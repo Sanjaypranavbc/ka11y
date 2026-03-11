@@ -1,681 +1,582 @@
 import os
 import hashlib
 import aiohttp
-import logging
-from urllib.parse import urljoin
 from pydantic import BaseModel
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich import box
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.models import ImageData
-import sys
 
-logger = setup_logger(name="KAC", tag="classify_assets")
-logger.info("Logger initialized")
+console = Console()
+logger  = setup_logger(name="KAC", tag="classify_assets")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Pydantic output model
+# ─────────────────────────────────────────────────────────────────────────────
 class ImageClassification(BaseModel):
-    classification: str = "informative"
-    sub_type: str | None = None
-    is_text_image: bool = False
-    is_functional: bool = False
-    is_decorative: bool = False
-    is_complex: bool = False
-    is_logo: bool = False
-    is_icon: bool = False
-    is_button: bool = False
-    file_format: str | None = None
+    classification: str       = "informative"
+    sub_type:       str | None = None
+    is_text_image:  bool      = False
+    is_functional:  bool      = False
+    is_decorative:  bool      = False
+    is_complex:     bool      = False
+    is_logo:        bool      = False
+    is_icon:        bool      = False
+    is_button:      bool      = False
+    file_format:    str | None = None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Keyword constants (defined once, reused across methods)
+# ─────────────────────────────────────────────────────────────────────────────
+_LOGO_KEYWORDS = [
+    "logo", "brand", "header-img", "site-logo", "company-logo",
+    "wordmark", "logotype", "brand-mark", "site-brand",
+    "navbar-brand", "nav-logo", "masthead", "identity"
+]
+
+_ICON_KEYWORDS = ["icon", "ico", "symbol", "glyph", "sprite", "badge", "avatar"]
+
+_FONT_ICON_PREFIXES = [
+    "fa ", "fa-", "fas ", "fas-", "far ", "far-", "fab ", "fab-",   # FontAwesome
+    "material-icons", "material-symbols",                             # Material
+    "bi bi-", "bi-",                                                  # Bootstrap Icons
+    "glyphicon",                                                      # Bootstrap 3
+    "feather", "lucide",                                              # Feather / Lucide
+    "icon-", "-icon",                                                 # Generic
+]
+
+_CHART_KEYWORDS = [
+    "chart", "graph", "plot", "bar-chart", "line-chart", "pie-chart",
+    "scatter", "histogram", "heatmap", "treemap", "funnel", "waterfall",
+    "trend", "analytics", "metric", "kpi", "dashboard", "infographic",
+    "diagram", "flowchart", "flow-chart", "architecture", "schema",
+    "network", "topology", "mindmap", "gantt", "timeline",
+    "statistics", "report", "data-viz", "visualization"
+]
+
+_CHART_LIBS = [
+    "chart.js", "chartjs", "d3.js", "d3.min", "highcharts",
+    "plotly", "echarts", "apexcharts", "recharts", "vega",
+    "amcharts", "fusioncharts", "canvasjs", "chartist",
+    "nivo", "victory", "c3.js", "c3.min"
+]
+
+# NOTE: generic terms ("figure", "caption") intentionally omitted to prevent
+# false positives on news-article photos in <figure><figcaption> containers.
+_CHART_PARENT_CLASSES = [
+    "chart", "graph", "diagram", "viz", "visualization",
+    "plot", "infographic", "canvas-wrap", "chart-container",
+    "dashboard", "analytics", "data-chart", "chart-wrap"
+]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 class ClassifyAssets:
     def __init__(self, output_dir: str):
-        self.output_dir = output_dir
+        self.output_dir  = output_dir
         self.images_data: list[ImageData] = []
 
+    # ── helpers ──────────────────────────────────────────────────────────────
 
     def get_image_hash(self, src: str) -> str:
-        """Generate unique hash for image URL"""
         return hashlib.md5(src.encode()).hexdigest()[:12]
 
-    async def classify_image(self, img_element) -> dict:
-        """Classify image based on its attributes and context"""
-        logger.info("Starting image classification")
+    def _rich_result(self, label: str, cls: str, sub: str | None, color: str):
+        """Print a compact one-line rich result for the classification."""
+        sub_str = f"/{sub}" if sub else ""
+        console.print(
+            f"  [bold {color}]→ {label}[/bold {color}] "
+            f"[dim]{cls}{sub_str}[/dim]"
+        )
 
-        alt_text = await img_element.get_attribute('alt') or ''
-        src = await img_element.get_attribute('src') or ''
-        role = await img_element.get_attribute('role') or ''
-        aria_hidden = await img_element.get_attribute('aria-hidden') or ''
+    # ── public: classify_image ────────────────────────────────────────────────
 
-        classification = ImageClassification()
+    async def classify_image(self, img_element, page=None) -> dict:
+        """
+        WCAG-based image classification cascade:
 
+          STEP 0  aria-hidden / role=presentation  → decorative/presentational
+          STEP 1a _is_button OR inButton           → functional/buttons
+          STEP 1b _is_logo  AND inRealLink         → functional/logos
+          STEP 1c _is_chart                        → complex/charts
+          STEP 1d _is_icon  AND (inLink|hasClick)  → functional/icons
+          STEP 1e inRealLink OR hasClick           → functional/images
+          STEP 2  standalone _is_logo              → informative/logos
+          STEP 3  standalone _is_icon  (has alt)   → informative/icons
+                                       (no alt)    → decorative/decorative
+          STEP 4  alt present                      → informative (sub-typed)
+                  alt="" explicit                  → decorative/decorative
+                  alt missing                      → decorative/missing_alt
+        """
+        c = ImageClassification()
+
+        # ── gather basic attributes ──
+        alt_text    = await img_element.get_attribute("alt")          # None = missing
+        src         = await img_element.get_attribute("src") or ""
+        role        = (await img_element.get_attribute("role") or "").lower()
+        aria_hidden = (await img_element.get_attribute("aria-hidden") or "").lower()
+
+        # ── build context ──
         try:
-            context_info = await img_element.evaluate('''el => {
-                const styles = window.getComputedStyle(el);
-                const rect = el.getBoundingClientRect();
-                const parent = el.parentElement;
+            ctx = await img_element.evaluate('''el => {
+                const a = el.closest("a");
+                const href = a ? (a.getAttribute("href") || "").trim() : "";
+                const deadHref = !href || href === "#" || href === "" ||
+                                 href.startsWith("javascript:");
                 return {
-                    width: rect.width,
-                    height: rect.height,
-                    position: styles.position,
-                    parentTag: parent ? parent.tagName : null,
-                    inLink: el.closest("a") !== null,
-                    inButton: el.closest("button") !== null,
-                    linkHref: el.closest("a") ? el.closest("a").href : null,
-                    linkText: el.closest("a") ? el.closest("a").textContent.trim() : null,
-                    hasClickHandler: el.onclick !== null || el.parentElement?.onclick !== null
+                    inButton:    el.closest("button, [role='button']") !== null,
+                    inLink:      a !== null,
+                    inRealLink:  a !== null && !deadHref,
+                    linkHref:    href || null,
+                    hasClick:    el.onclick !== null ||
+                                 window.getComputedStyle(el).cursor === "pointer"
                 };
             }''')
-            logger.info(f"Context info: {context_info}")
-        except Exception as e:
-            logger.info(f"Could not get context info: {str(e)}")
-            context_info = {
-                'width': 0, 'height': 0,
-                'inLink': False, 'inButton': False, 'hasClickHandler': False
-            }
+        except Exception:
+            ctx = {"inButton": False, "inLink": False,
+                   "inRealLink": False, "linkHref": None, "hasClick": False}
 
-        # ── BUTTONS (must come before logo/icon to catch button-wrapped logos/icons) ──
-        # Note: is_button_image no longer returns True for plain <a> links
-        is_button = await self.is_button_image(img_element)
-        if is_button or context_info.get('inButton'):
-            classification.is_functional = True
-            classification.is_button = True
-            classification.classification = 'functional'
-            classification.sub_type = 'buttons'
-            logger.info("Classified as functional button image")
-            return classification.model_dump()
+        logger.info(f"Context: {ctx}")
 
-        # ── LOGOS ──
-        if await self.is_logo(img_element, src, alt_text):
-            classification.is_logo = True
-            classification.is_text_image = True
-            if context_info.get('inLink'):
-                # Logo inside a link → functional
-                classification.is_functional = True
-                classification.classification = 'functional'
-                classification.sub_type = 'logos'
-                logger.info("Classified as functional logo (in link)")
+        src_lower = src.lower()
+        alt_str   = alt_text if alt_text is not None else ""   # '' = explicit empty
+        alt_lower = alt_str.lower()
+
+        # ─────────────────────────────────────────────────────────────
+        # STEP 0 — explicitly hidden / presentational
+        # ─────────────────────────────────────────────────────────────
+        if aria_hidden == "true" or role in ("presentation", "none"):
+            c.is_decorative = True
+            c.classification = "decorative"
+            c.sub_type = "presentational"
+            logger.info("[STEP 0] Decorative — aria-hidden/role=presentation")
+            self._rich_result("STEP 0 · presentational", "decorative", "presentational", "dim")
+            return c.model_dump()
+
+        # ─────────────────────────────────────────────────────────────
+        # STEP 1a — button
+        # ─────────────────────────────────────────────────────────────
+        if ctx["inButton"] or await self._is_button(img_element):
+            c.is_functional = True
+            c.is_button     = True
+            c.classification = "functional"
+            c.sub_type       = "buttons"
+            logger.info("[STEP 1a] functional/buttons")
+            self._rich_result("STEP 1a · button", "functional", "buttons", "yellow")
+            return c.model_dump()
+
+        # ─────────────────────────────────────────────────────────────
+        # STEP 1b — logo in a real navigation link
+        # ─────────────────────────────────────────────────────────────
+        if ctx["inRealLink"] and await self._is_logo(img_element, src, alt_str):
+            c.is_functional  = True
+            c.is_logo        = True
+            c.is_text_image  = True
+            c.classification = "functional"
+            c.sub_type       = "logos"
+            logger.info("[STEP 1b] functional/logos")
+            self._rich_result("STEP 1b · logo (nav link)", "functional", "logos", "cyan")
+            return c.model_dump()
+
+        # ─────────────────────────────────────────────────────────────
+        # STEP 1c — complex chart / diagram
+        # ─────────────────────────────────────────────────────────────
+        if await self._is_chart(img_element, src, alt_str, page):
+            c.is_complex     = True
+            c.classification = "complex"
+            c.sub_type       = "charts"
+            logger.info("[STEP 1c] complex/charts")
+            self._rich_result("STEP 1c · chart/diagram", "complex", "charts", "magenta")
+            return c.model_dump()
+
+        # ─────────────────────────────────────────────────────────────
+        # STEP 1d — icon in a clickable context
+        # ─────────────────────────────────────────────────────────────
+        if (ctx["inLink"] or ctx["hasClick"]) and await self._is_icon(img_element, src):
+            c.is_functional  = True
+            c.is_icon        = True
+            c.classification = "functional"
+            c.sub_type       = "icons"
+            logger.info("[STEP 1d] functional/icons")
+            self._rich_result("STEP 1d · icon (clickable)", "functional", "icons", "yellow")
+            return c.model_dump()
+
+        # ─────────────────────────────────────────────────────────────
+        # STEP 1e — any image in a real link / with click handler
+        # ─────────────────────────────────────────────────────────────
+        if ctx["inRealLink"] or ctx["hasClick"]:
+            c.is_functional  = True
+            c.classification = "functional"
+            c.sub_type       = "images"
+            logger.info("[STEP 1e] functional/images")
+            self._rich_result("STEP 1e · clickable image", "functional", "images", "yellow")
+            return c.model_dump()
+
+        # ─────────────────────────────────────────────────────────────
+        # STEP 2 — standalone logo (not in a link)
+        # ─────────────────────────────────────────────────────────────
+        if await self._is_logo(img_element, src, alt_str):
+            c.is_logo       = True
+            c.is_text_image = True
+            if alt_str.strip():
+                c.classification = "informative"
+                c.sub_type       = "logos"
+                logger.info("[STEP 2] informative/logos (standalone with alt)")
+                self._rich_result("STEP 2 · logo (informative)", "informative", "logos", "green")
             else:
-                # Standalone logo → informative
-                classification.classification = 'informative'
-                classification.sub_type = 'logos'  # consistent plural
-                logger.info("Classified as informative logo (not in link)")
-            return classification.model_dump()
+                c.is_decorative  = True
+                c.classification = "decorative"
+                c.sub_type       = "decorative"
+                logger.info("[STEP 2] decorative/logo (standalone, no alt)")
+                self._rich_result("STEP 2 · logo (no alt → decorative)", "decorative", "decorative", "dim")
+            return c.model_dump()
 
-        # ── CHARTS / GRAPHS ──
-        if await self.is_chart(img_element, src, alt_text):
-            classification.is_complex = True
-            classification.classification = 'complex'
-            classification.sub_type = 'charts'
-            logger.info("Classified as complex chart/graph")
-            return classification.model_dump()
-
-        # ── ICONS ──
-        if await self.is_icon(img_element, src, alt_text):
-            classification.is_icon = True
-            # Clickable icon → functional (use context_info, NOT is_button_image)
-            if context_info.get('inLink') or context_info.get('hasClickHandler'):
-                classification.is_functional = True
-                classification.classification = 'functional'
-                classification.sub_type = 'icons'
-                logger.info("Classified as functional icon (clickable)")
-            elif alt_text.strip():
-                # Non-clickable icon with alt → informative
-                classification.classification = 'informative'
-                classification.sub_type = 'general_informative'
-                logger.info("Classified as informative icon (has alt text)")
+        # ─────────────────────────────────────────────────────────────
+        # STEP 3 — standalone icon
+        # ─────────────────────────────────────────────────────────────
+        if await self._is_icon(img_element, src):
+            c.is_icon = True
+            if alt_str.strip():
+                c.classification = "informative"
+                c.sub_type       = "icons"
+                logger.info("[STEP 3] informative/icons (has alt)")
+                self._rich_result("STEP 3 · icon (informative)", "informative", "icons", "green")
             else:
-                # Non-clickable icon without alt → decorative
-                classification.is_decorative = True
-                classification.is_functional = False
-                classification.classification = 'decorative'
-                classification.sub_type = 'decorative'
-                logger.info("Classified as decorative icon (no alt text)")
-            return classification.model_dump()
+                c.is_decorative  = True
+                c.classification = "decorative"
+                c.sub_type       = "decorative"
+                logger.info("[STEP 3] decorative/icons (no alt)")
+                self._rich_result("STEP 3 · icon (no alt → decorative)", "decorative", "decorative", "dim")
+            return c.model_dump()
 
-        # ── ANY OTHER CLICKABLE IMAGE → FUNCTIONAL ──
-        if context_info.get('inLink') or context_info.get('hasClickHandler'):
-            classification.is_functional = True
-            classification.classification = 'functional'
-            classification.sub_type = 'images'
-            logger.info("Classified as functional image (clickable)")
-            return classification.model_dump()
+        # ─────────────────────────────────────────────────────────────
+        # STEP 4 — alt text rule (the core WCAG 1.1.1 distinction)
+        # ─────────────────────────────────────────────────────────────
+        if alt_text is None:
+            # alt attribute completely missing → WCAG violation
+            c.is_decorative  = True
+            c.classification = "decorative"
+            c.sub_type       = "missing_alt"
+            logger.info("[STEP 4] decorative/missing_alt (WCAG violation)")
+            self._rich_result("STEP 4 · missing alt (WCAG violation)", "decorative", "missing_alt", "red")
+            return c.model_dump()
 
-        # ── DECORATIVE ──
-        if (alt_text == '' or
-                role in ['presentation', 'none'] or
-                aria_hidden == 'true' or
-                'decorat' in src.lower() or
-                'background' in src.lower() or
-                'spacer' in src.lower()):
-            classification.is_decorative = True
-            classification.is_functional = False
-            classification.classification = 'decorative'
-            classification.sub_type = 'decorative'
-            logger.info("Classified as decorative image")
-            return classification.model_dump()
+        if alt_str == "":
+            # Explicit alt="" → intentionally decorative
+            c.is_decorative  = True
+            c.classification = "decorative"
+            c.sub_type       = "decorative"
+            logger.info("[STEP 4] decorative (explicit alt='')")
+            self._rich_result("STEP 4 · decorative (alt='')", "decorative", "decorative", "dim")
+            return c.model_dump()
 
-        # ── INFORMATIVE ──
-        if alt_text.strip() and len(alt_text) < 100:
-            classification.classification = 'informative'
-            classification.sub_type = 'succinct_information'
-            logger.info("Classified as informative (succinct alt text)")
+        # Has meaningful alt text → informative, sub-typed by length/context
+        sub = self._informative_sub_type(alt_str)
+        c.classification = "informative"
+        c.sub_type       = sub
+        logger.info(f"[STEP 4] informative/{sub}")
+        self._rich_result(f"STEP 4 · informative", "informative", sub, "green")
+        return c.model_dump()
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Private detection helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _informative_sub_type(self, alt: str) -> str:
+        words = len(alt.split())
+        if words <= 3:
+            return "succinct_information"
+        if words <= 12:
+            return "general_informative"
+        return "extended_description"
+
+    async def _is_button(self, element) -> bool:
         try:
-            has_nearby_text = await img_element.evaluate('''el => {
-                const parent = el.parentElement;
-                if (!parent) return false;
-                const siblings = Array.from(parent.children);
-                const textSiblings = siblings.filter(s =>
-                    s !== el && s.textContent && s.textContent.trim().length > 20
-                );
-                return textSiblings.length > 0;
+            r = await element.evaluate('''el => {
+                const tag  = el.tagName.toLowerCase();
+                const type = (el.getAttribute("type") || "").toLowerCase();
+                if (tag === "button") return true;
+                if (tag === "input" && ["button","submit","reset"].includes(type)) return true;
+                if (el.getAttribute("role") === "button") return true;
+                if (el.onclick !== null || el.getAttribute("onclick") !== null) return true;
+                // <img> inside a button ancestor
+                if (tag === "img") {
+                    if (el.closest("button, [role='button']") !== null) return true;
+                    let p = el.parentElement, d = 0;
+                    while (p && d < 4) {
+                        const cls = (p.className || "").toLowerCase();
+                        if (/\\bbtn\\b/.test(cls)) return true;
+                        p = p.parentElement; d++;
+                    }
+                }
+                return false;
             }''')
-            if has_nearby_text and alt_text.strip():
-                classification.classification = 'informative'
-                classification.sub_type = 'supplementary'
-                logger.info("Classified as supplementary informative image")
-        except Exception as e:
-            logger.debug(f"Error checking nearby text: {str(e)}")
+            return bool(r)
+        except Exception:
+            return False
 
-        # Default informative fallback
-        if alt_text.strip() and classification.classification == 'informative' and not classification.sub_type:
-            classification.sub_type = 'general_informative'
-            logger.info("Classified as general informative image")
-
-        logger.info(
-            f"Final classification: classification={classification.classification}, sub_type={classification.sub_type}")
-        return classification.model_dump()
-
-    async def is_logo(self, element, src: str, alt_text: str) -> bool:
-        patterns = ["logo", "brand", "header-img", "site-logo", "company-logo"]
+    async def _is_logo(self, element, src: str, alt_text: str) -> bool:
         src_lower = src.lower()
         alt_lower = alt_text.lower()
-        if any(p in src_lower for p in patterns) or any(p in alt_lower for p in patterns):
+        if any(k in src_lower for k in _LOGO_KEYWORDS):
+            return True
+        if any(k in alt_lower for k in _LOGO_KEYWORDS):
             return True
         try:
-            cls = await element.get_attribute("class") or ""
-            if any(p in cls.lower() for p in patterns):
+            cls   = (await element.get_attribute("class") or "").lower()
+            id_   = (await element.get_attribute("id")    or "").lower()
+            title = (await element.get_attribute("title") or "").lower()
+            combined = f"{cls} {id_} {title}"
+            if any(k in combined for k in _LOGO_KEYWORDS):
                 return True
-        except Exception:
-            pass
-        return False
-
-    async def is_icon(self, element, src: str, alt_text: str) -> bool:
-        """Detect if element is an icon — <img> icon, <i> font icon, or SVG icon"""
-        logger.debug(f"Checking if element is icon: src={src[:50]}, alt={alt_text[:50]}")
-
-        icon_patterns = ['icon', 'ico', 'symbol', 'glyph', 'sprite']
-        FONT_ICON_PATTERNS = [
-            'fa ', 'fa-', 'fas ', 'fas-', 'far ', 'far-', 'fab ', 'fab-',  # FontAwesome
-            'material-icons', 'material-symbols',  # Material
-            'bi bi-', 'bi-',  # Bootstrap Icons
-            'glyphicon',  # Bootstrap 3
-            'feather', 'lucide',  # Feather / Lucide
-            'icon-', '-icon',  # Generic
-        ]
-
-        try:
-            tag_name = await element.evaluate("el => el.tagName.toLowerCase()")
-            class_name = await element.get_attribute('class') or ''
-            class_lower = class_name.lower()
-
-            # ── FONT-BASED ICONS: <i> or <span> directly queried from extraction loop ──
-            # These ARE icons by definition if they have font icon classes — return immediately
-            if tag_name in ('i', 'span'):
-                if any(p in class_lower for p in FONT_ICON_PATTERNS):
-                    logger.info(f"Font icon confirmed (tag={tag_name}, class={class_name})")
-                    return True
-                # <i> without font icon class is still likely an icon element
-                if tag_name == 'i':
-                    logger.info(f"<i> element treated as icon (no matching class but is <i> tag)")
-                    return True
-                return False  # <span> without icon class → not an icon
-
-            # ── SVG ICON ──
-            if tag_name == 'svg':
-                size = await element.evaluate('''el => {
-                    const r = el.getBoundingClientRect();
-                    return { width: r.width, height: r.height };
-                }''')
-                if size['width'] <= 64 and size['height'] <= 64:
-                    logger.info(f"SVG icon detected by size: {size}")
-                    return True
-                if any(p in class_lower for p in icon_patterns):
-                    logger.info(f"SVG icon detected by class: {class_name}")
-                    return True
-                return False  # Large SVG without icon class → not an icon
-
-            # ── IMAGE-BASED ICONS (<img>) — only reaches here for <img> tags ──
-            src_lower = src.lower()
-            if any(p in src_lower for p in icon_patterns):
-                logger.info(f"Icon detected in src: {src[:50]}")
-                return True
-
-            if any(p in class_lower for p in icon_patterns):
-                logger.info(f"Icon detected in class: {class_name}")
-                return True
-
-            size = await element.evaluate('''el => {
-                const r = el.getBoundingClientRect();
-                return { width: r.width, height: r.height };
+            # Homepage link inside header/nav carrying an aria-label with brand name
+            return await element.evaluate('''el => {
+                const a = el.closest("a");
+                if (!a) return false;
+                const href = (a.getAttribute("href") || "").trim();
+                const isHome = href === "/" || href === "" || href === window.location.origin;
+                const inHeader = el.closest("header, nav, [role='banner']") !== null;
+                const aLabel  = (a.getAttribute("aria-label") || "").toLowerCase();
+                const hasLogo = /logo|brand|home/.test(aLabel);
+                return isHome && inHeader && hasLogo;
             }''')
-            # Accept icons up to 96×96 px (covers 24/32/48/64/96 common sizes)
-            # Widen aspect ratio to 0.5–2.0 to catch non-square icons
-            # (hamburger menus, flag icons, social share buttons, etc.)
-            if size['width'] <= 96 and size['height'] <= 96:
-                if size['width'] > 0 and size['height'] > 0:
-                    aspect_ratio = size['width'] / size['height']
-                    if 0.5 <= aspect_ratio <= 2.0:
-                        logger.info(f"Icon detected by size: {size}")
-                        return True
+        except Exception:
+            return False
 
+    async def _is_icon(self, element, src: str) -> bool:
+        try:
+            tag   = await element.evaluate("el => el.tagName.toLowerCase()")
+            cls   = (await element.get_attribute("class") or "").lower()
+            src_l = src.lower()
+
+            # Font-icon: <i> or <span> with known icon class prefix
+            if tag in ("i", "span"):
+                return any(p in cls for p in _FONT_ICON_PREFIXES)
+
+            # SVG icon: small size or icon class
+            if tag == "svg":
+                size = await element.evaluate(
+                    "el => ({ w: el.getBoundingClientRect().width, "
+                    "         h: el.getBoundingClientRect().height })"
+                )
+                if size["w"] <= 96 and size["h"] <= 96:
+                    return True
+                if any(k in cls for k in _ICON_KEYWORDS):
+                    return True
+                return False
+
+            # <img>: keyword in src/class, or small square-ish image
+            if any(k in src_l for k in _ICON_KEYWORDS):
+                return True
+            if any(k in cls for k in _ICON_KEYWORDS):
+                return True
+            size = await element.evaluate(
+                "el => ({ w: el.getBoundingClientRect().width, "
+                "         h: el.getBoundingClientRect().height })"
+            )
+            w, h = size["w"], size["h"]
+            if 0 < w <= 96 and 0 < h <= 96:
+                aspect = w / h
+                if 0.33 <= aspect <= 3.0:
+                    logger.info(f"Icon by size {w}×{h}, aspect={aspect:.2f}")
+                    return True
         except Exception as e:
-            logger.debug(f"Error in is_icon: {e}")
-
-        logger.debug("Element is not an icon")
+            logger.debug(f"is_icon error: {e}")
         return False
 
-    async def is_chart(self, element, src: str, alt_text: str, page=None) -> bool:
+    async def _is_chart(self, element, src: str, alt_text: str, page=None) -> bool:
         """
-        Detect if element is a chart, diagram, or other complex visual.
-
-        Signal priority (highest → lowest):
-          1. Chart JS library detected on page
-          2. SVG internal structure (many shapes + labels)
-          3. Canvas element (large)
-          4. Keyword match in alt / src / class / figcaption
-          5. Parent context (<figure>, <canvas>, wrapper divs)
-          6. Aspect ratio heuristic (wide landscape = chart, tall portrait = infographic)
-
-        Returns True only when cumulative score >= threshold (avoids false positives).
+        Scoring-based chart/diagram detector.
+        Threshold = 3.  Signals (highest → lowest weight):
+          +4  SVG has axis/legend
+          +3  alt text contains chart keyword  |  SVG: many shapes+labels  |  caption text
+          +3  large <canvas> element
+          +2  page loads a chart JS library    |  src keyword  |  class keyword  |  <figure> ancestor
+          +1  title attribute keyword  |  aspect-ratio heuristic
         """
+        score = 0
+        src_l = (src or "").lower()
+        alt_l = (alt_text or "").lower()
 
-        logger.info(f"is_chart check: src={src[:60]}, alt={alt_text[:60]}")
-
-        score = 0  # Accumulate evidence; threshold = 3
-
-        # ─────────────────────────────────────────────────────────────
-        # 1. CHART JS LIBRARY DETECTION (page-level, strongest signal)
-        #    If the page uses a charting library, nearby large images
-        #    are very likely chart screenshots or exported chart images.
-        # ─────────────────────────────────────────────────────────────
-        CHART_LIBS = [
-            "chart.js", "chartjs", "d3.js", "d3.min", "highcharts",
-            "plotly", "echarts", "apexcharts", "recharts", "vega",
-            "amcharts", "fusioncharts", "canvasjs", "chartist",
-            "nivo", "victory", "c3.js", "c3.min"
-        ]
-
+        # ── 1. Chart JS library on page (strongest page-level signal) ──
         if page:
             try:
-                page_scripts = await page.evaluate('''() => {
-                    return Array.from(document.querySelectorAll("script[src]"))
-                        .map(s => s.src.toLowerCase());
-                }''')
-                if any(lib in script for lib in CHART_LIBS for script in page_scripts):
-                    logger.info("Chart JS library detected on page (+2)")
+                scripts = await page.evaluate(
+                    "() => Array.from(document.querySelectorAll('script[src]'))"
+                    "     .map(s => s.src.toLowerCase())"
+                )
+                if any(lib in s for lib in _CHART_LIBS for s in scripts):
+                    logger.info("Chart lib detected on page (+2)")
                     score += 2
-            except Exception as e:
-                logger.debug(f"Script scan error: {e}")
+            except Exception:
+                pass
 
-        # ─────────────────────────────────────────────────────────────
-        # 2. KEYWORD DETECTION — alt text, src/filename, class, title
-        # ─────────────────────────────────────────────────────────────
-        CHART_KEYWORDS = [
-            "chart", "graph", "plot", "bar-chart", "line-chart", "pie-chart",
-            "scatter", "histogram", "heatmap", "treemap", "funnel", "waterfall",
-            "trend", "analytics", "metric", "kpi", "dashboard", "infographic",
-            "diagram", "flowchart", "flow-chart", "architecture", "schema",
-            "network", "topology", "mindmap", "gantt", "timeline",
-            "statistics", "report", "figure", "data-viz", "visualization"
-        ]
+        # ── 2. Keyword in alt / src / class / title ──
+        if any(kw in alt_l for kw in _CHART_KEYWORDS):
+            logger.info("Chart keyword in alt (+3)")
+            score += 3
 
-        src_lower = (src or "").lower()
-        alt_lower = (alt_text or "").lower()
-
-        if any(kw in alt_lower for kw in CHART_KEYWORDS):
-            logger.info(f"Chart keyword in alt text (+3)")
-            score += 3  # alt text is intentional — highest weight
-
-        if any(kw in src_lower for kw in CHART_KEYWORDS):
-            logger.info(f"Chart keyword in src/filename (+2)")
+        if any(kw in src_l for kw in _CHART_KEYWORDS):
+            logger.info("Chart keyword in src (+2)")
             score += 2
 
         try:
-            class_name = (await element.get_attribute("class") or "").lower()
-            title_attr = (await element.get_attribute("title") or "").lower()
+            cls   = (await element.get_attribute("class") or "").lower()
+            title = (await element.get_attribute("title") or "").lower()
+            if any(kw in cls   for kw in _CHART_KEYWORDS): score += 2
+            if any(kw in title for kw in _CHART_KEYWORDS): score += 1
+        except Exception:
+            pass
 
-            if any(kw in class_name for kw in CHART_KEYWORDS):
-                logger.info(f"Chart keyword in class name (+2)")
-                score += 2
-
-            if any(kw in title_attr for kw in CHART_KEYWORDS):
-                logger.info(f"Chart keyword in title attr (+1)")
-                score += 1
-        except Exception as e:
-            logger.debug(f"Attribute read error: {e}")
-
-        # ─────────────────────────────────────────────────────────────
-        # 3. PARENT CONTEXT — <figure>, <canvas>, wrapper div classes,
-        #    and EXTENDED CAPTION DETECTION (figcaption + custom divs)
-        #
-        #    Real-world sites rarely use semantic <figcaption>.
-        #    Common patterns seen in the wild:
-        #      • <div class="g-Image__caption">Figure 1. Diagram of...</div>  ← Kao example
-        #      • <p class="caption">Chart showing...</p>
-        #      • <span class="image-caption">...</span>
-        #      • <p style="text-align:center">Figure 1. ...</p> inside wrapper
-        # ─────────────────────────────────────────────────────────────
+        # ── 3. Parent context ──
         try:
-            parent_info = await element.evaluate('''el => {
-                const parent = el.parentElement;
-                const grandparent = parent ? parent.parentElement : null;
-                // Walk up further to catch deeply nested caption siblings
-                const great = grandparent ? grandparent.parentElement : null;
-
-                function getCaptionText(node) {
-                    if (!node) return "";
-
-                    // 1. Semantic <figcaption>
-                    const fig = node.querySelector("figcaption");
-                    if (fig) return fig.textContent.trim().toLowerCase();
-
-                    // 2. Custom caption divs/spans/p by class or id keyword
-                    //    Matches: g-Image__caption, l-Image__caption, image-caption,
-                    //             caption-text, figure-caption, img-caption, etc.
-                    const captionEl = node.querySelector(
-                        '[class*="caption" i], [class*="Caption"], [id*="caption" i], ' +
-                        '[class*="figure" i], [class*="Figure"], ' +
-                        '[class*="img-desc" i], [class*="image-desc" i], ' +
-                        '[class*="photo-desc" i], [class*="media-desc" i]'
+            ancestors = await element.evaluate('''el => {
+                function info(n) {
+                    if (!n) return null;
+                    const fig = n.querySelector("figcaption");
+                    const cap = n.querySelector(
+                        "[class*=caption i],[class*=Caption],[id*=caption i]," +
+                        "[class*=figure i],[class*=img-desc i],[class*=image-desc i]"
                     );
-                    if (captionEl) return captionEl.textContent.trim().toLowerCase();
-
-                    // 3. Centered <p> siblings that look like captions
-                    //    e.g. <p style="text-align: center;">Figure 1. Diagram of...</p>
-                    const centeredP = node.querySelector('p[style*="text-align: center"], p[style*="text-align:center"]');
-                    if (centeredP) {
-                        const text = centeredP.textContent.trim().toLowerCase();
-                        // Only treat as caption if it starts with figure/fig/table/chart/diagram
-                        if (/^(figure|fig\.|table|chart|diagram|image|photo|graph|plot)/.test(text)) {
-                            return text;
-                        }
-                    }
-
-                    return "";
-                }
-
-                function collectInfo(node) {
-                    if (!node) return null;
-                    const captionText = getCaptionText(node);
+                    const capText = (fig || cap)
+                        ? (fig || cap).textContent.trim().toLowerCase()
+                        : "";
                     return {
-                        tag: node.tagName.toLowerCase(),
-                        className: (node.className || "").toLowerCase(),
-                        id: (node.id || "").toLowerCase(),
-                        hasCaption: captionText.length > 0,
-                        captionText: captionText
+                        tag:      n.tagName.toLowerCase(),
+                        cls:      (n.className || "").toLowerCase(),
+                        id:       (n.id || "").toLowerCase(),
+                        capText:  capText
                     };
                 }
-
-                return {
-                    parent: collectInfo(parent),
-                    grandparent: collectInfo(grandparent),
-                    great: collectInfo(great)
-                };
+                const p  = el.parentElement;
+                const gp = p  ? p.parentElement  : null;
+                const gg = gp ? gp.parentElement : null;
+                return [info(p), info(gp), info(gg)];
             }''')
 
-            CHART_PARENT_CLASSES = [
-                "chart", "graph", "diagram", "viz", "visualization",
-                "plot", "infographic", "canvas-wrap", "chart-container",
-                "dashboard", "analytics", "figure", "image__caption",
-                "img-caption", "media-caption", "caption"
-            ]
-
-            for ancestor in [parent_info.get("parent"), parent_info.get("grandparent"), parent_info.get("great")]:
-                if not ancestor:
+            figure_seen = False
+            for anc in ancestors:
+                if not anc:
                     continue
+                combined = f"{anc['cls']} {anc['id']}"
 
-                # <figure> is a strong semantic signal
-                if ancestor["tag"] == "figure":
-                    logger.info("Parent is <figure> (+2)")
+                if anc["tag"] == "figure" and not figure_seen:
+                    logger.info("Ancestor <figure> (+2)")
+                    score += 2
+                    figure_seen = True
+
+                if any(kw in combined for kw in _CHART_PARENT_CLASSES):
+                    logger.info(f"Chart class in ancestor: {combined[:60]} (+2)")
                     score += 2
 
-                # <canvas> sibling or wrapper
-                if ancestor["tag"] == "canvas":
-                    logger.info("Parent is <canvas> (+2)")
-                    score += 2
-
-                # Class / ID match on wrapper div
-                combined = ancestor["className"] + " " + ancestor["id"]
-                if any(kw in combined for kw in CHART_PARENT_CLASSES):
-                    logger.info(f"Chart keyword in parent class/id: {combined[:60]} (+2)")
-                    score += 2
-
-                # Caption text (figcaption OR custom div) with chart keywords
-                if ancestor["hasCaption"] and any(kw in ancestor["captionText"] for kw in CHART_KEYWORDS):
-                    logger.info(f"Caption contains chart keyword: '{ancestor['captionText'][:80]}' (+3)")
-                    score += 3  # Bumped from +2 — caption text is very reliable
+                if anc["capText"] and any(kw in anc["capText"] for kw in _CHART_KEYWORDS):
+                    logger.info(f"Caption contains chart keyword: {anc['capText'][:60]} (+3)")
+                    score += 3
 
         except Exception as e:
-            logger.info(f"Parent context error: {e}")
+            logger.debug(f"Ancestor check error: {e}")
 
-        # ─────────────────────────────────────────────────────────────
-        # 4. SVG STRUCTURAL ANALYSIS
-        #    Many <rect>/<path> elements + <text> labels → rendered chart
-        # ─────────────────────────────────────────────────────────────
+        # ── 4. SVG structural analysis ──
         try:
-            tag_name = await element.evaluate("el => el.tagName.toLowerCase()")
-
-            if tag_name == "svg":
-                structure = await element.evaluate('''svg => ({
-                    rects:   svg.querySelectorAll("rect").length,
-                    paths:   svg.querySelectorAll("path").length,
-                    lines:   svg.querySelectorAll("line").length,
-                    circles: svg.querySelectorAll("circle").length,
-                    texts:   svg.querySelectorAll("text").length,
-                    groups:  svg.querySelectorAll("g").length,
-                    hasAxis: svg.querySelector(".axis, .tick, [class*=axis], [class*=tick]") !== null,
-                    hasLegend: svg.querySelector(".legend, [class*=legend]") !== null
+            tag = await element.evaluate("el => el.tagName.toLowerCase()")
+            if tag == "svg":
+                st = await element.evaluate('''svg => ({
+                    rects:     svg.querySelectorAll("rect").length,
+                    paths:     svg.querySelectorAll("path").length,
+                    circles:   svg.querySelectorAll("circle").length,
+                    texts:     svg.querySelectorAll("text").length,
+                    groups:    svg.querySelectorAll("g").length,
+                    hasAxis:   !!svg.querySelector(".axis,.tick,[class*=axis],[class*=tick]"),
+                    hasLegend: !!svg.querySelector(".legend,[class*=legend]")
                 })''')
-
-                logger.debug(f"SVG structure: {structure}")
-
-                # Axis or legend is a near-certain chart signal
-                if structure["hasAxis"] or structure["hasLegend"]:
-                    logger.info("SVG has axis/legend (+4)")
+                if st["hasAxis"] or st["hasLegend"]:
+                    logger.info("SVG axis/legend (+4)")
                     score += 4
-
-                # Many shapes + text labels = chart
-                shape_count = structure["rects"] + structure["paths"] + structure["circles"]
-                if structure["texts"] >= 3 and shape_count > 5:
-                    logger.info(f"SVG: shapes={shape_count}, texts={structure['texts']} (+3)")
+                shapes = st["rects"] + st["paths"] + st["circles"]
+                if st["texts"] >= 3 and shapes > 5:
+                    logger.info(f"SVG shapes={shapes} texts={st['texts']} (+3)")
                     score += 3
-
-                # Lots of groups can indicate layered chart structure
-                if structure["groups"] > 10 and structure["texts"] >= 2:
-                    logger.info(f"SVG: complex group structure (+1)")
+                if st["groups"] > 10 and st["texts"] >= 2:
+                    logger.info("SVG complex group structure (+1)")
                     score += 1
+        except Exception:
+            pass
 
-        except Exception as e:
-            logger.debug(f"SVG analysis error: {e}")
-
-        # ─────────────────────────────────────────────────────────────
-        # 5. CANVAS ELEMENT (large rendered canvas = chart/viz)
-        # ─────────────────────────────────────────────────────────────
+        # ── 5. Large <canvas> element ──
         try:
-            tag_name = await element.evaluate("el => el.tagName.toLowerCase()")
-            if tag_name == "canvas":
-                size = await element.evaluate('''el => {
-                    const r = el.getBoundingClientRect();
-                    return {width: r.width, height: r.height};
-                }''')
-                if size["width"] > 200 and size["height"] > 150:
-                    logger.info(f"Large <canvas> element: {size} (+3)")
+            tag = await element.evaluate("el => el.tagName.toLowerCase()")
+            if tag == "canvas":
+                sz = await element.evaluate(
+                    "el => ({ w: el.getBoundingClientRect().width,"
+                    "         h: el.getBoundingClientRect().height })"
+                )
+                if sz["w"] > 200 and sz["h"] > 150:
+                    logger.info(f"Large canvas {sz['w']}×{sz['h']} (+3)")
                     score += 3
-        except Exception as e:
-            logger.debug(f"Canvas check error: {e}")
+        except Exception:
+            pass
 
-        # ─────────────────────────────────────────────────────────────
-        # 6. ASPECT RATIO + SIZE HEURISTIC
-        #    Charts: wide landscape (ratio > 1.3, width > 300)
-        #    Infographics: tall portrait (ratio < 0.6, height > 400)
-        #    Icons/thumbnails: small — skip
-        # ─────────────────────────────────────────────────────────────
+        # ── 6. Aspect-ratio heuristic (large landscape or tall portrait) ──
         try:
-            size = await element.evaluate('''el => {
-                const r = el.getBoundingClientRect();
-                return {width: r.width, height: r.height};
-            }''')
-
-            w, h = size["width"], size["height"]
-
+            sz = await element.evaluate(
+                "el => ({ w: el.getBoundingClientRect().width,"
+                "         h: el.getBoundingClientRect().height })"
+            )
+            w, h = sz["w"], sz["h"]
             if w > 0 and h > 0:
                 ratio = w / h
-                is_large = w > 300 or h > 300
-
-                if is_large and (ratio > 1.3 or ratio < 0.6):
-                    logger.info(f"Aspect ratio matches chart/infographic: {ratio:.2f}, size={w}x{h} (+1)")
+                if (w > 300 or h > 300) and (ratio > 1.3 or ratio < 0.6):
+                    logger.info(f"Aspect-ratio heuristic {ratio:.2f} {w}×{h} (+1)")
                     score += 1
+        except Exception:
+            pass
 
-        except Exception as e:
-            logger.info(f"Size heuristic error: {e}")
-
-        # ─────────────────────────────────────────────────────────────
-        # 7. FILE FORMAT SIGNAL
-        #    SVG file extension in src → likely diagram/icon (soft signal)
-        # ─────────────────────────────────────────────────────────────
-        if src_lower.endswith(".svg"):
-            logger.info("SVG file format detected (+1)")
-            score += 1
-
-        # ─────────────────────────────────────────────────────────────
-        # DECISION
-        # ─────────────────────────────────────────────────────────────
         THRESHOLD = 3
-        is_chart_result = score >= THRESHOLD
+        result = score >= THRESHOLD
+        logger.info(f"_is_chart score={score} → {'YES' if result else 'no'}")
+        return result
 
-        logger.info(f"is_chart score={score}/{THRESHOLD} → {'CHART ✓' if is_chart_result else 'not chart'}")
-        return is_chart_result
+    # ── public aliases (backward compat) ──────────────────────────────────────
+    async def is_logo(self, el, src, alt): return await self._is_logo(el, src, alt)
+    async def is_icon(self, el, src, alt): return await self._is_icon(el, src)
+    async def is_chart(self, el, src, alt, page=None): return await self._is_chart(el, src, alt, page)
+    async def is_button_image(self, el): return await self._is_button(el)
 
-    async def is_button_image(self, element) -> bool:
-        """Detect if element is a button or image inside a button"""
-        logger.info("Checking if element is a button")
-        try:
-            result = await element.evaluate('''el => {
-                const tag = el.tagName.toLowerCase();
-                const inputType = (el.getAttribute('type') || '').toLowerCase();
-
-                // ── Element IS a button natively ──
-                if (tag === 'button') return { isButton: true, reason: 'is <button> element' };
-
-                if (tag === 'input' && ['button', 'submit', 'reset'].includes(inputType))
-                    return { isButton: true, reason: 'is input[type=' + inputType + ']' };
-
-                if (el.getAttribute('role') === 'button')
-                    return { isButton: true, reason: 'has role=button' };
-
-                // ── Element has an inline click handler on itself ──
-                if (el.onclick !== null || el.getAttribute('onclick') !== null)
-                    return { isButton: true, reason: 'has click handler' };
-
-                // ── Element is INSIDE a button (for <img> elements) ──
-                if (tag === 'img') {
-                    // First: check for ANY button ancestor regardless of <a> in between
-                    if (el.closest('button') !== null)
-                        return { isButton: true, reason: 'img inside <button>' };
-
-                    if (el.closest('[role="button"]') !== null)
-                        return { isButton: true, reason: 'img inside role=button element' };
-
-                    // Walk ancestors — max 4 levels
-                    // Only bail on <a> if there is definitely NO button above it
-                    let ancestor = el.parentElement;
-                    let depth = 0;
-                    let foundLink = false;
-                    while (ancestor && depth < 4) {
-                        const aTag = ancestor.tagName.toLowerCase();
-                        if (aTag === 'body' || aTag === 'html') break;
-
-                        const role = ancestor.getAttribute('role');
-                        const type = (ancestor.getAttribute('type') || '').toLowerCase();
-                        const className = (ancestor.className || '').toLowerCase();
-
-                        if (role === 'button') return { isButton: true, reason: 'ancestor role=button' };
-                        if (type === 'button') return { isButton: true, reason: 'ancestor type=button' };
-                        // Only match btn as a whole word to avoid false positives (e.g. "submit-btn", "navbar")  
-                        if (/\bbtn\b/.test(className)) return { isButton: true, reason: 'ancestor btn class' };
-
-                        // Track <a> but don't bail immediately — button may appear above
-                        if (aTag === 'a') foundLink = true;
-
-                        ancestor = ancestor.parentElement;
-                        depth++;
-                    }
-
-                    // If only a link was found and no button, it's not a button image
-                    if (foundLink) return { isButton: false, reason: null };
-                }
-
-                return { isButton: false, reason: null };
-            }''')
-
-            logger.info(f"Button detection result: {result}")
-            if result.get('isButton'):
-                logger.info(f"Button detected: {result.get('reason')}")
-                return True
-
-        except Exception as e:
-            logger.debug(f"Error checking button: {str(e)}")
-
-        logger.debug("Element is not a button")
-        return False
-
+    # ── overlay container detection ───────────────────────────────────────────
     async def get_visual_container(self, img_element, page):
         return await img_element.evaluate_handle('''img => {
-            function getVisibleText(element) {
-                const text = element.innerText && element.innerText.trim();
-                return text && text.length > 3 && text.length < 200;
-            }
-
-            let current = img.parentElement;
             const imgRect = img.getBoundingClientRect();
+            if (imgRect.width < 60 || imgRect.height < 60) return img;
 
-            // Skip overlay detection for small images (icons, social buttons)
-            if (imgRect.width < 60 || imgRect.height < 60) {
-                return img;
-            }
-
+            let cur = img.parentElement;
             for (let i = 0; i < 3; i++) {
-                if (!current || current.tagName === 'BODY' || current.tagName === 'HTML') break;
-
-                const rect = current.getBoundingClientRect();
-                const areaRatio = (rect.width * rect.height) / (imgRect.width * imgRect.height);
-
-                // Container must be close in size to image
-                if (areaRatio > 2) break;
-
-                const children = Array.from(current.children);
-                const hasOverlaySibling = children.some(child => {
-                    if (child === img) return false;
-                    const childStyle = window.getComputedStyle(child);
-                    const childRect = child.getBoundingClientRect();
-
-                    const intersect = !(childRect.right < imgRect.left ||
-                                      childRect.left > imgRect.right ||
-                                      childRect.bottom < imgRect.top ||
-                                      childRect.top > imgRect.bottom);
-
-                    const hasText = getVisibleText(child);
-                    // Must be absolutely positioned AND overlapping AND meaningful text
-                    return childStyle.position === 'absolute' && intersect && hasText;
+                if (!cur || cur.tagName === "BODY" || cur.tagName === "HTML") break;
+                const rect = cur.getBoundingClientRect();
+                if ((rect.width * rect.height) / (imgRect.width * imgRect.height) > 2) break;
+                const hasOverlay = Array.from(cur.children).some(ch => {
+                    if (ch === img) return false;
+                    const cs  = window.getComputedStyle(ch);
+                    const cr  = ch.getBoundingClientRect();
+                    const txt = (ch.innerText || "").trim();
+                    const overlaps = !(cr.right  < imgRect.left  || cr.left > imgRect.right ||
+                                       cr.bottom < imgRect.top   || cr.top  > imgRect.bottom);
+                    return cs.position === "absolute" && overlaps &&
+                           txt.length > 3 && txt.length < 200;
                 });
-
-                if (hasOverlaySibling) return current;
-                current = current.parentElement;
+                if (hasOverlay) return cur;
+                cur = cur.parentElement;
             }
-
             return img;
         }''')
 
-    async def _download_file(self, session: aiohttp.ClientSession, url: str, path: str) -> bool:
+    # ── file download helper ──────────────────────────────────────────────────
+    async def _download_file(self, session: aiohttp.ClientSession,
+                              url: str, path: str) -> bool:
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                 if resp.status == 200:
@@ -683,14 +584,8 @@ class ClassifyAssets:
                     with open(path, "wb") as f:
                         f.write(await resp.read())
                     return True
-                else:
-                    logger.warning(f"Download failed {resp.status}: {url}")
-                    return False
+                logger.warning(f"Download {resp.status}: {url}")
+                return False
         except Exception as e:
             logger.error(f"Download error {url}: {e}")
             return False
-
-
-
-
-
