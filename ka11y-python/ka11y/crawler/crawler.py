@@ -17,7 +17,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.rule import Rule
 from rich.text import Text
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, MofNCompleteColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    MofNCompleteColumn,
+)
 from rich import box
 
 from ka11y.crawler.models import ImageData, ImageMetadata
@@ -28,64 +34,65 @@ from ka11y.utils.config_loader import load_config
 CONFIG = load_config()
 
 console = Console()
-logger  = setup_logger(name="KAC", tag="crawler")
+logger = setup_logger(name="KAC", tag="crawler")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pydantic models
 # ─────────────────────────────────────────────────────────────────────────────
 class CrawlSummary(BaseModel):
-    total_images:      int = 0
-    informative:       int = 0
-    decorative:        int = 0
-    functional:        int = 0
-    complex:           int = 0
-    text_images:       int = 0
+    total_images: int = 0
+    informative: int = 0
+    decorative: int = 0
+    functional: int = 0
+    complex: int = 0
+    text_images: int = 0
     functional_buttons: int = 0
-    functional_icons:  int = 0
-    functional_logos:  int = 0
+    functional_icons: int = 0
+    functional_logos: int = 0
     functional_images: int = 0
-    pages_crawled:     int = 0
+    pages_crawled: int = 0
 
 
 class CrawlReport(BaseModel):
-    base_url:          str
-    crawl_date:        str
-    summary:           CrawlSummary
+    base_url: str
+    crawl_date: str
+    summary: CrawlSummary
     sub_type_breakdown: dict[str, int] = Field(default_factory=dict)
-    images:            List[ImageData]  = Field(default_factory=list)
+    images: List[ImageData] = Field(default_factory=list)
 
 
 class _CR:
     """Thin adapter: dict → attribute access."""
+
     def __init__(self, d: dict):
-        self.type         = d["classification"]
-        self.sub_type     = d.get("sub_type")
+        self.type = d["classification"]
+        self.sub_type = d.get("sub_type")
         self.is_text_image = d.get("is_text_image", False)
         self.is_functional = d.get("is_functional", False)
         self.is_decorative = d.get("is_decorative", False)
-        self.is_complex    = d.get("is_complex",    False)
-        self.is_logo       = d.get("is_logo",       False)
-        self.is_icon       = d.get("is_icon",       False)
-        self.is_button     = d.get("is_button",     False)
-        self.file_format   = d.get("file_format")
+        self.is_complex = d.get("is_complex", False)
+        self.is_logo = d.get("is_logo", False)
+        self.is_icon = d.get("is_icon", False)
+        self.is_button = d.get("is_button", False)
+        self.file_format = d.get("file_format")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 class AsyncImageCrawler:
 
     def __init__(self, base_url: str, max_depth: int):
-        self.base_url         = base_url
-        self.max_depth        = max_depth
+        self.base_url = base_url
+        self.max_depth = max_depth
         self.include_invisible = CONFIG["crawler"]["include_invisible"]
-        self.images_data:    List[ImageData]     = []
+        self.images_data: List[ImageData] = []
         self.images_metadata: List[ImageMetadata] = []
-        self.visited_urls: Set[str]               = set()
+        self.visited_urls: Set[str] = set()
 
-        base_out  = CONFIG["input"]["output_dir"]
-        domain    = urlparse(base_url).netloc.replace("www.", "").replace(".", "_")
+        base_out = CONFIG["input"]["output_dir"]
+        domain = urlparse(base_url).netloc.replace("www.", "").replace(".", "_")
         timestamp = time.strftime("%m%d_%H%M")
-        self.output_dir  = f"{base_out}/{domain}_{timestamp}"
+        self.output_dir = f"{base_out}/{domain}_{timestamp}"
         self.metadata_dir = f"{self.output_dir}/metadata"
 
         self.classifier = ClassifyAssets(output_dir=self.output_dir)
@@ -109,7 +116,7 @@ class AsyncImageCrawler:
         On any JS exception, returns True (assume visible).
         """
         try:
-            return await element.evaluate('''el => {
+            return await element.evaluate("""el => {
                 const st  = window.getComputedStyle(el);
                 const tag = el.tagName.toLowerCase();
 
@@ -137,9 +144,9 @@ class AsyncImageCrawler:
                     if (!hasSrc) return false;
                 }
                 return true;
-            }''')
+            }""")
         except Exception:
-            return True   # never silently drop images on JS error
+            return True  # never silently drop images on JS error
 
     # ── lazy-loading triggers ─────────────────────────────────────────────────
     async def _trigger_lazy_loading(self, page):
@@ -147,7 +154,7 @@ class AsyncImageCrawler:
         passes = CONFIG.get("crawler", {}).get("scroll_passes", 3)
         for i in range(passes):
             logger.info(f"Scroll pass {i+1}/{passes}")
-            await page.evaluate('''() => {
+            await page.evaluate("""() => {
                 return new Promise(resolve => {
                     const total = document.body.scrollHeight;
                     const step  = total / 10;
@@ -161,13 +168,13 @@ class AsyncImageCrawler:
                         }
                     }, 150);
                 });
-            }''')
+            }""")
             await page.wait_for_timeout(500)
             await page.evaluate("window.scrollTo(0, 0)")
             await page.wait_for_timeout(300)
 
         # Fire IntersectionObserver callbacks manually
-        await page.evaluate('''() => {
+        await page.evaluate("""() => {
             const imgs = document.querySelectorAll("img[data-src],img[data-lazy-src],img[data-original]");
             imgs.forEach(img => {
                 const obs = new IntersectionObserver(entries => {
@@ -176,7 +183,7 @@ class AsyncImageCrawler:
                 });
                 obs.observe(img);
             });
-        }''')
+        }""")
         await page.wait_for_timeout(1000)
         logger.info("Lazy-load trigger complete")
 
@@ -185,18 +192,19 @@ class AsyncImageCrawler:
         console.print(Rule("[dim]Revealing hidden content (tabs / accordions)[/dim]"))
         revealed = 0
         groups = {
-            "tabs":       '[role="tab"], .tab, [data-toggle="tab"], .nav-link',
+            "tabs": '[role="tab"], .tab, [data-toggle="tab"], .nav-link',
             "accordions": '[data-toggle="collapse"], .accordion-toggle, .accordion-button, details summary',
-            "dropdowns":  '[data-toggle="dropdown"], .dropdown-toggle',
-            "modals":     '[data-toggle="modal"]',
-            "carousels":  '.carousel-control-next, .slick-next, [data-slide="next"]',
-            "load_more":  '.load-more, [data-load-more]',
+            "dropdowns": '[data-toggle="dropdown"], .dropdown-toggle',
+            "modals": '[data-toggle="modal"]',
+            "carousels": '.carousel-control-next, .slick-next, [data-slide="next"]',
+            "load_more": ".load-more, [data-load-more]",
         }
         for name, sel in groups.items():
             try:
                 els = await page.locator(sel).all()
-                unique = {await e.evaluate("el => el.outerHTML.slice(0,100)"): e
-                          for e in els}.values()
+                unique = {
+                    await e.evaluate("el => el.outerHTML.slice(0,100)"): e for e in els
+                }.values()
                 count = 0
                 for el in list(unique)[:8]:
                     try:
@@ -217,8 +225,14 @@ class AsyncImageCrawler:
     # ── src resolution helper ─────────────────────────────────────────────────
     async def _resolve_src(self, el) -> str | None:
         """Return the best absolute URL for an image element, or None."""
-        for attr in ("src", "data-src", "data-lazy-src",
-                     "data-original", "data-lazy", "data-url"):
+        for attr in (
+            "src",
+            "data-src",
+            "data-lazy-src",
+            "data-original",
+            "data-lazy",
+            "data-url",
+        ):
             val = await el.get_attribute(attr)
             if val and not val.startswith("data:"):
                 return urljoin(self.base_url, val)
@@ -235,22 +249,40 @@ class AsyncImageCrawler:
     def _subpath(self, cr: _CR) -> str:
         if cr.type == "functional":
             sub = cr.sub_type or "images"
-            return f"functional/{sub}" if f"functional/{sub}" in set(CONFIG["directories"]) else "functional"
+            return (
+                f"functional/{sub}"
+                if f"functional/{sub}" in set(CONFIG["directories"])
+                else "functional"
+            )
         if cr.type == "complex":
             sub = cr.sub_type or "charts"
-            return f"complex/{sub}" if f"complex/{sub}" in set(CONFIG["directories"]) else "complex"
-        return cr.type   # informative / decorative
+            return (
+                f"complex/{sub}"
+                if f"complex/{sub}" in set(CONFIG["directories"])
+                else "complex"
+            )
+        return cr.type  # informative / decorative
 
-    def _make_image_data(self, *, url, src, alt, title, cr: _CR,
-                          screenshot_path, filename) -> ImageData:
+    def _make_image_data(
+        self, *, url, src, alt, title, cr: _CR, screenshot_path, filename
+    ) -> ImageData:
         return ImageData(
-            url=url, src=src, alt_text=alt, title=title,
-            classification=cr.type, sub_type=cr.sub_type,
-            is_functional=cr.is_functional, is_decorative=cr.is_decorative,
-            is_complex=cr.is_complex, is_text_image=cr.is_text_image,
-            is_logo=cr.is_logo, is_icon=cr.is_icon, is_button=cr.is_button,
+            url=url,
+            src=src,
+            alt_text=alt,
+            title=title,
+            classification=cr.type,
+            sub_type=cr.sub_type,
+            is_functional=cr.is_functional,
+            is_decorative=cr.is_decorative,
+            is_complex=cr.is_complex,
+            is_text_image=cr.is_text_image,
+            is_logo=cr.is_logo,
+            is_icon=cr.is_icon,
+            is_button=cr.is_button,
             file_format=cr.file_format,
-            screenshot_path=screenshot_path, filename=filename,
+            screenshot_path=screenshot_path,
+            filename=filename,
         )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -261,18 +293,22 @@ class AsyncImageCrawler:
             return
         self.visited_urls.add(self.base_url)
 
-        console.print(Panel(
-            f"[bold cyan]Crawling:[/bold cyan] {self.base_url}\n"
-            f"[dim]Depth {current_depth}/{self.max_depth}[/dim]",
-            title="[bold]ka11y Image Crawler[/bold]",
-            border_style="cyan"
-        ))
+        console.print(
+            Panel(
+                f"[bold cyan]Crawling:[/bold cyan] {self.base_url}\n"
+                f"[dim]Depth {current_depth}/{self.max_depth}[/dim]",
+                title="[bold]ka11y Image Crawler[/bold]",
+                border_style="cyan",
+            )
+        )
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context(
-                viewport={"width":  CONFIG["crawl_browser"]["width"],
-                           "height": CONFIG["crawl_browser"]["height"]}
+                viewport={
+                    "width": CONFIG["crawl_browser"]["width"],
+                    "height": CONFIG["crawl_browser"]["height"],
+                }
             )
             page = await context.new_page()
             page.set_default_timeout(60_000)
@@ -284,9 +320,15 @@ class AsyncImageCrawler:
                 console.print(f"  [green]✓[/green] Page loaded (load)")
                 logger.info("Page loaded (load strategy)")
             except Exception as e:
-                logger.warning(f"'load' timed out: {e}  — retrying with domcontentloaded")
-                await page.goto(self.base_url, wait_until="domcontentloaded", timeout=60_000)
-                console.print(f"  [yellow]⚠[/yellow] Page loaded (domcontentloaded fallback)")
+                logger.warning(
+                    f"'load' timed out: {e}  — retrying with domcontentloaded"
+                )
+                await page.goto(
+                    self.base_url, wait_until="domcontentloaded", timeout=60_000
+                )
+                console.print(
+                    f"  [yellow]⚠[/yellow] Page loaded (domcontentloaded fallback)"
+                )
 
             await page.wait_for_timeout(3_000)
             await self._trigger_lazy_loading(page)
@@ -297,11 +339,13 @@ class AsyncImageCrawler:
                 # ═══════════════════════════════════════════════════════════
                 # PASS 1 — <img> and <input type="image"> elements
                 # ═══════════════════════════════════════════════════════════
-                console.print(Panel(
-                    "Scanning [bold]<img>[/bold] and [bold]<input type=image>[/bold]",
-                    title="[yellow]PASS 1 · Image Elements[/yellow]",
-                    border_style="yellow"
-                ))
+                console.print(
+                    Panel(
+                        "Scanning [bold]<img>[/bold] and [bold]<input type=image>[/bold]",
+                        title="[yellow]PASS 1 · Image Elements[/yellow]",
+                        border_style="yellow",
+                    )
+                )
 
                 img_els = await page.locator('img, input[type="image"]').all()
                 console.print(f"  Found [bold]{len(img_els)}[/bold] elements")
@@ -321,10 +365,16 @@ class AsyncImageCrawler:
                     task = prog.add_task("Processing images…", total=len(img_els))
 
                     for idx, img in enumerate(img_els):
-                        prog.update(task, advance=1,
-                                    description=f"[yellow]Image {idx+1}/{len(img_els)}[/yellow]")
+                        prog.update(
+                            task,
+                            advance=1,
+                            description=f"[yellow]Image {idx+1}/{len(img_els)}[/yellow]",
+                        )
                         try:
-                            if not self.include_invisible and not await self._is_visible(img):
+                            if (
+                                not self.include_invisible
+                                and not await self._is_visible(img)
+                            ):
                                 skipped_hidden += 1
                                 continue
 
@@ -336,14 +386,14 @@ class AsyncImageCrawler:
                                 continue
                             seen_srcs.add(abs_src)
 
-                            alt   = await img.get_attribute("alt") or ""
+                            alt = await img.get_attribute("alt") or ""
                             title = await img.get_attribute("title") or ""
 
                             cr = _CR(await self.classifier.classify_image(img, page))
 
                             img_hash = self.classifier.get_image_hash(abs_src)
                             sub_path = self._subpath(cr)
-                            img_dir  = os.path.join(self.output_dir, sub_path)
+                            img_dir = os.path.join(self.output_dir, sub_path)
                             os.makedirs(img_dir, exist_ok=True)
                             filename = f"img_{img_hash}.png"
                             save_path = f"{img_dir}/{filename}"
@@ -351,58 +401,81 @@ class AsyncImageCrawler:
                             # ── screenshot / download ──
                             saved = False
                             if cr.is_icon:
-                                ext = os.path.splitext(urlparse(abs_src).path)[1] or ".png"
-                                filename  = f"img_{img_hash}{ext}"
+                                ext = (
+                                    os.path.splitext(urlparse(abs_src).path)[1]
+                                    or ".png"
+                                )
+                                filename = f"img_{img_hash}{ext}"
                                 save_path = f"{img_dir}/{filename}"
                                 async with aiohttp.ClientSession() as sess:
                                     saved = await self.classifier._download_file(
-                                        sess, abs_src, save_path)
+                                        sess, abs_src, save_path
+                                    )
                                 if not saved:
                                     save_path = f"{img_dir}/img_{img_hash}.png"
-                                    filename  = f"img_{img_hash}.png"
+                                    filename = f"img_{img_hash}.png"
                                     try:
                                         ph = await img.evaluate_handle(
                                             "el => el.closest('a,button,li,td,div') || el.parentElement"
                                         )
-                                        await ph.screenshot(path=save_path); saved = True
+                                        await ph.screenshot(path=save_path)
+                                        saved = True
                                     except Exception:
                                         pass
 
                             elif cr.is_button:
-                                ext = os.path.splitext(urlparse(abs_src).path)[1] or ".png"
-                                filename  = f"img_{img_hash}{ext}"
+                                ext = (
+                                    os.path.splitext(urlparse(abs_src).path)[1]
+                                    or ".png"
+                                )
+                                filename = f"img_{img_hash}{ext}"
                                 save_path = f"{img_dir}/{filename}"
                                 async with aiohttp.ClientSession() as sess:
                                     saved = await self.classifier._download_file(
-                                        sess, abs_src, save_path)
+                                        sess, abs_src, save_path
+                                    )
                                 if not saved:
                                     try:
-                                        await img.screenshot(path=save_path); saved = True
+                                        await img.screenshot(path=save_path)
+                                        saved = True
                                     except Exception:
                                         pass
 
                             else:
                                 # Detect overlay container (text overlaid on image)
                                 try:
-                                    container_h = await self.classifier.get_visual_container(img, page)
-                                    is_overlay  = await page.evaluate(
-                                        "(args) => args[0] !== args[1]", [container_h, img]
+                                    container_h = (
+                                        await self.classifier.get_visual_container(
+                                            img, page
+                                        )
+                                    )
+                                    is_overlay = await page.evaluate(
+                                        "(args) => args[0] !== args[1]",
+                                        [container_h, img],
                                     )
                                     target = container_h if is_overlay else img
-                                    await target.screenshot(path=save_path); saved = True
+                                    await target.screenshot(path=save_path)
+                                    saved = True
                                 except Exception:
                                     # Fallback: direct download
                                     async with aiohttp.ClientSession() as sess:
                                         saved = await self.classifier._download_file(
-                                            sess, abs_src, save_path)
+                                            sess, abs_src, save_path
+                                        )
 
                             if saved:
                                 captured += 1
-                                self.images_data.append(self._make_image_data(
-                                    url=self.base_url, src=abs_src,
-                                    alt=alt, title=title, cr=cr,
-                                    screenshot_path=save_path, filename=filename
-                                ))
+                                self.images_data.append(
+                                    self._make_image_data(
+                                        url=self.base_url,
+                                        src=abs_src,
+                                        alt=alt,
+                                        title=title,
+                                        cr=cr,
+                                        screenshot_path=save_path,
+                                        filename=filename,
+                                    )
+                                )
                                 logger.info(
                                     f"  ✓ [{cr.type}/{cr.sub_type}] {os.path.basename(save_path)}"
                                 )
@@ -418,15 +491,17 @@ class AsyncImageCrawler:
                 # ═══════════════════════════════════════════════════════════
                 # PASS 2 — Standalone button elements
                 # ═══════════════════════════════════════════════════════════
-                console.print(Panel(
-                    "Scanning [bold]<button>[/bold], [bold]<input type=submit>[/bold], "
-                    "[bold][role=button][/bold], Bootstrap .btn links",
-                    title="[yellow]PASS 2 · Button Elements[/yellow]",
-                    border_style="yellow"
-                ))
+                console.print(
+                    Panel(
+                        "Scanning [bold]<button>[/bold], [bold]<input type=submit>[/bold], "
+                        "[bold][role=button][/bold], Bootstrap .btn links",
+                        title="[yellow]PASS 2 · Button Elements[/yellow]",
+                        border_style="yellow",
+                    )
+                )
 
                 btn_sel = (
-                    'button, '
+                    "button, "
                     'input[type="button"], input[type="submit"], input[type="reset"], '
                     '[role="button"], '
                     'a[class*="btn"]:not([role="button"])'
@@ -445,13 +520,15 @@ class AsyncImageCrawler:
                         if not await self._is_visible(btn):
                             continue
 
-                        info = await btn.evaluate('''el => ({
+                        info = await btn.evaluate("""el => ({
                             tag:  el.tagName.toLowerCase(),
                             text: (el.innerText || el.value || el.getAttribute("aria-label") || "").trim().slice(0,80),
                             type: el.getAttribute("type") || ""
-                        })''')
+                        })""")
                         html_hash = hashlib.md5(
-                            (await btn.evaluate("el => el.outerHTML.slice(0,200)")).encode()
+                            (
+                                await btn.evaluate("el => el.outerHTML.slice(0,200)")
+                            ).encode()
                         ).hexdigest()[:12]
                         if html_hash in seen_btns:
                             continue
@@ -463,30 +540,44 @@ class AsyncImageCrawler:
 
                         # Reject near-empty screenshots
                         if os.path.getsize(btn_path) < 500:
-                            os.remove(btn_path); continue
+                            os.remove(btn_path)
+                            continue
                         try:
                             from PIL import Image as PILImage
+
                             with PILImage.open(btn_path) as im:
                                 if im.width < 20 or im.height < 10:
-                                    os.remove(btn_path); continue
+                                    os.remove(btn_path)
+                                    continue
                         except Exception:
                             pass
 
                         captured_btns += 1
                         lbl = info["text"] or f"<{info['tag']}>"
-                        console.print(f"  [green]✓[/green] Button: [dim]{lbl[:60]}[/dim]")
+                        console.print(
+                            f"  [green]✓[/green] Button: [dim]{lbl[:60]}[/dim]"
+                        )
                         logger.info(f"  ✓ Button captured: {btn_path} ({lbl})")
 
-                        self.images_data.append(ImageData(
-                            url=self.base_url,
-                            src=self.base_url,
-                            alt_text=info["text"], title=info["text"],
-                            classification="functional", sub_type="buttons",
-                            is_functional=True, is_decorative=False,
-                            is_complex=False, is_text_image=False,
-                            is_logo=False, is_icon=False, is_button=True,
-                            screenshot_path=btn_path, filename=btn_file,
-                        ))
+                        self.images_data.append(
+                            ImageData(
+                                url=self.base_url,
+                                src=self.base_url,
+                                alt_text=info["text"],
+                                title=info["text"],
+                                classification="functional",
+                                sub_type="buttons",
+                                is_functional=True,
+                                is_decorative=False,
+                                is_complex=False,
+                                is_text_image=False,
+                                is_logo=False,
+                                is_icon=False,
+                                is_button=True,
+                                screenshot_path=btn_path,
+                                filename=btn_file,
+                            )
+                        )
                     except Exception as e:
                         logger.debug(f"  Button {bi+1} error: {e}")
 
@@ -495,17 +586,19 @@ class AsyncImageCrawler:
                 # ═══════════════════════════════════════════════════════════
                 # PASS 3 — Inline <svg> elements (icons + charts)
                 # ═══════════════════════════════════════════════════════════
-                console.print(Panel(
-                    "Scanning inline [bold]<svg>[/bold] elements",
-                    title="[yellow]PASS 3 · Inline SVG Elements[/yellow]",
-                    border_style="yellow"
-                ))
+                console.print(
+                    Panel(
+                        "Scanning inline [bold]<svg>[/bold] elements",
+                        title="[yellow]PASS 3 · Inline SVG Elements[/yellow]",
+                        border_style="yellow",
+                    )
+                )
 
                 svg_els = await page.locator("svg").all()
                 console.print(f"  Found [bold]{len(svg_els)}[/bold] SVG elements")
                 logger.info(f"PASS 3: {len(svg_els)} SVG elements")
 
-                seen_svgs:  set[str] = set()
+                seen_svgs: set[str] = set()
                 captured_svgs = 0
 
                 for si, svg in enumerate(svg_els):
@@ -520,7 +613,7 @@ class AsyncImageCrawler:
                         seen_svgs.add(svg_hash)
 
                         # Gather context for classification
-                        svg_ctx = await svg.evaluate('''el => {
+                        svg_ctx = await svg.evaluate("""el => {
                             const a   = el.closest("a");
                             const btn = el.closest("button, [role='button']");
                             const href = a ? (a.getAttribute("href") || "") : "";
@@ -533,18 +626,23 @@ class AsyncImageCrawler:
                                 ariaHidden: el.getAttribute("aria-hidden") || "",
                                 role:      el.getAttribute("role") || ""
                             };
-                        }''')
+                        }""")
 
-                        is_icon_svg  = await self.classifier.is_icon(svg, "", "")
-                        is_chart_svg = (not is_icon_svg and
-                                        await self.classifier.is_chart(svg, "", "", page))
+                        is_icon_svg = await self.classifier.is_icon(svg, "", "")
+                        is_chart_svg = (
+                            not is_icon_svg
+                            and await self.classifier.is_chart(svg, "", "", page)
+                        )
 
                         if not is_icon_svg and not is_chart_svg:
                             continue
 
                         if is_icon_svg:
-                            sub_dir = "functional/icons" if (svg_ctx["inLink"] or svg_ctx["inButton"]) \
-                                      else "informative"
+                            sub_dir = (
+                                "functional/icons"
+                                if (svg_ctx["inLink"] or svg_ctx["inButton"])
+                                else "informative"
+                            )
                         else:
                             sub_dir = "complex/charts"
 
@@ -559,19 +657,32 @@ class AsyncImageCrawler:
 
                         captured_svgs += 1
                         kind = "icon" if is_icon_svg else "chart"
-                        console.print(f"  [green]✓[/green] SVG {kind}: [dim]{sub_dir}[/dim]")
+                        console.print(
+                            f"  [green]✓[/green] SVG {kind}: [dim]{sub_dir}[/dim]"
+                        )
                         logger.info(f"  ✓ SVG {kind} saved: {svg_path}")
 
-                        self.images_data.append(ImageData(
-                            url=self.base_url, src=self.base_url,
-                            alt_text=svg_ctx["ariaLabel"], title="",
-                            classification="functional" if is_icon_svg else "complex",
-                            sub_type="icons" if is_icon_svg else "charts",
-                            is_functional=is_icon_svg, is_decorative=False,
-                            is_complex=is_chart_svg, is_text_image=False,
-                            is_logo=False, is_icon=is_icon_svg, is_button=False,
-                            screenshot_path=svg_path, filename=svg_file,
-                        ))
+                        self.images_data.append(
+                            ImageData(
+                                url=self.base_url,
+                                src=self.base_url,
+                                alt_text=svg_ctx["ariaLabel"],
+                                title="",
+                                classification=(
+                                    "functional" if is_icon_svg else "complex"
+                                ),
+                                sub_type="icons" if is_icon_svg else "charts",
+                                is_functional=is_icon_svg,
+                                is_decorative=False,
+                                is_complex=is_chart_svg,
+                                is_text_image=False,
+                                is_logo=False,
+                                is_icon=is_icon_svg,
+                                is_button=False,
+                                screenshot_path=svg_path,
+                                filename=svg_file,
+                            )
+                        )
                     except Exception as e:
                         logger.debug(f"  SVG {si+1} error: {e}")
 
@@ -580,11 +691,13 @@ class AsyncImageCrawler:
                 # ═══════════════════════════════════════════════════════════
                 # PASS 4 — Font icons (<i> and <span> with icon classes)
                 # ═══════════════════════════════════════════════════════════
-                console.print(Panel(
-                    "Scanning font-icon [bold]<i>[/bold] and [bold]<span>[/bold] elements",
-                    title="[yellow]PASS 4 · Font Icons[/yellow]",
-                    border_style="yellow"
-                ))
+                console.print(
+                    Panel(
+                        "Scanning font-icon [bold]<i>[/bold] and [bold]<span>[/bold] elements",
+                        title="[yellow]PASS 4 · Font Icons[/yellow]",
+                        border_style="yellow",
+                    )
+                )
 
                 fi_sel = (
                     'i[class*="fa"], i[class*="material"], i[class*="bi"], '
@@ -611,7 +724,7 @@ class AsyncImageCrawler:
                             continue
                         seen_fi.add(fi_hash)
 
-                        fi_info = await fi.evaluate('''el => {
+                        fi_info = await fi.evaluate("""el => {
                             const a   = el.closest("a");
                             const btn = el.closest("button,[role='button']");
                             return {
@@ -620,11 +733,13 @@ class AsyncImageCrawler:
                                 label:    el.getAttribute("aria-label") ||
                                           el.getAttribute("title") || ""
                             };
-                        }''')
+                        }""")
 
                         is_functional = fi_info["inLink"] or fi_info["inButton"]
-                        fi_sub_dir = "functional/icons" if is_functional else "decorative"
-                        save_dir   = f"{self.output_dir}/{fi_sub_dir}"
+                        fi_sub_dir = (
+                            "functional/icons" if is_functional else "decorative"
+                        )
+                        save_dir = f"{self.output_dir}/{fi_sub_dir}"
                         os.makedirs(save_dir, exist_ok=True)
                         fi_file = f"fi_{fi_hash}.png"
                         fi_path = f"{save_dir}/{fi_file}"
@@ -646,16 +761,27 @@ class AsyncImageCrawler:
                         )
                         logger.info(f"  ✓ Font icon saved: {fi_path}")
 
-                        self.images_data.append(ImageData(
-                            url=self.base_url, src=self.base_url,
-                            alt_text=fi_info["label"], title="",
-                            classification="functional" if is_functional else "decorative",
-                            sub_type="icons" if is_functional else "decorative",
-                            is_functional=is_functional, is_decorative=not is_functional,
-                            is_complex=False, is_text_image=False,
-                            is_logo=False, is_icon=True, is_button=False,
-                            screenshot_path=fi_path, filename=fi_file,
-                        ))
+                        self.images_data.append(
+                            ImageData(
+                                url=self.base_url,
+                                src=self.base_url,
+                                alt_text=fi_info["label"],
+                                title="",
+                                classification=(
+                                    "functional" if is_functional else "decorative"
+                                ),
+                                sub_type="icons" if is_functional else "decorative",
+                                is_functional=is_functional,
+                                is_decorative=not is_functional,
+                                is_complex=False,
+                                is_text_image=False,
+                                is_logo=False,
+                                is_icon=True,
+                                is_button=False,
+                                screenshot_path=fi_path,
+                                filename=fi_file,
+                            )
+                        )
                     except Exception as e:
                         logger.debug(f"  Font icon {fii+1} error: {e}")
 
@@ -664,13 +790,15 @@ class AsyncImageCrawler:
                 # ═══════════════════════════════════════════════════════════
                 # PASS 5 — CSS background-image elements
                 # ═══════════════════════════════════════════════════════════
-                console.print(Panel(
-                    "Scanning elements with [bold]background-image[/bold] CSS property",
-                    title="[yellow]PASS 5 · CSS Background Images[/yellow]",
-                    border_style="yellow"
-                ))
+                console.print(
+                    Panel(
+                        "Scanning elements with [bold]background-image[/bold] CSS property",
+                        title="[yellow]PASS 5 · CSS Background Images[/yellow]",
+                        border_style="yellow",
+                    )
+                )
 
-                bg_candidates = await page.evaluate('''() => {
+                bg_candidates = await page.evaluate("""() => {
                     const results = [];
                     const all = document.querySelectorAll("*");
                     for (const el of all) {
@@ -695,9 +823,11 @@ class AsyncImageCrawler:
                         });
                     }
                     return results;
-                }''')
+                }""")
 
-                console.print(f"  Found [bold]{len(bg_candidates)}[/bold] background-image candidates")
+                console.print(
+                    f"  Found [bold]{len(bg_candidates)}[/bold] background-image candidates"
+                )
                 logger.info(f"PASS 5: {len(bg_candidates)} background candidates")
 
                 seen_bgs: set[str] = set()
@@ -713,8 +843,10 @@ class AsyncImageCrawler:
                         bg_hash = hashlib.md5(abs_src.encode()).hexdigest()[:12]
 
                         # Classify
-                        is_hidden = (bg["ariaHidden"] == "true" or
-                                     bg["role"] in ("presentation", "none"))
+                        is_hidden = bg["ariaHidden"] == "true" or bg["role"] in (
+                            "presentation",
+                            "none",
+                        )
                         has_label = bool(bg["ariaLabel"].strip())
 
                         if is_hidden:
@@ -731,7 +863,9 @@ class AsyncImageCrawler:
                         bg_path = f"{save_dir}/{bg_file}"
 
                         async with aiohttp.ClientSession() as sess:
-                            ok = await self.classifier._download_file(sess, abs_src, bg_path)
+                            ok = await self.classifier._download_file(
+                                sess, abs_src, bg_path
+                            )
 
                         if ok:
                             captured_bg += 1
@@ -741,23 +875,39 @@ class AsyncImageCrawler:
                             )
                             logger.info(f"  ✓ BG image saved: {bg_path}")
 
-                            self.images_data.append(ImageData(
-                                url=self.base_url, src=abs_src,
-                                alt_text=bg["ariaLabel"], title="",
-                                classification=cls, sub_type=sub,
-                                is_functional=False, is_decorative=(cls == "decorative"),
-                                is_complex=False, is_text_image=False,
-                                is_logo=False, is_icon=False, is_button=False,
-                                screenshot_path=bg_path, filename=bg_file,
-                            ))
+                            self.images_data.append(
+                                ImageData(
+                                    url=self.base_url,
+                                    src=abs_src,
+                                    alt_text=bg["ariaLabel"],
+                                    title="",
+                                    classification=cls,
+                                    sub_type=sub,
+                                    is_functional=False,
+                                    is_decorative=(cls == "decorative"),
+                                    is_complex=False,
+                                    is_text_image=False,
+                                    is_logo=False,
+                                    is_icon=False,
+                                    is_button=False,
+                                    screenshot_path=bg_path,
+                                    filename=bg_file,
+                                )
+                            )
                     except Exception as e:
                         logger.debug(f"  BG image error: {e}")
 
-                console.print(f"  [green]✓ Captured {captured_bg} background images[/green]")
+                console.print(
+                    f"  [green]✓ Captured {captured_bg} background images[/green]"
+                )
 
                 # ── link-following (multi-depth) ───────────────────────────
                 if current_depth < self.max_depth:
-                    console.print(Rule(f"[dim]Finding links (depth {current_depth}→{self.max_depth})[/dim]"))
+                    console.print(
+                        Rule(
+                            f"[dim]Finding links (depth {current_depth}→{self.max_depth})[/dim]"
+                        )
+                    )
                     links = await page.locator("a[href]").all()
                     for link in links:
                         try:
@@ -770,18 +920,19 @@ class AsyncImageCrawler:
                                 continue
                             if abs_href not in self.visited_urls:
                                 sub_crawler = AsyncImageCrawler(
-                                    base_url=abs_href,
-                                    max_depth=self.max_depth
+                                    base_url=abs_href, max_depth=self.max_depth
                                 )
                                 sub_crawler.visited_urls = self.visited_urls
-                                sub_crawler.images_data  = self.images_data
+                                sub_crawler.images_data = self.images_data
                                 await sub_crawler.crawl_page(current_depth + 1)
                         except Exception:
                             pass
 
             except Exception as e:
                 logger.error(f"Crawl error: {e}")
-                import traceback; traceback.print_exc()
+                import traceback
+
+                traceback.print_exc()
 
             finally:
                 await context.close()
@@ -801,14 +952,20 @@ class AsyncImageCrawler:
         for img in self.images_data:
             summary.total_images += 1
             cls = img.classification
-            if cls == "informative": summary.informative += 1
-            elif cls == "decorative": summary.decorative += 1
+            if cls == "informative":
+                summary.informative += 1
+            elif cls == "decorative":
+                summary.decorative += 1
             elif cls == "functional":
                 summary.functional += 1
-                if img.sub_type == "buttons": summary.functional_buttons += 1
-                elif img.sub_type == "icons":  summary.functional_icons  += 1
-                elif img.sub_type == "logos":  summary.functional_logos  += 1
-                else:                          summary.functional_images += 1
+                if img.sub_type == "buttons":
+                    summary.functional_buttons += 1
+                elif img.sub_type == "icons":
+                    summary.functional_icons += 1
+                elif img.sub_type == "logos":
+                    summary.functional_logos += 1
+                else:
+                    summary.functional_images += 1
             elif cls == "complex":
                 summary.complex += 1
             if img.is_text_image:
@@ -821,7 +978,7 @@ class AsyncImageCrawler:
             crawl_date=datetime.now().isoformat(),
             summary=summary,
             sub_type_breakdown=sub_breakdown,
-            images=self.images_data
+            images=self.images_data,
         )
 
         report_path = f"{self.output_dir}/images_report.json"
@@ -831,21 +988,23 @@ class AsyncImageCrawler:
         # ── Rich summary table ──
         tbl = Table(
             title=f"[bold cyan]Crawl Complete — {self.base_url}[/bold cyan]",
-            box=box.ROUNDED, border_style="cyan", show_header=True
+            box=box.ROUNDED,
+            border_style="cyan",
+            show_header=True,
         )
         tbl.add_column("Category", style="bold")
         tbl.add_column("Count", justify="right")
 
-        tbl.add_row("Total Images",       str(summary.total_images))
+        tbl.add_row("Total Images", str(summary.total_images))
         tbl.add_row("[green]Informative[/green]", str(summary.informative))
-        tbl.add_row("[dim]Decorative[/dim]",      str(summary.decorative))
+        tbl.add_row("[dim]Decorative[/dim]", str(summary.decorative))
         tbl.add_row("[yellow]Functional[/yellow]", str(summary.functional))
-        tbl.add_row("  ↳ Buttons",        str(summary.functional_buttons))
-        tbl.add_row("  ↳ Icons",          str(summary.functional_icons))
-        tbl.add_row("  ↳ Logos",          str(summary.functional_logos))
-        tbl.add_row("  ↳ Images",         str(summary.functional_images))
-        tbl.add_row("[magenta]Complex[/magenta]",  str(summary.complex))
-        tbl.add_row("[dim]Pages crawled[/dim]",    str(summary.pages_crawled))
+        tbl.add_row("  ↳ Buttons", str(summary.functional_buttons))
+        tbl.add_row("  ↳ Icons", str(summary.functional_icons))
+        tbl.add_row("  ↳ Logos", str(summary.functional_logos))
+        tbl.add_row("  ↳ Images", str(summary.functional_images))
+        tbl.add_row("[magenta]Complex[/magenta]", str(summary.complex))
+        tbl.add_row("[dim]Pages crawled[/dim]", str(summary.pages_crawled))
         console.print(tbl)
 
         console.print(f"\n  [dim]Report → {report_path}[/dim]")
@@ -860,21 +1019,40 @@ class AsyncImageCrawler:
             return
         csv_path = f"{self.output_dir}/images_with_alt_text.csv"
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=[
-                "src", "alt_text", "title", "classification",
-                "sub_type", "is_functional", "is_decorative",
-                "is_complex", "is_logo", "is_icon", "is_button",
-                "screenshot_path"
-            ])
+            w = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "src",
+                    "alt_text",
+                    "title",
+                    "classification",
+                    "sub_type",
+                    "is_functional",
+                    "is_decorative",
+                    "is_complex",
+                    "is_logo",
+                    "is_icon",
+                    "is_button",
+                    "screenshot_path",
+                ],
+            )
             w.writeheader()
             for img in imgs_with_alt:
-                w.writerow({
-                    "src": img.src, "alt_text": img.alt_text, "title": img.title,
-                    "classification": img.classification, "sub_type": img.sub_type,
-                    "is_functional": img.is_functional, "is_decorative": img.is_decorative,
-                    "is_complex": img.is_complex, "is_logo": img.is_logo,
-                    "is_icon": img.is_icon, "is_button": img.is_button,
-                    "screenshot_path": img.screenshot_path
-                })
+                w.writerow(
+                    {
+                        "src": img.src,
+                        "alt_text": img.alt_text,
+                        "title": img.title,
+                        "classification": img.classification,
+                        "sub_type": img.sub_type,
+                        "is_functional": img.is_functional,
+                        "is_decorative": img.is_decorative,
+                        "is_complex": img.is_complex,
+                        "is_logo": img.is_logo,
+                        "is_icon": img.is_icon,
+                        "is_button": img.is_button,
+                        "screenshot_path": img.screenshot_path,
+                    }
+                )
         console.print(f"  [dim]CSV  → {csv_path} ({len(imgs_with_alt)} rows)[/dim]")
         logger.info(f"CSV saved: {csv_path}")

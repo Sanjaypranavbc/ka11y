@@ -10,7 +10,7 @@ class OCRReader:
         self.reader = self._create_reader()
 
     def _create_reader(self):
-        return easyocr.Reader(['en'], gpu=False)
+        return easyocr.Reader(["en"], gpu=False)
 
     def readtext(self, image_path: str):
         return self.reader.readtext(image_path)

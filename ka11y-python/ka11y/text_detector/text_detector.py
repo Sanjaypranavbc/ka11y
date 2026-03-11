@@ -1,4 +1,4 @@
-#text_detector
+# text_detector
 
 import os
 import json
@@ -11,10 +11,16 @@ from datetime import datetime
 import cv2
 from ka11y.preprocessor import extract_color
 from ka11y.preprocessor import contrast_analyzer
-from ka11y.preprocessor.text_helper_models import TextDetectionResult, TextDetectionReport, DetailedDetection, _json_serializer
+from ka11y.preprocessor.text_helper_models import (
+    TextDetectionResult,
+    TextDetectionReport,
+    DetailedDetection,
+    _json_serializer,
+)
 from ka11y.text_detector.ocrbase import OCRReader
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
+
 config = load_config()
 
 logger = setup_logger(name="KAC", tag="text_detector")
@@ -37,15 +43,9 @@ class OCRPreprocessing:
         contrast_folder = config["ocr"]["contrast_folder"]
         category_config = ocr_config["categories"]
 
-        self.text_detected_dir = os.path.join(
-            self.base_output_dir,
-            base_folder
-        )
+        self.text_detected_dir = os.path.join(self.base_output_dir, base_folder)
 
-        self.contrast_dir = os.path.join(
-            self.text_detected_dir,
-            contrast_folder
-        )
+        self.contrast_dir = os.path.join(self.text_detected_dir, contrast_folder)
         logger.info(f"base output dir :{self.base_output_dir}")
         logger.info(f"text detected dir :{self.text_detected_dir}")
 
@@ -65,7 +65,7 @@ class OCRPreprocessing:
 
         self.results: List[TextDetectionResult] = []
 
-    def _determine_category(self,original_path: str) -> str:
+    def _determine_category(self, original_path: str) -> str:
         """Heuristic to determine category based on source path."""
         path_str = str(original_path).lower()
         if "button" in path_str:
@@ -182,9 +182,7 @@ class OCRPreprocessing:
         category = self._determine_category(image_path)
 
         result = TextDetectionResult(
-            filename=filename,
-            original_path=image_path,
-            category=category
+            filename=filename, original_path=image_path, category=category
         )
 
         try:
@@ -198,7 +196,9 @@ class OCRPreprocessing:
                     clean_bbox = [(int(p[0]), int(p[1])) for p in bbox]
 
                     try:
-                        contrast_info = contrast_analyzer.analyze_text_region(img, clean_bbox)
+                        contrast_info = contrast_analyzer.analyze_text_region(
+                            img, clean_bbox
+                        )
                     except Exception as e:
                         logger.warning(f"Contrast analysis failed: {e}")
                         contrast_info = None
@@ -206,12 +206,10 @@ class OCRPreprocessing:
                     violations = []
 
                     color_info = None
-                    if contrast_info and not contrast_info.get('error'):
+                    if contrast_info and not contrast_info.get("error"):
                         try:
                             extracted = extract_color.extract_colors_from_mask(
-                                contrast_info['region'],
-                                contrast_info['mask'],
-                                k_bg=3
+                                contrast_info["region"], contrast_info["mask"], k_bg=3
                             )
 
                             if "error" not in extracted:
@@ -221,62 +219,76 @@ class OCRPreprocessing:
                                 color_info = {
                                     "foreground": fg_color,
                                     "background_palette": bg_colors,
-                                    "contrast_checks": []
+                                    "contrast_checks": [],
                                 }
 
-                                fg_lum = fg_color['luminance']
+                                fg_lum = fg_color["luminance"]
                                 for bg in bg_colors:
-                                    bg_lum = bg['luminance']
+                                    bg_lum = bg["luminance"]
                                     l1 = max(fg_lum, bg_lum)
                                     l2 = min(fg_lum, bg_lum)
                                     ratio = (l1 + 0.05) / (l2 + 0.05)
-                                    compliance = contrast_analyzer.check_wcag_compliance(ratio)
-                                    color_info["contrast_checks"].append({
-                                        "bg_color": bg,
-                                        "ratio": round(ratio, 2),
-                                        "compliance": compliance
-                                    })
-                                    if not compliance['AA_normal']:
-                                        violations.append(f"Fails AA Normal vs BG {bg['hex']}")
+                                    compliance = (
+                                        contrast_analyzer.check_wcag_compliance(ratio)
+                                    )
+                                    color_info["contrast_checks"].append(
+                                        {
+                                            "bg_color": bg,
+                                            "ratio": round(ratio, 2),
+                                            "compliance": compliance,
+                                        }
+                                    )
+                                    if not compliance["AA_normal"]:
+                                        violations.append(
+                                            f"Fails AA Normal vs BG {bg['hex']}"
+                                        )
                             else:
-                                logger.warning(f"Color extraction failed: {extracted['error']}")
+                                logger.warning(
+                                    f"Color extraction failed: {extracted['error']}"
+                                )
 
                         except Exception as cp_err:
                             logger.warning(f"Color picker failed for region: {cp_err}")
 
-                    if contrast_info and not contrast_info.get('error'):
-                        if 'compliance' in contrast_info:
-                            compliance = contrast_info['compliance']
-                            if not compliance.get('AA_normal', False):
+                    if contrast_info and not contrast_info.get("error"):
+                        if "compliance" in contrast_info:
+                            compliance = contrast_info["compliance"]
+                            if not compliance.get("AA_normal", False):
                                 violations.append("Fails AA Normal")
 
                     if violations:
                         result.contrast_violations_count += 1
 
-                    result.detections.append(DetailedDetection(
-                        text=text,
-                        confidence=float(conf),
-                        bbox=clean_bbox,
-                        contrast_info=contrast_info,
-                        color_info=color_info,
-                        wcag_violations=violations
-                    ))
+                    result.detections.append(
+                        DetailedDetection(
+                            text=text,
+                            confidence=float(conf),
+                            bbox=clean_bbox,
+                            contrast_info=contrast_info,
+                            color_info=color_info,
+                            wcag_violations=violations,
+                        )
+                    )
 
                 # Copy image to appropriate text category folder
-                dest_folder = self.categories.get(category, self.categories["with_text"])
+                dest_folder = self.categories.get(
+                    category, self.categories["with_text"]
+                )
                 dest_path = os.path.join(dest_folder, filename)
                 shutil.copy2(image_path, dest_path)
 
                 result.new_path = dest_path
 
                 logger.info(
-                    f"✓ Detected {len(detections)} text regions. Category: {category}. Violations: {result.contrast_violations_count}")
+                    f"✓ Detected {len(detections)} text regions. Category: {category}. Violations: {result.contrast_violations_count}"
+                )
             else:
                 logger.debug(f"No text detected in {filename}")
 
         except Exception as e:
             logger.error(f"Error processing {filename}: {str(e)}")
             import traceback
+
             traceback.print_exc()
 
         return result
@@ -285,7 +297,7 @@ class OCRPreprocessing:
         """Scan source directory for images"""
         logger.info(f"Scanning directory: {self.source_directory}")
 
-        image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+        image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
         image_files = []
         for root, dirs, files in os.walk(self.source_directory):
             # Avoid scanning our own output directories if they are inside source
@@ -301,9 +313,13 @@ class OCRPreprocessing:
             self.results.append(result)
 
             if result.has_text:
-                print(f"  ✓ Found {len(result.detections)} text regions ({result.category})")
+                print(
+                    f"  ✓ Found {len(result.detections)} text regions ({result.category})"
+                )
                 if result.contrast_violations_count > 0:
-                    print(f"  ⚠ {result.contrast_violations_count} contrast violations detected!")
+                    print(
+                        f"  ⚠ {result.contrast_violations_count} contrast violations detected!"
+                    )
             else:
                 print(f"  . No text")
 
@@ -336,9 +352,11 @@ class TextClassification:
         """Create necessary output directories"""
         self.categories = {
             "button_text": os.path.join(self.text_detected_dir, "button_text"),
-            "informational_text": os.path.join(self.text_detected_dir, "informational_text"),
+            "informational_text": os.path.join(
+                self.text_detected_dir, "informational_text"
+            ),
             "logo_text": os.path.join(self.text_detected_dir, "logo_text"),
-            "with_text": os.path.join(self.text_detected_dir, "with_text")
+            "with_text": os.path.join(self.text_detected_dir, "with_text"),
         }
 
         # Create text detection folders
@@ -356,7 +374,9 @@ class TextClassification:
         json_file = os.path.join(self.text_detected_dir, "text_detection_report.json")
 
         images_with_text = sum(1 for r in self.results if r.has_text)
-        images_with_violations = sum(1 for r in self.results if r.contrast_violations_count > 0)
+        images_with_violations = sum(
+            1 for r in self.results if r.contrast_violations_count > 0
+        )
 
         report = TextDetectionReport(
             scan_date=datetime.utcnow().isoformat(),
@@ -364,7 +384,7 @@ class TextClassification:
             total_images_scanned=len(self.results),
             images_with_text=images_with_text,
             images_with_contrast_violations=images_with_violations,
-            results=self.results
+            results=self.results,
         )
 
         with open(json_file, "w", encoding="utf-8") as f:
@@ -373,7 +393,7 @@ class TextClassification:
                 f,
                 indent=2,
                 ensure_ascii=False,
-                default=_json_serializer
+                default=_json_serializer,
             )
 
         # 2. Contrast Markdown Report
@@ -409,28 +429,34 @@ class TextClassification:
                         if det.color_info:
                             text_snippet = det.text.replace("\n", " ")[:30]
                             # Clean up snippet
-                            if len(det.text) > 30: text_snippet += "..."
+                            if len(det.text) > 30:
+                                text_snippet += "..."
 
-                            f.write(f"#### {i}. Text: \"{text_snippet}\"\n")
+                            f.write(f'#### {i}. Text: "{text_snippet}"\n')
 
                             fg = det.color_info.get("foreground", {})
                             f.write(
-                                f"- **Detected Text Color**: {fg.get('hex', 'N/A')} (Lum: {fg.get('luminance', 'N/A')})\n\n")
+                                f"- **Detected Text Color**: {fg.get('hex', 'N/A')} (Lum: {fg.get('luminance', 'N/A')})\n\n"
+                            )
 
-                            f.write("| Background | Ratio | AA Normal | AA Large | AAA Normal | AAA Large |\n")
+                            f.write(
+                                "| Background | Ratio | AA Normal | AA Large | AAA Normal | AAA Large |\n"
+                            )
                             f.write("|---|---|---|---|---|---|\n")
 
                             for check in det.color_info.get("contrast_checks", []):
-                                bg = check['bg_color']
-                                ratio = check['ratio']
-                                comp = check['compliance']
+                                bg = check["bg_color"]
+                                ratio = check["ratio"]
+                                comp = check["compliance"]
 
-                                aa = "✅" if comp['AA_normal'] else "❌"
-                                aa_lg = "✅" if comp['AA_large'] else "❌"
-                                aaa = "✅" if comp['AAA_normal'] else "❌"
-                                aaa_lg = "✅" if comp['AAA_large'] else "❌"
+                                aa = "✅" if comp["AA_normal"] else "❌"
+                                aa_lg = "✅" if comp["AA_large"] else "❌"
+                                aaa = "✅" if comp["AAA_normal"] else "❌"
+                                aaa_lg = "✅" if comp["AAA_large"] else "❌"
 
-                                f.write(f"| {bg['hex']} | {ratio}:1 | {aa} | {aa_lg} | {aaa} | {aaa_lg} |\n")
+                                f.write(
+                                    f"| {bg['hex']} | {ratio}:1 | {aa} | {aa_lg} | {aaa} | {aaa_lg} |\n"
+                                )
                             f.write("\n")
                     f.write("---\n\n")
 
@@ -442,9 +468,16 @@ def main():
         # Default fallback logic
         source_directory = "crawled_images"
         if os.path.exists(source_directory):
-            crawl_dirs = [d for d in os.listdir(source_directory) if os.path.isdir(os.path.join(source_directory, d))]
+            crawl_dirs = [
+                d
+                for d in os.listdir(source_directory)
+                if os.path.isdir(os.path.join(source_directory, d))
+            ]
             if crawl_dirs:
-                crawl_dirs.sort(key=lambda x: os.path.getmtime(os.path.join(source_directory, x)), reverse=True)
+                crawl_dirs.sort(
+                    key=lambda x: os.path.getmtime(os.path.join(source_directory, x)),
+                    reverse=True,
+                )
                 source_directory = os.path.join(source_directory, crawl_dirs[0])
 
     if not os.path.exists(source_directory):
@@ -459,5 +492,3 @@ def main():
 
 # if __name__ == "__main__":
 #     main()
-
-

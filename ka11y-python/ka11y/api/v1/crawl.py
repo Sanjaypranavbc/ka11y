@@ -16,18 +16,12 @@ class CrawlRequest(BaseModel):
     run_ocr: bool = True
 
 
-
 class CrawlResponse(BaseModel):
     status: str
     output_dir: str
     url: str
     max_depth: int
     ocr_dir: str | None = None
-
-
-
-
-
 
 
 @router.post("/", response_model=CrawlResponse)
@@ -68,7 +62,7 @@ async def run_crawler(payload: CrawlRequest):
             output_dir=str(crawler.output_dir),
             url=url,
             max_depth=max_depth,
-            ocr_dir=ocr_dir
+            ocr_dir=ocr_dir,
         )
 
     except Exception as e:

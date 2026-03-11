@@ -9,11 +9,9 @@ import numpy as np
 from pydantic import BaseModel, Field
 
 
-
-
 class DetailedDetection(BaseModel):
-
     """Detailed information about a single detected text region"""
+
     text: str
     confidence: float
     bbox: List[tuple[int, int]]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
@@ -24,6 +22,7 @@ class DetailedDetection(BaseModel):
 
 class TextDetectionResult(BaseModel):
     """Result of text detection in an image"""
+
     filename: str
     original_path: str
     has_text: bool = False
@@ -35,13 +34,13 @@ class TextDetectionResult(BaseModel):
 
 class TextDetectionReport(BaseModel):
     """Complete text detection report"""
+
     scan_date: str
     source_directory: str
     total_images_scanned: int = 0
     images_with_text: int = 0
     images_with_contrast_violations: int = 0
     results: List[TextDetectionResult] = Field(default_factory=list)
-
 
 
 def _json_serializer(obj):

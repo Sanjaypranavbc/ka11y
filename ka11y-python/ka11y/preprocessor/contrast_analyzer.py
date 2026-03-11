@@ -6,17 +6,17 @@ from typing import Tuple, Dict, Any, List, Union
 # Color space utilities
 # -------------------------
 
+
 def srgb_to_linear(channel: np.ndarray) -> np.ndarray:
     return np.where(
-        channel <= 0.04045,
-        channel / 12.92,
-        np.power((channel + 0.055) / 1.055, 2.4)
+        channel <= 0.04045, channel / 12.92, np.power((channel + 0.055) / 1.055, 2.4)
     )
 
 
 # -------------------------
 # Segmentation
 # -------------------------
+
 
 def segment_text_region(region: np.ndarray) -> np.ndarray:
     """
@@ -26,9 +26,7 @@ def segment_text_region(region: np.ndarray) -> np.ndarray:
     gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
     gray = cv2.bilateralFilter(gray, 9, 75, 75)
 
-    _, thresh = cv2.threshold(
-        gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # Heuristic: text occupies less area than background
     if np.sum(thresh == 255) > thresh.size / 2:
@@ -43,9 +41,9 @@ def segment_text_region(region: np.ndarray) -> np.ndarray:
 # Luminance + contrast
 # -------------------------
 
+
 def calculate_luminance_contrast(
-    region: np.ndarray,
-    mask: np.ndarray
+    region: np.ndarray, mask: np.ndarray
 ) -> Tuple[float, float, float]:
 
     rgb = cv2.cvtColor(region, cv2.COLOR_BGR2RGB) / 255.0
@@ -55,9 +53,7 @@ def calculate_luminance_contrast(
         linear[:, :, i] = srgb_to_linear(rgb[:, :, i])
 
     luminance = (
-        0.2126 * linear[:, :, 0] +
-        0.7152 * linear[:, :, 1] +
-        0.0722 * linear[:, :, 2]
+        0.2126 * linear[:, :, 0] + 0.7152 * linear[:, :, 1] + 0.0722 * linear[:, :, 2]
     )
 
     text_pixels = luminance[mask == 255]
@@ -90,9 +86,9 @@ def calculate_luminance_contrast(
 # Average colors (reporting only)
 # -------------------------
 
+
 def get_average_rgb(
-    region: np.ndarray,
-    mask: np.ndarray
+    region: np.ndarray, mask: np.ndarray
 ) -> Tuple[Tuple[int, int, int], Tuple[int, int, int]]:
 
     b, g, r = cv2.split(region)
@@ -119,13 +115,14 @@ def get_average_rgb(
 # WCAG compliance
 # -------------------------
 
+
 def check_wcag_compliance(ratio: float) -> Dict[str, Any]:
     return {
         "contrast_ratio": round(ratio, 2),
         "AA_normal": ratio >= 4.5,
         "AA_large": ratio >= 3.0,
         "AAA_normal": ratio >= 7.0,
-        "AAA_large": ratio >= 4.5
+        "AAA_large": ratio >= 4.5,
     }
 
 
@@ -133,9 +130,9 @@ def check_wcag_compliance(ratio: float) -> Dict[str, Any]:
 # MAIN ENTRY
 # -------------------------
 
+
 def analyze_text_region(
-    image: Union[str, np.ndarray],
-    bbox: List[Tuple[int, int]]
+    image: Union[str, np.ndarray], bbox: List[Tuple[int, int]]
 ) -> Dict[str, Any]:
 
     try:
@@ -156,7 +153,7 @@ def analyze_text_region(
         w = min(W - x, w + 2 * pad)
         h = min(H - y, h + 2 * pad)
 
-        region = img[y:y + h, x:x + w]
+        region = img[y : y + h, x : x + w]
         if region.size == 0:
             return {"error": "Empty region"}
 
@@ -177,7 +174,7 @@ def analyze_text_region(
             "luminance_fg": round(text_L, 4),
             "luminance_bg": round(bg_L, 4),
             "contrast_ratio": round(ratio, 2),
-            "compliance": compliance
+            "compliance": compliance,
         }
 
     except Exception as e:

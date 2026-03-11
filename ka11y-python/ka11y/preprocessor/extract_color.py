@@ -7,8 +7,9 @@ from collections import Counter
 # Utilities
 # -------------------------
 
+
 def rgb_to_hex(rgb):
-    return '#{:02x}{:02x}{:02x}'.format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
+    return "#{:02x}{:02x}{:02x}".format(int(rgb[0]), int(rgb[1]), int(rgb[2]))
 
 
 def relative_luminance(rgb):
@@ -21,12 +22,16 @@ def relative_luminance(rgb):
 # KMeans helper
 # -------------------------
 
+
 def cluster_colors(pixels, k):
     pixels = np.float32(pixels)
     _, labels, centers = cv2.kmeans(
-        pixels, k, None,
+        pixels,
+        k,
+        None,
         (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 50, 0.2),
-        10, cv2.KMEANS_RANDOM_CENTERS
+        10,
+        cv2.KMEANS_RANDOM_CENTERS,
     )
 
     counts = Counter(labels.flatten())
@@ -35,12 +40,16 @@ def cluster_colors(pixels, k):
     colors = []
     for idx, count in counts.items():
         rgb = centers[idx].astype(int)
-        colors.append({
-            "rgb": tuple([int(c) for c in rgb]),  # Convert to standard int list then tuple
-            "hex": rgb_to_hex(rgb),
-            "percent": float(round(count / total * 100, 2)), # Cast to float
-            "luminance": float(relative_luminance(rgb)) # Cast to float
-        })
+        colors.append(
+            {
+                "rgb": tuple(
+                    [int(c) for c in rgb]
+                ),  # Convert to standard int list then tuple
+                "hex": rgb_to_hex(rgb),
+                "percent": float(round(count / total * 100, 2)),  # Cast to float
+                "luminance": float(relative_luminance(rgb)),  # Cast to float
+            }
+        )
 
     return sorted(colors, key=lambda x: x["percent"], reverse=True)
 
@@ -48,6 +57,7 @@ def cluster_colors(pixels, k):
 # -------------------------
 # Global image palette
 # -------------------------
+
 
 def extract_global_colors(img_rgb, k=8):
     pixels = img_rgb.reshape(-1, 3)
@@ -57,6 +67,7 @@ def extract_global_colors(img_rgb, k=8):
 # -------------------------
 # Text-adjacent background pixels
 # -------------------------
+
 
 def extract_adjacent_text_pixels(img_rgb, bbox, padding=6):
     h_img, w_img, _ = img_rgb.shape
@@ -79,9 +90,10 @@ def extract_adjacent_text_pixels(img_rgb, bbox, padding=6):
 
     return region[mask]
 
-def extract_colors_from_mask(region: np.ndarray,
-                             mask: np.ndarray,
-                             k_bg: int = 3) -> dict:
+
+def extract_colors_from_mask(
+    region: np.ndarray, mask: np.ndarray, k_bg: int = 3
+) -> dict:
     """
     Extract foreground and background colors using segmentation mask.
 
@@ -110,28 +122,25 @@ def extract_colors_from_mask(region: np.ndarray,
     # ---------- BACKGROUND ----------
     bg_clusters = cluster_colors(bg_pixels, k=k_bg)
 
-    return {
-        "foreground": fg_color,
-        "background_palette": bg_clusters
-    }
+    return {"foreground": fg_color, "background_palette": bg_clusters}
 
 
 # -------------------------
 # Text color extraction
 # -------------------------
 
+
 def extract_text_color(img_rgb, bbox):
     xs = [p[0] for p in bbox]
     ys = [p[1] for p in bbox]
 
-    crop = img_rgb[min(ys):max(ys), min(xs):max(xs)]
+    crop = img_rgb[min(ys) : max(ys), min(xs) : max(xs)]
     pixels = crop.reshape(-1, 3)
 
     clusters = cluster_colors(pixels, k=2)
 
     # Pick the brightest cluster (white text)
     return max(clusters, key=lambda c: c["luminance"])
-
 
 
 # -------------------------
@@ -144,7 +153,7 @@ if __name__ == "__main__":
     img = cv2.imread(image_path)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    reader = easyocr.Reader(['en'], gpu=False)
+    reader = easyocr.Reader(["en"], gpu=False)
     detections = reader.readtext(image_path)
 
     print("\n==============================")

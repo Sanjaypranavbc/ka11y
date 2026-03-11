@@ -10,7 +10,6 @@ import datetime
 from logging.handlers import RotatingFileHandler
 
 
-
 def setup_logger(name="KAC", level=logging.INFO, tag=None):
     print("Setting up logger...")
     BASE_DIR = "."
@@ -37,7 +36,7 @@ def setup_logger(name="KAC", level=logging.INFO, tag=None):
             log_filename,
             maxBytes=5 * 1024 * 1024,  # 5MB
             backupCount=5,
-            encoding="utf-8"
+            encoding="utf-8",
         )
         file_handler.setLevel(level)
 
@@ -53,10 +52,6 @@ def setup_logger(name="KAC", level=logging.INFO, tag=None):
 
     # 🔹 Always return adapter
     return logging.LoggerAdapter(base_logger, {"tag": tag or "GENERAL"})
-
-
-
-
 
 
 # Helper functions for styled logging
@@ -88,6 +83,3 @@ def log_success(logger, message):
 def log_processing(logger, message):
     """Log processing status with blue bold formatting"""
     logger.info(f"[bold blue]{message}[/bold blue]")
-
-
-

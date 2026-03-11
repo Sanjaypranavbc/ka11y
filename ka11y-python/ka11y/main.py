@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from fastapi import FastAPI
@@ -26,7 +27,7 @@ app = FastAPI(
     title="ka11y",
     description="AI Based Web Accessibility Checker",
     version="0.0.1",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.include_router(router)
