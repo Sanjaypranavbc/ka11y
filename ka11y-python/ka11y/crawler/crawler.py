@@ -284,79 +284,184 @@ class AsyncImageCrawler:
     async def reveal_hidden_images(self, page):
         """Click tabs, accordions, etc. to reveal hidden images"""
         logger.info("Starting reveal_hidden_images")
-
         revealed_count = 0
 
-        # Click all tabs
-        logger.info("Attempting to expand click tabs")
-        try:
-            tabs = await page.locator('[role="tab"], .tab, [data-toggle="tab"], .nav-link').all() #TODO: it is  ststic see all possibility
-            logger.info(f"Found {len(tabs)} tab elements")
+        # ─────────────────────────────────────────────────────────────
+        # MASTER TOGGLE SELECTOR — covers all known patterns
+        # ─────────────────────────────────────────────────────────────
+        TOGGLE_SELECTORS = {
 
-            for idx, tab in enumerate(tabs[:8]):  # Limit to avoid infinite loops
-                logger.debug(f"Processing tab {idx + 1}/8")
-                try:
-                    if await tab.is_visible(timeout=1000):
-                        await tab.click(timeout=2000)
-                        await page.wait_for_timeout(500)
-                        revealed_count += 1
-                        logger.info(f"Successfully clicked tab {idx + 1}")
-                    else:
-                        logger.info(f"Tab {idx + 1} not visible, skipping")
-                except Exception as e:
-                    logger.info(f"Failed to click tab {idx + 1}: {str(e)}")
-                    pass
-        except Exception as e:
-            logger.warning(f"Error processing tabs: {str(e)}")
-            pass
+            # ── TABS ──
+            "tabs": [
+                '[role="tab"]',  # ARIA semantic
+                '[data-toggle="tab"]',  # Bootstrap 3/4
+                '[data-bs-toggle="tab"]',  # Bootstrap 5
+                '[data-tab]',  # Generic data attr
+                '[data-target*="tab"]',  # Bootstrap target
+                '.nav-link',  # Bootstrap nav
+                '.nav-item > a',  # Bootstrap nav item
+                '.tab-link',  # Generic
+                '.tab-btn',  # Generic
+                '.tabs__item',  # BEM style
+                '.tab__trigger',  # BEM style
+                'ul.tabs li a',  # Legacy list tabs
+                '[class*="tab-head"]',  # Fuzzy tab header
+                '[class*="tab-title"]',  # Fuzzy tab title
+                '[class*="tab-label"]',  # Fuzzy tab label
+            ],
 
-        # Expand accordions
-        logger.info("Attempting to expand accordions")
-        try:
-            accordions = await page.locator('[data-toggle="collapse"], .accordion-toggle, .accordion-button').all()
-            logger.info(f"Found {len(accordions)} accordion elements")
+            # ── ACCORDIONS ──
+            "accordions": [
+                '[data-toggle="collapse"]',  # Bootstrap 3/4
+                '[data-bs-toggle="collapse"]',  # Bootstrap 5
+                '.accordion-toggle',  # Bootstrap 3
+                '.accordion-button',  # Bootstrap 5
+                '[aria-expanded]',  # ARIA expanded state
+                '[aria-controls]',  # ARIA controls panel
+                'details > summary',  # Native HTML5
+                '[data-accordion]',  # Generic data attr
+                '[data-collapse]',  # Generic data attr
+                '[class*="accordion-head"]',  # Fuzzy
+                '[class*="accordion-title"]',  # Fuzzy
+                '[class*="accordion-trigger"]',  # Fuzzy
+                '[class*="accordion-btn"]',  # Fuzzy
+                '[class*="collapse-toggle"]',  # Fuzzy
+                '[class*="expand-btn"]',  # Fuzzy
+                '[class*="expander"]',  # Fuzzy
+                '.faq-question',  # Common FAQ pattern
+                '.faq__question',  # BEM FAQ
+                '[class*="faq-q"]',  # Fuzzy FAQ
+            ],
 
-            for idx, accordion in enumerate(accordions[:8]):
-                try:
-                    if await accordion.is_visible(timeout=1000):
-                        await accordion.click(timeout=2000)
-                        await page.wait_for_timeout(500)
-                        revealed_count += 1
-                        logger.info(f"Successfully clicked accordion {idx + 1}")
-                    else:
-                        logger.info(f"Accordion {idx + 1} not visible, skipping")
-                except Exception as e:
-                    logger.info(f"Failed to click accordion {idx + 1}: {str(e)}")
-                    pass
-        except Exception as e:
-            logger.warning(f"Error processing accordions: {str(e)}")
-            pass
+            # ── DROPDOWNS ──
+            "dropdowns": [
+                '[data-toggle="dropdown"]',  # Bootstrap 3/4
+                '[data-bs-toggle="dropdown"]',  # Bootstrap 5
+                '.dropdown-toggle',  # Bootstrap
+                '[aria-haspopup="true"]',  # ARIA dropdown
+                '[aria-haspopup="listbox"]',  # ARIA listbox
+                '[aria-haspopup="menu"]',  # ARIA menu
+                'select',  # Native select
+                '[class*="dropdown-btn"]',  # Fuzzy
+                '[class*="dropdown-trigger"]',  # Fuzzy
+                '[class*="select-trigger"]',  # Fuzzy
+            ],
 
-        # Click carousel/slider controls
-        logger.info("Attempting to click carousel controls")
-        try:
-            carousel_btns = await page.locator(
-                '.carousel-control, .slider-next, .slick-next, [data-slide="next"]').all()
-            logger.info(f"Found {len(carousel_btns)} carousel control elements")
+            # ── MODALS / DIALOGS ──
+            "modals": [
+                '[data-toggle="modal"]',  # Bootstrap 3/4
+                '[data-bs-toggle="modal"]',  # Bootstrap 5
+                '[data-modal]',  # Generic
+                '[data-open-modal]',  # Generic
+                '[aria-haspopup="dialog"]',  # ARIA dialog
+                '[class*="modal-trigger"]',  # Fuzzy
+                '[class*="modal-open"]',  # Fuzzy
+                '[class*="open-modal"]',  # Fuzzy
+                '[class*="lightbox"]',  # Lightbox triggers
+                '[data-lightbox]',  # Lightbox data attr
+                '[data-fancybox]',  # FancyBox
+            ],
 
-            for idx, btn in enumerate(carousel_btns[:5]):
-                try:
-                    if await btn.is_visible(timeout=1000):
-                        await btn.click(timeout=2000)
-                        await page.wait_for_timeout(500)
-                        revealed_count += 1
-                        logger.info(f"Successfully clicked carousel button {idx + 1}")
-                    else:
-                        logger.info(f"Carousel button {idx + 1} not visible, skipping")
-                except Exception as e:
-                    logger.debug(f"Failed to click carousel button {idx + 1}: {str(e)}")
-                    pass
-        except Exception as e:
-            logger.warning(f"Error processing carousel controls: {str(e)}")
-            pass
+            # ── CAROUSELS / SLIDERS ──
+            "carousels": [
+                '[data-slide]',  # Bootstrap carousel
+                '[data-bs-slide]',  # Bootstrap 5
+                '.carousel-control-next',  # Bootstrap 5
+                '.carousel-control-prev',  # Bootstrap 5
+                '.slick-next',  # Slick slider
+                '.slick-prev',  # Slick slider
+                '.slick-dots li button',  # Slick dots
+                '.swiper-button-next',  # Swiper
+                '.swiper-button-prev',  # Swiper
+                '.swiper-pagination-bullet',  # Swiper dots
+                '[class*="carousel-btn"]',  # Fuzzy
+                '[class*="slider-next"]',  # Fuzzy
+                '[class*="slider-prev"]',  # Fuzzy
+                '[class*="slide-arrow"]',  # Fuzzy
+                '.owl-next',  # Owl Carousel
+                '.owl-prev',  # Owl Carousel
+                '.owl-dot',  # Owl Carousel dots
+                '[class*="splide__arrow"]',  # Splide
+            ],
 
-        ### Total count
-        logger.info(f"reveal_hidden_images complete. Revealed {revealed_count} elements")
+            # ── SHOW MORE / LOAD MORE ──
+            "load_more": [
+                '[class*="load-more"]',  # Fuzzy
+                '[class*="show-more"]',  # Fuzzy
+                '[class*="view-more"]',  # Fuzzy
+                '[class*="read-more"]',  # Fuzzy
+                '[class*="see-more"]',  # Fuzzy
+                'button[data-page]',  # Pagination buttons
+                '[aria-label*="load more" i]',  # ARIA label
+                '[aria-label*="show more" i]',  # ARIA label
+                '[aria-label*="view more" i]',  # ARIA label
+            ],
+
+            # ── TOOLTIPS / POPOVERS ──
+            "tooltips": [
+                '[data-toggle="tooltip"]',  # Bootstrap 3/4
+                '[data-bs-toggle="tooltip"]',  # Bootstrap 5
+                '[data-toggle="popover"]',  # Bootstrap 3/4
+                '[data-bs-toggle="popover"]',  # Bootstrap 5
+                '[data-tippy]',  # Tippy.js
+                '[data-tooltip]',  # Generic
+            ],
+
+            # ── OFFCANVAS / SIDEBARS ──
+            "offcanvas": [
+                '[data-bs-toggle="offcanvas"]',  # Bootstrap 5
+                '[data-toggle="offcanvas"]',  # Generic
+                '[aria-controls*="sidebar" i]',  # ARIA sidebar
+                '[class*="sidebar-toggle"]',  # Fuzzy
+                '[class*="menu-toggle"]',  # Fuzzy hamburger
+                '[class*="nav-toggle"]',  # Fuzzy nav
+                '.hamburger',  # Common hamburger
+                '[class*="burger"]',  # Fuzzy burger
+                '#menu-toggle',  # Common ID
+            ],
+        }
+
+        for group_name, selectors in TOGGLE_SELECTORS.items():
+            combined = ", ".join(selectors)
+            logger.info(f"Processing toggle group: {group_name}")
+
+            try:
+                elements = await page.locator(combined).all()
+                # Deduplicate by bounding box to avoid clicking same element twice
+                seen_boxes = set()
+                unique_elements = []
+
+                for el in elements:
+                    try:
+                        box = await el.bounding_box()
+                        if box:
+                            key = (round(box['x']), round(box['y']))
+                            if key not in seen_boxes:
+                                seen_boxes.add(key)
+                                unique_elements.append(el)
+                    except Exception:
+                        continue
+
+                logger.info(f"  Found {len(unique_elements)} unique {group_name} elements")
+
+                limit = 5 if group_name in ("carousels", "tooltips") else 8
+                for idx, el in enumerate(unique_elements[:limit]):
+                    try:
+                        if await el.is_visible(timeout=1000):
+                            await el.scroll_into_view_if_needed(timeout=1000)
+                            await el.click(timeout=2000)
+                            await page.wait_for_timeout(600)
+                            revealed_count += 1
+                            logger.info(f"  ✓ Clicked {group_name}[{idx + 1}]")
+                    except Exception as e:
+                        logger.debug(f"  Failed to click {group_name}[{idx + 1}]: {e}")
+                        continue
+
+            except Exception as e:
+                logger.warning(f"Error processing {group_name}: {e}")
+                continue
+
+        logger.info(f"reveal_hidden_images complete — {revealed_count} elements triggered")
 
     async def is_actually_visible(self, element, page):
         """More comprehensive visibility check"""
