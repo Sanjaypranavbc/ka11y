@@ -1,27 +1,66 @@
 """
-Alt Text Checker - WCAG 1.1.1 (Non-text Content) & 4.1.2 (Name, Role, Value)
-==============================================================================
-Checks whether:
-  - Informative images: alt text contains OCR-detected text (partial match)
-  - Functional images: alt text / accessible name is meaningful (not empty/generic)
-Generates a consolidated CSV report with pass/fail status per image.
+ka11y/accessibility/audit.py
+============================
+Unified WCAG Accessibility Auditor.
+
+Merges output from all three pipeline stages:
+  1. Crawler  (ImageData list  — classification, alt text, flags)
+  2. Classifier (already embedded in ImageData via ClassifyAssets)
+  3. Text Detector (TextDetectionResult list — OCR text, contrast violations)
+
+Produces a single audit_report.csv in output_dir covering EVERY crawled image,
+including decorative images and images with missing alt text.
+
+WCAG criteria checked
+---------------------
+  WCAG 1.1.1  Non-text Content  — all images (informative, functional, decorative)
+  WCAG 4.1.2  Name, Role, Value — functional images only (logo / icon / button)
+
+Usage (explicit call from route or CLI)
+---------------------------------------
+    from ka11y.accessibility.audit import AccessibilityAuditor
+
+    auditor = AccessibilityAuditor()
+    report_df = auditor.generate_audit_report(
+        images_data=crawler.images_data,      # List[ImageData]
+        ocr_results=detector.results,         # List[TextDetectionResult]
+        output_dir=crawler.output_dir,        # str path
+    )
 """
 
+from __future__ import annotations
+
 import re
-import json
-import pandas as pd
+import csv
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
+from datetime import datetime
+
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="audit")
 
 
 # ---------------------------------------------------------------------------
-# Constants
+# WCAG constants
 # ---------------------------------------------------------------------------
 
-# Heuristic list of acceptable accessible names for functional images
-# (logos, icons, buttons). Add more as needed.
-FUNCTIONAL_ACCEPTABLE_NAMES: set[str] = {
-    # Navigation / UI actions
+_EMPTY_OR_GENERIC: set[str] = {
+    "", "image", "img", "photo", "picture", "graphic", "figure", "icon",
+    "untitled", "placeholder", "null", "none", "n/a", "na",
+    "image of", "photo of", "picture of", "graphic of",
+    "spacer", "decoration", "decorative",
+}
+
+# Social/brand icon names — must be paired with "icon" to be acceptable
+_SOCIAL_BRAND_NAMES: set[str] = {
+    "facebook", "twitter", "x", "instagram", "youtube", "linkedin",
+    "tiktok", "pinterest", "snapchat", "whatsapp", "telegram", "line",
+    "wechat", "note", "github", "gitlab", "reddit", "threads",
+}
+
+# Acceptable action/purpose words for buttons
+_BUTTON_ACTION_WORDS: set[str] = {
     "menu", "close", "open", "search", "back", "forward", "next", "prev",
     "previous", "submit", "send", "cancel", "confirm", "ok", "yes", "no",
     "save", "delete", "edit", "add", "remove", "upload", "download",
@@ -29,287 +68,501 @@ FUNCTIONAL_ACCEPTABLE_NAMES: set[str] = {
     "reload", "home", "settings", "help", "info", "more", "less",
     "expand", "collapse", "toggle", "play", "pause", "stop", "mute",
     "unmute", "fullscreen", "exit fullscreen", "zoom in", "zoom out",
-    "scroll up", "scroll down", "scroll left", "scroll right",
     "like", "dislike", "comment", "reply", "follow", "unfollow",
     "subscribe", "unsubscribe", "login", "logout", "sign in", "sign out",
     "sign up", "register", "checkout", "cart", "bag", "wishlist",
-    "filter", "sort", "view", "hide", "show",
-    # Social / brand icons
-    "facebook", "twitter", "x", "instagram", "youtube", "linkedin",
-    "tiktok", "pinterest", "snapchat", "whatsapp", "telegram", "line",
-    "wechat", "note", "github", "gitlab", "reddit",
-    # Cookie / consent
-    "cookies settings", "accept all cookies", "reject all",
-    "accept cookies", "decline cookies",
-    # Generic logo / brand patterns (checked via regex below)
-    # e.g., "kao", "kao group", "kao logo", etc.
+    "filter", "sort", "view", "hide", "show", "skip", "navigate",
+    "go to", "load more", "read more", "see more", "see all",
+    "cookies settings", "accept all cookies", "reject all", "accept cookies",
+    "decline cookies", "manage cookies", "cookie preferences",
+    "previous slide", "next slide", "go to slide",
+    "new window", "opens in new tab",
 }
 
-# Regex patterns for functional acceptable names (logos, branded icons)
-FUNCTIONAL_ACCEPTABLE_PATTERNS: list[re.Pattern] = [
-    re.compile(r".+\s+(logo|icon|button|image|img|banner|badge)$", re.IGNORECASE),
-    re.compile(r"^(logo|icon|button|banner|badge)\s+.+", re.IGNORECASE),
+# Report CSV columns (order preserved)
+_REPORT_COLUMNS = [
+    "filename",
+    "src",
+    "url",
+    "classification",
+    "sub_type",
+    "is_logo",
+    "is_icon",
+    "is_button",
+    "is_functional",
+    "is_decorative",
+    "alt_text",
+    "title",
+    "has_ocr_text",
+    "detected_text",
+    "contrast_violations_count",
+    "wcag_1_1_1_status",
+    "wcag_4_1_2_status",
+    "overall_status",
+    "wcag_1_1_1_reason",
+    "wcag_4_1_2_reason",
+    "screenshot_path",
 ]
-
-# Alt text values that are considered MISSING / insufficient
-EMPTY_OR_GENERIC_ALT: set[str] = {
-    "", "image", "img", "photo", "picture", "graphic", "figure",
-    "untitled", "placeholder", "null", "none", "n/a", "na",
-    "image of", "photo of", "picture of",
-}
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _normalise(text: str) -> str:
-    """Lowercase, strip punctuation/extra whitespace."""
-    text = text.lower()
-    text = re.sub(r"[^\w\s]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+def _norm(text: str) -> str:
+    """Lowercase, strip punctuation, collapse whitespace."""
+    t = str(text).lower()
+    t = re.sub(r"[^\w\s]", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
 
 
-def _is_functional_alt_acceptable(alt: str) -> bool:
+def _is_empty(value) -> bool:
+    return str(value).strip().lower() in {"nan", "none", "", "null"}
+
+
+def _ocr_for_file(
+    ocr_results: list,
+    filename: str,
+) -> tuple[bool, list[str], int]:
     """
-    Returns True when an alt / accessible-name for a functional image
-    is considered meaningful under WCAG 4.1.2.
+    Lookup OCR results for a given filename.
+    Returns (has_text, detected_texts, contrast_violations_count).
+    Uses TextDetectionResult objects from text_detector.
     """
-    if not alt or _normalise(alt) in EMPTY_OR_GENERIC_ALT:
-        return False
-
-    norm = _normalise(alt)
-
-    # Direct hit in acceptable set
-    if norm in FUNCTIONAL_ACCEPTABLE_NAMES:
-        return True
-
-    # Pattern match (e.g., "Kao Logo", "Back Button")
-    for pattern in FUNCTIONAL_ACCEPTABLE_PATTERNS:
-        if pattern.match(alt.strip()):
-            return True
-
-    # Any non-empty, non-generic string that describes an action/label is
-    # considered acceptable (heuristic: must be ≥ 2 chars & not purely numeric)
-    if len(norm) >= 2 and not norm.isdigit():
-        return True
-
-    return False
+    target = Path(filename).name.lower()
+    for r in ocr_results:
+        # r is a TextDetectionResult (Pydantic model)
+        r_name = Path(r.filename).name.lower()
+        if r_name == target:
+            texts = [d.text for d in r.detections if d.text and d.text.strip()]
+            return r.has_text, texts, r.contrast_violations_count
+    return False, [], 0
 
 
-def _ocr_texts_for_image(ocr_results: list[dict], image_filename: str) -> list[str]:
+# ---------------------------------------------------------------------------
+# WCAG 1.1.1 checks
+# ---------------------------------------------------------------------------
+
+def _check_1_1_1_decorative(alt: str) -> tuple[bool, str]:
+    """Decorative images MUST have alt='' (empty string)."""
+    if alt == "" or _is_empty(alt):
+        return True, "PASS [1.1.1] Decorative image correctly has empty alt"
+    return (
+        False,
+        f"FAIL [1.1.1] Decorative image must have alt=\"\" (empty). Found: '{alt}'",
+    )
+
+
+def _check_1_1_1_missing_alt(sub_type: str) -> tuple[bool, str]:
+    """Missing alt attribute entirely — WCAG violation for any image."""
+    return (
+        False,
+        "FAIL [1.1.1] Alt attribute is completely missing — "
+        "every <img> must have an alt attribute (WCAG violation).",
+    )
+
+
+def _check_1_1_1_informative(
+    alt: str, detected_texts: list[str]
+) -> tuple[bool, str]:
     """
-    Extract all detected text strings for a given filename from OCR JSON results.
-    Matching is done on the basename only (case-insensitive).
+    Informative: alt must convey visible text detected by OCR.
+    At least one OCR word (>=3 chars) must appear in the alt text.
     """
-    target = Path(image_filename).name.lower()
-    for entry in ocr_results:
-        if Path(entry.get("filename", "")).name.lower() == target:
-            if entry.get("has_text") and entry.get("detections"):
-                return [d["text"] for d in entry["detections"] if d.get("text")]
-    return []
+    norm_alt = _norm(alt or "")
 
+    if not alt or norm_alt in _EMPTY_OR_GENERIC:
+        return False, "FAIL [1.1.1] Alt text is empty or generic"
 
-def _informative_alt_check(alt_text: str, detected_texts: list[str]) -> tuple[bool, str]:
-    """
-    WCAG 1.1.1 check for informative images.
-    Returns (passed: bool, reason: str).
-
-    Rule: at least ONE OCR-detected word (length ≥ 3) must appear in the alt text.
-    If there are no detected texts, we fall back to checking alt is non-generic.
-    """
     if not detected_texts:
-        # No OCR text found → can't verify; pass if alt is non-empty & non-generic
-        if alt_text and _normalise(alt_text) not in EMPTY_OR_GENERIC_ALT:
-            return True, "No OCR text detected; alt text is non-empty"
-        return False, "No OCR text detected and alt text is empty/generic"
+        return (
+            True,
+            "PASS [1.1.1] No OCR text detected; alt is non-empty "
+            "(manual review recommended)",
+        )
 
-    combined_ocr = " ".join(detected_texts)
-    norm_alt = _normalise(alt_text or "")
-    norm_ocr = _normalise(combined_ocr)
-
-    # Extract meaningful words (length ≥ 3) from OCR
+    norm_ocr = _norm(" ".join(detected_texts))
     ocr_words = [w for w in norm_ocr.split() if len(w) >= 3]
 
     if not ocr_words:
-        # All OCR tokens are very short (e.g., single chars); treat as decoration
-        if alt_text and _normalise(alt_text) not in EMPTY_OR_GENERIC_ALT:
-            return True, "OCR words too short to match; alt text is non-empty"
-        return False, "OCR words too short and alt text is empty/generic"
+        return True, "PASS [1.1.1] OCR tokens too short to match; alt is non-empty"
 
     matched = [w for w in ocr_words if w in norm_alt]
     if matched:
-        return True, f"OCR word(s) found in alt text: {matched}"
+        return True, f"PASS [1.1.1] OCR word(s) found in alt: {matched}"
 
-    return False, f"No OCR word found in alt text. OCR words: {ocr_words[:5]}"
+    return (
+        False,
+        f"FAIL [1.1.1] OCR words {ocr_words[:5]} not found in alt text '{alt}'",
+    )
 
 
-def _functional_alt_check(
-    alt_text: str,
-    aria_label: Optional[str],
-    role: Optional[str],
+def _check_1_1_1_logo(alt: str) -> tuple[bool, str]:
+    """
+    Logo: alt MUST include the word 'logo' (or 'home' for linked logos).
+    W3C WAI: format is '[Brand name] logo'.
+    """
+    if not alt or _is_empty(alt) or _norm(alt) in _EMPTY_OR_GENERIC:
+        return False, "FAIL [1.1.1] Logo has empty/missing alt text"
+
+    norm = _norm(alt)
+    if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
+        return True, f"PASS [1.1.1] Logo alt includes 'logo'/'home': '{alt}'"
+
+    return (
+        False,
+        f"FAIL [1.1.1] Logo alt must include the word 'logo' "
+        f"(e.g. 'Kao logo'). Found: '{alt}'. "
+        f"Screen readers need 'logo' to announce the image purpose.",
+    )
+
+
+def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
+    """
+    Icon: alt must describe the ACTION or include 'icon'.
+    Social brand icons require '<Brand> icon' — brand name alone is insufficient.
+    """
+    if not alt or _is_empty(alt) or _norm(alt) in _EMPTY_OR_GENERIC:
+        return False, "FAIL [1.1.1] Icon has empty/missing alt text"
+
+    norm = _norm(alt)
+
+    if norm in _SOCIAL_BRAND_NAMES:
+        return (
+            False,
+            f"FAIL [1.1.1] Social icon alt '{alt}' must include 'icon' "
+            f"(e.g. '{alt} icon'). Brand name alone is not sufficient per WCAG 1.1.1.",
+        )
+
+    has_qualifier = bool(re.search(r"\b(icon|logo|button|link)\b", norm))
+    is_action = norm in _BUTTON_ACTION_WORDS or any(
+        w in _BUTTON_ACTION_WORDS for w in norm.split()
+    )
+
+    if has_qualifier or is_action:
+        return True, f"PASS [1.1.1] Icon alt describes purpose: '{alt}'"
+
+    if len(norm) >= 2 and not norm.isdigit():
+        return (
+            True,
+            f"PASS [1.1.1] Icon alt is non-empty: '{alt}' "
+            f"(verify it describes the action, not the appearance)",
+        )
+
+    return False, f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose"
+
+
+def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
+    """Button: alt must describe the action/purpose of the control."""
+    if not alt or _is_empty(alt) or _norm(alt) in _EMPTY_OR_GENERIC:
+        return False, "FAIL [1.1.1] Button has empty/missing accessible name"
+
+    norm = _norm(alt)
+
+    if norm in _BUTTON_ACTION_WORDS:
+        return True, f"PASS [1.1.1] Button alt describes action: '{alt}'"
+
+    matched = [w for w in norm.split() if w in _BUTTON_ACTION_WORDS]
+    if matched:
+        return True, f"PASS [1.1.1] Button alt contains action word(s) {matched}: '{alt}'"
+
+    if len(norm) >= 2 and not norm.isdigit():
+        return (
+            True,
+            f"PASS [1.1.1] Button alt is non-empty: '{alt}' "
+            f"(verify it describes the button action)",
+        )
+
+    return False, f"FAIL [1.1.1] Button alt '{alt}' is not descriptive"
+
+
+# ---------------------------------------------------------------------------
+# WCAG 4.1.2 check
+# ---------------------------------------------------------------------------
+
+def _check_4_1_2(
+    alt: str, sub_type: str
 ) -> tuple[bool, str]:
     """
-    WCAG 4.1.2 check for functional images.
-    Accessible name is resolved via: alt → aria-label → role (fallback).
+    WCAG 4.1.2: functional image must have a programmatically determinable
+    accessible name. Uses alt (aria-label/title resolution already happened
+    in the crawler/classifier via element.evaluate context).
+
+    Logo  → name must include 'logo'.
+    Icon  → brand-only name is insufficient.
+    Button → any non-empty, non-generic name is acceptable.
     """
-    # Resolve accessible name (priority: aria-label > alt > title)
-    accessible_name = (
-        aria_label.strip() if aria_label and str(aria_label) != "nan" else
-        alt_text.strip() if alt_text and str(alt_text) != "nan" else
-        ""
-    )
+    name = (alt or "").strip()
 
-    if _is_functional_alt_acceptable(accessible_name):
-        source = "aria-label" if (aria_label and str(aria_label) != "nan") else "alt"
-        return True, f"Accessible name '{accessible_name}' is meaningful (from {source})"
+    if not name or _norm(name) in _EMPTY_OR_GENERIC:
+        return (
+            False,
+            f"FAIL [4.1.2] No accessible name found. alt='{alt}'",
+        )
 
-    return False, (
-        f"Functional image has missing/generic accessible name: '{accessible_name}'. "
-        f"aria-label='{aria_label}', role='{role}'"
-    )
+    norm = _norm(name)
+
+    if sub_type == "logos":
+        if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
+            return True, f"PASS [4.1.2] Logo accessible name includes 'logo': '{name}'"
+        return (
+            False,
+            f"FAIL [4.1.2] Logo accessible name '{name}' must include 'logo'.",
+        )
+
+    if sub_type == "icons" and norm in _SOCIAL_BRAND_NAMES:
+        return (
+            False,
+            f"FAIL [4.1.2] Icon accessible name '{name}' is brand name only "
+            f"— must say '{name} icon'.",
+        )
+
+    return True, f"PASS [4.1.2] Accessible name is present and meaningful: '{name}'"
 
 
 # ---------------------------------------------------------------------------
-# Main checker
+# Main auditor class
 # ---------------------------------------------------------------------------
 
-def check_alt_text(
-    csv_path: str,
-    ocr_json_path: str,
-    output_csv_path: str = "alt_text_report.csv",
-) -> pd.DataFrame:
+class AltTextAccessibilityAuditor:
     """
-    Parameters
-    ----------
-    csv_path        : Path to the alt-text CSV produced by the crawler.
-    ocr_json_path   : Path to the OCR JSON output file.
-    output_csv_path : Where to save the final report CSV.
-
-    Returns
-    -------
-    DataFrame with one row per image, containing audit columns.
+    Merges ImageData (crawler + classifier) with TextDetectionResult (OCR)
+    and runs WCAG 1.1.1 + 4.1.2 checks for every crawled image.
     """
-    # -- Load inputs --------------------------------------------------------
-    df = pd.read_csv(csv_path)
-    with open(ocr_json_path, "r", encoding="utf-8") as f:
-        ocr_data = json.load(f)
 
-    ocr_results: list[dict] = ocr_data.get("results", [])
+    def generate_audit_report(
+        self,
+        images_data: list,          # List[ImageData]
+        ocr_results: list,          # List[TextDetectionResult]
+        output_dir: str,
+    ) -> list[dict]:
+        """
+        Parameters
+        ----------
+        images_data : crawler.images_data  (List[ImageData] Pydantic models)
+        ocr_results : detector.results     (List[TextDetectionResult])
+        output_dir  : crawler.output_dir   (report saved here as audit_report.csv)
 
-    # -- Normalise column names ---------------------------------------------
-    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+        Returns
+        -------
+        List[dict]  — one dict per image (same rows written to CSV)
+        """
+        logger.info(
+            f"Generating audit report — {len(images_data)} images, "
+            f"{len(ocr_results)} OCR results"
+        )
 
-    required = {"src", "alt_text", "classification"}
-    missing = required - set(df.columns)
-    if missing:
-        raise ValueError(f"CSV is missing required columns: {missing}")
+        records: list[dict] = []
 
-    # Optional metadata columns (may not always be present)
-    aria_col   = "aria_label"   if "aria_label"   in df.columns else None
-    role_col   = "role"         if "role"          in df.columns else None
-    title_col  = "title"        if "title"         in df.columns else None
-    fname_col  = "screenshot_path" if "screenshot_path" in df.columns else None
+        for img in images_data:
+            # ── Pull fields from ImageData ───────────────────────────────
+            filename       = str(img.filename or "")
+            src            = str(img.src or "")
+            url            = str(img.url or "")
+            alt_text       = img.alt_text if img.alt_text is not None else ""
+            title          = str(img.title or "")
+            classification = str(img.classification or "").strip().lower()
+            sub_type       = str(img.sub_type or "").strip().lower()
+            is_logo        = bool(img.is_logo)
+            is_icon        = bool(img.is_icon)
+            is_button      = bool(img.is_button)
+            is_functional  = bool(img.is_functional)
+            is_decorative  = bool(img.is_decorative)
+            screenshot_path = str(img.screenshot_path or "")
 
-    # -- Build report rows --------------------------------------------------
-    records = []
-
-    for _, row in df.iterrows():
-        src             = str(row.get("src", ""))
-        alt_text        = str(row.get("alt_text", "")) if pd.notna(row.get("alt_text")) else ""
-        classification  = str(row.get("classification", "")).strip().lower()
-        aria_label      = str(row.get(aria_col, "")) if aria_col else ""
-        role            = str(row.get(role_col, ""))  if role_col else ""
-        title           = str(row.get(title_col, "")) if title_col else ""
-        screenshot_path = str(row.get(fname_col, "")) if fname_col else ""
-
-        # Derive filename for OCR lookup
-        filename = Path(screenshot_path).name if screenshot_path else Path(src).name
-
-        # Detected texts from OCR
-        detected_texts = _ocr_texts_for_image(ocr_results, filename)
-        detected_text_joined = " | ".join(detected_texts) if detected_texts else ""
-
-        # ---- Run WCAG check -----------------------------------------------
-        if classification == "decorative":
-            # Decorative images should have empty alt=""
-            passed = (alt_text == "" or alt_text.lower() in {"", "nan"})
-            wcag_criterion = "WCAG 1.1.1"
-            reason = (
-                "Decorative image has empty alt (correct)"
-                if passed else
-                f"Decorative image should have empty alt, found: '{alt_text}'"
+            # ── OCR lookup by filename ───────────────────────────────────
+            has_ocr_text, detected_texts, contrast_count = _ocr_for_file(
+                ocr_results, filename
             )
+            detected_joined = " | ".join(detected_texts)
 
-        elif classification == "informative":
-            wcag_criterion = "WCAG 1.1.1"
-            passed, reason = _informative_alt_check(alt_text, detected_texts)
+            # ── Determine functional sub_type for WCAG checks ────────────
+            # sub_type from classifier: "logos" | "icons" | "buttons" | "images"
+            # Fallback via boolean flags for any edge cases
+            if not sub_type or sub_type == "images":
+                if is_logo:
+                    sub_type = "logos"
+                elif is_button:
+                    sub_type = "buttons"
+                elif is_icon:
+                    sub_type = "icons"
 
-        elif classification == "functional":
-            wcag_criterion = "WCAG 4.1.2"
-            passed, reason = _functional_alt_check(alt_text, aria_label, role)
+            # ── WCAG checks ──────────────────────────────────────────────
+            wcag_4_1_2_pass   = None
+            wcag_4_1_2_reason = "N/A — not a functional image"
 
+            # Handle missing_alt as a special decorative sub-type
+            if sub_type == "missing_alt" or (
+                classification == "decorative" and alt_text is None
+            ):
+                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(sub_type)
+
+            elif classification == "decorative":
+                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(
+                    alt_text
+                )
+
+            elif classification == "informative":
+                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_informative(
+                    alt_text, detected_texts
+                )
+
+            elif classification == "functional":
+                if sub_type == "logos":
+                    wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_logo(alt_text)
+                elif sub_type == "icons":
+                    wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_icon(alt_text)
+                else:  # buttons / images
+                    wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_button(
+                        alt_text
+                    )
+
+                wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(
+                    alt_text, sub_type
+                )
+
+            elif classification == "complex":
+                # Complex images need long descriptions; check alt is non-empty
+                wcag_1_1_1_pass = bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
+                wcag_1_1_1_reason = (
+                    f"PASS [1.1.1] Complex image has alt: '{alt_text}'"
+                    if wcag_1_1_1_pass
+                    else "FAIL [1.1.1] Complex image (chart/diagram) must have "
+                         "a meaningful alt or long description"
+                )
+
+            else:
+                wcag_1_1_1_pass = bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
+                wcag_1_1_1_reason = (
+                    f"PASS [1.1.1] Alt is non-empty: '{alt_text}'"
+                    if wcag_1_1_1_pass
+                    else "FAIL [1.1.1] Alt empty/generic (unknown classification)"
+                )
+
+            # Overall: all applicable checks must pass
+            checks = [wcag_1_1_1_pass]
+            if wcag_4_1_2_pass is not None:
+                checks.append(wcag_4_1_2_pass)
+            overall = "PASSED" if all(checks) else "FAILED"
+
+            records.append({
+                "filename":                 filename,
+                "src":                      src,
+                "url":                      url,
+                "classification":           classification,
+                "sub_type":                 sub_type,
+                "is_logo":                  is_logo,
+                "is_icon":                  is_icon,
+                "is_button":                is_button,
+                "is_functional":            is_functional,
+                "is_decorative":            is_decorative,
+                "alt_text":                 alt_text,
+                "title":                    title,
+                "has_ocr_text":             has_ocr_text,
+                "detected_text":            detected_joined,
+                "contrast_violations_count": contrast_count,
+                "wcag_1_1_1_status":        "PASSED" if wcag_1_1_1_pass else "FAILED",
+                "wcag_4_1_2_status": (
+                    "PASSED" if wcag_4_1_2_pass is True
+                    else "FAILED" if wcag_4_1_2_pass is False
+                    else "N/A"
+                ),
+                "overall_status":           overall,
+                "wcag_1_1_1_reason":        wcag_1_1_1_reason,
+                "wcag_4_1_2_reason":        wcag_4_1_2_reason,
+                "screenshot_path":          screenshot_path,
+            })
+
+        # ── Save CSV ─────────────────────────────────────────────────────
+        report_path = str(Path(output_dir) / "audit_report.csv")
+        with open(report_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=_REPORT_COLUMNS)
+            writer.writeheader()
+            writer.writerows(records)
+
+        # ── Console summary ───────────────────────────────────────────────
+        self._print_summary(records, report_path)
+
+        return records
+
+    # ── Summary printer ──────────────────────────────────────────────────────
+
+    def _print_summary(self, records: list[dict], report_path: str):
+        total   = len(records)
+        passed  = sum(1 for r in records if r["overall_status"] == "PASSED")
+        failed  = sum(1 for r in records if r["overall_status"] == "FAILED")
+
+        sep = "=" * 70
+        print(f"\n{sep}")
+        print("  KA11Y — UNIFIED WCAG ACCESSIBILITY AUDIT REPORT")
+        print(f"  Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"  Report    : {report_path}")
+        print(sep)
+        print(f"  Total images audited : {total}")
+        print(f"  PASSED               : {passed}  ({passed/total*100:.1f}%)" if total else "  No images.")
+        print(f"  FAILED               : {failed}  ({failed/total*100:.1f}%)" if total else "")
+        print()
+
+        # Per-criterion
+        wcag_111 = [r for r in records if r["wcag_1_1_1_status"] != "N/A"]
+        wcag_412 = [r for r in records if r["wcag_4_1_2_status"] != "N/A"]
+        p111 = sum(1 for r in wcag_111 if r["wcag_1_1_1_status"] == "PASSED")
+        f111 = sum(1 for r in wcag_111 if r["wcag_1_1_1_status"] == "FAILED")
+        p412 = sum(1 for r in wcag_412 if r["wcag_4_1_2_status"] == "PASSED")
+        f412 = sum(1 for r in wcag_412 if r["wcag_4_1_2_status"] == "FAILED")
+
+        print(f"  WCAG 1.1.1 (Non-text Content) : {p111} PASSED / {f111} FAILED ({len(wcag_111)} applicable)")
+        print(f"  WCAG 4.1.2 (Name/Role/Value)  : {p412} PASSED / {f412} FAILED ({len(wcag_412)} applicable)")
+        print()
+
+        # By classification
+        from collections import Counter
+        cls_pass = Counter(
+            r["classification"] for r in records if r["overall_status"] == "PASSED"
+        )
+        cls_fail = Counter(
+            r["classification"] for r in records if r["overall_status"] == "FAILED"
+        )
+        all_cls = sorted(
+            set(list(cls_pass.keys()) + list(cls_fail.keys()))
+        )
+        print("  By classification:")
+        print(f"  {'Classification':<20} {'PASSED':>8} {'FAILED':>8} {'TOTAL':>8}")
+        print(f"  {'-'*46}")
+        for cls in all_cls:
+            p = cls_pass.get(cls, 0)
+            f = cls_fail.get(cls, 0)
+            print(f"  {cls:<20} {p:>8} {f:>8} {p+f:>8}")
+        print()
+
+        # OCR / contrast summary
+        with_ocr = sum(1 for r in records if r["has_ocr_text"])
+        with_contrast = sum(1 for r in records if r["contrast_violations_count"] > 0)
+        print(f"  Images with OCR text detected  : {with_ocr}")
+        print(f"  Images with contrast violations: {with_contrast}")
+        print()
+
+        # Failed images list
+        failed_rows = [r for r in records if r["overall_status"] == "FAILED"]
+        if failed_rows:
+            print("  Failed images:")
+            print(f"  {'Filename':<35} {'Classification':<15} {'Sub-type':<12} {'Alt text':<25} {'1.1.1':>6} {'4.1.2':>6}")
+            print(f"  {'-'*105}")
+            for r in failed_rows:
+                alt_preview = (r["alt_text"] or "")[:24]
+                print(
+                    f"  {r['filename']:<35} "
+                    f"{r['classification']:<15} "
+                    f"{r['sub_type']:<12} "
+                    f"{alt_preview:<25} "
+                    f"{r['wcag_1_1_1_status']:>6} "
+                    f"{r['wcag_4_1_2_status']:>6}"
+                )
         else:
-            # Unknown classification → basic non-empty check
-            wcag_criterion = "WCAG 1.1.1"
-            passed = bool(alt_text) and _normalise(alt_text) not in EMPTY_OR_GENERIC_ALT
-            reason = "Unknown classification; checked alt is non-empty"
+            print("  All images passed!")
 
-        records.append({
-            "filename":          filename,
-            "src":               src,
-            "classification":    classification,
-            "wcag_criterion":    wcag_criterion,
-            "status":            "PASSED" if passed else "FAILED",
-            "source_alt_text":   alt_text,
-            "aria_label":        aria_label,
-            "role":              role,
-            "title":             title,
-            "detected_text":     detected_text_joined,
-            "reason":            reason,
-        })
-
-    report_df = pd.DataFrame(records)
-
-    # -- Summary stats ------------------------------------------------------
-    total   = len(report_df)
-    passed  = (report_df["status"] == "PASSED").sum()
-    failed  = (report_df["status"] == "FAILED").sum()
-
-    print("=" * 60)
-    print("ALT TEXT AUDIT REPORT")
-    print("=" * 60)
-    print(f"Total images checked : {total}")
-    print(f"PASSED               : {passed}  ({passed/total*100:.1f}%)")
-    print(f"FAILED               : {failed}  ({failed/total*100:.1f}%)")
-    print()
-
-    by_criterion = report_df.groupby(["wcag_criterion", "status"]).size().unstack(fill_value=0)
-    print("By WCAG criterion:")
-    print(by_criterion.to_string())
-    print()
-
-    by_class = report_df.groupby(["classification", "status"]).size().unstack(fill_value=0)
-    print("By classification:")
-    print(by_class.to_string())
-    print("=" * 60)
-
-    # -- Save report --------------------------------------------------------
-    report_df.to_csv(output_csv_path, index=False)
-    print(f"\nReport saved → {output_csv_path}")
-
-    return report_df
-
-
-# ---------------------------------------------------------------------------
-# CLI entry-point
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    report = check_alt_text(
-        csv_path="crawled_images/kao_com_0311_1700/images_with_alt_text.csv",
-        ocr_json_path="crawled_images/kao_com_0311_1700/text_detected/text_detection_report.json",
-        output_csv_path="./output.csv",
-    )
-    print(report.to_string(index=False))
+        print(sep)
+        logger.info(
+            f"Audit complete — {total} images, {passed} passed, {failed} failed. "
+            f"Report: {report_path}"
+        )

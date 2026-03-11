@@ -1014,12 +1014,19 @@ class AsyncImageCrawler:
         self._export_csv()
 
     def _export_csv(self):
-        imgs_with_alt = [i for i in self.images_data if i.alt_text]
-        if not imgs_with_alt:
+        """
+        Export ALL crawled images to images_with_alt_text.csv.
+        Includes decorative and missing-alt images (alt_text column is empty for those).
+        Previously this method filtered to only images where alt_text was truthy.
+        """
+        if not self.images_data:
             return
+
         csv_path = f"{self.output_dir}/images_with_alt_text.csv"
+
+        import csv as _csv
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(
+            w = _csv.DictWriter(
                 f,
                 fieldnames=[
                     "src",
@@ -1037,11 +1044,14 @@ class AsyncImageCrawler:
                 ],
             )
             w.writeheader()
-            for img in imgs_with_alt:
+            for img in self.images_data:
                 w.writerow(
                     {
                         "src": img.src,
-                        "alt_text": img.alt_text,
+                        # Use empty string when alt is None (missing) so the CSV
+                        # column is always present — the auditor distinguishes
+                        # None vs "" via the classification / sub_type fields.
+                        "alt_text": img.alt_text if img.alt_text is not None else "",
                         "title": img.title,
                         "classification": img.classification,
                         "sub_type": img.sub_type,
@@ -1054,5 +1064,12 @@ class AsyncImageCrawler:
                         "screenshot_path": img.screenshot_path,
                     }
                 )
-        console.print(f"  [dim]CSV  → {csv_path} ({len(imgs_with_alt)} rows)[/dim]")
-        logger.info(f"CSV saved: {csv_path}")
+
+        from rich.console import Console
+        Console().print(
+            f"  [dim]CSV  → {csv_path} ({len(self.images_data)} rows, "
+            f"all images including decorative)[/dim]"
+        )
+
+        from ka11y.config.logger import setup_logger
+        setup_logger(name="KAC", tag="crawler").info(f"CSV saved: {csv_path}")
