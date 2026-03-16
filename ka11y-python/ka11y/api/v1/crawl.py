@@ -3,31 +3,49 @@ ka11y/api/routes/crawl.py
 =========================
 FastAPI route for the full ka11y pipeline:
 
-  STEP 1  Crawl   — AsyncImageCrawler
-  STEP 2  OCR     — OCRPreprocessing + TextClassification  (optional)
-  STEP 3  Audit   — AccessibilityAuditor  (explicit call, produces audit_report.csv)
+  STEP 1  Crawl        — AsyncImageCrawler              (injected)
+  STEP 2  OCR          — OCRPreprocessing + TextClassification  (optional)
+  STEP 3  Image Audit  — AltTextAccessibilityAuditor            (injected, optional)
+  STEP 4  Form Crawl   — AsyncFormCrawler                       (injected)
+  STEP 5  Form Audit   — FormAccessibilityAuditor               (injected, optional)
+
+All steps share the same output_dir so every artefact lands in one directory.
+Dependencies are provided via FastAPI's DI system (see api/dependencies.py).
 """
 
 import traceback
-from fastapi import APIRouter, HTTPException
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
 
 from ka11y.crawler.crawler import AsyncImageCrawler
-from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
+from ka11y.crawler.forms_crawler import AsyncFormCrawler
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
+from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
+from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
 from ka11y.config.logger import setup_logger
+
+from ka11y.api.v1.dependencies import (
+    get_output_dir,
+    get_image_crawler,
+    get_alt_text_auditor,
+    get_form_crawler,
+    get_form_auditor,
+)
 
 router = APIRouter(prefix="/crawl", tags=["crawl"])
 logger = setup_logger(name="KAC", tag="crawl")
 
 
-# ── Request / Response models ────────────────────────────────────────────────
+# ── Request / Response models ─────────────────────────────────────────────────
 
 class CrawlRequest(BaseModel):
     url: HttpUrl = "https://www.kao.com/global/en/"
     max_depth: int = 0
     run_ocr: bool = True
-    run_audit: bool = True   # ← new flag; set False to skip WCAG audit
+    run_audit: bool = True
+    run_form_audit: bool = True
 
 
 class CrawlResponse(BaseModel):
@@ -35,83 +53,99 @@ class CrawlResponse(BaseModel):
     output_dir: str
     url: str
     max_depth: int
+    # Image pipeline
+    total_images: int = 0
     ocr_dir: str | None = None
-    audit_report: str | None = None   # ← path to audit_report.csv
-    audit_summary: dict | None = None  # ← pass/fail counts
+    audit_report: str | None = None
+    audit_summary: dict | None = None
+    # Forms pipeline
+    total_fields: int = 0
+    form_audit_report: str | None = None
+    form_audit_summary: dict | None = None
 
 
-# ── Route ────────────────────────────────────────────────────────────────────
+# ── Route ─────────────────────────────────────────────────────────────────────
 
 @router.post("/", response_model=CrawlResponse)
-async def run_crawler(payload: CrawlRequest):
+async def run_crawler(
+    payload: CrawlRequest,
+    # ── injected dependencies ──────────────────────────────────────────────
+    output_dir: Path                          = Depends(get_output_dir),
+    crawler: AsyncImageCrawler                = Depends(get_image_crawler),
+    auditor: AltTextAccessibilityAuditor      = Depends(get_alt_text_auditor),
+    form_crawler: AsyncFormCrawler            = Depends(get_form_crawler),
+    form_auditor: FormAccessibilityAuditor    = Depends(get_form_auditor),
+):
     url       = str(payload.url)
     max_depth = payload.max_depth
 
     logger.info("=" * 60)
     logger.info("KA11Y PIPELINE START")
-    logger.info(f"  URL       : {url}")
-    logger.info(f"  max_depth : {max_depth}")
-    logger.info(f"  run_ocr   : {payload.run_ocr}")
-    logger.info(f"  run_audit : {payload.run_audit}")
+    logger.info(f"  URL            : {url}")
+    logger.info(f"  max_depth      : {max_depth}")
+    logger.info(f"  output_dir     : {output_dir}")
+    logger.info(f"  run_ocr        : {payload.run_ocr}")
+    logger.info(f"  run_audit      : {payload.run_audit}")
+    logger.info(f"  run_form_audit : {payload.run_form_audit}")
     logger.info("=" * 60)
 
-    ocr_results   = []   # populated in STEP 2 if run_ocr=True
-    ocr_dir       = None
-    audit_report  = None
-    audit_summary = None
+    ocr_results        = []
+    ocr_dir            = None
+    audit_report       = None
+    audit_summary      = None
+    form_inputs        = []
+    form_audit_report  = None
+    form_audit_summary = None
 
     try:
-        # ── STEP 1 : Crawl ───────────────────────────────────────────────
-        logger.info("\nSTEP 1: CRAWL")
+        # ── STEP 1 : Image Crawl ─────────────────────────────────────────
+        logger.info("\nSTEP 1: IMAGE CRAWL")
         logger.info("-" * 40)
 
-        crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
         await crawler.crawl_page()
-        crawler.save_results()     # writes images_report.json + images_with_alt_text.csv
+        crawler.save_results()
 
         logger.info(
             f"Crawl complete — {len(crawler.images_data)} images in "
             f"{len(crawler.visited_urls)} page(s)"
         )
 
-        # ── STEP 2 : OCR (optional) ──────────────────────────────────────
+        # ── STEP 2 : OCR (optional) ───────────────────────────────────────
         if payload.run_ocr:
             logger.info("\nSTEP 2: TEXT DETECTION & CONTRAST ANALYSIS")
             logger.info("-" * 40)
 
             detector = OCRPreprocessing(source_directory=crawler.output_dir)
-            detector.scan_directory()          # populates detector.results
+            detector.scan_directory()
 
             save = TextClassification(source_directory=crawler.output_dir)
             save.results = detector.results
-            save.save_reports()                # writes text_detection_report.json
+            save.save_reports()
 
-            ocr_results = detector.results     # keep for audit step
-            ocr_dir = str(detector.text_detected_dir)
+            ocr_results = detector.results
+            ocr_dir     = str(detector.text_detected_dir)
 
             logger.info(
                 f"OCR complete — {len(ocr_results)} images processed, "
                 f"{sum(1 for r in ocr_results if r.has_text)} with text"
             )
 
-        # ── STEP 3 : WCAG Accessibility Audit ────────────────────────────
+        # ── STEP 3 : Image Accessibility Audit (optional) ─────────────────
         if payload.run_audit:
-            logger.info("\nSTEP 3: WCAG ACCESSIBILITY AUDIT")
+            logger.info("\nSTEP 3: WCAG IMAGE ACCESSIBILITY AUDIT")
             logger.info("-" * 40)
 
-            auditor = AltTextAccessibilityAuditor()
             records = auditor.generate_audit_report(
                 images_data=crawler.images_data,
-                ocr_results=ocr_results,       # empty list is safe if OCR skipped
+                ocr_results=ocr_results,
                 output_dir=crawler.output_dir,
             )
 
             audit_report = f"{crawler.output_dir}/audit_report.csv"
 
-            # Build a lightweight summary dict to include in the API response
-            total   = len(records)
-            passed  = sum(1 for r in records if r["overall_status"] == "PASSED")
-            failed  = sum(1 for r in records if r["overall_status"] == "FAILED")
+            total  = len(records)
+            passed = sum(1 for r in records if r["overall_status"] == "PASSED")
+            failed = total - passed
 
             by_class: dict[str, dict] = {}
             for r in records:
@@ -121,21 +155,55 @@ async def run_crawler(payload: CrawlRequest):
                 by_class[cls]["passed" if r["overall_status"] == "PASSED" else "failed"] += 1
 
             audit_summary = {
-                "total":              total,
-                "passed":             passed,
-                "failed":             failed,
-                "pass_rate_pct":      round(passed / total * 100, 1) if total else 0,
-                "wcag_1_1_1_failed":  sum(1 for r in records if r["wcag_1_1_1_status"] == "FAILED"),
-                "wcag_4_1_2_failed":  sum(1 for r in records if r["wcag_4_1_2_status"] == "FAILED"),
-                "images_with_ocr":    sum(1 for r in records if r["has_ocr_text"]),
+                "total":               total,
+                "passed":              passed,
+                "failed":              failed,
+                "pass_rate_pct":       round(passed / total * 100, 1) if total else 0,
+                "wcag_1_1_1_failed":   sum(1 for r in records if r["wcag_1_1_1_status"] == "FAILED"),
+                "wcag_4_1_2_failed":   sum(1 for r in records if r["wcag_4_1_2_status"] == "FAILED"),
+                "images_with_ocr":     sum(1 for r in records if r["has_ocr_text"]),
                 "contrast_violations": sum(1 for r in records if r["contrast_violations_count"] > 0),
-                "by_classification":  by_class,
+                "by_classification":   by_class,
             }
 
             logger.info(
-                f"Audit complete — {total} images, "
+                f"Image audit complete — {total} images, "
                 f"{passed} passed ({audit_summary['pass_rate_pct']}%), "
                 f"{failed} failed"
+            )
+
+        # ── STEP 4 : Form Crawl ───────────────────────────────────────────
+        logger.info("\nSTEP 4: FORM CRAWL")
+        logger.info("-" * 40)
+
+        # Sync the form crawler's output dir to the image crawler's actual dir
+        # so both pipelines write artefacts to the same folder.
+        form_crawler.output_dir = Path(crawler.output_dir)
+        form_crawler.output_dir.mkdir(parents=True, exist_ok=True)
+
+        form_inputs = await form_crawler.crawl()
+        form_crawler.save_raw_json()
+
+        logger.info(f"Form crawl complete — {len(form_inputs)} input fields found")
+
+        # ── STEP 5 : Form Accessibility Audit (optional) ─────────────────
+        if payload.run_form_audit:
+            logger.info("\nSTEP 5: WCAG 3.3.1 / 3.3.2 FORM AUDIT")
+            logger.info("-" * 40)
+
+            # Keep the form auditor's output path in sync with the shared dir
+            form_auditor.output_dir = Path(crawler.output_dir)
+            form_auditor.output_dir.mkdir(parents=True, exist_ok=True)
+
+            form_records       = form_auditor.generate_audit_report(form_inputs=form_inputs)
+            form_audit_report  = f"{crawler.output_dir}/audit_form_report.csv"
+            form_audit_summary = FormAccessibilityAuditor.summarize(form_records)
+
+            logger.info(
+                f"Form audit complete — {form_audit_summary['total_fields']} fields, "
+                f"{form_audit_summary['passed']} passed "
+                f"({form_audit_summary['pass_rate_pct']}%), "
+                f"{form_audit_summary['failed']} failed"
             )
 
         logger.info("\nPIPELINE COMPLETE")
@@ -146,9 +214,13 @@ async def run_crawler(payload: CrawlRequest):
             output_dir=str(crawler.output_dir),
             url=url,
             max_depth=max_depth,
+            total_images=len(crawler.images_data),
             ocr_dir=ocr_dir,
             audit_report=audit_report,
             audit_summary=audit_summary,
+            total_fields=len(form_inputs),
+            form_audit_report=form_audit_report,
+            form_audit_summary=form_audit_summary,
         )
 
     except Exception as e:
