@@ -1,0 +1,48 @@
+{
+  "name": "wcag-accessibility-api",
+  "version": "1.0.0",
+  "description": "Node.js Express API to evaluate HTML accessibility using axe-core and Puppeteer",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "selftest": "node selftest.js",
+    "test": "jest --coverage"
+  },
+  "keywords": [
+    "accessibility",
+    "wcag",
+    "axe-core",
+    "puppeteer",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axe-core": "^4.9.0",
+    "cors": "^2.8.6",
+    "express": "^4.18.2",
+    "puppeteer": "^22.0.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "jest": "^30.3.0",
+    "jest-junit": "^16.0.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^7.2.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": ["/node_modules/"],
+    "reporters": [
+      "default",
+      ["jest-junit", { "outputDirectory": ".", "outputName": "junit.xml" }]
+    ],
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": ["*.js", "routes/**/*.js"]
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
