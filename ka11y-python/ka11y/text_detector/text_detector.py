@@ -5,6 +5,7 @@ import json
 import shutil
 import sys
 import logging
+import csv
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
@@ -368,9 +369,9 @@ class TextClassification:
         logger.info(f"Created output directories in {self.base_output_dir}")
 
     def save_reports(self):
-        """Save JSON report and Contrast Markdown report"""
+        """Save JSON, CSV and Contrast Markdown reports"""
 
-        # 1. JSON Report
+        # JSON Report (Full Report)
         json_file = os.path.join(self.text_detected_dir, "text_detection_report.json")
 
         images_with_text = sum(1 for r in self.results if r.has_text)
@@ -396,7 +397,15 @@ class TextClassification:
                 default=_json_serializer,
             )
 
-        # 2. Contrast Markdown Report
+        # CSV Report
+        csv_file = os.path.join(self.contrast_dir, "contrast_report.csv")
+        self._generate_contrast_csv(csv_file)
+
+        # Contrast JSON Report
+        contrast_json = os.path.join(self.contrast_dir, "contrast_report.json")
+        self._generate_contrast_json(contrast_json)
+
+        # Markdown Report
         md_file = os.path.join(self.contrast_dir, "contrast_report.md")
         self._generate_contrast_markdown(md_file, images_with_violations)
 
@@ -407,6 +416,8 @@ class TextClassification:
         print(f"Contrast violations: {images_with_violations}")
         print(f"Reports saved to:")
         print(f"  - {json_file}")
+        print(f"  - {csv_file}")
+        print(f"  - {contrast_json}")
         print(f"  - {md_file}")
         print(f"{'=' * 60}")
 
@@ -459,6 +470,69 @@ class TextClassification:
                                 )
                             f.write("\n")
                     f.write("---\n\n")
+
+    def _generate_contrast_csv(self, output_path):
+        """Generate CSV report for contrast results"""
+
+        with open(output_path, "w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.writer(csvfile)
+
+            writer.writerow([
+                "Image",
+                "Image Path",
+                "Text",
+                "Foreground Color",
+                "Background Color",
+                "Contrast Ratio",
+                "AA Normal",
+                "AA Large",
+                "AAA Normal",
+                "AAA Large"
+            ])
+
+            for result in self.results:
+                for det in result.detections:
+                    if det.color_info:
+                        fg = det.color_info.get("foreground", {}).get("hex", "N/A")
+
+                        for check in det.color_info.get("contrast_checks", []):
+                            bg = check["bg_color"]["hex"]
+                            ratio = check["ratio"]
+                            comp = check["compliance"]
+
+                            writer.writerow([
+                                result.filename,
+                                result.original_path,  # ← added
+                                det.text,
+                                fg,
+                                bg,
+                                ratio,
+                                comp["AA_normal"],
+                                comp["AA_large"],
+                                comp["AAA_normal"],
+                                comp["AAA_large"],
+                            ])
+
+    def _generate_contrast_json(self, output_path):
+        """Generate JSON report only for contrast analysis"""
+
+        contrast_data = []
+
+        for result in self.results:
+            for det in result.detections:
+                if det.color_info:
+                    contrast_data.append({
+                        "image": result.filename,
+                        "image_path": result.original_path,  # ← added
+                        "text": det.text,
+                        "foreground": det.color_info.get("foreground"),
+                        "background_palette": det.color_info.get("background_palette"),
+                        "contrast_checks": det.color_info.get("contrast_checks"),
+                        "wcag_violations": det.wcag_violations
+                    })
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(contrast_data, f, indent=2)
 
 
 def main():
