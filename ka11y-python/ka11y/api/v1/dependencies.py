@@ -24,8 +24,12 @@ from pydantic import HttpUrl
 from ka11y.utils.config_loader import load_config
 from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
+from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
+from ka11y.crawler.moving_content_crawler import MovingContentCrawler
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
+from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import LabelInNameAuditor
+from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import PauseStopHideAuditor
 
 
 # ── 1. Config ─────────────────────────────────────────────────────────────────
@@ -93,3 +97,43 @@ def get_form_auditor(
 ) -> FormAccessibilityAuditor:
     """FormAccessibilityAuditor needs the output dir to write its CSV."""
     return FormAccessibilityAuditor(output_dir=str(output_dir))
+
+
+def get_interactive_crawler(
+    url: str,
+    max_depth: int,
+    output_dir: Path = Depends(get_output_dir),
+) -> InteractiveElementCrawler:
+    """Provide an InteractiveElementCrawler for WCAG 2.5.3 auditing."""
+    return InteractiveElementCrawler(
+        base_url=url,
+        output_dir=str(output_dir),
+        max_depth=max_depth,
+    )
+
+
+def get_moving_content_crawler(
+    url: str,
+    max_depth: int,
+    output_dir: Path = Depends(get_output_dir),
+) -> MovingContentCrawler:
+    """Provide a MovingContentCrawler for WCAG 2.2.2 auditing."""
+    return MovingContentCrawler(
+        base_url=url,
+        output_dir=str(output_dir),
+        max_depth=max_depth,
+    )
+
+
+def get_label_in_name_auditor(
+    output_dir: Path = Depends(get_output_dir),
+) -> LabelInNameAuditor:
+    """LabelInNameAuditor needs the output dir to write its CSV."""
+    return LabelInNameAuditor(output_dir=str(output_dir))
+
+
+def get_pause_stop_hide_auditor(
+    output_dir: Path = Depends(get_output_dir),
+) -> PauseStopHideAuditor:
+    """PauseStopHideAuditor needs the output dir to write its CSV."""
+    return PauseStopHideAuditor(output_dir=str(output_dir))

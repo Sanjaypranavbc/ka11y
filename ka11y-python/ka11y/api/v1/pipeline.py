@@ -25,9 +25,13 @@ from pydantic import BaseModel, HttpUrl
 
 from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
+from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
+from ka11y.crawler.moving_content_crawler import MovingContentCrawler
 from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
+from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import LabelInNameAuditor
+from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import PauseStopHideAuditor
 from ka11y.config.logger import setup_logger
 
 from ka11y.api.v1.dependencies import (
@@ -36,6 +40,10 @@ from ka11y.api.v1.dependencies import (
     get_form_crawler,
     get_alt_text_auditor,
     get_form_auditor,
+    get_interactive_crawler,
+    get_moving_content_crawler,
+    get_label_in_name_auditor,
+    get_pause_stop_hide_auditor,
 )
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -50,6 +58,8 @@ class PipelineRequest(BaseModel):
     run_ocr: bool = True
     run_image_audit: bool = True
     run_form_audit: bool = True
+    run_label_in_name_audit: bool = True
+    run_pause_stop_hide_audit: bool = True
 
 
 class PipelineResponse(BaseModel):
@@ -66,6 +76,14 @@ class PipelineResponse(BaseModel):
     total_fields: int
     form_audit_report: str | None = None
     form_audit_summary: dict | None = None
+    # WCAG 2.5.3 — Label in Name
+    total_interactive_elements: int = 0
+    label_in_name_report: str | None = None
+    label_in_name_summary: dict | None = None
+    # WCAG 2.2.2 — Pause, Stop, Hide
+    total_moving_content_items: int = 0
+    pause_stop_hide_report: str | None = None
+    pause_stop_hide_summary: dict | None = None
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
@@ -76,11 +94,15 @@ async def run_full_pipeline(
     # ── shared output directory (resolved once, reused by all deps) ────────
     output_dir: Path                     = Depends(get_output_dir),
     # ── crawlers ──────────────────────────────────────────────────────────
-    image_crawler: AsyncImageCrawler     = Depends(get_image_crawler),
-    form_crawler: AsyncFormCrawler       = Depends(get_form_crawler),
+    image_crawler: AsyncImageCrawler           = Depends(get_image_crawler),
+    form_crawler: AsyncFormCrawler             = Depends(get_form_crawler),
+    interactive_crawler: InteractiveElementCrawler = Depends(get_interactive_crawler),
+    moving_content_crawler: MovingContentCrawler   = Depends(get_moving_content_crawler),
     # ── auditors ──────────────────────────────────────────────────────────
-    image_auditor: AltTextAccessibilityAuditor = Depends(get_alt_text_auditor),
-    form_auditor: FormAccessibilityAuditor     = Depends(get_form_auditor),
+    image_auditor: AltTextAccessibilityAuditor     = Depends(get_alt_text_auditor),
+    form_auditor: FormAccessibilityAuditor         = Depends(get_form_auditor),
+    label_in_name_auditor: LabelInNameAuditor      = Depends(get_label_in_name_auditor),
+    pause_stop_hide_auditor: PauseStopHideAuditor  = Depends(get_pause_stop_hide_auditor),
 ):
     url       = str(payload.url)
     max_depth = payload.max_depth
@@ -92,12 +114,16 @@ async def run_full_pipeline(
     logger.info(f"  output_dir : {output_dir}")
     logger.info("=" * 60)
 
-    ocr_results         = []
-    ocr_dir             = None
-    image_audit_report  = None
-    image_audit_summary = None
-    form_audit_report   = None
-    form_audit_summary  = None
+    ocr_results              = []
+    ocr_dir                  = None
+    image_audit_report       = None
+    image_audit_summary      = None
+    form_audit_report        = None
+    form_audit_summary       = None
+    label_in_name_report     = None
+    label_in_name_summary    = None
+    pause_stop_hide_report   = None
+    pause_stop_hide_summary  = None
 
     try:
         # ── STEP 1 : Image Crawl ──────────────────────────────────────────
@@ -198,6 +224,59 @@ async def run_full_pipeline(
                 f"{form_audit_summary['failed']} failed"
             )
 
+        # ── STEP 6 : Interactive Element Crawl (2.5.3) ───────────────
+        logger.info("\nSTEP 6: INTERACTIVE ELEMENT CRAWL (WCAG 2.5.3)")
+        logger.info("-" * 40)
+
+        interactive_elements = await interactive_crawler.crawl()
+        interactive_crawler.save_raw_json()
+
+        logger.info(f"Interactive crawl complete — {len(interactive_elements)} elements found")
+
+        # ── STEP 7 : WCAG 2.5.3 Label in Name Audit (optional) ───────
+        if payload.run_label_in_name_audit:
+            logger.info("\nSTEP 7: WCAG 2.5.3 LABEL IN NAME AUDIT")
+            logger.info("-" * 40)
+
+            lin_records       = label_in_name_auditor.generate_audit_report(interactive_elements)
+            label_in_name_report   = str(output_dir / "audit_label_in_name_report.csv")
+            label_in_name_summary  = LabelInNameAuditor.summarize(lin_records)
+
+            logger.info(
+                f"Label in Name audit complete — "
+                f"{label_in_name_summary['checked']} checked, "
+                f"{label_in_name_summary['passed']} passed "
+                f"({label_in_name_summary['pass_rate_pct']}%), "
+                f"{label_in_name_summary['failed']} failed"
+            )
+
+        # ── STEP 8 : Moving Content Crawl (2.2.2) ────────────────────
+        logger.info("\nSTEP 8: MOVING CONTENT CRAWL (WCAG 2.2.2)")
+        logger.info("-" * 40)
+
+        moving_items = await moving_content_crawler.crawl()
+        moving_content_crawler.save_raw_json()
+
+        logger.info(f"Moving content crawl complete — {len(moving_items)} items found")
+
+        # ── STEP 9 : WCAG 2.2.2 Pause Stop Hide Audit (optional) ─────
+        if payload.run_pause_stop_hide_audit:
+            logger.info("\nSTEP 9: WCAG 2.2.2 PAUSE / STOP / HIDE AUDIT")
+            logger.info("-" * 40)
+
+            psh_records          = pause_stop_hide_auditor.generate_audit_report(moving_items)
+            pause_stop_hide_report   = str(output_dir / "audit_pause_stop_hide_report.csv")
+            pause_stop_hide_summary  = PauseStopHideAuditor.summarize(psh_records)
+
+            logger.info(
+                f"Pause/Stop/Hide audit complete — "
+                f"{pause_stop_hide_summary['total_items']} items, "
+                f"{pause_stop_hide_summary['passed']} passed "
+                f"({pause_stop_hide_summary['pass_rate_pct']}%), "
+                f"{pause_stop_hide_summary['failed']} failed | "
+                f"axe-core would miss {pause_stop_hide_summary['axe_would_miss']}"
+            )
+
         logger.info("\nFULL PIPELINE COMPLETE")
         logger.info("=" * 60)
 
@@ -213,6 +292,12 @@ async def run_full_pipeline(
             total_fields=len(form_inputs),
             form_audit_report=form_audit_report,
             form_audit_summary=form_audit_summary,
+            total_interactive_elements=len(interactive_elements),
+            label_in_name_report=label_in_name_report,
+            label_in_name_summary=label_in_name_summary,
+            total_moving_content_items=len(moving_items),
+            pause_stop_hide_report=pause_stop_hide_report,
+            pause_stop_hide_summary=pause_stop_hide_summary,
         )
 
     except Exception as e:
