@@ -20,7 +20,6 @@ This auditor additionally detects:
   • Animated GIFs             — looping .gif images (no native pause)
   • CSS / WAAPI animations    — long-running keyframe animations (> 5 s or infinite)
   • JavaScript carousels      — Bootstrap, Swiper, Slick, Owl Carousel, Glide, Splide, generic
-
 Pass conditions (WCAG 2.2.2 applicability gates — ALL must be met to require a mechanism)
 ──────────────────────────────────────────────────────────────────────────────────────────
   1. starts_automatically == True
