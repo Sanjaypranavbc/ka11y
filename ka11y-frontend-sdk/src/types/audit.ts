@@ -51,6 +51,7 @@ export interface AuditResult {
 export interface AuditConfig {
   url: string;
   max_depth: number;
+  wcag_level: "A" | "AA" | "AAA";
   run_ocr: boolean;
   run_image_audit: boolean;
   run_form_audit: boolean;

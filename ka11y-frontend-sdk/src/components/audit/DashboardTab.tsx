@@ -12,16 +12,16 @@ interface DashboardTabProps {
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
-  critical: "hsl(0, 72%, 51%)",
-  high: "hsl(25, 95%, 53%)",
-  medium: "hsl(43, 96%, 56%)",
-  low: "hsl(48, 96%, 53%)",
+  critical: "hsl(0, 84%, 60%)",
+  high:     "hsl(22, 98%, 56%)",
+  medium:   "hsl(45, 100%, 50%)",
+  low:      "hsl(199, 78%, 56%)",
 };
 
 const SOURCE_COLORS = {
-  violations: "hsl(0, 72%, 51%)",
-  needs_review: "hsl(43, 96%, 56%)",
-  passes: "hsl(142, 71%, 45%)",
+  violations:   "hsl(0, 84%, 58%)",
+  needs_review: "hsl(213, 94%, 55%)",
+  passes:       "hsl(151, 68%, 46%)",
 };
 
 export function DashboardTab({ result }: DashboardTabProps) {
@@ -87,24 +87,30 @@ export function DashboardTab({ result }: DashboardTabProps) {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Metric cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="Total Findings" value={result.total} icon={<Activity className="h-5 w-5" />} />
-        <MetricCard label="Violations" value={result.violations_count} variant="critical" icon={<AlertTriangle className="h-5 w-5" />} />
-        <MetricCard label="Needs Review" value={result.needs_review_count} variant="serious" icon={<HelpCircle className="h-5 w-5" />} />
-        <MetricCard label="Passes" value={result.passes_count} variant="success" icon={<CheckCircle2 className="h-5 w-5" />} />
+    <div className="space-y-5 p-5 grid-bg min-h-full">
+      {/* Metric cards — staggered reveal */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: "Total Findings",  value: result.total,              variant: "default"  as const, icon: <Activity className="h-5 w-5" />,     delay: "delay-0"   },
+          { label: "Violations",      value: result.violations_count,   variant: "critical" as const, icon: <AlertTriangle className="h-5 w-5" />, delay: "delay-75"  },
+          { label: "Needs Review",    value: result.needs_review_count, variant: "serious"  as const, icon: <HelpCircle className="h-5 w-5" />,    delay: "delay-150" },
+          { label: "Passes",          value: result.passes_count,       variant: "success"  as const, icon: <CheckCircle2 className="h-5 w-5" />,  delay: "delay-225" },
+        ].map((m) => (
+          <div key={m.label} className={`animate-fade-up ${m.delay}`}>
+            <MetricCard label={m.label} value={m.value} variant={m.variant} icon={m.icon} />
+          </div>
+        ))}
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 animate-fade-up delay-300">
         {/* Severity Pie */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Violations by Severity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={severityChartConfig} className="h-64">
+            <ChartContainer config={severityChartConfig} className="h-64" role="img" aria-label={`Pie chart: ${severityData.map((d) => `${d.name} ${d.value}`).join(", ")}`}>
               <PieChart>
                 <Pie data={severityData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="value" paddingAngle={2}>
                   {severityData.map((entry, i) => (
@@ -124,7 +130,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
             <CardTitle className="text-sm font-medium">Findings by Source</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={sourceChartConfig} className="h-64">
+            <ChartContainer config={sourceChartConfig} className="h-64" role="img" aria-label="Bar chart showing violations, needs review, and passes broken down by axe and python sources">
               <BarChart data={sourceData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="name" className="text-xs" />
@@ -141,7 +147,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
       </div>
 
       {/* WCAG Level Breakdown */}
-      <Card>
+      <Card className="animate-fade-up delay-450">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">WCAG Level Breakdown</CardTitle>
         </CardHeader>
@@ -162,7 +168,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
       </Card>
 
       {/* Top Failing WCAG */}
-      <Card>
+      <Card className="animate-fade-up delay-600">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium">Top Failing WCAG Criteria</CardTitle>
         </CardHeader>
@@ -178,19 +184,19 @@ export function DashboardTab({ result }: DashboardTabProps) {
                   {topCriteria.map((entry, i) => (
                     <Cell
                       key={i}
-                      fill={entry.level === "A" ? "hsl(217, 91%, 60%)" : "hsl(271, 91%, 65%)"}
+                      fill={entry.level === "A" ? "hsl(213, 94%, 55%)" : "hsl(199, 78%, 56%)"}
                     />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex gap-4 mt-2 justify-center">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <div className="w-3 h-3 rounded-sm" style={{ background: "hsl(217, 91%, 60%)" }} /> Level A
+          <div className="flex gap-5 mt-2 justify-center" aria-hidden="true">
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
+              <div className="w-2.5 h-2.5" style={{ background: "hsl(213, 94%, 55%)" }} /> Level A
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <div className="w-3 h-3 rounded-sm" style={{ background: "hsl(271, 91%, 65%)" }} /> Level AA
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
+              <div className="w-2.5 h-2.5" style={{ background: "hsl(199, 78%, 56%)" }} /> Level AA
             </div>
           </div>
         </CardContent>

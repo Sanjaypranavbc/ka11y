@@ -2,119 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/*
+ * ka11y — Midnight Blue
+ * True black base · electric blue primary · IBM Plex Sans + IBM Plex Mono
+ */
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 215 20% 20%;
+    /* ── Core palette ────────────────────────────────────────────── */
+    --background:        0 0% 4%;
+    --foreground:        214 20% 92%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 215 20% 20%;
+    --card:              0 0% 7%;
+    --card-foreground:   214 20% 92%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 215 20% 20%;
+    --popover:           0 0% 8%;
+    --popover-foreground: 214 20% 92%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
+    /* Electric blue — single dominant accent */
+    --primary:           213 94% 55%;
+    --primary-foreground: 0 0% 4%;
 
-    --secondary: 215 20% 93%;
-    --secondary-foreground: 215 20% 20%;
+    --secondary:         0 0% 11%;
+    --secondary-foreground: 214 15% 70%;
 
-    --muted: 215 15% 96%;
-    --muted-foreground: 215 10% 45%;
+    --muted:             0 0% 10%;
+    --muted-foreground:  214 8% 44%;
 
-    --accent: 217 91% 96%;
-    --accent-foreground: 217 91% 35%;
+    --accent:            213 60% 12%;
+    --accent-foreground: 213 94% 72%;
 
-    --destructive: 0 84% 60%;
+    --destructive:       0 84% 58%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 215 15% 90%;
-    --input: 215 15% 90%;
-    --ring: 217 91% 60%;
+    --border:            0 0% 13%;
+    --input:             0 0% 11%;
+    --ring:              213 94% 55%;
 
-    --radius: 0.75rem;
-    
-    /* Custom report tokens */
-    --critical: 0 72% 51%;
+    --radius: 3px;
+
+    /* ── Severity tokens ─────────────────────────────────────────── */
+    --critical:          0 84% 58%;
     --critical-foreground: 0 0% 100%;
-    
-    --serious: 25 95% 53%;
+
+    --serious:           22 96% 55%;
     --serious-foreground: 0 0% 100%;
-    
-    --moderate: 43 96% 56%;
-    --moderate-foreground: 215 20% 20%;
-    
-    --minor: 201 96% 32%;
-    --minor-foreground: 0 0% 100%;
-    
-    --success: 142 71% 45%;
+
+    --moderate:          45 100% 50%;
+    --moderate-foreground: 0 0% 5%;
+
+    --minor:             199 78% 56%;
+    --minor-foreground:  0 0% 100%;
+
+    --success:           151 68% 46%;
     --success-foreground: 0 0% 100%;
-    
-    --score-excellent: 142 71% 45%;
-    --score-good: 43 96% 56%;
-    --score-poor: 0 72% 51%;
-    
-    --report-shadow: 0deg 0% 0% / 0.05;
 
-    --sidebar-background: 0 0% 98%;
+    --score-excellent:   151 68% 46%;
+    --score-good:        45 100% 50%;
+    --score-poor:        0 84% 58%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --report-shadow:     0deg 0% 0% / 0.5;
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-
-    --card: 217 33% 17%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 217 33% 17%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
-    
-    --report-shadow: 0deg 0% 100% / 0.05;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* ── Sidebar ─────────────────────────────────────────────────── */
+    --sidebar-background:         0 0% 3%;
+    --sidebar-foreground:         214 15% 78%;
+    --sidebar-primary:            213 94% 55%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent:             213 60% 10%;
+    --sidebar-accent-foreground:  213 94% 72%;
+    --sidebar-border:             0 0% 11%;
+    --sidebar-ring:               213 94% 55%;
   }
 }
 
@@ -123,7 +80,66 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  }
+
+  /* Subtle grid on scrollable areas */
+  .grid-bg {
+    background-image:
+      linear-gradient(hsl(213 30% 14% / 0.25) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(213 30% 14% / 0.25) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* Thin scrollbar */
+  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 1px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.5);
   }
 }
+
+/* ── Animations ──────────────────────────────────────────────────────── */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes amber-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(213 94% 55% / 0); }
+  50%       { box-shadow: 0 0 16px 3px hsl(213 94% 55% / 0.28); }
+}
+
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+
+.animate-fade-up  { animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in  { animation: fade-in 0.3s ease both; }
+.animate-amber-pulse { animation: amber-pulse 2.4s ease-in-out infinite; }
+
+/* Stagger helpers */
+.delay-0   { animation-delay: 0ms; }
+.delay-75  { animation-delay: 75ms; }
+.delay-150 { animation-delay: 150ms; }
+.delay-225 { animation-delay: 225ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-450 { animation-delay: 450ms; }
+.delay-600 { animation-delay: 600ms; }

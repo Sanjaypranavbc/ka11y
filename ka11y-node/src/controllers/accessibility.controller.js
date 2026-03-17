@@ -261,7 +261,7 @@ class AccessibilityController {
    *               message: net::ERR_NAME_NOT_RESOLVED
    */
   async analyseUrlFlat(req, res) {
-    const { url } = req.body;
+    const { url, level = 'AA' } = req.body;
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'url field is required and must be a string' });
@@ -275,9 +275,11 @@ class AccessibilityController {
       return res.status(400).json({ error: 'url field must be a valid http or https URL' });
     }
 
+    const wcagLevel = ['A', 'AA', 'AAA'].includes(level) ? level : 'AA';
+
     try {
-      this._logger.info(`analyseUrlFlat start url=${url}`);
-      const findings = await this._service.analyseUrlFlat(url);
+      this._logger.info(`analyseUrlFlat start url=${url} level=${wcagLevel}`);
+      const findings = await this._service.analyseUrlFlat(url, wcagLevel);
       this._logger.info(`analyseUrlFlat done findings=${findings.length}`);
       res.json({ url, findings });
     } catch (err) {

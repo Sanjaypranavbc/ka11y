@@ -67,7 +67,7 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
   const hasFilters = search || severityFilter.length || sourceFilter.length || scFilter.length;
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           placeholder="Search reason or HTML..."
@@ -77,11 +77,12 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
         />
 
         {/* Severity filters */}
-        <div className="flex gap-1">
+        <div role="group" aria-label="Filter by severity" className="flex gap-1">
           {allSeverities.map((s) => (
             <button
               key={s}
               onClick={() => toggleFilter(severityFilter, s, setSeverityFilter)}
+              aria-pressed={severityFilter.includes(s)}
               className={cn(
                 "px-2 py-1 rounded text-xs font-medium border transition-colors",
                 severityFilter.includes(s) ? severityColors[s] : "bg-muted text-muted-foreground border-border"
@@ -93,11 +94,12 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
         </div>
 
         {/* Source filters */}
-        <div className="flex gap-1">
+        <div role="group" aria-label="Filter by source" className="flex gap-1">
           {allSources.map((s) => (
             <button
               key={s}
               onClick={() => toggleFilter(sourceFilter, s, setSourceFilter)}
+              aria-pressed={sourceFilter.includes(s)}
               className={cn(
                 "px-2 py-1 rounded text-xs font-medium border transition-colors",
                 sourceFilter.includes(s) ? sourceColors[s] : "bg-muted text-muted-foreground border-border"
@@ -109,11 +111,12 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
         </div>
 
         {/* WCAG SC filter - show as scrollable row */}
-        <div className="flex gap-1 flex-wrap">
+        <div role="group" aria-label="Filter by WCAG success criterion" className="flex gap-1 flex-wrap">
           {allScs.slice(0, 8).map((sc) => (
             <button
               key={sc}
               onClick={() => toggleFilter(scFilter, sc, setScFilter)}
+              aria-pressed={scFilter.includes(sc)}
               className={cn(
                 "px-2 py-1 rounded text-xs font-mono border transition-colors",
                 scFilter.includes(sc) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground border-border"
@@ -166,7 +169,7 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
                 <TableCell>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-xs text-muted-foreground cursor-help">
+                      <span tabIndex={0} className="text-xs text-muted-foreground cursor-help">
                         {v.reason.length > 80 ? v.reason.slice(0, 80) + "…" : v.reason}
                       </span>
                     </TooltipTrigger>
@@ -179,8 +182,8 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
                   </code>
                 </TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]">
-                    <Wrench className="h-3 w-3" />
+                  <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>
+                    <Wrench className="h-3 w-3" aria-hidden="true" />
                   </Button>
                 </TableCell>
               </TableRow>

@@ -30,9 +30,9 @@ export function NeedsReviewTab({ items }: NeedsReviewTabProps) {
   }, [items, search]);
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="bg-moderate/10 border border-moderate/30 rounded-lg p-4 flex items-start gap-3">
-        <AlertTriangle className="h-5 w-5 text-moderate shrink-0 mt-0.5" />
+    <div className="p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
+      <div className="bg-moderate/10 border border-moderate/30 rounded-lg p-4 flex items-start gap-3" role="note">
+        <AlertTriangle className="h-5 w-5 text-moderate shrink-0 mt-0.5" aria-hidden="true" />
         <p className="text-sm text-foreground">
           These items require manual verification — automated tools could not determine pass/fail.
         </p>
@@ -70,8 +70,8 @@ export function NeedsReviewTab({ items }: NeedsReviewTabProps) {
                 <TableCell className="text-xs">{v.criterion_name}</TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{v.reason}</TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]">
-                    <Wrench className="h-3 w-3" />
+                  <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>
+                    <Wrench className="h-3 w-3" aria-hidden="true" />
                   </Button>
                 </TableCell>
               </TableRow>

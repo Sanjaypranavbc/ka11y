@@ -29,17 +29,18 @@ interface AuditSidebarProps {
 }
 
 const navItems: { label: string; value: TabValue; icon: React.ElementType }[] = [
-  { label: "Dashboard", value: "dashboard", icon: LayoutDashboard },
-  { label: "Violations", value: "violations", icon: AlertTriangle },
-  { label: "Needs Review", value: "needs-review", icon: HelpCircle },
-  { label: "Passes", value: "passes", icon: CheckCircle2 },
-  { label: "Settings", value: "settings", icon: Settings },
+  { label: "Dashboard",    value: "dashboard",    icon: LayoutDashboard },
+  { label: "Violations",   value: "violations",   icon: AlertTriangle   },
+  { label: "Needs Review", value: "needs-review", icon: HelpCircle      },
+  { label: "Passes",       value: "passes",       icon: CheckCircle2    },
+  { label: "Settings",     value: "settings",     icon: Settings        },
 ];
 
 export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, open, onClose }: AuditSidebarProps) {
   const [config, setConfig] = useState<AuditConfig>({
     url: "https://www.kao.com/global/en/",
     max_depth: 0,
+    wcag_level: "AA",
     run_ocr: true,
     run_image_audit: true,
     run_form_audit: true,
@@ -49,12 +50,12 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, op
   });
 
   const toggles: { key: keyof AuditConfig; label: string }[] = [
-    { key: "run_ocr", label: "OCR" },
-    { key: "run_image_audit", label: "Image Audit" },
-    { key: "run_form_audit", label: "Form Audit" },
-    { key: "run_label_in_name_audit", label: "Label in Name" },
-    { key: "run_pause_stop_hide_audit", label: "Pause/Stop/Hide" },
-    { key: "run_target_size_audit", label: "Target Size" },
+    { key: "run_ocr",                   label: "OCR"           },
+    { key: "run_image_audit",           label: "Image Audit"   },
+    { key: "run_form_audit",            label: "Form Audit"    },
+    { key: "run_label_in_name_audit",   label: "Label in Name" },
+    { key: "run_pause_stop_hide_audit", label: "Pause/Stop"    },
+    { key: "run_target_size_audit",     label: "Target Size"   },
   ];
 
   const isRunning = jobStatus === "pending" || jobStatus === "running";
@@ -63,112 +64,189 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, op
     <>
       {/* Mobile overlay */}
       {open && (
-        <div className="fixed inset-0 z-40 bg-foreground/20 md:hidden" onClick={onClose} />
+        <div
+          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
       )}
 
       <aside
+        aria-label="Audit controls"
         className={cn(
-          "fixed top-0 left-0 z-50 h-full w-72 bg-card border-r border-border flex flex-col transition-transform duration-200",
+          "fixed top-0 left-0 z-50 h-full w-64 bg-[hsl(var(--sidebar-background))] border-r border-[hsl(var(--sidebar-border))] flex flex-col transition-transform duration-200",
           "md:translate-x-0 md:static md:z-auto",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {/* Header */}
-        <div className="p-5 flex items-center justify-between">
+        {/* Brand */}
+        <div className="px-5 py-5 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">ka11y</h1>
-            <p className="text-xs text-muted-foreground">Accessibility Auditor</p>
+            <h1 className="text-2xl font-extrabold tracking-[-0.04em] text-foreground leading-none">
+              ka<span className="text-primary">11</span>y
+            </h1>
+            <p className="text-[9px] font-mono tracking-[0.2em] uppercase text-muted-foreground mt-1 select-none">
+              a11y diagnostic
+            </p>
           </div>
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={onClose}>
-            <X className="h-4 w-4" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={onClose}
+            aria-label="Close sidebar"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
         </div>
 
-        <Separator />
+        <Separator className="bg-[hsl(var(--sidebar-border))]" />
 
         {/* Navigation */}
-        <nav className="p-3 space-y-1">
+        <nav aria-label="Main navigation" className="py-3">
           {navItems.map((item) => (
             <button
               key={item.value}
               onClick={() => { onTabChange(item.value); onClose(); }}
+              aria-current={activeTab === item.value ? "page" : undefined}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                "w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-colors border-l-2",
                 activeTab === item.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "border-l-primary text-primary bg-primary/5"
+                  : "border-l-transparent text-muted-foreground hover:text-foreground hover:bg-white/[0.03]"
               )}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               {item.label}
             </button>
           ))}
         </nav>
 
-        <Separator />
+        <Separator className="bg-[hsl(var(--sidebar-border))]" />
 
         {/* Audit Controls */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <h3 className="text-sm font-semibold text-foreground">Run New Audit</h3>
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          <p className="text-[9px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
+            New Audit
+          </p>
 
+          {/* URL & depth */}
           <div className="space-y-3">
             <div>
-              <Label className="text-xs text-muted-foreground">URL to audit</Label>
+              <Label htmlFor="audit-url" className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
+                Target URL
+              </Label>
               <Input
+                id="audit-url"
                 value={config.url}
                 onChange={(e) => setConfig((c) => ({ ...c, url: e.target.value }))}
                 placeholder="https://example.com"
-                className="mt-1 text-xs h-8"
+                className="mt-1.5 h-8 text-xs font-mono bg-[hsl(var(--input))] border-border focus-visible:ring-primary/50"
               />
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">Max depth</Label>
+              <Label htmlFor="audit-max-depth" className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
+                Max Depth
+              </Label>
               <Input
+                id="audit-max-depth"
                 type="number"
                 value={config.max_depth}
                 onChange={(e) => setConfig((c) => ({ ...c, max_depth: parseInt(e.target.value) || 0 }))}
-                className="mt-1 text-xs h-8"
+                className="mt-1.5 h-8 text-xs font-mono bg-[hsl(var(--input))] border-border focus-visible:ring-primary/50"
                 min={0}
               />
             </div>
+            <div>
+              <Label className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
+                WCAG Level
+              </Label>
+              <div className="mt-1.5 flex rounded-md overflow-hidden border border-border text-[10px] font-semibold">
+                {(["A", "AA", "AAA"] as const).map((lvl) => (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => setConfig((c) => ({ ...c, wcag_level: lvl }))}
+                    className={cn(
+                      "flex-1 py-1.5 transition-colors",
+                      config.wcag_level === lvl
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-[hsl(var(--input))] text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {lvl}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-2">
+          {/* Toggles */}
+          <div className="space-y-2.5">
             {toggles.map((t) => (
               <div key={t.key} className="flex items-center justify-between">
-                <Label className="text-xs text-muted-foreground">{t.label}</Label>
+                <Label
+                  htmlFor={`toggle-${t.key}`}
+                  className="text-[10px] font-medium text-muted-foreground cursor-pointer"
+                >
+                  {t.label}
+                </Label>
                 <Switch
+                  id={`toggle-${t.key}`}
                   checked={config[t.key] as boolean}
                   onCheckedChange={(v) => setConfig((c) => ({ ...c, [t.key]: v }))}
-                  className="scale-75"
+                  className="scale-[0.7] data-[state=checked]:bg-primary"
                 />
               </div>
             ))}
           </div>
 
+          {/* Run button */}
           <Button
             onClick={() => onRunAudit(config)}
             disabled={isRunning || !config.url}
-            className="w-full"
+            className={cn(
+              "w-full h-9 text-xs font-semibold tracking-wider uppercase bg-primary text-primary-foreground hover:bg-primary/90 border-0",
+              isRunning && "animate-amber-pulse"
+            )}
           >
             {isRunning ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" aria-hidden="true" />
             ) : (
-              <Play className="h-4 w-4 mr-2" />
+              <Play className="h-3.5 w-3.5 mr-2" aria-hidden="true" />
             )}
-            {isRunning ? "Running..." : "Run Audit"}
+            {isRunning ? "Running…" : "Run Audit"}
           </Button>
 
-          {/* Status indicator */}
+          {/* Status */}
           {jobStatus !== "idle" && (
-            <div className="flex items-center gap-2 text-xs">
-              {jobStatus === "pending" && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-              {jobStatus === "running" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-              {jobStatus === "completed" && <CheckCircle className="h-3 w-3 text-success" />}
-              {jobStatus === "failed" && <XCircle className="h-3 w-3 text-destructive" />}
-              <span className="text-muted-foreground capitalize">{jobStatus}</span>
+            <div className="flex items-center gap-2 text-[10px] font-mono" role="status" aria-live="polite">
+              {(jobStatus === "pending" || jobStatus === "running") && (
+                <Loader2 className="h-3 w-3 animate-spin text-primary" aria-hidden="true" />
+              )}
+              {jobStatus === "completed" && (
+                <CheckCircle className="h-3 w-3 text-success" aria-hidden="true" />
+              )}
+              {jobStatus === "failed" && (
+                <XCircle className="h-3 w-3 text-destructive" aria-hidden="true" />
+              )}
+              <span className={cn(
+                "capitalize",
+                jobStatus === "completed" && "text-success",
+                jobStatus === "failed"    && "text-destructive",
+                (jobStatus === "pending" || jobStatus === "running") && "text-primary",
+              )}>
+                {jobStatus}
+              </span>
             </div>
           )}
+        </div>
+
+        {/* Footer rule */}
+        <div className="px-4 py-3 border-t border-[hsl(var(--sidebar-border))]">
+          <p className="text-[8px] font-mono tracking-widest text-muted-foreground/40 uppercase">
+            WCAG 2.1 A / AA / AAA · axe-core + Python
+          </p>
         </div>
       </aside>
     </>

@@ -26,7 +26,7 @@ export function PassesTab({ passes }: PassesTabProps) {
   };
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
       {Object.entries(grouped).map(([source, items]) => (
         <Collapsible key={source} open={openSections[source]} onOpenChange={() => toggle(source)}>
           <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">

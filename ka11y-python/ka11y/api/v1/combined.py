@@ -234,6 +234,7 @@ _PYTHON_SEVERITY: Dict[str, str] = {
 class CombinedRequest(BaseModel):
     url: HttpUrl
     max_depth: int = 0
+    wcag_level: str = "AA"   # "A" | "AA" | "AAA"
     run_ocr: bool = True
     run_image_audit: bool = True
     run_form_audit: bool = True
@@ -256,7 +257,17 @@ class JobStatusResponse(BaseModel):
 # ── Node caller ───────────────────────────────────────────────────────────────
 
 
-async def _call_node_flat(url: str, node_base_url: str) -> List[Dict]:
+def _allowed_levels(wcag_level: str) -> set:
+    """Return the set of WCAG levels included at a given conformance target."""
+    levels = {"A"}
+    if wcag_level in ("AA", "AAA"):
+        levels.add("AA")
+    if wcag_level == "AAA":
+        levels.add("AAA")
+    return levels
+
+
+async def _call_node_flat(url: str, node_base_url: str, wcag_level: str = "AA") -> List[Dict]:
     """
     POST to Node's /api/v1/analyse-url-flat.
     Returns a flat list of element-wise findings:
@@ -265,7 +276,7 @@ async def _call_node_flat(url: str, node_base_url: str) -> List[Dict]:
     """
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
     async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(endpoint, json={"url": url})
+        resp = await client.post(endpoint, json={"url": url, "level": wcag_level})
         resp.raise_for_status()
         return resp.json().get("findings", [])
 
@@ -703,7 +714,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        node_task = asyncio.create_task(_call_node_flat(url, node_base_url))
+        node_task = asyncio.create_task(_call_node_flat(url, node_base_url, payload.wcag_level))
         python_task = asyncio.create_task(
             _run_python_pipeline(
                 url=url,
@@ -719,6 +730,13 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
         )
 
         node_findings, python_findings = await asyncio.gather(node_task, python_task)
+
+        # Filter Python findings to the requested WCAG level
+        allowed = _allowed_levels(payload.wcag_level)
+        python_findings = [
+            f for f in python_findings
+            if f.get("level") in allowed or f.get("level") is None
+        ]
 
         # Merge: violations first, then needs_review, then passes
         all_findings = node_findings + python_findings

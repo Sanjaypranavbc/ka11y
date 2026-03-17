@@ -37,17 +37,17 @@ const Index = () => {
           onToggleSidebar={() => setSidebarOpen(true)}
         />
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto grid-bg">
           {isLoading ? (
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)}
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <Skeleton className="h-72 rounded-lg" />
-                <Skeleton className="h-72 rounded-lg" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <Skeleton className="h-72" />
+                <Skeleton className="h-72" />
               </div>
-              <Skeleton className="h-48 rounded-lg" />
+              <Skeleton className="h-48" />
             </div>
           ) : jobStatus === "failed" ? (
             <div className="flex items-center justify-center h-full">

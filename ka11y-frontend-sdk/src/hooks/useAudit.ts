@@ -27,6 +27,7 @@ export function useAudit() {
         body: JSON.stringify({
           url: config.url,
           max_depth: config.max_depth,
+          wcag_level: config.wcag_level,
           run_ocr: config.run_ocr,
           run_image_audit: config.run_image_audit,
           run_form_audit: config.run_form_audit,
@@ -54,18 +55,19 @@ export function useAudit() {
           if (pollData.status === "completed") {
             stopPolling();
             setJobStatus("completed");
+            const report = pollData.result || {};
             setResult({
               job_id: pollData.job_id || jobId,
               status: "completed",
               url: config.url,
-              generated_at: pollData.generated_at || new Date().toISOString(),
-              total: (pollData.violations?.length || 0) + (pollData.needs_review?.length || 0) + (pollData.passes?.length || 0),
-              violations_count: pollData.violations?.length || 0,
-              needs_review_count: pollData.needs_review?.length || 0,
-              passes_count: pollData.passes?.length || 0,
-              violations: pollData.violations || [],
-              needs_review: pollData.needs_review || [],
-              passes: pollData.passes || [],
+              generated_at: report.generated_at || new Date().toISOString(),
+              total: (report.violations?.length || 0) + (report.needs_review?.length || 0) + (report.passes?.length || 0),
+              violations_count: report.violations?.length || 0,
+              needs_review_count: report.needs_review?.length || 0,
+              passes_count: report.passes?.length || 0,
+              violations: report.violations || [],
+              needs_review: report.needs_review || [],
+              passes: report.passes || [],
             });
           } else if (pollData.status === "failed") {
             stopPolling();
