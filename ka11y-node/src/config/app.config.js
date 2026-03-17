@@ -21,7 +21,8 @@ const config = {
   },
 
   browser: {
-    headless: true,
+    headless: 'shell',
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -31,7 +32,6 @@ const config = {
       '--no-first-run',
       '--disable-crash-reporter',
       '--disable-breakpad',
-      '--crash-dumps-dir=/tmp',
     ],
   },
   

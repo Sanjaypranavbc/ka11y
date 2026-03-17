@@ -1,0 +1,129 @@
+---
+title: "Environment Variables"
+description: "All environment variables for each ka11y service"
+---
+
+## ka11y-node
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `NODE_ENV` | `development` | No | Set to `production` to disable dev logging |
+| `PORT` | `3000` | No | Port the Express server listens on |
+| `AXE_TIMEOUT_MS` | `60000` | No | Per-page axe-core scan timeout (milliseconds) |
+| `BODY_LIMIT` | `10mb` | No | Express request body size limit |
+| `PUPPETEER_EXECUTABLE_PATH` | `/usr/bin/chromium` | No | Path to the Chromium binary (auto-set in Dockerfile) |
+| `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD` | `true` | No | Prevents Puppeteer from downloading its own Chromium (auto-set in Dockerfile) |
+
+### Example `.env` (Node)
+
+```bash
+NODE_ENV=production
+PORT=3000
+AXE_TIMEOUT_MS=90000
+BODY_LIMIT=10mb
+```
+
+---
+
+## ka11y-python
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `NODE_BASE_URL` | `http://localhost:3000` | Yes (in Docker) | Base URL of the ka11y-node service |
+| `PYTHONUNBUFFERED` | — | Recommended | Set to `"1"` for real-time log output in Docker |
+
+### Example `.env` (Python)
+
+```bash
+NODE_BASE_URL=http://node:3000
+PYTHONUNBUFFERED=1
+```
+
+<Note>
+  In Docker Compose the Python container resolves `node` by Docker's internal DNS — use `http://node:3000`. For local development outside Docker use `http://localhost:3000`.
+</Note>
+
+---
+
+## ka11y-frontend
+
+The frontend is a static React build served by nginx. There are no runtime environment variables — all API calls go to `/api/*` which nginx proxies to the Python service.
+
+Build-time Vite variables can be set in `.env.local`:
+
+```bash
+# ka11y-frontend-sdk/.env.local (development only)
+VITE_API_BASE=/api/v1   # default — matches nginx proxy prefix
+```
+
+---
+
+## Docker Compose env block reference
+
+The `docker-compose.yml` at the repo root sets these variables for each service:
+
+```yaml
+services:
+  node:
+    environment:
+      NODE_ENV:       production
+      PORT:           "3000"
+      AXE_TIMEOUT_MS: "60000"
+      BODY_LIMIT:     "10mb"
+
+  python:
+    environment:
+      NODE_BASE_URL:    "http://node:3000"
+      PYTHONUNBUFFERED: "1"
+```
+
+---
+
+## Using a `.env` file with Docker Compose
+
+Create a `.env` file in the repo root to override any value without editing `docker-compose.yml`:
+
+```bash
+# .env  (repo root)
+AXE_TIMEOUT_MS=90000
+NODE_BASE_URL=http://my-node-host:3000
+```
+
+Docker Compose automatically loads `.env` from the same directory as `docker-compose.yml`.
+
+---
+
+## Secrets and sensitive values
+
+ka11y-python calls `load_dotenv()` at startup (`ka11y/main.py`), so you can place a `.env` file in the `ka11y-python/` directory:
+
+```bash
+# ka11y-python/.env
+NODE_BASE_URL=http://node:3000
+```
+
+Do **not** commit `.env` files to version control. Add them to `.gitignore`:
+
+```
+.env
+.env.local
+.env.production
+```
+
+---
+
+## Playwright / Chromium environment
+
+These are set automatically by the Python Dockerfile and do not need to be configured manually:
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `PLAYWRIGHT_BROWSERS_PATH` | `/ms-playwright` | Where `playwright install` stores browsers |
+
+Playwright's Chromium is installed during `docker compose build` via:
+
+```dockerfile
+RUN poetry run playwright install chromium --with-deps
+```
+
+This downloads Chromium into the image layer — no network access is needed at runtime.

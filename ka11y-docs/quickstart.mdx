@@ -1,0 +1,128 @@
+---
+title: "Quickstart"
+description: "Get ka11y running locally in under 5 minutes"
+---
+
+## Prerequisites
+
+| Tool | Minimum version |
+|------|----------------|
+| Docker | 24+ |
+| Docker Compose | v2 |
+| 8 GB RAM | recommended for EasyOCR models |
+
+---
+
+## 1 — Clone and start
+
+```bash
+git clone https://github.com/your-org/ka11y.git
+cd ka11y
+docker compose up --build
+```
+
+This builds and starts three services:
+
+| Container | Port | Purpose |
+|-----------|------|---------|
+| `ka11y-node` | 3000 | axe-core / Puppeteer engine |
+| `ka11y-python` | 8000 | FastAPI + Python auditors |
+| `ka11y-frontend` | 8080 | React dashboard (nginx) |
+
+<Warning>
+  First build downloads EasyOCR language models (~300 MB) and Playwright Chromium (~150 MB). Subsequent builds use the Docker layer cache and are fast.
+</Warning>
+
+---
+
+## 2 — Run an audit via the dashboard
+
+Open **http://localhost:8080**, enter a URL in the sidebar, and click **Run Audit**.
+
+The dashboard streams live stage progress as each auditor completes. When the job finishes, violations, needs-review items, and passes are shown across the four tabs.
+
+---
+
+## 3 — Run an audit via the API
+
+```bash
+# Submit an audit
+JOB=$(curl -s -X POST http://localhost:8000/api/v1/combined/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "wcag_level": "AA",
+    "max_depth": 0,
+    "run_ocr": true,
+    "run_image_audit": true,
+    "run_form_audit": true,
+    "run_label_in_name_audit": true,
+    "run_pause_stop_hide_audit": true,
+    "run_target_size_audit": true
+  }' | jq -r '.job_id')
+
+echo "Job ID: $JOB"
+
+# Stream real-time progress (Ctrl+C to stop)
+curl -N http://localhost:8000/api/v1/combined/$JOB/stream
+
+# Or poll for the final result
+curl http://localhost:8000/api/v1/combined/$JOB | jq '.result.summary'
+```
+
+Expected poll response once complete:
+
+```json
+{
+  "violations": 12,
+  "needs_review": 4,
+  "passes": 87,
+  "by_severity": { "critical": 2, "high": 5, "medium": 4, "low": 1 },
+  "by_source": {
+    "axe":    { "violations": 8, "needs_review": 4, "passes": 75 },
+    "python": { "violations": 4, "needs_review": 0, "passes": 12 }
+  }
+}
+```
+
+---
+
+## 4 — View the interactive API docs
+
+FastAPI auto-generates Swagger UI at **http://localhost:8000/docs** and ReDoc at **http://localhost:8000/redoc**.
+
+---
+
+## Development mode (hot reload)
+
+For local development without Docker:
+
+```bash
+cd ka11y-python
+
+# Install dependencies
+poetry install
+
+# Install Playwright browsers
+poetry run playwright install chromium
+
+# Run with hot reload
+poetry run uvicorn ka11y.main:app --reload --port 8000
+```
+
+Set `NODE_BASE_URL` to point to a running ka11y-node instance:
+
+```bash
+NODE_BASE_URL=http://localhost:3000 poetry run uvicorn ka11y.main:app --reload
+```
+
+---
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NODE_BASE_URL` | `http://localhost:3000` | Base URL of the ka11y-node service |
+| `PYTHONUNBUFFERED` | `1` | Ensure live log output in Docker |
+
+See [Environment Reference](/deployment/environment) for all options.

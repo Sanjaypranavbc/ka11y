@@ -1,0 +1,505 @@
+---
+title: "Adding a New WCAG Rule"
+description: "End-to-end walkthrough for implementing a new WCAG success criterion in ka11y-python"
+---
+
+This guide walks through adding a completely new WCAG rule. We will implement **WCAG 3.1.1 Language of Page** as a worked example — detecting whether the `<html>` element carries a valid `lang` attribute.
+
+By the end you will have:
+- A new **Crawler** that extracts the raw element data
+- A new **Auditor** that applies the WCAG logic
+- A new **finding converter** wired into `combined.py`
+- A new **stage** that appears in the SSE stream and the job status
+
+<Note>
+  The worked example is simplified for clarity. Your crawler and auditor may be more complex — follow the same structural pattern.
+</Note>
+
+---
+
+## Overview: the five files you touch
+
+| # | File | What you add |
+|---|------|-------------|
+| 1 | `ka11y/crawler/<name>_crawler.py` | **New file** — Playwright extraction |
+| 2 | `ka11y/accessibility/rules/<category>/<name>_auditor.py` | **New file** — WCAG logic |
+| 3 | `ka11y/api/v1/combined.py` | Finding converter + stage block + request toggle |
+| 4 | *(optional)* `ka11y/api/v1/dependencies.py` | FastAPI `Depends()` provider |
+| 5 | *(optional)* `ka11y/api/v1/pipeline.py` | Wire into sequential pipeline |
+
+---
+
+## Step 1 — Create the Crawler
+
+The crawler uses Playwright to navigate the page and extract raw data. It must implement:
+
+- `async def crawl() -> List[Dict]` — returns one dict per detected element
+- `def save_raw_json()` — persists results for debugging
+
+**Create** `ka11y/crawler/lang_crawler.py`:
+
+```python
+"""
+ka11y/crawler/lang_crawler.py
+==============================
+Crawls the <html> element's lang attribute (WCAG 3.1.1).
+"""
+
+from __future__ import annotations
+import json
+from pathlib import Path
+from typing import Any, Dict, List
+
+from playwright.async_api import async_playwright
+
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="lang_crawler")
+
+
+class LangCrawler:
+    """Extract the <html lang> value from a URL."""
+
+    def __init__(self, *, base_url: str, output_dir: str, max_depth: int = 0) -> None:
+        self.base_url   = base_url
+        self.output_dir = Path(output_dir)
+        self.max_depth  = max_depth
+        self._results: List[Dict[str, Any]] = []
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    async def crawl(self) -> List[Dict[str, Any]]:
+        """Navigate to base_url and extract html[lang]."""
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            page    = await browser.new_page()
+            await page.goto(self.base_url, wait_until="domcontentloaded", timeout=30_000)
+
+            lang_value: str = await page.evaluate(
+                "() => document.documentElement.getAttribute('lang') || ''"
+            )
+            page_title: str = await page.evaluate("() => document.title")
+            await browser.close()
+
+        record = {
+            "page_url":    self.base_url,
+            "page_title":  page_title,
+            "lang_value":  lang_value.strip(),
+            "html_snippet": f'<html lang="{lang_value}">' if lang_value else "<html>",
+            "element_id":  None,
+            "tag":         "HTML",
+        }
+        self._results = [record]
+        logger.info(f"[lang_crawler] lang='{lang_value}' for {self.base_url}")
+        return self._results
+
+    def save_raw_json(self) -> None:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / "lang_raw.json"
+        path.write_text(
+            __import__("json").dumps(self._results, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        logger.info(f"[lang_crawler] saved {path}")
+```
+
+### Crawler design rules
+
+<AccordionGroup>
+  <Accordion title="Always use headless=True">
+    The crawler is run inside Docker with no display. Never pass `headless=False`.
+  </Accordion>
+  <Accordion title="Close the browser in every code path">
+    Use `async with async_playwright()` so the browser is always closed even on exception. Otherwise Playwright leaks zombie processes.
+  </Accordion>
+  <Accordion title="One dict per detected element">
+    Return one dict for each element you want to audit. If you're auditing the `<html>` element there's only one. If you're auditing form fields there may be dozens.
+  </Accordion>
+  <Accordion title="Required keys in every dict">
+    `html_snippet` (str), `element_id` (str | None), `tag` (str). The auditor and finding converter rely on these.
+  </Accordion>
+  <Accordion title="save_raw_json() is mandatory">
+    Even if you never look at it, the combined pipeline calls `save_raw_json()` on every crawler. Omitting it causes an `AttributeError`.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Step 2 — Create the Auditor
+
+The auditor receives the list of dicts from the crawler and applies WCAG logic. It must implement:
+
+- `generate_audit_report(items: List[Dict]) -> List[Dict]` — returns one record per item with `<rule>_status` and `<rule>_violation`
+
+**Create** `ka11y/accessibility/rules/language/lang_auditor.py`:
+
+```python
+"""
+ka11y/accessibility/rules/language/lang_auditor.py
+===================================================
+WCAG 3.1.1 — Language of Page (Level A).
+
+Rule: The <html> element must carry a non-empty, valid BCP-47 lang attribute.
+"""
+
+from __future__ import annotations
+import re
+from pathlib import Path
+from typing import Any, Dict, List
+
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="lang_auditor")
+
+# Loose BCP-47 primary-language sub-tag pattern (e.g. "en", "fr", "zh-Hant")
+_BCP47_RE = re.compile(r"^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{1,8})*$")
+
+
+class LangAuditor:
+    """Audits WCAG 3.1.1 — Language of Page."""
+
+    def __init__(self, output_dir: str = "output") -> None:
+        self.output_dir = Path(output_dir)
+
+    def generate_audit_report(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Evaluate each item from LangCrawler.
+
+        Output record keys
+        ------------------
+        wcag_3_1_1_status    "FAILED" | "PASSED" | "N/A"
+        wcag_3_1_1_violation  str  (reason for failure)
+        html_snippet          str
+        element_id            str | None
+        tag                   str
+        """
+        results: List[Dict[str, Any]] = []
+
+        for item in items:
+            lang  = item.get("lang_value", "").strip()
+            rec   = {**item}   # copy all keys from crawler output
+
+            if not lang:
+                rec["wcag_3_1_1_status"]    = "FAILED"
+                rec["wcag_3_1_1_violation"] = (
+                    "The <html> element is missing a lang attribute. "
+                    "Add lang='en' (or the appropriate BCP-47 language tag)."
+                )
+            elif not _BCP47_RE.match(lang):
+                rec["wcag_3_1_1_status"]    = "FAILED"
+                rec["wcag_3_1_1_violation"] = (
+                    f"lang='{lang}' is not a valid BCP-47 language tag. "
+                    "Use a primary sub-tag such as 'en', 'fr', or 'zh-Hant'."
+                )
+            else:
+                rec["wcag_3_1_1_status"]    = "PASSED"
+                rec["wcag_3_1_1_violation"] = ""
+
+            results.append(rec)
+
+        self._save_csv(results)
+        return results
+
+    # ── Internal helpers ──────────────────────────────────────────────────────
+
+    def _save_csv(self, results: List[Dict[str, Any]]) -> None:
+        import csv
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.output_dir / "audit_lang_report.csv"
+        if not results:
+            return
+        with open(path, "w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(results[0].keys()))
+            writer.writeheader()
+            writer.writerows(results)
+        logger.info(f"[lang_auditor] saved {path}")
+```
+
+Also create the `__init__.py`:
+
+```python
+# ka11y/accessibility/rules/language/__init__.py
+```
+
+### Auditor design rules
+
+<AccordionGroup>
+  <Accordion title="Status values must be exactly FAILED, PASSED, or N/A">
+    The finding converter in `combined.py` pattern-matches these exact strings. Any other value is silently skipped.
+  </Accordion>
+  <Accordion title="Never import Playwright">
+    Auditors must be pure Python — no browser, no network. This keeps them unit-testable and fast.
+  </Accordion>
+  <Accordion title="N/A is for exception cases">
+    Use `"N/A"` when a rule genuinely does not apply to an element (e.g. target-size exceptions for inline links). The finding converter must explicitly `continue` on N/A.
+  </Accordion>
+  <Accordion title="Include html_snippet, element_id, and tag in every output record">
+    Copy these from the input dict using `{**item}`. The finding converter reads them to populate the `element` object.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Step 3 — Add the finding converter
+
+Open `ka11y/api/v1/combined.py` and add two things:
+
+### 3a — Register severity and suggested fix
+
+In `_PYTHON_SEVERITY` add:
+```python
+_PYTHON_SEVERITY: Dict[str, str] = {
+    # … existing entries …
+    "3.1.1": "critical",   # ← add this
+}
+```
+
+In `_SUGGESTED_FIX` add:
+```python
+_SUGGESTED_FIX: Dict[str, str] = {
+    # … existing entries …
+    "3.1.1": "Add a lang attribute to <html>: <html lang='en'>.",   # ← add this
+}
+```
+
+<Note>
+  Both dicts already contain many entries. Check if your WCAG SC is already present before adding — do not duplicate.
+</Note>
+
+### 3b — Add the converter function
+
+Place it alongside the other converters (`_alt_text_to_findings`, `_form_to_findings`, etc.):
+
+```python
+def _lang_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    """Convert LangAuditor records → flat finding dicts (WCAG 3.1.1)."""
+    findings = []
+    for r in records:
+        status_raw = r.get("wcag_3_1_1_status", "")
+        if status_raw == "N/A":
+            continue
+        if status_raw == "FAILED":
+            findings.append(_make_finding(
+                source="python",
+                rule_id="python_3_1_1_lang",
+                wcag_sc="3.1.1",
+                status="fail",
+                reason=r.get("wcag_3_1_1_violation") or "Page is missing a valid lang attribute.",
+                severity=_PYTHON_SEVERITY["3.1.1"],
+                element_html=r.get("html_snippet", ""),
+                element_id=r.get("element_id"),
+                element_tag=r.get("tag", "HTML"),
+                page_url=page_url,
+            ))
+        elif status_raw == "PASSED":
+            findings.append(_make_finding(
+                source="python",
+                rule_id="python_3_1_1_lang",
+                wcag_sc="3.1.1",
+                status="pass",
+                reason="Page has a valid lang attribute.",
+                severity=None,
+                page_url=page_url,
+            ))
+    return findings
+```
+
+---
+
+## Step 4 — Wire the stage into `_run_python_stages()`
+
+### 4a — Add the toggle to `CombinedRequest`
+
+```python
+class CombinedRequest(BaseModel):
+    url: HttpUrl
+    # … existing fields …
+    run_lang_audit: bool = True   # ← add this
+```
+
+### 4b — Add imports
+
+At the top of `combined.py`:
+
+```python
+from ka11y.crawler.lang_crawler import LangCrawler
+from ka11y.accessibility.rules.language.lang_auditor import LangAuditor
+```
+
+### 4c — Add the stage block
+
+Inside `_run_python_stages()`, add a new stage block **after** `target_size` (or wherever makes sense for your rule):
+
+```python
+# ── Stage: lang_audit (WCAG 3.1.1) ───────────────────────────────────────
+stage_findings = []
+_stage_start(job_id, "lang_audit")
+try:
+    lang_crawler = LangCrawler(
+        base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+    )
+    lang_items = await lang_crawler.crawl()
+    lang_crawler.save_raw_json()
+
+    if run_lang_audit:
+        lang_auditor = LangAuditor(output_dir=str(output_dir))
+        records = lang_auditor.generate_audit_report(lang_items)
+        stage_findings = _lang_to_findings(records, url)
+        all_findings.extend(stage_findings)
+
+    _stage_complete(job_id, "lang_audit", len(stage_findings))
+except Exception as _exc:
+    _stage_error_and_warn(job_id, "lang_audit", _exc)
+```
+
+### 4d — Pass the toggle through `_run_job()`
+
+In `_run_job()`, add `run_lang_audit=payload.run_lang_audit` to the `_run_python_stages()` call:
+
+```python
+python_task = asyncio.create_task(
+    _run_python_stages(
+        # … existing kwargs …
+        run_lang_audit=payload.run_lang_audit,  # ← add this
+        job_id=job_id,
+    )
+)
+```
+
+And update the `_run_python_stages` signature:
+
+```python
+async def _run_python_stages(
+    *,
+    # … existing params …
+    run_lang_audit: bool,
+    job_id: str,
+) -> List[Dict[str, Any]]:
+```
+
+---
+
+## Step 5 — Update the SSE stage label (frontend)
+
+Open `ka11y-frontend-sdk/src/pages/Index.tsx` and add an entry to `STAGE_LABELS`:
+
+```typescript
+const STAGE_LABELS: Record<string, string> = {
+  // … existing entries …
+  lang_audit: "Language of page (3.1.1)",   // ← add this
+};
+```
+
+Also update `AuditSidebar.tsx`:
+
+```typescript
+const STAGE_LABELS: Record<string, string> = {
+  // … existing entries …
+  lang_audit: "Language audit",
+};
+```
+
+---
+
+## Step 6 — Add a unit test
+
+Create `tests/test_lang_auditor.py`:
+
+```python
+import pytest
+from ka11y.accessibility.rules.language.lang_auditor import LangAuditor
+
+AUDITOR = LangAuditor(output_dir="/tmp/ka11y_test")
+
+
+def _item(lang: str) -> dict:
+    return {
+        "page_url": "https://example.com",
+        "lang_value": lang,
+        "html_snippet": f"<html lang='{lang}'>",
+        "element_id": None,
+        "tag": "HTML",
+    }
+
+
+def test_valid_lang_passes():
+    results = AUDITOR.generate_audit_report([_item("en")])
+    assert results[0]["wcag_3_1_1_status"] == "PASSED"
+
+
+def test_missing_lang_fails():
+    results = AUDITOR.generate_audit_report([_item("")])
+    assert results[0]["wcag_3_1_1_status"] == "FAILED"
+    assert "missing" in results[0]["wcag_3_1_1_violation"].lower()
+
+
+def test_invalid_lang_fails():
+    results = AUDITOR.generate_audit_report([_item("english")])
+    assert results[0]["wcag_3_1_1_status"] == "FAILED"
+
+
+def test_subtag_lang_passes():
+    results = AUDITOR.generate_audit_report([_item("zh-Hant")])
+    assert results[0]["wcag_3_1_1_status"] == "PASSED"
+```
+
+Run tests:
+
+```bash
+cd ka11y-python
+poetry run pytest tests/test_lang_auditor.py -v
+```
+
+---
+
+## Checklist
+
+<Steps>
+  <Step title="Crawler created">
+    `ka11y/crawler/lang_crawler.py` — implements `crawl()` and `save_raw_json()`.
+  </Step>
+  <Step title="Auditor created">
+    `ka11y/accessibility/rules/language/lang_auditor.py` — records carry `wcag_3_1_1_status` and `wcag_3_1_1_violation`.
+  </Step>
+  <Step title="Severity registered">
+    `_PYTHON_SEVERITY["3.1.1"]` set in `combined.py`.
+  </Step>
+  <Step title="Suggested fix registered">
+    `_SUGGESTED_FIX["3.1.1"]` set in `combined.py`.
+  </Step>
+  <Step title="Finding converter added">
+    `_lang_to_findings()` in `combined.py`.
+  </Step>
+  <Step title="Toggle added to CombinedRequest">
+    `run_lang_audit: bool = True` in `CombinedRequest`.
+  </Step>
+  <Step title="Stage wired into _run_python_stages()">
+    Stage block follows the `_stage_start / try / _stage_complete / except _stage_error_and_warn` pattern.
+  </Step>
+  <Step title="Frontend stage label added">
+    `STAGE_LABELS["lang_audit"]` in `Index.tsx` and `AuditSidebar.tsx`.
+  </Step>
+  <Step title="Unit tests written and passing">
+    Covers PASSED, FAILED, and N/A (if applicable).
+  </Step>
+</Steps>
+
+---
+
+## Quick reference: naming conventions
+
+| Concept | Pattern | Example |
+|---------|---------|---------|
+| Crawler class | `XxxCrawler` | `LangCrawler` |
+| Crawler file | `xxx_crawler.py` | `lang_crawler.py` |
+| Auditor class | `XxxAuditor` | `LangAuditor` |
+| Auditor file | `xxx_auditor.py` | `lang_auditor.py` |
+| Auditor package | `ka11y/accessibility/rules/<category>/` | `language/` |
+| Status key | `wcag_X_X_X_status` | `wcag_3_1_1_status` |
+| Violation key | `wcag_X_X_X_violation` | `wcag_3_1_1_violation` |
+| Rule ID | `python_X_X_X_<name>` | `python_3_1_1_lang` |
+| Stage name | snake_case short description | `lang_audit` |
+| Request toggle | `run_<stage_name>: bool = True` | `run_lang_audit` |
+| Finding converter | `_xxx_to_findings(records, page_url)` | `_lang_to_findings` |
+| Raw JSON file | `<stage>_raw.json` | `lang_raw.json` |
+| CSV report | `audit_<stage>_report.csv` | `audit_lang_report.csv` |

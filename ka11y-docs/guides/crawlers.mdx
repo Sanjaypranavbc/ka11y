@@ -1,0 +1,191 @@
+---
+title: "Crawlers Reference"
+description: "How each Playwright crawler extracts raw data from a page"
+---
+
+All crawlers share the same contract:
+
+```python
+async def crawl() -> List[Dict[str, Any]]
+def save_raw_json() -> None
+```
+
+They navigate the page using Playwright Chromium in headless mode, inject JavaScript to extract element metadata, and return a flat list of dicts. They never apply WCAG logic — that is the auditor's responsibility.
+
+---
+
+## AsyncImageCrawler
+
+**File**: `ka11y/crawler/crawler.py`
+**Crawls**: `<img>`, `<svg>`, `<button>`, background images, font icons (`<i>`, `<span>`)
+
+### What it extracts per element
+
+| Field | Description |
+|-------|-------------|
+| `src` | Image src (resolved absolute URL) |
+| `alt` | `alt` attribute value |
+| `aria_label` | `aria-label` |
+| `aria_labelledby` | Referenced label text (resolved) |
+| `aria_describedby` | Referenced description text |
+| `aria_hidden` | `aria-hidden` attribute |
+| `role` | `role` attribute |
+| `natural_width/height` | Intrinsic image dimensions |
+| `rendered_width/height` | `getBoundingClientRect()` dimensions |
+| `in_button` | Whether the image is inside a `<button>` |
+| `in_link` | Whether the image is inside an `<a>` |
+| `link_href` | Parent link's `href` |
+| `nearest_heading` | Text of the nearest ancestor heading |
+| `surrounding_text` | 50 chars of surrounding text |
+| `classification` | Result of `ClassifyAssets` cascade |
+
+### Screenshot behaviour
+
+After classification, the crawler screenshots each image to the appropriate category folder:
+
+```
+output_dir/
+├── decorative/
+├── informative/
+│   ├── succinct_information/
+│   └── logos/
+├── functional/
+│   ├── buttons/
+│   ├── icons/
+│   ├── logos/
+│   └── images/
+└── complex/
+    └── charts/
+```
+
+### Image classification cascade
+
+`ClassifyAssets` (in `ka11y/classifier/classfier.py`) runs a deterministic cascade:
+
+| Step | Condition | Category |
+|------|-----------|----------|
+| 0 | `aria-hidden` or `role=presentation` | `decorative/presentational` |
+| 1a | Inside `<button>` | `functional/buttons` |
+| 1b | Logo keyword + inside real link | `functional/logos` |
+| 1c | Chart keyword or parent chart class | `complex/charts` |
+| 1d | Icon keyword + clickable | `functional/icons` |
+| 1e | Inside real link or has click handler | `functional/images` |
+| 2 | Standalone logo keyword | `informative/logos` |
+| 3 | Standalone icon → has alt → `informative/icons`, no alt → `decorative/decorative` |
+| 4 | alt present → `informative`, alt="" → `decorative`, alt absent → `decorative/missing_alt` |
+
+---
+
+## AsyncFormCrawler
+
+**File**: `ka11y/crawler/forms_crawler.py`
+**Crawls**: All form fields (`<input>`, `<textarea>`, `<select>`) inside `<form>` elements and implicit forms
+
+### What it extracts per field
+
+| Field | Description |
+|-------|-------------|
+| `tag` | `INPUT`, `TEXTAREA`, or `SELECT` |
+| `type` | Input type (`text`, `email`, `password`, etc.) |
+| `element_id` / `element_name` | `id` or `name` attribute |
+| `placeholder` | `placeholder` attribute |
+| `aria_label` | Direct `aria-label` |
+| `aria_labelledby` | Referenced label text |
+| `label_text` | Text of associated `<label for="...">` |
+| `wrapping_label_text` | Text of wrapping `<label>` |
+| `required` | `required` attribute present |
+| `aria_required` | `aria-required="true"` |
+| `autocomplete` | `autocomplete` attribute value |
+| `aria_describedby` | Referenced description element |
+| `error_role` | Role of the describedby element |
+| `error_aria_live` | `aria-live` value on error element |
+| `html_snippet` | Outer HTML (truncated to 600 chars) |
+
+### JavaScript extraction
+
+The crawler injects a single `EXTRACT_JS` script that traverses all forms and implicit forms, resolves label associations, and returns the complete field metadata in one `page.evaluate()` call.
+
+---
+
+## InteractiveElementCrawler
+
+**File**: `ka11y/crawler/interactive_crawler.py`
+**Crawls**: `<button>`, `<a>`, `<input type="submit/button/reset/image">`, elements with `role` in `{button, link, menuitem, tab, option, treeitem, gridcell}`
+
+### What it extracts per element
+
+| Field | Description |
+|-------|-------------|
+| `tag` | Element tag name |
+| `role` | ARIA role (explicit or implicit) |
+| `visible_label` | Visible text content (stripped) |
+| `aria_label` | `aria-label` attribute |
+| `aria_labelledby` | Referenced label text (resolved) |
+| `title` | `title` attribute |
+| `accessible_name` | Computed accessible name (AccName 1.1 algorithm) |
+| `element_id` | `id` attribute |
+| `input_type` | For `<input>`, the `type` attribute |
+
+### Accessible name computation
+
+The crawler computes `accessible_name` client-side following a simplified AccName 1.1 priority order:
+
+1. `aria-labelledby` (resolved text)
+2. `aria-label`
+3. `value` (for `<input type="submit/button">`)
+4. `alt` (for `<input type="image">`)
+5. Element text content
+6. `title`
+
+This mirrors the computation a browser or assistive technology would perform.
+
+---
+
+## MovingContentCrawler
+
+**File**: `ka11y/crawler/moving_content_crawler.py`
+**Crawls**: Auto-playing video, animated GIFs, CSS/WAAPI animations, JavaScript carousels, `<marquee>`, `<blink>`
+
+### Detection strategies
+
+| Type | Detection method |
+|------|-----------------|
+| `video_autoplay` | `<video>` with `autoplay` attribute |
+| `animated_gif` | `<img>` whose `src` ends in `.gif` |
+| `css_animation` | `document.getAnimations()` — running WAAPI or CSS animations with `iteration: Infinity` |
+| `carousel_autoplay` | Class/data-attribute detection for Bootstrap, Swiper, Slick, Owl, Flickity, Glide, Splide |
+| `marquee` | `<marquee>` elements |
+| `blink` | `<blink>` elements |
+
+### Why this goes beyond axe-core
+
+axe-core only flags `<blink>` and `<marquee>`. It does not detect:
+- CSS animations with infinite loops
+- JavaScript carousel libraries
+- `<video autoplay>`
+- Animated GIFs
+
+The `axe_would_catch` boolean in each record lets you filter down to novel detections.
+
+---
+
+## TargetSizeCrawler
+
+**File**: `ka11y/crawler/target_size_crawler.py`
+**Crawls**: All interactive elements: `<button>`, `<a>`, `<input>`, `<select>`, `<textarea>`, ARIA role equivalents
+
+### What it extracts per element
+
+| Field | Description |
+|-------|-------------|
+| `rendered_width_px` | `getBoundingClientRect().width` |
+| `rendered_height_px` | `getBoundingClientRect().height` |
+| `padding_top/right/bottom/left` | Computed padding from `getComputedStyle` |
+| `is_inline_exception` | `<a>` in inline context (WCAG 2.5.8 exception 1) |
+| `is_ua_controlled_exception` | Native checkbox/radio with `appearance: auto` (exception 4) |
+
+### Exception detection
+
+**Exception 1 — Inline**: An `<a>` element is inline when its `display` is `inline` and it is not the sole interactive element on its line. The crawler approximates this by checking `getComputedStyle().display === 'inline'`.
+
+**Exception 4 — UA-controlled**: A `<input type="checkbox">` or `<input type="radio">` where `getComputedStyle().appearance` is `auto` or `checkbox`/`radio` (the browser controls the size).

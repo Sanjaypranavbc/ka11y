@@ -1,0 +1,78 @@
+---
+title: "2.5.3 Label in Name"
+description: "WCAG 2.5.3 — accessible name must contain the visible label text"
+---
+
+<Info>
+  **Level A** · WCAG 2.1+ · Auditor: `LabelInNameAuditor` · File: `ka11y/accessibility/rules/input_modalities/label_in_name_auditor.py`
+</Info>
+
+## What it checks
+
+For interactive elements that have visible text, the **accessible name** (what a screen reader or speech-input tool reads) must **contain** that visible text.
+
+## Why this matters
+
+Speech-input users (Dragon NaturallySpeaking, Voice Control) activate elements by speaking what they see. If the accessible name differs from the visible label, the command won't work.
+
+**Example:**
+```html
+<!-- Visible text: "Submit form" -->
+<!-- aria-label: "Send" -->
+<button aria-label="Send">Submit form</button>
+```
+A user says "Click Submit form" — Dragon sends a click to the button. But the button's accessible name is "Send", so the user has to know to say "Click Send" — information not visible on screen.
+
+## Computed accessible name
+
+The auditor uses the `accessible_name` computed by `InteractiveElementCrawler`, which follows a simplified AccName 1.1 priority:
+
+1. `aria-labelledby` (resolved text)
+2. `aria-label`
+3. `value` (submit/button inputs)
+4. `alt` (image inputs)
+5. Element text content
+6. `title`
+
+## Check logic
+
+| Condition | Status |
+|-----------|--------|
+| `visible_label` is empty (icon-only) | `N/A` — rule does not apply |
+| `accessible_name` is empty | `FAILED` — no accessible name at all |
+| `accessible_name.lower()` does not contain `visible_label.lower()` | `FAILED` |
+| `accessible_name.lower()` contains `visible_label.lower()` | `PASSED` |
+
+## Elements audited
+
+- `<button>` with visible text
+- `<a>` with visible text
+- `<input type="submit|button|reset|image">` with visible label
+- Elements with ARIA interactive roles: `button`, `link`, `menuitem`, `tab`, `option`, `treeitem`, `gridcell`
+
+## Common violations
+
+| Violation | Visible label | Accessible name |
+|-----------|--------------|-----------------|
+| Synonym substitution | "Buy now" | "Purchase" |
+| Abbreviation | "Search" | "Srch" |
+| Language mismatch | "Submit" | "Soumettre" |
+| Extra prefix only | "Submit" | "Form Submit" — passes (contains "Submit") |
+| Icon + tooltip | *(empty)* | "Close" — N/A (no visible label) |
+
+## Suggested fix
+
+```html
+<!-- Bad: aria-label replaces the visible text -->
+<button aria-label="Send form">Submit</button>
+
+<!-- Good: aria-label contains the visible text -->
+<button aria-label="Submit the contact form">Submit</button>
+
+<!-- Good: no aria-label needed when visible text is sufficient -->
+<button>Submit</button>
+
+<!-- Good: aria-labelledby pointing to visible text -->
+<span id="btn-label">Submit</span>
+<button aria-labelledby="btn-label extra-context">Submit</button>
+```

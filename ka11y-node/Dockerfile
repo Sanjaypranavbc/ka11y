@@ -25,8 +25,8 @@ FROM node:20-slim AS runtime
 LABEL org.opencontainers.image.title="ka11y-node"
 LABEL org.opencontainers.image.description="Puppeteer + axe-core WCAG accessibility engine"
 
-# ── [1/5] Install system Chromium (apt resolves all deps correctly) ───────────
-RUN echo "==> [1/5] Installing system Chromium..." && \
+# ── [1/4] Install system Chromium (apt resolves all deps correctly) ───────────
+RUN echo "==> [1/4] Installing system Chromium..." && \
     apt-get update -qq && \
     apt-get install -y --no-install-recommends \
         chromium \
@@ -34,37 +34,37 @@ RUN echo "==> [1/5] Installing system Chromium..." && \
         curl \
         fonts-liberation \
         fonts-noto-color-emoji \
+        libatk-bridge2.0-0 \
+        libatk1.0-0 \
+        libcups2 \
+        libdrm2 \
+        libgbm1 \
+        libgtk-3-0 \
+        libnss3 \
+        libxss1 \
+        libasound2 \
     && rm -rf /var/lib/apt/lists/* \
-    && echo "==> [1/5] Chromium installed: $(chromium --version)"
+    && echo "==> [1/4] Chromium installed: $(chromium --version)"
 
 WORKDIR /app
 
-# ── [2/5] Copy pre-built node_modules from deps stage ────────────────────────
-RUN echo "==> [2/5] Copying node_modules from deps stage..."
+# ── [2/4] Copy pre-built node_modules from deps stage ────────────────────────
+RUN echo "==> [2/4] Copying node_modules from deps stage..."
 COPY --from=deps /app/node_modules ./node_modules
-RUN echo "==> [2/5] node_modules copied ($(du -sh node_modules | cut -f1))"
+RUN echo "==> [2/4] node_modules copied ($(du -sh node_modules | cut -f1))"
 
-# ── [3/5] Copy application source ────────────────────────────────────────────
-RUN echo "==> [3/5] Copying application source..."
+# ── [3/4] Copy application source ────────────────────────────────────────────
+RUN echo "==> [3/4] Copying application source..."
 COPY package*.json ./
 COPY server.js     ./
 COPY src/          ./src/
-RUN echo "==> [3/5] Source copied"
+RUN echo "==> [3/4] Source copied"
 
 # ── [4/5] Puppeteer — point to system Chromium, skip bundled download ─────────
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
-RUN echo "==> [4/5] Puppeteer configured to use system Chromium at $(which chromium)"
-
-# ── [5/5] Non-root security user ─────────────────────────────────────────────
-RUN echo "==> [5/5] Creating non-root user 'appuser'..." && \
-    groupadd -r appuser && \
-    useradd -r -g appuser -G audio,video appuser && \
-    chown -R appuser:appuser /app && \
-    echo "==> [5/5] User 'appuser' created"
-
-USER appuser
+RUN echo "==> [4/4] Puppeteer configured to use system Chromium at $(which chromium)"
 
 EXPOSE 3000
 

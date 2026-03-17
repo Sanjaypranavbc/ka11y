@@ -1,0 +1,148 @@
+---
+title: "Configuration"
+description: "YAML config file and environment variables for ka11y-python"
+---
+
+## Config file
+
+ka11y-python reads `ka11y/config/config.yml` at startup via `ka11y/utils/config_loader.py`.
+
+```yaml
+# ka11y/config/config.yml
+
+input:
+  url:        "https://example.com"   # Default URL for CLI / standalone runs
+  max_depth:  0                        # 0 = single page; >0 = recursive crawl depth
+  output_dir: "crawled_images"         # Base output directory (relative to CWD)
+
+directories:
+  - "informative"
+  - "decorative"
+  - "functional"
+  - "functional/buttons"
+  - "functional/icons"
+  - "functional/logos"
+  - "functional/images"
+  - "complex"
+  - "complex/charts"
+  - "complex/emojis"
+
+ocr:
+  base_folder:     "text_detected"
+  contrast_folder: "contrast"
+  categories:
+    button_text:        "button_text"
+    informational_text: "informational_text"
+    logo_text:          "logo_text"
+    with_text:          "with_text"
+
+crawler:
+  include_data_uris: false   # Include base64 data: URIs in image crawl
+  include_invisible: false   # Include elements with visibility:hidden / display:none
+  scroll_passes:     3       # Number of scroll passes to trigger lazy-loaded content
+
+crawl_browser:
+  width:  1920               # Playwright viewport width (CSS px)
+  height: 1080               # Playwright viewport height (CSS px)
+```
+
+### Loading the config
+
+```python
+from ka11y.utils.config_loader import load_config
+
+config = load_config()                           # Default path
+config = load_config("path/to/config.yml")       # Custom path
+```
+
+The `load_config()` function uses `yaml.safe_load` — no Python execution in the YAML file.
+
+---
+
+## Environment variables
+
+Set these in your shell, `.env` file, or `docker-compose.yml` `environment:` block.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NODE_BASE_URL` | `http://localhost:3000` | Base URL of the ka11y-node service |
+| `PYTHONUNBUFFERED` | — | Set to `"1"` in Docker to get real-time log output |
+
+### NODE_BASE_URL
+
+The Python service calls the Node/axe-core engine at `${NODE_BASE_URL}/api/v1/axe`.
+
+```bash
+# Local dev (Node running on host)
+NODE_BASE_URL=http://localhost:3000
+
+# Docker Compose (uses Docker internal DNS)
+NODE_BASE_URL=http://node:3000
+```
+
+---
+
+## Config reference by section
+
+### `input`
+
+Used only when running the pipeline directly (not through the API). API requests supply these values in the request body.
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `url` | string | Target URL |
+| `max_depth` | int | Crawl depth (0 = single page) |
+| `output_dir` | string | Base directory for output files |
+
+### `directories`
+
+Sub-directories created under `output_dir` for storing classified images. Matches the image classifier's output categories.
+
+### `ocr`
+
+Controls where OCR intermediate files are stored.
+
+| Key | Description |
+|-----|-------------|
+| `base_folder` | Sub-directory for detected text images |
+| `contrast_folder` | Sub-directory for contrast-adjusted images |
+| `categories.*` | Maps classification names to folder names |
+
+### `crawler`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `include_data_uris` | bool | `false` | When `true`, images encoded as `data:` URIs are crawled |
+| `include_invisible` | bool | `false` | When `true`, off-screen and hidden elements are included |
+| `scroll_passes` | int | `3` | Playwright scrolls the page this many times to trigger lazy-load |
+
+### `crawl_browser`
+
+Playwright viewport dimensions. Use `1920×1080` (desktop) or `375×812` (mobile) to test at different breakpoints.
+
+---
+
+## Adding a new config key
+
+1. Add the key to `ka11y/config/config.yml`.
+2. Import `config` in your module:
+   ```python
+   from ka11y.utils.config_loader import config
+   value = config["your_section"]["your_key"]
+   ```
+3. Add a sensible default — `config_loader.py` uses `yaml.safe_load` and will return `None` for missing keys unless you guard with `.get()`.
+
+---
+
+## Logger
+
+Configured in `ka11y/config/logger.py`. Each module creates a tagged logger:
+
+```python
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="my_module")
+logger.info("Starting up")
+```
+
+The `tag` appears in log output to identify the source module.

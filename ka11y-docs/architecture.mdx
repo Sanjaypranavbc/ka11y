@@ -1,0 +1,224 @@
+---
+title: "Architecture"
+description: "Job lifecycle, parallel execution model, SSE bus, and stage pipeline"
+---
+
+## System overview
+
+```
+Browser / CI
+    │
+    ▼ POST /api/v1/combined/
+┌────────────────────────────────────────────────────────────┐
+│  ka11y-python  (FastAPI, port 8000)                        │
+│                                                            │
+│  ┌─────────────┐   asyncio.gather(return_exceptions=True)  │
+│  │  _run_job   │──────────────────────────────────────┐    │
+│  └─────────────┘                                      │    │
+│         │                                             │    │
+│  ┌──────▼──────────┐         ┌───────────────────┐   │    │
+│  │  Python stages  │         │  axe-core (Node)  │   │    │
+│  │  (sequential)   │         │  POST /analyse-   │   │    │
+│  │                 │         │  url-flat         │   │    │
+│  │  image_audit    │         └────────┬──────────┘   │    │
+│  │  form_audit     │                  │               │    │
+│  │  label_in_name  │◄─────────────────┘               │    │
+│  │  pause_stop_hide│    merged findings                │    │
+│  │  target_size    │                                   │    │
+│  └────────┬────────┘                                  │    │
+│           │                                           │    │
+│  ┌────────▼────────────────────────────────────────┐  │    │
+│  │  _build_report — sort, aggregate, write JSON    │  │    │
+│  └────────────────────────────────────────────────┘  │    │
+│           │                                           │    │
+│  ┌────────▼────────────────────────────────────────┐  │    │
+│  │  SSE subscriber bus — broadcasts events to      │  │    │
+│  │  all connected EventSource clients              │  │    │
+│  └────────────────────────────────────────────────┘  │    │
+└────────────────────────────────────────────────────────────┘
+         │ GET /api/v1/combined/{job_id}/stream
+    ┌────▼──────────┐
+    │  React frontend│  (EventSource — live stage cards)
+    └───────────────┘
+```
+
+---
+
+## Job lifecycle
+
+```
+POST /combined/
+      │
+      ▼
+  status: "pending"
+  job dict written to _jobs{}
+  asyncio.create_task(_run_job)
+  202 returned immediately
+      │
+      ▼
+  status: "running"
+  _stage_start("axe_core") broadcast
+  asyncio.create_task(node) + asyncio.create_task(python stages)
+  asyncio.gather(return_exceptions=True)
+      │
+      ├─── node task completes ──► _stage_complete("axe_core", n)
+      │         or fails        ──► _stage_error("axe_core", msg)
+      │                             _jobs[id]["warnings"].append(...)
+      │
+      ├─── image_audit stage ───► _stage_start / _stage_complete / _stage_error
+      ├─── form_audit stage
+      ├─── label_in_name stage
+      ├─── pause_stop_hide stage
+      └─── target_size stage
+              │
+              ▼
+        merge findings
+        _build_report()
+        write combined_report.json
+              │
+              ▼
+        status: "completed"   ←── job_complete SSE event broadcast
+          or
+        status: "failed"      ←── job_failed  SSE event broadcast
+              │
+              ▼
+        _close_subscribers()  — sentinel None sent to all queues
+```
+
+<Note>
+  The job only transitions to `"failed"` if **both** the Node task and the Python pipeline return zero findings. A Node crash with successful Python stages still produces a `"completed"` job.
+</Note>
+
+---
+
+## Parallel execution model
+
+```python
+# combined.py — _run_job()
+node_task   = asyncio.create_task(_call_node_flat(...))
+python_task = asyncio.create_task(_run_python_stages(...))
+
+node_result, python_result = await asyncio.gather(
+    node_task, python_task,
+    return_exceptions=True   # ← neither task cancels the other on failure
+)
+```
+
+The Node task (axe-core) and the Python pipeline run concurrently. The Python pipeline itself is **sequential** across its five stages to avoid overwhelming Playwright with concurrent browser instances.
+
+---
+
+## SSE subscriber bus
+
+```
+_jobs:        Dict[job_id → job_dict]
+_subscribers: Dict[job_id → List[asyncio.Queue]]
+```
+
+When a client connects to `GET /combined/{job_id}/stream`:
+
+1. A new `asyncio.Queue` is created and appended to `_subscribers[job_id]`.
+2. The SSE generator yields messages from the queue.
+3. `_broadcast(job_id, event_type, data)` puts the same message into every queue in `_subscribers[job_id]`.
+4. When the job reaches a terminal state, `_close_subscribers(job_id)` puts `None` (sentinel) into every queue, and all open generators exit their loops.
+
+```
+stage_start  ──► _broadcast ──► Q1, Q2, … Qn  ──► EventSource clients
+stage_complete     (fan-out)
+stage_error
+job_complete
+job_failed
+": keepalive"  (every 25 s, per-generator)
+```
+
+Multiple browser tabs or CI clients can subscribe to the same job simultaneously.
+
+---
+
+## Crawler → Auditor pipeline per stage
+
+Every Python WCAG rule follows the same two-class pattern:
+
+```
+┌───────────────────────────────┐
+│  Crawler (Playwright)         │
+│  • Navigates the URL          │
+│  • Extracts raw element data  │
+│  • Returns List[XxxData]      │
+│  • Saves xxx_raw.json         │
+└──────────────┬────────────────┘
+               │ List[Dict]
+               ▼
+┌───────────────────────────────┐
+│  Auditor (pure Python)        │
+│  • Applies WCAG rules         │
+│  • Returns List[Dict] with    │
+│    <rule>_status + _violation │
+│  • Writes audit_xxx.csv       │
+└──────────────┬────────────────┘
+               │ List[Dict]
+               ▼
+┌───────────────────────────────┐
+│  Finding converter            │
+│  _xxx_to_findings()           │
+│  • Maps to flat finding shape │
+│  • Calls _make_finding()      │
+└───────────────────────────────┘
+```
+
+The auditor never touches Playwright — it only processes the JSON the crawler emits. This means auditors are fully unit-testable without a browser.
+
+---
+
+## Finding shape
+
+Every finding — regardless of source (axe or Python) or WCAG criterion — has the same flat structure:
+
+```json
+{
+  "source":         "python",
+  "rule_id":        "python_1_1_1_alt",
+  "wcag_sc":        "1.1.1",
+  "criterion_name": "Non-text Content",
+  "level":          "A",
+  "severity":       "critical",
+  "status":         "fail",
+  "reason":         "Image is missing alt attribute.",
+  "suggested_fix":  "Add a descriptive alt attribute…",
+  "help_url":       null,
+  "element": {
+    "html":       "<img src=\"/banner.jpg\" class=\"hero\">",
+    "element_id": null,
+    "tag":        "IMG",
+    "page_url":   "https://example.com/"
+  }
+}
+```
+
+Pass findings have `severity: null`, `suggested_fix: null`, and `element: null`.
+
+See [Output Format](/internals/output-format) for the full field reference.
+
+---
+
+## Output directory layout
+
+Each job writes its artefacts to a timestamped directory:
+
+```
+crawled_images/
+└── example_com_0317_1430_combined/
+    ├── combined_report.json          # Final merged report
+    ├── images_report.json            # Image crawler summary
+    ├── images_with_alt_text.csv      # Alt-text per image
+    ├── text_detected/                # EasyOCR per-image results
+    │   └── img_abc123.json
+    ├── forms_raw.json                # Raw form field data
+    ├── audit_form_report.csv         # Form auditor findings
+    ├── interactive_elements_raw.json
+    ├── audit_label_in_name_report.csv
+    ├── moving_content_raw.json
+    ├── audit_pause_stop_hide_report.csv
+    ├── target_size_raw.json
+    └── audit_target_size_report.csv
+```

@@ -1,0 +1,244 @@
+---
+title: "Output Format"
+description: "Complete reference for the CombinedReport JSON structure returned by the combined audit"
+---
+
+## Where the output lives
+
+| Location | Contents |
+|----------|----------|
+| `GET /api/v1/combined/{job_id}` → `result` key | Full `CombinedReport` object in JSON |
+| `crawled_images/{hostname}/{job_id}/combined_report.json` | Same report persisted to the server filesystem |
+
+---
+
+## Top-level shape
+
+```typescript
+interface CombinedReport {
+  url:          string;       // Canonical URL that was audited
+  generated_at: string;       // ISO-8601 UTC timestamp
+  warnings:     string[];     // Degradation messages (e.g. "axe-core stage failed")
+  summary:      Summary;
+  violations:   Finding[];
+  needs_review: Finding[];
+  passes:       Finding[];
+}
+```
+
+---
+
+## Summary
+
+```typescript
+interface Summary {
+  total_findings:  number;      // violations + needs_review + passes
+  violations:      number;
+  needs_review:    number;
+  passes:          number;
+  by_severity: {
+    critical: number;
+    high:     number;
+    medium:   number;
+    low:      number;
+  };
+  by_level: {
+    A:   { violations: number; needs_review: number; passes: number };
+    AA:  { violations: number; needs_review: number; passes: number };
+    AAA: { violations: number; needs_review: number; passes: number };
+  };
+  by_wcag_sc: {
+    [sc: string]: { violations: number; needs_review: number; passes: number };
+    // e.g. "1.1.1": { violations: 2, needs_review: 1, passes: 14 }
+  };
+  by_source: {
+    axe:    { violations: number; needs_review: number; passes: number };
+    python: { violations: number; needs_review: number; passes: number };
+  };
+}
+```
+
+---
+
+## Finding
+
+Every entry in `violations`, `needs_review`, and `passes` is a `Finding` object:
+
+```typescript
+interface Finding {
+  source:         "axe" | "python";
+  rule_id:        string;           // e.g. "python_1_1_1_alt" or axe rule id
+  wcag_sc:        string;           // e.g. "1.1.1"
+  criterion_name: string | null;    // e.g. "Non-text Content"
+  level:          "A" | "AA" | "AAA" | null;
+  severity:       "critical" | "high" | "medium" | "low" | null;
+  status:         "fail" | "pass" | "needs_review";
+  reason:         string;           // Human-readable explanation
+  suggested_fix:  string | null;    // Remediation hint — null for passes
+  help_url:       string | null;    // Link to axe rule docs (axe findings only)
+  element: {
+    html:       string;             // First 600 chars of outerHTML
+    element_id: string | null;
+    tag:        string | null;
+    page_url:   string;
+  } | null;                         // null for document-level passes
+}
+```
+
+### Field notes
+
+**`source`**
+`"axe"` — produced by axe-core running in Node/Puppeteer.
+`"python"` — produced by a Python auditor in ka11y-python.
+
+**`rule_id`**
+For Python rules the convention is `python_{sc_underscored}_{short_name}`:
+
+| Rule ID | WCAG SC | Auditor |
+|---------|---------|---------|
+| `python_1_1_1_alt` | 1.1.1 | AltTextAccessibilityAuditor |
+| `python_2_2_2_pause_stop_hide` | 2.2.2 | PauseStopHideAuditor |
+| `python_2_5_3_label_in_name` | 2.5.3 | LabelInNameAuditor |
+| `python_2_5_8_target_size` | 2.5.8 | TargetSizeAuditor |
+| `python_3_3_1_error_id` | 3.3.1 | FormAccessibilityAuditor |
+| `python_3_3_2_labels` | 3.3.2 | FormAccessibilityAuditor |
+
+**`severity`**
+Assigned per WCAG success criterion. Python-assigned severities:
+
+| SC | Severity |
+|----|----------|
+| 1.1.1 | critical |
+| 2.2.2 | high |
+| 2.5.3 | high |
+| 2.5.8 | medium |
+| 3.3.1 | high |
+| 3.3.2 | high |
+
+axe-core severities are passed through as-is from axe's `impact` field (`critical`, `serious` → `high`, `moderate` → `medium`, `minor` → `low`).
+
+**`status`**
+
+| Value | Meaning |
+|-------|---------|
+| `"fail"` | Element violates the criterion |
+| `"pass"` | Element satisfies the criterion |
+| `"needs_review"` | Auditor cannot determine automatically — manual check required |
+
+---
+
+## Complete example
+
+```json
+{
+  "url": "https://example.com",
+  "generated_at": "2025-11-04T10:22:31.000Z",
+  "warnings": [],
+  "summary": {
+    "total_findings": 3,
+    "violations": 1,
+    "needs_review": 1,
+    "passes": 1,
+    "by_severity": { "critical": 1, "high": 0, "medium": 0, "low": 0 },
+    "by_level": {
+      "A":   { "violations": 1, "needs_review": 1, "passes": 1 },
+      "AA":  { "violations": 0, "needs_review": 0, "passes": 0 },
+      "AAA": { "violations": 0, "needs_review": 0, "passes": 0 }
+    },
+    "by_wcag_sc": {
+      "1.1.1": { "violations": 1, "needs_review": 1, "passes": 1 }
+    },
+    "by_source": {
+      "axe":    { "violations": 0, "needs_review": 0, "passes": 0 },
+      "python": { "violations": 1, "needs_review": 1, "passes": 1 }
+    }
+  },
+  "violations": [
+    {
+      "source": "python",
+      "rule_id": "python_1_1_1_alt",
+      "wcag_sc": "1.1.1",
+      "criterion_name": "Non-text Content",
+      "level": "A",
+      "severity": "critical",
+      "status": "fail",
+      "reason": "Image has no alt attribute.",
+      "suggested_fix": "Add a descriptive alt attribute: <img alt='Description'>. For decorative images use alt=''.",
+      "help_url": null,
+      "element": {
+        "html": "<img src=\"/hero.jpg\" class=\"banner\">",
+        "element_id": null,
+        "tag": "img",
+        "page_url": "https://example.com"
+      }
+    }
+  ],
+  "needs_review": [
+    {
+      "source": "python",
+      "rule_id": "python_1_1_1_alt",
+      "wcag_sc": "1.1.1",
+      "criterion_name": "Non-text Content",
+      "level": "A",
+      "severity": "critical",
+      "status": "needs_review",
+      "reason": "Alt text 'img' is suspiciously short or generic.",
+      "suggested_fix": "Replace generic alt text with a meaningful description of the image.",
+      "help_url": null,
+      "element": {
+        "html": "<img src=\"/product.png\" alt=\"img\">",
+        "element_id": "product-photo",
+        "tag": "img",
+        "page_url": "https://example.com"
+      }
+    }
+  ],
+  "passes": [
+    {
+      "source": "python",
+      "rule_id": "python_1_1_1_alt",
+      "wcag_sc": "1.1.1",
+      "criterion_name": "Non-text Content",
+      "level": "A",
+      "severity": null,
+      "status": "pass",
+      "reason": "Image has a descriptive alt attribute.",
+      "suggested_fix": null,
+      "help_url": null,
+      "element": null
+    }
+  ]
+}
+```
+
+---
+
+## Warnings
+
+The `warnings` array carries human-readable notes about degraded results. These do **not** count as violations.
+
+| Situation | Example warning |
+|-----------|----------------|
+| Node/axe-core stage failed | `"axe_core stage failed — axe-core results not included. Error: Connection refused"` |
+| Python stage failed | `"image_audit stage failed — 1.1.1 results not included. Error: Playwright timeout"` |
+
+When `warnings` is non-empty, treat the report as a **partial result** — rerunning after fixing the infrastructure issue may produce additional findings.
+
+---
+
+## Filesystem layout
+
+Reports are written under the shared `crawled_output` Docker volume:
+
+```
+crawled_images/
+└── {hostname}/
+    └── {job_id}/
+        ├── combined_report.json      ← Full CombinedReport
+        ├── images/                   ← Downloaded images (image_audit)
+        ├── raw_images.json           ← AsyncImageCrawler output
+        ├── raw_forms.json            ← AsyncFormCrawler output
+        ├── raw_interactive.json      ← InteractiveElementCrawler output
+        ├── raw_moving_content.json   ← MovingContentCrawler output
+        └── raw_target_size.json      ← TargetSizeCrawler output
+```

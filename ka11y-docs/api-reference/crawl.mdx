@@ -1,0 +1,14 @@
+---
+title: "Crawl"
+description: "POST /api/v1/crawl/ — image and form crawl pipeline"
+---
+
+A lightweight endpoint that runs only the image and form crawlers (no label-in-name, moving content, or target size stages). Useful for quickly extracting raw element data before auditing.
+
+## POST /api/v1/crawl/
+
+**Steps**: Image Crawl → OCR → Image Audit → Form Crawl → Form Audit
+
+**Request body** is identical to the [Combined endpoint](/api-reference/combined#submit-an-audit).
+
+The response contains raw crawl metadata and audit summaries for images and forms only.

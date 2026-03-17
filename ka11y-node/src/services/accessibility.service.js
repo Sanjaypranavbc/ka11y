@@ -48,8 +48,9 @@ class AccessibilityService {
     try {
       this._logger.info('Launching Puppeteer browser...');
       browser = await this._puppeteer.launch({
-        headless: this._config.browser.headless,
-        args:     this._config.browser.args,
+        headless:       this._config.browser.headless,
+        executablePath: this._config.browser.executablePath,
+        args:           this._config.browser.args,
       });
 
       const page = await browser.newPage();
@@ -112,8 +113,9 @@ class AccessibilityService {
     try {
       this._logger.info(`Launching Puppeteer browser for URL: ${url}`);
       browser = await this._puppeteer.launch({
-        headless: this._config.browser.headless,
-        args:     this._config.browser.args,
+        headless:       this._config.browser.headless,
+        executablePath: this._config.browser.executablePath,
+        args:           this._config.browser.args,
       });
 
       const page = await browser.newPage();
@@ -176,8 +178,9 @@ class AccessibilityService {
     try {
       this._logger.info(`[flat] Launching browser for URL: ${url} level=${level}`);
       browser = await this._puppeteer.launch({
-        headless: this._config.browser.headless,
-        args:     this._config.browser.args,
+        headless:       this._config.browser.headless,
+        executablePath: this._config.browser.executablePath,
+        args:           this._config.browser.args,
       });
 
       const page = await browser.newPage();

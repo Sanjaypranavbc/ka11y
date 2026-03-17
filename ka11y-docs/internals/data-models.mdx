@@ -1,0 +1,202 @@
+---
+title: "Data Models"
+description: "Pydantic and TypedDict models used across the ka11y-python codebase"
+---
+
+## Crawler models
+
+### FormInputData
+
+`ka11y/crawler/forms_crawler.py`
+
+```python
+class FormInputData(BaseModel):
+    page_url:            str
+    form_index:          int
+    form_id:             Optional[str]
+    form_action:         Optional[str]
+    form_method:         str        # "get" | "post"
+    tag:                 str        # "INPUT" | "TEXTAREA" | "SELECT"
+    input_type:          Optional[str]
+    element_id:          Optional[str]
+    element_name:        Optional[str]
+    placeholder:         Optional[str]
+    aria_label:          Optional[str]
+    aria_labelledby:     Optional[str]
+    label_text:          Optional[str]   # <label for="...">
+    wrapping_label_text: Optional[str]   # wrapping <label>
+    required:            bool
+    aria_required:       bool
+    aria_invalid:        Optional[str]
+    autocomplete:        Optional[str]
+    aria_describedby:    Optional[str]
+    error_role:          Optional[str]   # role of describedby element
+    error_aria_live:     Optional[str]   # aria-live of describedby element
+    html_snippet:        str
+```
+
+### InteractiveElementData
+
+`ka11y/crawler/interactive_crawler.py`
+
+```python
+class InteractiveElementData(BaseModel):
+    page_url:        str
+    tag:             str
+    role:            Optional[str]
+    element_id:      Optional[str]
+    element_name:    Optional[str]
+    input_type:      Optional[str]
+    visible_label:   str    # stripped text content
+    aria_label:      Optional[str]
+    aria_labelledby: Optional[str]
+    title:           Optional[str]
+    value:           Optional[str]
+    alt:             Optional[str]
+    accessible_name: str    # computed per AccName 1.1
+    html_snippet:    str
+```
+
+### MovingContentData
+
+`ka11y/crawler/moving_content_crawler.py`
+
+```python
+class MovingContentData(BaseModel):
+    page_url:             str
+    content_type:         str   # video_autoplay | animated_gif | css_animation | carousel_autoplay | marquee | blink
+    tag:                  str
+    element_id:           Optional[str]
+    animation_name:       Optional[str]
+    animation_duration:   Optional[float]  # seconds
+    animation_iterations: Optional[str]    # "Infinity" or count
+    loops:                bool
+    starts_automatically: bool
+    has_video_controls:   bool
+    has_pause_button:     bool
+    has_mechanism:        bool   # any pause/stop/hide mechanism
+    axe_would_catch:      bool
+    html_snippet:         str
+```
+
+### TargetSizeData
+
+`ka11y/crawler/target_size_crawler.py`
+
+```python
+class TargetSizeData(BaseModel):
+    page_url:              str
+    tag:                   str
+    role:                  Optional[str]
+    element_id:            Optional[str]
+    input_type:            Optional[str]
+    rendered_width_px:     float
+    rendered_height_px:    float
+    padding_top:           float
+    padding_right:         float
+    padding_bottom:        float
+    padding_left:          float
+    is_inline_exception:   bool
+    is_ua_controlled_exception: bool
+    passes_size:           bool    # width >= 24 AND height >= 24
+    html_snippet:          str
+```
+
+---
+
+## Auditor output record (common keys)
+
+Every auditor returns a list of dicts. Each dict extends the crawler input with:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `wcag_X_X_X_status` | `"FAILED"` \| `"PASSED"` \| `"N/A"` | Audit result |
+| `wcag_X_X_X_violation` | str | Human-readable failure reason |
+| `html_snippet` | str | Element HTML (from crawler) |
+| `element_id` | str \| None | Element `id` attribute |
+| `tag` | str | Element tag name |
+
+---
+
+## Finding (flat output shape)
+
+Returned in `result.violations`, `result.needs_review`, and `result.passes`:
+
+```typescript
+interface Finding {
+  source:         "axe" | "python";
+  rule_id:        string;           // e.g. "python_1_1_1_alt"
+  wcag_sc:        string;           // e.g. "1.1.1"
+  criterion_name: string | null;
+  level:          "A" | "AA" | "AAA" | null;
+  severity:       "critical" | "high" | "medium" | "low" | null;
+  status:         "fail" | "pass" | "needs_review";
+  reason:         string;
+  suggested_fix:  string | null;    // null for passes
+  help_url:       string | null;
+  element:        {
+    html:       string;             // first 600 chars of outer HTML
+    element_id: string | null;
+    tag:        string | null;
+    page_url:   string;
+  } | null;                         // null for passes
+}
+```
+
+---
+
+## JobStatusResponse
+
+Returned by `GET /combined/{job_id}`:
+
+```typescript
+interface JobStatusResponse {
+  job_id:        string;
+  status:        "pending" | "running" | "completed" | "failed";
+  url:           string;
+  submitted_at:  string;       // ISO-8601
+  completed_at:  string | null;
+  report_path:   string | null;
+  result:        CombinedReport | null;
+  error:         string | null;
+  current_stage: string | null;
+  stages:        StageRecord[];
+  warnings:      string[];
+}
+
+interface StageRecord {
+  name:           string;      // stage_name
+  status:         "running" | "completed" | "error";
+  started_at:     string;      // ISO-8601
+  completed_at?:  string;
+  findings_count?: number;
+  error?:         string;
+}
+```
+
+---
+
+## CombinedReport
+
+Persisted to `combined_report.json` and included in `result`:
+
+```typescript
+interface CombinedReport {
+  url:          string;
+  generated_at: string;      // ISO-8601
+  warnings:     string[];
+  summary: {
+    total_findings:  number;
+    violations:      number;
+    needs_review:    number;
+    passes:          number;
+    by_severity:     { critical: number; high: number; medium: number; low: number };
+    by_level:        Record<"A" | "AA" | "AAA", { violations: number; needs_review: number; passes: number }>;
+    by_wcag_sc:      Record<string, { violations: number; needs_review: number; passes: number }>;
+    by_source:       Record<"axe" | "python", { violations: number; needs_review: number; passes: number }>;
+  };
+  violations:   Finding[];
+  needs_review: Finding[];
+  passes:       Finding[];
+}
+```

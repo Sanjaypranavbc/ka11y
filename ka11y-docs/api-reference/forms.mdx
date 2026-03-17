@@ -1,0 +1,14 @@
+t---
+title: "Forms"
+description: "POST /api/v1/forms/ — forms-only audit"
+---
+
+Runs only the form crawler and auditor. Fastest endpoint for checking WCAG 3.3.1 / 3.3.2 compliance on form-heavy pages.
+
+## POST /api/v1/forms/
+
+**Steps**: Form Crawl → Form Audit (WCAG 3.3.1 + 3.3.2)
+
+**Request body**: `url` (required), `max_depth` (optional, default 0).
+
+See [WCAG 3.3.1 / 3.3.2](/rules/wcag-3-3-1-3-3-2) for the full rule logic.

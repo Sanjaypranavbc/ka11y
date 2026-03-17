@@ -1,0 +1,119 @@
+---
+title: "Introduction"
+description: "ka11y — AI-powered WCAG accessibility auditing for the web"
+---
+
+<img
+  className="block dark:hidden"
+  src="/logo/hero-light.png"
+  alt="ka11y hero"
+/>
+
+## What is ka11y?
+
+**ka11y** is an automated WCAG 2.1/2.2 accessibility auditing platform that combines:
+
+| Engine | What it checks |
+|--------|---------------|
+| **axe-core** (Node.js) | DOM structure, ARIA semantics, colour contrast, keyboard, 80+ rules |
+| **Python auditors** | Alt-text quality (OCR + ML), forms, label-in-name, moving content, target size |
+
+The two engines run **in parallel** for every audit. Results are merged into a single flat findings list, deduplicated by WCAG success criterion, and returned via a REST job API with real-time Server-Sent Events (SSE) progress streaming.
+
+---
+
+## WCAG Coverage
+
+<CardGroup cols={2}>
+  <Card title="1.1.1 Non-text Content" icon="image" href="/rules/wcag-1-1-1">
+    OCR + ML classification determines whether alt text accurately describes the image. Goes far beyond a simple "alt attribute present" check.
+  </Card>
+  <Card title="2.2.2 Pause, Stop, Hide" icon="pause" href="/rules/wcag-2-2-2">
+    Detects animated GIFs, CSS animations, autoplay video, and JavaScript carousels — categories axe-core misses entirely.
+  </Card>
+  <Card title="2.5.3 Label in Name" icon="tag" href="/rules/wcag-2-5-3">
+    Verifies that every accessible name contains its visible label text, enabling speech-input users to activate controls by voice.
+  </Card>
+  <Card title="2.5.8 Target Size" icon="expand" href="/rules/wcag-2-5-8">
+    Measures rendered dimensions via JavaScript + Playwright to flag targets below 24 × 24 CSS px, applying the three WCAG 2.2 exceptions.
+  </Card>
+  <Card title="3.3.1 Error Identification" icon="triangle-exclamation" href="/rules/wcag-3-3-1-3-3-2">
+    Checks that required fields link to error messages via `aria-describedby` pointing to elements with `role="alert"` or `aria-live`.
+  </Card>
+  <Card title="3.3.2 Labels or Instructions" icon="input-text" href="/rules/wcag-3-3-1-3-3-2">
+    Verifies visible labels, rejects placeholder-only patterns, and checks `autocomplete` on personal-data fields.
+  </Card>
+</CardGroup>
+
+---
+
+## Key Features
+
+<AccordionGroup>
+  <Accordion title="Graceful degradation">
+    If axe-core (Node) fails — e.g. Docker sandbox crash, timeout — the job still completes with Python-only results. A `warnings[]` array in the response notes what was unavailable.
+  </Accordion>
+  <Accordion title="Real-time SSE streaming">
+    Connect to `GET /api/v1/combined/{job_id}/stream` immediately after submitting an audit to receive live stage events: `stage_start`, `stage_complete`, `stage_error`, `job_complete`, `job_failed`. Heartbeat keepalives fire every 25 s.
+  </Accordion>
+  <Accordion title="Pluggable rule architecture">
+    Each WCAG rule is a self-contained Crawler + Auditor pair. Adding a new rule requires no changes to existing code — only new files and a single wiring block in `combined.py`. See [Adding a Rule](/guides/adding-a-rule).
+  </Accordion>
+  <Accordion title="CSV + JSON output">
+    Every auditor writes a per-stage CSV report alongside the consolidated `combined_report.json`. Artefacts are stored in a timestamped directory under `crawled_images/`.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Project Layout
+
+```
+ka11y-python/
+├── ka11y/
+│   ├── main.py                    # FastAPI app + lifespan
+│   ├── api/
+│   │   ├── router.py              # Top-level /api/v1 router
+│   │   └── v1/
+│   │       ├── combined.py        # ★ Primary endpoint (async job + SSE)
+│   │       ├── pipeline.py        # Sequential 11-step pipeline endpoint
+│   │       ├── crawl.py           # Image + form crawl-only endpoint
+│   │       ├── forms.py           # Forms-only endpoint
+│   │       └── dependencies.py    # FastAPI Depends() providers
+│   ├── crawler/
+│   │   ├── crawler.py             # AsyncImageCrawler
+│   │   ├── forms_crawler.py       # AsyncFormCrawler
+│   │   ├── interactive_crawler.py # InteractiveElementCrawler
+│   │   ├── moving_content_crawler.py # MovingContentCrawler
+│   │   ├── target_size_crawler.py # TargetSizeCrawler
+│   │   └── models.py              # Shared Pydantic models
+│   ├── accessibility/rules/
+│   │   ├── non_text/alttext.py    # AltTextAccessibilityAuditor  (1.1.1)
+│   │   ├── forms/form_auditor.py  # FormAccessibilityAuditor     (3.3.1 / 3.3.2)
+│   │   └── input_modalities/
+│   │       ├── label_in_name_auditor.py  # LabelInNameAuditor   (2.5.3)
+│   │       └── target_size_auditor.py    # TargetSizeAuditor    (2.5.8)
+│   │   └── timing/
+│   │       └── pause_stop_hide_auditor.py # PauseStopHideAuditor (2.2.2)
+│   ├── classifier/classfier.py    # Image classification cascade
+│   ├── text_detector/             # EasyOCR wrapper
+│   ├── config/                    # Logger + config loader
+│   └── utils/                    # config_loader.py
+└── pyproject.toml
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run the stack in 3 commands with Docker Compose.
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand the job lifecycle, SSE bus, and stage pipeline.
+  </Card>
+  <Card title="Add a Rule" icon="plus" href="/guides/adding-a-rule">
+    Step-by-step guide to adding a new WCAG success criterion.
+  </Card>
+</CardGroup>

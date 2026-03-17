@@ -1,0 +1,108 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "ka11y",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/logo/favicon.svg",
+  "colors": {
+    "primary": "#0969da",
+    "light": "#3b82f6",
+    "dark": "#1d4ed8",
+    "background": {
+      "light": "#ffffff",
+      "dark": "#0a0a0a"
+    }
+  },
+  "font": {
+    "headings": { "family": "IBM Plex Sans" },
+    "body":     { "family": "IBM Plex Sans" }
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/your-org/ka11y"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Run Audit",
+    "url": "http://localhost:8080"
+  },
+  "tabs": [
+    { "name": "Docs",          "url": "/"              },
+    { "name": "API Reference", "url": "api-reference"  },
+    { "name": "Rules",         "url": "rules"          },
+    { "name": "Guides",        "url": "guides"         }
+  ],
+  "anchors": [
+    {
+      "name": "WCAG 2.2 Spec",
+      "icon": "book-open",
+      "url": "https://www.w3.org/TR/WCAG22/"
+    },
+    {
+      "name": "axe-core Rules",
+      "icon": "circle-check",
+      "url": "https://dequeuniversity.com/rules/axe/"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Overview",
+      "pages": [
+        "introduction",
+        "quickstart",
+        "architecture"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/combined",
+        "api-reference/pipeline",
+        "api-reference/crawl",
+        "api-reference/forms"
+      ]
+    },
+    {
+      "group": "WCAG Rules",
+      "pages": [
+        "rules/overview",
+        "rules/wcag-1-1-1",
+        "rules/wcag-2-2-2",
+        "rules/wcag-2-5-3",
+        "rules/wcag-2-5-8",
+        "rules/wcag-3-3-1-3-3-2"
+      ]
+    },
+    {
+      "group": "Developer Guides",
+      "pages": [
+        "guides/adding-a-rule",
+        "guides/crawlers",
+        "guides/auditors",
+        "guides/sse-integration"
+      ]
+    },
+    {
+      "group": "Internals",
+      "pages": [
+        "internals/data-models",
+        "internals/sse-events",
+        "internals/output-format",
+        "internals/config"
+      ]
+    },
+    {
+      "group": "Deployment",
+      "pages": [
+        "deployment/docker",
+        "deployment/environment"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/your-org/ka11y"
+  }
+}

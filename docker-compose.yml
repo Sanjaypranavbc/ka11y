@@ -22,6 +22,9 @@ services:
     restart: unless-stopped
     shm_size: '256m'
 
+    security_opt:
+      - seccomp:unconfined
+
     environment:
       NODE_ENV:       production
       PORT:           "3000"

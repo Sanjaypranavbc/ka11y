@@ -1,0 +1,115 @@
+---
+title: "3.3.1 + 3.3.2 Forms"
+description: "WCAG 3.3.1 Error Identification and 3.3.2 Labels or Instructions"
+---
+
+<Info>
+  **Level A** · Auditor: `FormAccessibilityAuditor` · File: `ka11y/accessibility/rules/forms/form_auditor.py`
+</Info>
+
+## 3.3.2 — Labels or Instructions
+
+Every form field must have a **programmatically associated, visible label** so users know what to enter.
+
+### Pass conditions (any one is sufficient)
+
+| Source | Example |
+|--------|---------|
+| `<label for="field-id">` | `<label for="email">Email address</label>` |
+| Wrapping `<label>` | `<label>Email <input type="email"></label>` |
+| `aria-label` | `<input aria-label="Email address">` |
+| `aria-labelledby` | `<input aria-labelledby="email-heading">` |
+
+### Fail conditions
+
+| Violation | Reason |
+|-----------|--------|
+| No label source | Field has no label, no aria-label, no aria-labelledby |
+| Placeholder only | `placeholder` is not an accessible label — it disappears on input |
+| Personal field without autocomplete | `<input type="email/tel/password/url">` with no `autocomplete` attribute |
+| Required without marking | Field is functionally required but not marked with `required` or `aria-required="true"` |
+
+### Autocomplete check
+
+Fields whose `type` is `email`, `tel`, `password`, `url`, `search`, or `date` must carry an `autocomplete` attribute. This aids users with cognitive disabilities and enables password manager autofill.
+
+```html
+<!-- Bad -->
+<input type="email" id="email" name="email">
+
+<!-- Good -->
+<input type="email" id="email" name="email" autocomplete="email">
+```
+
+---
+
+## 3.3.1 — Error Identification
+
+When a required field fails validation, the error must be:
+1. **Identified** — clearly associated with the field
+2. **Described** — the nature of the error must be conveyed in text
+
+### Pass condition
+
+`aria-describedby` on the field points to an element that has `role="alert"` OR `aria-live="assertive"` or `aria-live="polite"`.
+
+```html
+<input id="email" type="email" aria-required="true"
+       aria-describedby="email-error">
+<span id="email-error" role="alert" aria-live="assertive">
+  Please enter a valid email address.
+</span>
+```
+
+### Fail conditions
+
+| Violation | Reason |
+|-----------|--------|
+| Required field, no `aria-describedby` | Error message cannot be found by assistive technology |
+| `aria-describedby` points to element without `role="alert"` or `aria-live` | Error won't be announced automatically |
+
+<Note>
+  The auditor checks the **static DOM** at crawl time. It cannot trigger form submission to observe dynamic error states. Always add the `aria-describedby` linkage in your HTML — even if the error element is initially hidden — so assistive technology can locate it when it becomes visible.
+</Note>
+
+---
+
+## Complete compliant form example
+
+```html
+<form>
+  <div>
+    <label for="name">Full name</label>
+    <input
+      id="name"
+      type="text"
+      name="name"
+      autocomplete="name"
+      required
+      aria-required="true"
+      aria-describedby="name-error"
+    >
+    <span id="name-error" role="alert" aria-live="assertive" hidden>
+      Full name is required.
+    </span>
+  </div>
+
+  <div>
+    <label for="email">Email address</label>
+    <input
+      id="email"
+      type="email"
+      name="email"
+      autocomplete="email"
+      required
+      aria-required="true"
+      aria-describedby="email-error"
+    >
+    <span id="email-error" role="alert" aria-live="assertive" hidden>
+      Please enter a valid email address.
+    </span>
+  </div>
+
+  <button type="submit">Submit</button>
+</form>
+```

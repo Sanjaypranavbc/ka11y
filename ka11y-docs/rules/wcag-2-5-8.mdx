@@ -1,0 +1,80 @@
+---
+title: "2.5.8 Target Size (Minimum)"
+description: "WCAG 2.5.8 — interactive elements must be at least 24 × 24 CSS pixels"
+---
+
+<Info>
+  **Level AA** · WCAG 2.2 · Auditor: `TargetSizeAuditor` · File: `ka11y/accessibility/rules/input_modalities/target_size_auditor.py`
+</Info>
+
+## What it checks
+
+Every interactive element must have a **rendered size** of at least **24 × 24 CSS pixels**, or must have sufficient spacing around it so that the 24 × 24 target area does not overlap with another target.
+
+<Note>
+  axe-core has no rule for WCAG 2.5.8. This check is **Python-only**.
+</Note>
+
+## Measured dimensions
+
+The crawler uses `getBoundingClientRect()` via Playwright to get the **actual rendered dimensions** — not the CSS `width`/`height` properties. This correctly handles:
+- Elements whose size is determined by padding or content
+- Elements whose dimensions are set in relative units (em, %, vw)
+- Elements inside a responsive grid that collapse below their specified size
+
+## Exceptions (N/A cases)
+
+WCAG 2.5.8 provides several exceptions. ka11y automatically detects two:
+
+| Exception | Condition | Detection |
+|-----------|-----------|-----------|
+| **Inline** | `<a>` within a sentence of text | `getComputedStyle().display === 'inline'` |
+| **UA-controlled** | Native checkbox / radio without custom styling | `getComputedStyle().appearance` is `auto`, `checkbox`, or `radio` |
+
+Elements matching an exception are reported as `N/A` and excluded from the violation count.
+
+## Common violations
+
+| Element | Typical issue |
+|---------|--------------|
+| Small icon links | `<a>` with only a 16 × 16 icon, no padding |
+| Compact nav items | `<li><a>` items in a tight toolbar |
+| Social share buttons | `<a>` wrapped around 14 × 14 SVG icon |
+| Small pagination links | `<a>` with `padding: 2px 4px` |
+
+## Suggested fix
+
+```css
+/* Increase the click/touch area without changing visual size */
+.icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 4px;   /* adds to clickable area */
+}
+
+/* Or use the newer CSS approach */
+.icon-link {
+  min-width: 24px;
+  min-height: 24px;
+}
+```
+
+For elements where you cannot change the visual size:
+
+```css
+/* Use a transparent pseudo-element to extend the tap target */
+.small-button {
+  position: relative;
+}
+.small-button::after {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 24px;
+  min-height: 24px;
+}
+```

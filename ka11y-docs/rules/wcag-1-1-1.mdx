@@ -1,0 +1,95 @@
+---
+title: "1.1.1 Non-text Content"
+description: "WCAG 1.1.1 — alt-text quality check with OCR and ML image classification"
+---
+
+<Info>
+  **Level A** · Auditor: `AltTextAccessibilityAuditor` · File: `ka11y/accessibility/rules/non_text/alttext.py`
+</Info>
+
+## What it checks
+
+WCAG 1.1.1 requires that all non-text content has a text alternative. ka11y goes far beyond checking that `alt` is present — it classifies each image and validates whether the alt text is **semantically appropriate** for that classification.
+
+## Image classification
+
+Before auditing, every image passes through a deterministic classification cascade (`ClassifyAssets`):
+
+| Category | Examples |
+|----------|---------|
+| `decorative/decorative` | Background textures, spacer images, `alt=""` |
+| `decorative/presentational` | `aria-hidden="true"` or `role="presentation"` |
+| `informative/succinct_information` | Editorial photos, product images |
+| `informative/logos` | Standalone brand logos |
+| `informative/icons` | Standalone informational icons |
+| `functional/buttons` | Images inside `<button>` |
+| `functional/logos` | Logos inside navigation links |
+| `functional/icons` | Icons inside clickable elements |
+| `functional/images` | Other images inside links |
+| `complex/charts` | Graphs, infographics, data visualisations |
+
+## Per-classification rules
+
+<AccordionGroup>
+  <Accordion title="decorative — alt must be empty">
+    `alt=""` is required. Any non-empty alt text on a decorative image is a **violation** — it will be read by screen readers unnecessarily.
+  </Accordion>
+  <Accordion title="informative — alt must describe content (OCR-backed)">
+    alt must be non-empty. If OCR detects text in the image, the cosine similarity between the alt text and the OCR words must exceed the configured threshold. A low-similarity alt text is flagged as inaccurate.
+  </Accordion>
+  <Accordion title="functional/logos — alt must include logo/home">
+    The alt text must contain the word "logo" or "home" so screen-reader users understand the image is a navigation landmark.
+  </Accordion>
+  <Accordion title="functional/icons — alt must describe the action">
+    The alt text must include "icon" or describe the action the icon triggers. Social brand icons must include the brand name (e.g. "Twitter icon" not just "icon").
+  </Accordion>
+  <Accordion title="functional/buttons — alt must be an action phrase">
+    Validated against a vocabulary of 100+ action words (submit, close, play, pause, delete, download, share, search…). Generic alts like "image" or "click here" are violations.
+  </Accordion>
+  <Accordion title="complex/charts — alt + long description required">
+    The image must have non-empty `alt` AND `aria-describedby` pointing to a long description. alt alone is insufficient for complex content.
+  </Accordion>
+</AccordionGroup>
+
+## OCR pipeline
+
+When `run_ocr: true` (default), EasyOCR scans every crawled image:
+
+```
+EasyOCR → text regions + confidence → contrast check → category
+                                                        ├── with_text
+                                                        ├── no_text
+                                                        └── button_text / logo_text
+```
+
+The detected words are then used in the cosine similarity check for informative images.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Missing alt | `<img src="banner.jpg">` — no `alt` attribute |
+| Decorative with text | `<img src="divider.png" alt="decorative divider">` |
+| Generic alt | `<img src="product.jpg" alt="image">` |
+| Logo without "logo" | `<img src="logo.svg" alt="Company Name">` should be `alt="Company Name logo"` |
+| Inaccurate alt (OCR) | Image contains "50% OFF" but `alt="sale"` |
+
+## Suggested fix
+
+```html
+<!-- Decorative -->
+<img src="divider.png" alt="">
+
+<!-- Informative -->
+<img src="product.jpg" alt="Blue running shoes with white sole">
+
+<!-- Logo in nav link -->
+<a href="/"><img src="logo.svg" alt="Acme Corp logo"></a>
+
+<!-- Icon button -->
+<button><img src="close.svg" alt="Close dialog"></button>
+
+<!-- Chart -->
+<img src="chart.png" alt="Q1 revenue chart" aria-describedby="chart-desc">
+<p id="chart-desc">Bar chart showing Q1 revenue of £2.4M, up 12% from Q4…</p>
+```
