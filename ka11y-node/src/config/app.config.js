@@ -30,9 +30,6 @@ const config = {
     ],
   },
   
-  cors: {
-    origin: /^http:\/\/localhost(:\d+)?$/, // Only allow localhost with any port
-  },
 };
 
 module.exports = config;

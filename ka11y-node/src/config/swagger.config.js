@@ -19,7 +19,10 @@ const options = {
     ],
   },
   // Path to the API docs
-  apis: [path.resolve(__dirname, '../controllers/*.js')],
+  apis: [
+    path.resolve(__dirname, '../controllers/health.controller.js'),
+    path.resolve(__dirname, '../controllers/accessibility.controller.js'),
+  ],
 };
 
 const swaggerSpec = swaggerJsdoc(options);

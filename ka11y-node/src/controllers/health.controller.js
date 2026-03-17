@@ -10,7 +10,7 @@ class HealthController {
 
   /**
    * @openapi
-   * /health:
+   * /api/v1/health:
    *   get:
    *     description: Health check endpoint to verify API uptime.
    *     responses:

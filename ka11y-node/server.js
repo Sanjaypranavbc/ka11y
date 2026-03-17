@@ -1,17 +1,12 @@
 'use strict';
 
 const express = require('express');
-const cors    = require('cors');
-const axe     = require('axe-core');
-
 // 1. Config & Utils
-const config            = require('./src/config/app.config');
-const logger            = require('./src/utils/logger');
-const wcagCriteriaNames = require('./src/utils/wcagCriteriaNames');
+const config  = require('./src/config/app.config');
+const logger  = require('./src/utils/logger');
 
 // 2. Services
 const AccessibilityService = require('./src/services/accessibility.service');
-const RulesService         = require('./src/services/rules.service');
 const swaggerSpec          = require('./src/config/swagger.config');
 const swaggerUi            = require('swagger-ui-express');
 
@@ -22,23 +17,16 @@ const accessibilityService = new AccessibilityService(
   config
 );
 
-const rulesService = new RulesService(axe, wcagCriteriaNames, logger);
-
 // 3. Controllers
 const HealthController        = require('./src/controllers/health.controller');
 const AccessibilityController = require('./src/controllers/accessibility.controller');
-const RulesController         = require('./src/controllers/rules.controller');
-const RulesGuideController    = require('./src/controllers/rulesGuide.controller');
 
 const healthController        = new HealthController(logger);
 const accessibilityController = new AccessibilityController(accessibilityService, logger);
-const rulesController         = new RulesController(rulesService, logger);
-const rulesGuideController    = new RulesGuideController(logger);
 
 // 4. Express Setup
 const app = express();
 
-app.use(cors(config.cors));
 app.use(express.json({ limit: config.payload.limit }));
 app.use(express.urlencoded({ extended: true, limit: config.payload.limit }));
 
@@ -55,11 +43,10 @@ app.use((req, res, next) => {
 });
 
 // 5. Routes
-app.get('/health',               (req, res) => healthController.getHealth(req, res));
-app.get('/rules',                (req, res) => rulesController.getRules(req, res));
-app.get('/rules-guide',          (req, res) => rulesGuideController.getAll(req, res));
-app.get('/rules-guide/:ruleId',  (req, res) => rulesGuideController.getOne(req, res));
-app.post('/analyze-accessibility', (req, res) => accessibilityController.analyze(req, res));
+const API_V1 = '/api/v1';
+app.get( `${API_V1}/health`,                (req, res) => healthController.getHealth(req, res));
+app.post(`${API_V1}/analyze-accessibility`, (req, res) => accessibilityController.analyze(req, res));
+app.post(`${API_V1}/analyse-url`,           (req, res) => accessibilityController.analyseUrl(req, res));
 
 // Swagger UI page
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -99,11 +86,9 @@ if (require.main === module) {
     logger.info(divider);
 
     logger.info('  REST Endpoints');
-    logger.info(`  GET  ${BASE_URL}/health                  — Liveness / readiness probe`);
-    logger.info(`  GET  ${BASE_URL}/rules?tags=wcag2a,...   — List axe-core rules by WCAG tag`);
-    logger.info(`  GET  ${BASE_URL}/rules-guide             — Full WCAG criteria reference guide`);
-    logger.info(`  GET  ${BASE_URL}/rules-guide/:ruleId     — Single WCAG criterion detail`);
-    logger.info(`  POST ${BASE_URL}/analyze-accessibility   — Run axe-core audit on a URL`);
+    logger.info(`  GET  ${BASE_URL}/api/v1/health                  — Liveness / readiness probe`);
+    logger.info(`  POST ${BASE_URL}/api/v1/analyze-accessibility   — Run axe-core audit on raw HTML`);
+    logger.info(`  POST ${BASE_URL}/api/v1/analyse-url             — Crawl a URL and run axe-core audit`);
     logger.info(divider);
 
     logger.info('  Documentation');

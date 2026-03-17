@@ -14,7 +14,7 @@ class AccessibilityController {
 
   /**
    * @openapi
-   * /analyze-accessibility:
+   * /api/v1/analyze-accessibility:
    *   post:
    *     summary: Analyze HTML for accessibility issues
    *     description: >
@@ -78,7 +78,7 @@ class AccessibilityController {
    *                 successCriteriaId: "4.1.2"
    *     responses:
    *       200:
-   *         description: Accessibility analysis result
+   *         description: Accessibility analysis result grouped by WCAG Success Criterion
    *         content:
    *           application/json:
    *             schema:
@@ -89,51 +89,48 @@ class AccessibilityController {
    *                   items:
    *                     type: object
    *                     properties:
-   *                       ruleId:
+   *                       successCriteriaId:
    *                         type: string
-   *                         description: axe-core rule identifier
-   *                         example: image-alt
-   *                       description:
-   *                         type: string
-   *                         description: Human-readable rule description
-   *                         example: Ensure <img> elements have alternative text
-   *                       impact:
-   *                         type: string
-   *                         nullable: true
-   *                         description: "Severity: critical | serious | moderate | minor | null"
-   *                         example: critical
-   *                       status:
-   *                         type: string
-   *                         description: "Result: fail | pass | incomplete"
-   *                         example: fail
-   *                       reason:
-   *                         type: string
-   *                         description: Why the rule failed or passed
-   *                         example: Element does not have an alt attribute
-   *                       helpUrl:
-   *                         type: string
-   *                         description: Link to full rule documentation
-   *                         example: https://dequeuniversity.com/rules/axe/4.11/image-alt
+   *                         description: WCAG SC ID or "best-practice"
+   *                         example: "1.1.1"
+   *                       rules:
+   *                         type: array
+   *                         items:
+   *                           type: object
+   *                           properties:
+   *                             ruleId:
+   *                               type: string
+   *                               example: image-alt
+   *                             description:
+   *                               type: string
+   *                             impact:
+   *                               type: string
+   *                               nullable: true
+   *                             status:
+   *                               type: string
+   *                               description: "fail | pass | incomplete"
+   *                             reason:
+   *                               type: string
+   *                             helpUrl:
+   *                               type: string
    *             example:
    *               results:
-   *                 - ruleId: image-alt
-   *                   description: Ensure <img> elements have alternative text or a role of none or presentation
-   *                   impact: critical
-   *                   status: fail
-   *                   reason: Element does not have an alt attribute
-   *                   helpUrl: https://dequeuniversity.com/rules/axe/4.11/image-alt?application=axeAPI
-   *                 - ruleId: document-title
-   *                   description: Ensure each HTML document contains a non-empty <title> element
-   *                   impact: serious
-   *                   status: fail
-   *                   reason: Document does not have a non-empty <title> element
-   *                   helpUrl: https://dequeuniversity.com/rules/axe/4.11/document-title?application=axeAPI
-   *                 - ruleId: aria-hidden-body
-   *                   description: Ensure aria-hidden="true" is not present on the document body.
-   *                   impact: null
-   *                   status: pass
-   *                   reason: aria-hidden="true" must not be present on the document body
-   *                   helpUrl: https://dequeuniversity.com/rules/axe/4.11/aria-hidden-body?application=axeAPI
+   *                 - successCriteriaId: "1.1.1"
+   *                   rules:
+   *                     - ruleId: image-alt
+   *                       description: Ensure <img> elements have alternative text or a role of none or presentation
+   *                       impact: critical
+   *                       status: fail
+   *                       reason: Element does not have an alt attribute
+   *                       helpUrl: https://dequeuniversity.com/rules/axe/4.11/image-alt?application=axeAPI
+   *                 - successCriteriaId: "2.4.2"
+   *                   rules:
+   *                     - ruleId: document-title
+   *                       description: Ensure each HTML document contains a non-empty <title> element
+   *                       impact: serious
+   *                       status: fail
+   *                       reason: Document does not have a non-empty <title> element
+   *                       helpUrl: https://dequeuniversity.com/rules/axe/4.11/document-title?application=axeAPI
    *       400:
    *         description: Invalid input — html field missing or JSON is malformed
    *         content:
@@ -167,6 +164,133 @@ class AccessibilityController {
       this._logger.error(`analyze failed: ${err.message}`);
       res.status(500).json({
         error:   'Accessibility analysis failed',
+        message: err.message,
+      });
+    }
+  }
+
+  /**
+   * @openapi
+   * /api/v1/analyse-url:
+   *   post:
+   *     summary: Analyse a live URL for accessibility issues
+   *     description: >
+   *       Crawls the given URL using Puppeteer, injects axe-core into the loaded page,
+   *       and returns WCAG accessibility results in the same format as /analyze-accessibility.
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - url
+   *             properties:
+   *               url:
+   *                 type: string
+   *                 description: Fully-qualified URL to crawl and analyse (http or https).
+   *                 example: "https://example.com"
+   *               successCriteriaId:
+   *                 type: string
+   *                 nullable: true
+   *                 description: >
+   *                   Optional WCAG Success Criterion filter (e.g. "1.1.1").
+   *                   Omit or set to null to return all rules.
+   *                 example: "1.1.1"
+   *           examples:
+   *             basic_url:
+   *               summary: Analyse a public URL
+   *               value:
+   *                 url: "https://example.com"
+   *             url_with_filter:
+   *               summary: Analyse and filter by SC 1.1.1
+   *               value:
+   *                 url: "https://example.com"
+   *                 successCriteriaId: "1.1.1"
+   *     responses:
+   *       200:
+   *         description: Accessibility analysis result grouped by WCAG Success Criterion
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 url:
+   *                   type: string
+   *                   description: The URL that was analysed
+   *                 results:
+   *                   type: array
+   *                   items:
+   *                     type: object
+   *                     properties:
+   *                       successCriteriaId:
+   *                         type: string
+   *                         description: WCAG SC ID or "best-practice"
+   *                         example: "1.1.1"
+   *                       rules:
+   *                         type: array
+   *                         items:
+   *                           type: object
+   *                           properties:
+   *                             ruleId:
+   *                               type: string
+   *                             description:
+   *                               type: string
+   *                             impact:
+   *                               type: string
+   *                               nullable: true
+   *                             status:
+   *                               type: string
+   *                               description: "fail | pass | incomplete"
+   *                             reason:
+   *                               type: string
+   *                             helpUrl:
+   *                               type: string
+   *       400:
+   *         description: Invalid input — url field missing or not a valid http/https URL
+   *         content:
+   *           application/json:
+   *             example:
+   *               error: url field is required and must be a valid http or https URL
+   *       500:
+   *         description: Internal server error (navigation failure, timeout, etc.)
+   *         content:
+   *           application/json:
+   *             example:
+   *               error: URL accessibility analysis failed
+   *               message: net::ERR_NAME_NOT_RESOLVED
+   */
+  async analyseUrl(req, res) {
+    const { url, successCriteriaId } = req.body;
+
+    if (!url || typeof url !== 'string') {
+      this._logger.warn('analyseUrl rejected: url field missing or not a string');
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      this._logger.warn(`analyseUrl rejected: invalid URL "${url}"`);
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      this._logger.warn(`analyseUrl rejected: unsupported protocol "${parsedUrl.protocol}"`);
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    try {
+      const filter = successCriteriaId ?? null;
+      this._logger.info(`analyseUrl start url=${url} successCriteriaId=${filter ?? 'none'}`);
+      const results = await this._service.analyseUrl(url, filter);
+      this._logger.info(`analyseUrl done results=${results.length}`);
+      res.json({ url, results });
+    } catch (err) {
+      this._logger.error(`analyseUrl failed: ${err.message}`);
+      res.status(500).json({
+        error:   'URL accessibility analysis failed',
         message: err.message,
       });
     }
