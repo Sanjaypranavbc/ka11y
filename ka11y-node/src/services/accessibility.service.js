@@ -168,12 +168,13 @@ class AccessibilityService {
    * @param {string} url - Fully-qualified URL
    * @returns {Promise<Array<object>>} Flat findings array
    */
-  async analyseUrlFlat(url) {
-    const { timeoutMs, runOnly } = this._config.axe;
+  async analyseUrlFlat(url, level = 'AA') {
+    const { timeoutMs } = this._config.axe;
+    const runOnly = { type: 'tag', values: _tagsForLevel(level) };
     let browser = null;
 
     try {
-      this._logger.info(`[flat] Launching browser for URL: ${url}`);
+      this._logger.info(`[flat] Launching browser for URL: ${url} level=${level}`);
       browser = await this._puppeteer.launch({
         headless: this._config.browser.headless,
         args:     this._config.browser.args,
