@@ -16,7 +16,7 @@ const config = {
     defaultTags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'],
     runOnly: {
       type: 'tag',
-      values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'],
+      values: ['wcag2a', 'wcag2aa', 'wcag2aaa', 'wcag21a', 'wcag21aa', 'best-practice'],
     },
   },
 
@@ -27,6 +27,10 @@ const config = {
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
+      '--no-zygote',
+      '--no-first-run',
+      '--disable-crash-reporter',
+      '--disable-breakpad',
     ],
   },
   

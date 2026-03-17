@@ -5,6 +5,9 @@
 # ── Stage 1: dependency installer ────────────────────────────────────────────
 FROM node:20-slim AS deps
 
+# Skip Puppeteer's bundled Chrome download — we use system Chromium instead
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 WORKDIR /app
 
 RUN echo "==> [deps 1/2] Copying package manifests..."
@@ -22,83 +25,46 @@ FROM node:20-slim AS runtime
 LABEL org.opencontainers.image.title="ka11y-node"
 LABEL org.opencontainers.image.description="Puppeteer + axe-core WCAG accessibility engine"
 
-# ── [1/6] System libraries required by Chromium (Puppeteer bundled) ──────────
-RUN echo "==> [1/6] Updating apt package index..." && \
+# ── [1/5] Install system Chromium (apt resolves all deps correctly) ───────────
+RUN echo "==> [1/5] Installing system Chromium..." && \
     apt-get update -qq && \
-    echo "==> [1/6] Installing Chromium system libraries..." && \
     apt-get install -y --no-install-recommends \
+        chromium \
         ca-certificates \
         curl \
         fonts-liberation \
         fonts-noto-color-emoji \
-        libasound2 \
-        libatk-bridge2.0-0 \
-        libatk1.0-0 \
-        libc6 \
-        libcairo2 \
-        libcups2 \
-        libdbus-1-3 \
-        libexpat1 \
-        libfontconfig1 \
-        libgbm1 \
-        libgcc1 \
-        libglib2.0-0 \
-        libgtk-3-0 \
-        libnspr4 \
-        libnss3 \
-        libpango-1.0-0 \
-        libpangocairo-1.0-0 \
-        libstdc++6 \
-        libx11-6 \
-        libx11-xcb1 \
-        libxcb1 \
-        libxcomposite1 \
-        libxcursor1 \
-        libxdamage1 \
-        libxext6 \
-        libxfixes3 \
-        libxi6 \
-        libxrandr2 \
-        libxrender1 \
-        libxss1 \
-        libxtst6 \
-        lsb-release \
-        wget \
-        xdg-utils \
     && rm -rf /var/lib/apt/lists/* \
-    && echo "==> [1/6] Chromium system libraries installed"
+    && echo "==> [1/5] Chromium installed: $(chromium --version)"
 
 WORKDIR /app
 
-# ── [2/6] Copy pre-built node_modules from deps stage ────────────────────────
-RUN echo "==> [2/6] Copying node_modules from deps stage..."
+# ── [2/5] Copy pre-built node_modules from deps stage ────────────────────────
+RUN echo "==> [2/5] Copying node_modules from deps stage..."
 COPY --from=deps /app/node_modules ./node_modules
-RUN echo "==> [2/6] node_modules copied ($(du -sh node_modules | cut -f1))"
+RUN echo "==> [2/5] node_modules copied ($(du -sh node_modules | cut -f1))"
 
-# ── [3/6] Copy application source ────────────────────────────────────────────
-RUN echo "==> [3/6] Copying application source..."
+# ── [3/5] Copy application source ────────────────────────────────────────────
+RUN echo "==> [3/5] Copying application source..."
 COPY package*.json ./
 COPY server.js     ./
 COPY src/          ./src/
-RUN echo "==> [3/6] Source copied"
+RUN echo "==> [3/5] Source copied"
 
-# ── [4/6] Puppeteer — use the bundled Chromium from node_modules ─────────────
-RUN echo "==> [4/6] Configuring Puppeteer (bundled Chromium)..."
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+# ── [4/5] Puppeteer — point to system Chromium, skip bundled download ─────────
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
-RUN echo "==> [4/6] Puppeteer configured"
+RUN echo "==> [4/5] Puppeteer configured to use system Chromium at $(which chromium)"
 
-# ── [5/6] Non-root security user ─────────────────────────────────────────────
-RUN echo "==> [5/6] Creating non-root user 'appuser'..." && \
+# ── [5/5] Non-root security user ─────────────────────────────────────────────
+RUN echo "==> [5/5] Creating non-root user 'appuser'..." && \
     groupadd -r appuser && \
     useradd -r -g appuser -G audio,video appuser && \
     chown -R appuser:appuser /app && \
-    echo "==> [5/6] User 'appuser' created"
+    echo "==> [5/5] User 'appuser' created"
 
 USER appuser
-
-# ── [6/6] Final configuration ─────────────────────────────────────────────────
-RUN echo "==> [6/6] Final image configuration complete"
 
 EXPOSE 3000
 

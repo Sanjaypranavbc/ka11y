@@ -24,6 +24,9 @@ COPY ka11y/ ./ka11y/
 RUN pip install --no-cache-dir --upgrade poetry
 RUN poetry install
 
+# Install Playwright's Chromium browser + all system dependencies
+RUN poetry run playwright install chromium --with-deps
+
 EXPOSE 8000
 
 CMD ["poetry", "run", "uvicorn", "ka11y.main:app", "--host", "0.0.0.0", "--port", "8000"]
