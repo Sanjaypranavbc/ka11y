@@ -11,7 +11,7 @@ from typing import List, Optional
 from datetime import datetime
 import cv2
 from ka11y.preprocessor import extract_color
-from ka11y.preprocessor import contrast_analyzer
+from ka11y.accessibility.rules.non_text import contrast_analyzer
 from ka11y.preprocessor.text_helper_models import (
     TextDetectionResult,
     TextDetectionReport,
