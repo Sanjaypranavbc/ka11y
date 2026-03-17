@@ -24,6 +24,7 @@ interface AuditSidebarProps {
   onTabChange: (tab: TabValue) => void;
   onRunAudit: (config: AuditConfig) => void;
   jobStatus: "idle" | "pending" | "running" | "completed" | "failed";
+  currentStage?: string;
   open: boolean;
   onClose: () => void;
 }
@@ -36,7 +37,16 @@ const navItems: { label: string; value: TabValue; icon: React.ElementType }[] = 
   { label: "Settings",     value: "settings",     icon: Settings        },
 ];
 
-export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, open, onClose }: AuditSidebarProps) {
+const STAGE_LABELS: Record<string, string> = {
+  axe_core:        "axe-core scan",
+  image_audit:     "Image audit",
+  form_audit:      "Form audit",
+  label_in_name:   "Label in name",
+  pause_stop_hide: "Moving content",
+  target_size:     "Target size",
+};
+
+export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, currentStage, open, onClose }: AuditSidebarProps) {
   const [config, setConfig] = useState<AuditConfig>({
     url: "https://www.kao.com/global/en/",
     max_depth: 0,
@@ -113,7 +123,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, op
                 "w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-colors border-l-2",
                 activeTab === item.value
                   ? "border-l-primary text-primary bg-primary/5"
-                  : "border-l-transparent text-muted-foreground hover:text-foreground hover:bg-white/[0.03]"
+                  : "border-l-transparent text-muted-foreground hover:text-foreground hover:bg-black/[0.04]"
               )}
             >
               <item.icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -220,24 +230,31 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, op
 
           {/* Status */}
           {jobStatus !== "idle" && (
-            <div className="flex items-center gap-2 text-[10px] font-mono" role="status" aria-live="polite">
-              {(jobStatus === "pending" || jobStatus === "running") && (
-                <Loader2 className="h-3 w-3 animate-spin text-primary" aria-hidden="true" />
+            <div className="space-y-1" role="status" aria-live="polite">
+              <div className="flex items-center gap-2 text-[10px] font-mono">
+                {(jobStatus === "pending" || jobStatus === "running") && (
+                  <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" aria-hidden="true" />
+                )}
+                {jobStatus === "completed" && (
+                  <CheckCircle className="h-3 w-3 text-success shrink-0" aria-hidden="true" />
+                )}
+                {jobStatus === "failed" && (
+                  <XCircle className="h-3 w-3 text-destructive shrink-0" aria-hidden="true" />
+                )}
+                <span className={cn(
+                  "capitalize",
+                  jobStatus === "completed" && "text-success",
+                  jobStatus === "failed"    && "text-destructive",
+                  (jobStatus === "pending" || jobStatus === "running") && "text-primary",
+                )}>
+                  {jobStatus}
+                </span>
+              </div>
+              {currentStage && (jobStatus === "pending" || jobStatus === "running") && (
+                <p className="text-[9px] font-mono text-muted-foreground pl-5 truncate">
+                  {STAGE_LABELS[currentStage] ?? currentStage}
+                </p>
               )}
-              {jobStatus === "completed" && (
-                <CheckCircle className="h-3 w-3 text-success" aria-hidden="true" />
-              )}
-              {jobStatus === "failed" && (
-                <XCircle className="h-3 w-3 text-destructive" aria-hidden="true" />
-              )}
-              <span className={cn(
-                "capitalize",
-                jobStatus === "completed" && "text-success",
-                jobStatus === "failed"    && "text-destructive",
-                (jobStatus === "pending" || jobStatus === "running") && "text-primary",
-              )}>
-                {jobStatus}
-              </span>
             </div>
           )}
         </div>

@@ -3,41 +3,41 @@
 @tailwind utilities;
 
 /*
- * ka11y — Midnight Blue
- * True black base · electric blue primary · IBM Plex Sans + IBM Plex Mono
+ * ka11y — Clean White / Electric Blue
+ * Pure white base · electric blue primary · IBM Plex Sans + IBM Plex Mono
  */
 
 @layer base {
   :root {
     /* ── Core palette ────────────────────────────────────────────── */
-    --background:        0 0% 4%;
-    --foreground:        214 20% 92%;
+    --background:        0 0% 100%;
+    --foreground:        213 60% 15%;
 
-    --card:              0 0% 7%;
-    --card-foreground:   214 20% 92%;
+    --card:              213 20% 98%;
+    --card-foreground:   213 60% 15%;
 
-    --popover:           0 0% 8%;
-    --popover-foreground: 214 20% 92%;
+    --popover:           0 0% 100%;
+    --popover-foreground: 213 60% 15%;
 
     /* Electric blue — single dominant accent */
-    --primary:           213 94% 55%;
-    --primary-foreground: 0 0% 4%;
+    --primary:           213 94% 48%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary:         0 0% 11%;
-    --secondary-foreground: 214 15% 70%;
+    --secondary:         213 25% 94%;
+    --secondary-foreground: 213 40% 28%;
 
-    --muted:             0 0% 10%;
-    --muted-foreground:  214 8% 44%;
+    --muted:             213 20% 96%;
+    --muted-foreground:  213 15% 48%;
 
-    --accent:            213 60% 12%;
-    --accent-foreground: 213 94% 72%;
+    --accent:            213 50% 93%;
+    --accent-foreground: 213 80% 33%;
 
     --destructive:       0 84% 58%;
     --destructive-foreground: 0 0% 100%;
 
-    --border:            0 0% 13%;
-    --input:             0 0% 11%;
-    --ring:              213 94% 55%;
+    --border:            213 25% 86%;
+    --input:             213 20% 96%;
+    --ring:              213 94% 48%;
 
     --radius: 3px;
 
@@ -45,33 +45,33 @@
     --critical:          0 84% 58%;
     --critical-foreground: 0 0% 100%;
 
-    --serious:           22 96% 55%;
+    --serious:           22 96% 52%;
     --serious-foreground: 0 0% 100%;
 
-    --moderate:          45 100% 50%;
+    --moderate:          45 100% 42%;
     --moderate-foreground: 0 0% 5%;
 
-    --minor:             199 78% 56%;
+    --minor:             199 78% 38%;
     --minor-foreground:  0 0% 100%;
 
-    --success:           151 68% 46%;
+    --success:           151 68% 36%;
     --success-foreground: 0 0% 100%;
 
-    --score-excellent:   151 68% 46%;
-    --score-good:        45 100% 50%;
+    --score-excellent:   151 68% 36%;
+    --score-good:        45 100% 42%;
     --score-poor:        0 84% 58%;
 
-    --report-shadow:     0deg 0% 0% / 0.5;
+    --report-shadow:     213deg 25% 70% / 0.2;
 
     /* ── Sidebar ─────────────────────────────────────────────────── */
-    --sidebar-background:         0 0% 3%;
-    --sidebar-foreground:         214 15% 78%;
-    --sidebar-primary:            213 94% 55%;
-    --sidebar-primary-foreground: 0 0% 4%;
-    --sidebar-accent:             213 60% 10%;
-    --sidebar-accent-foreground:  213 94% 72%;
-    --sidebar-border:             0 0% 11%;
-    --sidebar-ring:               213 94% 55%;
+    --sidebar-background:         213 30% 97%;
+    --sidebar-foreground:         213 50% 22%;
+    --sidebar-primary:            213 94% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent:             213 50% 92%;
+    --sidebar-accent-foreground:  213 80% 33%;
+    --sidebar-border:             213 25% 88%;
+    --sidebar-ring:               213 94% 48%;
   }
 }
 
@@ -92,8 +92,8 @@
   /* Subtle grid on scrollable areas */
   .grid-bg {
     background-image:
-      linear-gradient(hsl(213 30% 14% / 0.25) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(213 30% 14% / 0.25) 1px, transparent 1px);
+      linear-gradient(hsl(213 30% 85% / 0.35) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(213 30% 85% / 0.35) 1px, transparent 1px);
     background-size: 28px 28px;
   }
 
@@ -121,9 +121,9 @@
   to   { opacity: 1; }
 }
 
-@keyframes amber-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 hsl(213 94% 55% / 0); }
-  50%       { box-shadow: 0 0 16px 3px hsl(213 94% 55% / 0.28); }
+@keyframes blue-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(213 94% 48% / 0); }
+  50%       { box-shadow: 0 0 16px 3px hsl(213 94% 48% / 0.22); }
 }
 
 @keyframes scan-line {
@@ -131,9 +131,9 @@
   100% { transform: translateY(400%); }
 }
 
-.animate-fade-up  { animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-fade-in  { animation: fade-in 0.3s ease both; }
-.animate-amber-pulse { animation: amber-pulse 2.4s ease-in-out infinite; }
+.animate-fade-up       { animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in       { animation: fade-in 0.3s ease both; }
+.animate-amber-pulse   { animation: blue-pulse 2.4s ease-in-out infinite; }
 
 /* Stagger helpers */
 .delay-0   { animation-delay: 0ms; }

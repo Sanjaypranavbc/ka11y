@@ -31,6 +31,7 @@ const config = {
       '--no-first-run',
       '--disable-crash-reporter',
       '--disable-breakpad',
+      '--crash-dumps-dir=/tmp',
     ],
   },
   

@@ -3,25 +3,135 @@ ka11y/api/v1/combined.py
 ========================
 Async combined audit — Python auditors + Node axe-core running in parallel.
 
-  POST /combined/          → 202 { job_id, status: "pending" }
-  GET  /combined/{job_id} → job status / combined_report.json content
+ENDPOINTS
+─────────
+  POST /combined/                 202  { job_id, status, url, submitted_at }
+  GET  /combined/{job_id}          200  Full job status + result once completed
+  GET  /combined/{job_id}/stream   200  Server-Sent Events stream (text/event-stream)
 
-Output format — flat element-wise findings
-──────────────────────────────────────────
-Every finding (violation / needs_review / pass) has:
-  source          "axe" | "python"
-  rule_id         axe rule ID or internal Python rule key
-  wcag_sc         "1.1.1"
-  criterion_name  "Non-text Content"
-  level           "A" | "AA" | "AAA"
-  severity        "critical" | "high" | "medium" | "low" | null
-  status          "fail" | "pass" | "needs_review"
-  reason          human-readable explanation
-  suggested_fix   static remediation hint (null for passes)
-  element         { html, element_id, tag, page_url } | null  (null for pass rules)
+JOB LIFECYCLE
+─────────────
+  submitted → pending → running → completed
+                                ↘ failed (only when every stage errors out)
 
-The job also writes combined_report.json to the output directory.
+  Graceful degradation: if the axe-core (Node) stage fails but Python stages
+  succeed, the job still completes. The report includes a `warnings` list
+  noting which sources were unavailable.
+
+STAGE ORDER & NAMES
+───────────────────
+  axe_core        Node / axe-core WCAG scan (runs in parallel with Python stages)
+  image_audit     Crawl images → OCR → 1.1.1 alt-text check
+  form_audit      Crawl forms → 3.3.1 / 3.3.2 label / error checks
+  label_in_name   Crawl interactive elements → 2.5.3 check
+  pause_stop_hide Crawl moving content → 2.2.2 check
+  target_size     Crawl touch targets → 2.5.8 size check
+
+SSE EVENT SCHEMA
+────────────────
+  All events arrive as:
+    event: <event_type>
+    data: <json>
+
+  Event types:
+    stage_start     { stage_name: str, started_at: str }
+    stage_complete  { stage_name: str, completed_at: str, findings_count: int }
+    stage_error     { stage_name: str, error: str }
+    job_state       { current_stage: str, stages: list }   (sent on late connect)
+    job_complete    { job_id: str, summary: dict }
+    job_failed      { job_id: str, error: str }
+
+  Heartbeat comment lines (": keepalive") are sent every 25 s to keep the
+  connection alive through proxies that would otherwise time out.
+
+OUTPUT FORMAT
+─────────────
+  Every finding (violation / needs_review / pass) carries:
+    source          "axe" | "python"
+    rule_id         axe rule ID or internal Python rule key
+    wcag_sc         e.g. "1.1.1"
+    criterion_name  e.g. "Non-text Content"
+    level           "A" | "AA" | "AAA"
+    severity        "critical" | "high" | "medium" | "low" | null
+    status          "fail" | "pass" | "needs_review"
+    reason          human-readable explanation
+    suggested_fix   static remediation hint (null for passes)
+    element         { html, element_id, tag, page_url } | null
+
+HOW TO ADD A NEW PYTHON RULE
+─────────────────────────────
+Step 1 — Crawler  (ka11y/crawler/)
+  • Write (or subclass) an async crawler with:
+      async def crawl() -> List[Dict]   — one dict per detected element
+      def save_raw_json()
+  • Each dict may carry arbitrary keys; your auditor will consume them.
+
+Step 2 — Auditor  (ka11y/accessibility/rules/<category>/)
+  • Implement: generate_audit_report(items) -> List[Dict]
+  • Each output record MUST include:
+      <rule_key>_status    "FAILED" | "PASSED" | "N/A"
+      <rule_key>_violation str  (ignored on PASSED / N/A)
+      html_snippet         str
+      element_id           str | None
+      tag                  str
+
+Step 3 — Finding converter  (add to this file)
+  def _myrule_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+      findings = []
+      for r in records:
+          status_raw = r.get("mykey_status", "")
+          if status_raw == "N/A":
+              continue
+          if status_raw == "FAILED":
+              findings.append(_make_finding(
+                  source="python", rule_id="python_X_X_X_myrule",
+                  wcag_sc="X.X.X", status="fail",
+                  reason=r.get("mykey_violation") or "Default reason.",
+                  severity=_PYTHON_SEVERITY["X.X.X"],
+                  element_html=r.get("html_snippet", ""),
+                  element_id=r.get("element_id"),
+                  element_tag=r.get("tag", ""),
+                  page_url=page_url,
+              ))
+          elif status_raw == "PASSED":
+              findings.append(_make_finding(
+                  source="python", rule_id="python_X_X_X_myrule",
+                  wcag_sc="X.X.X", status="pass",
+                  reason="Element meets WCAG X.X.X.", severity=None,
+                  page_url=page_url,
+              ))
+      return findings
+
+Step 4 — Register severity & suggested fix
+  • Add wcag_sc entry to _PYTHON_SEVERITY  (skip if already present)
+  • Add wcag_sc entry to _SUGGESTED_FIX    (skip if already present)
+
+Step 5 — Wire into _run_python_stages()
+  Add a new stage block following the existing pattern:
+
+      stage_findings: List[Dict] = []
+      _stage_start(job_id, "my_stage_name")
+      try:
+          my_crawler = MyCrawler(
+              base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+          )
+          items = await my_crawler.crawl()
+          my_crawler.save_raw_json()
+          if run_my_audit:
+              auditor = MyAuditor(output_dir=str(output_dir))
+              records = auditor.generate_audit_report(items)
+              stage_findings = _myrule_to_findings(records, url)
+              all_findings.extend(stage_findings)
+          _stage_complete(job_id, "my_stage_name", len(stage_findings))
+      except Exception as _exc:
+          _stage_error_and_warn(job_id, "my_stage_name", _exc)
+
+Step 6 — Expose the toggle in CombinedRequest
+  Add:  run_my_audit: bool = True
+  Pass it through submit_combined_audit → _run_job → _run_python_stages.
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
@@ -30,11 +140,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, HttpUrl
 
 from ka11y.crawler.crawler import AsyncImageCrawler
@@ -60,11 +171,15 @@ from ka11y.utils.config_loader import load_config
 router = APIRouter(prefix="/combined", tags=["combined"])
 logger = setup_logger(name="KAC", tag="combined")
 
-# ── In-memory job store ────────────────────────────────────────────────────────
+
+# ── In-memory stores ────────────────────────────────────────────────────────────
 _jobs: Dict[str, Dict[str, Any]] = {}
 
+# SSE subscriber bus: job_id → list of per-client asyncio.Queue
+_subscribers: Dict[str, List[asyncio.Queue]] = {}
 
-# ── Static metadata ────────────────────────────────────────────────────────────
+
+# ── Static metadata ─────────────────────────────────────────────────────────────
 
 _WCAG_NAMES: Dict[str, str] = {
     "1.1.1": "Non-text Content",
@@ -127,63 +242,21 @@ _WCAG_NAMES: Dict[str, str] = {
 }
 
 _WCAG_LEVEL: Dict[str, str] = {
-    "1.1.1": "A",
-    "1.2.1": "A",
-    "1.2.2": "A",
-    "1.2.3": "A",
-    "1.3.1": "A",
-    "1.3.2": "A",
-    "1.3.3": "A",
-    "1.4.1": "A",
-    "1.4.2": "A",
-    "2.1.1": "A",
-    "2.1.2": "A",
-    "2.1.4": "A",
-    "2.2.1": "A",
-    "2.2.2": "A",
-    "2.3.1": "A",
-    "2.4.1": "A",
-    "2.4.2": "A",
-    "2.4.3": "A",
-    "2.4.4": "A",
-    "2.5.1": "A",
-    "2.5.2": "A",
-    "2.5.3": "A",
-    "2.5.4": "A",
-    "3.1.1": "A",
-    "3.2.1": "A",
-    "3.2.2": "A",
-    "3.3.1": "A",
-    "3.3.2": "A",
-    "3.3.7": "A",
-    "4.1.1": "A",
-    "4.1.2": "A",
-    "1.2.4": "AA",
-    "1.2.5": "AA",
-    "1.3.4": "AA",
-    "1.3.5": "AA",
-    "1.4.3": "AA",
-    "1.4.4": "AA",
-    "1.4.5": "AA",
-    "1.4.10": "AA",
-    "1.4.11": "AA",
-    "1.4.12": "AA",
-    "1.4.13": "AA",
-    "2.4.5": "AA",
-    "2.4.6": "AA",
-    "2.4.7": "AA",
-    "2.4.11": "AA",
-    "2.4.13": "AA",
-    "2.5.7": "AA",
-    "2.5.8": "AA",
-    "3.1.2": "AA",
-    "3.2.3": "AA",
-    "3.2.4": "AA",
-    "3.2.6": "AA",
-    "3.3.3": "AA",
-    "3.3.4": "AA",
-    "3.3.8": "AA",
-    "4.1.3": "AA",
+    "1.1.1": "A",  "1.2.1": "A",  "1.2.2": "A",  "1.2.3": "A",
+    "1.3.1": "A",  "1.3.2": "A",  "1.3.3": "A",  "1.4.1": "A",
+    "1.4.2": "A",  "2.1.1": "A",  "2.1.2": "A",  "2.1.4": "A",
+    "2.2.1": "A",  "2.2.2": "A",  "2.3.1": "A",  "2.4.1": "A",
+    "2.4.2": "A",  "2.4.3": "A",  "2.4.4": "A",  "2.5.1": "A",
+    "2.5.2": "A",  "2.5.3": "A",  "2.5.4": "A",  "3.1.1": "A",
+    "3.2.1": "A",  "3.2.2": "A",  "3.3.1": "A",  "3.3.2": "A",
+    "3.3.7": "A",  "4.1.1": "A",  "4.1.2": "A",
+    "1.2.4": "AA", "1.2.5": "AA", "1.3.4": "AA", "1.3.5": "AA",
+    "1.4.3": "AA", "1.4.4": "AA", "1.4.5": "AA", "1.4.10": "AA",
+    "1.4.11": "AA","1.4.12": "AA","1.4.13": "AA","2.4.5": "AA",
+    "2.4.6": "AA", "2.4.7": "AA", "2.4.11": "AA","2.4.13": "AA",
+    "2.5.7": "AA", "2.5.8": "AA", "3.1.2": "AA", "3.2.3": "AA",
+    "3.2.4": "AA", "3.2.6": "AA", "3.3.3": "AA", "3.3.4": "AA",
+    "3.3.8": "AA", "4.1.3": "AA",
 }
 
 _SUGGESTED_FIX: Dict[str, str] = {
@@ -217,7 +290,6 @@ _SUGGESTED_FIX: Dict[str, str] = {
     "4.1.3": "Wrap status messages in a live region: <div role='status' aria-live='polite'>...</div>.",
 }
 
-# Python-auditor severity by WCAG SC
 _PYTHON_SEVERITY: Dict[str, str] = {
     "1.1.1": "critical",
     "2.2.2": "high",
@@ -228,13 +300,12 @@ _PYTHON_SEVERITY: Dict[str, str] = {
 }
 
 
-# ── Request / Response models ──────────────────────────────────────────────────
-
+# ── Request / Response models ────────────────────────────────────────────────────
 
 class CombinedRequest(BaseModel):
     url: HttpUrl
     max_depth: int = 0
-    wcag_level: str = "AA"   # "A" | "AA" | "AAA"
+    wcag_level: str = "AA"            # "A" | "AA" | "AAA"
     run_ocr: bool = True
     run_image_audit: bool = True
     run_form_audit: bool = True
@@ -245,20 +316,76 @@ class CombinedRequest(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str
-    status: str  # pending | running | completed | failed
+    status: str                        # pending | running | completed | failed
     url: str
     submitted_at: str
     completed_at: Optional[str] = None
     report_path: Optional[str] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    current_stage: Optional[str] = None
+    stages: List[Dict[str, Any]] = []
+    warnings: List[str] = []
 
 
-# ── Node caller ───────────────────────────────────────────────────────────────
+# ── SSE subscriber bus ───────────────────────────────────────────────────────────
 
+def _broadcast(job_id: str, event_type: str, data: Dict[str, Any]) -> None:
+    """Push an SSE event dict to every subscriber queue for this job."""
+    msg = {"event": event_type, "data": data}
+    for q in _subscribers.get(job_id, []):
+        q.put_nowait(msg)
+
+
+def _close_subscribers(job_id: str) -> None:
+    """Send sentinel None to all queues so their generators exit, then clean up."""
+    for q in _subscribers.get(job_id, []):
+        q.put_nowait(None)
+    _subscribers.pop(job_id, None)
+
+
+# ── Stage tracking helpers ───────────────────────────────────────────────────────
+
+def _stage_start(job_id: str, name: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    rec = {"name": name, "status": "running", "started_at": now}
+    job = _jobs[job_id]
+    job["current_stage"] = name
+    job.setdefault("stages", []).append(rec)
+    _broadcast(job_id, "stage_start", {"stage_name": name, "started_at": now})
+
+
+def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    for s in _jobs[job_id].get("stages", []):
+        if s["name"] == name and s["status"] == "running":
+            s.update(status="completed", completed_at=now, findings_count=findings_count)
+            break
+    _broadcast(job_id, "stage_complete", {
+        "stage_name": name, "completed_at": now, "findings_count": findings_count,
+    })
+
+
+def _stage_error(job_id: str, name: str, error: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    for s in _jobs[job_id].get("stages", []):
+        if s["name"] == name and s["status"] == "running":
+            s.update(status="error", completed_at=now, error=error)
+            break
+    _broadcast(job_id, "stage_error", {"stage_name": name, "error": error})
+
+
+def _stage_error_and_warn(job_id: str, name: str, exc: Exception) -> None:
+    """Record a non-fatal stage failure: update stages, broadcast, log a warning."""
+    msg = str(exc)
+    logger.warning(f"[combined] {name} stage error: {msg}")
+    _stage_error(job_id, name, msg)
+    _jobs[job_id].setdefault("warnings", []).append(f"{name}: {msg}")
+
+
+# ── WCAG level filter ────────────────────────────────────────────────────────────
 
 def _allowed_levels(wcag_level: str) -> set:
-    """Return the set of WCAG levels included at a given conformance target."""
     levels = {"A"}
     if wcag_level in ("AA", "AAA"):
         levels.add("AA")
@@ -267,12 +394,12 @@ def _allowed_levels(wcag_level: str) -> set:
     return levels
 
 
+# ── Node caller ──────────────────────────────────────────────────────────────────
+
 async def _call_node_flat(url: str, node_base_url: str, wcag_level: str = "AA") -> List[Dict]:
     """
     POST to Node's /api/v1/analyse-url-flat.
-    Returns a flat list of element-wise findings:
-      [{ source, rule_id, wcag_sc, criterion_name, level, severity,
-         status, reason, suggested_fix, help_url, element }, ...]
+    Returns a flat list of element-wise findings from axe-core.
     """
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
     async with httpx.AsyncClient(timeout=120.0) as client:
@@ -281,8 +408,7 @@ async def _call_node_flat(url: str, node_base_url: str, wcag_level: str = "AA") 
         return resp.json().get("findings", [])
 
 
-# ── Python pipeline → flat findings ───────────────────────────────────────────
-
+# ── Finding factory ──────────────────────────────────────────────────────────────
 
 def _make_finding(
     *,
@@ -297,65 +423,50 @@ def _make_finding(
     element_tag: Optional[str] = None,
     page_url: str = "",
 ) -> Dict[str, Any]:
+    is_pass = status == "pass"
     return {
         "source": source,
         "rule_id": rule_id,
         "wcag_sc": wcag_sc,
         "criterion_name": _WCAG_NAMES.get(wcag_sc),
         "level": _WCAG_LEVEL.get(wcag_sc),
-        "severity": severity if status != "pass" else None,
+        "severity": None if is_pass else severity,
         "status": status,
         "reason": reason,
-        "suggested_fix": _SUGGESTED_FIX.get(wcag_sc) if status != "pass" else None,
+        "suggested_fix": None if is_pass else _SUGGESTED_FIX.get(wcag_sc),
         "help_url": None,
-        "element": (
-            {
-                "html": element_html[:600],
-                "element_id": element_id,
-                "tag": element_tag,
-                "page_url": page_url,
-            }
-            if status != "pass"
-            else None
-        ),
+        "element": None if is_pass else {
+            "html": element_html[:600],
+            "element_id": element_id,
+            "tag": element_tag,
+            "page_url": page_url,
+        },
     }
 
+
+# ── Per-auditor finding converters ───────────────────────────────────────────────
+# Each converter maps raw auditor records → flat finding dicts.
+# Add a new converter here when adding a new Python rule (see HOW TO ADD A NEW RULE).
 
 def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
         status_raw = r.get("wcag_1_1_1_status", "")
-        violation = r.get("wcag_1_1_1_violation", "")
-        html = r.get("html_snippet", "")
-        src = r.get("src", "") or ""
-
         if status_raw == "FAILED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_1_1_1_alt",
-                    wcag_sc="1.1.1",
-                    status="fail",
-                    reason=violation or "Image missing adequate alt text.",
-                    severity=_PYTHON_SEVERITY["1.1.1"],
-                    element_html=html,
-                    element_id=None,
-                    element_tag="IMG",
-                    page_url=page_url,
-                )
-            )
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_1_1_alt", wcag_sc="1.1.1",
+                status="fail",
+                reason=r.get("wcag_1_1_1_violation") or "Image missing adequate alt text.",
+                severity=_PYTHON_SEVERITY["1.1.1"],
+                element_html=r.get("html_snippet", ""),
+                element_tag="IMG", page_url=page_url,
+            ))
         elif status_raw == "PASSED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_1_1_1_alt",
-                    wcag_sc="1.1.1",
-                    status="pass",
-                    reason="Image has adequate alt text.",
-                    severity=None,
-                    page_url=page_url,
-                )
-            )
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_1_1_alt", wcag_sc="1.1.1",
+                status="pass", reason="Image has adequate alt text.",
+                severity=None, page_url=page_url,
+            ))
     return findings
 
 
@@ -365,39 +476,23 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         html = r.get("html_snippet", "")
         tag = r.get("tag", "INPUT")
         eid = r.get("element_id") or r.get("element_name")
-
-        for sc, key in [("3.3.1", "wcag_3_3_1_status"), ("3.3.2", "wcag_3_3_2_status")]:
-            viol_key = key.replace("_status", "_violation")
-            status_raw = r.get(key, "")
-            violation = r.get(viol_key, "")
-
+        for sc, status_key in [("3.3.1", "wcag_3_3_1_status"), ("3.3.2", "wcag_3_3_2_status")]:
+            violation_key = status_key.replace("_status", "_violation")
+            status_raw = r.get(status_key, "")
+            rule_id = f"python_{sc.replace('.', '_')}"
             if status_raw == "FAILED":
-                findings.append(
-                    _make_finding(
-                        source="python",
-                        rule_id=f"python_{sc.replace('.','_')}",
-                        wcag_sc=sc,
-                        status="fail",
-                        reason=violation or f"Form field violates WCAG {sc}.",
-                        severity=_PYTHON_SEVERITY[sc],
-                        element_html=html,
-                        element_id=eid,
-                        element_tag=tag,
-                        page_url=page_url,
-                    )
-                )
+                findings.append(_make_finding(
+                    source="python", rule_id=rule_id, wcag_sc=sc, status="fail",
+                    reason=r.get(violation_key) or f"Form field violates WCAG {sc}.",
+                    severity=_PYTHON_SEVERITY[sc],
+                    element_html=html, element_id=eid, element_tag=tag, page_url=page_url,
+                ))
             elif status_raw == "PASSED":
-                findings.append(
-                    _make_finding(
-                        source="python",
-                        rule_id=f"python_{sc.replace('.','_')}",
-                        wcag_sc=sc,
-                        status="pass",
-                        reason=f"Form field meets WCAG {sc}.",
-                        severity=None,
-                        page_url=page_url,
-                    )
-                )
+                findings.append(_make_finding(
+                    source="python", rule_id=rule_id, wcag_sc=sc, status="pass",
+                    reason=f"Form field meets WCAG {sc}.",
+                    severity=None, page_url=page_url,
+                ))
     return findings
 
 
@@ -407,39 +502,22 @@ def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         status_raw = r.get("wcag_2_5_3_status", "")
         if status_raw == "N/A":
             continue
-        html = r.get("html_snippet", "")
-        eid = r.get("element_id") or None
-        tag = r.get("tag", "")
-        violation = r.get("wcag_2_5_3_violation", "")
-
         if status_raw == "FAILED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_2_5_3_label_in_name",
-                    wcag_sc="2.5.3",
-                    status="fail",
-                    reason=violation
-                    or "Accessible name does not contain visible label.",
-                    severity=_PYTHON_SEVERITY["2.5.3"],
-                    element_html=html,
-                    element_id=eid,
-                    element_tag=tag,
-                    page_url=page_url,
-                )
-            )
+            findings.append(_make_finding(
+                source="python", rule_id="python_2_5_3_label_in_name", wcag_sc="2.5.3",
+                status="fail",
+                reason=r.get("wcag_2_5_3_violation") or "Accessible name does not contain visible label.",
+                severity=_PYTHON_SEVERITY["2.5.3"],
+                element_html=r.get("html_snippet", ""),
+                element_id=r.get("element_id"),
+                element_tag=r.get("tag", ""), page_url=page_url,
+            ))
         elif status_raw == "PASSED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_2_5_3_label_in_name",
-                    wcag_sc="2.5.3",
-                    status="pass",
-                    reason="Accessible name contains the visible label.",
-                    severity=None,
-                    page_url=page_url,
-                )
-            )
+            findings.append(_make_finding(
+                source="python", rule_id="python_2_5_3_label_in_name", wcag_sc="2.5.3",
+                status="pass", reason="Accessible name contains the visible label.",
+                severity=None, page_url=page_url,
+            ))
     return findings
 
 
@@ -447,39 +525,22 @@ def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
         status_raw = r.get("wcag_2_2_2_status", "")
-        violation = r.get("wcag_2_2_2_violation", "")
-        html = r.get("html_snippet", "")
-        tag = r.get("tag", "")
-        eid = r.get("element_id") or None
-
         if status_raw == "FAILED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_2_2_2_pause_stop_hide",
-                    wcag_sc="2.2.2",
-                    status="fail",
-                    reason=violation
-                    or "Auto-playing content has no pause/stop mechanism.",
-                    severity=_PYTHON_SEVERITY["2.2.2"],
-                    element_html=html,
-                    element_id=eid,
-                    element_tag=tag,
-                    page_url=page_url,
-                )
-            )
+            findings.append(_make_finding(
+                source="python", rule_id="python_2_2_2_pause_stop_hide", wcag_sc="2.2.2",
+                status="fail",
+                reason=r.get("wcag_2_2_2_violation") or "Auto-playing content has no pause/stop mechanism.",
+                severity=_PYTHON_SEVERITY["2.2.2"],
+                element_html=r.get("html_snippet", ""),
+                element_id=r.get("element_id"),
+                element_tag=r.get("tag", ""), page_url=page_url,
+            ))
         elif status_raw == "PASSED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_2_2_2_pause_stop_hide",
-                    wcag_sc="2.2.2",
-                    status="pass",
-                    reason="Moving content has a pause/stop mechanism or exception applies.",
-                    severity=None,
-                    page_url=page_url,
-                )
-            )
+            findings.append(_make_finding(
+                source="python", rule_id="python_2_2_2_pause_stop_hide", wcag_sc="2.2.2",
+                status="pass", reason="Moving content has a pause/stop mechanism or exception applies.",
+                severity=None, page_url=page_url,
+            ))
     return findings
 
 
@@ -489,45 +550,31 @@ def _ts_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         status_raw = r.get("wcag_2_5_8_status", "")
         if status_raw == "N/A":
             continue
-        violation = r.get("wcag_2_5_8_violation", "")
-        html = r.get("html_snippet", "")
-        tag = r.get("tag", "")
-        eid = r.get("element_id") or None
         w = r.get("rendered_width_px", 0)
         h = r.get("rendered_height_px", 0)
-
         if status_raw == "FAILED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_2_5_8_target_size",
-                    wcag_sc="2.5.8",
-                    status="fail",
-                    reason=violation
-                    or f"Target size {w:.0f}×{h:.0f} px is below 24×24 px minimum.",
-                    severity=_PYTHON_SEVERITY["2.5.8"],
-                    element_html=html,
-                    element_id=eid,
-                    element_tag=tag,
-                    page_url=page_url,
-                )
-            )
+            findings.append(_make_finding(
+                source="python", rule_id="python_2_5_8_target_size", wcag_sc="2.5.8",
+                status="fail",
+                reason=r.get("wcag_2_5_8_violation") or f"Target size {w:.0f}×{h:.0f} px is below 24×24 px minimum.",
+                severity=_PYTHON_SEVERITY["2.5.8"],
+                element_html=r.get("html_snippet", ""),
+                element_id=r.get("element_id"),
+                element_tag=r.get("tag", ""), page_url=page_url,
+            ))
         elif status_raw == "PASSED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_2_5_8_target_size",
-                    wcag_sc="2.5.8",
-                    status="pass",
-                    reason=f"Target size {w:.0f}×{h:.0f} px meets the 24×24 px minimum.",
-                    severity=None,
-                    page_url=page_url,
-                )
-            )
+            findings.append(_make_finding(
+                source="python", rule_id="python_2_5_8_target_size", wcag_sc="2.5.8",
+                status="pass", reason=f"Target size {w:.0f}×{h:.0f} px meets the 24×24 px minimum.",
+                severity=None, page_url=page_url,
+            ))
     return findings
 
 
-async def _run_python_pipeline(
+# ── Python pipeline stages ───────────────────────────────────────────────────────
+
+async def _run_python_stages(
+    *,
     url: str,
     output_dir: Path,
     max_depth: int,
@@ -537,147 +584,161 @@ async def _run_python_pipeline(
     run_label_in_name_audit: bool,
     run_pause_stop_hide_audit: bool,
     run_target_size_audit: bool,
+    job_id: str,
 ) -> List[Dict[str, Any]]:
-    """Run all Python auditors; return flat element-wise findings list."""
+    """
+    Run all Python auditors sequentially with per-stage progress tracking.
+
+    Each stage is wrapped in try/except so a single failure does NOT abort
+    the remaining stages — graceful degradation is the default behaviour.
+    Returns a combined flat list of findings from all stages that succeeded.
+    """
     all_findings: List[Dict] = []
 
-    # ── 1.1.1 image / alt-text ────────────────────────────────────────────
-    image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
-    await image_crawler.crawl_page()
-    image_crawler.save_results()
+    # ── Stage: image_audit (WCAG 1.1.1) ──────────────────────────────────────
+    stage_findings: List[Dict] = []
+    _stage_start(job_id, "image_audit")
+    try:
+        image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
+        await image_crawler.crawl_page()
+        image_crawler.save_results()
 
-    ocr_results: list = []
-    if run_ocr:
-        detector = OCRPreprocessing(source_directory=image_crawler.output_dir)
-        detector.scan_directory()
-        saver = TextClassification(source_directory=image_crawler.output_dir)
-        saver.results = detector.results
-        saver.save_reports()
-        ocr_results = detector.results
+        ocr_results: list = []
+        if run_ocr:
+            detector = OCRPreprocessing(source_directory=image_crawler.output_dir)
+            detector.scan_directory()
+            saver = TextClassification(source_directory=image_crawler.output_dir)
+            saver.results = detector.results
+            saver.save_reports()
+            ocr_results = detector.results
 
-    if run_image_audit:
-        auditor = AltTextAccessibilityAuditor()
-        records = auditor.generate_audit_report(
-            images_data=image_crawler.images_data,
-            ocr_results=ocr_results,
-            output_dir=image_crawler.output_dir,
+        if run_image_audit:
+            auditor = AltTextAccessibilityAuditor()
+            records = auditor.generate_audit_report(
+                images_data=image_crawler.images_data,
+                ocr_results=ocr_results,
+                output_dir=image_crawler.output_dir,
+            )
+            stage_findings = _alt_text_to_findings(records, url)
+            all_findings.extend(stage_findings)
+
+        _stage_complete(job_id, "image_audit", len(stage_findings))
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "image_audit", _exc)
+
+    # ── Stage: form_audit (WCAG 3.3.1 / 3.3.2) ───────────────────────────────
+    stage_findings = []
+    _stage_start(job_id, "form_audit")
+    try:
+        form_crawler = AsyncFormCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
         )
-        all_findings.extend(_alt_text_to_findings(records, url))
+        form_inputs = await form_crawler.crawl()
+        form_crawler.save_raw_json()
 
-    # ── 3.3.1 / 3.3.2 form audit ──────────────────────────────────────────
-    form_crawler = AsyncFormCrawler(
-        base_url=url,
-        output_dir=str(output_dir),
-        max_depth=max_depth,
-    )
-    form_inputs = await form_crawler.crawl()
-    form_crawler.save_raw_json()
+        if run_form_audit:
+            form_auditor = FormAccessibilityAuditor(output_dir=str(output_dir))
+            records = form_auditor.generate_audit_report(form_inputs=form_inputs)
+            stage_findings = _form_to_findings(records, url)
+            all_findings.extend(stage_findings)
 
-    if run_form_audit:
-        form_auditor = FormAccessibilityAuditor(output_dir=str(output_dir))
-        records = form_auditor.generate_audit_report(form_inputs=form_inputs)
-        all_findings.extend(_form_to_findings(records, url))
+        _stage_complete(job_id, "form_audit", len(stage_findings))
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "form_audit", _exc)
 
-    # ── 2.5.3 label-in-name ───────────────────────────────────────────────
-    interactive_crawler = InteractiveElementCrawler(
-        base_url=url,
-        output_dir=str(output_dir),
-        max_depth=max_depth,
-    )
-    interactive_elements = await interactive_crawler.crawl()
-    interactive_crawler.save_raw_json()
+    # ── Stage: label_in_name (WCAG 2.5.3) ────────────────────────────────────
+    stage_findings = []
+    _stage_start(job_id, "label_in_name")
+    try:
+        interactive_crawler = InteractiveElementCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+        )
+        interactive_elements = await interactive_crawler.crawl()
+        interactive_crawler.save_raw_json()
 
-    if run_label_in_name_audit:
-        lin_auditor = LabelInNameAuditor(output_dir=str(output_dir))
-        records = lin_auditor.generate_audit_report(interactive_elements)
-        all_findings.extend(_lin_to_findings(records, url))
+        if run_label_in_name_audit:
+            lin_auditor = LabelInNameAuditor(output_dir=str(output_dir))
+            records = lin_auditor.generate_audit_report(interactive_elements)
+            stage_findings = _lin_to_findings(records, url)
+            all_findings.extend(stage_findings)
 
-    # ── 2.2.2 pause-stop-hide ─────────────────────────────────────────────
-    moving_crawler = MovingContentCrawler(
-        base_url=url,
-        output_dir=str(output_dir),
-        max_depth=max_depth,
-    )
-    moving_items = await moving_crawler.crawl()
-    moving_crawler.save_raw_json()
+        _stage_complete(job_id, "label_in_name", len(stage_findings))
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "label_in_name", _exc)
 
-    if run_pause_stop_hide_audit:
-        psh_auditor = PauseStopHideAuditor(output_dir=str(output_dir))
-        records = psh_auditor.generate_audit_report(moving_items)
-        all_findings.extend(_psh_to_findings(records, url))
+    # ── Stage: pause_stop_hide (WCAG 2.2.2) ──────────────────────────────────
+    stage_findings = []
+    _stage_start(job_id, "pause_stop_hide")
+    try:
+        moving_crawler = MovingContentCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+        )
+        moving_items = await moving_crawler.crawl()
+        moving_crawler.save_raw_json()
 
-    # ── 2.5.8 target size ─────────────────────────────────────────────────
-    ts_crawler = TargetSizeCrawler(
-        base_url=url,
-        output_dir=str(output_dir),
-        max_depth=max_depth,
-    )
-    ts_items = await ts_crawler.crawl()
-    ts_crawler.save_raw_json()
+        if run_pause_stop_hide_audit:
+            psh_auditor = PauseStopHideAuditor(output_dir=str(output_dir))
+            records = psh_auditor.generate_audit_report(moving_items)
+            stage_findings = _psh_to_findings(records, url)
+            all_findings.extend(stage_findings)
 
-    if run_target_size_audit:
-        ts_auditor = TargetSizeAuditor(output_dir=str(output_dir))
-        records = ts_auditor.generate_audit_report(ts_items)
-        all_findings.extend(_ts_to_findings(records, url))
+        _stage_complete(job_id, "pause_stop_hide", len(stage_findings))
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "pause_stop_hide", _exc)
+
+    # ── Stage: target_size (WCAG 2.5.8) ──────────────────────────────────────
+    stage_findings = []
+    _stage_start(job_id, "target_size")
+    try:
+        ts_crawler = TargetSizeCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+        )
+        ts_items = await ts_crawler.crawl()
+        ts_crawler.save_raw_json()
+
+        if run_target_size_audit:
+            ts_auditor = TargetSizeAuditor(output_dir=str(output_dir))
+            records = ts_auditor.generate_audit_report(ts_items)
+            stage_findings = _ts_to_findings(records, url)
+            all_findings.extend(stage_findings)
+
+        _stage_complete(job_id, "target_size", len(stage_findings))
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "target_size", _exc)
 
     return all_findings
 
 
-# ── Report builder ────────────────────────────────────────────────────────────
-
+# ── Report builder ───────────────────────────────────────────────────────────────
 
 def _build_report(url: str, all_findings: List[Dict]) -> Dict[str, Any]:
     """Merge axe + Python flat findings into the final combined report."""
-
-    violations = [f for f in all_findings if f["status"] == "fail"]
+    violations  = [f for f in all_findings if f["status"] == "fail"]
     needs_review = [f for f in all_findings if f["status"] == "needs_review"]
-    passes = [f for f in all_findings if f["status"] == "pass"]
+    passes      = [f for f in all_findings if f["status"] == "pass"]
 
-    # ── by_severity ──────────────────────────────────────────────────────
     sev_count: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     for f in violations + needs_review:
         sev = f.get("severity")
         if sev in sev_count:
             sev_count[sev] += 1
 
-    # ── by_level ─────────────────────────────────────────────────────────
     level_count: Dict[str, Dict] = {}
-    for f in all_findings:
-        lv = f.get("level") or "unknown"
-        if lv not in level_count:
-            level_count[lv] = {"violations": 0, "needs_review": 0, "passes": 0}
-        if f["status"] == "fail":
-            level_count[lv]["violations"] += 1
-        elif f["status"] == "needs_review":
-            level_count[lv]["needs_review"] += 1
-        else:
-            level_count[lv]["passes"] += 1
-
-    # ── by_wcag_sc ────────────────────────────────────────────────────────
     sc_count: Dict[str, Dict] = {}
-    for f in all_findings:
-        sc = f.get("wcag_sc") or "unknown"
-        if sc not in sc_count:
-            sc_count[sc] = {"violations": 0, "needs_review": 0, "passes": 0}
-        if f["status"] == "fail":
-            sc_count[sc]["violations"] += 1
-        elif f["status"] == "needs_review":
-            sc_count[sc]["needs_review"] += 1
-        else:
-            sc_count[sc]["passes"] += 1
-
-    # ── by_source ─────────────────────────────────────────────────────────
     src_count: Dict[str, Dict] = {}
+
     for f in all_findings:
-        src = f.get("source", "unknown")
-        if src not in src_count:
-            src_count[src] = {"violations": 0, "needs_review": 0, "passes": 0}
-        if f["status"] == "fail":
-            src_count[src]["violations"] += 1
-        elif f["status"] == "needs_review":
-            src_count[src]["needs_review"] += 1
-        else:
-            src_count[src]["passes"] += 1
+        for bucket, key in [(level_count, f.get("level") or "unknown"),
+                            (sc_count,    f.get("wcag_sc") or "unknown"),
+                            (src_count,   f.get("source", "unknown"))]:
+            if key not in bucket:
+                bucket[key] = {"violations": 0, "needs_review": 0, "passes": 0}
+            if f["status"] == "fail":
+                bucket[key]["violations"] += 1
+            elif f["status"] == "needs_review":
+                bucket[key]["needs_review"] += 1
+            else:
+                bucket[key]["passes"] += 1
 
     return {
         "url": url,
@@ -698,11 +759,18 @@ def _build_report(url: str, all_findings: List[Dict]) -> Dict[str, Any]:
     }
 
 
-# ── Async job runner ───────────────────────────────────────────────────────────
-
+# ── Async job runner ─────────────────────────────────────────────────────────────
 
 async def _run_job(job_id: str, payload: CombinedRequest) -> None:
-    """Background task: runs Python + Node concurrently, builds and saves report."""
+    """
+    Background task: run axe-core (Node) and Python stages in parallel.
+
+    Graceful degradation:
+    • Uses asyncio.gather(return_exceptions=True) so neither branch cancels the other.
+    • If axe-core fails → Python-only report with a warning entry.
+    • If a Python stage fails → other stages continue; warning entry added.
+    • Job fails ONLY when both axe-core AND all Python stages return nothing.
+    """
     _jobs[job_id]["status"] = "running"
     url = str(payload.url)
 
@@ -714,9 +782,13 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        node_task = asyncio.create_task(_call_node_flat(url, node_base_url, payload.wcag_level))
+        # Fire axe-core and all Python stages concurrently
+        _stage_start(job_id, "axe_core")
+        node_task = asyncio.create_task(
+            _call_node_flat(url, node_base_url, payload.wcag_level)
+        )
         python_task = asyncio.create_task(
-            _run_python_pipeline(
+            _run_python_stages(
                 url=url,
                 output_dir=output_dir,
                 max_depth=payload.max_depth,
@@ -726,10 +798,30 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
                 run_label_in_name_audit=payload.run_label_in_name_audit,
                 run_pause_stop_hide_audit=payload.run_pause_stop_hide_audit,
                 run_target_size_audit=payload.run_target_size_audit,
+                job_id=job_id,
             )
         )
 
-        node_findings, python_findings = await asyncio.gather(node_task, python_task)
+        node_result, python_result = await asyncio.gather(
+            node_task, python_task, return_exceptions=True
+        )
+
+        # ── Resolve axe-core result ───────────────────────────────────────────
+        if isinstance(node_result, Exception):
+            _stage_error_and_warn(job_id, "axe_core", node_result)
+            node_findings: List[Dict] = []
+        else:
+            node_findings = node_result
+            _stage_complete(job_id, "axe_core", len(node_findings))
+
+        # ── Resolve Python result ─────────────────────────────────────────────
+        python_findings: List[Dict] = [] if isinstance(python_result, Exception) else python_result
+
+        if not node_findings and not python_findings:
+            raise RuntimeError(
+                "All audit sources failed — no findings could be collected. "
+                "Check warnings for details."
+            )
 
         # Filter Python findings to the requested WCAG level
         allowed = _allowed_levels(payload.wcag_level)
@@ -738,27 +830,26 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
             if f.get("level") in allowed or f.get("level") is None
         ]
 
-        # Merge: violations first, then needs_review, then passes
         all_findings = node_findings + python_findings
         all_findings.sort(
             key=lambda f: {"fail": 0, "needs_review": 1, "pass": 2}.get(f["status"], 3)
         )
 
         report = _build_report(url, all_findings)
+        report["warnings"] = _jobs[job_id].get("warnings", [])
 
-        # Write combined_report.json
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=2, ensure_ascii=False)
 
-        _jobs[job_id].update(
-            {
-                "status": "completed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "report_path": str(report_path),
-                "result": report,
-            }
-        )
+        _jobs[job_id].update({
+            "status": "completed",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "report_path": str(report_path),
+            "result": report,
+            "current_stage": None,
+        })
+
         logger.info(
             f"[combined] job {job_id} completed — "
             f"{report['summary']['violations']} violations, "
@@ -767,19 +858,26 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
             f"report → {report_path}"
         )
 
+        _broadcast(job_id, "job_complete", {
+            "job_id": job_id,
+            "summary": report["summary"],
+        })
+
     except Exception as exc:
         logger.error(f"[combined] job {job_id} failed: {exc}")
-        _jobs[job_id].update(
-            {
-                "status": "failed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error": str(exc),
-            }
-        )
+        _jobs[job_id].update({
+            "status": "failed",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "error": str(exc),
+            "current_stage": None,
+        })
+        _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
+
+    finally:
+        _close_subscribers(job_id)
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
-
+# ── Routes ───────────────────────────────────────────────────────────────────────
 
 @router.post("/", response_model=JobStatusResponse, status_code=202)
 async def submit_combined_audit(payload: CombinedRequest):
@@ -787,22 +885,11 @@ async def submit_combined_audit(payload: CombinedRequest):
     Submit a combined Python + Node axe-core accessibility audit.
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
-    for status and the full report.
+    for status and the full report, or connect to
+    **GET /api/v1/combined/{job_id}/stream** for real-time SSE stage events.
 
-    **`result.violations`** — flat list of failing elements, each with:
-    - `source` ("axe" | "python"), `rule_id`, `wcag_sc`, `criterion_name`, `level`
-    - `severity` (critical / high / medium / low)
-    - `reason` — why the element failed
-    - `suggested_fix` — static remediation hint
-    - `element` — `{ html, element_id, tag, page_url }`
-
-    **`result.needs_review`** — same shape; manual verification required.
-
-    **`result.passes`** — rule-level (not element-level) passing checks.
-
-    **`result.summary`** — totals broken down by severity, level, WCAG SC, and source.
-
-    The full report is also saved as `combined_report.json` in the output directory.
+    **Graceful degradation**: if Node/axe-core is unavailable the job still
+    completes using Python-only findings; a `warnings` list notes the failure.
     """
     job_id = str(uuid.uuid4())
     url = str(payload.url)
@@ -817,6 +904,9 @@ async def submit_combined_audit(payload: CombinedRequest):
         "report_path": None,
         "result": None,
         "error": None,
+        "current_stage": None,
+        "stages": [],
+        "warnings": [],
     }
 
     asyncio.create_task(_run_job(job_id, payload))
@@ -830,11 +920,82 @@ async def get_combined_audit(job_id: str):
     Poll the status or retrieve the result of a combined audit job.
 
     - **pending**   — queued, not yet started
-    - **running**   — Python + Node auditors executing
-    - **completed** — `result` populated, `report_path` points to `combined_report.json`
-    - **failed**    — `error` contains the exception message
+    - **running**   — stages executing (`current_stage` shows active stage)
+    - **completed** — `result` populated; `warnings` lists any non-fatal failures
+    - **failed**    — `error` contains the root-cause message
     """
     job = _jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
     return job
+
+
+@router.get("/{job_id}/stream")
+async def stream_combined_audit(job_id: str):
+    """
+    Server-Sent Events stream for a combined audit job.
+
+    Connect immediately after submitting to receive real-time stage progress.
+    If the job has already completed or failed when you connect, a single
+    terminal event is sent and the stream closes.
+
+    Events: stage_start | stage_complete | stage_error | job_state |
+            job_complete | job_failed
+    Heartbeat: ': keepalive' comment lines every 25 s.
+    """
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+
+    q: asyncio.Queue = asyncio.Queue()
+    _subscribers.setdefault(job_id, []).append(q)
+
+    async def generator() -> AsyncGenerator[str, None]:
+        try:
+            current = _jobs.get(job_id, {})
+
+            # If job already finished, send the terminal event immediately
+            if current.get("status") == "completed":
+                result = current.get("result", {})
+                yield (
+                    f"event: job_complete\n"
+                    f"data: {json.dumps({'job_id': job_id, 'summary': result.get('summary', {})})}\n\n"
+                )
+                return
+            if current.get("status") == "failed":
+                yield (
+                    f"event: job_failed\n"
+                    f"data: {json.dumps({'job_id': job_id, 'error': current.get('error', '')})}\n\n"
+                )
+                return
+
+            # Send current running state for late-connecting clients
+            if current.get("current_stage") or current.get("stages"):
+                yield (
+                    f"event: job_state\n"
+                    f"data: {json.dumps({'current_stage': current.get('current_stage'), 'stages': current.get('stages', [])})}\n\n"
+                )
+
+            while True:
+                try:
+                    msg = await asyncio.wait_for(q.get(), timeout=25.0)
+                    if msg is None:          # sentinel — job reached terminal state
+                        break
+                    yield f"event: {msg['event']}\ndata: {json.dumps(msg['data'])}\n\n"
+                    if msg["event"] in ("job_complete", "job_failed"):
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"  # prevent proxy timeout
+        finally:
+            subs = _subscribers.get(job_id, [])
+            if q in subs:
+                subs.remove(q)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx output buffering for SSE
+        },
+    )

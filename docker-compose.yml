@@ -20,6 +20,7 @@ services:
     image: ka11y-node:latest
     container_name: ka11y-node
     restart: unless-stopped
+    shm_size: '256m'
 
     environment:
       NODE_ENV:       production

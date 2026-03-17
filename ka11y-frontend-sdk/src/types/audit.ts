@@ -33,6 +33,15 @@ export interface AuditPass {
   reason: string;
 }
 
+export interface StageInfo {
+  name: string;
+  status: "running" | "completed" | "error";
+  started_at: string;
+  completed_at?: string;
+  findings_count?: number;
+  error?: string;
+}
+
 export interface AuditResult {
   job_id: string;
   status: "pending" | "running" | "completed" | "failed";
@@ -46,6 +55,9 @@ export interface AuditResult {
   needs_review: AuditNeedsReview[];
   passes: AuditPass[];
   error?: string;
+  warnings?: string[];
+  current_stage?: string | null;
+  stages?: StageInfo[];
 }
 
 export interface AuditConfig {
