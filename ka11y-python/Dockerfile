@@ -37,7 +37,7 @@ RUN echo "==> [1/8] Updating apt package index..." && \
         git \
         ca-certificates \
         # --- OpenCV / EasyOCR runtime libs ---
-        libgl1-mesa-glx \
+        libgl1 \
         libglib2.0-0 \
         libsm6 \
         libxrender1 \
