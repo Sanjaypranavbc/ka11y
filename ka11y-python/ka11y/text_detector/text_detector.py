@@ -11,7 +11,7 @@ from typing import List, Optional
 from datetime import datetime
 import cv2
 from ka11y.preprocessor import extract_color
-from ka11y.accessibility.rules.non_text import contrast_analyzer
+from ka11y.accessibility.rules.non_text import contrast_analyser
 from ka11y.preprocessor.text_helper_models import (
     TextDetectionResult,
     TextDetectionReport,
@@ -101,7 +101,7 @@ class OCRPreprocessing:
     #                 clean_bbox = [(int(p[0]), int(p[1])) for p in bbox]
     #
     #                 try:
-    #                     contrast_info = contrast_analyzer.analyze_text_region(img, clean_bbox)
+    #                     contrast_info = contrast_analyser.analyze_text_region(img, clean_bbox)
     #                 except Exception as e:
     #                     logger.warning(f"Contrast analysis failed: {e}")
     #                     contrast_info = None
@@ -127,7 +127,7 @@ class OCRPreprocessing:
     #                             l1 = max(fg_lum, bg_lum)
     #                             l2 = min(fg_lum, bg_lum)
     #                             ratio = (l1 + 0.05) / (l2 + 0.05)
-    #                             compliance = contrast_analyzer.check_wcag_compliance(ratio)
+    #                             compliance = contrast_analyser.check_wcag_compliance(ratio)
     #                             color_info["contrast_checks"].append({
     #                                 "bg_color": bg,
     #                                 "ratio": round(ratio, 2),
@@ -197,7 +197,7 @@ class OCRPreprocessing:
                     clean_bbox = [(int(p[0]), int(p[1])) for p in bbox]
 
                     try:
-                        contrast_info = contrast_analyzer.analyze_text_region(
+                        contrast_info = contrast_analyser.analyze_text_region(
                             img, clean_bbox
                         )
                     except Exception as e:
@@ -230,7 +230,7 @@ class OCRPreprocessing:
                                     l2 = min(fg_lum, bg_lum)
                                     ratio = (l1 + 0.05) / (l2 + 0.05)
                                     compliance = (
-                                        contrast_analyzer.check_wcag_compliance(ratio)
+                                        contrast_analyser.check_wcag_compliance(ratio)
                                     )
                                     color_info["contrast_checks"].append(
                                         {
