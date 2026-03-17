@@ -35,26 +35,27 @@ from pydantic import BaseModel
 
 class TargetSizeData(BaseModel):
     """One interactive element record, consumed by TargetSizeAuditor."""
-    page_url:    str
+
+    page_url: str
     element_index: int
-    tag:         str                      # BUTTON | A | INPUT | DIV …
-    role:        Optional[str] = None
-    element_id:  Optional[str] = None
-    input_type:  Optional[str] = None
+    tag: str  # BUTTON | A | INPUT | DIV …
+    role: Optional[str] = None
+    element_id: Optional[str] = None
+    input_type: Optional[str] = None
     accessible_name: Optional[str] = None
 
     # Rendered dimensions (CSS px)
-    rendered_width_px:  float
+    rendered_width_px: float
     rendered_height_px: float
 
     # Computed CSS padding (CSS px)
-    padding_top_px:    float = 0.0
+    padding_top_px: float = 0.0
     padding_bottom_px: float = 0.0
-    padding_left_px:   float = 0.0
-    padding_right_px:  float = 0.0
+    padding_left_px: float = 0.0
+    padding_right_px: float = 0.0
 
     # WCAG 2.5.8 applicability exceptions (True = rule does not apply)
-    is_inline_exception:        bool = False
+    is_inline_exception: bool = False
     is_ua_controlled_exception: bool = False
 
     # Pre-computed pass/fail for size (width ≥ 24 AND height ≥ 24)
@@ -190,9 +191,9 @@ class TargetSizeCrawler:
     }"""
 
     def __init__(self, base_url: str, output_dir: str, max_depth: int = 0):
-        self.base_url   = base_url
+        self.base_url = base_url
         self.output_dir = Path(output_dir)
-        self.max_depth  = max_depth
+        self.max_depth = max_depth
         self.results: List[TargetSizeData] = []
         self.visited: set = set()
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -238,7 +239,10 @@ class TargetSizeCrawler:
                 )
                 base_netloc = urlparse(self.base_url).netloc
                 for href in links:
-                    if urlparse(href).netloc == base_netloc and href not in self.visited:
+                    if (
+                        urlparse(href).netloc == base_netloc
+                        and href not in self.visited
+                    ):
                         await self._crawl_page(context, href, depth + 1)
 
         except Exception as exc:

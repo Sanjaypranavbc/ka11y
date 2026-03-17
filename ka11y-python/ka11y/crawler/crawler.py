@@ -1025,6 +1025,7 @@ class AsyncImageCrawler:
         csv_path = f"{self.output_dir}/images_with_alt_text.csv"
 
         import csv as _csv
+
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             w = _csv.DictWriter(
                 f,
@@ -1066,10 +1067,12 @@ class AsyncImageCrawler:
                 )
 
         from rich.console import Console
+
         Console().print(
             f"  [dim]CSV  → {csv_path} ({len(self.images_data)} rows, "
             f"all images including decorative)[/dim]"
         )
 
         from ka11y.config.logger import setup_logger
+
         setup_logger(name="KAC", tag="crawler").info(f"CSV saved: {csv_path}")

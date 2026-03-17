@@ -260,6 +260,32 @@ class AccessibilityController {
    *               error: URL accessibility analysis failed
    *               message: net::ERR_NAME_NOT_RESOLVED
    */
+  async analyseUrlFlat(req, res) {
+    const { url } = req.body;
+
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'url field is required and must be a string' });
+    }
+
+    let parsedUrl;
+    try { parsedUrl = new URL(url); } catch {
+      return res.status(400).json({ error: 'url field must be a valid http or https URL' });
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return res.status(400).json({ error: 'url field must be a valid http or https URL' });
+    }
+
+    try {
+      this._logger.info(`analyseUrlFlat start url=${url}`);
+      const findings = await this._service.analyseUrlFlat(url);
+      this._logger.info(`analyseUrlFlat done findings=${findings.length}`);
+      res.json({ url, findings });
+    } catch (err) {
+      this._logger.error(`analyseUrlFlat failed: ${err.message}`);
+      res.status(500).json({ error: 'URL flat analysis failed', message: err.message });
+    }
+  }
+
   async analyseUrl(req, res) {
     const { url, successCriteriaId } = req.body;
 

@@ -43,17 +43,17 @@ from typing import Any, Dict, List, Tuple
 
 from ka11y.crawler.target_size_crawler import TargetSizeData
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-MIN_PX = 24.0   # WCAG 2.5.8 minimum
+MIN_PX = 24.0  # WCAG 2.5.8 minimum
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Check function
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _check_258(item: TargetSizeData) -> Tuple[str, str]:
     """
@@ -67,7 +67,10 @@ def _check_258(item: TargetSizeData) -> Tuple[str, str]:
     """
     # ── Exceptions: rule does not apply ────────────────────────────────────
     if item.is_inline_exception:
-        return "N/A", "Inline link exception — target size not required (WCAG 2.5.8 E1)."
+        return (
+            "N/A",
+            "Inline link exception — target size not required (WCAG 2.5.8 E1).",
+        )
 
     if item.is_ua_controlled_exception:
         return "N/A", (
@@ -100,6 +103,7 @@ def _check_258(item: TargetSizeData) -> Tuple[str, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Auditor
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TargetSizeAuditor:
     """
@@ -150,39 +154,40 @@ class TargetSizeAuditor:
         for item in items:
             status, violation = _check_258(item)
             record = {
-                "page_url":                  item.page_url,
-                "element_index":             item.element_index,
-                "tag":                       item.tag,
-                "role":                      item.role or "",
-                "element_id":               item.element_id or "",
-                "input_type":               item.input_type or "",
-                "accessible_name":          item.accessible_name or "",
-                "rendered_width_px":         item.rendered_width_px,
-                "rendered_height_px":        item.rendered_height_px,
-                "padding_top_px":           item.padding_top_px,
-                "padding_bottom_px":        item.padding_bottom_px,
-                "padding_left_px":          item.padding_left_px,
-                "padding_right_px":         item.padding_right_px,
-                "is_inline_exception":      item.is_inline_exception,
+                "page_url": item.page_url,
+                "element_index": item.element_index,
+                "tag": item.tag,
+                "role": item.role or "",
+                "element_id": item.element_id or "",
+                "input_type": item.input_type or "",
+                "accessible_name": item.accessible_name or "",
+                "rendered_width_px": item.rendered_width_px,
+                "rendered_height_px": item.rendered_height_px,
+                "padding_top_px": item.padding_top_px,
+                "padding_bottom_px": item.padding_bottom_px,
+                "padding_left_px": item.padding_left_px,
+                "padding_right_px": item.padding_right_px,
+                "is_inline_exception": item.is_inline_exception,
                 "is_ua_controlled_exception": item.is_ua_controlled_exception,
-                "passes_size":              item.passes_size,
-                "wcag_2_5_8_status":        status,
-                "wcag_2_5_8_violation":     violation,
+                "passes_size": item.passes_size,
+                "wcag_2_5_8_status": status,
+                "wcag_2_5_8_violation": violation,
                 "overall_status": (
-                    "FAILED" if status == "FAILED"
+                    "FAILED"
+                    if status == "FAILED"
                     else ("PASSED" if status == "PASSED" else "N/A")
                 ),
-                "html_snippet":             item.html_snippet[:400],
+                "html_snippet": item.html_snippet[:400],
             }
             records.append(record)
 
         # ── Summary counts ──────────────────────────────────────────────────
-        total   = len(records)
-        passed  = sum(1 for r in records if r["wcag_2_5_8_status"] == "PASSED")
-        failed  = sum(1 for r in records if r["wcag_2_5_8_status"] == "FAILED")
-        na      = sum(1 for r in records if r["wcag_2_5_8_status"] == "N/A")
+        total = len(records)
+        passed = sum(1 for r in records if r["wcag_2_5_8_status"] == "PASSED")
+        failed = sum(1 for r in records if r["wcag_2_5_8_status"] == "FAILED")
+        na = sum(1 for r in records if r["wcag_2_5_8_status"] == "N/A")
         checked = passed + failed
-        rate    = round(passed / checked * 100, 1) if checked else 0
+        rate = round(passed / checked * 100, 1) if checked else 0
 
         by_tag: Dict[str, Dict[str, int]] = {}
         for r in records:
@@ -195,17 +200,19 @@ class TargetSizeAuditor:
 
         # ── Summary row ─────────────────────────────────────────────────────
         summary = {field: "" for field in self.CSV_FIELDS}
-        summary.update({
-            "page_url":          "── SUMMARY ──",
-            "tag":               f"Total elements          : {total}",
-            "role":              f"Checked (N/A excluded)  : {checked}",
-            "element_id":        f"PASSED (≥ 24×24 px)     : {passed}",
-            "input_type":        f"FAILED (< 24×24 px)     : {failed}",
-            "accessible_name":   f"N/A (exception)         : {na}",
-            "rendered_width_px": f"Pass rate               : {rate}%",
-            "wcag_2_5_8_status": "PASSED" if failed == 0 else "FAILED",
-            "overall_status":    "PASSED" if failed == 0 else "FAILED",
-        })
+        summary.update(
+            {
+                "page_url": "── SUMMARY ──",
+                "tag": f"Total elements          : {total}",
+                "role": f"Checked (N/A excluded)  : {checked}",
+                "element_id": f"PASSED (≥ 24×24 px)     : {passed}",
+                "input_type": f"FAILED (< 24×24 px)     : {failed}",
+                "accessible_name": f"N/A (exception)         : {na}",
+                "rendered_width_px": f"Pass rate               : {rate}%",
+                "wcag_2_5_8_status": "PASSED" if failed == 0 else "FAILED",
+                "overall_status": "PASSED" if failed == 0 else "FAILED",
+            }
+        )
 
         # ── Write CSV ────────────────────────────────────────────────────────
         csv_path = self.output_dir / "audit_target_size_report.csv"
@@ -229,9 +236,9 @@ class TargetSizeAuditor:
 
     @staticmethod
     def summarize(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-        passed  = sum(1 for r in records if r["wcag_2_5_8_status"] == "PASSED")
-        failed  = sum(1 for r in records if r["wcag_2_5_8_status"] == "FAILED")
-        na      = sum(1 for r in records if r["wcag_2_5_8_status"] == "N/A")
+        passed = sum(1 for r in records if r["wcag_2_5_8_status"] == "PASSED")
+        failed = sum(1 for r in records if r["wcag_2_5_8_status"] == "FAILED")
+        na = sum(1 for r in records if r["wcag_2_5_8_status"] == "N/A")
         checked = passed + failed
 
         failed_by_tag: Dict[str, int] = {}
@@ -241,12 +248,12 @@ class TargetSizeAuditor:
                 failed_by_tag[t] = failed_by_tag.get(t, 0) + 1
 
         return {
-            "total_elements":    len(records),
-            "checked":           checked,
-            "passed":            passed,
-            "failed":            failed,
-            "na":                na,
-            "pass_rate_pct":     round(passed / checked * 100, 1) if checked else 0,
+            "total_elements": len(records),
+            "checked": checked,
+            "passed": passed,
+            "failed": failed,
+            "na": na,
+            "pass_rate_pct": round(passed / checked * 100, 1) if checked else 0,
             "wcag_2_5_8_failed": failed,
-            "failed_by_tag":     failed_by_tag,
+            "failed_by_tag": failed_by_tag,
         }

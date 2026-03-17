@@ -1,6 +1,6 @@
 'use strict';
 
-const { mapResults } = require('../utils/axeResultMapper');
+const { mapResults, mapResultsFlat } = require('../utils/axeResultMapper');
 
 /**
  * AccessibilityService — SRP: orchestrates a single Puppeteer + axe analysis run.
@@ -144,6 +144,69 @@ class AccessibilityService {
       if (browser) {
         await browser.close();
         this._logger.info('Browser closed.');
+      }
+    }
+  }
+
+  /**
+   * Like analyseUrl but returns a flat, element-wise findings array
+   * (one entry per failing/incomplete element, one per passing rule).
+   *
+   * @param {string} url - Fully-qualified URL
+   * @returns {Promise<Array<object>>} Flat findings array
+   */
+  async analyseUrlFlat(url) {
+    const { timeoutMs, runOnly } = this._config.axe;
+    let browser = null;
+
+    try {
+      this._logger.info(`[flat] Launching browser for URL: ${url}`);
+      browser = await this._puppeteer.launch({
+        headless: this._config.browser.headless,
+        args:     this._config.browser.args,
+      });
+
+      const page = await browser.newPage();
+      page.setDefaultTimeout(timeoutMs);
+      page.setDefaultNavigationTimeout(timeoutMs);
+
+      page.on('console', (msg) => {
+        if (msg.type() === 'error') {
+          this._logger.debug(`Browser console [${msg.type()}]: ${msg.text()}`);
+        }
+      });
+
+      this._logger.info(`[flat] Navigating to ${url}...`);
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+
+      this._logger.info('[flat] Injecting axe-core...');
+      await page.addScriptTag({ path: this._axeCorePath });
+
+      this._logger.info('[flat] Running axe.run()...');
+      const axeResults = await page.evaluate((runOptions) => {
+        return new Promise((resolve, reject) => {
+          // eslint-disable-next-line no-undef
+          axe.run(document, runOptions, (err, results) => {
+            if (err) reject(err);
+            else resolve(results);
+          });
+        });
+      }, runOnly);
+
+      this._logger.info(
+        `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +
+        `passes: ${axeResults.passes.length}, ` +
+        `incomplete: ${(axeResults.incomplete || []).length}`
+      );
+
+      return mapResultsFlat(axeResults, url);
+    } catch (err) {
+      this._logger.error(`[flat] Error: ${err.message}`);
+      throw err;
+    } finally {
+      if (browser) {
+        await browser.close();
+        this._logger.info('[flat] Browser closed.');
       }
     }
   }

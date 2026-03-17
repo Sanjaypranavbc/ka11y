@@ -29,12 +29,18 @@ from ka11y.crawler.moving_content_crawler import MovingContentCrawler
 from ka11y.crawler.target_size_crawler import TargetSizeCrawler
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
-from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import LabelInNameAuditor
-from ka11y.accessibility.rules.input_modalities.target_size_auditor import TargetSizeAuditor
-from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import PauseStopHideAuditor
-
+from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
+    LabelInNameAuditor,
+)
+from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
+    TargetSizeAuditor,
+)
+from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
+    PauseStopHideAuditor,
+)
 
 # ── 1. Config ─────────────────────────────────────────────────────────────────
+
 
 @lru_cache(maxsize=1)
 def get_config() -> dict:
@@ -43,6 +49,7 @@ def get_config() -> dict:
 
 
 # ── 2. Output directory ───────────────────────────────────────────────────────
+
 
 def get_output_dir(
     url: str,
@@ -56,14 +63,15 @@ def get_output_dir(
     share the exact same directory when composed in a single request.
     """
     base_out = config["input"]["output_dir"]
-    domain   = urlparse(url).netloc.replace("www.", "").replace(".", "_")
-    ts       = time.strftime("%m%d_%H%M")
-    path     = Path(f"{base_out}/{domain}_{ts}")
+    domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
+    ts = time.strftime("%m%d_%H%M")
+    path = Path(f"{base_out}/{domain}_{ts}")
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 # ── 3. Crawlers ───────────────────────────────────────────────────────────────
+
 
 def get_image_crawler(
     url: str,
@@ -88,6 +96,7 @@ def get_form_crawler(
 
 
 # ── 4. Auditors ───────────────────────────────────────────────────────────────
+
 
 def get_alt_text_auditor() -> AltTextAccessibilityAuditor:
     """AltTextAccessibilityAuditor is stateless — new instance per request."""

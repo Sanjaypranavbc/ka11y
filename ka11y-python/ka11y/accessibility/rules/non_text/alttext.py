@@ -46,37 +46,145 @@ logger = setup_logger(name="KAC", tag="audit")
 # ---------------------------------------------------------------------------
 
 _EMPTY_OR_GENERIC: set[str] = {
-    "", "image", "img", "photo", "picture", "graphic", "figure", "icon",
-    "untitled", "placeholder", "null", "none", "n/a", "na",
-    "image of", "photo of", "picture of", "graphic of",
-    "spacer", "decoration", "decorative",
+    "",
+    "image",
+    "img",
+    "photo",
+    "picture",
+    "graphic",
+    "figure",
+    "icon",
+    "untitled",
+    "placeholder",
+    "null",
+    "none",
+    "n/a",
+    "na",
+    "image of",
+    "photo of",
+    "picture of",
+    "graphic of",
+    "spacer",
+    "decoration",
+    "decorative",
 }
 
 # Social/brand icon names — must be paired with "icon" to be acceptable
 _SOCIAL_BRAND_NAMES: set[str] = {
-    "facebook", "twitter", "x", "instagram", "youtube", "linkedin",
-    "tiktok", "pinterest", "snapchat", "whatsapp", "telegram", "line",
-    "wechat", "note", "github", "gitlab", "reddit", "threads",
+    "facebook",
+    "twitter",
+    "x",
+    "instagram",
+    "youtube",
+    "linkedin",
+    "tiktok",
+    "pinterest",
+    "snapchat",
+    "whatsapp",
+    "telegram",
+    "line",
+    "wechat",
+    "note",
+    "github",
+    "gitlab",
+    "reddit",
+    "threads",
 }
 
 # Acceptable action/purpose words for buttons
 _BUTTON_ACTION_WORDS: set[str] = {
-    "menu", "close", "open", "search", "back", "forward", "next", "prev",
-    "previous", "submit", "send", "cancel", "confirm", "ok", "yes", "no",
-    "save", "delete", "edit", "add", "remove", "upload", "download",
-    "share", "print", "copy", "paste", "cut", "undo", "redo", "refresh",
-    "reload", "home", "settings", "help", "info", "more", "less",
-    "expand", "collapse", "toggle", "play", "pause", "stop", "mute",
-    "unmute", "fullscreen", "exit fullscreen", "zoom in", "zoom out",
-    "like", "dislike", "comment", "reply", "follow", "unfollow",
-    "subscribe", "unsubscribe", "login", "logout", "sign in", "sign out",
-    "sign up", "register", "checkout", "cart", "bag", "wishlist",
-    "filter", "sort", "view", "hide", "show", "skip", "navigate",
-    "go to", "load more", "read more", "see more", "see all",
-    "cookies settings", "accept all cookies", "reject all", "accept cookies",
-    "decline cookies", "manage cookies", "cookie preferences",
-    "previous slide", "next slide", "go to slide",
-    "new window", "opens in new tab",
+    "menu",
+    "close",
+    "open",
+    "search",
+    "back",
+    "forward",
+    "next",
+    "prev",
+    "previous",
+    "submit",
+    "send",
+    "cancel",
+    "confirm",
+    "ok",
+    "yes",
+    "no",
+    "save",
+    "delete",
+    "edit",
+    "add",
+    "remove",
+    "upload",
+    "download",
+    "share",
+    "print",
+    "copy",
+    "paste",
+    "cut",
+    "undo",
+    "redo",
+    "refresh",
+    "reload",
+    "home",
+    "settings",
+    "help",
+    "info",
+    "more",
+    "less",
+    "expand",
+    "collapse",
+    "toggle",
+    "play",
+    "pause",
+    "stop",
+    "mute",
+    "unmute",
+    "fullscreen",
+    "exit fullscreen",
+    "zoom in",
+    "zoom out",
+    "like",
+    "dislike",
+    "comment",
+    "reply",
+    "follow",
+    "unfollow",
+    "subscribe",
+    "unsubscribe",
+    "login",
+    "logout",
+    "sign in",
+    "sign out",
+    "sign up",
+    "register",
+    "checkout",
+    "cart",
+    "bag",
+    "wishlist",
+    "filter",
+    "sort",
+    "view",
+    "hide",
+    "show",
+    "skip",
+    "navigate",
+    "go to",
+    "load more",
+    "read more",
+    "see more",
+    "see all",
+    "cookies settings",
+    "accept all cookies",
+    "reject all",
+    "accept cookies",
+    "decline cookies",
+    "manage cookies",
+    "cookie preferences",
+    "previous slide",
+    "next slide",
+    "go to slide",
+    "new window",
+    "opens in new tab",
 }
 
 # Report CSV columns (order preserved)
@@ -108,6 +216,7 @@ _REPORT_COLUMNS = [
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _norm(text: str) -> str:
     """Lowercase, strip punctuation, collapse whitespace."""
@@ -143,6 +252,7 @@ def _ocr_for_file(
 # WCAG 1.1.1 checks
 # ---------------------------------------------------------------------------
 
+
 def _check_1_1_1_decorative(alt: str) -> tuple[bool, str]:
     """Decorative images MUST have alt='' (empty string)."""
     if alt == "" or _is_empty(alt):
@@ -162,9 +272,7 @@ def _check_1_1_1_missing_alt(sub_type: str) -> tuple[bool, str]:
     )
 
 
-def _check_1_1_1_informative(
-    alt: str, detected_texts: list[str]
-) -> tuple[bool, str]:
+def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool, str]:
     """
     Informative: alt must convey visible text detected by OCR.
     At least one OCR word (>=3 chars) must appear in the alt text.
@@ -264,7 +372,10 @@ def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
 
     matched = [w for w in norm.split() if w in _BUTTON_ACTION_WORDS]
     if matched:
-        return True, f"PASS [1.1.1] Button alt contains action word(s) {matched}: '{alt}'"
+        return (
+            True,
+            f"PASS [1.1.1] Button alt contains action word(s) {matched}: '{alt}'",
+        )
 
     if len(norm) >= 2 and not norm.isdigit():
         return (
@@ -280,9 +391,8 @@ def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
 # WCAG 4.1.2 check
 # ---------------------------------------------------------------------------
 
-def _check_4_1_2(
-    alt: str, sub_type: str
-) -> tuple[bool, str]:
+
+def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
     """
     WCAG 4.1.2: functional image must have a programmatically determinable
     accessible name. Uses alt (aria-label/title resolution already happened
@@ -324,6 +434,7 @@ def _check_4_1_2(
 # Main auditor class
 # ---------------------------------------------------------------------------
 
+
 class AltTextAccessibilityAuditor:
     """
     Merges ImageData (crawler + classifier) with TextDetectionResult (OCR)
@@ -332,8 +443,8 @@ class AltTextAccessibilityAuditor:
 
     def generate_audit_report(
         self,
-        images_data: list,          # List[ImageData]
-        ocr_results: list,          # List[TextDetectionResult]
+        images_data: list,  # List[ImageData]
+        ocr_results: list,  # List[TextDetectionResult]
         output_dir: str,
     ) -> list[dict]:
         """
@@ -356,18 +467,18 @@ class AltTextAccessibilityAuditor:
 
         for img in images_data:
             # ── Pull fields from ImageData ───────────────────────────────
-            filename       = str(img.filename or "")
-            src            = str(img.src or "")
-            url            = str(img.url or "")
-            alt_text       = img.alt_text if img.alt_text is not None else ""
-            title          = str(img.title or "")
+            filename = str(img.filename or "")
+            src = str(img.src or "")
+            url = str(img.url or "")
+            alt_text = img.alt_text if img.alt_text is not None else ""
+            title = str(img.title or "")
             classification = str(img.classification or "").strip().lower()
-            sub_type       = str(img.sub_type or "").strip().lower()
-            is_logo        = bool(img.is_logo)
-            is_icon        = bool(img.is_icon)
-            is_button      = bool(img.is_button)
-            is_functional  = bool(img.is_functional)
-            is_decorative  = bool(img.is_decorative)
+            sub_type = str(img.sub_type or "").strip().lower()
+            is_logo = bool(img.is_logo)
+            is_icon = bool(img.is_icon)
+            is_button = bool(img.is_button)
+            is_functional = bool(img.is_functional)
+            is_decorative = bool(img.is_decorative)
             screenshot_path = str(img.screenshot_path or "")
 
             # ── OCR lookup by filename ───────────────────────────────────
@@ -388,7 +499,7 @@ class AltTextAccessibilityAuditor:
                     sub_type = "icons"
 
             # ── WCAG checks ──────────────────────────────────────────────
-            wcag_4_1_2_pass   = None
+            wcag_4_1_2_pass = None
             wcag_4_1_2_reason = "N/A — not a functional image"
 
             # Handle missing_alt as a special decorative sub-type
@@ -398,9 +509,7 @@ class AltTextAccessibilityAuditor:
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(sub_type)
 
             elif classification == "decorative":
-                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(
-                    alt_text
-                )
+                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(alt_text)
 
             elif classification == "informative":
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_informative(
@@ -413,26 +522,26 @@ class AltTextAccessibilityAuditor:
                 elif sub_type == "icons":
                     wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_icon(alt_text)
                 else:  # buttons / images
-                    wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_button(
-                        alt_text
-                    )
+                    wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_button(alt_text)
 
-                wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(
-                    alt_text, sub_type
-                )
+                wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(alt_text, sub_type)
 
             elif classification == "complex":
                 # Complex images need long descriptions; check alt is non-empty
-                wcag_1_1_1_pass = bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
+                wcag_1_1_1_pass = (
+                    bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
+                )
                 wcag_1_1_1_reason = (
                     f"PASS [1.1.1] Complex image has alt: '{alt_text}'"
                     if wcag_1_1_1_pass
                     else "FAIL [1.1.1] Complex image (chart/diagram) must have "
-                         "a meaningful alt or long description"
+                    "a meaningful alt or long description"
                 )
 
             else:
-                wcag_1_1_1_pass = bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
+                wcag_1_1_1_pass = (
+                    bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
+                )
                 wcag_1_1_1_reason = (
                     f"PASS [1.1.1] Alt is non-empty: '{alt_text}'"
                     if wcag_1_1_1_pass
@@ -445,33 +554,35 @@ class AltTextAccessibilityAuditor:
                 checks.append(wcag_4_1_2_pass)
             overall = "PASSED" if all(checks) else "FAILED"
 
-            records.append({
-                "filename":                 filename,
-                "src":                      src,
-                "url":                      url,
-                "classification":           classification,
-                "sub_type":                 sub_type,
-                "is_logo":                  is_logo,
-                "is_icon":                  is_icon,
-                "is_button":                is_button,
-                "is_functional":            is_functional,
-                "is_decorative":            is_decorative,
-                "alt_text":                 alt_text,
-                "title":                    title,
-                "has_ocr_text":             has_ocr_text,
-                "detected_text":            detected_joined,
-                "contrast_violations_count": contrast_count,
-                "wcag_1_1_1_status":        "PASSED" if wcag_1_1_1_pass else "FAILED",
-                "wcag_4_1_2_status": (
-                    "PASSED" if wcag_4_1_2_pass is True
-                    else "FAILED" if wcag_4_1_2_pass is False
-                    else "N/A"
-                ),
-                "overall_status":           overall,
-                "wcag_1_1_1_reason":        wcag_1_1_1_reason,
-                "wcag_4_1_2_reason":        wcag_4_1_2_reason,
-                "screenshot_path":          screenshot_path,
-            })
+            records.append(
+                {
+                    "filename": filename,
+                    "src": src,
+                    "url": url,
+                    "classification": classification,
+                    "sub_type": sub_type,
+                    "is_logo": is_logo,
+                    "is_icon": is_icon,
+                    "is_button": is_button,
+                    "is_functional": is_functional,
+                    "is_decorative": is_decorative,
+                    "alt_text": alt_text,
+                    "title": title,
+                    "has_ocr_text": has_ocr_text,
+                    "detected_text": detected_joined,
+                    "contrast_violations_count": contrast_count,
+                    "wcag_1_1_1_status": "PASSED" if wcag_1_1_1_pass else "FAILED",
+                    "wcag_4_1_2_status": (
+                        "PASSED"
+                        if wcag_4_1_2_pass is True
+                        else "FAILED" if wcag_4_1_2_pass is False else "N/A"
+                    ),
+                    "overall_status": overall,
+                    "wcag_1_1_1_reason": wcag_1_1_1_reason,
+                    "wcag_4_1_2_reason": wcag_4_1_2_reason,
+                    "screenshot_path": screenshot_path,
+                }
+            )
 
         # ── Save CSV ─────────────────────────────────────────────────────
         report_path = str(Path(output_dir) / "audit_report.csv")
@@ -488,9 +599,9 @@ class AltTextAccessibilityAuditor:
     # ── Summary printer ──────────────────────────────────────────────────────
 
     def _print_summary(self, records: list[dict], report_path: str):
-        total   = len(records)
-        passed  = sum(1 for r in records if r["overall_status"] == "PASSED")
-        failed  = sum(1 for r in records if r["overall_status"] == "FAILED")
+        total = len(records)
+        passed = sum(1 for r in records if r["overall_status"] == "PASSED")
+        failed = sum(1 for r in records if r["overall_status"] == "FAILED")
 
         sep = "=" * 70
         print(f"\n{sep}")
@@ -499,8 +610,16 @@ class AltTextAccessibilityAuditor:
         print(f"  Report    : {report_path}")
         print(sep)
         print(f"  Total images audited : {total}")
-        print(f"  PASSED               : {passed}  ({passed/total*100:.1f}%)" if total else "  No images.")
-        print(f"  FAILED               : {failed}  ({failed/total*100:.1f}%)" if total else "")
+        print(
+            f"  PASSED               : {passed}  ({passed/total*100:.1f}%)"
+            if total
+            else "  No images."
+        )
+        print(
+            f"  FAILED               : {failed}  ({failed/total*100:.1f}%)"
+            if total
+            else ""
+        )
         print()
 
         # Per-criterion
@@ -511,21 +630,24 @@ class AltTextAccessibilityAuditor:
         p412 = sum(1 for r in wcag_412 if r["wcag_4_1_2_status"] == "PASSED")
         f412 = sum(1 for r in wcag_412 if r["wcag_4_1_2_status"] == "FAILED")
 
-        print(f"  WCAG 1.1.1 (Non-text Content) : {p111} PASSED / {f111} FAILED ({len(wcag_111)} applicable)")
-        print(f"  WCAG 4.1.2 (Name/Role/Value)  : {p412} PASSED / {f412} FAILED ({len(wcag_412)} applicable)")
+        print(
+            f"  WCAG 1.1.1 (Non-text Content) : {p111} PASSED / {f111} FAILED ({len(wcag_111)} applicable)"
+        )
+        print(
+            f"  WCAG 4.1.2 (Name/Role/Value)  : {p412} PASSED / {f412} FAILED ({len(wcag_412)} applicable)"
+        )
         print()
 
         # By classification
         from collections import Counter
+
         cls_pass = Counter(
             r["classification"] for r in records if r["overall_status"] == "PASSED"
         )
         cls_fail = Counter(
             r["classification"] for r in records if r["overall_status"] == "FAILED"
         )
-        all_cls = sorted(
-            set(list(cls_pass.keys()) + list(cls_fail.keys()))
-        )
+        all_cls = sorted(set(list(cls_pass.keys()) + list(cls_fail.keys())))
         print("  By classification:")
         print(f"  {'Classification':<20} {'PASSED':>8} {'FAILED':>8} {'TOTAL':>8}")
         print(f"  {'-'*46}")
@@ -546,7 +668,9 @@ class AltTextAccessibilityAuditor:
         failed_rows = [r for r in records if r["overall_status"] == "FAILED"]
         if failed_rows:
             print("  Failed images:")
-            print(f"  {'Filename':<35} {'Classification':<15} {'Sub-type':<12} {'Alt text':<25} {'1.1.1':>6} {'4.1.2':>6}")
+            print(
+                f"  {'Filename':<35} {'Classification':<15} {'Sub-type':<12} {'Alt text':<25} {'1.1.1':>6} {'4.1.2':>6}"
+            )
             print(f"  {'-'*105}")
             for r in failed_rows:
                 alt_preview = (r["alt_text"] or "")[:24]

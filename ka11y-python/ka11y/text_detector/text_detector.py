@@ -477,18 +477,20 @@ class TextClassification:
         with open(output_path, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
 
-            writer.writerow([
-                "Image",
-                "Image Path",
-                "Text",
-                "Foreground Color",
-                "Background Color",
-                "Contrast Ratio",
-                "AA Normal",
-                "AA Large",
-                "AAA Normal",
-                "AAA Large"
-            ])
+            writer.writerow(
+                [
+                    "Image",
+                    "Image Path",
+                    "Text",
+                    "Foreground Color",
+                    "Background Color",
+                    "Contrast Ratio",
+                    "AA Normal",
+                    "AA Large",
+                    "AAA Normal",
+                    "AAA Large",
+                ]
+            )
 
             for result in self.results:
                 for det in result.detections:
@@ -500,18 +502,20 @@ class TextClassification:
                             ratio = check["ratio"]
                             comp = check["compliance"]
 
-                            writer.writerow([
-                                result.filename,
-                                result.original_path,  # ← added
-                                det.text,
-                                fg,
-                                bg,
-                                ratio,
-                                comp["AA_normal"],
-                                comp["AA_large"],
-                                comp["AAA_normal"],
-                                comp["AAA_large"],
-                            ])
+                            writer.writerow(
+                                [
+                                    result.filename,
+                                    result.original_path,  # ← added
+                                    det.text,
+                                    fg,
+                                    bg,
+                                    ratio,
+                                    comp["AA_normal"],
+                                    comp["AA_large"],
+                                    comp["AAA_normal"],
+                                    comp["AAA_large"],
+                                ]
+                            )
 
     def _generate_contrast_json(self, output_path):
         """Generate JSON report only for contrast analysis"""
@@ -521,15 +525,19 @@ class TextClassification:
         for result in self.results:
             for det in result.detections:
                 if det.color_info:
-                    contrast_data.append({
-                        "image": result.filename,
-                        "image_path": result.original_path,  # ← added
-                        "text": det.text,
-                        "foreground": det.color_info.get("foreground"),
-                        "background_palette": det.color_info.get("background_palette"),
-                        "contrast_checks": det.color_info.get("contrast_checks"),
-                        "wcag_violations": det.wcag_violations
-                    })
+                    contrast_data.append(
+                        {
+                            "image": result.filename,
+                            "image_path": result.original_path,  # ← added
+                            "text": det.text,
+                            "foreground": det.color_info.get("foreground"),
+                            "background_palette": det.color_info.get(
+                                "background_palette"
+                            ),
+                            "contrast_checks": det.color_info.get("contrast_checks"),
+                            "wcag_violations": det.wcag_violations,
+                        }
+                    )
 
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(contrast_data, f, indent=2)

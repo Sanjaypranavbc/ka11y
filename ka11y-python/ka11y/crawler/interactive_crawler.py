@@ -23,13 +23,14 @@ from pydantic import BaseModel
 
 class InteractiveElementData(BaseModel):
     """One interactive element record, consumed by LabelInNameAuditor."""
+
     page_url: str
     element_index: int
-    tag: str                                     # BUTTON | A | INPUT | DIV …
-    role: Optional[str] = None                   # explicit ARIA role (if present)
+    tag: str  # BUTTON | A | INPUT | DIV …
+    role: Optional[str] = None  # explicit ARIA role (if present)
     element_id: Optional[str] = None
     element_name: Optional[str] = None
-    input_type: Optional[str] = None             # submit | button | reset | image
+    input_type: Optional[str] = None  # submit | button | reset | image
 
     # Visible text rendered on screen (what sighted users see)
     visible_label: Optional[str] = None
@@ -37,10 +38,10 @@ class InteractiveElementData(BaseModel):
     # Accessible-name computation inputs
     aria_label: Optional[str] = None
     aria_labelledby: Optional[str] = None
-    aria_labelledby_text: Optional[str] = None   # resolved text from aria-labelledby IDs
+    aria_labelledby_text: Optional[str] = None  # resolved text from aria-labelledby IDs
     title_attr: Optional[str] = None
-    value_attr: Optional[str] = None             # for <input type="submit|button|reset">
-    alt_attr: Optional[str] = None               # for <input type="image">
+    value_attr: Optional[str] = None  # for <input type="submit|button|reset">
+    alt_attr: Optional[str] = None  # for <input type="image">
 
     # Final computed accessible name (AccName-1.1 approximation)
     accessible_name: Optional[str] = None
@@ -221,9 +222,9 @@ class InteractiveElementCrawler:
     }"""
 
     def __init__(self, base_url: str, output_dir: str, max_depth: int = 0):
-        self.base_url   = base_url
+        self.base_url = base_url
         self.output_dir = Path(output_dir)
-        self.max_depth  = max_depth
+        self.max_depth = max_depth
         self.results: List[InteractiveElementData] = []
         self.visited: set = set()
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -269,7 +270,10 @@ class InteractiveElementCrawler:
                 )
                 base_netloc = urlparse(self.base_url).netloc
                 for href in links:
-                    if urlparse(href).netloc == base_netloc and href not in self.visited:
+                    if (
+                        urlparse(href).netloc == base_netloc
+                        and href not in self.visited
+                    ):
                         await self._crawl_page(context, href, depth + 1)
         except Exception as exc:
             print(f"[InteractiveCrawler] Error on {url}: {exc}")

@@ -44,10 +44,10 @@ from typing import List, Dict, Any, Optional
 
 from ka11y.crawler.interactive_crawler import InteractiveElementData
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _normalize(text: Optional[str]) -> str:
     """Lowercase and collapse all whitespace to a single space."""
@@ -72,7 +72,7 @@ def _check_253(el: InteractiveElementData):
       "FAILED" — accessible name is missing or does not contain visible label
     """
     visible = _normalize(el.visible_label)
-    name    = _normalize(el.accessible_name)
+    name = _normalize(el.accessible_name)
 
     # N/A: no visible text (icon-only button, image with no alt, etc.)
     if not visible or not _has_word_chars(visible):
@@ -100,6 +100,7 @@ def _check_253(el: InteractiveElementData):
 # ─────────────────────────────────────────────────────────────────────────────
 # Auditor
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class LabelInNameAuditor:
     """
@@ -146,51 +147,54 @@ class LabelInNameAuditor:
         for el in elements:
             status, violation = _check_253(el)
             record = {
-                "page_url":             el.page_url,
-                "element_index":        el.element_index,
-                "tag":                  el.tag,
-                "role":                 el.role or "",
-                "element_id":           el.element_id or "",
-                "input_type":           el.input_type or "",
-                "visible_label":        el.visible_label or "",
-                "aria_label":           el.aria_label or "",
-                "aria_labelledby":      el.aria_labelledby or "",
+                "page_url": el.page_url,
+                "element_index": el.element_index,
+                "tag": el.tag,
+                "role": el.role or "",
+                "element_id": el.element_id or "",
+                "input_type": el.input_type or "",
+                "visible_label": el.visible_label or "",
+                "aria_label": el.aria_label or "",
+                "aria_labelledby": el.aria_labelledby or "",
                 "aria_labelledby_text": el.aria_labelledby_text or "",
-                "title_attr":           el.title_attr or "",
-                "value_attr":           el.value_attr or "",
-                "alt_attr":             el.alt_attr or "",
-                "accessible_name":      el.accessible_name or "",
-                "wcag_2_5_3_status":    status,
+                "title_attr": el.title_attr or "",
+                "value_attr": el.value_attr or "",
+                "alt_attr": el.alt_attr or "",
+                "accessible_name": el.accessible_name or "",
+                "wcag_2_5_3_status": status,
                 "wcag_2_5_3_violation": violation,
-                "overall_status":       (
-                    "FAILED" if status == "FAILED"
+                "overall_status": (
+                    "FAILED"
+                    if status == "FAILED"
                     else ("PASSED" if status == "PASSED" else "N/A")
                 ),
-                "html_snippet":         el.html_snippet[:400],
+                "html_snippet": el.html_snippet[:400],
             }
             records.append(record)
 
         # ── Summary counts ─────────────────────────────────────────────────
-        total   = len(records)
-        passed  = sum(1 for r in records if r["wcag_2_5_3_status"] == "PASSED")
-        failed  = sum(1 for r in records if r["wcag_2_5_3_status"] == "FAILED")
-        na      = sum(1 for r in records if r["wcag_2_5_3_status"] == "N/A")
+        total = len(records)
+        passed = sum(1 for r in records if r["wcag_2_5_3_status"] == "PASSED")
+        failed = sum(1 for r in records if r["wcag_2_5_3_status"] == "FAILED")
+        na = sum(1 for r in records if r["wcag_2_5_3_status"] == "N/A")
         checked = passed + failed
-        rate    = round(passed / checked * 100, 1) if checked else 0
+        rate = round(passed / checked * 100, 1) if checked else 0
 
         # ── Summary row ────────────────────────────────────────────────────
         summary = {field: "" for field in self.CSV_FIELDS}
-        summary.update({
-            "page_url":          "── SUMMARY ──",
-            "tag":               f"Total elements          : {total}",
-            "role":              f"Checked (N/A excluded)  : {checked}",
-            "element_id":        f"PASSED                  : {passed}",
-            "input_type":        f"FAILED                  : {failed}",
-            "visible_label":     f"N/A (no visible text)   : {na}",
-            "accessible_name":   f"Pass rate               : {rate}%",
-            "wcag_2_5_3_status": "PASSED" if failed == 0 else "FAILED",
-            "overall_status":    "PASSED" if failed == 0 else "FAILED",
-        })
+        summary.update(
+            {
+                "page_url": "── SUMMARY ──",
+                "tag": f"Total elements          : {total}",
+                "role": f"Checked (N/A excluded)  : {checked}",
+                "element_id": f"PASSED                  : {passed}",
+                "input_type": f"FAILED                  : {failed}",
+                "visible_label": f"N/A (no visible text)   : {na}",
+                "accessible_name": f"Pass rate               : {rate}%",
+                "wcag_2_5_3_status": "PASSED" if failed == 0 else "FAILED",
+                "overall_status": "PASSED" if failed == 0 else "FAILED",
+            }
+        )
 
         # ── Write CSV ──────────────────────────────────────────────────────
         csv_path = self.output_dir / "audit_label_in_name_report.csv"
@@ -210,16 +214,16 @@ class LabelInNameAuditor:
 
     @staticmethod
     def summarize(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-        passed  = sum(1 for r in records if r["wcag_2_5_3_status"] == "PASSED")
-        failed  = sum(1 for r in records if r["wcag_2_5_3_status"] == "FAILED")
-        na      = sum(1 for r in records if r["wcag_2_5_3_status"] == "N/A")
+        passed = sum(1 for r in records if r["wcag_2_5_3_status"] == "PASSED")
+        failed = sum(1 for r in records if r["wcag_2_5_3_status"] == "FAILED")
+        na = sum(1 for r in records if r["wcag_2_5_3_status"] == "N/A")
         checked = passed + failed
         return {
-            "total_elements":    len(records),
-            "checked":           checked,
-            "passed":            passed,
-            "failed":            failed,
-            "na":                na,
-            "pass_rate_pct":     round(passed / checked * 100, 1) if checked else 0,
+            "total_elements": len(records),
+            "checked": checked,
+            "passed": passed,
+            "failed": failed,
+            "na": na,
+            "pass_rate_pct": round(passed / checked * 100, 1) if checked else 0,
             "wcag_2_5_3_failed": failed,
         }

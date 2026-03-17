@@ -45,18 +45,17 @@ from typing import List, Dict, Any, Tuple
 
 from ka11y.crawler.moving_content_crawler import MovingContentData
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
 _TYPE_LABELS: Dict[str, str] = {
-    "video_autoplay":    "Video with autoplay",
-    "animated_gif":      "Animated GIF (loops indefinitely)",
-    "css_animation":     "CSS / WAAPI animation",
+    "video_autoplay": "Video with autoplay",
+    "animated_gif": "Animated GIF (loops indefinitely)",
+    "css_animation": "CSS / WAAPI animation",
     "carousel_autoplay": "Carousel / slider with autoplay",
-    "marquee_element":   "<marquee> element (deprecated)",
-    "blink_element":     "<blink> element (deprecated)",
+    "marquee_element": "<marquee> element (deprecated)",
+    "blink_element": "<blink> element (deprecated)",
 }
 
 _HINTS: Dict[str, str] = {
@@ -91,6 +90,7 @@ _HINTS: Dict[str, str] = {
 # Check function
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _check_222(item: MovingContentData) -> Tuple[str, str]:
     """
     Returns (status, violation_message) for WCAG 2.2.2.
@@ -108,7 +108,9 @@ def _check_222(item: MovingContentData) -> Tuple[str, str]:
     # Gate 2: content must last more than 5 seconds.
     # duration_seconds == -1 means infinite; None means unknown (treat as applicable).
     # loops == True also means infinite total duration regardless of single-loop duration.
-    is_infinite = item.duration_seconds == -1 or item.animation_iteration_count == "infinite"
+    is_infinite = (
+        item.duration_seconds == -1 or item.animation_iteration_count == "infinite"
+    )
     if (
         not is_infinite
         and not item.loops
@@ -122,7 +124,7 @@ def _check_222(item: MovingContentData) -> Tuple[str, str]:
         return "PASSED", ""
 
     label = _TYPE_LABELS.get(item.content_type, item.content_type)
-    hint  = _HINTS.get(item.content_type, "Provide a mechanism to pause, stop, or hide.")
+    hint = _HINTS.get(item.content_type, "Provide a mechanism to pause, stop, or hide.")
 
     if is_infinite or item.loops:
         duration_str = "loops indefinitely"
@@ -141,6 +143,7 @@ def _check_222(item: MovingContentData) -> Tuple[str, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Auditor
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class PauseStopHideAuditor:
     """
@@ -191,63 +194,69 @@ class PauseStopHideAuditor:
         for item in items:
             status, violation = _check_222(item)
             record = {
-                "page_url":                   item.page_url,
-                "element_index":              item.element_index,
-                "content_type":               item.content_type,
-                "content_type_label":         _TYPE_LABELS.get(item.content_type, item.content_type),
-                "tag":                        item.tag,
-                "element_id":                 item.element_id or "",
-                "src":                        item.src or "",
-                "animation_name":             item.animation_name or "",
+                "page_url": item.page_url,
+                "element_index": item.element_index,
+                "content_type": item.content_type,
+                "content_type_label": _TYPE_LABELS.get(
+                    item.content_type, item.content_type
+                ),
+                "tag": item.tag,
+                "element_id": item.element_id or "",
+                "src": item.src or "",
+                "animation_name": item.animation_name or "",
                 "animation_duration_seconds": (
                     item.animation_duration_seconds
-                    if item.animation_duration_seconds is not None else ""
+                    if item.animation_duration_seconds is not None
+                    else ""
                 ),
-                "animation_iteration_count":  item.animation_iteration_count or "",
-                "loops":                      item.loops,
-                "duration_seconds":           (
-                    item.duration_seconds
-                    if item.duration_seconds is not None else ""
+                "animation_iteration_count": item.animation_iteration_count or "",
+                "loops": item.loops,
+                "duration_seconds": (
+                    item.duration_seconds if item.duration_seconds is not None else ""
                 ),
-                "starts_automatically":       item.starts_automatically,
-                "has_video_controls":         item.has_video_controls,
-                "has_pause_button":           item.has_pause_button,
-                "has_mechanism":              item.has_mechanism,
-                "wcag_2_2_2_status":          status,
-                "wcag_2_2_2_violation":       violation,
-                "overall_status":             status,
-                "axe_would_catch":            item.axe_would_catch,
-                "html_snippet":               item.html_snippet,
+                "starts_automatically": item.starts_automatically,
+                "has_video_controls": item.has_video_controls,
+                "has_pause_button": item.has_pause_button,
+                "has_mechanism": item.has_mechanism,
+                "wcag_2_2_2_status": status,
+                "wcag_2_2_2_violation": violation,
+                "overall_status": status,
+                "axe_would_catch": item.axe_would_catch,
+                "html_snippet": item.html_snippet,
             }
             records.append(record)
 
         # ── Summary counts ─────────────────────────────────────────────────
-        total  = len(records)
+        total = len(records)
         passed = sum(1 for r in records if r["wcag_2_2_2_status"] == "PASSED")
         failed = total - passed
-        rate   = round(passed / total * 100, 1) if total else 0
+        rate = round(passed / total * 100, 1) if total else 0
 
         by_type: Dict[str, Dict[str, int]] = {}
         for r in records:
             ct = r["content_type"]
             if ct not in by_type:
                 by_type[ct] = {"passed": 0, "failed": 0}
-            by_type[ct]["passed" if r["wcag_2_2_2_status"] == "PASSED" else "failed"] += 1
+            by_type[ct][
+                "passed" if r["wcag_2_2_2_status"] == "PASSED" else "failed"
+            ] += 1
 
         axe_would_miss = sum(1 for r in records if not r["axe_would_catch"])
 
         # ── Summary row ────────────────────────────────────────────────────
         summary = {field: "" for field in self.CSV_FIELDS}
-        summary.update({
-            "page_url":          "── SUMMARY ──",
-            "content_type":      f"Total items      : {total}",
-            "tag":               f"PASSED           : {passed}",
-            "element_id":        f"FAILED           : {failed}",
-            "src":               f"Pass rate        : {rate}%",
-            "animation_name":    f"Axe-core misses  : {axe_would_miss}",
-            "wcag_2_2_2_status": "PASSED" if failed == 0 else "FAILED",
-            "overall_status":    "PASSED" if failed == 0 else "FAILED",
-        })
+        summary.update(
+            {
+                "page_url": "── SUMMARY ──",
+                "content_type": f"Total items      : {total}",
+                "tag": f"PASSED           : {passed}",
+                "element_id": f"FAILED           : {failed}",
+                "src": f"Pass rate        : {rate}%",
+                "animation_name": f"Axe-core misses  : {axe_would_miss}",
+                "wcag_2_2_2_status": "PASSED" if failed == 0 else "FAILED",
+                "overall_status": "PASSED" if failed == 0 else "FAILED",
+            }
+        )
 
         # ── Write CSV ──────────────────────────────────────────────────────
         csv_path = self.output_dir / "audit_pause_stop_hide_report.csv"
@@ -272,7 +281,7 @@ class PauseStopHideAuditor:
 
     @staticmethod
     def summarize(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-        total  = len(records)
+        total = len(records)
         passed = sum(1 for r in records if r["wcag_2_2_2_status"] == "PASSED")
         failed = total - passed
 
@@ -286,12 +295,12 @@ class PauseStopHideAuditor:
                 passed_by_type[ct] = passed_by_type.get(ct, 0) + 1
 
         return {
-            "total_items":       total,
-            "passed":            passed,
-            "failed":            failed,
-            "pass_rate_pct":     round(passed / total * 100, 1) if total else 0,
+            "total_items": total,
+            "passed": passed,
+            "failed": failed,
+            "pass_rate_pct": round(passed / total * 100, 1) if total else 0,
             "wcag_2_2_2_failed": failed,
-            "axe_would_miss":    sum(1 for r in records if not r["axe_would_catch"]),
-            "failed_by_type":    failed_by_type,
-            "passed_by_type":    passed_by_type,
+            "axe_would_miss": sum(1 for r in records if not r["axe_would_catch"]),
+            "failed_by_type": failed_by_type,
+            "passed_by_type": passed_by_type,
         }

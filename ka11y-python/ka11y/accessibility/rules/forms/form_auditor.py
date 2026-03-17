@@ -37,10 +37,10 @@ from typing import List, Dict, Any
 
 from ka11y.crawler.forms_crawler import FormInputData
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _violations_331(f: FormInputData) -> List[str]:
     """
@@ -72,7 +72,7 @@ def _violations_331(f: FormInputData) -> List[str]:
             viols.append(
                 "3.3.1: Error container (#"
                 + f.error_element_id
-                + ") has neither role=\"alert\" nor aria-live — "
+                + ') has neither role="alert" nor aria-live — '
                 "screen readers will not announce validation errors automatically."
             )
 
@@ -102,11 +102,7 @@ def _violations_332(f: FormInputData) -> List[str]:
         pass  # covered below with placeholder heuristic
 
     # (c) Placeholder used as sole label (placeholder ≠ label)
-    if (
-        not f.has_any_label
-        and f.placeholder
-        and f.placeholder.strip()
-    ):
+    if not f.has_any_label and f.placeholder and f.placeholder.strip():
         viols.append(
             "3.3.2: Placeholder is the only label — "
             "placeholders disappear on input; use a persistent <label> instead."
@@ -115,16 +111,24 @@ def _violations_332(f: FormInputData) -> List[str]:
     # (d) Autocomplete missing for personal-data input types
     PERSONAL_TYPES = {"email", "tel", "url", "password", "name"}
     PERSONAL_NAMES = {
-        "email", "phone", "tel", "password", "username",
-        "first-name", "last-name", "firstname", "lastname",
-        "address", "city", "zip", "postcode", "country",
+        "email",
+        "phone",
+        "tel",
+        "password",
+        "username",
+        "first-name",
+        "last-name",
+        "firstname",
+        "lastname",
+        "address",
+        "city",
+        "zip",
+        "postcode",
+        "country",
     }
     field_type = (f.type or "").lower()
     field_name = (f.name or "").lower()
-    if (
-        field_type in PERSONAL_TYPES
-        or any(n in field_name for n in PERSONAL_NAMES)
-    ):
+    if field_type in PERSONAL_TYPES or any(n in field_name for n in PERSONAL_NAMES):
         if not f.autocomplete:
             viols.append(
                 "3.3.2: Personal-data field ("
@@ -142,13 +146,14 @@ def _violations_332(f: FormInputData) -> List[str]:
 def _field_appears_required(f: FormInputData) -> bool:
     """Heuristic: label or placeholder contains '*'."""
     label = (f.label_text or "").strip()
-    ph    = (f.placeholder or "").strip()
+    ph = (f.placeholder or "").strip()
     return "*" in label or "*" in ph
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Auditor
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class FormAccessibilityAuditor:
     """
@@ -201,61 +206,63 @@ class FormAccessibilityAuditor:
         for f in form_inputs:
             viols_331 = _violations_331(f)
             viols_332 = _violations_332(f)
-            total     = len(viols_331) + len(viols_332)
+            total = len(viols_331) + len(viols_332)
 
             record = {
-                "page_url":             f.page_url,
-                "form_index":           f.form_index,
-                "form_id":              f.form_id or "",
-                "field_tag":            f.tag,
-                "field_type":           f.type or "",
-                "field_id":             f.id or "",
-                "field_name":           f.name or "",
-                "label_text":           f.label_text or "",
-                "has_any_label":        f.has_any_label,
-                "required":             f.required,
-                "aria_invalid":         f.aria_invalid or "",
+                "page_url": f.page_url,
+                "form_index": f.form_index,
+                "form_id": f.form_id or "",
+                "field_tag": f.tag,
+                "field_type": f.type or "",
+                "field_id": f.id or "",
+                "field_name": f.name or "",
+                "label_text": f.label_text or "",
+                "has_any_label": f.has_any_label,
+                "required": f.required,
+                "aria_invalid": f.aria_invalid or "",
                 # WCAG 3.3.1
-                "wcag_3_3_1_status":    "FAILED" if viols_331 else "PASSED",
+                "wcag_3_3_1_status": "FAILED" if viols_331 else "PASSED",
                 "wcag_3_3_1_violations": " | ".join(viols_331),
                 # WCAG 3.3.2
-                "wcag_3_3_2_status":    "FAILED" if viols_332 else "PASSED",
+                "wcag_3_3_2_status": "FAILED" if viols_332 else "PASSED",
                 "wcag_3_3_2_violations": " | ".join(viols_332),
                 # Overall
-                "overall_status":       "FAILED" if total > 0 else "PASSED",
-                "total_violations":     total,
+                "overall_status": "FAILED" if total > 0 else "PASSED",
+                "total_violations": total,
                 # Error message metadata
-                "error_element_id":     f.error_element_id     or "",
-                "error_element_role":   f.error_element_role   or "",
+                "error_element_id": f.error_element_id or "",
+                "error_element_role": f.error_element_role or "",
                 "error_has_role_alert": f.error_has_role_alert,
-                "error_has_aria_live":  f.error_has_aria_live  or "",
-                "error_element_text":   (f.error_element_text  or "")[:200],
+                "error_has_aria_live": f.error_has_aria_live or "",
+                "error_element_text": (f.error_element_text or "")[:200],
                 # HTML
-                "html_snippet":         f.html[:400],
+                "html_snippet": f.html[:400],
             }
             records.append(record)
 
         # ── Build summary counts ──────────────────────────────────────────────
-        total_fields  = len(records)
-        total_passed  = sum(1 for r in records if r["overall_status"] == "PASSED")
-        total_failed  = total_fields - total_passed
-        pass_rate     = round(total_passed / total_fields * 100, 1) if total_fields else 0
-        fail_331      = sum(1 for r in records if r["wcag_3_3_1_status"] == "FAILED")
-        fail_332      = sum(1 for r in records if r["wcag_3_3_2_status"] == "FAILED")
+        total_fields = len(records)
+        total_passed = sum(1 for r in records if r["overall_status"] == "PASSED")
+        total_failed = total_fields - total_passed
+        pass_rate = round(total_passed / total_fields * 100, 1) if total_fields else 0
+        fail_331 = sum(1 for r in records if r["wcag_3_3_1_status"] == "FAILED")
+        fail_332 = sum(1 for r in records if r["wcag_3_3_2_status"] == "FAILED")
 
         # ── Summary row appended after all field rows ─────────────────────────
         summary_row = {field: "" for field in self.CSV_FIELDS}
-        summary_row.update({
-            "page_url":          "── SUMMARY ──",
-            "field_tag":         f"Total fields : {total_fields}",
-            "field_type":        f"PASSED : {total_passed}",
-            "field_id":          f"FAILED : {total_failed}",
-            "field_name":        f"Pass rate : {pass_rate}%",
-            "wcag_3_3_1_status": f"3.3.1 failed : {fail_331}",
-            "wcag_3_3_2_status": f"3.3.2 failed : {fail_332}",
-            "overall_status":    "PASSED" if total_failed == 0 else "FAILED",
-            "total_violations":  sum(r["total_violations"] for r in records),
-        })
+        summary_row.update(
+            {
+                "page_url": "── SUMMARY ──",
+                "field_tag": f"Total fields : {total_fields}",
+                "field_type": f"PASSED : {total_passed}",
+                "field_id": f"FAILED : {total_failed}",
+                "field_name": f"Pass rate : {pass_rate}%",
+                "wcag_3_3_1_status": f"3.3.1 failed : {fail_331}",
+                "wcag_3_3_2_status": f"3.3.2 failed : {fail_332}",
+                "overall_status": "PASSED" if total_failed == 0 else "FAILED",
+                "total_violations": sum(r["total_violations"] for r in records),
+            }
+        )
 
         # ── Write CSV ─────────────────────────────────────────────────────────
         csv_path = self.output_dir / "audit_form_report.csv"
@@ -276,17 +283,21 @@ class FormAccessibilityAuditor:
     # ── Convenience summary ───────────────────────────────────────────────────
     @staticmethod
     def summarize(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-        total   = len(records)
-        passed  = sum(1 for r in records if r["overall_status"] == "PASSED")
-        failed  = total - passed
+        total = len(records)
+        passed = sum(1 for r in records if r["overall_status"] == "PASSED")
+        failed = total - passed
         return {
-            "total_fields":          total,
-            "passed":                passed,
-            "failed":                failed,
-            "pass_rate_pct":         round(passed / total * 100, 1) if total else 0,
-            "wcag_3_3_1_failed":     sum(1 for r in records if r["wcag_3_3_1_status"] == "FAILED"),
-            "wcag_3_3_2_failed":     sum(1 for r in records if r["wcag_3_3_2_status"] == "FAILED"),
-            "fields_missing_label":  sum(1 for r in records if not r["has_any_label"]),
+            "total_fields": total,
+            "passed": passed,
+            "failed": failed,
+            "pass_rate_pct": round(passed / total * 100, 1) if total else 0,
+            "wcag_3_3_1_failed": sum(
+                1 for r in records if r["wcag_3_3_1_status"] == "FAILED"
+            ),
+            "wcag_3_3_2_failed": sum(
+                1 for r in records if r["wcag_3_3_2_status"] == "FAILED"
+            ),
+            "fields_missing_label": sum(1 for r in records if not r["has_any_label"]),
             "fields_with_no_error_container": sum(
                 1 for r in records if r["required"] and not r["error_element_id"]
             ),

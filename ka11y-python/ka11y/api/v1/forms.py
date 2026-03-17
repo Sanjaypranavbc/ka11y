@@ -36,6 +36,7 @@ logger = setup_logger(name="KAC", tag="forms")
 
 # ── Request / Response models ─────────────────────────────────────────────────
 
+
 class FormsRequest(BaseModel):
     url: HttpUrl = "https://www.kao.com/global/en/"
     max_depth: int = 0
@@ -54,15 +55,16 @@ class FormsResponse(BaseModel):
 
 # ── Route ─────────────────────────────────────────────────────────────────────
 
+
 @router.post("/", response_model=FormsResponse)
 async def run_forms_crawler(
     payload: FormsRequest,
     # ── injected dependencies ──────────────────────────────────────────────
-    output_dir: Path                  = Depends(get_output_dir),
-    crawler: AsyncFormCrawler         = Depends(get_form_crawler),
+    output_dir: Path = Depends(get_output_dir),
+    crawler: AsyncFormCrawler = Depends(get_form_crawler),
     auditor: FormAccessibilityAuditor = Depends(get_form_auditor),
 ):
-    url       = str(payload.url)
+    url = str(payload.url)
     max_depth = payload.max_depth
 
     logger.info("=" * 60)
@@ -73,7 +75,7 @@ async def run_forms_crawler(
     logger.info(f"  run_audit  : {payload.run_audit}")
     logger.info("=" * 60)
 
-    audit_report  = None
+    audit_report = None
     audit_summary = None
 
     try:
@@ -93,7 +95,7 @@ async def run_forms_crawler(
 
             records = auditor.generate_audit_report(form_inputs=form_inputs)
 
-            audit_report  = f"{output_dir}/audit_form_report.csv"
+            audit_report = f"{output_dir}/audit_form_report.csv"
             audit_summary = FormAccessibilityAuditor.summarize(records)
 
             logger.info(

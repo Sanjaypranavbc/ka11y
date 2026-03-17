@@ -40,6 +40,7 @@ logger = setup_logger(name="KAC", tag="crawl")
 
 # ── Request / Response models ─────────────────────────────────────────────────
 
+
 class CrawlRequest(BaseModel):
     url: HttpUrl = "https://www.kao.com/global/en/"
     max_depth: int = 0
@@ -66,17 +67,18 @@ class CrawlResponse(BaseModel):
 
 # ── Route ─────────────────────────────────────────────────────────────────────
 
+
 @router.post("/", response_model=CrawlResponse)
 async def run_crawler(
     payload: CrawlRequest,
     # ── injected dependencies ──────────────────────────────────────────────
-    output_dir: Path                          = Depends(get_output_dir),
-    crawler: AsyncImageCrawler                = Depends(get_image_crawler),
-    auditor: AltTextAccessibilityAuditor      = Depends(get_alt_text_auditor),
-    form_crawler: AsyncFormCrawler            = Depends(get_form_crawler),
-    form_auditor: FormAccessibilityAuditor    = Depends(get_form_auditor),
+    output_dir: Path = Depends(get_output_dir),
+    crawler: AsyncImageCrawler = Depends(get_image_crawler),
+    auditor: AltTextAccessibilityAuditor = Depends(get_alt_text_auditor),
+    form_crawler: AsyncFormCrawler = Depends(get_form_crawler),
+    form_auditor: FormAccessibilityAuditor = Depends(get_form_auditor),
 ):
-    url       = str(payload.url)
+    url = str(payload.url)
     max_depth = payload.max_depth
 
     logger.info("=" * 60)
@@ -89,12 +91,12 @@ async def run_crawler(
     logger.info(f"  run_form_audit : {payload.run_form_audit}")
     logger.info("=" * 60)
 
-    ocr_results        = []
-    ocr_dir            = None
-    audit_report       = None
-    audit_summary      = None
-    form_inputs        = []
-    form_audit_report  = None
+    ocr_results = []
+    ocr_dir = None
+    audit_report = None
+    audit_summary = None
+    form_inputs = []
+    form_audit_report = None
     form_audit_summary = None
 
     try:
@@ -123,7 +125,7 @@ async def run_crawler(
             save.save_reports()
 
             ocr_results = detector.results
-            ocr_dir     = str(detector.text_detected_dir)
+            ocr_dir = str(detector.text_detected_dir)
 
             logger.info(
                 f"OCR complete — {len(ocr_results)} images processed, "
@@ -143,7 +145,7 @@ async def run_crawler(
 
             audit_report = f"{crawler.output_dir}/audit_report.csv"
 
-            total  = len(records)
+            total = len(records)
             passed = sum(1 for r in records if r["overall_status"] == "PASSED")
             failed = total - passed
 
@@ -152,18 +154,26 @@ async def run_crawler(
                 cls = r["classification"]
                 if cls not in by_class:
                     by_class[cls] = {"passed": 0, "failed": 0}
-                by_class[cls]["passed" if r["overall_status"] == "PASSED" else "failed"] += 1
+                by_class[cls][
+                    "passed" if r["overall_status"] == "PASSED" else "failed"
+                ] += 1
 
             audit_summary = {
-                "total":               total,
-                "passed":              passed,
-                "failed":              failed,
-                "pass_rate_pct":       round(passed / total * 100, 1) if total else 0,
-                "wcag_1_1_1_failed":   sum(1 for r in records if r["wcag_1_1_1_status"] == "FAILED"),
-                "wcag_4_1_2_failed":   sum(1 for r in records if r["wcag_4_1_2_status"] == "FAILED"),
-                "images_with_ocr":     sum(1 for r in records if r["has_ocr_text"]),
-                "contrast_violations": sum(1 for r in records if r["contrast_violations_count"] > 0),
-                "by_classification":   by_class,
+                "total": total,
+                "passed": passed,
+                "failed": failed,
+                "pass_rate_pct": round(passed / total * 100, 1) if total else 0,
+                "wcag_1_1_1_failed": sum(
+                    1 for r in records if r["wcag_1_1_1_status"] == "FAILED"
+                ),
+                "wcag_4_1_2_failed": sum(
+                    1 for r in records if r["wcag_4_1_2_status"] == "FAILED"
+                ),
+                "images_with_ocr": sum(1 for r in records if r["has_ocr_text"]),
+                "contrast_violations": sum(
+                    1 for r in records if r["contrast_violations_count"] > 0
+                ),
+                "by_classification": by_class,
             }
 
             logger.info(
@@ -195,8 +205,8 @@ async def run_crawler(
             form_auditor.output_dir = Path(crawler.output_dir)
             form_auditor.output_dir.mkdir(parents=True, exist_ok=True)
 
-            form_records       = form_auditor.generate_audit_report(form_inputs=form_inputs)
-            form_audit_report  = f"{crawler.output_dir}/audit_form_report.csv"
+            form_records = form_auditor.generate_audit_report(form_inputs=form_inputs)
+            form_audit_report = f"{crawler.output_dir}/audit_form_report.csv"
             form_audit_summary = FormAccessibilityAuditor.summarize(form_records)
 
             logger.info(

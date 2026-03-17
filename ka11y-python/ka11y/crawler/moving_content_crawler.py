@@ -24,28 +24,29 @@ from pydantic import BaseModel
 
 class MovingContentData(BaseModel):
     """Data for one piece of auto-playing / animated content."""
+
     page_url: str
     element_index: int
-    content_type: str       # video_autoplay | animated_gif | css_animation
-                            # | carousel_autoplay | marquee_element | blink_element
+    content_type: str  # video_autoplay | animated_gif | css_animation
+    # | carousel_autoplay | marquee_element | blink_element
     tag: str
     element_id: Optional[str] = None
-    src: Optional[str] = None           # video / img src
+    src: Optional[str] = None  # video / img src
 
     # CSS / WAAPI animation details
     animation_name: Optional[str] = None
     animation_duration_seconds: Optional[float] = None
-    animation_iteration_count: Optional[str] = None   # "infinite" or "N"
+    animation_iteration_count: Optional[str] = None  # "infinite" or "N"
 
     # Moving-content properties
     loops: bool = False
-    duration_seconds: Optional[float] = None    # -1 means infinite
+    duration_seconds: Optional[float] = None  # -1 means infinite
     starts_automatically: bool = True
 
     # Pause / Stop / Hide mechanism
-    has_video_controls: bool = False    # <video controls> attribute present
-    has_pause_button: bool = False      # nearby button with pause/stop text
-    has_mechanism: bool = False         # any mechanism present
+    has_video_controls: bool = False  # <video controls> attribute present
+    has_pause_button: bool = False  # nearby button with pause/stop text
+    has_mechanism: bool = False  # any mechanism present
 
     # axe-core would already flag this element
     axe_would_catch: bool = False
@@ -402,9 +403,9 @@ class MovingContentCrawler:
     }"""
 
     def __init__(self, base_url: str, output_dir: str, max_depth: int = 0):
-        self.base_url   = base_url
+        self.base_url = base_url
         self.output_dir = Path(output_dir)
-        self.max_depth  = max_depth
+        self.max_depth = max_depth
         self.results: List[MovingContentData] = []
         self.visited: set = set()
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -454,7 +455,10 @@ class MovingContentCrawler:
                 )
                 base_netloc = urlparse(self.base_url).netloc
                 for href in links:
-                    if urlparse(href).netloc == base_netloc and href not in self.visited:
+                    if (
+                        urlparse(href).netloc == base_netloc
+                        and href not in self.visited
+                    ):
                         await self._crawl_page(context, href, depth + 1)
         except Exception as exc:
             print(f"[MovingContentCrawler] Error on {url}: {exc}")

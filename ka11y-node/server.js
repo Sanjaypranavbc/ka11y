@@ -47,6 +47,7 @@ const API_V1 = '/api/v1';
 app.get( `${API_V1}/health`,                (req, res) => healthController.getHealth(req, res));
 app.post(`${API_V1}/analyze-accessibility`, (req, res) => accessibilityController.analyze(req, res));
 app.post(`${API_V1}/analyse-url`,           (req, res) => accessibilityController.analyseUrl(req, res));
+app.post(`${API_V1}/analyse-url-flat`,      (req, res) => accessibilityController.analyseUrlFlat(req, res));
 
 // Swagger UI page
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

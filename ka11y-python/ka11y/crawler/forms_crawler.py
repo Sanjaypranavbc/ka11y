@@ -16,21 +16,21 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Pydantic models
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class FormInputData(BaseModel):
     page_url: str
-    form_index: int                  # 0-based index of <form> on the page
+    form_index: int  # 0-based index of <form> on the page
     form_id: Optional[str] = None
     form_action: Optional[str] = None
     form_method: Optional[str] = None
 
     # Field identity
-    tag: str                         # INPUT | SELECT | TEXTAREA
-    type: Optional[str] = None       # text | email | password | checkbox …
+    tag: str  # INPUT | SELECT | TEXTAREA
+    type: Optional[str] = None  # text | email | password | checkbox …
     id: Optional[str] = None
     name: Optional[str] = None
     placeholder: Optional[str] = None
@@ -51,10 +51,10 @@ class FormInputData(BaseModel):
     autocomplete: Optional[str] = None
 
     # Error message element linked to this field
-    error_element_id: Optional[str] = None    # id of element in aria-describedby
+    error_element_id: Optional[str] = None  # id of element in aria-describedby
     error_element_role: Optional[str] = None  # alert | status | …
     error_element_text: Optional[str] = None  # current visible text (may be empty)
-    error_has_role_alert: bool = False         # role="alert" present
+    error_has_role_alert: bool = False  # role="alert" present
     error_has_aria_live: Optional[str] = None  # aria-live value if set
 
     html: str = ""
@@ -63,6 +63,7 @@ class FormInputData(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 # Crawler
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class AsyncFormCrawler:
     """
@@ -164,9 +165,9 @@ class AsyncFormCrawler:
     }"""
 
     def __init__(self, base_url: str, output_dir: str, max_depth: int = 0):
-        self.base_url   = base_url
+        self.base_url = base_url
         self.output_dir = Path(output_dir)
-        self.max_depth  = max_depth
+        self.max_depth = max_depth
         self.results: List[FormInputData] = []
         self.visited: set = set()
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -206,9 +207,7 @@ class AsyncFormCrawler:
 
             raw: list = await page.evaluate(self.EXTRACT_JS)
             for item in raw:
-                self.results.append(
-                    FormInputData(page_url=url, **item)
-                )
+                self.results.append(FormInputData(page_url=url, **item))
 
             # Follow links for deeper crawls
             if depth < self.max_depth:
@@ -217,7 +216,10 @@ class AsyncFormCrawler:
                 )
                 base_netloc = urlparse(self.base_url).netloc
                 for href in links:
-                    if urlparse(href).netloc == base_netloc and href not in self.visited:
+                    if (
+                        urlparse(href).netloc == base_netloc
+                        and href not in self.visited
+                    ):
                         await self._crawl_page(context, href, depth + 1)
 
         except Exception as exc:
