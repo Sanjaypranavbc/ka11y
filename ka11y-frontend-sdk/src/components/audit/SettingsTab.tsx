@@ -13,22 +13,6 @@ export function SettingsTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">API Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label className="text-xs text-muted-foreground">Default API Base URL</Label>
-            <Input defaultValue="http://localhost:8000" className="mt-1 text-sm" />
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground">Polling Interval (ms)</Label>
-            <Input type="number" defaultValue={3000} className="mt-1 text-sm" />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle className="text-sm">Display</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">

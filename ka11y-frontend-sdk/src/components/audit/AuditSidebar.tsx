@@ -39,7 +39,6 @@ const navItems: { label: string; value: TabValue; icon: React.ElementType }[] = 
 export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, open, onClose }: AuditSidebarProps) {
   const [config, setConfig] = useState<AuditConfig>({
     url: "https://www.kao.com/global/en/",
-    node_base_url: "http://localhost:8000",
     max_depth: 0,
     run_ocr: true,
     run_image_audit: true,
@@ -119,14 +118,6 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, op
                 value={config.url}
                 onChange={(e) => setConfig((c) => ({ ...c, url: e.target.value }))}
                 placeholder="https://example.com"
-                className="mt-1 text-xs h-8"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">API Base URL</Label>
-              <Input
-                value={config.node_base_url}
-                onChange={(e) => setConfig((c) => ({ ...c, node_base_url: e.target.value }))}
                 className="mt-1 text-xs h-8"
               />
             </div>

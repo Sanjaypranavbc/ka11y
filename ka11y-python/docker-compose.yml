@@ -90,6 +90,40 @@ services:
         tag:       "ka11y-python|{{.Name}}"
 
 
+  # ── React + nginx frontend ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../ka11y-frontend-sdk
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_PROGRESS: plain
+    image: ka11y-frontend:latest
+    container_name: ka11y-frontend
+    restart: unless-stopped
+
+    # Frontend must start AFTER python passes its healthcheck
+    depends_on:
+      python:
+        condition: service_healthy
+
+    ports:
+      - "80:80"
+
+    healthcheck:
+      test:         ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval:     30s
+      timeout:      5s
+      start_period: 15s
+      retries:      3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        tag:       "ka11y-frontend|{{.Name}}"
+
+
 # ── Named volumes ──────────────────────────────────────────────────────────────
 volumes:
   crawled_output:

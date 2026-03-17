@@ -45,7 +45,7 @@ export function useAudit() {
 
       pollingRef.current = setInterval(async () => {
         try {
-          const pollRes = await fetch(`${baseUrl}/api/v1/combined/${jobId}`, {
+          const pollRes = await fetch(`/api/v1/combined/${jobId}`, {
             headers: { Accept: "application/json" },
           });
           if (!pollRes.ok) throw new Error(`Poll returned ${pollRes.status}`);
