@@ -107,7 +107,7 @@ services:
         condition: service_healthy
 
     ports:
-      - "80:80"
+      - "8080:80"
 
     healthcheck:
       test:         ["CMD", "wget", "-qO-", "http://localhost:80/"]

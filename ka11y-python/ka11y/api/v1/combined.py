@@ -233,7 +233,6 @@ _PYTHON_SEVERITY: Dict[str, str] = {
 
 class CombinedRequest(BaseModel):
     url: HttpUrl
-    node_base_url: str = os.getenv("NODE_BASE_URL", "http://localhost:3000")
     max_depth: int = 0
     run_ocr: bool = True
     run_image_audit: bool = True
@@ -697,13 +696,14 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
     url = str(payload.url)
 
     config = load_config()
+    node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
     domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
     ts = time.strftime("%m%d_%H%M")
     output_dir = Path(f"{config['input']['output_dir']}/{domain}_{ts}_combined")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        node_task = asyncio.create_task(_call_node_flat(url, payload.node_base_url))
+        node_task = asyncio.create_task(_call_node_flat(url, node_base_url))
         python_task = asyncio.create_task(
             _run_python_pipeline(
                 url=url,
