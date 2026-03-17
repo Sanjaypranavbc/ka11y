@@ -3,6 +3,19 @@
 const { mapResults, mapResultsFlat } = require('../utils/axeResultMapper');
 
 /**
+ * Map a WCAG conformance level string to axe-core tag arrays.
+ * "A"   → Level A tags only
+ * "AA"  → Level A + AA tags (default)
+ * "AAA" → Level A + AA + AAA tags
+ */
+function _tagsForLevel(level) {
+  const tags = ['wcag2a', 'wcag21a', 'best-practice'];
+  if (level === 'AA' || level === 'AAA') tags.push('wcag2aa', 'wcag21aa');
+  if (level === 'AAA') tags.push('wcag2aaa');
+  return tags;
+}
+
+/**
  * AccessibilityService — SRP: orchestrates a single Puppeteer + axe analysis run.
  *
  * All external dependencies are injected via the constructor (DIP).

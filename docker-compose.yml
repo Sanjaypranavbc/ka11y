@@ -1,0 +1,117 @@
+# =============================================================================
+# ka11y — Docker Compose (project root)
+# Services: ka11y-node · ka11y-python · ka11y-frontend
+#
+# Usage:
+#   docker compose build --parallel        # build all images in parallel
+#   docker compose up                      # start all services
+#   docker compose up --build              # build + start
+#   docker compose logs -f                 # follow logs
+#   docker compose down -v                 # stop + remove volumes
+# =============================================================================
+
+services:
+
+  # ── Node axe-core engine ───────────────────────────────────────────────────
+  node:
+    build:
+      context: ./ka11y-node
+      dockerfile: Dockerfile
+    image: ka11y-node:latest
+    container_name: ka11y-node
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV:       production
+      PORT:           "3000"
+      AXE_TIMEOUT_MS: "60000"
+      BODY_LIMIT:     "10mb"
+
+    ports:
+      - "3000:3000"
+
+    healthcheck:
+      test:         ["CMD", "curl", "-f", "http://localhost:3000/api/v1/health"]
+      interval:     30s
+      timeout:      10s
+      start_period: 45s
+      retries:      5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+
+  # ── Python FastAPI auditors ────────────────────────────────────────────────
+  python:
+    build:
+      context: ./ka11y-python
+      dockerfile: Dockerfile
+    image: ka11y-python:latest
+    container_name: ka11y-python
+    restart: unless-stopped
+
+    depends_on:
+      node:
+        condition: service_healthy
+
+    environment:
+      NODE_BASE_URL:    "http://node:3000"
+      PYTHONUNBUFFERED: "1"
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - crawled_output:/app/crawled_images
+
+    healthcheck:
+      test:         ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval:     30s
+      timeout:      15s
+      start_period: 90s
+      retries:      5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+
+  # ── React + nginx frontend ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./ka11y-frontend-sdk
+      dockerfile: Dockerfile
+    image: ka11y-frontend:latest
+    container_name: ka11y-frontend
+    restart: unless-stopped
+
+    depends_on:
+      python:
+        condition: service_healthy
+
+    ports:
+      - "8080:80"
+
+    healthcheck:
+      test:         ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval:     30s
+      timeout:      5s
+      start_period: 15s
+      retries:      3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+
+# ── Named volumes ──────────────────────────────────────────────────────────────
+volumes:
+  crawled_output:
+    driver: local
