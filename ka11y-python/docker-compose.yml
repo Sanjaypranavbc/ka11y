@@ -1,0 +1,98 @@
+# =============================================================================
+# ka11y — Docker Compose
+# Services: ka11y-node (axe-core engine) + ka11y-python (FastAPI auditors)
+#
+# Usage:
+#   docker compose build          # build both images (verbose logs per stage)
+#   docker compose up             # start both services
+#   docker compose up --build     # build + start
+#   docker compose logs -f        # follow logs
+#   docker compose down -v        # stop + remove volumes
+# =============================================================================
+
+services:
+
+  # ── Node axe-core engine ───────────────────────────────────────────────────
+  node:
+    build:
+      context: ../ka11y-node
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_PROGRESS: plain          # show every build step
+    image: ka11y-node:latest
+    container_name: ka11y-node
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV:        production
+      PORT:            "3000"
+      AXE_TIMEOUT_MS:  "60000"            # 60 s per axe run
+      BODY_LIMIT:      "10mb"
+
+    ports:
+      - "3000:3000"
+
+    healthcheck:
+      test:         ["CMD", "curl", "-f", "http://localhost:3000/api/v1/health"]
+      interval:     30s
+      timeout:      10s
+      start_period: 45s
+      retries:      5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        tag:       "ka11y-node|{{.Name}}"
+
+
+  # ── Python FastAPI auditors ────────────────────────────────────────────────
+  python:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_PROGRESS: plain          # show every build step
+    image: ka11y-python:latest
+    container_name: ka11y-python
+    restart: unless-stopped
+
+    # Python must start AFTER node passes its healthcheck
+    depends_on:
+      node:
+        condition: service_healthy
+
+    environment:
+      # Overrides the default in combined.py — Python calls Node by service name
+      NODE_BASE_URL:   "http://node:3000"
+      PYTHONUNBUFFERED: "1"
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      # Persist crawled images and audit reports across container restarts
+      - crawled_output:/app/crawled_images
+
+    healthcheck:
+      test:         ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval:     30s
+      timeout:      15s
+      start_period: 90s                   # allow extra time for heavy model loads
+      retries:      5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        tag:       "ka11y-python|{{.Name}}"
+
+
+# ── Named volumes ──────────────────────────────────────────────────────────────
+volumes:
+  crawled_output:
+    driver: local
+    labels:
+      com.ka11y.description: "Crawled images and audit CSV/JSON reports"

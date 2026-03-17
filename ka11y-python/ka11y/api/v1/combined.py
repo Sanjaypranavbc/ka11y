@@ -25,6 +25,7 @@ The job also writes combined_report.json to the output directory.
 
 import asyncio
 import json
+import os
 import time
 import uuid
 from datetime import datetime, timezone
@@ -232,7 +233,7 @@ _PYTHON_SEVERITY: Dict[str, str] = {
 
 class CombinedRequest(BaseModel):
     url: HttpUrl
-    node_base_url: str = "http://localhost:3000"
+    node_base_url: str = os.getenv("NODE_BASE_URL", "http://localhost:3000")
     max_depth: int = 0
     run_ocr: bool = True
     run_image_audit: bool = True

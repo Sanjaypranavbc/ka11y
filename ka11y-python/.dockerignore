@@ -1,0 +1,43 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Poetry cache
+.cache/
+
+# Test artefacts
+.pytest_cache/
+.ruff_cache/
+tests/
+htmlcov/
+.coverage
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Output / generated files
+crawled_images/
+logs/
+*.csv
+*.json
+!poetry.lock
+!pyproject.toml
+
+# Git
+.git/
+.gitignore
+
+# Docker itself
+Dockerfile
+docker-compose.yml
+.dockerignore
