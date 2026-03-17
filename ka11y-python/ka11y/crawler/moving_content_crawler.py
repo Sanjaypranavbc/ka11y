@@ -9,7 +9,7 @@ What is detected
   • <video autoplay>               — starts automatically, no controls
   • <img src="*.gif">              — animated GIFs (assumed looping indefinitely)
   • CSS / WAAPI animations > 5 s   — long-running keyframe animations
-  • Carousels with autoplay         — Bootstrap, Swiper, Slick, Owl, Glide, generic
+  • Carousels with autoplay         — Bootstrap, Swiper, Slick, Owl, Glide, Splide, generic
   • <marquee> / <blink>            — deprecated HTML (also caught by axe-core)
 """
 
@@ -44,7 +44,7 @@ class MovingContentData(BaseModel):
 
     # Pause / Stop / Hide mechanism
     has_video_controls: bool = False    # <video controls> attribute present
-    has_pause_button: bool = False      # nearby button with pause/stop/play text
+    has_pause_button: bool = False      # nearby button with pause/stop text
     has_mechanism: bool = False         # any mechanism present
 
     # axe-core would already flag this element
@@ -62,7 +62,7 @@ class MovingContentCrawler:
     EXTRACT_JS = r"""() => {
         const results = [];
 
-        /* ── helper: look for a pause/stop/play button near an element ── */
+        /* ── helper: look for a pause/stop button near an element (2 levels up) ── */
         function nearbyPauseButton(el) {
             const containers = [
                 el.parentElement,
@@ -76,7 +76,8 @@ class MovingContentCrawler:
                         btn.getAttribute('aria-label') ||
                         btn.getAttribute('title') || ''
                     ).toLowerCase();
-                    if (/pause|stop|play/.test(txt)) return true;
+                    // Only "pause" or "stop" — a plain "play" link is not a pause mechanism
+                    if (/pause|stop/.test(txt)) return true;
                 }
             }
             return false;
@@ -85,19 +86,34 @@ class MovingContentCrawler:
         /* ── 1. Videos with autoplay ─────────────────────────────────── */
         document.querySelectorAll('video').forEach(el => {
             if (!el.hasAttribute('autoplay') && !el.hasAttribute('data-autoplay')) return;
+
+            // WCAG 2.2.2 only applies when content lasts > 5 seconds.
+            // el.duration is available after metadata loads (autoplay triggers that).
+            // If duration is known and short, skip.
+            const vidDuration = isFinite(el.duration) ? el.duration : null;
+            if (vidDuration !== null && vidDuration <= 5) return;
+
             const hasControls = el.hasAttribute('controls');
             const hasPauseBtn = nearbyPauseButton(el);
+            const loops       = el.hasAttribute('loop');
+
+            // Resolve src: prefer currentSrc, then src attribute, then first <source> child
+            const src = el.currentSrc ||
+                        el.getAttribute('src') ||
+                        (el.querySelector('source[src]') || {}).src ||
+                        null;
+
             results.push({
                 element_index:              results.length,
                 content_type:               'video_autoplay',
                 tag:                        'VIDEO',
                 element_id:                 el.id || null,
-                src:                        el.currentSrc || el.src || null,
+                src:                        src,
                 animation_name:             null,
                 animation_duration_seconds: null,
-                animation_iteration_count:  null,
-                loops:                      true,
-                duration_seconds:           -1,
+                animation_iteration_count:  loops ? 'infinite' : null,
+                loops:                      loops,
+                duration_seconds:           loops ? -1 : (vidDuration || null),
                 starts_automatically:       true,
                 has_video_controls:         hasControls,
                 has_pause_button:           hasPauseBtn,
@@ -109,8 +125,10 @@ class MovingContentCrawler:
 
         /* ── 2. Animated GIFs ────────────────────────────────────────── */
         document.querySelectorAll('img[src]').forEach(el => {
-            const src = (el.src || el.getAttribute('src') || '').toLowerCase();
-            if (!src.includes('.gif')) return;
+            const src = (el.getAttribute('src') || '').toLowerCase().split('?')[0];
+            if (!src.endsWith('.gif')) return;
+
+            const hasPauseBtn = nearbyPauseButton(el);
             results.push({
                 element_index:              results.length,
                 content_type:               'animated_gif',
@@ -124,14 +142,14 @@ class MovingContentCrawler:
                 duration_seconds:           -1,
                 starts_automatically:       true,
                 has_video_controls:         false,
-                has_pause_button:           false,
-                has_mechanism:              false,
+                has_pause_button:           hasPauseBtn,
+                has_mechanism:              hasPauseBtn,
                 axe_would_catch:            false,
                 html_snippet:               (el.outerHTML || '').slice(0, 400),
             });
         });
 
-        /* ── 3. CSS / WAAPI animations (> 5 000 ms or infinite) ──────── */
+        /* ── 3. CSS / WAAPI animations (> 5 000 ms total, or infinite) ── */
         if (typeof document.getAnimations === 'function') {
             const seen = new WeakMap();
             document.getAnimations().forEach(anim => {
@@ -146,8 +164,7 @@ class MovingContentCrawler:
                 const isInfin = iters === Infinity;
                 const totalMs = isInfin ? Infinity : durMs * (iters || 1);
 
-                // Only flag if > 5 000 ms total or infinite, and not a micro-animation
-                if (durMs < 500) return;
+                // Skip if total duration is ≤ 5 000 ms (WCAG 2.2.2 threshold) and finite
                 if (!isInfin && totalMs <= 5000) return;
 
                 // Deduplicate: one entry per (element, animationName)
@@ -156,7 +173,20 @@ class MovingContentCrawler:
                 if (seen.get(el).has(animName)) return;
                 seen.get(el).add(animName);
 
+                // All CSS animations in getAnimations() started via CSS/JS automatically.
+                // If the animation is currently paused, something must have paused it,
+                // which itself counts as a mechanism (JS-controlled pause state).
+                const isPaused    = anim.playState === 'paused';
                 const hasPauseBtn = nearbyPauseButton(el);
+                const hasMechanism = hasPauseBtn || isPaused;
+
+                // Check if page honours prefers-reduced-motion for this element;
+                // if so, the page provides a system-level mechanism.
+                const style = window.getComputedStyle(el);
+                const animPlayState = style && style.animationPlayState;
+                // If reduced-motion media query would pause this, the page respects it
+                // (we cannot directly query this from JS, so rely on paused state check above)
+
                 results.push({
                     element_index:              results.length,
                     content_type:               'css_animation',
@@ -168,14 +198,115 @@ class MovingContentCrawler:
                     animation_iteration_count:  isInfin ? 'infinite' : String(iters || 1),
                     loops:                      isInfin,
                     duration_seconds:           isInfin ? -1 : totalMs / 1000,
-                    starts_automatically:       anim.playState === 'running',
+                    starts_automatically:       true,
                     has_video_controls:         false,
                     has_pause_button:           hasPauseBtn,
-                    has_mechanism:              hasPauseBtn,
+                    has_mechanism:              hasMechanism,
                     axe_would_catch:            false,
                     html_snippet:               (el.outerHTML || '').slice(0, 300),
                 });
             });
+        }
+
+        /* ── helper: check if a carousel element has autoplay enabled ── */
+        function carouselIsAutoplay(el) {
+            // Explicit data-autoplay / data-auto-advance (any truthy value except false/0)
+            const ap = el.getAttribute('data-autoplay');
+            if (ap !== null && ap !== 'false' && ap !== '0' && ap !== '') return true;
+            const aa = el.getAttribute('data-auto-advance');
+            if (aa !== null && aa !== 'false' && aa !== '0' && aa !== '') return true;
+
+            // Bootstrap: data-ride="carousel" enables autoplay by default
+            if (el.getAttribute('data-ride') === 'carousel') return true;
+            if (el.getAttribute('data-bs-ride') === 'carousel') return true;
+
+            // Slick: check data-slick JSON or DOM-attached instance (set by Slick on element)
+            if (el.classList.contains('slick-initialized')) {
+                try {
+                    const cfg = JSON.parse(el.getAttribute('data-slick') || '{}');
+                    if (cfg.autoplay === true) return true;
+                } catch(e) {}
+                // Slick attaches options directly on the element's slickOptions property
+                if (el.slickOptions && el.slickOptions.autoplay) return true;
+            }
+
+            // Swiper: check runtime instance (Swiper v6+ attaches to el.swiper)
+            if (el.classList.contains('swiper-initialized') ||
+                el.classList.contains('swiper-container') ||
+                el.classList.contains('swiper')) {
+                if (el.swiper && el.swiper.autoplay && el.swiper.autoplay.running) return true;
+                // Fallback: check data-swiper JSON configuration
+                try {
+                    const raw = el.getAttribute('data-swiper') || el.getAttribute('data-options') || '{}';
+                    const cfg = JSON.parse(raw);
+                    if (cfg.autoplay) return true;
+                } catch(e) {}
+            }
+
+            // Owl Carousel: check data-owlcarousel JSON (jQuery .data() is unavailable here)
+            if (el.classList.contains('owl-carousel')) {
+                try {
+                    const cfg = JSON.parse(el.getAttribute('data-owlcarousel') || '{}');
+                    if (cfg.autoPlay || cfg.autoplay) return true;
+                } catch(e) {}
+                // Some Owl implementations use data-auto-play or data-autoplay (checked above)
+                if (el.hasAttribute('data-auto-play')) return true;
+            }
+
+            // Flickity: check data-flickity JSON or runtime instance
+            if (el.classList.contains('flickity-enabled')) {
+                try {
+                    const cfg = JSON.parse(el.getAttribute('data-flickity') || '{}');
+                    if (cfg.autoPlay) return true;
+                } catch(e) {}
+                // Flickity attaches instance to element via el.flickity
+                if (el.flickity && el.flickity.options && el.flickity.options.autoPlay) return true;
+            }
+
+            // Glide.js: check data-glide JSON or the autoplay data attribute
+            if (el.classList.contains('glide--carousel') || el.classList.contains('glide')) {
+                try {
+                    const cfg = JSON.parse(el.getAttribute('data-glide') || '{}');
+                    if (cfg.autoplay) return true;
+                } catch(e) {}
+                // Some setups pass autoplay directly as an attribute
+                if (el.hasAttribute('data-glide-autoplay')) return true;
+            }
+
+            // Splide.js: check data-splide JSON or runtime instance
+            if (el.classList.contains('splide')) {
+                try {
+                    const cfg = JSON.parse(el.getAttribute('data-splide') || '{}');
+                    if (cfg.autoplay || cfg.autoPlay) return true;
+                } catch(e) {}
+                if (el.splide && el.splide.options && el.splide.options.autoplay) return true;
+            }
+
+            // Generic data-carousel: treat as autoplay only if it also has data-autoplay
+            // (already checked above); a bare data-carousel is just a marker, not autoplay
+            return false;
+        }
+
+        /* ── helper: pause button search both inside carousel and 2 levels up ── */
+        function carouselHasPauseButton(el) {
+            if (nearbyPauseButton(el)) return true;
+            // Search inside the carousel root for a pause/stop control
+            const inner = el.querySelectorAll
+                ? el.querySelectorAll('button,[role="button"],[role="switch"],a')
+                : [];
+            for (const btn of inner) {
+                const txt = (
+                    btn.innerText ||
+                    btn.getAttribute('aria-label') ||
+                    btn.getAttribute('title') || ''
+                ).toLowerCase();
+                if (/pause|stop/.test(txt)) return true;
+            }
+            // Also check aria-label on any child element
+            if (el.querySelector) {
+                if (el.querySelector('[aria-label*="pause" i],[aria-label*="stop" i]')) return true;
+            }
+            return false;
         }
 
         /* ── 4. Carousel / slider auto-play patterns ─────────────────── */
@@ -183,13 +314,15 @@ class MovingContentCrawler:
             '[data-ride="carousel"]',          // Bootstrap 4
             '[data-bs-ride="carousel"]',       // Bootstrap 5
             '.slick-initialized',              // Slick
-            '.swiper-initialized',             // Swiper v8+
-            '.swiper-container',               // Swiper legacy
+            '.swiper-initialized',             // Swiper v8+ (after init)
+            '.swiper-container',               // Swiper legacy (v6/v7)
+            '.swiper',                         // Swiper v8+ root class
             '.owl-carousel',                   // Owl Carousel
             '.flickity-enabled',               // Flickity
-            '.glide--carousel',                // Glide.js
-            '[data-autoplay="true"]',
-            '[data-auto-advance="true"]',
+            '.glide--carousel',                // Glide.js carousel mode
+            '.splide',                         // Splide.js
+            '[data-autoplay]',                 // Generic autoplay attribute (any value)
+            '[data-auto-advance]',             // Generic auto-advance attribute
         ];
 
         const seenCarousel = new WeakSet();
@@ -198,22 +331,9 @@ class MovingContentCrawler:
                 if (seenCarousel.has(el)) return;
                 seenCarousel.add(el);
 
-                const isAutoplay =
-                    el.hasAttribute('data-autoplay')    ||
-                    el.hasAttribute('data-auto-advance')||
-                    el.getAttribute('data-ride')    === 'carousel' ||
-                    el.getAttribute('data-bs-ride') === 'carousel' ||
-                    el.classList.contains('slick-initialized')   ||
-                    el.classList.contains('swiper-initialized')  ||
-                    el.classList.contains('swiper-container')    ||
-                    el.classList.contains('owl-carousel')        ||
-                    el.classList.contains('flickity-enabled')    ||
-                    el.classList.contains('glide--carousel');
+                if (!carouselIsAutoplay(el)) return;
 
-                if (!isAutoplay) return;
-
-                const hasPauseBtn = nearbyPauseButton(el) ||
-                    !!el.querySelector('[aria-label*="pause" i],[aria-label*="stop" i]');
+                const hasPauseBtn = carouselHasPauseButton(el);
 
                 results.push({
                     element_index:              results.length,
@@ -236,7 +356,7 @@ class MovingContentCrawler:
             });
         }
 
-        /* ── 5. <marquee> and <blink> (deprecated; axe-core also flags) */
+        /* ── 5. <marquee> and <blink> (deprecated; axe-core also flags) ── */
         document.querySelectorAll('marquee').forEach(el => {
             results.push({
                 element_index:              results.length,
@@ -321,8 +441,8 @@ class MovingContentCrawler:
                     await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
                 except Exception:
                     await page.goto(url, wait_until="commit", timeout=15_000)
-            # Wait longer so JS animations and carousel libraries can initialise
-            await page.wait_for_timeout(3000)
+            # Wait for JS carousel libraries and animations to fully initialise
+            await page.wait_for_timeout(4000)
 
             raw: list = await page.evaluate(self.EXTRACT_JS)
             for item in raw:

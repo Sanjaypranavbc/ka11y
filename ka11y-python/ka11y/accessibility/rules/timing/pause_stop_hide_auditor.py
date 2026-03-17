@@ -19,11 +19,13 @@ This auditor additionally detects:
   • <video autoplay>          — background / hero videos
   • Animated GIFs             — looping .gif images (no native pause)
   • CSS / WAAPI animations    — long-running keyframe animations (> 5 s or infinite)
-  • JavaScript carousels      — Bootstrap, Swiper, Slick, Owl Carousel, Glide, generic
+  • JavaScript carousels      — Bootstrap, Swiper, Slick, Owl Carousel, Glide, Splide, generic
 
-Pass condition
-──────────────
-  has_mechanism == True  (controls attribute on video, OR nearby pause/stop button)
+Pass conditions (WCAG 2.2.2 applicability gates — ALL must be met to require a mechanism)
+──────────────────────────────────────────────────────────────────────────────────────────
+  1. starts_automatically == True
+  2. duration_seconds > 5  OR  duration_seconds == -1 (infinite)  OR  loops == True
+  3. has_mechanism == False  →  FAILED
 
 CSV output: audit_pause_stop_hide_report.csv
 
@@ -40,7 +42,7 @@ CSV columns
 
 import csv
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 from ka11y.crawler.moving_content_crawler import MovingContentData
 
@@ -90,21 +92,45 @@ _HINTS: Dict[str, str] = {
 # Check function
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _check_222(item: MovingContentData):
+def _check_222(item: MovingContentData) -> Tuple[str, str]:
     """
     Returns (status, violation_message) for WCAG 2.2.2.
     status: "PASSED" | "FAILED"
+
+    WCAG 2.2.2 only applies when ALL three applicability gates are met:
+      1. Content starts automatically
+      2. Content lasts more than 5 seconds (or loops indefinitely)
+      3. No pause/stop/hide mechanism exists  →  FAILED
     """
+    # Gate 1: content must start automatically
+    if not item.starts_automatically:
+        return "PASSED", ""
+
+    # Gate 2: content must last more than 5 seconds.
+    # duration_seconds == -1 means infinite; None means unknown (treat as applicable).
+    # loops == True also means infinite total duration regardless of single-loop duration.
+    is_infinite = item.duration_seconds == -1 or item.animation_iteration_count == "infinite"
+    if (
+        not is_infinite
+        and not item.loops
+        and item.duration_seconds is not None
+        and item.duration_seconds <= 5.0
+    ):
+        return "PASSED", ""
+
+    # Gate 3: a mechanism must be absent to be a violation
     if item.has_mechanism:
         return "PASSED", ""
 
-    label        = _TYPE_LABELS.get(item.content_type, item.content_type)
-    hint         = _HINTS.get(item.content_type, "Provide a mechanism to pause, stop, or hide.")
-    duration_str = (
-        "loops indefinitely"
-        if item.duration_seconds == -1 or item.loops
-        else f"{item.duration_seconds:.1f} s"
-    )
+    label = _TYPE_LABELS.get(item.content_type, item.content_type)
+    hint  = _HINTS.get(item.content_type, "Provide a mechanism to pause, stop, or hide.")
+
+    if is_infinite or item.loops:
+        duration_str = "loops indefinitely"
+    elif item.duration_seconds is not None:
+        duration_str = f"{item.duration_seconds:.1f} s"
+    else:
+        duration_str = "unknown duration"
 
     msg = (
         f"2.2.2: {label} ({duration_str}) starts automatically "
@@ -192,7 +218,7 @@ class PauseStopHideAuditor:
                 "wcag_2_2_2_violation":       violation,
                 "overall_status":             status,
                 "axe_would_catch":            item.axe_would_catch,
-                "html_snippet":               item.html_snippet[:400],
+                "html_snippet":               item.html_snippet,
             }
             records.append(record)
 
@@ -233,10 +259,15 @@ class PauseStopHideAuditor:
             writer.writerow({field: "" for field in self.CSV_FIELDS})
             writer.writerow(summary)
 
+        by_type_summary = "  |  ".join(
+            f"{ct}: {counts['passed']}P/{counts['failed']}F"
+            for ct, counts in by_type.items()
+        )
         print(
             f"[PauseStopHideAuditor] audit_pause_stop_hide_report.csv → {csv_path}  "
             f"({total} items | {passed} PASSED / {failed} FAILED | pass rate {rate}%) "
-            f"| axe-core would miss {axe_would_miss} of these"
+            f"| axe-core would miss {axe_would_miss}"
+            + (f"\n  by type: {by_type_summary}" if by_type_summary else "")
         )
         return records
 
@@ -247,10 +278,13 @@ class PauseStopHideAuditor:
         failed = total - passed
 
         failed_by_type: Dict[str, int] = {}
+        passed_by_type: Dict[str, int] = {}
         for r in records:
+            ct = r["content_type"]
             if r["wcag_2_2_2_status"] == "FAILED":
-                ct = r["content_type"]
                 failed_by_type[ct] = failed_by_type.get(ct, 0) + 1
+            else:
+                passed_by_type[ct] = passed_by_type.get(ct, 0) + 1
 
         return {
             "total_items":       total,
@@ -260,4 +294,5 @@ class PauseStopHideAuditor:
             "wcag_2_2_2_failed": failed,
             "axe_would_miss":    sum(1 for r in records if not r["axe_would_catch"]),
             "failed_by_type":    failed_by_type,
+            "passed_by_type":    passed_by_type,
         }
