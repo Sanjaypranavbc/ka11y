@@ -26,6 +26,7 @@ torchvision = { version = ">=0.25.0,<0.26.0", source = "pytorch-cpu" }
 pandas = "^3.0.1"
 uvicorn = "^0.41.0"
 fastapi = "^0.135.1"
+pytest = "^9.0.2"
 
 [[tool.poetry.source]]
 name = "pytorch-cpu"
