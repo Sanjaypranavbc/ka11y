@@ -1,7 +1,8 @@
 """
 ka11y/accessibility/rules/input_modalities/label_in_name_auditor.py
 ====================================================================
-WCAG 2.5.3 — Label in Name  (Level A, WCAG 2.1+)
+WCAG 2.5.3 — Label in Name  (Level A, WCAG 2.1+)/
+
 
 Rule
 ────

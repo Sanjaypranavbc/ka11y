@@ -27,10 +27,12 @@ from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
 from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
 from ka11y.crawler.moving_content_crawler import MovingContentCrawler
+from ka11y.crawler.target_size_crawler import TargetSizeCrawler
 from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
 from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import LabelInNameAuditor
+from ka11y.accessibility.rules.input_modalities.target_size_auditor import TargetSizeAuditor
 from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import PauseStopHideAuditor
 from ka11y.config.logger import setup_logger
 
@@ -44,6 +46,8 @@ from ka11y.api.v1.dependencies import (
     get_moving_content_crawler,
     get_label_in_name_auditor,
     get_pause_stop_hide_auditor,
+    get_target_size_crawler,
+    get_target_size_auditor,
 )
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -60,6 +64,7 @@ class PipelineRequest(BaseModel):
     run_form_audit: bool = True
     run_label_in_name_audit: bool = True
     run_pause_stop_hide_audit: bool = True
+    run_target_size_audit: bool = True
 
 
 class PipelineResponse(BaseModel):
@@ -84,6 +89,10 @@ class PipelineResponse(BaseModel):
     total_moving_content_items: int = 0
     pause_stop_hide_report: str | None = None
     pause_stop_hide_summary: dict | None = None
+    # WCAG 2.5.8 — Target Size (Minimum)
+    total_target_size_elements: int = 0
+    target_size_report: str | None = None
+    target_size_summary: dict | None = None
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
@@ -94,15 +103,17 @@ async def run_full_pipeline(
     # ── shared output directory (resolved once, reused by all deps) ────────
     output_dir: Path                     = Depends(get_output_dir),
     # ── crawlers ──────────────────────────────────────────────────────────
-    image_crawler: AsyncImageCrawler           = Depends(get_image_crawler),
-    form_crawler: AsyncFormCrawler             = Depends(get_form_crawler),
+    image_crawler: AsyncImageCrawler               = Depends(get_image_crawler),
+    form_crawler: AsyncFormCrawler                 = Depends(get_form_crawler),
     interactive_crawler: InteractiveElementCrawler = Depends(get_interactive_crawler),
     moving_content_crawler: MovingContentCrawler   = Depends(get_moving_content_crawler),
+    target_size_crawler: TargetSizeCrawler         = Depends(get_target_size_crawler),
     # ── auditors ──────────────────────────────────────────────────────────
     image_auditor: AltTextAccessibilityAuditor     = Depends(get_alt_text_auditor),
     form_auditor: FormAccessibilityAuditor         = Depends(get_form_auditor),
     label_in_name_auditor: LabelInNameAuditor      = Depends(get_label_in_name_auditor),
     pause_stop_hide_auditor: PauseStopHideAuditor  = Depends(get_pause_stop_hide_auditor),
+    target_size_auditor: TargetSizeAuditor         = Depends(get_target_size_auditor),
 ):
     url       = str(payload.url)
     max_depth = payload.max_depth
@@ -124,6 +135,8 @@ async def run_full_pipeline(
     label_in_name_summary    = None
     pause_stop_hide_report   = None
     pause_stop_hide_summary  = None
+    target_size_report       = None
+    target_size_summary      = None
 
     try:
         # ── STEP 1 : Image Crawl ──────────────────────────────────────────
@@ -277,6 +290,32 @@ async def run_full_pipeline(
                 f"axe-core would miss {pause_stop_hide_summary['axe_would_miss']}"
             )
 
+        # ── STEP 10 : Target Size Crawl (2.5.8) ──────────────────────
+        logger.info("\nSTEP 10: TARGET SIZE CRAWL (WCAG 2.5.8)")
+        logger.info("-" * 40)
+
+        target_size_items = await target_size_crawler.crawl()
+        target_size_crawler.save_raw_json()
+
+        logger.info(f"Target size crawl complete — {len(target_size_items)} elements found")
+
+        # ── STEP 11 : WCAG 2.5.8 Target Size Audit (optional) ────────
+        if payload.run_target_size_audit:
+            logger.info("\nSTEP 11: WCAG 2.5.8 TARGET SIZE AUDIT")
+            logger.info("-" * 40)
+
+            ts_records         = target_size_auditor.generate_audit_report(target_size_items)
+            target_size_report = str(output_dir / "audit_target_size_report.csv")
+            target_size_summary = TargetSizeAuditor.summarize(ts_records)
+
+            logger.info(
+                f"Target size audit complete — "
+                f"{target_size_summary['checked']} checked, "
+                f"{target_size_summary['passed']} passed "
+                f"({target_size_summary['pass_rate_pct']}%), "
+                f"{target_size_summary['failed']} failed"
+            )
+
         logger.info("\nFULL PIPELINE COMPLETE")
         logger.info("=" * 60)
 
@@ -298,6 +337,9 @@ async def run_full_pipeline(
             total_moving_content_items=len(moving_items),
             pause_stop_hide_report=pause_stop_hide_report,
             pause_stop_hide_summary=pause_stop_hide_summary,
+            total_target_size_elements=len(target_size_items),
+            target_size_report=target_size_report,
+            target_size_summary=target_size_summary,
         )
 
     except Exception as e:

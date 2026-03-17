@@ -26,9 +26,11 @@ from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
 from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
 from ka11y.crawler.moving_content_crawler import MovingContentCrawler
+from ka11y.crawler.target_size_crawler import TargetSizeCrawler
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
 from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import LabelInNameAuditor
+from ka11y.accessibility.rules.input_modalities.target_size_auditor import TargetSizeAuditor
 from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import PauseStopHideAuditor
 
 
@@ -137,3 +139,23 @@ def get_pause_stop_hide_auditor(
 ) -> PauseStopHideAuditor:
     """PauseStopHideAuditor needs the output dir to write its CSV."""
     return PauseStopHideAuditor(output_dir=str(output_dir))
+
+
+def get_target_size_crawler(
+    url: str,
+    max_depth: int,
+    output_dir: Path = Depends(get_output_dir),
+) -> TargetSizeCrawler:
+    """Provide a TargetSizeCrawler for WCAG 2.5.8 auditing."""
+    return TargetSizeCrawler(
+        base_url=url,
+        output_dir=str(output_dir),
+        max_depth=max_depth,
+    )
+
+
+def get_target_size_auditor(
+    output_dir: Path = Depends(get_output_dir),
+) -> TargetSizeAuditor:
+    """TargetSizeAuditor needs the output dir to write its CSV."""
+    return TargetSizeAuditor(output_dir=str(output_dir))
