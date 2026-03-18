@@ -16,6 +16,7 @@ import {
   CheckCircle,
   XCircle,
   X,
+  Images,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,11 +31,12 @@ interface AuditSidebarProps {
 }
 
 const navItems: { label: string; value: TabValue; icon: React.ElementType }[] = [
-  { label: "Dashboard",    value: "dashboard",    icon: LayoutDashboard },
-  { label: "Violations",   value: "violations",   icon: AlertTriangle   },
-  { label: "Needs Review", value: "needs-review", icon: HelpCircle      },
-  { label: "Passes",       value: "passes",       icon: CheckCircle2    },
-  { label: "Settings",     value: "settings",     icon: Settings        },
+  { label: "Dashboard",         value: "dashboard",          icon: LayoutDashboard },
+  { label: "Violations",        value: "violations",         icon: AlertTriangle   },
+  { label: "Needs Review",      value: "needs-review",       icon: HelpCircle      },
+  { label: "Passes",            value: "passes",             icon: CheckCircle2    },
+  { label: "Image Visualiser",  value: "image-visualisation", icon: Images         },
+  { label: "Settings",          value: "settings",           icon: Settings        },
 ];
 
 const STAGE_LABELS: Record<string, string> = {

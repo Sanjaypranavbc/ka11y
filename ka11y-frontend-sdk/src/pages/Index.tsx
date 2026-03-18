@@ -6,6 +6,7 @@ import { DashboardTab } from "@/components/audit/DashboardTab";
 import { ViolationsTab } from "@/components/audit/ViolationsTab";
 import { NeedsReviewTab } from "@/components/audit/NeedsReviewTab";
 import { PassesTab } from "@/components/audit/PassesTab";
+import { ImageVisualisationTab } from "@/components/audit/ImageVisualisationTab";
 import { SettingsTab } from "@/components/audit/SettingsTab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabValue, StageInfo } from "@/types/audit";
@@ -161,11 +162,12 @@ const Index = () => {
                   ))}
                 </div>
               )}
-              {activeTab === "dashboard"    && <DashboardTab result={result} />}
-              {activeTab === "violations"   && <ViolationsTab violations={result.violations} />}
-              {activeTab === "needs-review" && <NeedsReviewTab items={result.needs_review} />}
-              {activeTab === "passes"       && <PassesTab passes={result.passes} />}
-              {activeTab === "settings"     && <SettingsTab />}
+              {activeTab === "dashboard"           && <DashboardTab result={result} />}
+              {activeTab === "violations"          && <ViolationsTab violations={result.violations} />}
+              {activeTab === "needs-review"        && <NeedsReviewTab items={result.needs_review} />}
+              {activeTab === "passes"              && <PassesTab passes={result.passes} />}
+              {activeTab === "image-visualisation" && <ImageVisualisationTab contrastReport={result.contrast_report} />}
+              {activeTab === "settings"            && <SettingsTab />}
             </>
           )}
         </main>

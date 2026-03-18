@@ -150,12 +150,13 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
-from urllib.parse import urlparse
+import mimetypes
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+from urllib.parse import quote, urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, HttpUrl
 
 from ka11y.crawler.crawler import AsyncImageCrawler
@@ -1043,6 +1044,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
     ts = time.strftime("%m%d_%H%M")
     output_dir = Path(f"{config['input']['output_dir']}/{domain}_{ts}_combined")
     output_dir.mkdir(parents=True, exist_ok=True)
+    _jobs[job_id]["output_dir"] = str(output_dir)
 
     try:
         # Fire axe-core and all Python stages concurrently
@@ -1106,6 +1108,15 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
 
         report = _build_report(url, all_findings, contrast_report=contrast_report)
         report["warnings"] = _jobs[job_id].get("warnings", [])
+
+        # Inject image_url into each contrast-report image so the frontend
+        # can render the image directly without constructing the URL itself.
+        if report.get("contrast_report"):
+            for img in report["contrast_report"].get("images", []):
+                img["image_url"] = (
+                    f"/api/v1/combined/{job_id}/image"
+                    f"?path={quote(img['path'], safe='')}"
+                )
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
@@ -1209,6 +1220,41 @@ async def get_combined_audit(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
     return job
+
+
+@router.get("/{job_id}/image")
+async def get_job_image(job_id: str, path: str):
+    """
+    Serve an image file belonging to a completed audit job.
+
+    The ``path`` query parameter must exactly match one of the image paths
+    recorded in ``result.contrast_report.images`` for the given job — any
+    other path is rejected with 403 to prevent directory traversal.
+
+    Example:
+        GET /api/v1/combined/<job_id>/image?path=/tmp/output/img.png
+    """
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+
+    # Whitelist: only serve paths that appear in this job's contrast report
+    result = job.get("result") or {}
+    contrast_report = result.get("contrast_report") or {}
+    valid_paths = {img["path"] for img in contrast_report.get("images", [])}
+
+    if path not in valid_paths:
+        raise HTTPException(
+            status_code=403,
+            detail="Image path is not associated with this job.",
+        )
+
+    img_path = Path(path)
+    if not img_path.exists() or not img_path.is_file():
+        raise HTTPException(status_code=404, detail="Image file not found on server.")
+
+    media_type, _ = mimetypes.guess_type(str(img_path))
+    return FileResponse(str(img_path), media_type=media_type or "image/png")
 
 
 @router.get("/{job_id}/stream")

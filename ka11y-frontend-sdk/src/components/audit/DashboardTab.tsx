@@ -1,4 +1,5 @@
 import { AuditResult } from "@/types/audit";
+import { ContrastReportSection } from "./ContrastReportSection";
 import { MetricCard } from "./MetricCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -64,7 +65,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
     const counts: Record<string, { sc: string; name: string; count: number; level: string }> = {};
     result.violations.forEach((v) => {
       const key = v.wcag_sc;
-      if (!counts[key]) counts[key] = { sc: v.wcag_sc, name: v.criterion_name, count: 0, level: v.level };
+      if (!counts[key]) counts[key] = { sc: v.wcag_sc ?? "?", name: v.criterion_name ?? "", count: 0, level: v.level ?? "" };
       counts[key].count++;
     });
     return Object.values(counts)
@@ -201,6 +202,11 @@ export function DashboardTab({ result }: DashboardTabProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Contrast report — rendered only when OCR produced contrast data */}
+      {result.contrast_report && result.contrast_report.images.length > 0 && (
+        <ContrastReportSection report={result.contrast_report} />
+      )}
     </div>
   );
 }

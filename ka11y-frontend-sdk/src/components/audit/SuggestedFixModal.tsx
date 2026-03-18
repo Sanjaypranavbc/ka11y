@@ -7,9 +7,9 @@ import { toast } from "sonner";
 interface SuggestedFixModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  wcagSc: string;
-  criterionName: string;
-  suggestedFix: string;
+  wcagSc: string | null;
+  criterionName: string | null;
+  suggestedFix: string | null;
   elementHtml: string;
   helpUrl?: string;
 }
@@ -24,33 +24,39 @@ export function SuggestedFixModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl w-full">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono">{wcagSc}</Badge>
-            {criterionName}
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            {wcagSc && <Badge variant="outline" className="font-mono shrink-0">{wcagSc}</Badge>}
+            <span className="break-words">{criterionName}</span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-sm font-medium text-foreground mb-2">Suggested Fix</h4>
-            <blockquote className="border-l-4 border-primary pl-4 text-sm text-muted-foreground italic">
-              {suggestedFix}
-            </blockquote>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-foreground">Element HTML</h4>
-              <Button variant="ghost" size="sm" onClick={copyHtml}>
-                <Copy className="h-3 w-3 mr-1" /> Copy
-              </Button>
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          {suggestedFix && (
+            <div>
+              <h4 className="text-sm font-medium text-foreground mb-2">Suggested Fix</h4>
+              <blockquote className="border-l-4 border-primary pl-4 text-sm text-muted-foreground italic break-words leading-relaxed">
+                {suggestedFix}
+              </blockquote>
             </div>
-            <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto">
-              <code>{elementHtml}</code>
-            </pre>
-          </div>
+          )}
+
+          {elementHtml && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-medium text-foreground">Element HTML</h4>
+                <Button variant="ghost" size="sm" onClick={copyHtml}>
+                  <Copy className="h-3 w-3 mr-1" /> Copy
+                </Button>
+              </div>
+              <div className="bg-muted rounded-md p-3 overflow-x-auto">
+                <pre className="text-xs whitespace-pre-wrap break-all leading-relaxed">
+                  <code>{elementHtml}</code>
+                </pre>
+              </div>
+            </div>
+          )}
 
           {helpUrl && (
             <Button variant="outline" size="sm" asChild>

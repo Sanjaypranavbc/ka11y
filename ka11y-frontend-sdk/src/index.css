@@ -89,12 +89,8 @@
     font-family: 'IBM Plex Sans', system-ui, sans-serif;
   }
 
-  /* Subtle grid on scrollable areas */
   .grid-bg {
-    background-image:
-      linear-gradient(hsl(213 30% 85% / 0.35) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(213 30% 85% / 0.35) 1px, transparent 1px);
-    background-size: 28px 28px;
+    background: white;
   }
 
   /* Thin scrollbar */
