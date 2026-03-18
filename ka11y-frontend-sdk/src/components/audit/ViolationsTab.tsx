@@ -38,7 +38,7 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
 
   const allSeverities = ["critical", "high", "medium", "low"];
   const allSources = ["axe", "python"];
-  const allScs = useMemo(() => [...new Set(violations.map((v) => v.wcag_sc))].sort(), [violations]);
+  const allScs = useMemo(() => [...new Set(violations.map((v) => v.wcag_sc).filter(Boolean))].sort() as string[], [violations]);
 
   const filtered = useMemo(() => {
     return violations.filter((v) => {
@@ -156,15 +156,15 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
             {filtered.slice(0, 50).map((v, i) => (
               <TableRow key={i} className="hover:bg-muted/30">
                 <TableCell>
-                  <Badge className={cn("text-[10px]", severityColors[v.severity])}>{v.severity}</Badge>
+                  <Badge className={cn("text-[10px]", v.severity ? severityColors[v.severity] : "bg-muted text-muted-foreground")}>{v.severity ?? "—"}</Badge>
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={cn("text-[10px]", sourceColors[v.source])}>{v.source}</Badge>
                 </TableCell>
-                <TableCell className="font-mono text-xs">{v.wcag_sc}</TableCell>
-                <TableCell className="text-xs">{v.criterion_name}</TableCell>
+                <TableCell className="font-mono text-xs">{v.wcag_sc ?? "—"}</TableCell>
+                <TableCell className="text-xs">{v.criterion_name ?? "—"}</TableCell>
                 <TableCell>
-                  <Badge variant={v.level === "A" ? "default" : "outline"} className="text-[10px]">{v.level}</Badge>
+                  <Badge variant={v.level === "A" ? "default" : "outline"} className="text-[10px]">{v.level ?? "—"}</Badge>
                 </TableCell>
                 <TableCell>
                   <Tooltip>

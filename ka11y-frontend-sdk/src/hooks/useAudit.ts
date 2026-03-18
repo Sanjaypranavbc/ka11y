@@ -1,25 +1,33 @@
 import { useState, useCallback, useRef } from "react";
-import { AuditConfig, AuditResult, StageInfo } from "@/types/audit";
+import { AuditConfig, AuditResult, ContrastReport, StageInfo } from "@/types/audit";
 import { emptyAuditResult } from "@/data/sampleData";
+
+// Backend returns element HTML nested as `element.html`; flatten it to `element_html` for the UI.
+function flattenFinding(f: Record<string, unknown>) {
+  const element = f.element as Record<string, unknown> | null | undefined;
+  return { ...f, element_html: (element?.html as string) || "" };
+}
 
 function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): AuditResult {
   const report = (pollData.result as Record<string, unknown>) || {};
+  const rawViolations = (report.violations as Record<string, unknown>[]) || [];
+  const rawNeedsReview = (report.needs_review as Record<string, unknown>[]) || [];
   return {
     job_id: (pollData.job_id as string) || "",
     status: "completed",
     url: (report.url as string) || (pollData.url as string) || config.url,
     generated_at: (report.generated_at as string) || new Date().toISOString(),
     total:
-      ((report.violations as unknown[])?.length || 0) +
-      ((report.needs_review as unknown[])?.length || 0) +
+      rawViolations.length + rawNeedsReview.length +
       ((report.passes as unknown[])?.length || 0),
-    violations_count: (report.violations as unknown[])?.length || 0,
-    needs_review_count: (report.needs_review as unknown[])?.length || 0,
+    violations_count: rawViolations.length,
+    needs_review_count: rawNeedsReview.length,
     passes_count: (report.passes as unknown[])?.length || 0,
-    violations: (report.violations as AuditResult["violations"]) || [],
-    needs_review: (report.needs_review as AuditResult["needs_review"]) || [],
+    violations: rawViolations.map(flattenFinding) as AuditResult["violations"],
+    needs_review: rawNeedsReview.map(flattenFinding) as AuditResult["needs_review"],
     passes: (report.passes as AuditResult["passes"]) || [],
     warnings: (report.warnings as string[]) || (pollData.warnings as string[]) || [],
+    contrast_report: (report.contrast_report as ContrastReport) ?? null,
   };
 }
 

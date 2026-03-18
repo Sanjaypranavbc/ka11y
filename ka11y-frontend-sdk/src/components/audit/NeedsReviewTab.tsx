@@ -64,10 +64,10 @@ export function NeedsReviewTab({ items }: NeedsReviewTabProps) {
           <TableBody>
             {filtered.map((v, i) => (
               <TableRow key={i}>
-                <TableCell><Badge className={cn("text-[10px]", severityColors[v.severity])}>{v.severity}</Badge></TableCell>
+                <TableCell><Badge className={cn("text-[10px]", v.severity ? severityColors[v.severity] : "bg-muted text-muted-foreground")}>{v.severity ?? "—"}</Badge></TableCell>
                 <TableCell><Badge variant="outline" className="text-[10px]">{v.source}</Badge></TableCell>
-                <TableCell className="font-mono text-xs">{v.wcag_sc}</TableCell>
-                <TableCell className="text-xs">{v.criterion_name}</TableCell>
+                <TableCell className="font-mono text-xs">{v.wcag_sc ?? "—"}</TableCell>
+                <TableCell className="text-xs">{v.criterion_name ?? "—"}</TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{v.reason}</TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>
