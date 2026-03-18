@@ -58,6 +58,16 @@ OUTPUT FORMAT
     suggested_fix   static remediation hint (null for passes)
     element         { html, element_id, tag, page_url } | null
 
+  Contrast findings (source="python", rule_id="python_1_4_3_contrast") also
+  include an extra top-level key in the combined report:
+
+    contrast_report {
+        summary { total_regions_analysed, total_violations,
+                  images_with_violations, pass_rate_pct }
+        table   [ flat row per detected text region ]
+        images  [ per-image nested detail ]
+    }
+
 HOW TO ADD A NEW PYTHON RULE
 ─────────────────────────────
 Step 1 — Crawler  (ka11y/crawler/)
@@ -292,6 +302,7 @@ _SUGGESTED_FIX: Dict[str, str] = {
 
 _PYTHON_SEVERITY: Dict[str, str] = {
     "1.1.1": "critical",
+    "1.4.3": "high",      # ← contrast (Minimum) — new
     "2.2.2": "high",
     "2.5.3": "high",
     "2.5.8": "medium",
@@ -444,6 +455,145 @@ def _make_finding(
     }
 
 
+# ── Contrast report builder ──────────────────────────────────────────────────────
+
+def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
+    """
+    Extract contrast data from OCR results into a structured report.
+
+    Returns
+    -------
+    {
+        "summary": {
+            "total_regions_analysed": int,
+            "total_violations":       int,
+            "images_with_violations": int,
+            "pass_rate_pct":          float,
+        },
+        "table": [          # one flat row per detected text region
+            {
+                "image":            str,
+                "image_path":       str,
+                "text":             str,
+                "confidence":       float,
+                "foreground_hex":   str | None,
+                "foreground_lum":   float | None,
+                "background_hex":   str | None,
+                "background_lum":   float | None,
+                "contrast_ratio":   float | None,
+                "AA_normal":        bool | None,
+                "AA_large":         bool | None,
+                "AAA_normal":       bool | None,
+                "AAA_large":        bool | None,
+                "violations":       list[str],
+            },
+            ...
+        ],
+        "images": [         # per-image nested detail
+            {
+                "filename":                  str,
+                "path":                      str,
+                "contrast_violations_count": int,
+                "detections": [ ... ],
+            },
+            ...
+        ],
+    }
+    """
+    table_rows: List[Dict[str, Any]] = []
+    images_detail: List[Dict[str, Any]] = []
+    total_violations = 0
+    images_with_violations = 0
+
+    for result in ocr_results:
+        if not result.has_text:
+            continue
+
+        image_detections: List[Dict[str, Any]] = []
+        image_has_violation = False
+
+        for det in result.detections:
+            ci  = det.contrast_info or {}
+            col = det.color_info or {}
+
+            ratio: Optional[float] = None
+            aa_n = aa_l = aaa_n = aaa_l = None
+
+            compliance = ci.get("compliance") or {}
+            if compliance:
+                ratio  = compliance.get("contrast_ratio")
+                aa_n   = compliance.get("AA_normal")
+                aa_l   = compliance.get("AA_large")
+                aaa_n  = compliance.get("AAA_normal")
+                aaa_l  = compliance.get("AAA_large")
+
+            fg      = col.get("foreground") or {}
+            bg_pal  = col.get("background_palette") or []
+            checks  = col.get("contrast_checks") or []
+            dominant_bg: Dict[str, Any] = bg_pal[0] if bg_pal else {}
+
+            table_rows.append({
+                "image":          result.filename,
+                "image_path":     result.original_path,
+                "text":           det.text,
+                "confidence":     round(float(det.confidence), 3),
+                "foreground_hex": fg.get("hex"),
+                "foreground_lum": fg.get("luminance"),
+                "background_hex": dominant_bg.get("hex"),
+                "background_lum": dominant_bg.get("luminance"),
+                "contrast_ratio": ratio,
+                "AA_normal":      aa_n,
+                "AA_large":       aa_l,
+                "AAA_normal":     aaa_n,
+                "AAA_large":      aaa_l,
+                "violations":     list(det.wcag_violations or []),
+            })
+
+            if det.wcag_violations:
+                total_violations += len(det.wcag_violations)
+                image_has_violation = True
+
+            image_detections.append({
+                "text":               det.text,
+                "confidence":         round(float(det.confidence), 3),
+                "bbox":               det.bbox,
+                "foreground":         fg or None,
+                "background_palette": bg_pal,
+                "contrast_checks":    checks,
+                "wcag_violations":    list(det.wcag_violations or []),
+                "ratio":              ratio,
+                "AA_normal":          aa_n,
+                "AA_large":           aa_l,
+                "AAA_normal":         aaa_n,
+                "AAA_large":          aaa_l,
+            })
+
+        if image_has_violation:
+            images_with_violations += 1
+
+        if image_detections:
+            images_detail.append({
+                "filename":                  result.filename,
+                "path":                      result.original_path,
+                "contrast_violations_count": result.contrast_violations_count,
+                "detections":                image_detections,
+            })
+
+    total = len(table_rows)
+    pass_rate = round((total - total_violations) / total * 100, 1) if total else 0.0
+
+    return {
+        "summary": {
+            "total_regions_analysed": total,
+            "total_violations":       total_violations,
+            "images_with_violations": images_with_violations,
+            "pass_rate_pct":          pass_rate,
+        },
+        "table":  table_rows,
+        "images": images_detail,
+    }
+
+
 # ── Per-auditor finding converters ───────────────────────────────────────────────
 # Each converter maps raw auditor records → flat finding dicts.
 # Add a new converter here when adding a new Python rule (see HOW TO ADD A NEW RULE).
@@ -467,6 +617,85 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                 status="pass", reason="Image has adequate alt text.",
                 severity=None, page_url=page_url,
             ))
+    return findings
+
+
+def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
+    """
+    Convert per-detection contrast data from OCR results into WCAG 1.4.3
+    findings so they appear in the combined violations / passes lists
+    alongside every other rule.
+
+    A detection becomes a "fail" finding when ANY of its wcag_violations
+    entries matches "Fails AA Normal".  It becomes a "pass" when the
+    contrast_info shows AA_normal = True and there are no violations.
+    """
+    findings: List[Dict] = []
+
+    for result in ocr_results:
+        if not result.has_text:
+            continue
+
+        for det in result.detections:
+            ci  = det.contrast_info or {}
+            col = det.color_info or {}
+
+            compliance = (ci.get("compliance") or {})
+            aa_normal  = compliance.get("AA_normal")
+            ratio      = compliance.get("contrast_ratio")
+
+            fg  = (col.get("foreground") or {})
+            bg_pal = col.get("background_palette") or []
+            dominant_bg = bg_pal[0] if bg_pal else {}
+
+            fg_hex = fg.get("hex", "?")
+            bg_hex = dominant_bg.get("hex", "?")
+            ratio_str = f"{ratio:.2f}:1" if ratio is not None else "unknown"
+
+            # Build a short HTML snippet to identify the element
+            text_snippet = (det.text or "")[:60].replace('"', "'")
+            element_html = (
+                f'<img-text fg="{fg_hex}" bg="{bg_hex}" '
+                f'ratio="{ratio_str}">{text_snippet}</img-text>'
+            )
+            image_label = f'{result.filename} -- "{text_snippet}"'
+
+            violations = list(det.wcag_violations or [])
+            has_aa_fail = any("AA Normal" in v for v in violations)
+
+            if has_aa_fail:
+                findings.append(_make_finding(
+                    source="python",
+                    rule_id="python_1_4_3_contrast",
+                    wcag_sc="1.4.3",
+                    status="fail",
+                    reason=(
+                        f'Text in image "{result.filename}" fails WCAG 1.4.3 '
+                        f"AA contrast. Ratio {ratio_str} "
+                        f"(fg {fg_hex} on bg {bg_hex}). "
+                        f"Required minimum: 4.5:1 for normal text."
+                    ),
+                    severity=_PYTHON_SEVERITY["1.4.3"],
+                    element_html=element_html,
+                    element_id=None,
+                    element_tag="img",
+                    page_url=page_url,
+                ))
+            elif aa_normal is True:
+                findings.append(_make_finding(
+                    source="python",
+                    rule_id="python_1_4_3_contrast",
+                    wcag_sc="1.4.3",
+                    status="pass",
+                    reason=(
+                        f"Text in {image_label} passes WCAG 1.4.3 AA contrast. "
+                        f"Ratio {ratio_str} (fg {fg_hex} on bg {bg_hex})."
+                    ),
+                    severity=None,
+                    page_url=page_url,
+                ))
+            # If aa_normal is None (no contrast info), skip — we have no data.
+
     return findings
 
 
@@ -585,17 +814,21 @@ async def _run_python_stages(
     run_pause_stop_hide_audit: bool,
     run_target_size_audit: bool,
     job_id: str,
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Run all Python auditors sequentially with per-stage progress tracking.
 
-    Each stage is wrapped in try/except so a single failure does NOT abort
-    the remaining stages — graceful degradation is the default behaviour.
-    Returns a combined flat list of findings from all stages that succeeded.
+    Returns
+    -------
+    (all_findings, contrast_report)
+        all_findings   — combined flat list of findings from all stages
+        contrast_report — structured contrast JSON (summary + table + images),
+                          or None if OCR was not run
     """
     all_findings: List[Dict] = []
+    contrast_report: Optional[Dict[str, Any]] = None
 
-    # ── Stage: image_audit (WCAG 1.1.1) ──────────────────────────────────────
+    # ── Stage: image_audit (WCAG 1.1.1 + 1.4.3 contrast) ────────────────────
     stage_findings: List[Dict] = []
     _stage_start(job_id, "image_audit")
     try:
@@ -612,6 +845,14 @@ async def _run_python_stages(
             saver.save_reports()
             ocr_results = detector.results
 
+            # ── Build structured contrast report ──────────────────────────
+            contrast_report = _build_contrast_report(ocr_results)
+
+            # ── Convert contrast violations into WCAG 1.4.3 findings ──────
+            contrast_findings = _contrast_to_findings(ocr_results, url)
+            stage_findings.extend(contrast_findings)
+            all_findings.extend(contrast_findings)
+
         if run_image_audit:
             auditor = AltTextAccessibilityAuditor()
             records = auditor.generate_audit_report(
@@ -619,8 +860,9 @@ async def _run_python_stages(
                 ocr_results=ocr_results,
                 output_dir=image_crawler.output_dir,
             )
-            stage_findings = _alt_text_to_findings(records, url)
-            all_findings.extend(stage_findings)
+            alt_findings = _alt_text_to_findings(records, url)
+            stage_findings.extend(alt_findings)
+            all_findings.extend(alt_findings)
 
         _stage_complete(job_id, "image_audit", len(stage_findings))
     except Exception as _exc:
@@ -706,16 +948,25 @@ async def _run_python_stages(
     except Exception as _exc:
         _stage_error_and_warn(job_id, "target_size", _exc)
 
-    return all_findings
+    return all_findings, contrast_report
 
 
 # ── Report builder ───────────────────────────────────────────────────────────────
 
-def _build_report(url: str, all_findings: List[Dict]) -> Dict[str, Any]:
-    """Merge axe + Python flat findings into the final combined report."""
-    violations  = [f for f in all_findings if f["status"] == "fail"]
+def _build_report(
+    url: str,
+    all_findings: List[Dict],
+    contrast_report: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Merge axe + Python flat findings into the final combined report.
+
+    The `contrast_report` key surfaces the full structured contrast analysis
+    (summary, flat table, and per-image detail) alongside the flat findings.
+    """
+    violations   = [f for f in all_findings if f["status"] == "fail"]
     needs_review = [f for f in all_findings if f["status"] == "needs_review"]
-    passes      = [f for f in all_findings if f["status"] == "pass"]
+    passes       = [f for f in all_findings if f["status"] == "pass"]
 
     sev_count: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     for f in violations + needs_review:
@@ -740,7 +991,7 @@ def _build_report(url: str, all_findings: List[Dict]) -> Dict[str, Any]:
             else:
                 bucket[key]["passes"] += 1
 
-    return {
+    report: Dict[str, Any] = {
         "url": url,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "summary": {
@@ -756,7 +1007,10 @@ def _build_report(url: str, all_findings: List[Dict]) -> Dict[str, Any]:
         "violations": violations,
         "needs_review": needs_review,
         "passes": passes,
+        # ── NEW: full structured contrast report ──────────────────────────
+        "contrast_report": contrast_report,
     }
+    return report
 
 
 # ── Async job runner ─────────────────────────────────────────────────────────────
@@ -815,7 +1069,13 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
             _stage_complete(job_id, "axe_core", len(node_findings))
 
         # ── Resolve Python result ─────────────────────────────────────────────
-        python_findings: List[Dict] = [] if isinstance(python_result, Exception) else python_result
+        python_findings: List[Dict] = []
+        contrast_report: Optional[Dict[str, Any]] = None
+
+        if isinstance(python_result, Exception):
+            pass  # all stages failed — warnings already recorded
+        else:
+            python_findings, contrast_report = python_result
 
         if not node_findings and not python_findings:
             raise RuntimeError(
@@ -835,7 +1095,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
             key=lambda f: {"fail": 0, "needs_review": 1, "pass": 2}.get(f["status"], 3)
         )
 
-        report = _build_report(url, all_findings)
+        report = _build_report(url, all_findings, contrast_report=contrast_report)
         report["warnings"] = _jobs[job_id].get("warnings", [])
 
         report_path = output_dir / "combined_report.json"
@@ -855,6 +1115,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
             f"{report['summary']['violations']} violations, "
             f"{report['summary']['needs_review']} needs_review, "
             f"{report['summary']['passes']} passes | "
+            f"contrast regions: {(contrast_report or {}).get('summary', {}).get('total_regions_analysed', 0)} | "
             f"report → {report_path}"
         )
 
@@ -890,6 +1151,11 @@ async def submit_combined_audit(payload: CombinedRequest):
 
     **Graceful degradation**: if Node/axe-core is unavailable the job still
     completes using Python-only findings; a `warnings` list notes the failure.
+
+    The completed result includes a `contrast_report` key with:
+    - `summary`  — aggregate counts and pass-rate
+    - `table`    — one flat row per detected text region (suitable for CSV/table display)
+    - `images`   — per-image nested detail with full palette and compliance data
     """
     job_id = str(uuid.uuid4())
     url = str(payload.url)
@@ -923,6 +1189,12 @@ async def get_combined_audit(job_id: str):
     - **running**   — stages executing (`current_stage` shows active stage)
     - **completed** — `result` populated; `warnings` lists any non-fatal failures
     - **failed**    — `error` contains the root-cause message
+
+    When completed, `result.contrast_report` contains the full contrast analysis:
+    - `summary`  — counts and pass-rate across all detected text regions
+    - `table`    — flat list of rows, one per text region (image, text, fg/bg hex,
+                   ratio, AA_normal, AA_large, AAA_normal, AAA_large, violations)
+    - `images`   — per-image nested detail with full palette and contrast checks
     """
     job = _jobs.get(job_id)
     if not job:

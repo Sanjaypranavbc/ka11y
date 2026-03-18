@@ -1,4 +1,4 @@
-# text_detector
+# text_detector.py
 
 import os
 import json

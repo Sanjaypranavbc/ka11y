@@ -19,6 +19,7 @@ that lists it — so all five steps share one directory.
 
 import traceback
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
@@ -60,6 +61,172 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 logger = setup_logger(name="KAC", tag="pipeline")
 
 
+# ── Contrast extraction helper ────────────────────────────────────────────────
+
+
+def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
+    """
+    Walk OCR results and build a structured contrast report that is safe to
+    serialise as JSON.
+
+    Returns
+    -------
+    {
+        "summary": {
+            "total_regions_analysed": int,
+            "total_violations":       int,
+            "images_with_violations": int,
+            "pass_rate_pct":          float,
+        },
+        "table": [          # one row per text-detection region
+            {
+                "image":            str,
+                "image_path":       str,
+                "text":             str,
+                "confidence":       float,
+                "foreground_hex":   str | None,
+                "foreground_lum":   float | None,
+                "background_hex":   str | None,   # dominant bg
+                "background_lum":   float | None,
+                "contrast_ratio":   float | None,
+                "AA_normal":        bool | None,
+                "AA_large":         bool | None,
+                "AAA_normal":       bool | None,
+                "AAA_large":        bool | None,
+                "violations":       list[str],
+            },
+            ...
+        ],
+        "images": [         # one entry per image that has detections
+            {
+                "filename":                  str,
+                "path":                      str,
+                "contrast_violations_count": int,
+                "detections": [
+                    {
+                        "text":           str,
+                        "confidence":     float,
+                        "bbox":           list,
+                        "foreground":     dict | None,
+                        "background_palette": list[dict],
+                        "contrast_checks":    list[dict],
+                        "wcag_violations":    list[str],
+                        "ratio":          float | None,
+                        "AA_normal":      bool | None,
+                        "AA_large":       bool | None,
+                        "AAA_normal":     bool | None,
+                        "AAA_large":      bool | None,
+                    },
+                    ...
+                ],
+            },
+            ...
+        ],
+    }
+    """
+    table_rows: List[Dict[str, Any]] = []
+    images_detail: List[Dict[str, Any]] = []
+    total_violations = 0
+    images_with_violations = 0
+
+    for result in ocr_results:
+        if not result.has_text:
+            continue
+
+        image_detections: List[Dict[str, Any]] = []
+        image_has_violation = False
+
+        for det in result.detections:
+            # ── pull contrast_info (from contrast_analyser.analyze_text_region) ──
+            ci = det.contrast_info or {}
+            col = det.color_info or {}
+
+            ratio: Optional[float] = None
+            aa_n = aa_l = aaa_n = aaa_l = None
+
+            compliance = ci.get("compliance") or {}
+            if compliance:
+                ratio   = compliance.get("contrast_ratio")
+                aa_n    = compliance.get("AA_normal")
+                aa_l    = compliance.get("AA_large")
+                aaa_n   = compliance.get("AAA_normal")
+                aaa_l   = compliance.get("AAA_large")
+
+            # ── foreground / background from color_info (cluster-based) ──────────
+            fg      = col.get("foreground") or {}
+            bg_pal  = col.get("background_palette") or []
+            checks  = col.get("contrast_checks") or []
+
+            # dominant background = first cluster with the highest contrast check
+            dominant_bg: Dict[str, Any] = {}
+            if bg_pal:
+                dominant_bg = bg_pal[0]
+
+            # flat table row (one per detection)
+            table_rows.append({
+                "image":           result.filename,
+                "image_path":      result.original_path,
+                "text":            det.text,
+                "confidence":      round(float(det.confidence), 3),
+                "foreground_hex":  fg.get("hex"),
+                "foreground_lum":  fg.get("luminance"),
+                "background_hex":  dominant_bg.get("hex"),
+                "background_lum":  dominant_bg.get("luminance"),
+                "contrast_ratio":  ratio,
+                "AA_normal":       aa_n,
+                "AA_large":        aa_l,
+                "AAA_normal":      aaa_n,
+                "AAA_large":       aaa_l,
+                "violations":      list(det.wcag_violations or []),
+            })
+
+            if det.wcag_violations:
+                total_violations += len(det.wcag_violations)
+                image_has_violation = True
+
+            # full detection record (nested under its image)
+            image_detections.append({
+                "text":               det.text,
+                "confidence":         round(float(det.confidence), 3),
+                "bbox":               det.bbox,
+                "foreground":         fg or None,
+                "background_palette": bg_pal,
+                "contrast_checks":    checks,
+                "wcag_violations":    list(det.wcag_violations or []),
+                "ratio":              ratio,
+                "AA_normal":          aa_n,
+                "AA_large":           aa_l,
+                "AAA_normal":         aaa_n,
+                "AAA_large":          aaa_l,
+            })
+
+        if image_has_violation:
+            images_with_violations += 1
+
+        if image_detections:
+            images_detail.append({
+                "filename":                  result.filename,
+                "path":                      result.original_path,
+                "contrast_violations_count": result.contrast_violations_count,
+                "detections":                image_detections,
+            })
+
+    total_regions = len(table_rows)
+    violations_free = total_regions - total_violations
+    pass_rate = round(violations_free / total_regions * 100, 1) if total_regions else 0.0
+
+    return {
+        "summary": {
+            "total_regions_analysed": total_regions,
+            "total_violations":       total_violations,
+            "images_with_violations": images_with_violations,
+            "pass_rate_pct":          pass_rate,
+        },
+        "table":  table_rows,
+        "images": images_detail,
+    }
+
+
 # ── Request / Response models ─────────────────────────────────────────────────
 
 
@@ -81,25 +248,27 @@ class PipelineResponse(BaseModel):
     max_depth: int
     # Image crawl
     total_images: int
-    ocr_dir: str | None = None
-    image_audit_report: str | None = None
-    image_audit_summary: dict | None = None
+    ocr_dir: Optional[str] = None
+    image_audit_report: Optional[str] = None
+    image_audit_summary: Optional[Dict[str, Any]] = None
+    # ── NEW: contrast analysis ─────────────────────────────────────────────
+    contrast_report: Optional[Dict[str, Any]] = None   # structured contrast JSON + table
     # Form crawl
     total_fields: int
-    form_audit_report: str | None = None
-    form_audit_summary: dict | None = None
+    form_audit_report: Optional[str] = None
+    form_audit_summary: Optional[Dict[str, Any]] = None
     # WCAG 2.5.3 — Label in Name
     total_interactive_elements: int = 0
-    label_in_name_report: str | None = None
-    label_in_name_summary: dict | None = None
+    label_in_name_report: Optional[str] = None
+    label_in_name_summary: Optional[Dict[str, Any]] = None
     # WCAG 2.2.2 — Pause, Stop, Hide
     total_moving_content_items: int = 0
-    pause_stop_hide_report: str | None = None
-    pause_stop_hide_summary: dict | None = None
+    pause_stop_hide_report: Optional[str] = None
+    pause_stop_hide_summary: Optional[Dict[str, Any]] = None
     # WCAG 2.5.8 — Target Size (Minimum)
     total_target_size_elements: int = 0
-    target_size_report: str | None = None
-    target_size_summary: dict | None = None
+    target_size_report: Optional[str] = None
+    target_size_summary: Optional[Dict[str, Any]] = None
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
@@ -137,6 +306,7 @@ async def run_full_pipeline(
 
     ocr_results = []
     ocr_dir = None
+    contrast_report = None
     image_audit_report = None
     image_audit_summary = None
     form_audit_report = None
@@ -176,9 +346,13 @@ async def run_full_pipeline(
             ocr_results = detector.results
             ocr_dir = str(detector.text_detected_dir)
 
+            # ── Build structured contrast report from OCR results ─────────
+            contrast_report = extract_contrast_report(ocr_results)
+
             logger.info(
                 f"OCR complete — {len(ocr_results)} images processed, "
-                f"{sum(1 for r in ocr_results if r.has_text)} with text"
+                f"{sum(1 for r in ocr_results if r.has_text)} with text | "
+                f"contrast violations: {contrast_report['summary']['total_violations']}"
             )
 
         # ── STEP 3 : Image Accessibility Audit (optional) ─────────────────
@@ -198,7 +372,7 @@ async def run_full_pipeline(
             passed = sum(1 for r in img_records if r["overall_status"] == "PASSED")
             failed = total - passed
 
-            by_class: dict[str, dict] = {}
+            by_class: Dict[str, Dict[str, int]] = {}
             for r in img_records:
                 cls = r["classification"]
                 if cls not in by_class:
@@ -354,6 +528,7 @@ async def run_full_pipeline(
             ocr_dir=ocr_dir,
             image_audit_report=image_audit_report,
             image_audit_summary=image_audit_summary,
+            contrast_report=contrast_report,       # ← NEW
             total_fields=len(form_inputs),
             form_audit_report=form_audit_report,
             form_audit_summary=form_audit_summary,
