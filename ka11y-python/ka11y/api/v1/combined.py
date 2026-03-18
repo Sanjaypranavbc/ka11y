@@ -626,9 +626,15 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     findings so they appear in the combined violations / passes lists
     alongside every other rule.
 
-    A detection becomes a "fail" finding when ANY of its wcag_violations
-    entries matches "Fails AA Normal".  It becomes a "pass" when the
-    contrast_info shows AA_normal = True and there are no violations.
+    Single source of truth: contrast_info["compliance"] from contrast_analyser,
+    which is computed directly from pixel luminance. wcag_violations strings are
+    NOT used here — they come from a separate cluster-based path in color_info
+    and can disagree with contrast_info.
+
+    Decision logic (requires contrast data to be present):
+      - aa_normal is False  → fail  (ratio < 4.5:1)
+      - aa_normal is True   → pass  (ratio >= 4.5:1)
+      - aa_normal is None   → skip  (no contrast data available)
     """
     findings: List[Dict] = []
 
@@ -640,19 +646,24 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             ci  = det.contrast_info or {}
             col = det.color_info or {}
 
-            compliance = (ci.get("compliance") or {})
-            aa_normal  = compliance.get("AA_normal")
+            # ── Single source of truth: contrast_analyser compliance dict ──────
+            compliance = ci.get("compliance") or {}
+            aa_normal  = compliance.get("AA_normal")   # True | False | None
             ratio      = compliance.get("contrast_ratio")
 
-            fg  = (col.get("foreground") or {})
-            bg_pal = col.get("background_palette") or []
+            # Skip entirely if we have no measured contrast data
+            if aa_normal is None:
+                continue
+
+            # ── Display metadata (for reason string and element snippet) ──────
+            fg          = col.get("foreground") or {}
+            bg_pal      = col.get("background_palette") or []
             dominant_bg = bg_pal[0] if bg_pal else {}
 
-            fg_hex = fg.get("hex", "?")
-            bg_hex = dominant_bg.get("hex", "?")
+            fg_hex    = fg.get("hex") or ci.get("foreground_color") or "?"
+            bg_hex    = dominant_bg.get("hex") or ci.get("background_color") or "?"
             ratio_str = f"{ratio:.2f}:1" if ratio is not None else "unknown"
 
-            # Build a short HTML snippet to identify the element
             text_snippet = (det.text or "")[:60].replace('"', "'")
             element_html = (
                 f'<img-text fg="{fg_hex}" bg="{bg_hex}" '
@@ -660,10 +671,8 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             )
             image_label = f'{result.filename} -- "{text_snippet}"'
 
-            violations = list(det.wcag_violations or [])
-            has_aa_fail = any("AA Normal" in v for v in violations)
-
-            if has_aa_fail:
+            if not aa_normal:
+                # ratio < 4.5:1 — AA normal text contrast failure
                 findings.append(_make_finding(
                     source="python",
                     rule_id="python_1_4_3_contrast",
@@ -681,7 +690,8 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                     element_tag="img",
                     page_url=page_url,
                 ))
-            elif aa_normal is True:
+            else:
+                # ratio >= 4.5:1 — passes AA normal text contrast
                 findings.append(_make_finding(
                     source="python",
                     rule_id="python_1_4_3_contrast",
@@ -694,7 +704,6 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                     severity=None,
                     page_url=page_url,
                 ))
-            # If aa_normal is None (no contrast info), skip — we have no data.
 
     return findings
 
