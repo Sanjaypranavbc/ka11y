@@ -13,8 +13,8 @@ WORKDIR /app
 RUN echo "==> [deps 1/2] Copying package manifests..."
 COPY package*.json ./
 
-RUN echo "==> [deps 2/2] Installing production Node dependencies (npm ci)..." && \
-    npm ci --omit=dev --prefer-offline 2>&1 | \
+RUN echo "==> [deps 2/2] Installing production Node dependencies (npm install)..." && \
+    npm install --omit=dev --prefer-offline 2>&1 | \
         while IFS= read -r line; do echo "  npm: $line"; done && \
     echo "==> [deps 2/2] Node dependencies installed ($(du -sh node_modules | cut -f1) on disk)"
 
