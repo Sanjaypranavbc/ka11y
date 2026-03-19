@@ -471,14 +471,14 @@ class MovingContentCrawler:
         page = await context.new_page()
         try:
             try:
-                await page.goto(url, wait_until="networkidle", timeout=30_000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             except Exception:
                 try:
                     await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
                 except Exception:
                     await page.goto(url, wait_until="commit", timeout=15_000)
             # Wait for JS carousel libraries and animations to fully initialise
-            await page.wait_for_timeout(4000)
+            await page.wait_for_timeout(2000)
 
             raw: list = await page.evaluate(self.EXTRACT_JS)
             for item in raw:

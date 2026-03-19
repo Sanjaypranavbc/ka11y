@@ -316,9 +316,9 @@ class AsyncImageCrawler:
             # ── page load ──
             console.print(Rule("[dim]Loading page[/dim]"))
             try:
-                await page.goto(self.base_url, wait_until="load", timeout=60_000)
-                console.print(f"  [green]✓[/green] Page loaded (load)")
-                logger.info("Page loaded (load strategy)")
+                await page.goto(self.base_url, wait_until="domcontentloaded", timeout=30_000)
+                console.print(f"  [green]✓[/green] Page loaded (domcontentloaded)")
+                logger.info("Page loaded (domcontentloaded strategy)")
             except Exception as e:
                 logger.warning(
                     f"'load' timed out: {e}  — retrying with domcontentloaded"
@@ -330,10 +330,10 @@ class AsyncImageCrawler:
                     f"  [yellow]⚠[/yellow] Page loaded (domcontentloaded fallback)"
                 )
 
-            await page.wait_for_timeout(3_000)
+            await page.wait_for_timeout(1_000)
             await self._trigger_lazy_loading(page)
             await self._reveal_hidden_images(page)
-            await page.wait_for_timeout(2_000)
+            await page.wait_for_timeout(500)
 
             try:
                 # ═══════════════════════════════════════════════════════════

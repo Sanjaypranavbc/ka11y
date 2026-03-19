@@ -144,6 +144,7 @@ Step 6 — Expose the toggle in CombinedRequest
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import os
 import time
@@ -977,7 +978,191 @@ def _ts_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     return findings
 
 
-# ── Python pipeline stages ───────────────────────────────────────────────────────
+# ── Per-stage coroutines (run concurrently via asyncio.gather) ───────────────
+#
+# Each coroutine owns its crawler + auditor lifecycle and reports its own
+# stage_start / stage_complete / stage_error SSE events.
+#
+# CPU-bound auditor calls are offloaded to a thread pool via
+# asyncio.to_thread() so they never block the event loop.
+
+
+async def _stage_image_audit(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_ocr: bool,
+    run_image_audit: bool,
+    job_id: str,
+) -> Tuple[List[Dict], Optional[Dict[str, Any]]]:
+    """Crawl images → OCR → 1.1.1 alt-text + 1.4.3 contrast."""
+    _stage_start(job_id, "image_audit")
+    try:
+        image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
+        await image_crawler.crawl_page()
+        await asyncio.to_thread(image_crawler.save_results)
+
+        ocr_results: list = []
+        contrast_report: Optional[Dict[str, Any]] = None
+        findings: List[Dict] = []
+
+        if run_ocr:
+            detector = OCRPreprocessing(source_directory=image_crawler.output_dir)
+            # Heavy CPU — EasyOCR + NumPy inference; must not block event loop
+            await asyncio.to_thread(detector.scan_directory)
+
+            saver = TextClassification(source_directory=image_crawler.output_dir)
+            saver.results = detector.results
+            await asyncio.to_thread(saver.save_reports)
+
+            ocr_results = detector.results
+            contrast_report = _build_contrast_report(ocr_results)
+            findings.extend(_contrast_to_findings(ocr_results, url))
+
+        if run_image_audit:
+            auditor = AltTextAccessibilityAuditor()
+            records = await asyncio.to_thread(
+                auditor.generate_audit_report,
+                images_data=image_crawler.images_data,
+                ocr_results=ocr_results,
+                output_dir=image_crawler.output_dir,
+            )
+            findings.extend(_alt_text_to_findings(records, url))
+
+        _stage_complete(job_id, "image_audit", len(findings))
+        return findings, contrast_report
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "image_audit", _exc)
+        return [], None
+
+
+async def _stage_form_audit(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_form_audit: bool,
+    job_id: str,
+) -> List[Dict]:
+    """Crawl forms → 3.3.1 / 3.3.2 label + error checks."""
+    _stage_start(job_id, "form_audit")
+    try:
+        form_crawler = AsyncFormCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth
+        )
+        form_inputs = await form_crawler.crawl()
+        await asyncio.to_thread(form_crawler.save_raw_json)
+
+        findings: List[Dict] = []
+        if run_form_audit:
+            form_auditor = FormAccessibilityAuditor(output_dir=str(output_dir))
+            records = await asyncio.to_thread(
+                functools.partial(
+                    form_auditor.generate_audit_report, form_inputs=form_inputs
+                )
+            )
+            findings = _form_to_findings(records, url)
+
+        _stage_complete(job_id, "form_audit", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "form_audit", _exc)
+        return []
+
+
+async def _stage_label_in_name(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_label_in_name_audit: bool,
+    job_id: str,
+) -> List[Dict]:
+    """Crawl interactive elements → 2.5.3 label-in-name check."""
+    _stage_start(job_id, "label_in_name")
+    try:
+        interactive_crawler = InteractiveElementCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth
+        )
+        interactive_elements = await interactive_crawler.crawl()
+        await asyncio.to_thread(interactive_crawler.save_raw_json)
+
+        findings: List[Dict] = []
+        if run_label_in_name_audit:
+            lin_auditor = LabelInNameAuditor(output_dir=str(output_dir))
+            records = await asyncio.to_thread(
+                lin_auditor.generate_audit_report, interactive_elements
+            )
+            findings = _lin_to_findings(records, url)
+
+        _stage_complete(job_id, "label_in_name", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "label_in_name", _exc)
+        return []
+
+
+async def _stage_pause_stop_hide(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_pause_stop_hide_audit: bool,
+    job_id: str,
+) -> List[Dict]:
+    """Crawl moving content → 2.2.2 pause/stop/hide check."""
+    _stage_start(job_id, "pause_stop_hide")
+    try:
+        moving_crawler = MovingContentCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth
+        )
+        moving_items = await moving_crawler.crawl()
+        await asyncio.to_thread(moving_crawler.save_raw_json)
+
+        findings: List[Dict] = []
+        if run_pause_stop_hide_audit:
+            psh_auditor = PauseStopHideAuditor(output_dir=str(output_dir))
+            records = await asyncio.to_thread(
+                psh_auditor.generate_audit_report, moving_items
+            )
+            findings = _psh_to_findings(records, url)
+
+        _stage_complete(job_id, "pause_stop_hide", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "pause_stop_hide", _exc)
+        return []
+
+
+async def _stage_target_size(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_target_size_audit: bool,
+    job_id: str,
+) -> List[Dict]:
+    """Crawl touch targets → 2.5.8 target-size check."""
+    _stage_start(job_id, "target_size")
+    try:
+        ts_crawler = TargetSizeCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth
+        )
+        ts_items = await ts_crawler.crawl()
+        await asyncio.to_thread(ts_crawler.save_raw_json)
+
+        findings: List[Dict] = []
+        if run_target_size_audit:
+            ts_auditor = TargetSizeAuditor(output_dir=str(output_dir))
+            records = await asyncio.to_thread(
+                ts_auditor.generate_audit_report, ts_items
+            )
+            findings = _ts_to_findings(records, url)
+
+        _stage_complete(job_id, "target_size", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "target_size", _exc)
+        return []
+
+
+# ── Python pipeline orchestrator ─────────────────────────────────────────────
 
 
 async def _run_python_stages(
@@ -994,145 +1179,45 @@ async def _run_python_stages(
     job_id: str,
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
-    Run all Python auditors sequentially with per-stage progress tracking.
+    Run all 5 Python audit stages **concurrently**.
+
+    Each stage crawls the target URL with its own browser instance and runs
+    its auditor in a thread pool so CPU-bound work never blocks the event loop.
 
     Returns
     -------
     (all_findings, contrast_report)
-        all_findings   — combined flat list of findings from all stages
-        contrast_report — structured contrast JSON (summary + table + images),
-                          or None if OCR was not run
     """
+    results = await asyncio.gather(
+        _stage_image_audit(
+            url, output_dir, max_depth, run_ocr, run_image_audit, job_id
+        ),
+        _stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id),
+        _stage_label_in_name(
+            url, output_dir, max_depth, run_label_in_name_audit, job_id
+        ),
+        _stage_pause_stop_hide(
+            url, output_dir, max_depth, run_pause_stop_hide_audit, job_id
+        ),
+        _stage_target_size(
+            url, output_dir, max_depth, run_target_size_audit, job_id
+        ),
+        return_exceptions=True,
+    )
+
     all_findings: List[Dict] = []
     contrast_report: Optional[Dict[str, Any]] = None
 
-    # ── Stage: image_audit (WCAG 1.1.1 + 1.4.3 contrast) ────────────────────
-    stage_findings: List[Dict] = []
-    _stage_start(job_id, "image_audit")
-    try:
-        image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
-        await image_crawler.crawl_page()
-        image_crawler.save_results()
+    # Image audit returns (findings, contrast_report)
+    img_result = results[0]
+    if not isinstance(img_result, Exception):
+        img_findings, contrast_report = img_result
+        all_findings.extend(img_findings)
 
-        ocr_results: list = []
-        if run_ocr:
-            detector = OCRPreprocessing(source_directory=image_crawler.output_dir)
-            detector.scan_directory()
-            saver = TextClassification(source_directory=image_crawler.output_dir)
-            saver.results = detector.results
-            saver.save_reports()
-            ocr_results = detector.results
-
-            # ── Build structured contrast report ──────────────────────────
-            contrast_report = _build_contrast_report(ocr_results)
-
-            # ── Convert contrast violations into WCAG 1.4.3 findings ──────
-            contrast_findings = _contrast_to_findings(ocr_results, url)
-            stage_findings.extend(contrast_findings)
-            all_findings.extend(contrast_findings)
-
-        if run_image_audit:
-            auditor = AltTextAccessibilityAuditor()
-            records = auditor.generate_audit_report(
-                images_data=image_crawler.images_data,
-                ocr_results=ocr_results,
-                output_dir=image_crawler.output_dir,
-            )
-            alt_findings = _alt_text_to_findings(records, url)
-            stage_findings.extend(alt_findings)
-            all_findings.extend(alt_findings)
-
-        _stage_complete(job_id, "image_audit", len(stage_findings))
-    except Exception as _exc:
-        _stage_error_and_warn(job_id, "image_audit", _exc)
-
-    # ── Stage: form_audit (WCAG 3.3.1 / 3.3.2) ───────────────────────────────
-    stage_findings = []
-    _stage_start(job_id, "form_audit")
-    try:
-        form_crawler = AsyncFormCrawler(
-            base_url=url,
-            output_dir=str(output_dir),
-            max_depth=max_depth,
-        )
-        form_inputs = await form_crawler.crawl()
-        form_crawler.save_raw_json()
-
-        if run_form_audit:
-            form_auditor = FormAccessibilityAuditor(output_dir=str(output_dir))
-            records = form_auditor.generate_audit_report(form_inputs=form_inputs)
-            stage_findings = _form_to_findings(records, url)
-            all_findings.extend(stage_findings)
-
-        _stage_complete(job_id, "form_audit", len(stage_findings))
-    except Exception as _exc:
-        _stage_error_and_warn(job_id, "form_audit", _exc)
-
-    # ── Stage: label_in_name (WCAG 2.5.3) ────────────────────────────────────
-    stage_findings = []
-    _stage_start(job_id, "label_in_name")
-    try:
-        interactive_crawler = InteractiveElementCrawler(
-            base_url=url,
-            output_dir=str(output_dir),
-            max_depth=max_depth,
-        )
-        interactive_elements = await interactive_crawler.crawl()
-        interactive_crawler.save_raw_json()
-
-        if run_label_in_name_audit:
-            lin_auditor = LabelInNameAuditor(output_dir=str(output_dir))
-            records = lin_auditor.generate_audit_report(interactive_elements)
-            stage_findings = _lin_to_findings(records, url)
-            all_findings.extend(stage_findings)
-
-        _stage_complete(job_id, "label_in_name", len(stage_findings))
-    except Exception as _exc:
-        _stage_error_and_warn(job_id, "label_in_name", _exc)
-
-    # ── Stage: pause_stop_hide (WCAG 2.2.2) ──────────────────────────────────
-    stage_findings = []
-    _stage_start(job_id, "pause_stop_hide")
-    try:
-        moving_crawler = MovingContentCrawler(
-            base_url=url,
-            output_dir=str(output_dir),
-            max_depth=max_depth,
-        )
-        moving_items = await moving_crawler.crawl()
-        moving_crawler.save_raw_json()
-
-        if run_pause_stop_hide_audit:
-            psh_auditor = PauseStopHideAuditor(output_dir=str(output_dir))
-            records = psh_auditor.generate_audit_report(moving_items)
-            stage_findings = _psh_to_findings(records, url)
-            all_findings.extend(stage_findings)
-
-        _stage_complete(job_id, "pause_stop_hide", len(stage_findings))
-    except Exception as _exc:
-        _stage_error_and_warn(job_id, "pause_stop_hide", _exc)
-
-    # ── Stage: target_size (WCAG 2.5.8) ──────────────────────────────────────
-    stage_findings = []
-    _stage_start(job_id, "target_size")
-    try:
-        ts_crawler = TargetSizeCrawler(
-            base_url=url,
-            output_dir=str(output_dir),
-            max_depth=max_depth,
-        )
-        ts_items = await ts_crawler.crawl()
-        ts_crawler.save_raw_json()
-
-        if run_target_size_audit:
-            ts_auditor = TargetSizeAuditor(output_dir=str(output_dir))
-            records = ts_auditor.generate_audit_report(ts_items)
-            stage_findings = _ts_to_findings(records, url)
-            all_findings.extend(stage_findings)
-
-        _stage_complete(job_id, "target_size", len(stage_findings))
-    except Exception as _exc:
-        _stage_error_and_warn(job_id, "target_size", _exc)
+    # All other stages return a plain findings list
+    for r in results[1:]:
+        if not isinstance(r, Exception):
+            all_findings.extend(r)
 
     return all_findings, contrast_report
 
