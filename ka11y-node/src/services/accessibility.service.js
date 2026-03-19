@@ -1,6 +1,35 @@
 'use strict';
 
+const dns = require('dns').promises;
 const { mapResults, mapResultsFlat } = require('../utils/axeResultMapper');
+
+const _PRIVATE_IP_RE = [
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^::1$/,
+  /^fc[0-9a-f]{2}:/i,
+  /^fe80:/i,
+];
+
+async function _assertPublicUrl(url) {
+  const { hostname } = new URL(url);
+  let addresses;
+  try {
+    addresses = await dns.resolve4(hostname);
+  } catch {
+    throw new Error(`SSRF guard: DNS resolution failed for ${hostname}`);
+  }
+  for (const ip of addresses) {
+    if (_PRIVATE_IP_RE.some(re => re.test(ip))) {
+      throw new Error(`SSRF guard: ${hostname} resolves to private IP ${ip}`);
+    }
+  }
+}
+
+const MAX_CONCURRENT = parseInt(process.env.PUPPETEER_MAX_CONCURRENT) || 3;
 
 /**
  * Map a WCAG conformance level string to axe-core tag arrays.
@@ -28,10 +57,28 @@ class AccessibilityService {
    * @param {object} config       - Application config ({ browser, axe })
    */
   constructor(puppeteer, axeCorePath, logger, config) {
-    this._puppeteer   = puppeteer;
-    this._axeCorePath = axeCorePath;
-    this._logger      = logger;
-    this._config      = config;
+    this._puppeteer    = puppeteer;
+    this._axeCorePath  = axeCorePath;
+    this._logger       = logger;
+    this._config       = config;
+    this._activeCount  = 0;
+    this._waitQueue    = [];
+  }
+
+  _acquireSlot() {
+    if (this._activeCount < MAX_CONCURRENT) {
+      this._activeCount++;
+      return Promise.resolve();
+    }
+    return new Promise(resolve => this._waitQueue.push(resolve));
+  }
+
+  _releaseSlot() {
+    if (this._waitQueue.length > 0) {
+      this._waitQueue.shift()();
+    } else {
+      this._activeCount--;
+    }
   }
 
   /**
@@ -45,6 +92,7 @@ class AccessibilityService {
     const { timeoutMs, runOnly } = this._config.axe;
     let browser = null;
 
+    await this._acquireSlot();
     try {
       this._logger.info('Launching Puppeteer browser...');
       browser = await this._puppeteer.launch({
@@ -96,6 +144,7 @@ class AccessibilityService {
         await browser.close();
         this._logger.info('Browser closed.');
       }
+      this._releaseSlot();
     }
   }
 
@@ -110,6 +159,8 @@ class AccessibilityService {
     const { timeoutMs, runOnly } = this._config.axe;
     let browser = null;
 
+    await _assertPublicUrl(url);
+    await this._acquireSlot();
     try {
       this._logger.info(`Launching Puppeteer browser for URL: ${url}`);
       browser = await this._puppeteer.launch({
@@ -160,6 +211,7 @@ class AccessibilityService {
         await browser.close();
         this._logger.info('Browser closed.');
       }
+      this._releaseSlot();
     }
   }
 
@@ -175,6 +227,8 @@ class AccessibilityService {
     const runOnly = { type: 'tag', values: _tagsForLevel(level) };
     let browser = null;
 
+    await _assertPublicUrl(url);
+    await this._acquireSlot();
     try {
       this._logger.info(`[flat] Launching browser for URL: ${url} level=${level}`);
       browser = await this._puppeteer.launch({
@@ -225,6 +279,7 @@ class AccessibilityService {
         await browser.close();
         this._logger.info('[flat] Browser closed.');
       }
+      this._releaseSlot();
     }
   }
 }

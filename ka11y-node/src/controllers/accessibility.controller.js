@@ -154,6 +154,10 @@ class AccessibilityController {
       return res.status(400).json({ error: 'html field is required and must be a string' });
     }
 
+    if (successCriteriaId != null && !/^\d+\.\d+\.\d+$/.test(successCriteriaId)) {
+      return res.status(400).json({ error: 'successCriteriaId must match format X.Y.Z (e.g. "1.1.1")' });
+    }
+
     try {
       const filter = successCriteriaId ?? null;
       this._logger.info(`analyze start successCriteriaId=${filter ?? 'none'} htmlLength=${html.length}`);
@@ -307,6 +311,10 @@ class AccessibilityController {
     if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
       this._logger.warn(`analyseUrl rejected: unsupported protocol "${parsedUrl.protocol}"`);
       return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    if (successCriteriaId != null && !/^\d+\.\d+\.\d+$/.test(successCriteriaId)) {
+      return res.status(400).json({ error: 'successCriteriaId must match format X.Y.Z (e.g. "1.1.1")' });
     }
 
     try {

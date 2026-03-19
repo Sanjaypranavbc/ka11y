@@ -11,7 +11,7 @@ description: "Coverage map — which rules are checked by axe-core vs Python aud
 | **1.3.1** | Info and Relationships | A | ✓ | — | axe-core only |
 | **1.3.5** | Identify Input Purpose | AA | ✓ | — | axe-core only |
 | **1.4.1** | Use of Color | A | ✓ | — | axe-core only |
-| **1.4.3** | Contrast (Minimum) | AA | Partial | Partial | Python checks text-in-image contrast via OCR |
+| **1.4.3** | Contrast (Minimum) | AA | Partial | **Full** | Python: OCR → per-region luminance → ContrastReport; axe-core: DOM text only |
 | **1.4.11** | Non-text Contrast | AA | ✓ | — | axe-core only |
 | **2.1.1** | Keyboard | A | ✓ | — | axe-core only |
 | **2.2.2** | Pause, Stop, Hide | A | Partial | **Full** | Python detects CSS animations, carousels, GIFs |
@@ -38,6 +38,7 @@ Python auditors map each WCAG SC to a default severity level:
 | WCAG SC | Severity |
 |---------|---------|
 | 1.1.1 | `critical` |
+| 1.4.3 | `high` |
 | 2.2.2 | `high` |
 | 2.5.3 | `high` |
 | 2.5.8 | `medium` |
@@ -58,3 +59,7 @@ axe-core performs static DOM analysis. It cannot:
 - **Check autocomplete requirements** for personal-data fields (3.3.2)
 
 The Python auditors complement axe-core in exactly these areas.
+
+<Tip>
+  WCAG **1.4.3** is a special case: axe-core checks DOM text contrast but has no visibility into text rendered inside images. ka11y's OCR pipeline fills this gap — see [1.4.3 Contrast (Minimum)](/rules/wcag-1-4-3) for the full pipeline description.
+</Tip>

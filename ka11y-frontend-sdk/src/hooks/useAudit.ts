@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { AuditConfig, AuditResult, ContrastReport, StageInfo } from "@/types/audit";
 import { emptyAuditResult } from "@/data/sampleData";
 
@@ -45,6 +45,7 @@ export function useAudit() {
   const sseRef = useRef<EventSource | null>(null);
   const jobIdRef = useRef<string>("");
   const configRef = useRef<AuditConfig | null>(null);
+  const activeJobRef = useRef<string>("");  // tracks current job — stale polls ignore old job ids
 
   const stopPolling = useCallback(() => {
     if (pollingRef.current) {
@@ -65,6 +66,8 @@ export function useAudit() {
     (jobId: string, config: AuditConfig) => {
       if (pollingRef.current) return; // already polling
       pollingRef.current = setInterval(async () => {
+        // Stale poll guard — discard results if a newer job has since been submitted
+        if (activeJobRef.current !== jobId) { stopPolling(); return; }
         try {
           const pollRes = await fetch(`/api/v1/combined/${jobId}`, {
             headers: { Accept: "application/json" },
@@ -106,28 +109,33 @@ export function useAudit() {
       const es = new EventSource(`/api/v1/combined/${jobId}/stream`);
       sseRef.current = es;
 
+      function safeParse(raw: string): Record<string, unknown> | null {
+        try { return JSON.parse(raw) as Record<string, unknown>; }
+        catch { return null; }
+      }
+
       es.addEventListener("stage_start", (e) => {
-        const data = JSON.parse(e.data);
-        setCurrentStage(data.stage_name);
+        const data = safeParse(e.data); if (!data) return;
+        setCurrentStage(data.stage_name as string);
         setStages((prev) => {
           if (prev.find((s) => s.name === data.stage_name)) return prev;
           return [
             ...prev,
-            { name: data.stage_name, status: "running", started_at: data.started_at },
+            { name: data.stage_name as string, status: "running", started_at: data.started_at as string },
           ];
         });
       });
 
       es.addEventListener("stage_complete", (e) => {
-        const data = JSON.parse(e.data);
+        const data = safeParse(e.data); if (!data) return;
         setStages((prev) =>
           prev.map((s) =>
             s.name === data.stage_name
               ? {
                   ...s,
                   status: "completed" as const,
-                  completed_at: data.completed_at,
-                  findings_count: data.findings_count,
+                  completed_at: data.completed_at as string,
+                  findings_count: data.findings_count as number,
                 }
               : s,
           ),
@@ -135,11 +143,11 @@ export function useAudit() {
       });
 
       es.addEventListener("stage_error", (e) => {
-        const data = JSON.parse(e.data);
+        const data = safeParse(e.data); if (!data) return;
         setStages((prev) =>
           prev.map((s) =>
             s.name === data.stage_name
-              ? { ...s, status: "error" as const, error: data.error }
+              ? { ...s, status: "error" as const, error: data.error as string }
               : s,
           ),
         );
@@ -147,13 +155,13 @@ export function useAudit() {
 
       // Sent to late-connecting clients with current running state
       es.addEventListener("job_state", (e) => {
-        const data = JSON.parse(e.data);
-        if (data.current_stage) setCurrentStage(data.current_stage);
-        if (data.stages?.length) setStages(data.stages);
+        const data = safeParse(e.data); if (!data) return;
+        if (data.current_stage) setCurrentStage(data.current_stage as string);
+        if ((data.stages as unknown[])?.length) setStages(data.stages as StageInfo[]);
       });
 
       es.addEventListener("job_complete", (e) => {
-        const data = JSON.parse(e.data);
+        const data = safeParse(e.data); if (!data) return;
         es.close();
         sseRef.current = null;
         stopPolling();
@@ -172,7 +180,7 @@ export function useAudit() {
       });
 
       es.addEventListener("job_failed", (e) => {
-        const data = JSON.parse(e.data);
+        const data = safeParse(e.data); if (!data) return;
         es.close();
         sseRef.current = null;
         stopPolling();
@@ -229,6 +237,7 @@ export function useAudit() {
         const data = await res.json();
         const jobId: string = data.job_id;
         jobIdRef.current = jobId;
+        activeJobRef.current = jobId;
         setJobStatus("running");
 
         // Connect SSE for real-time events; onerror falls back to polling
@@ -240,6 +249,14 @@ export function useAudit() {
     },
     [stopPolling, closeSSE, connectSSE],
   );
+
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      stopPolling();
+      closeSSE();
+    };
+  }, [stopPolling, closeSSE]);
 
   // ── Export ────────────────────────────────────────────────────────────────
   const exportJSON = useCallback(() => {

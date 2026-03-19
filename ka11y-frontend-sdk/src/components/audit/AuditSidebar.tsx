@@ -50,7 +50,7 @@ const STAGE_LABELS: Record<string, string> = {
 
 export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, currentStage, open, onClose }: AuditSidebarProps) {
   const [config, setConfig] = useState<AuditConfig>({
-    url: "https://www.kao.com/global/en/",
+    url: localStorage.getItem("ka11y_last_url") ?? "",
     max_depth: 0,
     wcag_level: "AA",
     run_ocr: true,
@@ -215,7 +215,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
 
           {/* Run button */}
           <Button
-            onClick={() => onRunAudit(config)}
+            onClick={() => { localStorage.setItem("ka11y_last_url", config.url); onRunAudit(config); }}
             disabled={isRunning || !config.url}
             className={cn(
               "w-full h-9 text-xs font-semibold tracking-wider uppercase bg-primary text-primary-foreground hover:bg-primary/90 border-0",

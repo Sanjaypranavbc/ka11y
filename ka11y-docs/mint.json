@@ -70,6 +70,7 @@
       "pages": [
         "rules/overview",
         "rules/wcag-1-1-1",
+        "rules/wcag-1-4-3",
         "rules/wcag-2-2-2",
         "rules/wcag-2-5-3",
         "rules/wcag-2-5-8",

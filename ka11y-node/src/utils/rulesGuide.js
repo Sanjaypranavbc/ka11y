@@ -1380,4 +1380,6 @@ const rulesGuide = {
 
 };
 
+Object.freeze(rulesGuide);
+
 module.exports = rulesGuide;

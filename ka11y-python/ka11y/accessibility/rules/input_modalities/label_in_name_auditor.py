@@ -39,6 +39,7 @@ CSV columns
 
 import csv
 import re
+import unicodedata
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -50,15 +51,32 @@ from ka11y.crawler.interactive_crawler import InteractiveElementData
 
 
 def _normalize(text: Optional[str]) -> str:
-    """Lowercase and collapse all whitespace to a single space."""
+    """NFC-normalise, casefold, and collapse whitespace for comparison.
+
+    Using NFC + casefold catches Unicode equivalences (e.g. "Café" vs "Cafe\u0301")
+    that a plain .lower() would miss.
+    """
     if not text:
         return ""
-    return re.sub(r"\s+", " ", text.strip()).lower()
+    nfc = unicodedata.normalize("NFC", text)
+    return re.sub(r"\s+", " ", nfc.strip()).casefold()
 
 
 def _has_word_chars(text: str) -> bool:
-    """True if text contains at least one Unicode word character (not just symbols)."""
-    return bool(re.search(r"\w", text))
+    """True if text contains at least one Unicode letter or digit (not just symbols)."""
+    return bool(re.search(r"[^\W_]", text, re.UNICODE))
+
+
+def _label_in_name(visible: str, acc_name: str) -> bool:
+    """Return True if *visible* appears as a whole word within *acc_name*.
+
+    Uses a word-boundary regex so that visible="Go" does not match "Gorilla".
+    Both inputs should already be normalised via _normalize().
+    """
+    if not visible:
+        return True
+    pattern = r"\b" + re.escape(visible) + r"\b"
+    return bool(re.search(pattern, acc_name))
 
 
 def _check_253(el: InteractiveElementData):
@@ -86,8 +104,8 @@ def _check_253(el: InteractiveElementData):
             "aria-label, aria-labelledby, title, or computed text name."
         )
 
-    # FAILED: accessible name does not contain visible label
-    if visible not in name:
+    # FAILED: accessible name does not contain visible label (word-boundary check)
+    if not _label_in_name(visible, name):
         return "FAILED", (
             f'2.5.3: Accessible name "{el.accessible_name}" does not contain '
             f'visible label "{el.visible_label}". '

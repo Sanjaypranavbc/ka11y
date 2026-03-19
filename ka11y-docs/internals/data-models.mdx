@@ -195,8 +195,50 @@ interface CombinedReport {
     by_wcag_sc:      Record<string, { violations: number; needs_review: number; passes: number }>;
     by_source:       Record<"axe" | "python", { violations: number; needs_review: number; passes: number }>;
   };
-  violations:   Finding[];
-  needs_review: Finding[];
-  passes:       Finding[];
+  violations:      Finding[];
+  needs_review:    Finding[];
+  passes:          Finding[];
+  contrast_report: ContrastReport | null;
+}
+```
+
+---
+
+## ContrastReport
+
+Produced by the OCR + WCAG 1.4.3 contrast analysis pipeline. Attached to `CombinedReport.contrast_report` when `run_ocr: true` and images are found.
+
+```typescript
+interface ContrastReport {
+  summary: {
+    total_regions_analysed:  number;
+    total_violations:        number;
+    images_with_violations:  number;
+    pass_rate_pct:           number;   // 0–100
+  };
+  table:  ContrastDetection[];
+  images: ContrastImageDetail[];
+}
+
+interface ContrastImageDetail {
+  filename:                  string;
+  path:                      string;   // Absolute server-side filesystem path
+  image_url:                 string;   // Injected by backend: /api/v1/combined/{job_id}/image?path=...
+  contrast_violations_count: number;
+  detections:                ContrastDetection[];
+}
+
+interface ContrastDetection {
+  text:            string;
+  contrast:        number;             // WCAG contrast ratio
+  wcag_violations: string[];           // ["aa_normal"] | ["aa_normal", "aa_large"] | []
+  compliance: {
+    aa_normal:  boolean;
+    aa_large:   boolean;
+    aaa_normal?: boolean;
+    aaa_large?:  boolean;
+  };
+  image_path:    string;
+  bounding_box?: number[];             // [x, y, w, h] pixels
 }
 ```

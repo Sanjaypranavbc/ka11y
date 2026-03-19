@@ -13,7 +13,9 @@ Injection graph
   get_form_auditor      → FormAccessibilityAuditor,   bound to output_dir
 """
 
+import re
 import time
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlparse
@@ -57,15 +59,29 @@ def get_output_dir(
 ) -> Path:
     """
     Build a per-run output directory:
-        <base_out>/<domain>_<MMDD_HHMM>/
+        <base_out>/<domain>_<MMDD_HHMM>_<uid>/
 
-    Both crawl and forms routes call this with the same `url`, so they
-    share the exact same directory when composed in a single request.
+    Security: hostname is validated against a strict allowlist pattern and
+    the resolved path is checked to remain inside base_out (prevents traversal).
+    A short UUID suffix prevents timestamp collisions for concurrent requests.
     """
-    base_out = config["input"]["output_dir"]
-    domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
+    base_out = Path(config["input"]["output_dir"]).resolve()
+
+    netloc = urlparse(url).netloc
+    # Strip port if present (e.g. "example.com:8080" → "example.com")
+    hostname = netloc.split(":")[0]
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", hostname):
+        raise ValueError(f"Invalid URL hostname for output directory: {hostname!r}")
+
+    safe_domain = hostname.replace("www.", "").replace(".", "_")
     ts = time.strftime("%m%d_%H%M")
-    path = Path(f"{base_out}/{domain}_{ts}")
+    uid = uuid.uuid4().hex[:8]
+    path = (base_out / f"{safe_domain}_{ts}_{uid}").resolve()
+
+    # Canonical path guard — must stay inside base_out
+    if not str(path).startswith(str(base_out)):
+        raise ValueError("Resolved output directory escapes the base output path.")
+
     path.mkdir(parents=True, exist_ok=True)
     return path
 

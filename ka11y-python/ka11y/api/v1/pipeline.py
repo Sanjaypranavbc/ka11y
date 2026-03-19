@@ -146,16 +146,16 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
 
             compliance = ci.get("compliance") or {}
             if compliance:
-                ratio   = compliance.get("contrast_ratio")
-                aa_n    = compliance.get("AA_normal")
-                aa_l    = compliance.get("AA_large")
-                aaa_n   = compliance.get("AAA_normal")
-                aaa_l   = compliance.get("AAA_large")
+                ratio = compliance.get("contrast_ratio")
+                aa_n = compliance.get("AA_normal")
+                aa_l = compliance.get("AA_large")
+                aaa_n = compliance.get("AAA_normal")
+                aaa_l = compliance.get("AAA_large")
 
             # ── foreground / background from color_info (cluster-based) ──────────
-            fg      = col.get("foreground") or {}
-            bg_pal  = col.get("background_palette") or []
-            checks  = col.get("contrast_checks") or []
+            fg = col.get("foreground") or {}
+            bg_pal = col.get("background_palette") or []
+            checks = col.get("contrast_checks") or []
 
             # dominant background = first cluster with the highest contrast check
             dominant_bg: Dict[str, Any] = {}
@@ -163,66 +163,74 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
                 dominant_bg = bg_pal[0]
 
             # flat table row (one per detection)
-            table_rows.append({
-                "image":           result.filename,
-                "image_path":      result.original_path,
-                "text":            det.text,
-                "confidence":      round(float(det.confidence), 3),
-                "foreground_hex":  fg.get("hex"),
-                "foreground_lum":  fg.get("luminance"),
-                "background_hex":  dominant_bg.get("hex"),
-                "background_lum":  dominant_bg.get("luminance"),
-                "contrast_ratio":  ratio,
-                "AA_normal":       aa_n,
-                "AA_large":        aa_l,
-                "AAA_normal":      aaa_n,
-                "AAA_large":       aaa_l,
-                "violations":      list(det.wcag_violations or []),
-            })
+            table_rows.append(
+                {
+                    "image": result.filename,
+                    "image_path": result.original_path,
+                    "text": det.text,
+                    "confidence": round(float(det.confidence), 3),
+                    "foreground_hex": fg.get("hex"),
+                    "foreground_lum": fg.get("luminance"),
+                    "background_hex": dominant_bg.get("hex"),
+                    "background_lum": dominant_bg.get("luminance"),
+                    "contrast_ratio": ratio,
+                    "AA_normal": aa_n,
+                    "AA_large": aa_l,
+                    "AAA_normal": aaa_n,
+                    "AAA_large": aaa_l,
+                    "violations": list(det.wcag_violations or []),
+                }
+            )
 
             if det.wcag_violations:
                 total_violations += len(det.wcag_violations)
                 image_has_violation = True
 
             # full detection record (nested under its image)
-            image_detections.append({
-                "text":               det.text,
-                "confidence":         round(float(det.confidence), 3),
-                "bbox":               det.bbox,
-                "foreground":         fg or None,
-                "background_palette": bg_pal,
-                "contrast_checks":    checks,
-                "wcag_violations":    list(det.wcag_violations or []),
-                "ratio":              ratio,
-                "AA_normal":          aa_n,
-                "AA_large":           aa_l,
-                "AAA_normal":         aaa_n,
-                "AAA_large":          aaa_l,
-            })
+            image_detections.append(
+                {
+                    "text": det.text,
+                    "confidence": round(float(det.confidence), 3),
+                    "bbox": det.bbox,
+                    "foreground": fg or None,
+                    "background_palette": bg_pal,
+                    "contrast_checks": checks,
+                    "wcag_violations": list(det.wcag_violations or []),
+                    "ratio": ratio,
+                    "AA_normal": aa_n,
+                    "AA_large": aa_l,
+                    "AAA_normal": aaa_n,
+                    "AAA_large": aaa_l,
+                }
+            )
 
         if image_has_violation:
             images_with_violations += 1
 
         if image_detections:
-            images_detail.append({
-                "filename":                  result.filename,
-                "path":                      result.original_path,
-                "contrast_violations_count": result.contrast_violations_count,
-                "detections":                image_detections,
-            })
+            images_detail.append(
+                {
+                    "filename": result.filename,
+                    "path": result.original_path,
+                    "contrast_violations_count": result.contrast_violations_count,
+                    "detections": image_detections,
+                }
+            )
 
     total_regions = len(table_rows)
     violations_free = total_regions - total_violations
-    pass_rate = round(violations_free / total_regions * 100, 1) if total_regions else 0.0
+    pass_rate = (
+        round(violations_free / total_regions * 100, 1) if total_regions else 0.0
+    )
 
     return {
         "summary": {
             "total_regions_analysed": total_regions,
-            "total_violations":       total_violations,
+            "total_violations": total_violations,
             "images_with_violations": images_with_violations,
-            "pass_rate_pct":          pass_rate,
+            "pass_rate_pct": pass_rate,
         },
-        "table":  table_rows,
+        "table": table_rows,
         "images": images_detail,
     }
 
@@ -252,7 +260,7 @@ class PipelineResponse(BaseModel):
     image_audit_report: Optional[str] = None
     image_audit_summary: Optional[Dict[str, Any]] = None
     # ── NEW: contrast analysis ─────────────────────────────────────────────
-    contrast_report: Optional[Dict[str, Any]] = None   # structured contrast JSON + table
+    contrast_report: Optional[Dict[str, Any]] = None  # structured contrast JSON + table
     # Form crawl
     total_fields: int
     form_audit_report: Optional[str] = None
@@ -528,7 +536,7 @@ async def run_full_pipeline(
             ocr_dir=ocr_dir,
             image_audit_report=image_audit_report,
             image_audit_summary=image_audit_summary,
-            contrast_report=contrast_report,       # ← NEW
+            contrast_report=contrast_report,  # ← NEW
             total_fields=len(form_inputs),
             form_audit_report=form_audit_report,
             form_audit_summary=form_audit_summary,

@@ -7,25 +7,57 @@ const logger  = require('./src/utils/logger');
 
 // 2. Services
 const AccessibilityService = require('./src/services/accessibility.service');
+const RulesService         = require('./src/services/rules.service');
 const swaggerSpec          = require('./src/config/swagger.config');
 const swaggerUi            = require('swagger-ui-express');
 
+const axe                  = require('axe-core');
 const accessibilityService = new AccessibilityService(
   require('puppeteer'),
   require('path').resolve(__dirname, 'node_modules/axe-core/axe.min.js'),
   logger,
   config
 );
+const rulesService = new RulesService(axe, logger);
 
 // 3. Controllers
 const HealthController        = require('./src/controllers/health.controller');
 const AccessibilityController = require('./src/controllers/accessibility.controller');
+const RulesController         = require('./src/controllers/rules.controller');
+const RulesGuideController    = require('./src/controllers/rulesGuide.controller');
 
 const healthController        = new HealthController(logger);
 const accessibilityController = new AccessibilityController(accessibilityService, logger);
+const rulesController         = new RulesController(rulesService, logger);
+const rulesGuideController    = new RulesGuideController(logger);
 
 // 4. Express Setup
 const app = express();
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
+// CORS
+app.use((req, res, next) => {
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',');
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (!origin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID');
+  res.setHeader('Vary', 'Origin');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 
 app.use(express.json({ limit: config.payload.limit }));
 app.use(express.urlencoded({ extended: true, limit: config.payload.limit }));
@@ -48,6 +80,9 @@ app.get( `${API_V1}/health`,                (req, res) => healthController.getHe
 app.post(`${API_V1}/analyze-accessibility`, (req, res) => accessibilityController.analyze(req, res));
 app.post(`${API_V1}/analyse-url`,           (req, res) => accessibilityController.analyseUrl(req, res));
 app.post(`${API_V1}/analyse-url-flat`,      (req, res) => accessibilityController.analyseUrlFlat(req, res));
+app.get( `${API_V1}/rules`,                 (req, res) => rulesController.getRules(req, res));
+app.get( `${API_V1}/rules-guide`,           (req, res) => rulesGuideController.getAllRules(req, res));
+app.get( `${API_V1}/rules-guide/:ruleId`,   (req, res) => rulesGuideController.getRuleById(req, res));
 
 // Swagger UI page
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

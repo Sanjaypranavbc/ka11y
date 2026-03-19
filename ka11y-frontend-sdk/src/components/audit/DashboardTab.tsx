@@ -111,7 +111,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
             <CardTitle className="text-sm font-medium">Violations by Severity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={severityChartConfig} className="h-64" role="img" aria-label={`Pie chart: ${severityData.map((d) => `${d.name} ${d.value}`).join(", ")}`}>
+            <ChartContainer config={severityChartConfig} className="h-64" role="img" tabIndex={0} aria-label={`Pie chart: ${severityData.map((d) => `${d.name} ${d.value}`).join(", ")}`}>
               <PieChart>
                 <Pie data={severityData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="value" paddingAngle={2}>
                   {severityData.map((entry, i) => (
@@ -131,7 +131,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
             <CardTitle className="text-sm font-medium">Findings by Source</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={sourceChartConfig} className="h-64" role="img" aria-label="Bar chart showing violations, needs review, and passes broken down by axe and python sources">
+            <ChartContainer config={sourceChartConfig} className="h-64" role="img" tabIndex={0} aria-label="Bar chart showing violations, needs review, and passes broken down by axe and python sources">
               <BarChart data={sourceData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="name" className="text-xs" />
@@ -140,7 +140,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
                 <Bar dataKey="violations" fill={SOURCE_COLORS.violations} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="needs_review" fill={SOURCE_COLORS.needs_review} radius={[4, 4, 0, 0]} />
                 <Bar dataKey="passes" fill={SOURCE_COLORS.passes} radius={[4, 4, 0, 0]} />
-                <Legend formatter={(value) => <span className="text-xs capitalize">{value.replace("_", " ")}</span>} />
+                <Legend formatter={(value) => <span className="text-xs capitalize">{value.replaceAll("_", " ")}</span>} />
               </BarChart>
             </ChartContainer>
           </CardContent>

@@ -39,12 +39,10 @@ function log(level, message, meta = null) {
     console.log(consoleLine);
   }
 
-  // File output
-  try {
-    fs.appendFileSync(getLogPath(level), fileLine);
-  } catch (err) {
+  // File output (non-blocking)
+  fs.promises.appendFile(getLogPath(level), fileLine).catch(err => {
     console.error(`[logger] Failed to write ${level} log:`, err.message);
-  }
+  });
 }
 
 const logger = {

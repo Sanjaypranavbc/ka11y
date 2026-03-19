@@ -109,7 +109,7 @@ const Index = () => {
           onToggleSidebar={() => setSidebarOpen(true)}
         />
 
-        <main className="flex-1 overflow-y-auto grid-bg">
+        <main className="flex-1 overflow-y-auto grid-bg" aria-busy={isLoading} aria-live="polite">
           {/* ── Loading ────────────────────────────────────────────── */}
           {isLoading ? (
             <div className="p-5 space-y-3">
@@ -129,7 +129,7 @@ const Index = () => {
           ) : jobStatus === "failed" ? (
             /* ── Error ─────────────────────────────────────────────── */
             <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-3">
+              <div role="alert" className="text-center space-y-3">
                 <AlertTriangle className="h-12 w-12 text-destructive mx-auto" aria-hidden="true" />
                 <h2 className="text-lg font-semibold text-foreground">Audit Failed</h2>
                 <p className="text-sm text-muted-foreground max-w-md">

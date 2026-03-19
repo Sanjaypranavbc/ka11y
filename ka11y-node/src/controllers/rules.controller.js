@@ -37,7 +37,7 @@ class RulesController {
    */
   getRules(req, res) {
     const tags = req.query.tags
-      ? req.query.tags.split(',')
+      ? req.query.tags.split(',').map(t => t.trim()).filter(Boolean)
       : config.axe.defaultTags;
 
     try {

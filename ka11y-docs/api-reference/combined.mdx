@@ -1,9 +1,9 @@
 ---
 title: "Combined Audit"
-description: "POST /api/v1/combined/ · GET /api/v1/combined/{job_id} · GET /api/v1/combined/{job_id}/stream"
+description: "POST /api/v1/combined/ · GET /api/v1/combined/{job_id} · GET /api/v1/combined/{job_id}/stream · GET /api/v1/combined/{job_id}/image"
 ---
 
-The combined endpoint is the **primary API**. It runs axe-core (Node) and all Python auditors in parallel, merges findings into a single flat list, and exposes job status via REST polling and Server-Sent Events streaming.
+The combined endpoint is the **primary API**. It runs axe-core (Node) and all Python auditors in parallel, merges findings into a single flat list, and exposes job status via REST polling and Server-Sent Events streaming. When OCR is enabled, a `contrast_report` is attached to the result and per-image files can be retrieved via the image endpoint.
 
 ---
 
@@ -140,7 +140,25 @@ Returns the full job record. Poll every 3 – 5 s until `status` is `"completed"
     "violations": [ /* ... finding objects ... */ ],
     "needs_review": [ /* ... */ ],
     "passes": [ /* ... */ ],
-    "warnings": []
+    "warnings": [],
+    "contrast_report": {
+      "summary": {
+        "total_regions_analysed": 84,
+        "total_violations": 12,
+        "images_with_violations": 5,
+        "pass_rate_pct": 85.7
+      },
+      "table": [ /* ... ContrastDetection objects ... */ ],
+      "images": [
+        {
+          "filename": "hero.jpg",
+          "path": "/app/crawled_images/example_com/b5ea3ea7-.../images/hero.jpg",
+          "image_url": "/api/v1/combined/b5ea3ea7-.../image?path=%2Fapp%2Fcrawled_images%2F...",
+          "contrast_violations_count": 3,
+          "detections": [ /* ... */ ]
+        }
+      ]
+    }
   }
 }
 ```
@@ -247,6 +265,45 @@ data: {"stage_name": "image_audit", "completed_at": "2026-03-17T17:16:30Z", "fin
 
 event: job_complete
 data: {"job_id": "b5ea3ea7-...", "summary": {"violations": 20, "needs_review": 7, "passes": 45}}
+```
+</ResponseExample>
+
+---
+
+## Serve a job image
+
+```
+GET /api/v1/combined/{job_id}/image?path={encoded_path}
+```
+
+Returns a crawled image file as a binary response (`image/jpeg`, `image/png`, etc.). This endpoint is used by the frontend Image Visualiser tab to render contrast report images inline.
+
+The `path` query parameter must be the **exact filesystem path** stored in `contrast_report.images[].path` for the given job. Paths that are not associated with the job are rejected with `403 Forbidden`.
+
+<Note>
+  The `image_url` field injected into each `ContrastImageDetail` is a pre-built, ready-to-use relative URL — consume it directly; do not construct image URLs manually.
+</Note>
+
+### Security model
+
+- Only paths present in `contrast_report.images` for the requested `job_id` are served (job-scoped whitelist).
+- The file must exist on the server filesystem at the recorded path.
+- No directory traversal is possible because the path is validated against the whitelist before any filesystem access.
+
+<ResponseExample>
+```http HTTP 200
+Content-Type: image/jpeg
+Content-Length: 48392
+
+<binary image data>
+```
+
+```json HTTP 403
+{ "detail": "Image path not associated with this job." }
+```
+
+```json HTTP 404
+{ "detail": "Image file not found on server." }
 ```
 </ResponseExample>
 

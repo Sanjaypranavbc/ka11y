@@ -52,7 +52,7 @@ def _violations_331(f: FormInputData) -> List[str]:
     viols = []
 
     # (a) Required field with no error container at all
-    if f.required or f.aria_required in ("true", "True"):
+    if f.required or (f.aria_required or "").strip().lower() == "true":
         if not f.aria_describedby:
             viols.append(
                 "3.3.1: Required field has no aria-describedby — "
@@ -96,7 +96,7 @@ def _violations_332(f: FormInputData) -> List[str]:
         )
 
     # (b) Required but not marked in HTML/ARIA
-    is_marked_required = f.required or f.aria_required in ("true", "True")
+    is_marked_required = f.required or (f.aria_required or "").strip().lower() == "true"
     if not is_marked_required and _field_appears_required(f):
         # heuristic: placeholder contains *, label contains *
         pass  # covered below with placeholder heuristic

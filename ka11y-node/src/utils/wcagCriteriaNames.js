@@ -99,4 +99,6 @@ const wcagCriteriaNames = {
   '3.3.9': 'Accessible Authentication (Enhanced)', // WCAG 2.2
 };
 
+// @deprecated — prefer the successCriteriaId field returned by axeResultMapper which derives
+// names from axe-core tags directly. This lookup table is no longer the source of truth.
 module.exports = wcagCriteriaNames;

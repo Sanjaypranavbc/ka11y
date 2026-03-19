@@ -117,6 +117,26 @@ const RULE_SC_FALLBACK = {
 
   // Viewport
   'meta-viewport-large': '1.4.4',
+
+  // Target size
+  'target-size': '2.5.8',
+
+  // Colour contrast
+  'color-contrast-enhanced': '1.4.6',
+
+  // Links / navigation
+  'identical-links-same-purpose': '2.4.9',
+
+  // Focus / keyboard
+  'focus-order-semantics':       '2.4.3',
+  'scrollable-region-focusable': '2.1.1',
+
+  // Tables
+  'table-duplicate-name': '1.3.1',
+
+  // ARIA field names
+  'aria-input-field-name':  '4.1.2',
+  'aria-toggle-field-name': '4.1.2',
 };
 
 /**

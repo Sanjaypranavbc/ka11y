@@ -1,4 +1,4 @@
-#contrast_analyser.py
+# contrast_analyser.py
 
 import cv2
 import numpy as np

@@ -16,13 +16,14 @@ description: "Complete reference for the CombinedReport JSON structure returned 
 
 ```typescript
 interface CombinedReport {
-  url:          string;       // Canonical URL that was audited
-  generated_at: string;       // ISO-8601 UTC timestamp
-  warnings:     string[];     // Degradation messages (e.g. "axe-core stage failed")
-  summary:      Summary;
-  violations:   Finding[];
-  needs_review: Finding[];
-  passes:       Finding[];
+  url:             string;            // Canonical URL that was audited
+  generated_at:    string;            // ISO-8601 UTC timestamp
+  warnings:        string[];          // Degradation messages (e.g. "axe-core stage failed")
+  summary:         Summary;
+  violations:      Finding[];
+  needs_review:    Finding[];
+  passes:          Finding[];
+  contrast_report: ContrastReport | null;  // Present when OCR is enabled and images are found
 }
 ```
 
@@ -207,9 +208,87 @@ axe-core severities are passed through as-is from axe's `impact` field (`critica
       "help_url": null,
       "element": null
     }
-  ]
+  ],
+  "contrast_report": {
+    "summary": {
+      "total_regions_analysed": 10,
+      "total_violations": 2,
+      "images_with_violations": 1,
+      "pass_rate_pct": 80.0
+    },
+    "table": [
+      {
+        "text": "SALE",
+        "contrast": 2.3,
+        "wcag_violations": ["aa_normal"],
+        "compliance": { "aa_normal": false, "aa_large": false },
+        "image_path": "/app/crawled_images/example_com/abc123/images/banner.jpg",
+        "bounding_box": [10, 20, 80, 30]
+      }
+    ],
+    "images": [
+      {
+        "filename": "banner.jpg",
+        "path": "/app/crawled_images/example_com/abc123/images/banner.jpg",
+        "image_url": "/api/v1/combined/abc123/image?path=%2Fapp%2Fcrawled_images%2Fexample_com%2Fabc123%2Fimages%2Fbanner.jpg",
+        "contrast_violations_count": 2,
+        "detections": [ /* ... */ ]
+      }
+    ]
+  }
 }
 ```
+
+---
+
+## ContrastReport
+
+Produced by the OCR + contrast analysis pipeline when `run_ocr: true` and images are found on the page. Attached as `contrast_report` on `CombinedReport` and also available via the [image endpoint](/api-reference/combined#serve-a-job-image).
+
+```typescript
+interface ContrastReport {
+  summary: {
+    total_regions_analysed:  number;   // Total text regions OCR detected across all images
+    total_violations:        number;   // Regions that fail WCAG 1.4.3 AA (4.5:1 normal text)
+    images_with_violations:  number;   // Count of images with ≥ 1 violation
+    pass_rate_pct:           number;   // 100 * passing_regions / total_regions (0–100)
+  };
+  table:  ContrastDetection[];         // Flat list of every detected text region
+  images: ContrastImageDetail[];       // Per-image summary with nested detections
+}
+
+interface ContrastImageDetail {
+  filename:                  string;
+  path:                      string;   // Absolute server-side filesystem path
+  image_url:                 string;   // Pre-built URL: GET /api/v1/combined/{job_id}/image?path=...
+  contrast_violations_count: number;
+  detections:                ContrastDetection[];
+}
+
+interface ContrastDetection {
+  text:            string;             // OCR-detected text content
+  contrast:        number;             // Computed WCAG contrast ratio (e.g. 3.21)
+  wcag_violations: string[];           // e.g. ["aa_normal"] when contrast < 4.5:1
+  compliance: {
+    aa_normal:  boolean;               // true → passes 4.5:1 threshold (normal text)
+    aa_large:   boolean;               // true → passes 3:1 threshold (large text)
+    aaa_normal?: boolean;
+    aaa_large?:  boolean;
+  };
+  image_path:    string;               // Filesystem path of the parent image
+  bounding_box?: number[];             // [x, y, w, h] in pixels (from EasyOCR)
+}
+```
+
+### `image_url` field
+
+The `image_url` in each `ContrastImageDetail` is injected by the backend **after** the report is built. It is a relative URL pointing to the image-serving endpoint, URL-encoded with `urllib.parse.quote`:
+
+```python
+img["image_url"] = f"/api/v1/combined/{job_id}/image?path={quote(img['path'], safe='')}"
+```
+
+Frontends should consume `image_url` directly — no URL construction is needed on the client side.
 
 ---
 

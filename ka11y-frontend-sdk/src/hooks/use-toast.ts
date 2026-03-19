@@ -174,7 +174,7 @@ function useToast() {
         listeners.splice(index, 1);
       }
     };
-  }, [state]);
+  }, []);  // register/unregister once — setState identity is stable
 
   return {
     ...state,

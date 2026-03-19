@@ -4,6 +4,23 @@ import { Badge } from "@/components/ui/badge";
 import { Copy, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
+function _fallbackCopy(text: string) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand("copy");
+    toast.success("HTML copied to clipboard");
+  } catch {
+    toast.error("Copy failed — please copy manually");
+  }
+  document.body.removeChild(ta);
+}
+
 interface SuggestedFixModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -18,8 +35,13 @@ export function SuggestedFixModal({
   open, onOpenChange, wcagSc, criterionName, suggestedFix, elementHtml, helpUrl,
 }: SuggestedFixModalProps) {
   const copyHtml = () => {
-    navigator.clipboard.writeText(elementHtml);
-    toast.success("HTML copied to clipboard");
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(elementHtml)
+        .then(() => toast.success("HTML copied to clipboard"))
+        .catch(() => _fallbackCopy(elementHtml));
+    } else {
+      _fallbackCopy(elementHtml);
+    }
   };
 
   return (

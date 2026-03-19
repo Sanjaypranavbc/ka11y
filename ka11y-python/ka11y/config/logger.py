@@ -11,7 +11,6 @@ from logging.handlers import RotatingFileHandler
 
 
 def setup_logger(name="KAC", level=logging.INFO, tag=None):
-    print("Setting up logger...")
     BASE_DIR = "."
     log_dir = os.path.join(BASE_DIR, "logs")
 
@@ -56,30 +55,30 @@ def setup_logger(name="KAC", level=logging.INFO, tag=None):
 
 # Helper functions for styled logging
 def log_info(logger, message):
-    """Log information with green bold formatting"""
-    logger.info(f"[bold green]{message}[/bold green]")
+    """Log information message."""
+    logger.info(message)
 
 
 def log_warning(logger, message):
-    """Log warning with yellow bold formatting"""
-    logger.warning(f"[bold yellow]{message}[/bold yellow]")
+    """Log warning message."""
+    logger.warning(message)
 
 
 def log_error(logger, message):
-    """Log error with red bold formatting"""
-    logger.error(f"[bold red]{message}[/bold red]")
+    """Log error message."""
+    logger.error(message)
 
 
 def log_debug(logger, message):
-    """Log debug with violet bold formatting"""
-    logger.debug(f"[bold magenta]{message}[/bold magenta]")
+    """Log debug message."""
+    logger.debug(message)
 
 
 def log_success(logger, message):
-    """Log success messages with cyan bold formatting"""
-    logger.info(f"[bold cyan]{message}[/bold cyan]")
+    """Log success message."""
+    logger.info(message)
 
 
 def log_processing(logger, message):
-    """Log processing status with blue bold formatting"""
-    logger.info(f"[bold blue]{message}[/bold blue]")
+    """Log processing status."""
+    logger.info(message)

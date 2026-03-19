@@ -13,11 +13,14 @@ What is detected
   • <marquee> / <blink>            — deprecated HTML (also caught by axe-core)
 """
 
+import io
 import json
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
 
+import httpx
+from PIL import Image
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
@@ -52,6 +55,28 @@ class MovingContentData(BaseModel):
     axe_would_catch: bool = False
 
     html_snippet: str = ""
+
+
+async def _is_animated_gif(src: str) -> bool:
+    """Return True only if the GIF at `src` has more than 1 frame (is animated)."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(src)
+            resp.raise_for_status()
+        img = Image.open(io.BytesIO(resp.content))
+        if img.format != "GIF":
+            return False
+        frame_count = 0
+        try:
+            while True:
+                frame_count += 1
+                img.seek(img.tell() + 1)
+        except EOFError:
+            pass
+        return frame_count > 1
+    except Exception:
+        # If we cannot fetch/parse, assume animated to err on the side of caution
+        return True
 
 
 class MovingContentCrawler:
@@ -426,6 +451,16 @@ class MovingContentCrawler:
             finally:
                 await context.close()
                 await browser.close()
+
+        # Verify animated GIFs — filter out static GIFs to avoid false positives
+        verified: List[MovingContentData] = []
+        for item in self.results:
+            if item.content_type == "animated_gif" and item.src:
+                if not await _is_animated_gif(item.src):
+                    continue
+            verified.append(item)
+        self.results = verified
+
         return self.results
 
     async def _crawl_page(self, context, url: str, depth: int):

@@ -188,6 +188,10 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 
 # SSE subscriber bus: job_id → list of per-client asyncio.Queue
 _subscribers: Dict[str, List[asyncio.Queue]] = {}
+_subscribers_lock: asyncio.Lock = asyncio.Lock()  # guards _subscribers mutations
+
+# TTL for completed/failed jobs (1 hour)
+_JOB_TTL_SECONDS: int = 3600
 
 
 # ── Static metadata ─────────────────────────────────────────────────────────────
@@ -253,21 +257,63 @@ _WCAG_NAMES: Dict[str, str] = {
 }
 
 _WCAG_LEVEL: Dict[str, str] = {
-    "1.1.1": "A",  "1.2.1": "A",  "1.2.2": "A",  "1.2.3": "A",
-    "1.3.1": "A",  "1.3.2": "A",  "1.3.3": "A",  "1.4.1": "A",
-    "1.4.2": "A",  "2.1.1": "A",  "2.1.2": "A",  "2.1.4": "A",
-    "2.2.1": "A",  "2.2.2": "A",  "2.3.1": "A",  "2.4.1": "A",
-    "2.4.2": "A",  "2.4.3": "A",  "2.4.4": "A",  "2.5.1": "A",
-    "2.5.2": "A",  "2.5.3": "A",  "2.5.4": "A",  "3.1.1": "A",
-    "3.2.1": "A",  "3.2.2": "A",  "3.3.1": "A",  "3.3.2": "A",
-    "3.3.7": "A",  "4.1.1": "A",  "4.1.2": "A",
-    "1.2.4": "AA", "1.2.5": "AA", "1.3.4": "AA", "1.3.5": "AA",
-    "1.4.3": "AA", "1.4.4": "AA", "1.4.5": "AA", "1.4.10": "AA",
-    "1.4.11": "AA","1.4.12": "AA","1.4.13": "AA","2.4.5": "AA",
-    "2.4.6": "AA", "2.4.7": "AA", "2.4.11": "AA","2.4.13": "AA",
-    "2.5.7": "AA", "2.5.8": "AA", "3.1.2": "AA", "3.2.3": "AA",
-    "3.2.4": "AA", "3.2.6": "AA", "3.3.3": "AA", "3.3.4": "AA",
-    "3.3.8": "AA", "4.1.3": "AA",
+    "1.1.1": "A",
+    "1.2.1": "A",
+    "1.2.2": "A",
+    "1.2.3": "A",
+    "1.3.1": "A",
+    "1.3.2": "A",
+    "1.3.3": "A",
+    "1.4.1": "A",
+    "1.4.2": "A",
+    "2.1.1": "A",
+    "2.1.2": "A",
+    "2.1.4": "A",
+    "2.2.1": "A",
+    "2.2.2": "A",
+    "2.3.1": "A",
+    "2.4.1": "A",
+    "2.4.2": "A",
+    "2.4.3": "A",
+    "2.4.4": "A",
+    "2.5.1": "A",
+    "2.5.2": "A",
+    "2.5.3": "A",
+    "2.5.4": "A",
+    "3.1.1": "A",
+    "3.2.1": "A",
+    "3.2.2": "A",
+    "3.3.1": "A",
+    "3.3.2": "A",
+    "3.3.7": "A",
+    "4.1.1": "A",
+    "4.1.2": "A",
+    "1.2.4": "AA",
+    "1.2.5": "AA",
+    "1.3.4": "AA",
+    "1.3.5": "AA",
+    "1.4.3": "AA",
+    "1.4.4": "AA",
+    "1.4.5": "AA",
+    "1.4.10": "AA",
+    "1.4.11": "AA",
+    "1.4.12": "AA",
+    "1.4.13": "AA",
+    "2.4.5": "AA",
+    "2.4.6": "AA",
+    "2.4.7": "AA",
+    "2.4.11": "AA",
+    "2.4.13": "AA",
+    "2.5.7": "AA",
+    "2.5.8": "AA",
+    "3.1.2": "AA",
+    "3.2.3": "AA",
+    "3.2.4": "AA",
+    "3.2.6": "AA",
+    "3.3.3": "AA",
+    "3.3.4": "AA",
+    "3.3.8": "AA",
+    "4.1.3": "AA",
 }
 
 _SUGGESTED_FIX: Dict[str, str] = {
@@ -303,7 +349,7 @@ _SUGGESTED_FIX: Dict[str, str] = {
 
 _PYTHON_SEVERITY: Dict[str, str] = {
     "1.1.1": "critical",
-    "1.4.3": "high",      # ← contrast (Minimum) — new
+    "1.4.3": "high",  # ← contrast (Minimum) — new
     "2.2.2": "high",
     "2.5.3": "high",
     "2.5.8": "medium",
@@ -314,10 +360,11 @@ _PYTHON_SEVERITY: Dict[str, str] = {
 
 # ── Request / Response models ────────────────────────────────────────────────────
 
+
 class CombinedRequest(BaseModel):
     url: HttpUrl
     max_depth: int = 0
-    wcag_level: str = "AA"            # "A" | "AA" | "AAA"
+    wcag_level: str = "AA"  # "A" | "AA" | "AAA"
     run_ocr: bool = True
     run_image_audit: bool = True
     run_form_audit: bool = True
@@ -328,7 +375,7 @@ class CombinedRequest(BaseModel):
 
 class JobStatusResponse(BaseModel):
     job_id: str
-    status: str                        # pending | running | completed | failed
+    status: str  # pending | running | completed | failed
     url: str
     submitted_at: str
     completed_at: Optional[str] = None
@@ -342,21 +389,42 @@ class JobStatusResponse(BaseModel):
 
 # ── SSE subscriber bus ───────────────────────────────────────────────────────────
 
+
 def _broadcast(job_id: str, event_type: str, data: Dict[str, Any]) -> None:
     """Push an SSE event dict to every subscriber queue for this job."""
     msg = {"event": event_type, "data": data}
-    for q in _subscribers.get(job_id, []):
+    # Read-only iteration — lock not required here since put_nowait is thread-safe
+    for q in list(_subscribers.get(job_id, [])):
         q.put_nowait(msg)
 
 
 def _close_subscribers(job_id: str) -> None:
     """Send sentinel None to all queues so their generators exit, then clean up."""
-    for q in _subscribers.get(job_id, []):
+    for q in list(_subscribers.get(job_id, [])):
         q.put_nowait(None)
     _subscribers.pop(job_id, None)
 
 
+async def _evict_old_jobs() -> None:
+    """Background task: remove completed/failed jobs older than _JOB_TTL_SECONDS."""
+    while True:
+        await asyncio.sleep(300)  # run every 5 minutes
+        cutoff = time.time() - _JOB_TTL_SECONDS
+        expired = [
+            jid
+            for jid, job in list(_jobs.items())
+            if job.get("status") in ("completed", "failed")
+            and job.get("_created_at", 0) < cutoff
+        ]
+        for jid in expired:
+            _jobs.pop(jid, None)
+            _subscribers.pop(jid, None)
+        if expired:
+            logger.info(f"[combined] TTL eviction: removed {len(expired)} old jobs")
+
+
 # ── Stage tracking helpers ───────────────────────────────────────────────────────
+
 
 def _stage_start(job_id: str, name: str) -> None:
     now = datetime.now(timezone.utc).isoformat()
@@ -371,11 +439,19 @@ def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
     now = datetime.now(timezone.utc).isoformat()
     for s in _jobs[job_id].get("stages", []):
         if s["name"] == name and s["status"] == "running":
-            s.update(status="completed", completed_at=now, findings_count=findings_count)
+            s.update(
+                status="completed", completed_at=now, findings_count=findings_count
+            )
             break
-    _broadcast(job_id, "stage_complete", {
-        "stage_name": name, "completed_at": now, "findings_count": findings_count,
-    })
+    _broadcast(
+        job_id,
+        "stage_complete",
+        {
+            "stage_name": name,
+            "completed_at": now,
+            "findings_count": findings_count,
+        },
+    )
 
 
 def _stage_error(job_id: str, name: str, error: str) -> None:
@@ -397,6 +473,7 @@ def _stage_error_and_warn(job_id: str, name: str, exc: Exception) -> None:
 
 # ── WCAG level filter ────────────────────────────────────────────────────────────
 
+
 def _allowed_levels(wcag_level: str) -> set:
     levels = {"A"}
     if wcag_level in ("AA", "AAA"):
@@ -408,7 +485,10 @@ def _allowed_levels(wcag_level: str) -> set:
 
 # ── Node caller ──────────────────────────────────────────────────────────────────
 
-async def _call_node_flat(url: str, node_base_url: str, wcag_level: str = "AA") -> List[Dict]:
+
+async def _call_node_flat(
+    url: str, node_base_url: str, wcag_level: str = "AA"
+) -> List[Dict]:
     """
     POST to Node's /api/v1/analyse-url-flat.
     Returns a flat list of element-wise findings from axe-core.
@@ -421,6 +501,7 @@ async def _call_node_flat(url: str, node_base_url: str, wcag_level: str = "AA") 
 
 
 # ── Finding factory ──────────────────────────────────────────────────────────────
+
 
 def _make_finding(
     *,
@@ -447,16 +528,21 @@ def _make_finding(
         "reason": reason,
         "suggested_fix": None if is_pass else _SUGGESTED_FIX.get(wcag_sc),
         "help_url": None,
-        "element": None if is_pass else {
-            "html": element_html[:600],
-            "element_id": element_id,
-            "tag": element_tag,
-            "page_url": page_url,
-        },
+        "element": (
+            None
+            if is_pass
+            else {
+                "html": element_html[:600],
+                "element_id": element_id,
+                "tag": element_tag,
+                "page_url": page_url,
+            }
+        ),
     }
 
 
 # ── Contrast report builder ──────────────────────────────────────────────────────
+
 
 def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
     """
@@ -514,7 +600,7 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
         image_has_violation = False
 
         for det in result.detections:
-            ci  = det.contrast_info or {}
+            ci = det.contrast_info or {}
             col = det.color_info or {}
 
             ratio: Optional[float] = None
@@ -522,63 +608,69 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
 
             compliance = ci.get("compliance") or {}
             if compliance:
-                ratio  = compliance.get("contrast_ratio")
-                aa_n   = compliance.get("AA_normal")
-                aa_l   = compliance.get("AA_large")
-                aaa_n  = compliance.get("AAA_normal")
-                aaa_l  = compliance.get("AAA_large")
+                ratio = compliance.get("contrast_ratio")
+                aa_n = compliance.get("AA_normal")
+                aa_l = compliance.get("AA_large")
+                aaa_n = compliance.get("AAA_normal")
+                aaa_l = compliance.get("AAA_large")
 
-            fg      = col.get("foreground") or {}
-            bg_pal  = col.get("background_palette") or []
-            checks  = col.get("contrast_checks") or []
+            fg = col.get("foreground") or {}
+            bg_pal = col.get("background_palette") or []
+            checks = col.get("contrast_checks") or []
             dominant_bg: Dict[str, Any] = bg_pal[0] if bg_pal else {}
 
-            table_rows.append({
-                "image":          result.filename,
-                "image_path":     result.original_path,
-                "text":           det.text,
-                "confidence":     round(float(det.confidence), 3),
-                "foreground_hex": fg.get("hex"),
-                "foreground_lum": fg.get("luminance"),
-                "background_hex": dominant_bg.get("hex"),
-                "background_lum": dominant_bg.get("luminance"),
-                "contrast_ratio": ratio,
-                "AA_normal":      aa_n,
-                "AA_large":       aa_l,
-                "AAA_normal":     aaa_n,
-                "AAA_large":      aaa_l,
-                "violations":     list(det.wcag_violations or []),
-            })
+            table_rows.append(
+                {
+                    "image": result.filename,
+                    "image_path": result.original_path,
+                    "text": det.text,
+                    "confidence": round(float(det.confidence), 3),
+                    "foreground_hex": fg.get("hex"),
+                    "foreground_lum": fg.get("luminance"),
+                    "background_hex": dominant_bg.get("hex"),
+                    "background_lum": dominant_bg.get("luminance"),
+                    "contrast_ratio": ratio,
+                    "AA_normal": aa_n,
+                    "AA_large": aa_l,
+                    "AAA_normal": aaa_n,
+                    "AAA_large": aaa_l,
+                    "violations": list(det.wcag_violations or []),
+                }
+            )
 
             if det.wcag_violations:
                 total_violations += len(det.wcag_violations)
                 image_has_violation = True
 
-            image_detections.append({
-                "text":               det.text,
-                "confidence":         round(float(det.confidence), 3),
-                "bbox":               det.bbox,
-                "foreground":         fg or None,
-                "background_palette": bg_pal,
-                "contrast_checks":    checks,
-                "wcag_violations":    list(det.wcag_violations or []),
-                "ratio":              ratio,
-                "AA_normal":          aa_n,
-                "AA_large":           aa_l,
-                "AAA_normal":         aaa_n,
-                "AAA_large":          aaa_l,
-            })
+            image_detections.append(
+                {
+                    "text": det.text,
+                    "confidence": round(float(det.confidence), 3),
+                    "bbox": det.bbox,
+                    "foreground": fg or None,
+                    "background_palette": bg_pal,
+                    "contrast_checks": checks,
+                    "wcag_violations": list(det.wcag_violations or []),
+                    "ratio": ratio,
+                    "AA_normal": aa_n,
+                    "AA_large": aa_l,
+                    "AAA_normal": aaa_n,
+                    "AAA_large": aaa_l,
+                }
+            )
 
         if image_has_violation:
             images_with_violations += 1
 
         if image_detections:
-            images_detail.append({
-                "filename":                  result.filename,
-                "path":                      result.original_path,
-                "contrast_violations_count": result.contrast_violations_count,
-                "detections":                image_detections,
-            })
+            images_detail.append(
+                {
+                    "filename": result.filename,
+                    "path": result.original_path,
+                    "contrast_violations_count": result.contrast_violations_count,
+                    "detections": image_detections,
+                }
+            )
 
     total = len(table_rows)
     pass_rate = round((total - total_violations) / total * 100, 1) if total else 0.0
@@ -586,11 +678,11 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
     return {
         "summary": {
             "total_regions_analysed": total,
-            "total_violations":       total_violations,
+            "total_violations": total_violations,
             "images_with_violations": images_with_violations,
-            "pass_rate_pct":          pass_rate,
+            "pass_rate_pct": pass_rate,
         },
-        "table":  table_rows,
+        "table": table_rows,
         "images": images_detail,
     }
 
@@ -599,25 +691,38 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
 # Each converter maps raw auditor records → flat finding dicts.
 # Add a new converter here when adding a new Python rule (see HOW TO ADD A NEW RULE).
 
+
 def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
         status_raw = r.get("wcag_1_1_1_status", "")
         if status_raw == "FAILED":
-            findings.append(_make_finding(
-                source="python", rule_id="python_1_1_1_alt", wcag_sc="1.1.1",
-                status="fail",
-                reason=r.get("wcag_1_1_1_violation") or "Image missing adequate alt text.",
-                severity=_PYTHON_SEVERITY["1.1.1"],
-                element_html=r.get("html_snippet", ""),
-                element_tag="IMG", page_url=page_url,
-            ))
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_1_1_alt",
+                    wcag_sc="1.1.1",
+                    status="fail",
+                    reason=r.get("wcag_1_1_1_violation")
+                    or "Image missing adequate alt text.",
+                    severity=_PYTHON_SEVERITY["1.1.1"],
+                    element_html=r.get("html_snippet", ""),
+                    element_tag="IMG",
+                    page_url=page_url,
+                )
+            )
         elif status_raw == "PASSED":
-            findings.append(_make_finding(
-                source="python", rule_id="python_1_1_1_alt", wcag_sc="1.1.1",
-                status="pass", reason="Image has adequate alt text.",
-                severity=None, page_url=page_url,
-            ))
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_1_1_alt",
+                    wcag_sc="1.1.1",
+                    status="pass",
+                    reason="Image has adequate alt text.",
+                    severity=None,
+                    page_url=page_url,
+                )
+            )
     return findings
 
 
@@ -644,25 +749,29 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             continue
 
         for det in result.detections:
-            ci  = det.contrast_info or {}
+            ci = det.contrast_info or {}
             col = det.color_info or {}
 
             # ── Single source of truth: contrast_analyser compliance dict ──────
             compliance = ci.get("compliance") or {}
-            aa_normal  = compliance.get("AA_normal")   # True | False | None
-            ratio      = compliance.get("contrast_ratio")
+            aa_normal = compliance.get("AA_normal")  # True | False | None
+            ratio = compliance.get("contrast_ratio")
 
             # Skip entirely if we have no measured contrast data
             if aa_normal is None:
+                logger.warning(
+                    f"[combined] contrast_to_findings: no AA_normal for "
+                    f'"{det.text[:40]!r}" in {result.filename} — skipping'
+                )
                 continue
 
             # ── Display metadata (for reason string and element snippet) ──────
-            fg          = col.get("foreground") or {}
-            bg_pal      = col.get("background_palette") or []
+            fg = col.get("foreground") or {}
+            bg_pal = col.get("background_palette") or []
             dominant_bg = bg_pal[0] if bg_pal else {}
 
-            fg_hex    = fg.get("hex") or ci.get("foreground_color") or "?"
-            bg_hex    = dominant_bg.get("hex") or ci.get("background_color") or "?"
+            fg_hex = fg.get("hex") or ci.get("foreground_color") or "?"
+            bg_hex = dominant_bg.get("hex") or ci.get("background_color") or "?"
             ratio_str = f"{ratio:.2f}:1" if ratio is not None else "unknown"
 
             text_snippet = (det.text or "")[:60].replace('"', "'")
@@ -674,37 +783,41 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
 
             if not aa_normal:
                 # ratio < 4.5:1 — AA normal text contrast failure
-                findings.append(_make_finding(
-                    source="python",
-                    rule_id="python_1_4_3_contrast",
-                    wcag_sc="1.4.3",
-                    status="fail",
-                    reason=(
-                        f'Text in image "{result.filename}" fails WCAG 1.4.3 '
-                        f"AA contrast. Ratio {ratio_str} "
-                        f"(fg {fg_hex} on bg {bg_hex}). "
-                        f"Required minimum: 4.5:1 for normal text."
-                    ),
-                    severity=_PYTHON_SEVERITY["1.4.3"],
-                    element_html=element_html,
-                    element_id=None,
-                    element_tag="img",
-                    page_url=page_url,
-                ))
+                findings.append(
+                    _make_finding(
+                        source="python",
+                        rule_id="python_1_4_3_contrast",
+                        wcag_sc="1.4.3",
+                        status="fail",
+                        reason=(
+                            f'Text in image "{result.filename}" fails WCAG 1.4.3 '
+                            f"AA contrast. Ratio {ratio_str} "
+                            f"(fg {fg_hex} on bg {bg_hex}). "
+                            f"Required minimum: 4.5:1 for normal text."
+                        ),
+                        severity=_PYTHON_SEVERITY["1.4.3"],
+                        element_html=element_html,
+                        element_id=None,
+                        element_tag="img",
+                        page_url=page_url,
+                    )
+                )
             else:
                 # ratio >= 4.5:1 — passes AA normal text contrast
-                findings.append(_make_finding(
-                    source="python",
-                    rule_id="python_1_4_3_contrast",
-                    wcag_sc="1.4.3",
-                    status="pass",
-                    reason=(
-                        f"Text in {image_label} passes WCAG 1.4.3 AA contrast. "
-                        f"Ratio {ratio_str} (fg {fg_hex} on bg {bg_hex})."
-                    ),
-                    severity=None,
-                    page_url=page_url,
-                ))
+                findings.append(
+                    _make_finding(
+                        source="python",
+                        rule_id="python_1_4_3_contrast",
+                        wcag_sc="1.4.3",
+                        status="pass",
+                        reason=(
+                            f"Text in {image_label} passes WCAG 1.4.3 AA contrast. "
+                            f"Ratio {ratio_str} (fg {fg_hex} on bg {bg_hex})."
+                        ),
+                        severity=None,
+                        page_url=page_url,
+                    )
+                )
 
     return findings
 
@@ -715,23 +828,41 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         html = r.get("html_snippet", "")
         tag = r.get("tag", "INPUT")
         eid = r.get("element_id") or r.get("element_name")
-        for sc, status_key in [("3.3.1", "wcag_3_3_1_status"), ("3.3.2", "wcag_3_3_2_status")]:
+        for sc, status_key in [
+            ("3.3.1", "wcag_3_3_1_status"),
+            ("3.3.2", "wcag_3_3_2_status"),
+        ]:
             violation_key = status_key.replace("_status", "_violation")
             status_raw = r.get(status_key, "")
             rule_id = f"python_{sc.replace('.', '_')}"
             if status_raw == "FAILED":
-                findings.append(_make_finding(
-                    source="python", rule_id=rule_id, wcag_sc=sc, status="fail",
-                    reason=r.get(violation_key) or f"Form field violates WCAG {sc}.",
-                    severity=_PYTHON_SEVERITY[sc],
-                    element_html=html, element_id=eid, element_tag=tag, page_url=page_url,
-                ))
+                findings.append(
+                    _make_finding(
+                        source="python",
+                        rule_id=rule_id,
+                        wcag_sc=sc,
+                        status="fail",
+                        reason=r.get(violation_key)
+                        or f"Form field violates WCAG {sc}.",
+                        severity=_PYTHON_SEVERITY[sc],
+                        element_html=html,
+                        element_id=eid,
+                        element_tag=tag,
+                        page_url=page_url,
+                    )
+                )
             elif status_raw == "PASSED":
-                findings.append(_make_finding(
-                    source="python", rule_id=rule_id, wcag_sc=sc, status="pass",
-                    reason=f"Form field meets WCAG {sc}.",
-                    severity=None, page_url=page_url,
-                ))
+                findings.append(
+                    _make_finding(
+                        source="python",
+                        rule_id=rule_id,
+                        wcag_sc=sc,
+                        status="pass",
+                        reason=f"Form field meets WCAG {sc}.",
+                        severity=None,
+                        page_url=page_url,
+                    )
+                )
     return findings
 
 
@@ -742,21 +873,33 @@ def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         if status_raw == "N/A":
             continue
         if status_raw == "FAILED":
-            findings.append(_make_finding(
-                source="python", rule_id="python_2_5_3_label_in_name", wcag_sc="2.5.3",
-                status="fail",
-                reason=r.get("wcag_2_5_3_violation") or "Accessible name does not contain visible label.",
-                severity=_PYTHON_SEVERITY["2.5.3"],
-                element_html=r.get("html_snippet", ""),
-                element_id=r.get("element_id"),
-                element_tag=r.get("tag", ""), page_url=page_url,
-            ))
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_2_5_3_label_in_name",
+                    wcag_sc="2.5.3",
+                    status="fail",
+                    reason=r.get("wcag_2_5_3_violation")
+                    or "Accessible name does not contain visible label.",
+                    severity=_PYTHON_SEVERITY["2.5.3"],
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=page_url,
+                )
+            )
         elif status_raw == "PASSED":
-            findings.append(_make_finding(
-                source="python", rule_id="python_2_5_3_label_in_name", wcag_sc="2.5.3",
-                status="pass", reason="Accessible name contains the visible label.",
-                severity=None, page_url=page_url,
-            ))
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_2_5_3_label_in_name",
+                    wcag_sc="2.5.3",
+                    status="pass",
+                    reason="Accessible name contains the visible label.",
+                    severity=None,
+                    page_url=page_url,
+                )
+            )
     return findings
 
 
@@ -765,21 +908,33 @@ def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     for r in records:
         status_raw = r.get("wcag_2_2_2_status", "")
         if status_raw == "FAILED":
-            findings.append(_make_finding(
-                source="python", rule_id="python_2_2_2_pause_stop_hide", wcag_sc="2.2.2",
-                status="fail",
-                reason=r.get("wcag_2_2_2_violation") or "Auto-playing content has no pause/stop mechanism.",
-                severity=_PYTHON_SEVERITY["2.2.2"],
-                element_html=r.get("html_snippet", ""),
-                element_id=r.get("element_id"),
-                element_tag=r.get("tag", ""), page_url=page_url,
-            ))
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_2_2_2_pause_stop_hide",
+                    wcag_sc="2.2.2",
+                    status="fail",
+                    reason=r.get("wcag_2_2_2_violation")
+                    or "Auto-playing content has no pause/stop mechanism.",
+                    severity=_PYTHON_SEVERITY["2.2.2"],
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=page_url,
+                )
+            )
         elif status_raw == "PASSED":
-            findings.append(_make_finding(
-                source="python", rule_id="python_2_2_2_pause_stop_hide", wcag_sc="2.2.2",
-                status="pass", reason="Moving content has a pause/stop mechanism or exception applies.",
-                severity=None, page_url=page_url,
-            ))
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_2_2_2_pause_stop_hide",
+                    wcag_sc="2.2.2",
+                    status="pass",
+                    reason="Moving content has a pause/stop mechanism or exception applies.",
+                    severity=None,
+                    page_url=page_url,
+                )
+            )
     return findings
 
 
@@ -792,25 +947,38 @@ def _ts_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         w = r.get("rendered_width_px", 0)
         h = r.get("rendered_height_px", 0)
         if status_raw == "FAILED":
-            findings.append(_make_finding(
-                source="python", rule_id="python_2_5_8_target_size", wcag_sc="2.5.8",
-                status="fail",
-                reason=r.get("wcag_2_5_8_violation") or f"Target size {w:.0f}×{h:.0f} px is below 24×24 px minimum.",
-                severity=_PYTHON_SEVERITY["2.5.8"],
-                element_html=r.get("html_snippet", ""),
-                element_id=r.get("element_id"),
-                element_tag=r.get("tag", ""), page_url=page_url,
-            ))
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_2_5_8_target_size",
+                    wcag_sc="2.5.8",
+                    status="fail",
+                    reason=r.get("wcag_2_5_8_violation")
+                    or f"Target size {w:.0f}×{h:.0f} px is below 24×24 px minimum.",
+                    severity=_PYTHON_SEVERITY["2.5.8"],
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=page_url,
+                )
+            )
         elif status_raw == "PASSED":
-            findings.append(_make_finding(
-                source="python", rule_id="python_2_5_8_target_size", wcag_sc="2.5.8",
-                status="pass", reason=f"Target size {w:.0f}×{h:.0f} px meets the 24×24 px minimum.",
-                severity=None, page_url=page_url,
-            ))
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_2_5_8_target_size",
+                    wcag_sc="2.5.8",
+                    status="pass",
+                    reason=f"Target size {w:.0f}×{h:.0f} px meets the 24×24 px minimum.",
+                    severity=None,
+                    page_url=page_url,
+                )
+            )
     return findings
 
 
 # ── Python pipeline stages ───────────────────────────────────────────────────────
+
 
 async def _run_python_stages(
     *,
@@ -883,7 +1051,9 @@ async def _run_python_stages(
     _stage_start(job_id, "form_audit")
     try:
         form_crawler = AsyncFormCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+            base_url=url,
+            output_dir=str(output_dir),
+            max_depth=max_depth,
         )
         form_inputs = await form_crawler.crawl()
         form_crawler.save_raw_json()
@@ -903,7 +1073,9 @@ async def _run_python_stages(
     _stage_start(job_id, "label_in_name")
     try:
         interactive_crawler = InteractiveElementCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+            base_url=url,
+            output_dir=str(output_dir),
+            max_depth=max_depth,
         )
         interactive_elements = await interactive_crawler.crawl()
         interactive_crawler.save_raw_json()
@@ -923,7 +1095,9 @@ async def _run_python_stages(
     _stage_start(job_id, "pause_stop_hide")
     try:
         moving_crawler = MovingContentCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+            base_url=url,
+            output_dir=str(output_dir),
+            max_depth=max_depth,
         )
         moving_items = await moving_crawler.crawl()
         moving_crawler.save_raw_json()
@@ -943,7 +1117,9 @@ async def _run_python_stages(
     _stage_start(job_id, "target_size")
     try:
         ts_crawler = TargetSizeCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+            base_url=url,
+            output_dir=str(output_dir),
+            max_depth=max_depth,
         )
         ts_items = await ts_crawler.crawl()
         ts_crawler.save_raw_json()
@@ -963,6 +1139,7 @@ async def _run_python_stages(
 
 # ── Report builder ───────────────────────────────────────────────────────────────
 
+
 def _build_report(
     url: str,
     all_findings: List[Dict],
@@ -974,9 +1151,9 @@ def _build_report(
     The `contrast_report` key surfaces the full structured contrast analysis
     (summary, flat table, and per-image detail) alongside the flat findings.
     """
-    violations   = [f for f in all_findings if f["status"] == "fail"]
+    violations = [f for f in all_findings if f["status"] == "fail"]
     needs_review = [f for f in all_findings if f["status"] == "needs_review"]
-    passes       = [f for f in all_findings if f["status"] == "pass"]
+    passes = [f for f in all_findings if f["status"] == "pass"]
 
     sev_count: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
     for f in violations + needs_review:
@@ -989,9 +1166,11 @@ def _build_report(
     src_count: Dict[str, Dict] = {}
 
     for f in all_findings:
-        for bucket, key in [(level_count, f.get("level") or "unknown"),
-                            (sc_count,    f.get("wcag_sc") or "unknown"),
-                            (src_count,   f.get("source", "unknown"))]:
+        for bucket, key in [
+            (level_count, f.get("level") or "unknown"),
+            (sc_count, f.get("wcag_sc") or "unknown"),
+            (src_count, f.get("source", "unknown")),
+        ]:
             if key not in bucket:
                 bucket[key] = {"violations": 0, "needs_review": 0, "passes": 0}
             if f["status"] == "fail":
@@ -1024,6 +1203,7 @@ def _build_report(
 
 
 # ── Async job runner ─────────────────────────────────────────────────────────────
+
 
 async def _run_job(job_id: str, payload: CombinedRequest) -> None:
     """
@@ -1097,7 +1277,8 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
         # Filter Python findings to the requested WCAG level
         allowed = _allowed_levels(payload.wcag_level)
         python_findings = [
-            f for f in python_findings
+            f
+            for f in python_findings
             if f.get("level") in allowed or f.get("level") is None
         ]
 
@@ -1122,13 +1303,15 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
         with open(report_path, "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=2, ensure_ascii=False)
 
-        _jobs[job_id].update({
-            "status": "completed",
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-            "report_path": str(report_path),
-            "result": report,
-            "current_stage": None,
-        })
+        _jobs[job_id].update(
+            {
+                "status": "completed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "report_path": str(report_path),
+                "result": report,
+                "current_stage": None,
+            }
+        )
 
         logger.info(
             f"[combined] job {job_id} completed — "
@@ -1139,19 +1322,25 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
             f"report → {report_path}"
         )
 
-        _broadcast(job_id, "job_complete", {
-            "job_id": job_id,
-            "summary": report["summary"],
-        })
+        _broadcast(
+            job_id,
+            "job_complete",
+            {
+                "job_id": job_id,
+                "summary": report["summary"],
+            },
+        )
 
     except Exception as exc:
         logger.error(f"[combined] job {job_id} failed: {exc}")
-        _jobs[job_id].update({
-            "status": "failed",
-            "completed_at": datetime.now(timezone.utc).isoformat(),
-            "error": str(exc),
-            "current_stage": None,
-        })
+        _jobs[job_id].update(
+            {
+                "status": "failed",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "error": str(exc),
+                "current_stage": None,
+            }
+        )
         _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
 
     finally:
@@ -1159,6 +1348,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────────
+
 
 @router.post("/", response_model=JobStatusResponse, status_code=202)
 async def submit_combined_audit(payload: CombinedRequest):
@@ -1181,11 +1371,22 @@ async def submit_combined_audit(payload: CombinedRequest):
     url = str(payload.url)
     now = datetime.now(timezone.utc).isoformat()
 
+    # SSRF guard: reject private / loopback / link-local URLs
+    _parsed = urlparse(url)
+    _host = _parsed.hostname or ""
+    _PRIVATE_PREFIXES = ("localhost", "127.", "10.", "192.168.", "169.254.")
+    if _host == "localhost" or any(_host.startswith(p) for p in _PRIVATE_PREFIXES):
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL hostname '{_host}' is not allowed (private/loopback address).",
+        )
+
     _jobs[job_id] = {
         "job_id": job_id,
         "status": "pending",
         "url": url,
         "submitted_at": now,
+        "_created_at": time.time(),
         "completed_at": None,
         "report_path": None,
         "result": None,
@@ -1275,7 +1476,8 @@ async def stream_combined_audit(job_id: str):
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
     q: asyncio.Queue = asyncio.Queue()
-    _subscribers.setdefault(job_id, []).append(q)
+    async with _subscribers_lock:
+        _subscribers.setdefault(job_id, []).append(q)
 
     async def generator() -> AsyncGenerator[str, None]:
         try:
@@ -1306,7 +1508,7 @@ async def stream_combined_audit(job_id: str):
             while True:
                 try:
                     msg = await asyncio.wait_for(q.get(), timeout=25.0)
-                    if msg is None:          # sentinel — job reached terminal state
+                    if msg is None:  # sentinel — job reached terminal state
                         break
                     yield f"event: {msg['event']}\ndata: {json.dumps(msg['data'])}\n\n"
                     if msg["event"] in ("job_complete", "job_failed"):
@@ -1314,15 +1516,16 @@ async def stream_combined_audit(job_id: str):
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"  # prevent proxy timeout
         finally:
-            subs = _subscribers.get(job_id, [])
-            if q in subs:
-                subs.remove(q)
+            async with _subscribers_lock:
+                subs = _subscribers.get(job_id, [])
+                if q in subs:
+                    subs.remove(q)
 
     return StreamingResponse(
         generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # disable nginx output buffering for SSE
+            "X-Accel-Buffering": "no",  # disable nginx output buffering for SSE
         },
     )

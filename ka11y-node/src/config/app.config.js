@@ -22,7 +22,7 @@ const config = {
 
   browser: {
     headless: 'shell',
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',

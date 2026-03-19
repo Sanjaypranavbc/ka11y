@@ -91,14 +91,24 @@ def extract_adjacent_text_pixels(img_rgb, bbox, padding=6):
     return region[mask]
 
 
+def _adaptive_k(pixels: np.ndarray, max_k: int = 5) -> int:
+    """Choose cluster count proportional to colour diversity, clamped to [2, max_k]."""
+    flat = pixels.reshape(-1, pixels.shape[-1]) if pixels.ndim == 3 else pixels
+    unique = len(np.unique(flat, axis=0))
+    return min(max_k, max(2, unique // 100))
+
+
 def extract_colors_from_mask(
-    region: np.ndarray, mask: np.ndarray, k_bg: int = 3
+    region: np.ndarray, mask: np.ndarray, k_bg: int = 0
 ) -> dict:
     """
     Extract foreground and background colors using segmentation mask.
 
     mask == 255 → text
     mask == 0   → background
+
+    k_bg=0 (default) uses adaptive cluster count based on pixel diversity.
+    Pass an explicit positive integer to override.
     """
 
     if region is None or mask is None:
@@ -120,7 +130,8 @@ def extract_colors_from_mask(
     fg_color = max(fg_clusters, key=lambda c: c["percent"])
 
     # ---------- BACKGROUND ----------
-    bg_clusters = cluster_colors(bg_pixels, k=k_bg)
+    effective_k_bg = k_bg if k_bg > 0 else _adaptive_k(bg_pixels)
+    bg_clusters = cluster_colors(bg_pixels, k=effective_k_bg)
 
     return {"foreground": fg_color, "background_palette": bg_clusters}
 
