@@ -1,0 +1,152 @@
+---
+title: "1.4.3 Contrast (Minimum)"
+description: "WCAG 1.4.3 — text-in-image contrast check via OCR and per-region luminance analysis"
+---
+
+<Info>
+  **Level AA** · Auditor: `ContrastAuditor` (via OCR pipeline) · File: `ka11y/api/v1/combined.py` (`_contrast_to_findings`)
+</Info>
+
+## What it checks
+
+WCAG 1.4.3 requires that text has sufficient contrast against its background. ka11y audits **text embedded inside images** — content that axe-core cannot reach because it is rendered pixel-by-pixel rather than as DOM text nodes.
+
+The pipeline:
+1. EasyOCR detects text regions within each crawled image
+2. Each region's foreground and background colours are sampled
+3. The WCAG contrast ratio is computed and checked against the AA thresholds
+4. Regions that fail are aggregated into a `ContrastReport` attached to the audit result
+
+## Contrast thresholds (WCAG AA)
+
+| Text size | Required contrast ratio |
+|-----------|------------------------|
+| Normal text (< 18 pt / < 14 pt bold) | **4.5 : 1** |
+| Large text (≥ 18 pt / ≥ 14 pt bold) | **3 : 1** |
+
+## OCR pipeline
+
+```
+Downloaded images
+      │
+      ▼
+OCRPreprocessing  ── EasyOCR ──▶  detected text regions
+                                         │
+                                         ▼
+                              TextClassification
+                              (foreground / background colour sampling)
+                                         │
+                                         ▼
+                              Contrast ratio calculation
+                              (WCAG relative luminance formula)
+                                         │
+                          ┌──────────────┴───────────────┐
+                          ▼                               ▼
+                    aa_normal = True               aa_normal = False
+                    → pass finding                 → violation finding
+```
+
+Each detected region produces one finding in `violations` or `passes`. If a region cannot be analysed (e.g. insufficient contrast data), it is excluded.
+
+## Output: ContrastReport
+
+When OCR is enabled and images are found, the audit result includes a top-level `contrast_report` key:
+
+```typescript
+interface ContrastReport {
+  summary: {
+    total_regions_analysed:  number;
+    total_violations:        number;
+    images_with_violations:  number;
+    pass_rate_pct:           number;   // 0–100
+  };
+  table: ContrastDetection[];          // flat list of all detections
+  images: ContrastImageDetail[];       // per-image aggregations
+}
+
+interface ContrastImageDetail {
+  filename:                  string;
+  path:                      string;   // absolute server-side filesystem path
+  image_url:                 string;   // ready-to-use URL: GET /api/v1/combined/{job_id}/image?path=...
+  contrast_violations_count: number;
+  detections:                ContrastDetection[];
+}
+
+interface ContrastDetection {
+  text:          string;
+  contrast:      number;               // computed ratio, e.g. 3.2
+  wcag_violations: string[];           // e.g. ["aa_normal"] when failing
+  compliance: {
+    aa_normal: boolean;                // true = passes 4.5:1 normal text
+    aa_large:  boolean;                // true = passes 3:1 large text
+    aaa_normal?: boolean;
+    aaa_large?:  boolean;
+  };
+  image_path:    string;
+  bounding_box?: number[];             // [x, y, w, h] pixel coordinates
+}
+```
+
+## `_contrast_to_findings` logic
+
+The internal `_contrast_to_findings` function in `combined.py` converts the contrast table into the standard `Finding` schema:
+
+```python
+for row in contrast_table:
+    compliance = row.get("compliance", {})
+    aa_normal   = compliance.get("aa_normal")   # True | False | None
+
+    if aa_normal is False:
+        status   = "fail"
+        severity = "high"
+    elif aa_normal is True:
+        status   = "pass"
+        severity = None
+    else:
+        continue   # insufficient data — skip
+
+    finding = {
+        "source":         "python",
+        "rule_id":        "python_1_4_3_contrast",
+        "wcag_sc":        "1.4.3",
+        "criterion_name": "Contrast (Minimum)",
+        "level":          "AA",
+        "severity":       severity,
+        "status":         status,
+        "reason":         f"Text '{row['text']}' — contrast ratio {row['contrast']:.2f}:1",
+        "suggested_fix":  "Increase contrast to at least 4.5:1 for normal text or 3:1 for large text." if status == "fail" else None,
+        "help_url":       None,
+        "element":        { "html": row["text"], "element_id": None, "tag": "img", "page_url": image_path },
+    }
+```
+
+## Common violations
+
+| Situation | Example |
+|-----------|---------|
+| Light grey text on white background | `#aaaaaa` on `#ffffff` → ratio ≈ 2.3 : 1 (fails 4.5 : 1) |
+| Yellow text on white background | `#ffff00` on `#ffffff` → ratio ≈ 1.1 : 1 |
+| Dark text on dark image | `#222222` text on `#1a1a1a` photo → ratio ≈ 1.2 : 1 |
+
+## Suggested fix
+
+```html
+<!-- Overlay text on images — use a semi-transparent backdrop -->
+<div style="position: relative;">
+  <img src="hero.jpg" alt="Hero image">
+  <div style="
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.65);   /* ensures 4.5:1+ for white text */
+    color: #ffffff;
+    padding: 0.75rem;
+  ">
+    Heading text here
+  </div>
+</div>
+```
+
+Use a contrast-checker tool (e.g. WebAIM Contrast Checker) to validate final colour combinations.
+
+## Viewing affected images
+
+The frontend **Image Visualiser** tab renders every image that was analysed, grouped into **Failed** and **Passed** sections. Each failed image shows all violating text regions. Images are served from the backend via the dedicated image endpoint — see [Combined API — Serve a job image](/api-reference/combined#serve-a-job-image).
