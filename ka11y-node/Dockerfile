@@ -5,17 +5,14 @@
 # ── Stage 1: dependency installer ────────────────────────────────────────────
 FROM node:20-slim AS deps
 
-# Skip Puppeteer's bundled Chrome download — we use system Chromium instead
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 WORKDIR /app
 
-RUN echo "==> [deps 1/2] Copying package manifests..."
 COPY package*.json ./
 
-RUN echo "==> [deps 2/2] Installing production Node dependencies (npm install)..." && \
-    npm install --omit=dev --prefer-offline 2>&1 | \
-        while IFS= read -r line; do echo "  npm: $line"; done && \
+RUN echo "==> [deps 2/2] Installing production Node dependencies..." && \
+    npm install --omit=dev && \
     echo "==> [deps 2/2] Node dependencies installed ($(du -sh node_modules | cut -f1) on disk)"
 
 
@@ -25,7 +22,6 @@ FROM node:20-slim AS runtime
 LABEL org.opencontainers.image.title="ka11y-node"
 LABEL org.opencontainers.image.description="Puppeteer + axe-core WCAG accessibility engine"
 
-# ── [1/4] Install system Chromium (apt resolves all deps correctly) ───────────
 RUN echo "==> [1/4] Installing system Chromium..." && \
     apt-get update -qq && \
     apt-get install -y --no-install-recommends \
@@ -48,19 +44,16 @@ RUN echo "==> [1/4] Installing system Chromium..." && \
 
 WORKDIR /app
 
-# ── [2/4] Copy pre-built node_modules from deps stage ────────────────────────
 RUN echo "==> [2/4] Copying node_modules from deps stage..."
 COPY --from=deps /app/node_modules ./node_modules
 RUN echo "==> [2/4] node_modules copied ($(du -sh node_modules | cut -f1))"
 
-# ── [3/4] Copy application source ────────────────────────────────────────────
 RUN echo "==> [3/4] Copying application source..."
 COPY package*.json ./
 COPY server.js     ./
 COPY src/          ./src/
 RUN echo "==> [3/4] Source copied"
 
-# ── [4/5] Puppeteer — point to system Chromium, skip bundled download ─────────
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
