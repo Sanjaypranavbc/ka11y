@@ -63,6 +63,7 @@ class KaLogger(logging.LoggerAdapter):
 
     def process(self, msg: str, kwargs: dict) -> tuple[str, dict]:
         tag = self.extra.get("tag", "GENERAL")
+        kwargs["extra"] = {**self.extra, **kwargs.get("extra", {})}
         return f"[bold cyan]\\[{tag}][/bold cyan] {msg}", kwargs
 
     def success(self, msg: str, *args, **kwargs) -> None:
