@@ -50,8 +50,7 @@ WORKDIR /app
 
 # ── [2/4] Copy pre-built node_modules from deps stage ────────────────────────
 RUN echo "==> [2/4] Copying node_modules from deps stage..."
-# COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app /app
+COPY --from=deps /app/node_modules ./node_modules
 RUN echo "==> [2/4] node_modules copied ($(du -sh node_modules | cut -f1))"
 
 # ── [3/4] Copy application source ────────────────────────────────────────────
