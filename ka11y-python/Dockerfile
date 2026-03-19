@@ -27,6 +27,11 @@ RUN poetry install
 # Install Playwright's Chromium browser + all system dependencies
 RUN poetry run playwright install chromium --with-deps
 
+# Pre-create the logs directory so it exists in the image layer.
+# The python_logs Docker volume is mounted over this path at runtime;
+# if the volume is not configured the directory still exists and logs work.
+RUN mkdir -p /app/logs
+
 EXPOSE 8000
 
 CMD ["poetry", "run", "uvicorn", "ka11y.main:app", "--host", "0.0.0.0", "--port", "8000"]
