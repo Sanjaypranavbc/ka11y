@@ -70,6 +70,7 @@ services:
 
     volumes:
       - crawled_output:/app/crawled_images
+      - python_logs:/app/logs
 
     healthcheck:
       test:         ["CMD", "curl", "-f", "http://localhost:8000/docs"]
@@ -118,4 +119,6 @@ services:
 # ── Named volumes ──────────────────────────────────────────────────────────────
 volumes:
   crawled_output:
+    driver: local
+  python_logs:
     driver: local

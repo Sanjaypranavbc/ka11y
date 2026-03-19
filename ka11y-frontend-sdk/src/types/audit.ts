@@ -36,10 +36,15 @@ export interface ContrastDetection {
   wcag_violations: string[];
 }
 
+export type ImageClassification =
+  | "button" | "icon" | "logo" | "image" | "chart"
+  | "informative" | "decorative" | "other";
+
 export interface ContrastImageDetail {
   filename: string;
   path: string;
   image_url: string;          // injected by backend: /api/v1/combined/{job_id}/image?path=...
+  classification: ImageClassification; // derived from storage path by backend
   contrast_violations_count: number;
   detections: ContrastDetection[];
 }
