@@ -542,6 +542,44 @@ def _make_finding(
     }
 
 
+# ── Image classification inference ──────────────────────────────────────────────
+
+
+def _infer_classification(path: str) -> str:
+    """
+    Derive the image classification from its storage path.
+
+    Images are stored under subdirectories that encode their classification:
+      functional/buttons/  → button
+      functional/icons/    → icon
+      functional/logos/    → logo
+      functional/images/   → image
+      complex/charts/      → chart
+      informative/logos/   → logo
+      informative/icons/   → icon
+      informative/         → informative
+      decorative/          → decorative
+    """
+    p = path.replace("\\", "/").lower()
+    if "/functional/buttons/" in p:
+        return "button"
+    if "/functional/icons/" in p:
+        return "icon"
+    if "/functional/logos/" in p or "/informative/logos/" in p:
+        return "logo"
+    if "/functional/images/" in p:
+        return "image"
+    if "/complex/charts/" in p:
+        return "chart"
+    if "/informative/icons/" in p:
+        return "icon"
+    if "/informative/" in p:
+        return "informative"
+    if "/decorative/" in p:
+        return "decorative"
+    return "other"
+
+
 # ── Contrast report builder ──────────────────────────────────────────────────────
 
 
@@ -668,6 +706,7 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
                 {
                     "filename": result.filename,
                     "path": result.original_path,
+                    "classification": _infer_classification(result.original_path),
                     "contrast_violations_count": result.contrast_violations_count,
                     "detections": image_detections,
                 }
@@ -697,6 +736,21 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
         status_raw = r.get("wcag_1_1_1_status", "")
+        if status_raw not in ("FAILED", "PASSED"):
+            continue
+
+        # Auditor field is "wcag_1_1_1_reason", not "wcag_1_1_1_violation"
+        reason = r.get("wcag_1_1_1_reason") or ""
+
+        # Build a readable HTML snippet from the available fields
+        src = r.get("src", "")
+        alt = r.get("alt_text", "")
+        alt_attr = f' alt="{alt}"' if alt is not None else ""
+        element_html = f'<img src="{src}"{alt_attr}>'
+
+        # Use the image src URL as the element identifier
+        element_id = r.get("src") or r.get("filename") or None
+
         if status_raw == "FAILED":
             findings.append(
                 _make_finding(
@@ -704,24 +758,24 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     rule_id="python_1_1_1_alt",
                     wcag_sc="1.1.1",
                     status="fail",
-                    reason=r.get("wcag_1_1_1_violation")
-                    or "Image missing adequate alt text.",
+                    reason=reason or "Image missing adequate alt text.",
                     severity=_PYTHON_SEVERITY["1.1.1"],
-                    element_html=r.get("html_snippet", ""),
-                    element_tag="IMG",
-                    page_url=page_url,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
+                    page_url=r.get("url") or page_url,
                 )
             )
-        elif status_raw == "PASSED":
+        else:  # PASSED
             findings.append(
                 _make_finding(
                     source="python",
                     rule_id="python_1_1_1_alt",
                     wcag_sc="1.1.1",
                     status="pass",
-                    reason="Image has adequate alt text.",
+                    reason=reason or "Image has adequate alt text.",
                     severity=None,
-                    page_url=page_url,
+                    page_url=r.get("url") or page_url,
                 )
             )
     return findings

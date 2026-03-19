@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ContrastImageDetail, ContrastReport } from "@/types/audit";
+import { ContrastImageDetail, ContrastReport, ImageClassification } from "@/types/audit";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,8 +9,56 @@ import {
   PassingThumb,
   SummaryTile,
 } from "./ContrastReportSection";
-import { CheckCircle2, AlertTriangle, Search, Images } from "lucide-react";
+import {
+  CheckCircle2,
+  AlertTriangle,
+  Search,
+  Images,
+  MousePointerClick,
+  Sparkles,
+  ImageIcon,
+  BadgeCheck,
+  BarChart2,
+  Tag,
+  HelpCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ── Classification metadata ───────────────────────────────────────────────────
+
+const CLASSIFICATION_META: Record<
+  ImageClassification,
+  { label: string; Icon: React.ElementType; color: string }
+> = {
+  button:      { label: "Buttons",      Icon: MousePointerClick, color: "text-blue-500" },
+  icon:        { label: "Icons",        Icon: Sparkles,          color: "text-purple-500" },
+  logo:        { label: "Logos",        Icon: BadgeCheck,        color: "text-amber-500" },
+  image:       { label: "Images",       Icon: ImageIcon,         color: "text-green-500" },
+  chart:       { label: "Charts",       Icon: BarChart2,         color: "text-cyan-500" },
+  informative: { label: "Informative",  Icon: Tag,               color: "text-teal-500" },
+  decorative:  { label: "Decorative",   Icon: Images,            color: "text-slate-500" },
+  other:       { label: "Other",        Icon: HelpCircle,        color: "text-muted-foreground" },
+};
+
+const CLASSIFICATION_ORDER: ImageClassification[] = [
+  "button", "icon", "logo", "image", "chart", "informative", "decorative", "other",
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function groupByClassification(
+  images: ContrastImageDetail[],
+): Map<ImageClassification, ContrastImageDetail[]> {
+  const map = new Map<ImageClassification, ContrastImageDetail[]>();
+  for (const img of images) {
+    const key = img.classification ?? "other";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(img);
+  }
+  return map;
+}
+
+// ── Main tab ──────────────────────────────────────────────────────────────────
 
 interface ImageVisualisationTabProps {
   contrastReport: ContrastReport | null | undefined;
@@ -19,7 +67,6 @@ interface ImageVisualisationTabProps {
 export function ImageVisualisationTab({ contrastReport }: ImageVisualisationTabProps) {
   const [search, setSearch] = useState("");
 
-  // ── Empty state ──────────────────────────────────────────────────────────────
   if (!contrastReport || contrastReport.images.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8 grid-bg min-h-full">
@@ -40,8 +87,10 @@ export function ImageVisualisationTab({ contrastReport }: ImageVisualisationTabP
     ? images.filter((img) => img.filename.toLowerCase().includes(search.toLowerCase()))
     : images;
 
-  const failedFiltered = filtered.filter((img) => img.contrast_violations_count > 0);
-  const passedFiltered = filtered.filter((img) => img.contrast_violations_count === 0);
+  const failedFiltered  = filtered.filter((img) => img.contrast_violations_count > 0);
+  const passedFiltered  = filtered.filter((img) => img.contrast_violations_count === 0);
+  const failedByClass   = groupByClassification(failedFiltered);
+  const passedByClass   = groupByClassification(passedFiltered);
 
   return (
     <div className="p-5 space-y-6 grid-bg min-h-full animate-fade-up">
@@ -69,54 +118,98 @@ export function ImageVisualisationTab({ contrastReport }: ImageVisualisationTabP
       </div>
 
       {/* ── Failed section ──────────────────────────────────────────────────── */}
-      <section aria-labelledby="failed-heading">
-        <div className="flex items-center gap-2 mb-4">
-          <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden="true" />
-          <h2 id="failed-heading" className="text-sm font-semibold text-foreground">
-            Failed
-          </h2>
-          <Badge variant="destructive" className="text-[10px]">
-            {failedFiltered.length}
-          </Badge>
-        </div>
-
-        {failedFiltered.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-4 pl-1">
-            {search ? "No failed images match your search." : "No contrast violations found — great work!"}
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {failedFiltered.map((img) => (
-              <FailedImageCard key={img.path} image={img} />
-            ))}
+      {failedFiltered.length > 0 && (
+        <section aria-labelledby="failed-heading">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertTriangle className="h-4 w-4 text-destructive" aria-hidden="true" />
+            <h2 id="failed-heading" className="text-sm font-semibold text-foreground">
+              Failed
+            </h2>
+            <Badge variant="destructive" className="text-[10px]">
+              {failedFiltered.length}
+            </Badge>
           </div>
-        )}
-      </section>
+
+          {CLASSIFICATION_ORDER.filter((cls) => failedByClass.has(cls)).map((cls) => (
+            <ClassificationGroup
+              key={cls}
+              classification={cls}
+              images={failedByClass.get(cls)!}
+              variant="failed"
+            />
+          ))}
+        </section>
+      )}
+
+      {failedFiltered.length === 0 && (
+        <p className="text-xs text-muted-foreground py-4 pl-1">
+          {search ? "No failed images match your search." : "No contrast violations found — great work!"}
+        </p>
+      )}
 
       {/* ── Passed section ──────────────────────────────────────────────────── */}
-      <section aria-labelledby="passed-heading">
-        <div className="flex items-center gap-2 mb-4">
-          <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
-          <h2 id="passed-heading" className="text-sm font-semibold text-foreground">
-            Passed
-          </h2>
-          <Badge className="text-[10px] bg-success/20 text-success border-success/30" variant="outline">
-            {passedFiltered.length}
-          </Badge>
-        </div>
-
-        {passedFiltered.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-4 pl-1">
-            {search ? "No passing images match your search." : "No images passed contrast check."}
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
-            {passedFiltered.map((img) => (
-              <PassedImageCard key={img.path} image={img} />
-            ))}
+      {passedFiltered.length > 0 && (
+        <section aria-labelledby="passed-heading">
+          <div className="flex items-center gap-2 mb-4">
+            <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
+            <h2 id="passed-heading" className="text-sm font-semibold text-foreground">
+              Passed
+            </h2>
+            <Badge className="text-[10px] bg-success/20 text-success border-success/30" variant="outline">
+              {passedFiltered.length}
+            </Badge>
           </div>
-        )}
-      </section>
+
+          {CLASSIFICATION_ORDER.filter((cls) => passedByClass.has(cls)).map((cls) => (
+            <ClassificationGroup
+              key={cls}
+              classification={cls}
+              images={passedByClass.get(cls)!}
+              variant="passed"
+            />
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ── Classification group ──────────────────────────────────────────────────────
+
+function ClassificationGroup({
+  classification,
+  images,
+  variant,
+}: {
+  classification: ImageClassification;
+  images: ContrastImageDetail[];
+  variant: "failed" | "passed";
+}) {
+  const meta = CLASSIFICATION_META[classification] ?? CLASSIFICATION_META.other;
+  const { label, Icon, color } = meta;
+
+  return (
+    <div className="mb-6">
+      {/* Group header */}
+      <div className="flex items-center gap-2 mb-3">
+        <Icon className={cn("h-3.5 w-3.5", color)} aria-hidden="true" />
+        <span className="text-xs font-medium text-foreground">{label}</span>
+        <span className="text-[10px] text-muted-foreground">({images.length})</span>
+      </div>
+
+      {variant === "failed" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {images.map((img) => (
+            <FailedImageCard key={img.path} image={img} />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
+          {images.map((img) => (
+            <PassedImageCard key={img.path} image={img} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -147,7 +240,6 @@ function FailedImageCard({ image }: { image: ContrastImageDetail }) {
             onError={() => setImgError(true)}
           />
         )}
-        {/* Overlay badge */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
           <p className="text-white text-[10px] font-medium truncate">{image.filename}</p>
         </div>

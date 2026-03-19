@@ -20,6 +20,7 @@ import datetime
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from rich.console import Console
 from rich.highlighter import NullHighlighter
@@ -85,7 +86,8 @@ def setup_logger(name: str = "KAC", tag: str | None = None) -> KaLogger:
     Handlers are attached only once per underlying logger name so repeated
     calls to setup_logger() with the same *name* are safe.
     """
-    log_dir = os.path.join(".", "logs")
+    # Absolute path so logs always land in ka11y-python/logs/ regardless of CWD
+    log_dir = str(Path(__file__).resolve().parent.parent.parent / "logs")
     os.makedirs(log_dir, exist_ok=True)
 
     base = logging.getLogger(name)

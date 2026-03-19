@@ -181,9 +181,11 @@ class OCRPreprocessing:
 
         filename = Path(image_path).name
         category = self._determine_category(image_path)
+        # Always store as absolute so the API can serve images regardless of CWD
+        abs_path = str(Path(image_path).resolve())
 
         result = TextDetectionResult(
-            filename=filename, original_path=image_path, category=category
+            filename=filename, original_path=abs_path, category=category
         )
 
         try:
