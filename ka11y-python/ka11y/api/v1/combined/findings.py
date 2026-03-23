@@ -334,7 +334,15 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
 
     return findings
 
-def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    """
+    Converter for crawler-based (static CSS analysis) WCAG 1.4.12 records.
+
+    TextSpacingAuditor produces three statuses:
+      FAILED  — fixed height + overflow:hidden  → "fail"
+      WARNING — fixed height only               → "needs_review"
+      PASSED  — no risk detected                → "pass"
+    """
     findings = []
     for r in records:
         status_raw = r.get("wcag_1_4_12_status", "")
@@ -344,7 +352,7 @@ def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
             findings.append(
                 _make_finding(
                     source="python",
-                    rule_id="python_1_4_12_text_spacing",
+                    rule_id="python_1_4_12_text_spacing_static",
                     wcag_sc="1.4.12",
                     status="fail",
                     reason=r.get("wcag_1_4_12_violation")
@@ -360,7 +368,7 @@ def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
             findings.append(
                 _make_finding(
                     source="python",
-                    rule_id="python_1_4_12_text_spacing",
+                    rule_id="python_1_4_12_text_spacing_static",
                     wcag_sc="1.4.12",
                     status="needs_review",
                     reason=r.get("wcag_1_4_12_violation")
@@ -376,7 +384,7 @@ def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
             findings.append(
                 _make_finding(
                     source="python",
-                    rule_id="python_1_4_12_text_spacing",
+                    rule_id="python_1_4_12_text_spacing_static",
                     wcag_sc="1.4.12",
                     status="pass",
                     reason="Element does not restrict text spacing.",
@@ -385,6 +393,7 @@ def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                 )
             )
     return findings
+
 
 def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
@@ -625,11 +634,12 @@ def _reflow_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     )
 
 
-def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+def _rendered_text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    """Converter for Playwright-based (rendered) WCAG 1.4.12 records."""
     return _rendered_rule_to_findings(
         records, page_url,
         rule_key="wcag_1_4_12",
-        rule_id="python_1_4_12_text_spacing",
+        rule_id="python_1_4_12_text_spacing_rendered",
         wcag_sc="1.4.12",
         pass_reason="No content or functionality is lost after text spacing overrides.",
     )

@@ -39,6 +39,7 @@ from .findings import (
     _alt_text_to_findings,
     _build_contrast_report,
     _contrast_to_findings,
+    _crawler_text_spacing_to_findings,
     _focus_not_obscured_enh_to_findings,
     _focus_not_obscured_min_to_findings,
     _form_to_findings,
@@ -47,8 +48,8 @@ from .findings import (
     _orientation_to_findings,
     _psh_to_findings,
     _reflow_to_findings,
+    _rendered_text_spacing_to_findings,
     _resize_text_to_findings,
-    _text_spacing_to_findings,
     _ts_to_findings,
 )
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
@@ -284,7 +285,7 @@ async def _stage_text_spacing(
             records = await asyncio.to_thread(
                 auditor.generate_audit_report, items
             )
-            findings = _text_spacing_to_findings(records, url)
+            findings = _crawler_text_spacing_to_findings(records, url)
 
         _stage_complete(job_id, "text_spacing", len(findings))
         return findings
@@ -332,7 +333,7 @@ async def _stage_rendered_layout_audit(
             [r for r in records if "wcag_1_4_4_status" in r], url))
         findings.extend(_reflow_to_findings(
             [r for r in records if "wcag_1_4_10_status" in r], url))
-        findings.extend(_text_spacing_to_findings(
+        findings.extend(_rendered_text_spacing_to_findings(
             [r for r in records if "wcag_1_4_12_status" in r], url))
         findings.extend(_orientation_to_findings(
             [r for r in records if "wcag_1_3_4_status" in r], url))
