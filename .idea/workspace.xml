@@ -5,8 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="539dcdbc-1d12-4243-a61c-89c6ad8de27b" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/findings.py" beforeDir="false" afterPath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/findings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/stages.py" beforeDir="false" afterPath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/stages.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/ka11y.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
