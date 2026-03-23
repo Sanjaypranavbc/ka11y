@@ -40,12 +40,13 @@ const navItems: { label: string; value: TabValue; icon: React.ElementType }[] = 
 ];
 
 const STAGE_LABELS: Record<string, string> = {
-  axe_core:        "axe-core scan",
-  image_audit:     "Image audit",
-  form_audit:      "Form audit",
-  label_in_name:   "Label in name",
-  pause_stop_hide: "Moving content",
-  target_size:     "Target size",
+  axe_core:              "axe-core scan",
+  image_audit:           "Image audit",
+  form_audit:            "Form audit",
+  label_in_name:         "Label in name",
+  pause_stop_hide:       "Moving content",
+  target_size:           "Target size",
+  rendered_layout_audit: "Rendered layout",
 };
 
 export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, currentStage, open, onClose }: AuditSidebarProps) {
@@ -59,15 +60,29 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
     run_label_in_name_audit: true,
     run_pause_stop_hide_audit: true,
     run_target_size_audit: true,
+    run_resize_text_audit: true,
+    run_reflow_audit: true,
+    run_text_spacing_audit: true,
+    run_orientation_audit: true,
+    run_hover_focus_content_audit: true,
+    run_focus_not_obscured_min_audit: true,
+    run_focus_not_obscured_enh_audit: true,
   });
 
   const toggles: { key: keyof AuditConfig; label: string }[] = [
-    { key: "run_ocr",                   label: "OCR"           },
-    { key: "run_image_audit",           label: "Image Audit"   },
-    { key: "run_form_audit",            label: "Form Audit"    },
-    { key: "run_label_in_name_audit",   label: "Label in Name" },
-    { key: "run_pause_stop_hide_audit", label: "Pause/Stop"    },
-    { key: "run_target_size_audit",     label: "Target Size"   },
+    { key: "run_ocr",                          label: "OCR"             },
+    { key: "run_image_audit",                  label: "Image Audit"     },
+    { key: "run_form_audit",                   label: "Form Audit"      },
+    { key: "run_label_in_name_audit",          label: "Label in Name"   },
+    { key: "run_pause_stop_hide_audit",        label: "Pause/Stop"      },
+    { key: "run_target_size_audit",            label: "Target Size"     },
+    { key: "run_resize_text_audit",            label: "Resize Text"     },
+    { key: "run_reflow_audit",                 label: "Reflow"          },
+    { key: "run_text_spacing_audit",           label: "Text Spacing"    },
+    { key: "run_orientation_audit",            label: "Orientation"     },
+    { key: "run_hover_focus_content_audit",    label: "Hover/Focus"     },
+    { key: "run_focus_not_obscured_min_audit", label: "Focus Obscured"  },
+    { key: "run_focus_not_obscured_enh_audit", label: "Focus Obscured+" },
   ];
 
   const isRunning = jobStatus === "pending" || jobStatus === "running";

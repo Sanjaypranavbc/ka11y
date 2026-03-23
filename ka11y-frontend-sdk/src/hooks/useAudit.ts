@@ -229,6 +229,13 @@ export function useAudit() {
             run_label_in_name_audit: config.run_label_in_name_audit,
             run_pause_stop_hide_audit: config.run_pause_stop_hide_audit,
             run_target_size_audit: config.run_target_size_audit,
+            run_resize_text_audit: config.run_resize_text_audit,
+            run_reflow_audit: config.run_reflow_audit,
+            run_text_spacing_audit: config.run_text_spacing_audit,
+            run_orientation_audit: config.run_orientation_audit,
+            run_hover_focus_content_audit: config.run_hover_focus_content_audit,
+            run_focus_not_obscured_min_audit: config.run_focus_not_obscured_min_audit,
+            run_focus_not_obscured_enh_audit: config.run_focus_not_obscured_enh_audit,
           }),
         });
 
