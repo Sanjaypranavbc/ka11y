@@ -33,6 +33,27 @@ WCAG 2.5.8 provides several exceptions. ka11y automatically detects two:
 
 Elements matching an exception are reported as `N/A` and excluded from the violation count.
 
+## Output
+
+**CSV file:** `audit_target_size_report.csv`
+
+Columns: `page_url`, `element_index`, `tag`, `role`, `element_id`, `input_type`, `accessible_name`, `rendered_width_px`, `rendered_height_px`, `padding_top_px`, `padding_bottom_px`, `padding_left_px`, `padding_right_px`, `is_inline_exception`, `is_ua_controlled_exception`, `passes_size`, `wcag_2_5_8_status`, `wcag_2_5_8_violation`, `overall_status`, `html_snippet`
+
+A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
+
+### `summarize()` return keys
+
+| Key | Description |
+|-----|-------------|
+| `total_elements` | All elements audited |
+| `checked` | Elements where rule applied (PASSED + FAILED, excludes N/A) |
+| `passed` | Elements ≥ 24×24 px |
+| `failed` | Elements < 24×24 px |
+| `na` | Elements matching an exception |
+| `pass_rate_pct` | `passed / checked × 100`, rounded to 1 dp |
+| `wcag_2_5_8_failed` | Same as `failed` |
+| `failed_by_tag` | `dict[tag, count]` — e.g. `{"A": 3, "BUTTON": 1}` |
+
 ## Common violations
 
 | Element | Typical issue |

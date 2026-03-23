@@ -6,3 +6,8 @@ router = APIRouter(prefix="/api/v1")
 # router.include_router(forms.router)
 router.include_router(pipeline.router)
 router.include_router(combined.router)
+
+
+@router.get("/health", tags=["health"])
+async def health():
+    return {"status": "ok"}

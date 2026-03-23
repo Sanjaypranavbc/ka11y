@@ -18,11 +18,11 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+COPY pyproject.toml poetry.lock ./
 COPY ka11y/ ./ka11y/
 
 RUN pip install --no-cache-dir --upgrade poetry
-RUN poetry install
+RUN poetry install --only main
 
 # Install Playwright's Chromium browser + all system dependencies
 RUN poetry run playwright install chromium --with-deps

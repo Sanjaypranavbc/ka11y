@@ -1,0 +1,72 @@
+---
+title: "1.3.4 Orientation"
+description: "Content is not restricted to a single display orientation unless essential"
+---
+
+<Info>
+  **Level:** AA · **Engine:** Rendered (Playwright) · **Auditor:** `orientation.py` · **Stage:** `rendered_layout_audit`
+</Info>
+
+## What it checks
+
+Pages must not lock themselves to portrait-only or landscape-only unless the specific use case is genuinely essential (e.g. a bank cheque, a piano keyboard). Both orientations should show usable content.
+
+---
+
+## How it works
+
+Two snapshots are taken at mobile-like viewports:
+
+| Scenario | Viewport |
+|----------|----------|
+| `orientation_portrait` | 390 × 844 px |
+| `orientation_landscape` | 844 × 390 px |
+
+The evaluator checks each snapshot for:
+
+1. **Rotate-device overlay** — text matching patterns like `"rotate your device"`, `"landscape only"`, `"portrait only"`, `"please rotate"`, `"turn your phone"`.
+2. **Missing main content** — fewer than 3 visible text-bearing elements suggests content is hidden.
+3. **Dramatic interactive element count difference** — if one orientation has < 50% of the other's focusable elements, orientation-locking may be occurring.
+
+Because essential-orientation exceptions legitimately exist, ambiguous cases return **NEEDS_REVIEW** rather than automatic FAILED.
+
+---
+
+## Common violations
+
+| Violation | Root cause | Fix |
+|-----------|-----------|-----|
+| Rotate-device overlay displayed | CSS `@media (orientation: portrait) { display: none }` on main content | Remove the orientation lock; implement responsive layout instead |
+| Main nav missing in landscape | `height: 100vh` on a portrait sidebar that overflows | Make layout fluid; use Flexbox or Grid |
+| App refuses portrait mode | `<meta name="screen-orientation" content="landscape">` or JS lock | Remove screen-orientation lock unless truly essential |
+
+---
+
+## Suggested fix
+
+```css
+/* ❌ Locks to landscape */
+@media (orientation: portrait) {
+  #main-content { display: none; }
+  #rotate-message { display: block; }
+}
+
+/* ✅ Responsive layout that works in both orientations */
+@media (max-width: 600px) {
+  .sidebar { width: 100%; }
+  .content { width: 100%; }
+}
+```
+
+---
+
+## Finding fields
+
+| Field | Value |
+|-------|-------|
+| `source` | `python` |
+| `rule_id` | `python_1_3_4_orientation` |
+| `wcag_sc` | `1.3.4` |
+| `level` | `AA` |
+| `severity` | `medium` |
+| `status` | `needs_review` \| `pass` (rarely `fail` — almost always uncertain) |

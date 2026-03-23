@@ -1,0 +1,75 @@
+---
+title: "1.4.10 Reflow"
+description: "Content reflows at 320 CSS px width without requiring horizontal scrolling"
+---
+
+<Info>
+  **Level:** AA · **Engine:** Rendered (Playwright) · **Auditor:** `reflow.py` · **Stage:** `rendered_layout_audit`
+</Info>
+
+## What it checks
+
+At a viewport width of 320 CSS pixels (equivalent to a 1280 px screen at 400% zoom), all content should be readable by scrolling vertically only. No horizontal scrolling should be required to read text or operate controls.
+
+---
+
+## How it works
+
+```
+reflow_320 scenario (viewport 320 × 640 px)
+        ↓
+  Playwright navigates, stabilises, collects full-page snapshot
+        ↓
+Evaluator checks:
+  1. document.scrollWidth > 320 + 5 px  →  page-level horizontal scroll
+  2. element.rect.right > 320 + 10 px   →  individual element overflow
+        ↓
+Exempt candidates (table, SVG, canvas, code editors) → NEEDS_REVIEW
+Non-exempt overflow → FAILED
+```
+
+**Exempt categories** (per WCAG): data tables, maps, diagrams, code editors. These are detected heuristically by tag name (`table`, `svg`, `canvas`, `pre`) or class markers (`codemirror`, `monaco`, `role="grid"`).
+
+---
+
+## Common violations
+
+| Violation | Root cause | Fix |
+|-----------|-----------|-----|
+| Page requires side-scroll | Fixed `width: 1200px` on a container | Use `max-width: 100%` or `width: min(1200px, 100%)` |
+| Form overflows viewport | Input `width: 500px` without `max-width` | Add `max-width: 100%` to form inputs |
+| Navigation wraps offscreen | `white-space: nowrap` on nav items | Remove `nowrap` or add responsive breakpoints |
+| Hero image overflows | `img` without `max-width: 100%` | Add `img { max-width: 100%; height: auto; }` |
+
+---
+
+## Suggested fix
+
+```css
+/* ❌ Fixed widths that break reflow */
+.container { width: 900px; }
+input { width: 400px; }
+
+/* ✅ Responsive equivalents */
+.container { max-width: 900px; width: 100%; }
+input { max-width: 100%; width: 400px; }
+
+/* ✅ Global image safety net */
+img, video, iframe {
+  max-width: 100%;
+  height: auto;
+}
+```
+
+---
+
+## Finding fields
+
+| Field | Value |
+|-------|-------|
+| `source` | `python` |
+| `rule_id` | `python_1_4_10_reflow` |
+| `wcag_sc` | `1.4.10` |
+| `level` | `AA` |
+| `severity` | `high` |
+| `status` | `fail` \| `needs_review` \| `pass` |

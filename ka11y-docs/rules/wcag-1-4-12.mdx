@@ -1,0 +1,94 @@
+---
+title: "1.4.12 Text Spacing"
+description: "No content or functionality is lost when text spacing is overridden"
+---
+
+<Info>
+  **Level:** AA · **Engine:** Rendered (Playwright) · **Auditor:** `text_spacing.py` · **Stage:** `rendered_layout_audit`
+</Info>
+
+## What it checks
+
+Users must be able to override the following CSS properties without losing content or functionality:
+
+| Property | Override value |
+|----------|---------------|
+| `line-height` | `1.5` |
+| `letter-spacing` | `0.12em` |
+| `word-spacing` | `0.16em` |
+| Paragraph / list-item spacing | `2em` (bottom margin) |
+
+---
+
+## How it works
+
+Two snapshots are compared:
+
+```
+text_spacing_baseline (1280 × 720, no overrides)
+        ↓  collect ElementSnapshot list  ↓
+text_spacing_override  (same viewport, CSS injected via page.add_style_tag)
+        ↓  collect ElementSnapshot list  ↓
+
+Evaluator diffs:
+  Elements not clipped in baseline AND clipped in override → FAILED
+  Page gained horizontal scroll after override            → NEEDS_REVIEW
+```
+
+**CSS injected** (via Playwright `add_style_tag`):
+```css
+* {
+  line-height: 1.5 !important;
+  letter-spacing: 0.12em !important;
+  word-spacing: 0.16em !important;
+}
+p, li, dt, dd, blockquote {
+  margin-bottom: 2em !important;
+}
+```
+
+---
+
+## Common violations
+
+| Violation | Root cause | Fix |
+|-----------|-----------|-----|
+| Tab/pill labels clipped | Fixed-width tab with `overflow: hidden` | Use `min-width` and allow text to wrap |
+| Icon+text button truncated | `white-space: nowrap` + fixed width | Remove fixed width; use flex with `min-width` |
+| Paragraph text hidden | Parent container with fixed `height` + `overflow: hidden` | Use `min-height` instead |
+| Validation message disappears | Fixed-height form field row | Let the height grow naturally |
+
+---
+
+## Suggested fix
+
+```css
+/* ❌ Breaks text spacing */
+.tab {
+  width: 120px;
+  height: 40px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ✅ Resilient to spacing overrides */
+.tab {
+  min-width: 120px;
+  min-height: 40px;
+  white-space: normal;
+  padding: 0.5em 1em;
+}
+```
+
+---
+
+## Finding fields
+
+| Field | Value |
+|-------|-------|
+| `source` | `python` |
+| `rule_id` | `python_1_4_12_text_spacing` |
+| `wcag_sc` | `1.4.12` |
+| `level` | `AA` |
+| `severity` | `high` |
+| `status` | `fail` \| `needs_review` \| `pass` |

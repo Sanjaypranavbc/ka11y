@@ -29,12 +29,28 @@ uvicorn = "^0.41.0"
 fastapi = "^0.135.1"
 httpx = ">=0.28.0,<1.0.0"
 pytest = "^9.0.2"
+pytest-html = ">=4.1.1,<5.0.0"
 
 [[tool.poetry.source]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 priority = "explicit"
 
+[tool.pytest.ini_options]
+# Unified HTML report — generated at tests/report/ka11y_test_report.html on every run.
+# Open in a browser after running: poetry run pytest
+addopts = [
+    "-v",
+    "--tb=short",
+    "--html=tests/report/ka11y_test_report.html",
+    "--self-contained-html",
+]
+asyncio_mode = "auto"
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+[dependency-groups]
+dev = [
+    "pytest-html (>=4.2.0,<5.0.0)"
+]

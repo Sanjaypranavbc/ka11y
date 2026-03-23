@@ -71,6 +71,12 @@
         "rules/overview",
         "rules/wcag-1-1-1",
         "rules/wcag-1-4-3",
+        "rules/wcag-1-4-4",
+        "rules/wcag-1-4-10",
+        "rules/wcag-1-4-12",
+        "rules/wcag-1-3-4",
+        "rules/wcag-1-4-13",
+        "rules/wcag-2-4-11-12",
         "rules/wcag-2-2-2",
         "rules/wcag-2-5-3",
         "rules/wcag-2-5-8",
@@ -89,6 +95,7 @@
     {
       "group": "Internals",
       "pages": [
+        "internals/combined-package",
         "internals/data-models",
         "internals/sse-events",
         "internals/output-format",

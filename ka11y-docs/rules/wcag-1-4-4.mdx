@@ -1,0 +1,89 @@
+---
+title: "1.4.4 Resize Text"
+description: "Text can be resized up to 200% without loss of content or functionality"
+---
+
+<Info>
+  **Level:** AA · **Engine:** Rendered (Playwright) · **Auditor:** `resize_text.py` · **Stage:** `rendered_layout_audit`
+</Info>
+
+## What it checks
+
+When a user or browser setting doubles the font size (200% text-only resize), no text should become clipped, hidden, truncated, or require horizontal scrolling. The page must remain fully readable and operable.
+
+---
+
+## How it works
+
+The rendered-layout engine runs two scenarios and diffs the results:
+
+```
+baseline (1280 × 720, default fonts)
+        ↓
+  Playwright loads page, stabilises, collects ElementSnapshot list
+        ↓
+resize_text_200 (same viewport, document.documentElement.style.fontSize = "200%")
+        ↓
+  Playwright applies font-size scaling, waits 300 ms, re-collects snapshots
+        ↓
+Evaluator compares: which text-bearing elements became clipped?
+```
+
+**Clipped element detection** checks each element where `scroll_width > client_width + 2` with `overflow-x: hidden | clip`, or `scroll_height > client_height + 2` with `overflow-y: hidden | clip`.
+
+**Page-level scroll** is also checked: if `document.scrollWidth > viewport.width` appears only after resize, the whole page fails.
+
+---
+
+## Common violations
+
+| Violation | Root cause | Fix |
+|-----------|-----------|-----|
+| Button label clipped after resize | Fixed-width `<button>` with `overflow: hidden` | Use `min-width` instead of fixed `width`; allow text to wrap |
+| Nav items pushed off-screen | Flexbox row with `overflow: hidden` on nav | Add `flex-wrap: wrap` or use `overflow: auto` |
+| Card body text hidden | Fixed-height card with `overflow: hidden` | Remove fixed height or switch to `min-height` |
+| Horizontal scroll introduced | Fixed-width container wider than viewport | Use `max-width: 100%` and relative units |
+
+---
+
+## Suggested fix
+
+```css
+/* ❌ Causes text clipping at 200% */
+.card {
+  height: 120px;
+  overflow: hidden;
+}
+
+/* ✅ Allows text to grow */
+.card {
+  min-height: 120px;
+  overflow: visible;
+}
+
+/* ❌ Fixed-width button clips label */
+.btn {
+  width: 80px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ✅ Flexible button */
+.btn {
+  min-width: 80px;
+  white-space: normal;
+}
+```
+
+---
+
+## Finding fields
+
+| Field | Value |
+|-------|-------|
+| `source` | `python` |
+| `rule_id` | `python_1_4_4_resize_text` |
+| `wcag_sc` | `1.4.4` |
+| `level` | `AA` |
+| `severity` | `high` |
+| `status` | `fail` \| `needs_review` \| `pass` |
