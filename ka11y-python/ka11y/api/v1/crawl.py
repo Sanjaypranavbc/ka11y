@@ -17,7 +17,7 @@ import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import HttpUrl
 
 from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
@@ -33,36 +33,10 @@ from ka11y.api.v1.dependencies import (
     get_form_crawler,
     get_form_auditor,
 )
+from ka11y.api.v1.models.crawl import CrawlRequest, CrawlResponse
 
 router = APIRouter(prefix="/crawl", tags=["crawl"])
 logger = setup_logger(name="KAC", tag="crawl")
-
-
-# ── Request / Response models ─────────────────────────────────────────────────
-
-
-class CrawlRequest(BaseModel):
-    url: HttpUrl = "https://www.kao.com/global/en/"
-    max_depth: int = 0
-    run_ocr: bool = True
-    run_audit: bool = True
-    run_form_audit: bool = True
-
-
-class CrawlResponse(BaseModel):
-    status: str
-    output_dir: str
-    url: str
-    max_depth: int
-    # Image pipeline
-    total_images: int = 0
-    ocr_dir: str | None = None
-    audit_report: str | None = None
-    audit_summary: dict | None = None
-    # Forms pipeline
-    total_fields: int = 0
-    form_audit_report: str | None = None
-    form_audit_summary: dict | None = None
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────

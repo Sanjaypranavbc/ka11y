@@ -156,9 +156,9 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import HttpUrl
 
 from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
@@ -177,8 +177,11 @@ from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
 from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
     PauseStopHideAuditor,
 )
+from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
+from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import TextSpacingAuditor
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
+from ka11y.api.v1.models.combined import CombinedRequest, JobStatusResponse
 
 router = APIRouter(prefix="/combined", tags=["combined"])
 logger = setup_logger(name="KAC", tag="combined")
@@ -351,41 +354,13 @@ _SUGGESTED_FIX: Dict[str, str] = {
 _PYTHON_SEVERITY: Dict[str, str] = {
     "1.1.1": "critical",
     "1.4.3": "high",  # ← contrast (Minimum) — new
+    "1.4.12": "medium",
     "2.2.2": "high",
     "2.5.3": "high",
     "2.5.8": "medium",
     "3.3.1": "high",
     "3.3.2": "high",
 }
-
-
-# ── Request / Response models ────────────────────────────────────────────────────
-
-
-class CombinedRequest(BaseModel):
-    url: HttpUrl
-    max_depth: int = 0
-    wcag_level: str = "AA"  # "A" | "AA" | "AAA"
-    run_ocr: bool = True
-    run_image_audit: bool = True
-    run_form_audit: bool = True
-    run_label_in_name_audit: bool = True
-    run_pause_stop_hide_audit: bool = True
-    run_target_size_audit: bool = True
-
-
-class JobStatusResponse(BaseModel):
-    job_id: str
-    status: str  # pending | running | completed | failed
-    url: str
-    submitted_at: str
-    completed_at: Optional[str] = None
-    report_path: Optional[str] = None
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    current_stage: Optional[str] = None
-    stages: List[Dict[str, Any]] = []
-    warnings: List[str] = []
 
 
 # ── SSE subscriber bus ───────────────────────────────────────────────────────────
@@ -1031,6 +1006,58 @@ def _ts_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
             )
     return findings
 
+def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    findings = []
+    for r in records:
+        status_raw = r.get("wcag_1_4_12_status", "")
+        if status_raw == "N/A":
+            continue
+        if status_raw == "FAILED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_12_text_spacing",
+                    wcag_sc="1.4.12",
+                    status="fail",
+                    reason=r.get("wcag_1_4_12_violation")
+                    or "Element may clip text when spacing is increased.",
+                    severity=_PYTHON_SEVERITY["1.4.12"],
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=page_url,
+                )
+            )
+        elif status_raw == "WARNING":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_12_text_spacing",
+                    wcag_sc="1.4.12",
+                    status="needs_review",
+                    reason=r.get("wcag_1_4_12_violation")
+                    or "Fixed height may cause clipping when text spacing increases.",
+                    severity=_PYTHON_SEVERITY["1.4.12"],
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=page_url,
+                )
+            )
+        elif status_raw == "PASSED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_12_text_spacing",
+                    wcag_sc="1.4.12",
+                    status="pass",
+                    reason="Element does not restrict text spacing.",
+                    severity=None,
+                    page_url=page_url,
+                )
+            )
+    return findings
+
 
 # ── Per-stage coroutines (run concurrently via asyncio.gather) ───────────────
 #
@@ -1216,6 +1243,37 @@ async def _stage_target_size(
         return []
 
 
+async def _stage_text_spacing(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_text_spacing_audit: bool,
+    job_id: str,
+) -> List[Dict]:
+    """Crawl fixed-height/overflow elements → 1.4.12 text-spacing check."""
+    _stage_start(job_id, "text_spacing")
+    try:
+        ts_crawler = AsyncTextSpacingCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth
+        )
+        items = await ts_crawler.crawl()
+        await asyncio.to_thread(ts_crawler.save_json)
+
+        findings: List[Dict] = []
+        if run_text_spacing_audit:
+            auditor = TextSpacingAuditor(output_dir=str(output_dir))
+            records = await asyncio.to_thread(
+                auditor.generate_audit_report, items
+            )
+            findings = _text_spacing_to_findings(records, url)
+
+        _stage_complete(job_id, "text_spacing", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "text_spacing", _exc)
+        return []
+
+
 # ── Python pipeline orchestrator ─────────────────────────────────────────────
 
 
@@ -1230,18 +1288,9 @@ async def _run_python_stages(
     run_label_in_name_audit: bool,
     run_pause_stop_hide_audit: bool,
     run_target_size_audit: bool,
+    run_text_spacing_audit: bool,   # ← add
     job_id: str,
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
-    """
-    Run all 5 Python audit stages **concurrently**.
-
-    Each stage crawls the target URL with its own browser instance and runs
-    its auditor in a thread pool so CPU-bound work never blocks the event loop.
-
-    Returns
-    -------
-    (all_findings, contrast_report)
-    """
     results = await asyncio.gather(
         _stage_image_audit(
             url, output_dir, max_depth, run_ocr, run_image_audit, job_id
@@ -1256,19 +1305,22 @@ async def _run_python_stages(
         _stage_target_size(
             url, output_dir, max_depth, run_target_size_audit, job_id
         ),
+        _stage_text_spacing(                      # ← add
+            url, output_dir, max_depth, run_text_spacing_audit, job_id
+        ),
         return_exceptions=True,
     )
 
     all_findings: List[Dict] = []
     contrast_report: Optional[Dict[str, Any]] = None
 
-    # Image audit returns (findings, contrast_report)
+    # results[0] is image_audit → (findings, contrast_report)
     img_result = results[0]
     if not isinstance(img_result, Exception):
         img_findings, contrast_report = img_result
         all_findings.extend(img_findings)
 
-    # All other stages return a plain findings list
+    # results[1:] are all plain findings lists (now includes text_spacing at index 5)
     for r in results[1:]:
         if not isinstance(r, Exception):
             all_findings.extend(r)
@@ -1382,6 +1434,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
                 run_label_in_name_audit=payload.run_label_in_name_audit,
                 run_pause_stop_hide_audit=payload.run_pause_stop_hide_audit,
                 run_target_size_audit=payload.run_target_size_audit,
+                run_text_spacing_audit=payload.run_text_spacing_audit,
                 job_id=job_id,
             )
         )

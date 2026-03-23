@@ -20,9 +20,9 @@ that lists it — so all five steps share one directory.
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl
+
+from pydantic import HttpUrl
 
 from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
@@ -56,6 +56,15 @@ from ka11y.api.v1.dependencies import (
     get_target_size_crawler,
     get_target_size_auditor,
 )
+from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
+from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
+    TextSpacingAuditor,
+)
+from ka11y.api.v1.dependencies import (
+    get_text_spacing_crawler,
+    get_text_spacing_auditor,
+)
+from ka11y.api.v1.models.pipeline import PipelineRequest, PipelineResponse
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 logger = setup_logger(name="KAC", tag="pipeline")
@@ -235,50 +244,6 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
     }
 
 
-# ── Request / Response models ─────────────────────────────────────────────────
-
-
-class PipelineRequest(BaseModel):
-    url: HttpUrl = "https://www.kao.com/global/en/"
-    max_depth: int = 0
-    run_ocr: bool = True
-    run_image_audit: bool = True
-    run_form_audit: bool = True
-    run_label_in_name_audit: bool = True
-    run_pause_stop_hide_audit: bool = True
-    run_target_size_audit: bool = True
-
-
-class PipelineResponse(BaseModel):
-    status: str
-    output_dir: str
-    url: str
-    max_depth: int
-    # Image crawl
-    total_images: int
-    ocr_dir: Optional[str] = None
-    image_audit_report: Optional[str] = None
-    image_audit_summary: Optional[Dict[str, Any]] = None
-    # ── NEW: contrast analysis ─────────────────────────────────────────────
-    contrast_report: Optional[Dict[str, Any]] = None  # structured contrast JSON + table
-    # Form crawl
-    total_fields: int
-    form_audit_report: Optional[str] = None
-    form_audit_summary: Optional[Dict[str, Any]] = None
-    # WCAG 2.5.3 — Label in Name
-    total_interactive_elements: int = 0
-    label_in_name_report: Optional[str] = None
-    label_in_name_summary: Optional[Dict[str, Any]] = None
-    # WCAG 2.2.2 — Pause, Stop, Hide
-    total_moving_content_items: int = 0
-    pause_stop_hide_report: Optional[str] = None
-    pause_stop_hide_summary: Optional[Dict[str, Any]] = None
-    # WCAG 2.5.8 — Target Size (Minimum)
-    total_target_size_elements: int = 0
-    target_size_report: Optional[str] = None
-    target_size_summary: Optional[Dict[str, Any]] = None
-
-
 # ── Route ─────────────────────────────────────────────────────────────────────
 
 
@@ -293,6 +258,7 @@ async def run_full_pipeline(
     interactive_crawler: InteractiveElementCrawler = Depends(get_interactive_crawler),
     moving_content_crawler: MovingContentCrawler = Depends(get_moving_content_crawler),
     target_size_crawler: TargetSizeCrawler = Depends(get_target_size_crawler),
+    text_spacing_crawler: AsyncTextSpacingCrawler = Depends(get_text_spacing_crawler),
     # ── auditors ──────────────────────────────────────────────────────────
     image_auditor: AltTextAccessibilityAuditor = Depends(get_alt_text_auditor),
     form_auditor: FormAccessibilityAuditor = Depends(get_form_auditor),
@@ -301,6 +267,7 @@ async def run_full_pipeline(
         get_pause_stop_hide_auditor
     ),
     target_size_auditor: TargetSizeAuditor = Depends(get_target_size_auditor),
+    text_spacing_auditor: TextSpacingAuditor = Depends(get_text_spacing_auditor),
 ):
     url = str(payload.url)
     max_depth = payload.max_depth
@@ -325,6 +292,10 @@ async def run_full_pipeline(
     pause_stop_hide_summary = None
     target_size_report = None
     target_size_summary = None
+    text_spacing_items = []
+    text_spacing_report = None
+    text_spacing_summary = None
+
 
     try:
         # ── STEP 1 : Image Crawl ──────────────────────────────────────────
@@ -523,6 +494,44 @@ async def run_full_pipeline(
                 f"({target_size_summary['pass_rate_pct']}%), "
                 f"{target_size_summary['failed']} failed"
             )
+        # ── STEP 12 : Text Spacing Crawl (1.4.12) ──────────────────────
+        logger.info("\nSTEP 12: TEXT SPACING CRAWL (WCAG 1.4.12)")
+        logger.info("-" * 40)
+
+        text_spacing_items = await text_spacing_crawler.crawl()
+        text_spacing_crawler.save_json()
+
+        logger.info(
+            f"Text spacing crawl complete — {len(text_spacing_items)} elements found"
+        )
+
+        # ── STEP 13 : WCAG 1.4.12 Text Spacing Audit (optional) ────────
+        if payload.run_text_spacing_audit:
+            logger.info("\nSTEP 13: WCAG 1.4.12 TEXT SPACING AUDIT")
+            logger.info("-" * 40)
+
+            ts_records = text_spacing_auditor.generate_audit_report(text_spacing_items)
+            text_spacing_report = str(output_dir / "audit_text_spacing_report.csv")
+
+            total = len(ts_records)
+            passed = sum(1 for r in ts_records if r["overall_status"] == "PASSED")
+            failed = sum(1 for r in ts_records if r["overall_status"] == "FAILED")
+            warning = sum(1 for r in ts_records if r["overall_status"] == "WARNING")
+
+            ts_total = len(ts_records)
+            text_spacing_summary = {
+                "total": ts_total,
+                "passed": passed,
+                "failed": failed,
+                "warning": warning,
+                "pass_rate_pct": round(passed / ts_total * 100, 1) if ts_total else 0,
+            }
+
+            logger.info(
+                f"Text spacing audit complete — {ts_total} elements, "
+                f"{passed} passed ({text_spacing_summary['pass_rate_pct']}%), "
+                f"{failed} failed, {warning} warnings"
+            )
 
         logger.info("\nFULL PIPELINE COMPLETE")
         logger.info("=" * 60)
@@ -549,6 +558,9 @@ async def run_full_pipeline(
             total_target_size_elements=len(target_size_items),
             target_size_report=target_size_report,
             target_size_summary=target_size_summary,
+            total_text_spacing_elements=len(text_spacing_items),
+            text_spacing_report=text_spacing_report,
+            text_spacing_summary=text_spacing_summary,
         )
 
     except Exception as e:

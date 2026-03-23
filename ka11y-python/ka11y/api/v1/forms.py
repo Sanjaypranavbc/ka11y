@@ -18,7 +18,7 @@ import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import HttpUrl
 
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
@@ -29,28 +29,10 @@ from ka11y.api.v1.dependencies import (
     get_form_crawler,
     get_form_auditor,
 )
+from ka11y.api.v1.models.forms import FormsRequest, FormsResponse
 
 router = APIRouter(prefix="/forms", tags=["forms"])
 logger = setup_logger(name="KAC", tag="forms")
-
-
-# ── Request / Response models ─────────────────────────────────────────────────
-
-
-class FormsRequest(BaseModel):
-    url: HttpUrl = "https://www.kao.com/global/en/"
-    max_depth: int = 0
-    run_audit: bool = True
-
-
-class FormsResponse(BaseModel):
-    status: str
-    output_dir: str
-    url: str
-    max_depth: int
-    total_fields: int
-    audit_report: str | None = None
-    audit_summary: dict | None = None
 
 
 # ── Route ─────────────────────────────────────────────────────────────────────
