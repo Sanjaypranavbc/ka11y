@@ -41,7 +41,6 @@ logger = setup_logger(name="KAC", tag="forms")
 @router.post("/", response_model=FormsResponse)
 async def run_forms_crawler(
     payload: FormsRequest,
-    # ── injected dependencies ──────────────────────────────────────────────
     output_dir: Path = Depends(get_output_dir),
     crawler: AsyncFormCrawler = Depends(get_form_crawler),
     auditor: FormAccessibilityAuditor = Depends(get_form_auditor),

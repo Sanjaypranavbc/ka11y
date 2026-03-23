@@ -115,18 +115,35 @@ class AsyncFormCrawler:
                 let errorAriaLive   = null;
 
                 if (describedby) {
-                    // There may be multiple space-separated IDs; check each
+                    // Resolve ALL space-separated IDs; prefer the element that
+                    // has role="alert" or aria-live (the true error container).
+                    // Fall back to the first element that exists in the DOM.
                     const ids = describedby.trim().split(/\s+/);
+                    let firstMatch = null;
+                    let alertMatch = null;
                     for (const eid of ids) {
                         const errEl = document.getElementById(eid);
-                        if (errEl) {
-                            errorElId     = eid;
-                            errorElRole   = errEl.getAttribute('role') || null;
-                            errorElText   = (errEl.innerText || errEl.textContent || '').trim();
-                            errorHasAlert = (errorElRole === 'alert');
-                            errorAriaLive = errEl.getAttribute('aria-live') || null;
-                            break; // use first matched error element
-                        }
+                        if (!errEl) continue;
+                        const role    = errEl.getAttribute('role') || null;
+                        const live    = errEl.getAttribute('aria-live') || null;
+                        const isAlert = role === 'alert' || live === 'assertive' || live === 'polite';
+                        const candidate = {
+                            id:        eid,
+                            role:      role,
+                            text:      (errEl.innerText || errEl.textContent || '').trim(),
+                            hasAlert:  role === 'alert',
+                            ariaLive:  live,
+                        };
+                        if (!firstMatch) firstMatch = candidate;
+                        if (isAlert && !alertMatch) alertMatch = candidate;
+                    }
+                    const chosen = alertMatch || firstMatch;
+                    if (chosen) {
+                        errorElId     = chosen.id;
+                        errorElRole   = chosen.role;
+                        errorElText   = chosen.text;
+                        errorHasAlert = chosen.hasAlert;
+                        errorAriaLive = chosen.ariaLive;
                     }
                 }
 

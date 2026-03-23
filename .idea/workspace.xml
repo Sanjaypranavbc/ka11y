@@ -4,93 +4,436 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="539dcdbc-1d12-4243-a61c-89c6ad8de27b" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/findings.py" beforeDir="false" afterPath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/findings.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/stages.py" beforeDir="false" afterPath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/stages.py" afterDir="false" />
+    <list default="true" id="06d6278d-1ecc-4dac-a3a6-ee3fe0bb23c1" name="Changes" comment="deleted @docker-compose.yml from ka11y-python">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/constants.py" beforeDir="false" afterPath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/combined/constants.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/forms.py" beforeDir="false" afterPath="$PROJECT_DIR$/ka11y-python/ka11y/api/v1/forms.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ka11y-python/ka11y/crawler/forms_crawler.py" beforeDir="false" afterPath="$PROJECT_DIR$/ka11y-python/ka11y/crawler/forms_crawler.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ka11y-python/ka11y/crawler/target_size_crawler.py" beforeDir="false" afterPath="$PROJECT_DIR$/ka11y-python/ka11y/crawler/target_size_crawler.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
-  <component name="FileTemplateManagerImpl">
-    <option name="RECENT_TEMPLATES">
-      <list>
-        <option value="Python Script" />
-      </list>
-    </option>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="311" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="ROOT_SYNC" value="SYNC" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Sanjaypranavbc&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Sanjaypranavbc/ka11y.git&quot;,
+    &quot;accountId&quot;: &quot;ce671250-da36-4bc1-8fe3-1e7355a97ff0&quot;
+  }
+}</component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
   </component>
   <component name="ProjectColorInfo">{
-  &quot;customColor&quot;: &quot;&quot;,
-  &quot;associatedIndex&quot;: 8
+  &quot;associatedIndex&quot;: 4
 }</component>
-  <component name="ProjectId" id="3BKlzLGykgJdVhnp9BWoJcwa8pH" />
+  <component name="ProjectId" id="3B18kmZ75Y44ma0ZSpGPqMhnZkc" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
+    <option name="showScratchesAndConsoles" value="false" />
   </component>
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;perceivable&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/meghana/BlueCaffeine/ka11y-project/ka11y/ka11y-python&quot;
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;SHELLCHECK.PATH&quot;: &quot;/home/pranav/.local/share/JetBrains/PyCharm2025.3/Shell Script/shellcheck&quot;,
+    &quot;ai.playground.ignore.import.keys.banner.in.settings&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/pranav/Documents/ka11y&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;editor.preferences.fonts.default&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;/snap/pycharm-community/580/plugins/javascript-plugin/jsLanguageServicesImpl/external&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
 }</component>
-  <component name="RunManager">
-    <configuration name="ka11y" type="PythonConfigurationType" factoryName="Python">
-      <module name="ka11y" />
-      <option name="ENV_FILES" value="" />
-      <option name="INTERPRETER_OPTIONS" value="" />
-      <option name="PARENT_ENVS" value="true" />
-      <envs>
-        <env name="PYTHONUNBUFFERED" value="1" />
-      </envs>
-      <option name="SDK_HOME" value="" />
-      <option name="SDK_NAME" value="KAC" />
-      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/ka11y-python" />
-      <option name="IS_MODULE_SDK" value="false" />
-      <option name="ADD_CONTENT_ROOTS" value="true" />
-      <option name="ADD_SOURCE_ROOTS" value="true" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/ka11y-python/ka11y/main.py" />
-      <option name="PARAMETERS" value="PYTHONPATH=~/BlueCaffeine/ka11y-project/ka11y/ka11y-python/ka11y" />
-      <option name="SHOW_COMMAND_LINE" value="false" />
-      <option name="EMULATE_TERMINAL" value="false" />
-      <option name="MODULE_MODE" value="false" />
-      <option name="REDIRECT_INPUT" value="false" />
-      <option name="INPUT_FILE" value="" />
-      <method v="2" />
-    </configuration>
-  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-f69e5c277ee4-cbfc7b97e6b2-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-252.27397.106" />
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-PY-253.31033.139" />
+        <option value="bundled-python-sdk-2653e85de345-6d6dccd035ac-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.31033.139" />
       </set>
     </attachedChunks>
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="539dcdbc-1d12-4243-a61c-89c6ad8de27b" name="Changes" comment="" />
-      <created>1774245903940</created>
+      <changelist id="06d6278d-1ecc-4dac-a3a6-ee3fe0bb23c1" name="Changes" comment="" />
+      <created>1773645360348</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1774245903940</updated>
+      <updated>1773645360348</updated>
+      <workItem from="1773645361431" duration="10061000" />
+      <workItem from="1773733674010" duration="20586000" />
+      <workItem from="1773767038396" duration="5341000" />
+      <workItem from="1773816344370" duration="17413000" />
+      <workItem from="1773903915027" duration="9983000" />
+      <workItem from="1773924515910" duration="32000" />
+      <workItem from="1773987179659" duration="859000" />
+      <workItem from="1773988049165" duration="50000" />
+      <workItem from="1773988109036" duration="18147000" />
     </task>
-    <task id="LOCAL-00001">
+    <task id="LOCAL-00001" summary="got rules">
       <option name="closed" value="true" />
-      <created>1774255599940</created>
+      <created>1773659626597</created>
       <option name="number" value="00001" />
       <option name="presentableId" value="LOCAL-00001" />
       <option name="project" value="LOCAL" />
-      <updated>1774255599940</updated>
+      <updated>1773659626597</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="got rules 4.2.1 , 2.2.2">
+      <option name="closed" value="true" />
+      <created>1773731242080</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1773731242080</updated>
+    </task>
+    <task id="LOCAL-00003" summary="moving crawler content">
+      <option name="closed" value="true" />
+      <created>1773731284006</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1773731284006</updated>
+    </task>
+    <task id="LOCAL-00004" summary="moving crawler content">
+      <option name="closed" value="true" />
+      <created>1773733859237</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1773733859238</updated>
+    </task>
+    <task id="LOCAL-00005" summary="bug fixed for 2.2.2">
+      <option name="closed" value="true" />
+      <created>1773735518145</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1773735518145</updated>
+    </task>
+    <task id="LOCAL-00006" summary="updated readme.md">
+      <option name="closed" value="true" />
+      <created>1773739637041</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1773739637041</updated>
+    </task>
+    <task id="LOCAL-00007" summary="test cases done">
+      <option name="closed" value="true" />
+      <created>1773739694186</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1773739694186</updated>
+    </task>
+    <task id="LOCAL-00008" summary="added pytest">
+      <option name="closed" value="true" />
+      <created>1773739810763</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1773739810764</updated>
+    </task>
+    <task id="LOCAL-00009" summary="renamed analyzer ==&gt; analyser">
+      <option name="closed" value="true" />
+      <created>1773740075465</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1773740075465</updated>
+    </task>
+    <task id="LOCAL-00010" summary="combined coverage markdown done :done">
+      <option name="closed" value="true" />
+      <created>1773745818102</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1773745818102</updated>
+    </task>
+    <task id="LOCAL-00011" summary="combined coverage markdown done :done">
+      <option name="closed" value="true" />
+      <created>1773745829193</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1773745829193</updated>
+    </task>
+    <task id="LOCAL-00012" summary="reformatted">
+      <option name="closed" value="true" />
+      <created>1773746296145</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1773746296145</updated>
+    </task>
+    <task id="LOCAL-00013" summary="added frontend">
+      <option name="closed" value="true" />
+      <created>1773751693955</created>
+      <option name="number" value="00013" />
+      <option name="presentableId" value="LOCAL-00013" />
+      <option name="project" value="LOCAL" />
+      <updated>1773751693955</updated>
+    </task>
+    <task id="LOCAL-00014" summary="added frontend">
+      <option name="closed" value="true" />
+      <created>1773751705670</created>
+      <option name="number" value="00014" />
+      <option name="presentableId" value="LOCAL-00014" />
+      <option name="project" value="LOCAL" />
+      <updated>1773751705670</updated>
+    </task>
+    <task id="LOCAL-00015" summary="added frontend">
+      <option name="closed" value="true" />
+      <created>1773751706837</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1773751706837</updated>
+    </task>
+    <task id="LOCAL-00016" summary="added frontend">
+      <option name="closed" value="true" />
+      <created>1773751989088</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1773751989088</updated>
+    </task>
+    <task id="LOCAL-00017" summary="fixed dockerfile">
+      <option name="closed" value="true" />
+      <created>1773752290299</created>
+      <option name="number" value="00017" />
+      <option name="presentableId" value="LOCAL-00017" />
+      <option name="project" value="LOCAL" />
+      <updated>1773752290299</updated>
+    </task>
+    <task id="LOCAL-00018" summary="fixed dockerfile">
+      <option name="closed" value="true" />
+      <created>1773754953888</created>
+      <option name="number" value="00018" />
+      <option name="presentableId" value="LOCAL-00018" />
+      <option name="project" value="LOCAL" />
+      <updated>1773754953888</updated>
+    </task>
+    <task id="LOCAL-00019" summary="fixed dockerfile">
+      <option name="closed" value="true" />
+      <created>1773758570002</created>
+      <option name="number" value="00019" />
+      <option name="presentableId" value="LOCAL-00019" />
+      <option name="project" value="LOCAL" />
+      <updated>1773758570002</updated>
+    </task>
+    <task id="LOCAL-00020" summary="fixed dockerfile">
+      <option name="closed" value="true" />
+      <created>1773758607650</created>
+      <option name="number" value="00020" />
+      <option name="presentableId" value="LOCAL-00020" />
+      <option name="project" value="LOCAL" />
+      <updated>1773758607650</updated>
+    </task>
+    <task id="LOCAL-00021" summary="fixed dockerfile">
+      <option name="closed" value="true" />
+      <created>1773767067444</created>
+      <option name="number" value="00021" />
+      <option name="presentableId" value="LOCAL-00021" />
+      <option name="project" value="LOCAL" />
+      <updated>1773767067444</updated>
+    </task>
+    <task id="LOCAL-00022" summary="fixed frontend&lt;-&gt;backend conn">
+      <option name="closed" value="true" />
+      <created>1773769452140</created>
+      <option name="number" value="00022" />
+      <option name="presentableId" value="LOCAL-00022" />
+      <option name="project" value="LOCAL" />
+      <updated>1773769452140</updated>
+    </task>
+    <task id="LOCAL-00023" summary="fixed frontend&lt;-&gt;backend conn">
+      <option name="closed" value="true" />
+      <created>1773772185204</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1773772185204</updated>
+    </task>
+    <task id="LOCAL-00024" summary="contrast viz added">
+      <option name="closed" value="true" />
+      <created>1773830714274</created>
+      <option name="number" value="00024" />
+      <option name="presentableId" value="LOCAL-00024" />
+      <option name="project" value="LOCAL" />
+      <updated>1773830714274</updated>
+    </task>
+    <task id="LOCAL-00025" summary="fixed errors">
+      <option name="closed" value="true" />
+      <created>1773900508571</created>
+      <option name="number" value="00025" />
+      <option name="presentableId" value="LOCAL-00025" />
+      <option name="project" value="LOCAL" />
+      <updated>1773900508571</updated>
+    </task>
+    <task id="LOCAL-00026" summary="added docs">
+      <option name="closed" value="true" />
+      <created>1773900517945</created>
+      <option name="number" value="00026" />
+      <option name="presentableId" value="LOCAL-00026" />
+      <option name="project" value="LOCAL" />
+      <updated>1773900517945</updated>
+    </task>
+    <task id="LOCAL-00027" summary="updated crawler.py">
+      <option name="closed" value="true" />
+      <created>1773901909310</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1773901909310</updated>
+    </task>
+    <task id="LOCAL-00028" summary="updated crawler.py">
+      <option name="closed" value="true" />
+      <created>1773905684858</created>
+      <option name="number" value="00028" />
+      <option name="presentableId" value="LOCAL-00028" />
+      <option name="project" value="LOCAL" />
+      <updated>1773905684858</updated>
+    </task>
+    <task id="LOCAL-00029" summary="updated crawler.py">
+      <option name="closed" value="true" />
+      <created>1773906469039</created>
+      <option name="number" value="00029" />
+      <option name="presentableId" value="LOCAL-00029" />
+      <option name="project" value="LOCAL" />
+      <updated>1773906469039</updated>
+    </task>
+    <task id="LOCAL-00030" summary="fixed alt text bug, image classification bug">
+      <option name="closed" value="true" />
+      <created>1773915547407</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1773915547407</updated>
+    </task>
+    <task id="LOCAL-00031" summary="fixed alt text bug, image classification bug">
+      <option name="closed" value="true" />
+      <created>1773924532216</created>
+      <option name="number" value="00031" />
+      <option name="presentableId" value="LOCAL-00031" />
+      <option name="project" value="LOCAL" />
+      <updated>1773924532216</updated>
+    </task>
+    <task id="LOCAL-00032" summary="major update done by splitting combined.py to a folder">
+      <option name="closed" value="true" />
+      <created>1774255466176</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1774255466176</updated>
+    </task>
+    <task id="LOCAL-00033" summary="major update done by splitting combined.py to a folder">
+      <option name="closed" value="true" />
+      <created>1774255493302</created>
+      <option name="number" value="00033" />
+      <option name="presentableId" value="LOCAL-00033" />
+      <option name="project" value="LOCAL" />
+      <updated>1774255493302</updated>
+    </task>
+    <task id="LOCAL-00034" summary="pushing tree">
+      <option name="closed" value="true" />
+      <created>1774256688209</created>
+      <option name="number" value="00034" />
+      <option name="presentableId" value="LOCAL-00034" />
+      <option name="project" value="LOCAL" />
+      <updated>1774256688209</updated>
+    </task>
+    <task id="LOCAL-00035" summary="fixed render issue">
+      <option name="closed" value="true" />
+      <created>1774260203469</created>
+      <option name="number" value="00035" />
+      <option name="presentableId" value="LOCAL-00035" />
+      <option name="project" value="LOCAL" />
+      <updated>1774260203469</updated>
+    </task>
+    <task id="LOCAL-00036" summary="deleted @docker-compose.yml from ka11y-python">
+      <option name="closed" value="true" />
+      <created>1774260630693</created>
+      <option name="number" value="00036" />
+      <option name="presentableId" value="LOCAL-00036" />
+      <option name="project" value="LOCAL" />
+      <updated>1774260630693</updated>
+    </task>
+    <task id="LOCAL-00037" summary="deleted @docker-compose.yml from ka11y-python">
+      <option name="closed" value="true" />
+      <created>1774260638934</created>
+      <option name="number" value="00037" />
+      <option name="presentableId" value="LOCAL-00037" />
+      <option name="project" value="LOCAL" />
+      <updated>1774260638934</updated>
+    </task>
+    <option name="localTasksCounter" value="38" />
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="got rules" />
+    <MESSAGE value="got rules 4.2.1 , 2.2.2" />
+    <MESSAGE value="moving crawler content" />
+    <MESSAGE value="bug fixed for 2.2.2" />
+    <MESSAGE value="updated readme.md" />
+    <MESSAGE value="test cases done" />
+    <MESSAGE value="added pytest" />
+    <MESSAGE value="renamed analyzer ==&gt; analyser" />
+    <MESSAGE value="combined coverage markdown done :done" />
+    <MESSAGE value="reformatted" />
+    <MESSAGE value="added frontend" />
+    <MESSAGE value="fixed dockerfile" />
+    <MESSAGE value="fixed frontend&lt;-&gt;backend conn" />
+    <MESSAGE value="contrast viz added" />
+    <MESSAGE value="fixed errors" />
+    <MESSAGE value="added docs" />
+    <MESSAGE value="updated crawler.py" />
+    <MESSAGE value="fixed alt text bug, image classification bug" />
+    <MESSAGE value="major update done by splitting combined.py to a folder" />
+    <MESSAGE value="pushing tree" />
+    <MESSAGE value="fixed render issue" />
+    <MESSAGE value="deleted @docker-compose.yml from ka11y-python" />
+    <option name="LAST_COMMIT_MESSAGE" value="deleted @docker-compose.yml from ka11y-python" />
   </component>
 </project>
