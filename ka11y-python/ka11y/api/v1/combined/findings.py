@@ -334,57 +334,6 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
 
     return findings
 
-def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
-    findings = []
-    for r in records:
-        status_raw = r.get("wcag_1_4_12_status", "")
-        if status_raw == "N/A":
-            continue
-        if status_raw == "FAILED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_1_4_12_text_spacing",
-                    wcag_sc="1.4.12",
-                    status="fail",
-                    reason=r.get("wcag_1_4_12_violation")
-                    or "Element may clip text when spacing is increased.",
-                    severity=_PYTHON_SEVERITY["1.4.12"],
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
-                )
-            )
-        elif status_raw == "WARNING":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_1_4_12_text_spacing",
-                    wcag_sc="1.4.12",
-                    status="needs_review",
-                    reason=r.get("wcag_1_4_12_violation")
-                    or "Fixed height may cause clipping when text spacing increases.",
-                    severity=_PYTHON_SEVERITY["1.4.12"],
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
-                )
-            )
-        elif status_raw == "PASSED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_1_4_12_text_spacing",
-                    wcag_sc="1.4.12",
-                    status="pass",
-                    reason="Element does not restrict text spacing.",
-                    severity=None,
-                    page_url=page_url,
-                )
-            )
-    return findings
 
 def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
