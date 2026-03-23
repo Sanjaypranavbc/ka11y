@@ -115,15 +115,24 @@ def setup_logger(name: str = "KAC", tag: str | None = None) -> KaLogger:
         # ── File handler (plain rotating text) ───────────────────────────────
         date = datetime.datetime.now().strftime("%Y-%m-%d")
         log_path = os.path.join(log_dir, f"{name}_{date}.log")
-        file_handler = RotatingFileHandler(
-            log_path,
-            maxBytes=5 * 1024 * 1024,  # 5 MB
-            backupCount=5,
-            encoding="utf-8",
-        )
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(_FILE_FMT)
-        base.addHandler(file_handler)
+        try:
+            file_handler = RotatingFileHandler(
+                log_path,
+                maxBytes=5 * 1024 * 1024,  # 5 MB
+                backupCount=5,
+                encoding="utf-8",
+            )
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(_FILE_FMT)
+            base.addHandler(file_handler)
+        except OSError as exc:
+            # Print directly — the logger isn't usable yet
+            import sys
+            print(
+                f"[ka11y logger] WARNING: could not create log file at "
+                f"{log_path!r}: {exc}. Logging to console only.",
+                file=sys.stderr,
+            )
 
     return KaLogger(base, {"tag": tag or "GENERAL"})
 

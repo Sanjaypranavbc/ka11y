@@ -24,6 +24,10 @@ from PIL import Image
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="moving_content")
+
 
 class MovingContentData(BaseModel):
     """Data for one piece of auto-playing / animated content."""
@@ -57,12 +61,11 @@ class MovingContentData(BaseModel):
     html_snippet: str = ""
 
 
-async def _is_animated_gif(src: str) -> bool:
+async def _is_animated_gif(src: str, client: httpx.AsyncClient) -> bool:
     """Return True only if the GIF at `src` has more than 1 frame (is animated)."""
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            resp = await client.get(src)
-            resp.raise_for_status()
+        resp = await client.get(src)
+        resp.raise_for_status()
         img = Image.open(io.BytesIO(resp.content))
         if img.format != "GIF":
             return False
@@ -453,12 +456,16 @@ class MovingContentCrawler:
                 await browser.close()
 
         # Verify animated GIFs — filter out static GIFs to avoid false positives
+        # One shared client for all GIF checks (3 s timeout; 50 GIFs ≠ 50 handshakes)
         verified: List[MovingContentData] = []
-        for item in self.results:
-            if item.content_type == "animated_gif" and item.src:
-                if not await _is_animated_gif(item.src):
-                    continue
-            verified.append(item)
+        async with httpx.AsyncClient(
+            timeout=3.0, follow_redirects=True
+        ) as gif_client:
+            for item in self.results:
+                if item.content_type == "animated_gif" and item.src:
+                    if not await _is_animated_gif(item.src, gif_client):
+                        continue
+                verified.append(item)
         self.results = verified
 
         return self.results
@@ -496,7 +503,7 @@ class MovingContentCrawler:
                     ):
                         await self._crawl_page(context, href, depth + 1)
         except Exception as exc:
-            print(f"[MovingContentCrawler] Error on {url}: {exc}")
+            logger.error(f"[MovingContentCrawler] Error on {url}: {exc}")
         finally:
             await page.close()
 

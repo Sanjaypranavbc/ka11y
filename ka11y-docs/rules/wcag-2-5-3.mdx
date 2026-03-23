@@ -36,12 +36,16 @@ The auditor uses the `accessible_name` computed by `InteractiveElementCrawler`, 
 
 ## Check logic
 
+Both `visible_label` and `accessible_name` are normalised before comparison using `_normalize()`: Unicode NFC normalisation → `casefold()` → collapse whitespace. This correctly handles Unicode equivalences (e.g. `"Café"` vs `"Cafe\u0301"`).
+
+The match uses a **word-boundary regex** (`\b...\b`) so that a visible label of `"Go"` does not match `"Gorilla"`.
+
 | Condition | Status |
 |-----------|--------|
-| `visible_label` is empty (icon-only) | `N/A` — rule does not apply |
+| `visible_label` is empty or contains no word characters (icon-only) | `N/A` — rule does not apply |
 | `accessible_name` is empty | `FAILED` — no accessible name at all |
-| `accessible_name.lower()` does not contain `visible_label.lower()` | `FAILED` |
-| `accessible_name.lower()` contains `visible_label.lower()` | `PASSED` |
+| normalised `accessible_name` does not contain normalised `visible_label` at a word boundary | `FAILED` |
+| normalised `accessible_name` contains normalised `visible_label` at a word boundary | `PASSED` |
 
 ## Elements audited
 
@@ -49,6 +53,26 @@ The auditor uses the `accessible_name` computed by `InteractiveElementCrawler`, 
 - `<a>` with visible text
 - `<input type="submit|button|reset|image">` with visible label
 - Elements with ARIA interactive roles: `button`, `link`, `menuitem`, `tab`, `option`, `treeitem`, `gridcell`
+
+## Output
+
+**CSV file:** `audit_label_in_name_report.csv`
+
+Columns: `page_url`, `element_index`, `tag`, `role`, `element_id`, `input_type`, `visible_label`, `aria_label`, `aria_labelledby`, `aria_labelledby_text`, `title_attr`, `value_attr`, `alt_attr`, `accessible_name`, `wcag_2_5_3_status`, `wcag_2_5_3_violation`, `overall_status`, `html_snippet`
+
+A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
+
+### `summarize()` return keys
+
+| Key | Description |
+|-----|-------------|
+| `total_elements` | All elements audited |
+| `checked` | Elements where the rule applied (PASSED + FAILED) |
+| `passed` | Elements that passed |
+| `failed` | Elements that failed |
+| `na` | Elements where visible label was absent |
+| `pass_rate_pct` | `passed / checked × 100`, rounded to 1 dp |
+| `wcag_2_5_3_failed` | Same as `failed` |
 
 ## Common violations
 

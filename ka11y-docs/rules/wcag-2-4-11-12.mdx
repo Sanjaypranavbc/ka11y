@@ -1,0 +1,104 @@
+---
+title: "2.4.11 / 2.4.12 Focus Not Obscured"
+description: "Keyboard-focused elements are not hidden by sticky headers, banners, or overlays"
+---
+
+<Info>
+  **Level:** AA · **Engine:** Rendered (Playwright) · **Stage:** `rendered_layout_audit`
+</Info>
+
+## Overview
+
+Both rules address the same problem — author-created fixed/sticky content (sticky headers, cookie banners, chat widgets, bottom navigation bars) can hide the focused element during keyboard navigation.
+
+| Criterion | Requirement | Severity |
+|-----------|-------------|---------|
+| **2.4.11** Minimum | Focused element is **not entirely** hidden | `high` |
+| **2.4.12** Enhanced | Focused element is **not obscured at all** | `high` |
+
+---
+
+## How it works
+
+A single keyboard traversal produces data used by both evaluators:
+
+```
+Page loaded at 1280 × 720 (desktop)
+        ↓
+Fixed/sticky overlays collected once via JS
+  (all elements with position: fixed | sticky, width > 10 px, height > 10 px)
+        ↓
+Up to 100 Tab key presses:
+  After each Tab:
+    1. Capture document.activeElement rect
+    2. Compute overlap ratio between focus rect and each overlay rect
+    3. Record FocusStep (step_index, tag, rect, obscuration_ratio, covering_elements)
+        ↓
+2.4.11 evaluator — fail if obscuration_ratio ≥ 0.95 (fully hidden)
+2.4.12 evaluator — fail if obscuration_ratio ≥ 0.10 (any meaningful overlap)
+```
+
+---
+
+## Thresholds
+
+| Status | 2.4.11 (Minimum) | 2.4.12 (Enhanced) |
+|--------|-----------------|------------------|
+| `fail` | ≥ 95% covered | ≥ 10% covered |
+| `needs_review` | 10–95% covered | 2–10% covered |
+| `pass` | < 10% covered | < 2% covered |
+
+---
+
+## Common violations
+
+| Violation | Root cause | Fix |
+|-----------|-----------|-----|
+| Focused link behind sticky header | No `scroll-padding-top` | Add `html { scroll-padding-top: <header-height>; }` |
+| Cookie banner covers focused button | Banner `position: fixed; bottom: 0` | Add `scroll-padding-bottom` or `scroll-margin-bottom` to focusable elements |
+| Chat widget obscures last focusable item | Floating chat overlaid on content | Ensure chat widget does not cover interactive content, or move it |
+
+---
+
+## Suggested fix
+
+```css
+/* ❌ Sticky header covers focused elements */
+header {
+  position: sticky;
+  top: 0;
+  height: 64px;
+}
+
+/* ✅ Reserve scroll padding so focused elements clear the header */
+html {
+  scroll-padding-top: 64px;   /* matches header height */
+}
+
+/* Or per-element scroll margin */
+a:focus, button:focus {
+  scroll-margin-top: 64px;
+}
+```
+
+---
+
+## Finding fields — 2.4.11
+
+| Field | Value |
+|-------|-------|
+| `source` | `python` |
+| `rule_id` | `python_2_4_11_focus_not_obscured_minimum` |
+| `wcag_sc` | `2.4.11` |
+| `level` | `AA` |
+| `severity` | `high` |
+
+## Finding fields — 2.4.12
+
+| Field | Value |
+|-------|-------|
+| `source` | `python` |
+| `rule_id` | `python_2_4_12_focus_not_obscured_enhanced` |
+| `wcag_sc` | `2.4.12` |
+| `level` | `AA` |
+| `severity` | `high` |

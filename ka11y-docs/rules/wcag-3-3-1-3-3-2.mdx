@@ -26,12 +26,17 @@ Every form field must have a **programmatically associated, visible label** so u
 |-----------|--------|
 | No label source | Field has no label, no aria-label, no aria-labelledby |
 | Placeholder only | `placeholder` is not an accessible label — it disappears on input |
-| Personal field without autocomplete | `<input type="email/tel/password/url">` with no `autocomplete` attribute |
+| Personal field without autocomplete | `<input type="email/tel/password/url/name">` (or name-heuristic match) with no `autocomplete` attribute |
 | Required without marking | Field is functionally required but not marked with `required` or `aria-required="true"` |
 
 ### Autocomplete check
 
-Fields whose `type` is `email`, `tel`, `password`, `url`, `search`, or `date` must carry an `autocomplete` attribute. This aids users with cognitive disabilities and enables password manager autofill.
+A field is considered a personal-data field — and must carry an `autocomplete` attribute — when **either** of these conditions holds:
+
+- Its `type` attribute is one of: `email`, `tel`, `password`, `url`, `name`
+- Its `name` attribute contains any of: `email`, `phone`, `tel`, `password`, `username`, `first-name`, `last-name`, `firstname`, `lastname`, `address`, `city`, `zip`, `postcode`, `country`
+
+This aids users with cognitive disabilities and enables password manager autofill.
 
 ```html
 <!-- Bad -->
@@ -73,6 +78,27 @@ When a required field fails validation, the error must be:
 </Note>
 
 ---
+
+## Output
+
+**CSV file:** `audit_form_report.csv`
+
+Columns: `page_url`, `form_index`, `form_id`, `field_tag`, `field_type`, `field_id`, `field_name`, `label_text`, `has_any_label`, `required`, `aria_invalid`, `wcag_3_3_1_status`, `wcag_3_3_1_violations`, `wcag_3_3_2_status`, `wcag_3_3_2_violations`, `overall_status`, `total_violations`, `error_element_id`, `error_element_role`, `error_has_role_alert`, `error_has_aria_live`, `error_element_text`, `html_snippet`
+
+A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
+
+### `summarize()` return keys
+
+| Key | Description |
+|-----|-------------|
+| `total_fields` | All fields audited |
+| `passed` | Fields with no violations |
+| `failed` | Fields with at least one violation |
+| `pass_rate_pct` | `passed / total × 100`, rounded to 1 dp |
+| `wcag_3_3_1_failed` | Fields failing WCAG 3.3.1 |
+| `wcag_3_3_2_failed` | Fields failing WCAG 3.3.2 |
+| `fields_missing_label` | Fields where `has_any_label` is `False` |
+| `fields_with_no_error_container` | Required fields with no `aria-describedby` target |
 
 ## Complete compliant form example
 

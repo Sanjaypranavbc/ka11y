@@ -46,8 +46,8 @@ Before auditing, every image passes through a deterministic classification casca
   <Accordion title="functional/buttons — alt must be an action phrase">
     Validated against a vocabulary of 100+ action words (submit, close, play, pause, delete, download, share, search…). Generic alts like "image" or "click here" are violations.
   </Accordion>
-  <Accordion title="complex/charts — alt + long description required">
-    The image must have non-empty `alt` AND `aria-describedby` pointing to a long description. alt alone is insufficient for complex content.
+  <Accordion title="complex/charts — alt must be non-empty">
+    The image must have a non-empty, non-generic `alt` attribute. The auditor checks that `alt` is present and meaningful. Providing a long description via `aria-describedby` is a **best practice** but is not enforced automatically — manual review is recommended for charts and diagrams.
   </Accordion>
 </AccordionGroup>
 
@@ -63,6 +63,14 @@ EasyOCR → text regions + confidence → contrast check → category
 ```
 
 The detected words are then used in the cosine similarity check for informative images.
+
+## Output
+
+**CSV file:** `audit_report.csv`
+
+Columns: `filename`, `src`, `url`, `classification`, `sub_type`, `is_logo`, `is_icon`, `is_button`, `is_functional`, `is_decorative`, `alt_text`, `title`, `has_ocr_text`, `detected_text`, `contrast_violations_count`, `wcag_1_1_1_status`, `wcag_4_1_2_status`, `overall_status`, `wcag_1_1_1_reason`, `wcag_4_1_2_reason`, `screenshot_path`
+
+Status values: `PASSED` · `FAILED` · `N/A`
 
 ## Common violations
 

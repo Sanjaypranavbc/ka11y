@@ -47,6 +47,38 @@ Each finding carries `axe_would_catch: bool`. Use this to filter for novel detec
 
 When `axe_would_catch` is `false`, the finding is something axe-core would have missed entirely.
 
+## Content type labels
+
+| `content_type` value | Human-readable label |
+|---------------------|---------------------|
+| `video_autoplay` | Video with autoplay |
+| `animated_gif` | Animated GIF (loops indefinitely) |
+| `css_animation` | CSS / WAAPI animation |
+| `carousel_autoplay` | Carousel / slider with autoplay |
+| `marquee_element` | `<marquee>` element (deprecated) |
+| `blink_element` | `<blink>` element (deprecated) |
+
+## Output
+
+**CSV file:** `audit_pause_stop_hide_report.csv`
+
+Columns: `page_url`, `element_index`, `content_type`, `content_type_label`, `tag`, `element_id`, `src`, `animation_name`, `animation_duration_seconds`, `animation_iteration_count`, `loops`, `duration_seconds`, `starts_automatically`, `has_video_controls`, `has_pause_button`, `has_mechanism`, `wcag_2_2_2_status`, `wcag_2_2_2_violation`, `overall_status`, `axe_would_catch`, `html_snippet`
+
+A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
+
+### `summarize()` return keys
+
+| Key | Description |
+|-----|-------------|
+| `total_items` | All moving-content items found |
+| `passed` | Items that passed |
+| `failed` | Items that failed |
+| `pass_rate_pct` | `passed / total × 100`, rounded to 1 dp |
+| `wcag_2_2_2_failed` | Same as `failed` |
+| `axe_would_miss` | Items where `axe_would_catch` is `False` |
+| `failed_by_type` | `dict[content_type, count]` for failing items |
+| `passed_by_type` | `dict[content_type, count]` for passing items |
+
 ## Common violations
 
 | Type | Example |

@@ -1,4 +1,4 @@
-# ka11y — Full-Stack Code Audit Report
+u# ka11y — Full-Stack Code Audit Report
 
 > **Generated:** 2026-03-19
 > **Updated:** 2026-03-19 (fixes applied)
