@@ -107,6 +107,14 @@ export interface AuditConfig {
   run_label_in_name_audit: boolean;
   run_pause_stop_hide_audit: boolean;
   run_target_size_audit: boolean;
+  // Rendered-layout checks (Playwright)
+  run_resize_text_audit: boolean;
+  run_reflow_audit: boolean;
+  run_text_spacing_audit: boolean;
+  run_orientation_audit: boolean;
+  run_hover_focus_content_audit: boolean;
+  run_focus_not_obscured_min_audit: boolean;
+  run_focus_not_obscured_enh_audit: boolean;
 }
 
 export type TabValue = "dashboard" | "violations" | "needs-review" | "passes" | "image-visualisation" | "settings";
