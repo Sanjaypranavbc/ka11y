@@ -1,0 +1,98 @@
+---
+title: "combined/ Package Structure"
+description: "How ka11y/api/v1/combined/ is organised after the module split"
+---
+
+The combined audit module was split from a single `combined.py` file into a package to keep each concern small and independently testable.
+
+```
+ka11y/api/v1/combined/
+├── __init__.py        re-exports router + _evict_old_jobs for backward compat
+├── constants.py       _WCAG_NAMES, _WCAG_LEVEL, _SUGGESTED_FIX, _PYTHON_SEVERITY
+├── models.py          CombinedRequest, JobStatusResponse (Pydantic)
+├── store.py           in-memory job dict, SSE subscriber bus, TTL eviction
+├── stage_events.py    _stage_start / _stage_complete / _stage_error helpers
+├── findings.py        _make_finding factory + all per-rule converter functions
+├── report.py          _build_report (aggregates flat findings → final JSON shape)
+├── stages.py          per-stage coroutines + _run_python_stages orchestrator
+├── runner.py          _run_job background task (axe-core + Python in parallel)
+└── routes.py          FastAPI router: POST / · GET /{id} · GET /{id}/stream · GET /{id}/image
+```
+
+---
+
+## Dependency graph
+
+```
+constants.py ──────────────────────────────────────────────────┐
+                                                               │
+models.py ─────────────────────────────────────────────────────┤
+                                                               │
+store.py ──────────────────────────────────────────────────────┤
+           │                                                   │
+stage_events.py (imports store)                                │
+           │                                                   │
+findings.py (imports constants)                                │
+           │                                                   ▼
+report.py ─────────────────────────────────────────────────────┤
+                                                               │
+stages.py (imports constants, store, stage_events, findings) ──┤
+                                                               │
+runner.py (imports store, stage_events, report, stages, models)┤
+                                                               │
+routes.py (imports models, store, runner) ─────────────────────┤
+                                                               │
+__init__.py (imports routes, store, findings) ─────────────────┘
+```
+
+No circular imports exist in this graph.
+
+---
+
+## Module responsibilities
+
+### `constants.py`
+All static WCAG metadata. Add entries here when implementing new rules:
+- `_WCAG_NAMES` — criterion display name
+- `_WCAG_LEVEL` — "A" / "AA" / "AAA"
+- `_SUGGESTED_FIX` — remediation hint surfaced in every failure finding
+- `_PYTHON_SEVERITY` — "critical" / "high" / "medium" / "low"
+
+### `models.py`
+Pydantic request/response models. When adding a new rule, add an optional `run_<name>_audit: bool = True` toggle to `CombinedRequest`.
+
+### `store.py`
+In-memory job store (`_jobs` dict) and SSE pub/sub bus. Both are module-level singletons shared across all request handlers.
+
+### `stage_events.py`
+`_stage_start`, `_stage_complete`, `_stage_error`, `_stage_error_and_warn` — called by every stage coroutine to update the job record and broadcast SSE events.
+
+### `findings.py`
+Contains:
+- `_make_finding()` — the single factory for all finding dicts (enforces schema)
+- `_build_contrast_report()` — structures OCR results into the contrast report section
+- One `_xxx_to_findings(records, page_url)` function per auditor
+
+### `report.py`
+`_build_report()` — groups flat findings into `violations`, `needs_review`, `passes`; computes `by_severity`, `by_level`, `by_wcag_sc`, `by_source` summary buckets.
+
+### `stages.py`
+One `async def _stage_xxx(...)` coroutine per rule family. All are gathered concurrently by `_run_python_stages()`. Crawlers and auditors are called here; results are passed through the relevant converter.
+
+### `runner.py`
+`_run_job()` — the top-level background task. Fires axe-core and `_run_python_stages` in parallel, resolves results, applies WCAG level filter, writes `combined_report.json`, updates job status, broadcasts terminal SSE events.
+
+### `routes.py`
+Four FastAPI routes. Imports `_run_job` and schedules it via `asyncio.create_task`. Handles the SSE generator and image serving.
+
+---
+
+## Backward compatibility
+
+`main.py` imports `_evict_old_jobs` and `api/router.py` imports `router`. Both continue to work unchanged because `__init__.py` re-exports them:
+
+```python
+# Still works after the split:
+from ka11y.api.v1.combined import router          # api/router.py
+from ka11y.api.v1.combined import _evict_old_jobs # main.py
+```
