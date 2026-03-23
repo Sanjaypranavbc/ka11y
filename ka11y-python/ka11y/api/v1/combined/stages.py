@@ -52,6 +52,10 @@ from .findings import (
     _ts_to_findings,
 )
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
+from ka11y.utils.config_loader import load_config
+from ka11y.api.v1.combined.models import CombinedRequest, JobStatusResponse
+from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import TextSpacingAuditor
+from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -258,6 +262,36 @@ async def _stage_target_size(
         _stage_error_and_warn(job_id, "target_size", _exc)
         return []
 
+async def _stage_text_spacing(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_text_spacing_audit: bool,
+    job_id: str,
+) -> List[Dict]:
+    """Crawl fixed-height/overflow elements → 1.4.12 text-spacing check."""
+    _stage_start(job_id, "text_spacing")
+    try:
+        ts_crawler = AsyncTextSpacingCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth
+        )
+        items = await ts_crawler.crawl()
+        await asyncio.to_thread(ts_crawler.save_json)
+
+        findings: List[Dict] = []
+        if run_text_spacing_audit:
+            auditor = TextSpacingAuditor(output_dir=str(output_dir))
+            records = await asyncio.to_thread(
+                auditor.generate_audit_report, items
+            )
+            findings = _text_spacing_to_findings(records, url)
+
+        _stage_complete(job_id, "text_spacing", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "text_spacing", _exc)
+        return []
+
 
 async def _stage_rendered_layout_audit(
     url: str,
@@ -357,6 +391,9 @@ async def _run_python_stages(
         ),
         _stage_target_size(
             url, output_dir, max_depth, run_target_size_audit, job_id
+        ),
+        _stage_text_spacing(
+            url, output_dir, max_depth, run_text_spacing_audit, job_id
         ),
         _stage_rendered_layout_audit(
             url, output_dir,
