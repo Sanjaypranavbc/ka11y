@@ -18,20 +18,22 @@ from ka11y.crawler.text_spacing_crawler import TextSpacingData
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _check_1412(item: TextSpacingData):
-    """
-    Returns (status, violation_message)
-    """
 
-    # Risk condition
-    if item.has_fixed_height and item.has_overflow_hidden:
+    # ❌ REAL WCAG failure
+    if item.is_clipped:
         return "FAILED", (
-            "1.4.12: Fixed height with overflow hidden may clip text "
-            "when spacing is increased."
+            "1.4.12: Text is clipped when spacing is increased."
+        )
+
+    # ⚠️ Risk (not guaranteed failure)
+    if item.has_fixed_height and item.has_overflow_hidden:
+        return "WARNING", (
+            "1.4.12: Potential clipping risk (fixed height + overflow hidden)."
         )
 
     if item.has_fixed_height:
-        return "WARNING", (
-            "1.4.12: Fixed height may cause clipping when text spacing increases."
+        return "INFO", (
+            "1.4.12: Fixed height detected — verify with manual testing."
         )
 
     return "PASSED", ""

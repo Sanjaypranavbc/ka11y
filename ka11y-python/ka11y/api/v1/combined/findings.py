@@ -575,13 +575,62 @@ def _reflow_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
 
 
 def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
-    return _rendered_rule_to_findings(
-        records, page_url,
-        rule_key="wcag_1_4_12",
-        rule_id="python_1_4_12_text_spacing",
-        wcag_sc="1.4.12",
-        pass_reason="No content or functionality is lost after text spacing overrides.",
-    )
+    findings: List[Dict] = []
+
+    for r in records:
+        status_raw = r.get("wcag_1_4_12_status", "")
+        if status_raw == "N/A":
+            continue
+
+        violation = r.get("wcag_1_4_12_violation", "")
+        sev = _PYTHON_SEVERITY.get("1.4.12")
+
+        if status_raw == "FAILED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_12_text_spacing",
+                    wcag_sc="1.4.12",
+                    status="fail",
+                    reason=violation or "Text is clipped when spacing increases.",
+                    severity=sev,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag"),
+                    page_url=r.get("page_url") or page_url,
+                )
+            )
+
+        elif status_raw == "WARNING":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_12_text_spacing",
+                    wcag_sc="1.4.12",
+                    status="needs_review",   # 🔥 important mapping
+                    reason=violation or "Potential clipping risk — verify manually.",
+                    severity=sev,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag"),
+                    page_url=r.get("page_url") or page_url,
+                )
+            )
+
+        elif status_raw == "PASSED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_12_text_spacing",
+                    wcag_sc="1.4.12",
+                    status="pass",
+                    reason="No content is lost after applying text spacing overrides.",
+                    severity=None,
+                    page_url=r.get("page_url") or page_url,
+                )
+            )
+
+    return findings
 
 
 def _orientation_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
