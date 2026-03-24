@@ -17,3 +17,7 @@ env/
 .DS_Store
 .idea/
 .vscode/
+
+# Output folders (Docker volumes)
+output/crawled_images/
+output/logs/
