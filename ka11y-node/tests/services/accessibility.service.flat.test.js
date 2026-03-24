@@ -1,0 +1,113 @@
+'use strict';
+
+jest.mock('dns', () => ({
+  promises: {
+    resolve4: jest.fn().mockResolvedValue(['93.184.216.34']),
+  },
+}));
+
+jest.mock('../../src/custom-checks/index', () => ({
+  runAll: jest.fn(),
+  runStaticChecks: jest.fn(),
+  mergeWithAxe: jest.fn(),
+}));
+
+const { runAll } = require('../../src/custom-checks/index');
+const AccessibilityService = require('../../src/services/accessibility.service');
+
+function makePage(axeResults) {
+  return {
+    setDefaultTimeout: jest.fn(),
+    setDefaultNavigationTimeout: jest.fn(),
+    on: jest.fn(),
+    goto: jest.fn().mockResolvedValue(undefined),
+    addScriptTag: jest.fn().mockResolvedValue(undefined),
+    evaluate: jest.fn().mockResolvedValue(axeResults),
+  };
+}
+
+function makeService(page) {
+  const browser = {
+    newPage: jest.fn().mockResolvedValue(page),
+    close: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const puppeteer = {
+    launch: jest.fn().mockResolvedValue(browser),
+  };
+
+  const logger = {
+    info: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+  };
+
+  const config = {
+    browser: {
+      headless: 'shell',
+      executablePath: undefined,
+      args: [],
+    },
+    axe: {
+      timeoutMs: 10_000,
+      runOnly: { type: 'tag', values: ['wcag2a'] },
+    },
+  };
+
+  return new AccessibilityService(puppeteer, '/fake/axe.min.js', logger, config);
+}
+
+describe('AccessibilityService.analyseUrlFlat', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('includes custom-check findings in flat results for matching WCAG level', async () => {
+    const page = makePage({ violations: [], passes: [], incomplete: [] });
+    const service = makeService(page);
+
+    runAll.mockResolvedValue([
+      {
+        successCriteriaId: '3.3.8', // AA
+        rules: [{
+          ruleId: 'custom-accessible-auth',
+          impact: 'serious',
+          status: 'fail',
+          reason: 'Authentication challenge has no accessible alternative.',
+          helpUrl: 'https://example.com/sc-338',
+        }],
+      },
+    ]);
+
+    const findings = await service.analyseUrlFlat('https://example.com', 'AA');
+
+    expect(runAll).toHaveBeenCalledTimes(1);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].rule_id).toBe('custom-accessible-auth');
+    expect(findings[0].status).toBe('fail');
+    expect(findings[0].source).toBe('axe');
+  });
+
+  test('filters out higher-level custom findings when running level A', async () => {
+    const page = makePage({ violations: [], passes: [], incomplete: [] });
+    const service = makeService(page);
+
+    runAll.mockResolvedValue([
+      {
+        successCriteriaId: '3.3.8', // AA
+        rules: [{
+          ruleId: 'custom-accessible-auth',
+          impact: 'serious',
+          status: 'fail',
+          reason: 'Authentication challenge has no accessible alternative.',
+          helpUrl: 'https://example.com/sc-338',
+        }],
+      },
+    ]);
+
+    const findings = await service.analyseUrlFlat('https://example.com', 'A');
+
+    expect(runAll).toHaveBeenCalledTimes(1);
+    expect(findings).toEqual([]);
+  });
+});
