@@ -44,7 +44,7 @@ describe('mapCustomResultsFlat', () => {
     expect(findings[0].severity).toBe('high');    // serious -> high
     expect(findings[1].severity).toBe('medium');  // moderate -> medium
     expect(findings[2].severity).toBeNull();      // pass -> null
-    expect(findings.every(f => f.source === 'axe')).toBe(true);
+    expect(findings.every(f => f.source === 'custom')).toBe(true);
     expect(findings[0].wcag_sc).toBe('2.4.7');
     expect(findings[1].wcag_sc).toBe('3.2.6');
     expect(findings[2].wcag_sc).toBe('4.1.1');

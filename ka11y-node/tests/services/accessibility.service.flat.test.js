@@ -2,7 +2,7 @@
 
 jest.mock('dns', () => ({
   promises: {
-    resolve4: jest.fn().mockResolvedValue(['93.184.216.34']),
+    lookup: jest.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
   },
 }));
 
@@ -85,7 +85,7 @@ describe('AccessibilityService.analyseUrlFlat', () => {
     expect(findings).toHaveLength(1);
     expect(findings[0].rule_id).toBe('custom-accessible-auth');
     expect(findings[0].status).toBe('fail');
-    expect(findings[0].source).toBe('axe');
+    expect(findings[0].source).toBe('custom');
   });
 
   test('filters out higher-level custom findings when running level A', async () => {

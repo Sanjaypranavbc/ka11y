@@ -1,6 +1,6 @@
 'use strict';
 
-const { mergeWithAxe, runStaticChecks } = require('../../src/custom-checks/index');
+const { mergeWithAxe, runAll, runStaticChecks } = require('../../src/custom-checks/index');
 
 describe('mergeWithAxe', () => {
   test('merges non-overlapping SC entries', () => {
@@ -62,5 +62,30 @@ describe('runStaticChecks', () => {
     const results = await runStaticChecks(mockPage);
     expect(Array.isArray(results)).toBe(true);
     expect(results.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('returns incomplete fallback entries when checks throw', async () => {
+    const mockPage = { evaluate: jest.fn().mockRejectedValue(new Error('boom')) };
+    const results = await runStaticChecks(mockPage);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every(r => r.rules[0].status === 'incomplete')).toBe(true);
+    expect(results[0].rules[0].reason).toContain('Custom check execution failed');
+  });
+});
+
+describe('runAll', () => {
+  test('does not silently drop failing custom checks', async () => {
+    const mockPage = {
+      evaluate: jest.fn().mockRejectedValue(new Error('forced-failure')),
+      keyboard: { press: jest.fn().mockRejectedValue(new Error('forced-failure')) },
+      on: jest.fn(),
+      off: jest.fn(),
+      url: jest.fn().mockReturnValue('https://example.com'),
+    };
+
+    const results = await runAll(mockPage);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every(r => Array.isArray(r.rules) && r.rules.length === 1)).toBe(true);
+    expect(results.every(r => r.rules[0].status === 'incomplete')).toBe(true);
   });
 });

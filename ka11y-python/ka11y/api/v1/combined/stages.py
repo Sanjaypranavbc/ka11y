@@ -64,8 +64,6 @@ from .findings import (
     _ts_to_findings,
 )
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
-from ka11y.utils.config_loader import load_config
-from ka11y.api.v1.combined.models import CombinedRequest, JobStatusResponse
 from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
     TextSpacingAuditor,
 )
@@ -113,6 +111,10 @@ async def _stage_image_audit(
 ) -> Tuple[List[Dict], Optional[Dict[str, Any]]]:
     """Crawl images → OCR → 1.1.1 alt-text + 1.4.3 contrast."""
     _stage_start(job_id, "image_audit")
+    if not run_ocr and not run_image_audit:
+        _stage_complete(job_id, "image_audit", 0)
+        return [], None
+
     try:
         image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
         await image_crawler.crawl_page()
@@ -162,6 +164,10 @@ async def _stage_form_audit(
 ) -> List[Dict]:
     """Crawl forms → 3.3.1 / 3.3.2 label + error checks."""
     _stage_start(job_id, "form_audit")
+    if not run_form_audit:
+        _stage_complete(job_id, "form_audit", 0)
+        return []
+
     try:
         form_crawler = AsyncFormCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
@@ -195,6 +201,10 @@ async def _stage_label_in_name(
 ) -> List[Dict]:
     """Crawl interactive elements → 2.5.3 label-in-name check."""
     _stage_start(job_id, "label_in_name")
+    if not run_label_in_name_audit:
+        _stage_complete(job_id, "label_in_name", 0)
+        return []
+
     try:
         interactive_crawler = InteractiveElementCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
@@ -226,6 +236,10 @@ async def _stage_pause_stop_hide(
 ) -> List[Dict]:
     """Crawl moving content → 2.2.2 pause/stop/hide check."""
     _stage_start(job_id, "pause_stop_hide")
+    if not run_pause_stop_hide_audit:
+        _stage_complete(job_id, "pause_stop_hide", 0)
+        return []
+
     try:
         moving_crawler = MovingContentCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
@@ -257,6 +271,10 @@ async def _stage_target_size(
 ) -> List[Dict]:
     """Crawl touch targets → 2.5.8 target-size check."""
     _stage_start(job_id, "target_size")
+    if not run_target_size_audit:
+        _stage_complete(job_id, "target_size", 0)
+        return []
+
     try:
         ts_crawler = TargetSizeCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
@@ -288,6 +306,10 @@ async def _stage_text_spacing(
 ) -> List[Dict]:
     """Crawl fixed-height/overflow elements → 1.4.12 text-spacing check."""
     _stage_start(job_id, "text_spacing")
+    if not run_text_spacing_audit:
+        _stage_complete(job_id, "text_spacing", 0)
+        return []
+
     try:
         ts_crawler = AsyncTextSpacingCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
@@ -325,6 +347,20 @@ async def _stage_rendered_layout_audit(
     WCAG 1.4.4 / 1.4.10 / 1.4.12 / 1.3.4 / 1.4.13 / 2.4.11 / 2.4.12.
     """
     _stage_start(job_id, "rendered_layout_audit")
+    if not any(
+        (
+            run_resize_text_audit,
+            run_reflow_audit,
+            run_text_spacing_audit,
+            run_orientation_audit,
+            run_hover_focus_content_audit,
+            run_focus_not_obscured_min_audit,
+            run_focus_not_obscured_enh_audit,
+        )
+    ):
+        _stage_complete(job_id, "rendered_layout_audit", 0)
+        return []
+
     try:
         crawler = RenderedLayoutCrawler(base_url=url, output_dir=str(output_dir))
         raw = await crawler.crawl()

@@ -85,6 +85,12 @@ app.get( `${API_V1}/rules`,                 (req, res) => rulesController.getRul
 app.get( `${API_V1}/rules-guide`,           (req, res) => rulesGuideController.getAll(req, res));
 app.get( `${API_V1}/rules-guide/:ruleId`,   (req, res) => rulesGuideController.getOne(req, res));
 
+// Backward-compatible aliases (legacy tests/clients use unversioned routes)
+app.get('/health',              (req, res) => healthController.getHealth(req, res));
+app.get('/rules',               (req, res) => rulesController.getRules(req, res));
+app.get('/rules-guide',         (req, res) => rulesGuideController.getAll(req, res));
+app.get('/rules-guide/:ruleId', (req, res) => rulesGuideController.getOne(req, res));
+
 // Swagger UI page
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 

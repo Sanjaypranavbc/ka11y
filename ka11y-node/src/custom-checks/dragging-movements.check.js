@@ -105,4 +105,4 @@ async function run(page) {
   };
 }
 
-module.exports = { run };
+module.exports = { run, SC, RULE_ID, HELP_URL };

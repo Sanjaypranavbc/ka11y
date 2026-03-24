@@ -372,7 +372,7 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
       const impact = rule && rule.impact ? rule.impact : null;
 
       findings.push({
-        source:         'axe',
+        source:         'custom',
         rule_id:        (rule && rule.ruleId) || 'custom-unknown-rule',
         wcag_sc:        sc,
         criterion_name: sc ? (WCAG_NAMES[sc] || null) : null,

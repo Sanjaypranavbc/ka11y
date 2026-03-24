@@ -11,7 +11,12 @@ const _PRIVATE_IP_RE = [
   /^192\.168\./,
   /^169\.254\./,
   /^::1$/,
-  /^fc[0-9a-f]{2}:/i,
+  /^::ffff:127\./i,
+  /^::ffff:10\./i,
+  /^::ffff:172\.(1[6-9]|2\d|3[01])\./i,
+  /^::ffff:192\.168\./i,
+  /^::ffff:169\.254\./i,
+  /^f[cd][0-9a-f]{2}:/i,
   /^fe80:/i,
 ];
 
@@ -19,11 +24,16 @@ async function _assertPublicUrl(url) {
   const { hostname } = new URL(url);
   let addresses;
   try {
-    addresses = await dns.resolve4(hostname);
+    // Resolve both IPv4 and IPv6 addresses.
+    // lookup() honours system resolver policy and returns all families.
+    addresses = await dns.lookup(hostname, { all: true, verbatim: true });
   } catch {
     throw new Error(`SSRF guard: DNS resolution failed for ${hostname}`);
   }
-  for (const ip of addresses) {
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    throw new Error(`SSRF guard: DNS resolution returned no addresses for ${hostname}`);
+  }
+  for (const { address: ip } of addresses) {
     if (_PRIVATE_IP_RE.some(re => re.test(ip))) {
       throw new Error(`SSRF guard: ${hostname} resolves to private IP ${ip}`);
     }
@@ -145,9 +155,12 @@ class AccessibilityService {
 
       this._logger.info('Running static custom checks...');
       const customResults = await runStaticChecks(page);
-      this._logger.info(`Custom checks complete — ${customResults.length} SC(s) checked.`);
+      const filteredCustom = criteriaId
+        ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
+        : customResults;
+      this._logger.info(`Custom checks complete — ${filteredCustom.length} SC(s) returned.`);
 
-      return mergeWithAxe(mapResults(axeResults, criteriaId), customResults);
+      return mergeWithAxe(mapResults(axeResults, criteriaId), filteredCustom);
     } catch (err) {
       this._logger.error('Error during accessibility analysis:', err.message);
       throw err;
@@ -216,9 +229,12 @@ class AccessibilityService {
 
       this._logger.info('Running all custom checks (static + interactive)...');
       const customResults = await runAll(page);
-      this._logger.info(`Custom checks complete — ${customResults.length} SC(s) checked.`);
+      const filteredCustom = criteriaId
+        ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
+        : customResults;
+      this._logger.info(`Custom checks complete — ${filteredCustom.length} SC(s) returned.`);
 
-      return mergeWithAxe(mapResults(axeResults, criteriaId), customResults);
+      return mergeWithAxe(mapResults(axeResults, criteriaId), filteredCustom);
     } catch (err) {
       this._logger.error(`Error during URL accessibility analysis: ${err.message}`);
       throw err;

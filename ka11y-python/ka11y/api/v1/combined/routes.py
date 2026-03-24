@@ -12,8 +12,10 @@ FastAPI route handlers for the combined audit endpoint.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import mimetypes
+import socket
 import time
 import uuid
 from datetime import datetime, timezone
@@ -30,7 +32,99 @@ from .store import _jobs, _subscribers, _subscribers_lock
 
 router = APIRouter(prefix="/combined", tags=["combined"])
 
-_PRIVATE_PREFIXES = ("localhost", "127.", "10.", "192.168.", "169.254.")
+
+def _is_non_public_ip(ip: str) -> bool:
+    """
+    Return True for IP addresses that should never be fetched by audit workers:
+    private, loopback, link-local, multicast, reserved, or unspecified.
+    """
+    parsed = ipaddress.ip_address(ip)
+
+    return any(
+        (
+            parsed.is_private,
+            parsed.is_loopback,
+            parsed.is_link_local,
+            parsed.is_multicast,
+            parsed.is_reserved,
+            parsed.is_unspecified,
+        )
+    )
+
+
+async def _resolve_all_ips(hostname: str) -> list[str]:
+    infos = await asyncio.to_thread(
+        socket.getaddrinfo,
+        hostname,
+        None,
+        0,
+        socket.SOCK_STREAM,
+    )
+    addrs: list[str] = []
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        ip = sockaddr[0]
+        if ip not in addrs:
+            addrs.append(ip)
+    return addrs
+
+
+async def _assert_public_url(url: str) -> None:
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL scheme '{parsed.scheme}' is not supported; use http or https.",
+        )
+
+    if not host:
+        raise HTTPException(status_code=400, detail="URL hostname is missing.")
+
+    if host.lower() == "localhost":
+        raise HTTPException(
+            status_code=400,
+            detail="URL hostname 'localhost' is not allowed (private/loopback address).",
+        )
+
+    # Literal IP host
+    try:
+        if _is_non_public_ip(host):
+            raise HTTPException(
+                status_code=400,
+                detail=f"URL hostname '{host}' is not allowed (private/loopback address).",
+            )
+        return
+    except ValueError:
+        # Not a literal IP, continue with DNS resolution.
+        pass
+
+    try:
+        resolved = await _resolve_all_ips(host)
+    except socket.gaierror:
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL hostname '{host}' could not be resolved.",
+        )
+
+    if not resolved:
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL hostname '{host}' resolved to no addresses.",
+        )
+
+    blocked = [ip for ip in resolved if _is_non_public_ip(ip)]
+    if blocked:
+        sample = ", ".join(blocked[:3])
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"URL hostname '{host}' resolves to private/loopback address(es): {sample}."
+            ),
+        )
 
 
 @router.post("/", response_model=JobStatusResponse, status_code=202)
@@ -49,14 +143,8 @@ async def submit_combined_audit(payload: CombinedRequest):
     url = str(payload.url)
     now = datetime.now(timezone.utc).isoformat()
 
-    # SSRF guard: reject private / loopback / link-local URLs
-    _parsed = urlparse(url)
-    _host = _parsed.hostname or ""
-    if _host == "localhost" or any(_host.startswith(p) for p in _PRIVATE_PREFIXES):
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL hostname '{_host}' is not allowed (private/loopback address).",
-        )
+    # SSRF guard: reject private / loopback / link-local endpoints.
+    await _assert_public_url(url)
 
     _jobs[job_id] = {
         "job_id": job_id,
