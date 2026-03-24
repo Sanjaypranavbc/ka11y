@@ -1,0 +1,461 @@
+2026-03-24 05:15:42 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Logger initialized
+2026-03-24 05:15:43 | INFO     | [main          ] | KAC | [bold cyan]\[main][/bold cyan] Logger initialized
+2026-03-24 05:15:43 | INFO     | [main          ] | KAC | [bold cyan]\[main][/bold cyan] Configuration loaded successfully
+2026-03-24 05:15:43 | INFO     | [main          ] | KAC | [bold cyan]\[main][/bold cyan] ka11y API starting up
+2026-03-24 05:15:54 | INFO     | [combined      ] | KAC | [bold cyan]\[combined][/bold cyan] [combined] job 5ae65661-71b5-49f9-babb-bbe244914c16 submitted for https://www.bluecaffeine.com/
+2026-03-24 05:15:54 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Crawler initialised — base_url=https://www.bluecaffeine.com/
+2026-03-24 05:16:10 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Page loaded (domcontentloaded strategy)
+2026-03-24 05:16:11 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Scroll pass 1/3
+2026-03-24 05:16:14 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Scroll pass 2/3
+2026-03-24 05:16:17 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Scroll pass 3/3
+2026-03-24 05:16:20 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Lazy-load trigger complete
+2026-03-24 05:16:22 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   carousels: clicked 2
+2026-03-24 05:16:22 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] reveal_hidden_images complete — 2 elements triggered
+2026-03-24 05:16:22 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] PASS 1: 75 img elements
+2026-03-24 05:16:23 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/', 'hasClick': True}
+2026-03-24 05:16:23 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1b] functional/logos
+2026-03-24 05:16:23 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/logos] img_257217c414f1.png
+2026-03-24 05:16:23 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/', 'hasClick': True}
+2026-03-24 05:16:23 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1b] functional/logos
+2026-03-24 05:16:24 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/logos] img_3eb072697322.png
+2026-03-24 05:16:24 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/', 'hasClick': True}
+2026-03-24 05:16:24 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1b] functional/logos
+2026-03-24 05:17:25 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/logos] img_f2457a848332.png
+2026-03-24 05:17:25 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:17:25 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Aspect-ratio heuristic 1.33 632×475 (+1)
+2026-03-24 05:17:25 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=1 → no
+2026-03-24 05:17:25 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:17:25 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_40a125f653e4.png
+2026-03-24 05:17:25 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:17:25 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:17:25 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative (explicit alt='')
+2026-03-24 05:18:26 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/decorative] img_75672c69191a.png
+2026-03-24 05:18:26 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:18:26 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:18:26 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative (explicit alt='')
+2026-03-24 05:20:09 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Logger initialized
+2026-03-24 05:20:09 | INFO     | [main          ] | KAC | [bold cyan]\[main][/bold cyan] Logger initialized
+2026-03-24 05:20:09 | INFO     | [main          ] | KAC | [bold cyan]\[main][/bold cyan] Configuration loaded successfully
+2026-03-24 05:20:09 | INFO     | [main          ] | KAC | [bold cyan]\[main][/bold cyan] ka11y API starting up
+2026-03-24 05:21:08 | INFO     | [combined      ] | KAC | [bold cyan]\[combined][/bold cyan] [combined] job 5da0f94c-c867-4cee-9f3c-7efc45360f1b submitted for https://www.bluecaffeine.com/
+2026-03-24 05:21:08 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Crawler initialised — base_url=https://www.bluecaffeine.com/
+2026-03-24 05:21:28 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Page loaded (domcontentloaded strategy)
+2026-03-24 05:21:29 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Scroll pass 1/3
+2026-03-24 05:21:32 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Scroll pass 2/3
+2026-03-24 05:21:34 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Scroll pass 3/3
+2026-03-24 05:21:37 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Lazy-load trigger complete
+2026-03-24 05:21:38 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   carousels: clicked 2
+2026-03-24 05:21:38 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] reveal_hidden_images complete — 2 elements triggered
+2026-03-24 05:21:39 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] PASS 1: 75 img elements
+2026-03-24 05:21:39 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/', 'hasClick': True}
+2026-03-24 05:21:39 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1b] functional/logos
+2026-03-24 05:21:39 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/logos] img_257217c414f1.png
+2026-03-24 05:21:39 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/', 'hasClick': True}
+2026-03-24 05:21:39 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1b] functional/logos
+2026-03-24 05:21:39 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/logos] img_3eb072697322.png
+2026-03-24 05:21:39 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/', 'hasClick': True}
+2026-03-24 05:21:39 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1b] functional/logos
+2026-03-24 05:22:40 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/logos] img_f2457a848332.png
+2026-03-24 05:22:40 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:22:40 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Aspect-ratio heuristic 1.33 632×475 (+1)
+2026-03-24 05:22:40 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=1 → no
+2026-03-24 05:22:40 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:22:40 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_40a125f653e4.png
+2026-03-24 05:22:40 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:22:40 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:22:40 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:23:41 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_26a2001138b5.png
+2026-03-24 05:23:41 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.google.com/partners/agency?id=3026234250', 'hasClick': True}
+2026-03-24 05:23:41 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:23:41 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1d] functional/icons
+2026-03-24 05:23:41 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/icons] img_3e187055c267.png
+2026-03-24 05:23:41 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:23:41 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:23:41 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:24:42 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_50035d4ff635.png
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Ancestor <figure> (+2)
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=2 → no
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:24:42 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_82d7628d2392.png
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Ancestor <figure> (+2)
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=2 → no
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:24:42 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_b69b37f9572b.png
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:42 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:24:43 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_39bae18d5094.png
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:24:43 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_bd4cad41e116.png
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:24:43 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_080122a96503.png
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:24:43 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_531f0f9ca879.png
+2026-03-24 05:24:43 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] informative/succinct_information
+2026-03-24 05:24:44 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [informative/succinct_information] img_187548361dda.png
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Ancestor <figure> (+2)
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Aspect-ratio heuristic 1.57 514×328 (+1)
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=3 → YES
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1c] complex/charts
+2026-03-24 05:24:44 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [complex/charts] img_77264935933d.png
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Ancestor <figure> (+2)
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Aspect-ratio heuristic 1.57 514×328 (+1)
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=3 → YES
+2026-03-24 05:24:44 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1c] complex/charts
+2026-03-24 05:24:45 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [complex/charts] img_9b2c9335e55f.png
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/how-to-overcome-common-saas-marketing-challenges-and-drive-growth-through-strategic-campaigns/', 'hasClick': True}
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:24:45 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_b4eccaf66230.png
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/mastering-prompt-engineering-the-strategic-advantage-for-smarter-ai/', 'hasClick': True}
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:24:45 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_8eeca7ce6279.png
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/about-customer-journey-mapping/', 'hasClick': True}
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:45 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:24:46 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_5ed95942e26a.png
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative/missing_alt (WCAG violation)
+2026-03-24 05:24:46 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/missing_alt] img_b1a19de6e228.png
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative/missing_alt (WCAG violation)
+2026-03-24 05:24:46 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/missing_alt] img_0429b619bd82.png
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:46 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative/missing_alt (WCAG violation)
+2026-03-24 05:24:46 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/missing_alt] img_e712abf3876a.png
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative/missing_alt (WCAG violation)
+2026-03-24 05:24:47 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/missing_alt] img_3e75b7986211.png
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative (explicit alt='')
+2026-03-24 05:24:47 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/decorative] img_e69f508c7e6b.png
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative/missing_alt (WCAG violation)
+2026-03-24 05:24:47 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/missing_alt] img_9bce52590cf3.png
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:47 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative/missing_alt (WCAG violation)
+2026-03-24 05:24:48 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/missing_alt] img_f7e475cc65b1.png
+2026-03-24 05:24:48 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:48 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:48 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative/missing_alt (WCAG violation)
+2026-03-24 05:24:48 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/missing_alt] img_e67e11f0221f.png
+2026-03-24 05:24:48 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:48 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:48 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative (explicit alt='')
+2026-03-24 05:24:48 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/decorative] img_8f43a31f6457.png
+2026-03-24 05:24:48 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:24:49 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:24:49 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative (explicit alt='')
+2026-03-24 05:25:49 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/decorative] img_3e8565588ae0.png
+2026-03-24 05:25:49 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:25:49 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:25:49 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative (explicit alt='')
+2026-03-24 05:26:49 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/decorative] img_de84ba2f6258.png
+2026-03-24 05:26:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': False, 'inRealLink': False, 'linkHref': None, 'hasClick': False}
+2026-03-24 05:26:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:26:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 4] decorative (explicit alt='')
+2026-03-24 05:27:50 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [decorative/decorative] img_44792a7e0b01.png
+2026-03-24 05:27:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/facebook-case-study/', 'hasClick': True}
+2026-03-24 05:27:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:27:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:50 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_36c73b57ce4e.png
+2026-03-24 05:27:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/facebook-case-study/', 'hasClick': True}
+2026-03-24 05:27:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:27:50 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:51 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_fff52b8119d2.png
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/seo-audit-case-study/', 'hasClick': True}
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:51 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_61e4d22f5188.png
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/liveworld-case-study/', 'hasClick': True}
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:51 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_d1e39ff7ad4f.png
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/stocksnips-case-study/', 'hasClick': True}
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Aspect-ratio heuristic 2.27 340×150 (+1)
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=1 → no
+2026-03-24 05:27:51 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:51 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_69d1e9b9866a.png
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/converge-point-case-study/', 'hasClick': True}
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:52 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_d6ef78a1c92a.png
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/3-phase-strategy-new/', 'hasClick': True}
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Aspect-ratio heuristic 2.27 340×150 (+1)
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=1 → no
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:52 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_2a0b559d4875.png
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.bluecaffeine.com/profit-case-study/', 'hasClick': True}
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:27:52 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:53 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_2963ec2931d5.png
+2026-03-24 05:27:53 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://www.google.com/partners/agency?id=3026234250', 'hasClick': True}
+2026-03-24 05:27:53 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:27:53 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:53 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_f2fe8248b8fb.png
+2026-03-24 05:27:53 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] Context: {'inButton': False, 'inLink': True, 'inRealLink': True, 'linkHref': 'https://advertising.amazon.com/partners/directory/details/amzn1.ads1.ma1.ezm4diuu0f0t7guc2d0d88o6/Blue-Caffeine-Evisco-Systems-Pvt-Ltd?ref_=prtdrl_shr_cy', 'hasClick': True}
+2026-03-24 05:27:53 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:27:53 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] [STEP 1e] functional/images
+2026-03-24 05:27:53 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ [functional/images] img_96f378b4fb6d.png
+2026-03-24 05:27:53 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] PASS 2: 23 button elements
+2026-03-24 05:27:54 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_e6ba781f6376.png (Previous)
+2026-03-24 05:27:54 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_477a79c4baed.png (Next)
+2026-03-24 05:27:54 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_6eb2dd842a42.png (LEARN MORE)
+2026-03-24 05:27:54 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_7e30bbe2e9bc.png (LEARN MORE)
+2026-03-24 05:27:54 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_68f50ddfa22d.png (ALL BLOGS)
+2026-03-24 05:27:54 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_a4b45366b484.png (ALL BLOGS)
+2026-03-24 05:28:54 | DEBUG    | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   Button 10 error: Locator.screenshot: Timeout 59992ms exceeded.
+Call log:
+  - taking element screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+  - attempting scroll into view action
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+    - waiting 20ms
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 100ms
+    112 × waiting for element to be stable
+        - element is not visible
+      - retrying scroll into view action
+        - waiting 500ms
+
+2026-03-24 05:29:54 | DEBUG    | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   Button 11 error: Locator.screenshot: Timeout 59984ms exceeded.
+Call log:
+  - taking element screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+  - attempting scroll into view action
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+    - waiting 20ms
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 100ms
+    112 × waiting for element to be stable
+        - element is not visible
+      - retrying scroll into view action
+        - waiting 500ms
+
+2026-03-24 05:30:54 | DEBUG    | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   Button 12 error: Locator.screenshot: Timeout 59993ms exceeded.
+Call log:
+  - taking element screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+  - attempting scroll into view action
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+    - waiting 20ms
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 100ms
+    112 × waiting for element to be stable
+        - element is not visible
+      - retrying scroll into view action
+        - waiting 500ms
+
+2026-03-24 05:31:55 | DEBUG    | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   Button 13 error: Locator.screenshot: Timeout 59990ms exceeded.
+Call log:
+  - taking element screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+  - attempting scroll into view action
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+    - waiting 20ms
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 100ms
+    112 × waiting for element to be stable
+        - element is not visible
+      - retrying scroll into view action
+        - waiting 500ms
+
+2026-03-24 05:31:55 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_82b0fb336089.png (VIEW ALL CASE STUDIES)
+2026-03-24 05:31:55 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_36dfada26c44.png (VIEW ALL CASE STUDIES)
+2026-03-24 05:32:55 | DEBUG    | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   Button 21 error: Locator.screenshot: Timeout 59992ms exceeded.
+Call log:
+  - taking element screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+  - attempting scroll into view action
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+    - waiting 20ms
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 100ms
+    112 × waiting for element to be stable
+        - element is not visible
+      - retrying scroll into view action
+        - waiting 500ms
+
+2026-03-24 05:32:55 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   ✓ Button captured: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_514ad59caf58.png (SUBMIT NOW)
+2026-03-24 05:32:55 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] PASS 3: 2 SVG elements
+2026-03-24 05:32:55 | INFO     | [classify_assets] | KAC | [bold cyan]\[classify_assets][/bold cyan] _is_chart score=0 → no
+2026-03-24 05:32:55 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] PASS 4: 23 font icon elements
+2026-03-24 05:34:56 | DEBUG    | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan]   Font icon 19 error: Locator.screenshot: Timeout 59982ms exceeded.
+Call log:
+  - taking element screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+  - attempting scroll into view action
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+    - waiting 20ms
+    2 × waiting for element to be stable
+      - element is not visible
+    - retrying scroll into view action
+      - waiting 100ms
+    112 × waiting for element to be stable
+        - element is not visible
+      - retrying scroll into view action
+        - waiting 500ms
+
+2026-03-24 05:34:56 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] PASS 5: 0 background candidates
+2026-03-24 05:34:56 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Browser closed — finished crawling https://www.bluecaffeine.com/
+2026-03-24 05:34:56 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] Report saved: crawled_images/bluecaffeine_com_0324_0521/images_report.json
+2026-03-24 05:34:56 | INFO     | [crawler       ] | KAC | [bold cyan]\[crawler][/bold cyan] CSV saved: crawled_images/bluecaffeine_com_0324_0521/images_with_alt_text.csv
+2026-03-24 05:34:56 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] base output dir :crawled_images/bluecaffeine_com_0324_0521
+2026-03-24 05:34:56 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] text detected dir :crawled_images/bluecaffeine_com_0324_0521/text_detected
+2026-03-24 05:34:56 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Initializing EasyOCR Reader (loading models)...
+2026-03-24 05:34:56 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] EasyOCR Reader initialized
+2026-03-24 05:34:56 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Scanning directory: crawled_images/bluecaffeine_com_0324_0521
+2026-03-24 05:34:56 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/complex/charts/img_77264935933d.png
+2026-03-24 05:35:03 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_77264935933d.png
+2026-03-24 05:35:03 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/complex/charts/img_9b2c9335e55f.png
+2026-03-24 05:35:04 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: with_text. Violations: 1
+2026-03-24 05:35:04 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_bd4cad41e116.png
+2026-03-24 05:35:04 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_bd4cad41e116.png
+2026-03-24 05:35:04 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_82d7628d2392.png
+2026-03-24 05:35:05 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 3 text regions. Category: informational_text. Violations: 1
+2026-03-24 05:35:05 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_50035d4ff635.png
+2026-03-24 05:35:05 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 2 text regions. Category: informational_text. Violations: 2
+2026-03-24 05:35:05 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_26a2001138b5.png
+2026-03-24 05:35:05 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: informational_text. Violations: 0
+2026-03-24 05:35:05 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_187548361dda.png
+2026-03-24 05:35:05 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_187548361dda.png
+2026-03-24 05:35:05 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_b69b37f9572b.png
+2026-03-24 05:35:06 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_b69b37f9572b.png
+2026-03-24 05:35:06 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_080122a96503.png
+2026-03-24 05:35:06 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: informational_text. Violations: 0
+2026-03-24 05:35:06 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_40a125f653e4.png
+2026-03-24 05:35:07 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: informational_text. Violations: 1
+2026-03-24 05:35:07 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_39bae18d5094.png
+2026-03-24 05:35:07 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_39bae18d5094.png
+2026-03-24 05:35:07 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/informative/img_531f0f9ca879.png
+2026-03-24 05:35:08 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: informational_text. Violations: 0
+2026-03-24 05:35:08 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_8f43a31f6457.png
+2026-03-24 05:35:08 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 8 text regions. Category: with_text. Violations: 8
+2026-03-24 05:35:08 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_3e75b7986211.png
+2026-03-24 05:35:08 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 2 text regions. Category: with_text. Violations: 2
+2026-03-24 05:35:08 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_e69f508c7e6b.png
+2026-03-24 05:35:09 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: with_text. Violations: 1
+2026-03-24 05:35:09 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_e67e11f0221f.png
+2026-03-24 05:35:09 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: with_text. Violations: 0
+2026-03-24 05:35:09 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_de84ba2f6258.png
+2026-03-24 05:35:09 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_de84ba2f6258.png
+2026-03-24 05:35:09 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_f7e475cc65b1.png
+2026-03-24 05:35:10 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 3 text regions. Category: with_text. Violations: 3
+2026-03-24 05:35:10 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_44792a7e0b01.png
+2026-03-24 05:35:10 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_44792a7e0b01.png
+2026-03-24 05:35:10 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_e712abf3876a.png
+2026-03-24 05:35:10 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 5 text regions. Category: with_text. Violations: 5
+2026-03-24 05:35:10 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_b1a19de6e228.png
+2026-03-24 05:35:11 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: with_text. Violations: 1
+2026-03-24 05:35:11 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_3e8565588ae0.png
+2026-03-24 05:35:11 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_3e8565588ae0.png
+2026-03-24 05:35:11 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_9bce52590cf3.png
+2026-03-24 05:35:11 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: with_text. Violations: 0
+2026-03-24 05:35:11 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/decorative/img_0429b619bd82.png
+2026-03-24 05:35:12 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 6 text regions. Category: with_text. Violations: 6
+2026-03-24 05:35:12 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_fff52b8119d2.png
+2026-03-24 05:35:12 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: with_text. Violations: 0
+2026-03-24 05:35:12 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_f2fe8248b8fb.png
+2026-03-24 05:35:12 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 2 text regions. Category: with_text. Violations: 2
+2026-03-24 05:35:12 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_96f378b4fb6d.png
+2026-03-24 05:35:12 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 3 text regions. Category: with_text. Violations: 3
+2026-03-24 05:35:12 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_61e4d22f5188.png
+2026-03-24 05:35:13 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 5 text regions. Category: with_text. Violations: 4
+2026-03-24 05:35:13 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_2963ec2931d5.png
+2026-03-24 05:35:14 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 5 text regions. Category: with_text. Violations: 5
+2026-03-24 05:35:14 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_d6ef78a1c92a.png
+2026-03-24 05:35:15 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 5 text regions. Category: with_text. Violations: 4
+2026-03-24 05:35:15 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_2a0b559d4875.png
+2026-03-24 05:35:16 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 4 text regions. Category: with_text. Violations: 4
+2026-03-24 05:35:16 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_5ed95942e26a.png
+2026-03-24 05:35:16 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 2 text regions. Category: with_text. Violations: 1
+2026-03-24 05:35:16 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_69d1e9b9866a.png
+2026-03-24 05:35:17 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 4 text regions. Category: with_text. Violations: 4
+2026-03-24 05:35:17 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_36c73b57ce4e.png
+2026-03-24 05:35:17 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 9 text regions. Category: with_text. Violations: 7
+2026-03-24 05:35:17 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_8eeca7ce6279.png
+2026-03-24 05:35:18 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 6 text regions. Category: with_text. Violations: 5
+2026-03-24 05:35:18 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_b4eccaf66230.png
+2026-03-24 05:35:19 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 5 text regions. Category: with_text. Violations: 5
+2026-03-24 05:35:19 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/images/img_d1e39ff7ad4f.png
+2026-03-24 05:35:19 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 6 text regions. Category: with_text. Violations: 5
+2026-03-24 05:35:19 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/logos/img_257217c414f1.png
+2026-03-24 05:35:19 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 3 text regions. Category: logo_text. Violations: 2
+2026-03-24 05:35:19 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/logos/img_f2457a848332.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 3 text regions. Category: logo_text. Violations: 0
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/logos/img_3eb072697322.png
+2026-03-24 05:35:20 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in img_3eb072697322.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_68f50ddfa22d.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: button_text. Violations: 1
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_514ad59caf58.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: button_text. Violations: 1
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_7e30bbe2e9bc.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: button_text. Violations: 1
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_6eb2dd842a42.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: button_text. Violations: 1
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_82b0fb336089.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: button_text. Violations: 1
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_477a79c4baed.png
+2026-03-24 05:35:20 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in btn_477a79c4baed.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_a4b45366b484.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: button_text. Violations: 1
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_36dfada26c44.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 1 text regions. Category: button_text. Violations: 1
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/buttons/btn_e6ba781f6376.png
+2026-03-24 05:35:20 | DEBUG    | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] No text detected in btn_e6ba781f6376.png
+2026-03-24 05:35:20 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Processing: crawled_images/bluecaffeine_com_0324_0521/functional/icons/img_3e187055c267.png
+2026-03-24 05:35:21 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] ✓ Detected 2 text regions. Category: with_text. Violations: 2
+2026-03-24 05:35:21 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Created output directories in crawled_images/bluecaffeine_com_0324_0521
+2026-03-24 05:35:21 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] Initializing EasyOCR Reader (loading models)...
+2026-03-24 05:35:21 | INFO     | [text_detector ] | KAC | [bold cyan]\[text_detector][/bold cyan] EasyOCR Reader initialized
+2026-03-24 05:35:23 | INFO     | [audit         ] | KAC | [bold cyan]\[audit][/bold cyan] Generating audit report — 50 images, 50 OCR results
+2026-03-24 05:35:23 | INFO     | [audit         ] | KAC | [bold cyan]\[audit][/bold cyan] Audit complete — 50 images, 40 passed, 10 failed. Report: crawled_images/bluecaffeine_com_0324_0521/audit_report.csv
+2026-03-24 05:35:23 | INFO     | [combined      ] | KAC | [bold cyan]\[combined][/bold cyan] [combined] job 5da0f94c-c867-4cee-9f3c-7efc45360f1b completed — 359 violations, 16 needs_review, 876 passes | contrast regions: 110 | report → crawled_images/bluecaffeine_com_0324_0521_combined/combined_report.json

@@ -84,9 +84,13 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
 
+#    volumes:
+#      - crawled_output:/app/crawled_images
+#      - python_logs:/app/logs
+    # In the python service:
     volumes:
-      - crawled_output:/app/crawled_images
-      - python_logs:/app/logs
+      - ./output/crawled_images:/app/crawled_images
+      - ./output/logs:/app/logs
 
     healthcheck:
       test:         ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]

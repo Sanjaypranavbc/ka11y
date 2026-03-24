@@ -1,0 +1,21 @@
+[
+  {
+    "page_url": "https://www.bluecaffeine.com/",
+    "element_index": 0,
+    "content_type": "css_animation",
+    "tag": "SPAN",
+    "element_id": null,
+    "src": null,
+    "animation_name": "spin",
+    "animation_duration_seconds": 1.0,
+    "animation_iteration_count": "infinite",
+    "loops": true,
+    "duration_seconds": -1.0,
+    "starts_automatically": true,
+    "has_video_controls": false,
+    "has_pause_button": false,
+    "has_mechanism": false,
+    "axe_would_catch": false,
+    "html_snippet": "<span class=\"ajax-loader\"></span>"
+  }
+]
