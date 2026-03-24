@@ -542,7 +542,9 @@ class TestAltTextAuditorReport:
             "is_logo", "is_icon", "is_button", "is_functional", "is_decorative",
             "alt_text", "title", "has_ocr_text", "detected_text",
             "contrast_violations_count", "wcag_1_1_1_status", "wcag_4_1_2_status",
+            "wcag_1_4_5_status", "wcag_1_4_11_status",
             "overall_status", "wcag_1_1_1_reason", "wcag_4_1_2_reason",
+            "wcag_1_4_5_reason", "wcag_1_4_11_reason",
             "screenshot_path",
         ]
         assert cols == expected

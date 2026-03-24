@@ -143,6 +143,12 @@ const RULE_SC_FALLBACK = {
   'aria-dialog-name':    '4.1.2',
   'aria-treeitem-name':  '4.1.2',
   'skip-link':           '2.4.1',
+
+  // WCAG 2.2 rules (active after adding wcag22a/wcag22aa tags to runOnly)
+  'focus-appearance':   '2.4.13',
+  'focus-visible':      '2.4.7',
+  'target-size':        '2.5.8',   // already mapped, kept explicit for WCAG 2.2 tag
+  'duplicate-id':       '4.1.1',   // still runs in axe 4.9+ under wcag2a-obsolete tag
 };
 
 /**

@@ -206,9 +206,13 @@ _REPORT_COLUMNS = [
     "contrast_violations_count",
     "wcag_1_1_1_status",
     "wcag_4_1_2_status",
+    "wcag_1_4_5_status",
+    "wcag_1_4_11_status",
     "overall_status",
     "wcag_1_1_1_reason",
     "wcag_4_1_2_reason",
+    "wcag_1_4_5_reason",
+    "wcag_1_4_11_reason",
     "screenshot_path",
 ]
 
@@ -246,6 +250,15 @@ def _ocr_for_file(
             texts = [d.text for d in r.detections if d.text and d.text.strip()]
             return r.has_text, texts, r.contrast_violations_count
     return False, [], 0
+
+
+def _ocr_result_for_file(ocr_results: list, filename: str):
+    """Return the full TextDetectionResult for a given filename, or None."""
+    target = Path(filename).name.lower()
+    for r in ocr_results:
+        if Path(r.filename).name.lower() == target:
+            return r
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -431,6 +444,112 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
 
 
 # ---------------------------------------------------------------------------
+# WCAG 1.4.5 check — Images of Text
+# ---------------------------------------------------------------------------
+
+
+def _check_1_4_5(
+    classification: str,
+    sub_type: str,
+    is_logo: bool,
+    has_ocr_text: bool,
+) -> tuple[bool | None, str]:
+    """
+    WCAG 1.4.5: Images of Text — if an image contains text, real text should
+    be used instead unless the presentation is essential (logos are exempt).
+
+    Returns:
+        (True, reason)   — PASS: no text detected, or logo exception applies
+        (False, reason)  — FAIL: text detected in non-logo image
+        (None, reason)   — N/A: decorative images are exempt
+    """
+    if classification == "decorative":
+        return None, "N/A — decorative images are not evaluated for 1.4.5"
+
+    # Logo / logotype exception (WCAG Note: logotypes are considered essential)
+    if is_logo or sub_type == "logos":
+        return (
+            True,
+            "PASS [1.4.5] Logo/logotype exception — customised branding text is exempt",
+        )
+
+    if not has_ocr_text:
+        return True, "PASS [1.4.5] No text detected in image"
+
+    # Text detected in a non-logo image — violation
+    return (
+        False,
+        "FAIL [1.4.5] Image contains text — replace with real CSS-styled text. "
+        "Only logos and essential-presentation images are exempt.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# WCAG 1.4.11 check — Non-text Contrast
+# ---------------------------------------------------------------------------
+
+
+def _check_1_4_11(
+    is_button: bool,
+    is_icon: bool,
+    sub_type: str,
+    has_ocr_text: bool,
+    ocr_result,
+) -> tuple[bool | None, str]:
+    """
+    WCAG 1.4.11: Non-text Contrast — UI components (buttons, icons used as
+    controls) must have a contrast ratio of at least 3:1 against adjacent colours.
+
+    We repurpose the OCR contrast data for button/icon images: if EasyOCR
+    detected text inside the image the measured contrast_ratio is used as a
+    proxy for the component's visual boundary contrast.
+
+    Returns:
+        (True, reason)   — PASS: meets 3:1 minimum
+        (False, reason)  — FAIL: below 3:1 minimum
+        (None, reason)   — N/A/INCOMPLETE: not a UI component, or no contrast data
+    """
+    is_ui_component = is_button or is_icon or sub_type in ("buttons", "icons")
+    if not is_ui_component:
+        return None, "N/A — 1.4.11 applies to UI components (buttons/icons)"
+
+    if not has_ocr_text or ocr_result is None:
+        return (
+            None,
+            "INCOMPLETE [1.4.11] No OCR contrast data available — manual check required",
+        )
+
+    # Find the minimum contrast ratio across all detected regions
+    min_ratio: float | None = None
+    for det in ocr_result.detections:
+        ci = det.contrast_info or {}
+        compliance = ci.get("compliance") or {}
+        ratio = compliance.get("contrast_ratio")
+        if ratio is not None:
+            if min_ratio is None or ratio < min_ratio:
+                min_ratio = ratio
+
+    if min_ratio is None:
+        return (
+            None,
+            "INCOMPLETE [1.4.11] Contrast data unavailable — manual check required",
+        )
+
+    ratio_str = f"{min_ratio:.2f}:1"
+    if min_ratio < 3.0:
+        return (
+            False,
+            f"FAIL [1.4.11] Non-text contrast ratio {ratio_str} is below the "
+            f"3:1 minimum required for UI components.",
+        )
+
+    return (
+        True,
+        f"PASS [1.4.11] Non-text contrast ratio {ratio_str} meets the 3:1 minimum.",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main auditor class
 # ---------------------------------------------------------------------------
 
@@ -486,6 +605,7 @@ class AltTextAccessibilityAuditor:
                 ocr_results, filename
             )
             detected_joined = " | ".join(detected_texts)
+            ocr_result = _ocr_result_for_file(ocr_results, filename)
 
             # ── Determine functional sub_type for WCAG checks ────────────
             # sub_type from classifier: "logos" | "icons" | "buttons" | "images"
@@ -548,10 +668,24 @@ class AltTextAccessibilityAuditor:
                     else "FAIL [1.1.1] Alt empty/generic (unknown classification)"
                 )
 
-            # Overall: all applicable checks must pass
+            # ── WCAG 1.4.5 (Images of Text) ──────────────────────────────
+            wcag_1_4_5_pass, wcag_1_4_5_reason = _check_1_4_5(
+                classification, sub_type, is_logo, has_ocr_text
+            )
+
+            # ── WCAG 1.4.11 (Non-text Contrast) ─────────────────────────
+            wcag_1_4_11_pass, wcag_1_4_11_reason = _check_1_4_11(
+                is_button, is_icon, sub_type, has_ocr_text, ocr_result
+            )
+
+            # Overall: all definitive checks must pass (None = N/A, skip)
             checks = [wcag_1_1_1_pass]
             if wcag_4_1_2_pass is not None:
                 checks.append(wcag_4_1_2_pass)
+            if wcag_1_4_5_pass is False:
+                checks.append(False)
+            if wcag_1_4_11_pass is False:
+                checks.append(False)
             overall = "PASSED" if all(checks) else "FAILED"
 
             records.append(
@@ -577,9 +711,21 @@ class AltTextAccessibilityAuditor:
                         if wcag_4_1_2_pass is True
                         else "FAILED" if wcag_4_1_2_pass is False else "N/A"
                     ),
+                    "wcag_1_4_5_status": (
+                        "PASSED"
+                        if wcag_1_4_5_pass is True
+                        else "FAILED" if wcag_1_4_5_pass is False else "N/A"
+                    ),
+                    "wcag_1_4_11_status": (
+                        "PASSED"
+                        if wcag_1_4_11_pass is True
+                        else "FAILED" if wcag_1_4_11_pass is False else "INCOMPLETE"
+                    ),
                     "overall_status": overall,
                     "wcag_1_1_1_reason": wcag_1_1_1_reason,
                     "wcag_4_1_2_reason": wcag_4_1_2_reason,
+                    "wcag_1_4_5_reason": wcag_1_4_5_reason,
+                    "wcag_1_4_11_reason": wcag_1_4_11_reason,
                     "screenshot_path": screenshot_path,
                 }
             )
@@ -625,16 +771,28 @@ class AltTextAccessibilityAuditor:
         # Per-criterion
         wcag_111 = [r for r in records if r["wcag_1_1_1_status"] != "N/A"]
         wcag_412 = [r for r in records if r["wcag_4_1_2_status"] != "N/A"]
+        wcag_145 = [r for r in records if r.get("wcag_1_4_5_status") not in ("N/A", None)]
+        wcag_1411 = [r for r in records if r.get("wcag_1_4_11_status") not in ("N/A", "INCOMPLETE", None)]
         p111 = sum(1 for r in wcag_111 if r["wcag_1_1_1_status"] == "PASSED")
         f111 = sum(1 for r in wcag_111 if r["wcag_1_1_1_status"] == "FAILED")
         p412 = sum(1 for r in wcag_412 if r["wcag_4_1_2_status"] == "PASSED")
         f412 = sum(1 for r in wcag_412 if r["wcag_4_1_2_status"] == "FAILED")
+        p145 = sum(1 for r in wcag_145 if r.get("wcag_1_4_5_status") == "PASSED")
+        f145 = sum(1 for r in wcag_145 if r.get("wcag_1_4_5_status") == "FAILED")
+        p1411 = sum(1 for r in wcag_1411 if r.get("wcag_1_4_11_status") == "PASSED")
+        f1411 = sum(1 for r in wcag_1411 if r.get("wcag_1_4_11_status") == "FAILED")
 
         print(
             f"  WCAG 1.1.1 (Non-text Content) : {p111} PASSED / {f111} FAILED ({len(wcag_111)} applicable)"
         )
         print(
             f"  WCAG 4.1.2 (Name/Role/Value)  : {p412} PASSED / {f412} FAILED ({len(wcag_412)} applicable)"
+        )
+        print(
+            f"  WCAG 1.4.5 (Images of Text)   : {p145} PASSED / {f145} FAILED ({len(wcag_145)} applicable)"
+        )
+        print(
+            f"  WCAG 1.4.11 (Non-text Contr.) : {p1411} PASSED / {f1411} FAILED ({len(wcag_1411)} with data)"
         )
         print()
 
