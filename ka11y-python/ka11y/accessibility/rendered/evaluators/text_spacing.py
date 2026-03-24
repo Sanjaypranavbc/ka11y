@@ -32,7 +32,11 @@ _TEXT_TAGS = {
 
 def _selector_key(el: ElementSnapshot) -> str:
     """Stable cross-scenario identity key for an element."""
-    return f"{el.tag}#{el.element_id}" if el.element_id else f"{el.tag}:{el.text[:40]}"
+    if el.element_id:
+        return f"{el.tag}#{el.element_id}"
+    if el.selector:
+        return el.selector
+    return f"{el.tag}:{el.text[:40]}"
 
 
 def evaluate(

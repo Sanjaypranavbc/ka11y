@@ -12,13 +12,14 @@ const swaggerSpec          = require('./src/config/swagger.config');
 const swaggerUi            = require('swagger-ui-express');
 
 const axe                  = require('axe-core');
+const wcagCriteriaNames    = require('./src/utils/wcagCriteriaNames');
 const accessibilityService = new AccessibilityService(
   require('puppeteer'),
   require('path').resolve(__dirname, 'node_modules/axe-core/axe.min.js'),
   logger,
   config
 );
-const rulesService = new RulesService(axe, logger);
+const rulesService = new RulesService(axe, wcagCriteriaNames, logger);
 
 // 3. Controllers
 const HealthController        = require('./src/controllers/health.controller');
@@ -81,8 +82,8 @@ app.post(`${API_V1}/analyze-accessibility`, (req, res) => accessibilityControlle
 app.post(`${API_V1}/analyse-url`,           (req, res) => accessibilityController.analyseUrl(req, res));
 app.post(`${API_V1}/analyse-url-flat`,      (req, res) => accessibilityController.analyseUrlFlat(req, res));
 app.get( `${API_V1}/rules`,                 (req, res) => rulesController.getRules(req, res));
-app.get( `${API_V1}/rules-guide`,           (req, res) => rulesGuideController.getAllRules(req, res));
-app.get( `${API_V1}/rules-guide/:ruleId`,   (req, res) => rulesGuideController.getRuleById(req, res));
+app.get( `${API_V1}/rules-guide`,           (req, res) => rulesGuideController.getAll(req, res));
+app.get( `${API_V1}/rules-guide/:ruleId`,   (req, res) => rulesGuideController.getOne(req, res));
 
 // Swagger UI page
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));

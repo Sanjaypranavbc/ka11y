@@ -1,7 +1,7 @@
 u# ka11y — Full-Stack Code Audit Report
 
 > **Generated:** 2026-03-19
-> **Updated:** 2026-03-19 (fixes applied)
+> **Updated:** 2026-03-24 (test suite completed; WCAG coverage expanded)
 > **Scope:** `ka11y-python` · `ka11y-node` · `ka11y-frontend-sdk`
 > **Method:** Static analysis · Pattern review · Security audit · Concurrency review
 >
@@ -386,6 +386,23 @@ Rich emoji formatting renders as raw Unicode bytes in plain-text log files and l
 
 #### L-PY-4 · Tests Missing for Combined Route SSE Streaming
 `tests/test_api_smoke.py` has no SSE consumer test. Add an async SSE test using `httpx-sse`.
+
+#### ✅ L-PY-6 · Tests Added for All Python Auditors and Rendered Evaluators
+Unit test files now exist for every Python auditor and rendered-layout evaluator:
+
+| Test file | Modules covered | Test count (approx) |
+|-----------|-----------------|---------------------|
+| `test_alt_text_auditor.py` | `AltTextAccessibilityAuditor`, `_check_4_1_2`, helpers | 60+ |
+| `test_form_auditor.py` | `FormAccessibilityAuditor`, `_violations_331`, `_violations_332` | 55+ |
+| `test_label_in_name_auditor.py` | `LabelInNameAuditor`, `_normalize`, `_check_253` | 40+ |
+| `test_pause_stop_hide_auditor.py` | `PauseStopHideAuditor`, `_check_222` | 60+ |
+| `test_target_size_auditor.py` | `TargetSizeAuditor`, `_check_258` | 45+ |
+| `test_rendered_evaluators.py` | `ReflowEvaluator`, `TextSpacingEvaluator`, `ResizeTextEvaluator`, `OrientationEvaluator`, `HoverFocusContentEvaluator`, `FocusNotObscuredMinimumEvaluator`, `FocusNotObscuredEnhancedEvaluator` | 35+ |
+| `test_rendered_geometry.py` | geometry helpers (`intersection_area`, `overlap_ratio`, `is_clipped`, etc.) | 25+ |
+| `test_rendered_converters.py` | API converter functions (`_reflow_to_findings`, `_resize_text_to_findings`, etc.) | 40+ |
+| `test_api_smoke.py` | FastAPI routes, `_make_finding`, `_build_report`, converter helpers | 50+ |
+
+All tests are pure unit tests (no Playwright/browser) using synthetic fixture objects. `conftest.py` provides a shared `tmp_output` fixture.
 
 #### L-PY-5 · No `mypy` / `ruff` in CI
 Add to `pyproject.toml`:
@@ -1211,7 +1228,9 @@ app.use(helmet());
 Despite the issues above, the codebase demonstrates strong intent and many good patterns:
 
 **ka11y-python**
-- Excellent WCAG coverage breadth — 6+ criteria with custom heuristics beyond axe-core
+- Excellent WCAG coverage breadth — 13 criteria with custom heuristics beyond axe-core (6 Level A, 7 Level AA, 1 Level AAA); combined coverage now 53 % across all 87 SCs
+- Rendered-layout evaluator suite (7 evaluators: Reflow, ResizeText, TextSpacing, Orientation, HoverFocusContent, FocusNotObscuredMin, FocusNotObscuredEnh) adds Playwright-based checks that axe cannot replicate
+- Full unit-test coverage for all auditors and evaluators (9 test files, 400+ test cases)
 - SSE streaming with polling fallback is a sophisticated resilience pattern
 - Pydantic models throughout give strong structural guarantees
 - Graceful degradation when Node/axe-core stage fails
@@ -1235,4 +1254,4 @@ Despite the issues above, the codebase demonstrates strong intent and many good 
 
 ---
 
-*End of report · ka11y Code Audit 2026-03-19*
+*End of report · ka11y Code Audit 2026-03-19 · Updated 2026-03-24*

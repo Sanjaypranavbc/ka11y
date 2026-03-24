@@ -130,6 +130,7 @@ const RULE_SC_FALLBACK = {
   // Focus / keyboard
   'focus-order-semantics':       '2.4.3',
   'scrollable-region-focusable': '2.1.1',
+  'accesskeys':                  '2.1.1',
 
   // Tables
   'table-duplicate-name': '1.3.1',
@@ -137,6 +138,11 @@ const RULE_SC_FALLBACK = {
   // ARIA field names
   'aria-input-field-name':  '4.1.2',
   'aria-toggle-field-name': '4.1.2',
+
+  // Additional best-practice rules with clear WCAG mapping
+  'aria-dialog-name':    '4.1.2',
+  'aria-treeitem-name':  '4.1.2',
+  'skip-link':           '2.4.1',
 };
 
 /**

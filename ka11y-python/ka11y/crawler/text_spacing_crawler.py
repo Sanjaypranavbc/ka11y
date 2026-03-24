@@ -51,27 +51,10 @@ class TextSpacingData(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class AsyncTextSpacingCrawler:
-
-    INJECT_SPACING_JS = r"""() => {
-        if (document.getElementById("wcag-text-spacing-test")) return;
-
-        const style = document.createElement("style");
-        style.id = "wcag-text-spacing-test";
-
-        style.innerHTML = `
-            * {
-                line-height: 1.5 !important;
-                letter-spacing: 0.12em !important;
-                word-spacing: 0.16em !important;
-            }
-
-            p, div, section, article {
-                margin-bottom: 2em !important;
-            }
-        `;
-
-        document.head.appendChild(style);
-    }"""
+    # This crawler performs STATIC structural analysis only (fixed-height + overflow
+    # detection without applying spacing overrides).  The rendered spacing-override
+    # test (applying WCAG 1.4.12 CSS and diffing snapshots) is handled by
+    # RenderedLayoutCrawler + evaluators/text_spacing.py.
 
     EXTRACT_JS = r"""() => {
     const results = [];

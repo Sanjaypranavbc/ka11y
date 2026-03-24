@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { AuditViolation } from "@/types/audit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [scFilter, setScFilter] = useState<string[]>([]);
   const [modalData, setModalData] = useState<AuditViolation | null>(null);
+  const [visibleCount, setVisibleCount] = useState(50);
 
   const allSeverities = ["critical", "high", "medium", "low"];
   const allSources = ["axe", "python"];
@@ -55,6 +56,7 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
 
   const toggleFilter = (arr: string[], val: string, setter: (v: string[]) => void) => {
     setter(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
+    resetVisibleCount();
   };
 
   const clearFilters = () => {
@@ -62,7 +64,10 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
     setSeverityFilter([]);
     setSourceFilter([]);
     setScFilter([]);
+    setVisibleCount(50);
   };
+
+  const resetVisibleCount = useCallback(() => setVisibleCount(50), []);
 
   const hasFilters = search || severityFilter.length || sourceFilter.length || scFilter.length;
 
@@ -72,7 +77,7 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
         <Input
           placeholder="Search reason or HTML..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); resetVisibleCount(); }}
           className="w-64 h-8 text-xs"
         />
 
@@ -110,9 +115,9 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
           ))}
         </div>
 
-        {/* WCAG SC filter - show as scrollable row */}
+        {/* WCAG SC filter - show all */}
         <div role="group" aria-label="Filter by WCAG success criterion" className="flex gap-1 flex-wrap">
-          {allScs.slice(0, 8).map((sc) => (
+          {allScs.map((sc) => (
             <button
               key={sc}
               onClick={() => toggleFilter(scFilter, sc, setScFilter)}
@@ -135,7 +140,8 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Showing {filtered.length} of {violations.length} violations
+        Showing {Math.min(visibleCount, filtered.length)} of {filtered.length} violations
+        {filtered.length !== violations.length && ` (${violations.length} total)`}
       </p>
 
       <div className="rounded-lg border border-border overflow-hidden">
@@ -153,7 +159,7 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.slice(0, 50).map((v, i) => (
+            {filtered.slice(0, visibleCount).map((v, i) => (
               <TableRow key={i} className="hover:bg-muted/30">
                 <TableCell>
                   <Badge className={cn("text-[10px]", v.severity ? severityColors[v.severity] : "bg-muted text-muted-foreground")}>{v.severity ?? "—"}</Badge>
@@ -191,6 +197,14 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
           </TableBody>
         </Table>
       </div>
+
+      {visibleCount < filtered.length && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" size="sm" className="text-xs" onClick={() => setVisibleCount((n) => n + 50)}>
+            Show more ({filtered.length - visibleCount} remaining)
+          </Button>
+        </div>
+      )}
 
       {modalData && (
         <SuggestedFixModal
