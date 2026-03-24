@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, HttpUrl
 
+
 class PipelineRequest(BaseModel):
     url: HttpUrl = "https://www.kao.com/global/en/"
     max_depth: int = 0
@@ -11,6 +12,7 @@ class PipelineRequest(BaseModel):
     run_pause_stop_hide_audit: bool = True
     run_target_size_audit: bool = True
     run_text_spacing_audit: bool = True
+
 
 class PipelineResponse(BaseModel):
     status: str

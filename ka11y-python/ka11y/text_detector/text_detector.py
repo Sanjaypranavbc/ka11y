@@ -234,7 +234,9 @@ class OCRPreprocessing:
                                     l1 = max(fg_lum, bg_lum)
                                     l2 = min(fg_lum, bg_lum)
                                     ratio = (l1 + 0.05) / (l2 + 0.05)
-                                    compliance = contrast_analyser.check_wcag_compliance(ratio)
+                                    compliance = (
+                                        contrast_analyser.check_wcag_compliance(ratio)
+                                    )
                                     contrast_checks.append(
                                         {
                                             "bg_color": bg,
@@ -251,7 +253,11 @@ class OCRPreprocessing:
                                 l1 = max(fg_lum, dom_bg_lum)
                                 l2 = min(fg_lum, dom_bg_lum)
                                 dominant_ratio = round((l1 + 0.05) / (l2 + 0.05), 2)
-                                dominant_compliance = contrast_analyser.check_wcag_compliance(dominant_ratio)
+                                dominant_compliance = (
+                                    contrast_analyser.check_wcag_compliance(
+                                        dominant_ratio
+                                    )
+                                )
 
                                 color_info = {
                                     "foreground": fg_color,
@@ -277,12 +283,20 @@ class OCRPreprocessing:
                         except Exception as cp_err:
                             logger.warning(f"Color picker failed for region: {cp_err}")
 
-                    if not violations and contrast_info and not contrast_info.get("error"):
+                    if (
+                        not violations
+                        and contrast_info
+                        and not contrast_info.get("error")
+                    ):
                         if "compliance" in contrast_info:
                             compliance = contrast_info["compliance"]
                             if not compliance.get("AA_normal", False):
-                                fg_rgb = contrast_info.get("foreground_color", (0, 0, 0))
-                                bg_rgb = contrast_info.get("background_color", (255, 255, 255))
+                                fg_rgb = contrast_info.get(
+                                    "foreground_color", (0, 0, 0)
+                                )
+                                bg_rgb = contrast_info.get(
+                                    "background_color", (255, 255, 255)
+                                )
                                 bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
                                 violations.append(f"Fails AA Normal vs BG {bg_hex}")
 

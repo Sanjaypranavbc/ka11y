@@ -24,7 +24,9 @@ def _is_text_relevant(item: TextSpacingData):
 
     return True
 
+
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _check_1412(item: TextSpacingData):
 
@@ -44,7 +46,9 @@ def _check_1412(item: TextSpacingData):
 
     return "PASSED", ""
 
+
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TextSpacingAuditor:
 

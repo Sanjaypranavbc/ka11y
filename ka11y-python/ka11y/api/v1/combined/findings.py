@@ -335,7 +335,6 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     return findings
 
 
-
 def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     """Convert image-audit records to WCAG 1.4.5 (Images of Text) findings."""
     findings: List[Dict] = []
@@ -358,7 +357,8 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     rule_id="python_1_4_5_images_of_text",
                     wcag_sc="1.4.5",
                     status="fail",
-                    reason=reason or "Image contains text — replace with real CSS-styled text.",
+                    reason=reason
+                    or "Image contains text — replace with real CSS-styled text.",
                     severity=sev,
                     element_html=element_html,
                     element_id=element_id,
@@ -373,7 +373,8 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     rule_id="python_1_4_5_images_of_text",
                     wcag_sc="1.4.5",
                     status="pass",
-                    reason=reason or "Image does not contain text (or logo exception applies).",
+                    reason=reason
+                    or "Image does not contain text (or logo exception applies).",
                     severity=None,
                     page_url=r.get("url") or page_url,
                 )
@@ -403,7 +404,8 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     rule_id="python_1_4_11_non_text_contrast",
                     wcag_sc="1.4.11",
                     status="fail",
-                    reason=reason or "UI component contrast ratio is below 3:1 minimum.",
+                    reason=reason
+                    or "UI component contrast ratio is below 3:1 minimum.",
                     severity=sev,
                     element_html=element_html,
                     element_id=element_id,
@@ -446,7 +448,8 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                         rule_id=rule_id,
                         wcag_sc=sc,
                         status="fail",
-                        reason=r.get(violation_key) or f"Form field violates WCAG {sc}.",
+                        reason=r.get(violation_key)
+                        or f"Form field violates WCAG {sc}.",
                         severity=_PYTHON_SEVERITY[sc],
                         element_html=html,
                         element_id=eid,
@@ -647,7 +650,8 @@ def _rendered_rule_to_findings(
 
 def _resize_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     return _rendered_rule_to_findings(
-        records, page_url,
+        records,
+        page_url,
         rule_key="wcag_1_4_4",
         rule_id="python_1_4_4_resize_text",
         wcag_sc="1.4.4",
@@ -657,13 +661,13 @@ def _resize_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
 
 def _reflow_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     return _rendered_rule_to_findings(
-        records, page_url,
+        records,
+        page_url,
         rule_key="wcag_1_4_10",
         rule_id="python_1_4_10_reflow",
         wcag_sc="1.4.10",
         pass_reason="Content reflows without horizontal scrolling at 320 CSS px.",
     )
-
 
 
 def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
@@ -697,7 +701,8 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     rule_id="python_1_4_12_text_spacing_static",
                     wcag_sc="1.4.12",
                     status="needs_review",
-                    reason=violation or "Fixed height with overflow hidden may clip text when spacing increases.",
+                    reason=violation
+                    or "Fixed height with overflow hidden may clip text when spacing increases.",
                     severity=sev,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -720,9 +725,12 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
     return findings
 
 
-def _rendered_text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+def _rendered_text_spacing_to_findings(
+    records: List[Dict], page_url: str
+) -> List[Dict]:
     return _rendered_rule_to_findings(
-        records, page_url,
+        records,
+        page_url,
         rule_key="wcag_1_4_12",
         rule_id="python_1_4_12_text_spacing_rendered",
         wcag_sc="1.4.12",
@@ -730,10 +738,10 @@ def _rendered_text_spacing_to_findings(records: List[Dict], page_url: str) -> Li
     )
 
 
-
 def _orientation_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     return _rendered_rule_to_findings(
-        records, page_url,
+        records,
+        page_url,
         rule_key="wcag_1_3_4",
         rule_id="python_1_3_4_orientation",
         wcag_sc="1.3.4",
@@ -743,7 +751,8 @@ def _orientation_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
 
 def _hover_focus_content_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     return _rendered_rule_to_findings(
-        records, page_url,
+        records,
+        page_url,
         rule_key="wcag_1_4_13",
         rule_id="python_1_4_13_hover_or_focus_content",
         wcag_sc="1.4.13",
@@ -751,9 +760,12 @@ def _hover_focus_content_to_findings(records: List[Dict], page_url: str) -> List
     )
 
 
-def _focus_not_obscured_min_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+def _focus_not_obscured_min_to_findings(
+    records: List[Dict], page_url: str
+) -> List[Dict]:
     return _rendered_rule_to_findings(
-        records, page_url,
+        records,
+        page_url,
         rule_key="wcag_2_4_11",
         rule_id="python_2_4_11_focus_not_obscured_minimum",
         wcag_sc="2.4.11",
@@ -761,9 +773,12 @@ def _focus_not_obscured_min_to_findings(records: List[Dict], page_url: str) -> L
     )
 
 
-def _focus_not_obscured_enh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+def _focus_not_obscured_enh_to_findings(
+    records: List[Dict], page_url: str
+) -> List[Dict]:
     return _rendered_rule_to_findings(
-        records, page_url,
+        records,
+        page_url,
         rule_key="wcag_2_4_12",
         rule_id="python_2_4_12_focus_not_obscured_enhanced",
         wcag_sc="2.4.12",

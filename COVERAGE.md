@@ -196,7 +196,9 @@ for future Python auditors:
 ### Node.js (`ka11y-node`) — axe-core + Custom Puppeteer Checks
 
 Covers **37 unique WCAG SCs** (23 Level A + 14 Level AA) through axe-core v4.9+ and 15 custom Puppeteer check modules.
-Results are merged and returned grouped by `successCriteriaId` with `fail / pass / incomplete` status per rule.
+Results are merged in both response shapes:
+- grouped APIs (`/api/v1/analyze-accessibility`, `/api/v1/analyse-url`) return `fail / pass / incomplete` per rule
+- flat API (`/api/v1/analyse-url-flat`) now includes custom-check findings with `fail / pass / needs_review` status (custom `incomplete` is normalised to `needs_review`) and applies WCAG level filtering (`A/AA/AAA`).
 
 **Level A SCs (23):** 1.1.1, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2
 
@@ -224,6 +226,12 @@ Results are merged and returned grouped by `successCriteriaId` with `fail / pass
 | `error-prevention.check.js` | 3.3.4 | Detect financial/legal/destructive forms; check for review step, confirmation checkbox, or preview button |
 | `accessible-auth.check.js` | 3.3.8 | Detect auth forms; flag CAPTCHA without audio alternative, paste-blocked password fields, cognitive puzzles |
 
+**Current backdrops (Node custom checks):**
+
+1. Most custom checks are rule-level heuristics, so flat findings currently return `element: null` (no stable CSS target/HTML snippet).
+2. Interactive checks (`on-focus`, `on-input`, `keyboard-trap`, `focus-visible`) can alter page state and may stop early after navigation for safety.
+3. If a custom check throws at runtime, it is logged and skipped; no explicit "check execution failed" finding is emitted yet.
+
 **Node.js future possibilities (custom Puppeteer):**
 
 | SC | Name | Approach |
@@ -233,4 +241,4 @@ Results are merged and returned grouped by `successCriteriaId` with `fail / pass
 
 ---
 
-*Generated: 2026-03-17 · Updated: 2026-03-24 (axe v4.9 audit + 15 custom Puppeteer checks + Python 1.4.3/1.4.5/1.4.11 image pipeline; +7 new Node checks: 2.1.4, 2.5.2, 2.5.7, 3.2.6, 3.3.3, 3.3.4, 3.3.8) · WCAG 2.2 (W3C Recommendation 2023-10-05)*
+*Generated: 2026-03-17 · Updated: 2026-03-24 (axe v4.9 audit + 15 custom Puppeteer checks + Python 1.4.3/1.4.5/1.4.11 image pipeline; +7 new Node checks: 2.1.4, 2.5.2, 2.5.7, 3.2.6, 3.3.3, 3.3.4, 3.3.8; flat endpoint now includes custom-check findings) · WCAG 2.2 (W3C Recommendation 2023-10-05)*

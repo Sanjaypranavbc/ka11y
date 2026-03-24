@@ -230,16 +230,25 @@ class RenderedLayoutCrawler:
         ) = await asyncio.gather(
             self._snapshot_at_viewport(_DESKTOP_W, _DESKTOP_H, "baseline", browser),
             self._snapshot_at_viewport(_REFLOW_W, _REFLOW_H, "reflow_320", browser),
-            self._snapshot_with_css(_DESKTOP_W, _DESKTOP_H, "text_spacing_override",
-                                     browser, css=_TEXT_SPACING_CSS),
-            self._snapshot_at_viewport(_DESKTOP_W, _DESKTOP_H,
-                                        "text_spacing_baseline", browser),
-            self._snapshot_with_js(_DESKTOP_W, _DESKTOP_H, "resize_text_200",
-                                    browser, js=_RESIZE_TEXT_JS),
-            self._snapshot_at_viewport(_PORTRAIT_W, _PORTRAIT_H,
-                                        "orientation_portrait", browser),
-            self._snapshot_at_viewport(_LANDSCAPE_W, _LANDSCAPE_H,
-                                        "orientation_landscape", browser),
+            self._snapshot_with_css(
+                _DESKTOP_W,
+                _DESKTOP_H,
+                "text_spacing_override",
+                browser,
+                css=_TEXT_SPACING_CSS,
+            ),
+            self._snapshot_at_viewport(
+                _DESKTOP_W, _DESKTOP_H, "text_spacing_baseline", browser
+            ),
+            self._snapshot_with_js(
+                _DESKTOP_W, _DESKTOP_H, "resize_text_200", browser, js=_RESIZE_TEXT_JS
+            ),
+            self._snapshot_at_viewport(
+                _PORTRAIT_W, _PORTRAIT_H, "orientation_portrait", browser
+            ),
+            self._snapshot_at_viewport(
+                _LANDSCAPE_W, _LANDSCAPE_H, "orientation_landscape", browser
+            ),
             return_exceptions=True,
         )
 
@@ -251,14 +260,18 @@ class RenderedLayoutCrawler:
             return fallback if isinstance(val, Exception) else val
 
         empty_snap = PageSnapshot(
-            scenario="empty", page_url=self.base_url,
-            viewport_width=_DESKTOP_W, viewport_height=_DESKTOP_H,
+            scenario="empty",
+            page_url=self.base_url,
+            viewport_width=_DESKTOP_W,
+            viewport_height=_DESKTOP_H,
         )
 
         return {
             "baseline": _safe(baseline_snap, empty_snap).model_dump(),
             "reflow_320": _safe(snap_320, empty_snap).model_dump(),
-            "text_spacing_baseline": _safe(snap_text_spacing_baseline, empty_snap).model_dump(),
+            "text_spacing_baseline": _safe(
+                snap_text_spacing_baseline, empty_snap
+            ).model_dump(),
             "text_spacing_override": _safe(snap_text_spacing, empty_snap).model_dump(),
             "resize_text_200": _safe(snap_resize, empty_snap).model_dump(),
             "orientation_portrait": _safe(snap_portrait, empty_snap).model_dump(),
@@ -269,7 +282,9 @@ class RenderedLayoutCrawler:
 
     # ── Snapshot helpers ───────────────────────────────────────────────────────
 
-    async def _make_context(self, browser: Browser, width: int, height: int) -> BrowserContext:
+    async def _make_context(
+        self, browser: Browser, width: int, height: int
+    ) -> BrowserContext:
         return await browser.new_context(
             viewport={"width": width, "height": height},
             ignore_https_errors=True,
@@ -465,7 +480,7 @@ class RenderedLayoutCrawler:
         try:
             # Collect baseline visible regions count
             baseline_count = await page.evaluate(
-                "() => document.querySelectorAll('[aria-expanded=\"true\"], "
+                '() => document.querySelectorAll(\'[aria-expanded="true"], '
                 ".tooltip.show, .popover.show, [data-tooltip]:not([hidden])').length"
             )
 
@@ -475,7 +490,7 @@ class RenderedLayoutCrawler:
 
             # Check if new content appeared
             after_count = await page.evaluate(
-                "() => document.querySelectorAll('[aria-expanded=\"true\"], "
+                '() => document.querySelectorAll(\'[aria-expanded="true"], '
                 ".tooltip.show, .popover.show, [data-tooltip]:not([hidden])').length"
             )
 
@@ -484,10 +499,12 @@ class RenderedLayoutCrawler:
             if not popup_appeared:
                 # Try focus trigger
                 try:
-                    await page.focus(cand.get("selector", "") or f"#{cand_id}" if cand_id else tag)
+                    await page.focus(
+                        cand.get("selector", "") or f"#{cand_id}" if cand_id else tag
+                    )
                     await asyncio.sleep(0.2)
                     after_focus = await page.evaluate(
-                        "() => document.querySelectorAll('[aria-expanded=\"true\"], "
+                        '() => document.querySelectorAll(\'[aria-expanded="true"], '
                         ".tooltip.show, .popover.show').length"
                     )
                     popup_appeared = int(after_focus) > int(baseline_count)
@@ -498,19 +515,22 @@ class RenderedLayoutCrawler:
                 return None
 
             # Capture popup HTML
-            popup_html = await page.evaluate(
-                "() => {"
-                "  const el = document.querySelector('[aria-expanded=\"true\"] + *, "
-                ".tooltip.show, .popover.show');"
-                "  return el ? el.outerHTML.slice(0, 300) : '';"
-                "}"
-            ) or ""
+            popup_html = (
+                await page.evaluate(
+                    "() => {"
+                    '  const el = document.querySelector(\'[aria-expanded="true"] + *, '
+                    ".tooltip.show, .popover.show');"
+                    "  return el ? el.outerHTML.slice(0, 300) : '';"
+                    "}"
+                )
+                or ""
+            )
 
             # Test: dismiss with Escape
             await page.keyboard.press("Escape")
             await asyncio.sleep(0.15)
             after_esc = await page.evaluate(
-                "() => document.querySelectorAll('[aria-expanded=\"true\"], "
+                '() => document.querySelectorAll(\'[aria-expanded="true"], '
                 ".tooltip.show, .popover.show').length"
             )
             dismissible = int(after_esc) < int(after_count)
@@ -522,7 +542,7 @@ class RenderedLayoutCrawler:
             await page.mouse.move(cx, cy - 60)
             await asyncio.sleep(0.2)
             after_move = await page.evaluate(
-                "() => document.querySelectorAll('[aria-expanded=\"true\"], "
+                '() => document.querySelectorAll(\'[aria-expanded="true"], '
                 ".tooltip.show, .popover.show').length"
             )
             pointer_can_move = int(after_move) > 0
@@ -567,7 +587,11 @@ def run_all_evaluators(
     Reconstruct PageSnapshot / FocusStep objects from raw dict and run all
     evaluators. Returns a flat list of RuleAuditRecord dicts (combined.py format).
     """
-    from ka11y.accessibility.rendered.models import PageSnapshot, FocusStep, HoverInteractionResult
+    from ka11y.accessibility.rendered.models import (
+        PageSnapshot,
+        FocusStep,
+        HoverInteractionResult,
+    )
 
     def _snap(key: str) -> PageSnapshot:
         d = raw.get(key, {})

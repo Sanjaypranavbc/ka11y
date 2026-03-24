@@ -11,7 +11,6 @@ from typing import Any, Dict, Optional, Tuple
 
 from .models import Rect
 
-
 # ── Rectangle helpers ─────────────────────────────────────────────────────────
 
 
@@ -49,10 +48,7 @@ def overlap_ratio(target: Rect, overlay: Rect) -> float:
 def has_intersection(a: Rect, b: Rect) -> bool:
     """Return True if the two rects overlap at all."""
     return (
-        a.left < b.right
-        and a.right > b.left
-        and a.top < b.bottom
-        and a.bottom > b.top
+        a.left < b.right and a.right > b.left and a.top < b.bottom and a.bottom > b.top
     )
 
 

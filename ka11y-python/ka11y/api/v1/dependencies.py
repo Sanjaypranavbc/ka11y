@@ -41,9 +41,10 @@ from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
     PauseStopHideAuditor,
 )
 from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
-from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import TextSpacingAuditor
+from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
+    TextSpacingAuditor,
+)
 from ka11y.api.v1.models.pipeline import PipelineRequest
-
 
 # ── 1. Config ─────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,7 @@ def get_target_size_auditor(
     """TargetSizeAuditor needs the output dir to write its CSV."""
     return TargetSizeAuditor(output_dir=str(output_dir))
 
+
 def get_text_spacing_crawler(
     payload: PipelineRequest,
     output_dir: Path = Depends(get_output_dir),
@@ -198,6 +200,7 @@ def get_text_spacing_crawler(
         output_dir=str(output_dir),
         max_depth=payload.max_depth,
     )
+
 
 def get_text_spacing_auditor(
     output_dir: Path = Depends(get_output_dir),

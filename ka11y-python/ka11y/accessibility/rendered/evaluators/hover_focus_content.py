@@ -72,7 +72,7 @@ def evaluate(
                     status="FAILED" if result.certain else "NEEDS_REVIEW",
                     violation=(
                         f"Hover/focus popup on <{result.trigger_tag}> "
-                        + (f'#{result.trigger_id} ' if result.trigger_id else '')
+                        + (f"#{result.trigger_id} " if result.trigger_id else "")
                         + "may violate WCAG 1.4.13: "
                         + " | ".join(issues)
                     ),
@@ -91,7 +91,7 @@ def evaluate(
                     status="NEEDS_REVIEW",
                     violation=(
                         f"Hover/focus popup detected on <{result.trigger_tag}> "
-                        + (f'#{result.trigger_id} ' if result.trigger_id else '')
+                        + (f"#{result.trigger_id} " if result.trigger_id else "")
                         + "— automated checks passed but manual verification "
                         "of dismissible/hoverable/persistent behaviour is required."
                     ),

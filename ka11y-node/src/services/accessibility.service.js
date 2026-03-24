@@ -1,7 +1,7 @@
 'use strict';
 
 const dns = require('dns').promises;
-const { mapResults, mapResultsFlat } = require('../utils/axeResultMapper');
+const { mapResults, mapResultsFlat, mapCustomResultsFlat } = require('../utils/axeResultMapper');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 
 const _PRIVATE_IP_RE = [
@@ -43,6 +43,13 @@ function _tagsForLevel(level) {
   if (level === 'AA' || level === 'AAA') tags.push('wcag2aa', 'wcag21aa', 'wcag22aa');
   if (level === 'AAA') tags.push('wcag2aaa');
   return tags;
+}
+
+function _allowedLevels(level) {
+  const levels = new Set(['A']);
+  if (level === 'AA' || level === 'AAA') levels.add('AA');
+  if (level === 'AAA') levels.add('AAA');
+  return levels;
 }
 
 /**
@@ -279,7 +286,17 @@ class AccessibilityService {
         `incomplete: ${(axeResults.incomplete || []).length}`
       );
 
-      return mapResultsFlat(axeResults, url);
+      this._logger.info('[flat] Running all custom checks (static + interactive)...');
+      const customResults = await runAll(page);
+      const allCustomFindings = mapCustomResultsFlat(customResults, url);
+      const allowedLevels = _allowedLevels(level);
+      const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
+      this._logger.info(`[flat] Custom checks complete — ${customFindings.length} finding(s).`);
+
+      const findings = [...mapResultsFlat(axeResults, url), ...customFindings];
+      const ORDER = { fail: 0, needs_review: 1, pass: 2 };
+      findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
+      return findings;
     } catch (err) {
       this._logger.error(`[flat] Error: ${err.message}`);
       throw err;

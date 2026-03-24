@@ -22,9 +22,24 @@ from ..heuristics import find_clipped_text_elements
 _RULE_KEY = "wcag_1_4_4"
 
 _TEXT_TAGS = {
-    "p", "span", "h1", "h2", "h3", "h4", "h5", "h6",
-    "li", "dt", "dd", "blockquote", "label", "td", "th",
-    "a", "button", "nav",
+    "p",
+    "span",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "dt",
+    "dd",
+    "blockquote",
+    "label",
+    "td",
+    "th",
+    "a",
+    "button",
+    "nav",
 }
 
 
@@ -60,7 +75,9 @@ def evaluate(
             newly_clipped.append(el)
 
     # Check for horizontal scroll appearing after resize
-    scroll_introduced = resized.has_horizontal_scroll and not baseline.has_horizontal_scroll
+    scroll_introduced = (
+        resized.has_horizontal_scroll and not baseline.has_horizontal_scroll
+    )
 
     if not newly_clipped and not scroll_introduced:
         records.append(

@@ -18,10 +18,10 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Data Model
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TextSpacingData(BaseModel):
     page_url: str
@@ -45,10 +45,10 @@ class TextSpacingData(BaseModel):
     is_clipped: bool
 
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Crawler
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class AsyncTextSpacingCrawler:
     # This crawler performs STATIC structural analysis only (fixed-height + overflow
@@ -122,7 +122,6 @@ class AsyncTextSpacingCrawler:
 
     return results;
 }"""
-
 
     def __init__(self, base_url: str, output_dir: str, max_depth: int = 0):
         self.base_url = base_url

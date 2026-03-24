@@ -296,7 +296,6 @@ async def run_full_pipeline(
     text_spacing_report = None
     text_spacing_summary = None
 
-
     try:
         # ── STEP 1 : Image Crawl ──────────────────────────────────────────
         logger.info("\nSTEP 1: IMAGE CRAWL")

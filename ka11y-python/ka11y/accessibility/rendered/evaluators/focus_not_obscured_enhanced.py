@@ -22,8 +22,8 @@ from ..models import FocusStep, RuleAuditRecord
 
 _RULE_KEY = "wcag_2_4_12"
 
-_FAIL_THRESHOLD = 0.10      # >= 10% → fail
-_REVIEW_THRESHOLD = 0.02    # 2–10% → needs_review
+_FAIL_THRESHOLD = 0.10  # >= 10% → fail
+_REVIEW_THRESHOLD = 0.02  # 2–10% → needs_review
 
 
 def evaluate(focus_steps: List[FocusStep]) -> List[RuleAuditRecord]:

@@ -1,9 +1,11 @@
 from pydantic import BaseModel, HttpUrl
 
+
 class FormsRequest(BaseModel):
     url: HttpUrl = "https://www.kao.com/global/en/"
     max_depth: int = 0
     run_audit: bool = True
+
 
 class FormsResponse(BaseModel):
     status: str

@@ -14,6 +14,7 @@ Levels
   ERROR    →  bold red
   CRITICAL →  bold white on red
 """
+
 from __future__ import annotations
 
 import datetime
@@ -35,13 +36,13 @@ if logging.getLevelName(SUCCESS_LEVEL) == f"Level {SUCCESS_LEVEL}":
 # ── Rich theme — one style per level name ───────────────────────────────────
 _THEME = Theme(
     {
-        "logging.level.debug":    "dim cyan",
-        "logging.level.info":     "bold green",
-        "logging.level.success":  "bold bright_green",
-        "logging.level.warning":  "bold yellow",
-        "logging.level.error":    "bold red",
+        "logging.level.debug": "dim cyan",
+        "logging.level.info": "bold green",
+        "logging.level.success": "bold bright_green",
+        "logging.level.warning": "bold yellow",
+        "logging.level.error": "bold red",
         "logging.level.critical": "bold white on red",
-        "log.time":               "dim white",
+        "log.time": "dim white",
     }
 )
 
@@ -128,6 +129,7 @@ def setup_logger(name: str = "KAC", tag: str | None = None) -> KaLogger:
         except OSError as exc:
             # Print directly — the logger isn't usable yet
             import sys
+
             print(
                 f"[ka11y logger] WARNING: could not create log file at "
                 f"{log_path!r}: {exc}. Logging to console only.",

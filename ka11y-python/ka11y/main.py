@@ -42,9 +42,7 @@ class _RateLimitMiddleware(BaseHTTPMiddleware):
         window_start = now - self._WINDOW_SECONDS
 
         # Evict timestamps outside the sliding window
-        self._timestamps[ip] = [
-            t for t in self._timestamps[ip] if t > window_start
-        ]
+        self._timestamps[ip] = [t for t in self._timestamps[ip] if t > window_start]
 
         if len(self._timestamps[ip]) >= self._MAX_REQUESTS:
             return JSONResponse(
@@ -64,9 +62,12 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
         response.headers.setdefault("X-XSS-Protection", "1; mode=block")
         return response
+
 
 logger = setup_logger(name="KAC", tag="main")
 logger.info("Logger initialized")

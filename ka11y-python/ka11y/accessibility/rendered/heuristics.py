@@ -121,12 +121,8 @@ def compute_obscuration(
             height=float(ov.get("height", 0)),
             top=float(ov.get("top", ov.get("y", 0))),
             left=float(ov.get("left", ov.get("x", 0))),
-            bottom=float(
-                ov.get("bottom", ov.get("y", 0) + ov.get("height", 0))
-            ),
-            right=float(
-                ov.get("right", ov.get("x", 0) + ov.get("width", 0))
-            ),
+            bottom=float(ov.get("bottom", ov.get("y", 0) + ov.get("height", 0))),
+            right=float(ov.get("right", ov.get("x", 0) + ov.get("width", 0))),
         )
         ratio = overlap_ratio(focus_rect, r)
         if ratio > 0.05:

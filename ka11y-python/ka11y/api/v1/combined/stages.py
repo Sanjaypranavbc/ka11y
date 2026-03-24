@@ -25,14 +25,23 @@ from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
 from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
 from ka11y.crawler.moving_content_crawler import MovingContentCrawler
-from ka11y.crawler.rendered_layout_crawler import RenderedLayoutCrawler, run_all_evaluators
+from ka11y.crawler.rendered_layout_crawler import (
+    RenderedLayoutCrawler,
+    run_all_evaluators,
+)
 from ka11y.crawler.target_size_crawler import TargetSizeCrawler
 from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
-from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import LabelInNameAuditor
-from ka11y.accessibility.rules.input_modalities.target_size_auditor import TargetSizeAuditor
-from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import PauseStopHideAuditor
+from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
+    LabelInNameAuditor,
+)
+from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
+    TargetSizeAuditor,
+)
+from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
+    PauseStopHideAuditor,
+)
 from ka11y.config.logger import setup_logger
 
 from .findings import (
@@ -57,7 +66,9 @@ from .findings import (
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
 from ka11y.utils.config_loader import load_config
 from ka11y.api.v1.combined.models import CombinedRequest, JobStatusResponse
-from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import TextSpacingAuditor
+from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
+    TextSpacingAuditor,
+)
 from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
 
 logger = setup_logger(name="KAC", tag="combined")
@@ -267,6 +278,7 @@ async def _stage_target_size(
         _stage_error_and_warn(job_id, "target_size", _exc)
         return []
 
+
 async def _stage_text_spacing(
     url: str,
     output_dir: Path,
@@ -286,9 +298,7 @@ async def _stage_text_spacing(
         findings: List[Dict] = []
         if run_text_spacing_audit:
             auditor = TextSpacingAuditor(output_dir=str(output_dir))
-            records = await asyncio.to_thread(
-                auditor.generate_audit_report, items
-            )
+            records = await asyncio.to_thread(auditor.generate_audit_report, items)
             findings = _crawler_text_spacing_to_findings(records, url)
 
         _stage_complete(job_id, "text_spacing", len(findings))
@@ -322,7 +332,8 @@ async def _stage_rendered_layout_audit(
 
         records = await asyncio.to_thread(
             run_all_evaluators,
-            raw, url,
+            raw,
+            url,
             run_resize_text_audit,
             run_reflow_audit,
             run_text_spacing_audit,
@@ -333,20 +344,39 @@ async def _stage_rendered_layout_audit(
         )
 
         findings: List[Dict] = []
-        findings.extend(_resize_text_to_findings(
-            [r for r in records if "wcag_1_4_4_status" in r], url))
-        findings.extend(_reflow_to_findings(
-            [r for r in records if "wcag_1_4_10_status" in r], url))
-        findings.extend(_rendered_text_spacing_to_findings(
-            [r for r in records if "wcag_1_4_12_status" in r], url))
-        findings.extend(_orientation_to_findings(
-            [r for r in records if "wcag_1_3_4_status" in r], url))
-        findings.extend(_hover_focus_content_to_findings(
-            [r for r in records if "wcag_1_4_13_status" in r], url))
-        findings.extend(_focus_not_obscured_min_to_findings(
-            [r for r in records if "wcag_2_4_11_status" in r], url))
-        findings.extend(_focus_not_obscured_enh_to_findings(
-            [r for r in records if "wcag_2_4_12_status" in r], url))
+        findings.extend(
+            _resize_text_to_findings(
+                [r for r in records if "wcag_1_4_4_status" in r], url
+            )
+        )
+        findings.extend(
+            _reflow_to_findings([r for r in records if "wcag_1_4_10_status" in r], url)
+        )
+        findings.extend(
+            _rendered_text_spacing_to_findings(
+                [r for r in records if "wcag_1_4_12_status" in r], url
+            )
+        )
+        findings.extend(
+            _orientation_to_findings(
+                [r for r in records if "wcag_1_3_4_status" in r], url
+            )
+        )
+        findings.extend(
+            _hover_focus_content_to_findings(
+                [r for r in records if "wcag_1_4_13_status" in r], url
+            )
+        )
+        findings.extend(
+            _focus_not_obscured_min_to_findings(
+                [r for r in records if "wcag_2_4_11_status" in r], url
+            )
+        )
+        findings.extend(
+            _focus_not_obscured_enh_to_findings(
+                [r for r in records if "wcag_2_4_12_status" in r], url
+            )
+        )
 
         _stage_complete(job_id, "rendered_layout_audit", len(findings))
         return findings
@@ -394,17 +424,18 @@ async def _run_python_stages(
         _stage_pause_stop_hide(
             url, output_dir, max_depth, run_pause_stop_hide_audit, job_id
         ),
-        _stage_target_size(
-            url, output_dir, max_depth, run_target_size_audit, job_id
-        ),
-        _stage_text_spacing(
-            url, output_dir, max_depth, run_text_spacing_audit, job_id
-        ),
+        _stage_target_size(url, output_dir, max_depth, run_target_size_audit, job_id),
+        _stage_text_spacing(url, output_dir, max_depth, run_text_spacing_audit, job_id),
         _stage_rendered_layout_audit(
-            url, output_dir,
-            run_resize_text_audit, run_reflow_audit, run_text_spacing_audit,
-            run_orientation_audit, run_hover_focus_content_audit,
-            run_focus_not_obscured_min_audit, run_focus_not_obscured_enh_audit,
+            url,
+            output_dir,
+            run_resize_text_audit,
+            run_reflow_audit,
+            run_text_spacing_audit,
+            run_orientation_audit,
+            run_hover_focus_content_audit,
+            run_focus_not_obscured_min_audit,
+            run_focus_not_obscured_enh_audit,
             job_id,
         ),
         return_exceptions=True,

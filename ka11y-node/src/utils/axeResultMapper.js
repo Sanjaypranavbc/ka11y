@@ -325,6 +325,75 @@ function mapResultsFlat(axeResults, pageUrl = null) {
   return findings;
 }
 
+/**
+ * Converts grouped custom-check output into flat findings.
+ *
+ * Input shape:
+ * [
+ *   {
+ *     successCriteriaId: "2.4.7",
+ *     rules: [{ ruleId, impact, status, reason, helpUrl, ... }]
+ *   }
+ * ]
+ *
+ * Output shape matches mapResultsFlat findings.
+ *
+ * @param {Array<object>} customResults
+ * @param {string} pageUrl
+ * @returns {Array<object>}
+ */
+function mapCustomResultsFlat(customResults, pageUrl = null) {
+  const findings = [];
+
+  const IMPACT_TO_SEVERITY = {
+    critical: 'critical',
+    serious:  'high',
+    moderate: 'medium',
+    minor:    'low',
+  };
+
+  const STATUS_MAP = {
+    fail: 'fail',
+    pass: 'pass',
+    incomplete: 'needs_review',
+  };
+
+  for (const result of (customResults || [])) {
+    const sc = (result && typeof result.successCriteriaId === 'string')
+      ? result.successCriteriaId
+      : null;
+    const rules = Array.isArray(result && result.rules) ? result.rules : [];
+
+    for (const rule of rules) {
+      const rawStatus = (rule && typeof rule.status === 'string')
+        ? rule.status
+        : 'incomplete';
+      const status = STATUS_MAP[rawStatus] || 'needs_review';
+      const impact = rule && rule.impact ? rule.impact : null;
+
+      findings.push({
+        source:         'axe',
+        rule_id:        (rule && rule.ruleId) || 'custom-unknown-rule',
+        wcag_sc:        sc,
+        criterion_name: sc ? (WCAG_NAMES[sc] || null) : null,
+        level:          sc ? (WCAG_LEVEL[sc]  || null) : null,
+        severity:       impact ? (IMPACT_TO_SEVERITY[impact] || null) : null,
+        status:         status,
+        reason:         (rule && rule.reason) || (rule && rule.description) || '',
+        suggested_fix:  sc ? (SUGGESTED_FIX[sc] || null) : null,
+        help_url:       (rule && rule.helpUrl) || null,
+        element:        null,
+      });
+    }
+  }
+
+  // Sort: fail → needs_review → pass
+  const ORDER = { fail: 0, needs_review: 1, pass: 2 };
+  findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
+
+  return findings;
+}
+
 // ── Static metadata tables used by mapResultsFlat ─────────────────────────────
 
 const WCAG_NAMES = {
@@ -440,4 +509,10 @@ const SUGGESTED_FIX = {
   '4.1.3':  "Wrap status messages in a live region: <div role='status' aria-live='polite'>...</div>.",
 };
 
-module.exports = { mapResults, mapResultsFlat, formatSuccessCriterion, extractSuccessCriteriaId };
+module.exports = {
+  mapResults,
+  mapResultsFlat,
+  mapCustomResultsFlat,
+  formatSuccessCriterion,
+  extractSuccessCriteriaId,
+};

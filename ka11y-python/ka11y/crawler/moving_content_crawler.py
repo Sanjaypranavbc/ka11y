@@ -458,9 +458,7 @@ class MovingContentCrawler:
         # Verify animated GIFs — filter out static GIFs to avoid false positives
         # One shared client for all GIF checks (3 s timeout; 50 GIFs ≠ 50 handshakes)
         verified: List[MovingContentData] = []
-        async with httpx.AsyncClient(
-            timeout=3.0, follow_redirects=True
-        ) as gif_client:
+        async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as gif_client:
             for item in self.results:
                 if item.content_type == "animated_gif" and item.src:
                     if not await _is_animated_gif(item.src, gif_client):

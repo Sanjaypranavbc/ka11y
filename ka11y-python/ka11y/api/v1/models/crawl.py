@@ -1,11 +1,13 @@
 from pydantic import BaseModel, HttpUrl
 
+
 class CrawlRequest(BaseModel):
     url: HttpUrl = "https://www.kao.com/global/en/"
     max_depth: int = 0
     run_ocr: bool = True
     run_audit: bool = True
     run_form_audit: bool = True
+
 
 class CrawlResponse(BaseModel):
     status: str

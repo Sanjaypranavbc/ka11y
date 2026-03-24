@@ -30,7 +30,7 @@ def _is_likely_exempt(el_tag: str, el_html: str) -> bool:
     if el_tag in _EXEMPT_TAGS:
         return True
     html_lower = el_html.lower()
-    for marker in ("data-chart", "role=\"grid\"", "role='grid'", "codemirror", "monaco"):
+    for marker in ("data-chart", 'role="grid"', "role='grid'", "codemirror", "monaco"):
         if marker in html_lower:
             return True
     return False
@@ -52,9 +52,11 @@ def evaluate(
     if page_scrolls:
         # Check if the scroll is only due to exempt elements
         overflow_els = elements_with_horizontal_overflow(snapshot_320)
-        exempt_only = all(
-            _is_likely_exempt(el.tag, el.html_snippet) for el in overflow_els
-        ) if overflow_els else False
+        exempt_only = (
+            all(_is_likely_exempt(el.tag, el.html_snippet) for el in overflow_els)
+            if overflow_els
+            else False
+        )
 
         if exempt_only:
             records.append(

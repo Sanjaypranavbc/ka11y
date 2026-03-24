@@ -771,8 +771,14 @@ class AltTextAccessibilityAuditor:
         # Per-criterion
         wcag_111 = [r for r in records if r["wcag_1_1_1_status"] != "N/A"]
         wcag_412 = [r for r in records if r["wcag_4_1_2_status"] != "N/A"]
-        wcag_145 = [r for r in records if r.get("wcag_1_4_5_status") not in ("N/A", None)]
-        wcag_1411 = [r for r in records if r.get("wcag_1_4_11_status") not in ("N/A", "INCOMPLETE", None)]
+        wcag_145 = [
+            r for r in records if r.get("wcag_1_4_5_status") not in ("N/A", None)
+        ]
+        wcag_1411 = [
+            r
+            for r in records
+            if r.get("wcag_1_4_11_status") not in ("N/A", "INCOMPLETE", None)
+        ]
         p111 = sum(1 for r in wcag_111 if r["wcag_1_1_1_status"] == "PASSED")
         f111 = sum(1 for r in wcag_111 if r["wcag_1_1_1_status"] == "FAILED")
         p412 = sum(1 for r in wcag_412 if r["wcag_4_1_2_status"] == "PASSED")

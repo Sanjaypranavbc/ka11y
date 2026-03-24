@@ -24,9 +24,23 @@ from ..heuristics import find_clipped_text_elements
 _RULE_KEY = "wcag_1_4_12"
 
 _TEXT_TAGS = {
-    "p", "span", "h1", "h2", "h3", "h4", "h5", "h6",
-    "li", "dt", "dd", "blockquote", "label", "td", "th",
-    "a", "button",
+    "p",
+    "span",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "dt",
+    "dd",
+    "blockquote",
+    "label",
+    "td",
+    "th",
+    "a",
+    "button",
 }
 
 

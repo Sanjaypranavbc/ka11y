@@ -316,7 +316,9 @@ class AsyncImageCrawler:
             # ── page load ──
             console.print(Rule("[dim]Loading page[/dim]"))
             try:
-                await page.goto(self.base_url, wait_until="domcontentloaded", timeout=30_000)
+                await page.goto(
+                    self.base_url, wait_until="domcontentloaded", timeout=30_000
+                )
                 console.print(f"  [green]✓[/green] Page loaded (domcontentloaded)")
                 logger.info("Page loaded (domcontentloaded strategy)")
             except Exception as e:

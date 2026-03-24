@@ -75,6 +75,7 @@ async def submit_combined_audit(payload: CombinedRequest):
 
     asyncio.create_task(_run_job(job_id, payload))
     from ka11y.config.logger import setup_logger
+
     logger = setup_logger(name="KAC", tag="combined")
     logger.info(f"[combined] job {job_id} submitted for {url}")
     return _jobs[job_id]

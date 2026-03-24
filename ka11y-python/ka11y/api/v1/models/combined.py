@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, HttpUrl
 
+
 class CombinedRequest(BaseModel):
     url: HttpUrl
     max_depth: int = 0
@@ -12,6 +13,7 @@ class CombinedRequest(BaseModel):
     run_pause_stop_hide_audit: bool = True
     run_target_size_audit: bool = True
     run_text_spacing_audit: bool = True
+
 
 class JobStatusResponse(BaseModel):
     job_id: str
