@@ -1,4 +1,0 @@
-page_url,element_index,content_type,content_type_label,tag,element_id,src,animation_name,animation_duration_seconds,animation_iteration_count,loops,duration_seconds,starts_automatically,has_video_controls,has_pause_button,has_mechanism,wcag_2_2_2_status,wcag_2_2_2_violation,overall_status,axe_would_catch,html_snippet
-https://www.bluecaffeine.com/,0,css_animation,CSS / WAAPI animation,SPAN,,,spin,1.0,infinite,True,-1.0,True,False,False,False,FAILED,"2.2.2: CSS / WAAPI animation (loops indefinitely) starts automatically and provides no mechanism to pause, stop, or hide it. Provide a Pause/Stop button, or honour prefers-reduced-motion by pausing/removing the animation for users who request it.",FAILED,False,"<span class=""ajax-loader""></span>"
-,,,,,,,,,,,,,,,,,,,,
-── SUMMARY ──,,Total items      : 1,,PASSED           : 0,FAILED           : 1,Pass rate        : 0.0%,Axe-core misses  : 1,,,,,,,,,FAILED,,FAILED,,
