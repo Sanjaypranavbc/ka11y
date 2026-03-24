@@ -51,13 +51,16 @@ Step 6 — Expose toggle  (models.py)
 
 from .routes import router
 from .store import _evict_old_jobs
+from .report import _build_report
 from .findings import (
     _make_finding,
     _alt_text_to_findings,
     _contrast_to_findings,
     _crawler_text_spacing_to_findings,
     _form_to_findings,
+    _images_of_text_to_findings,
     _lin_to_findings,
+    _non_text_contrast_to_findings,
     _psh_to_findings,
     _ts_to_findings,
     _resize_text_to_findings,
@@ -72,12 +75,15 @@ from .findings import (
 __all__ = [
     "router",
     "_evict_old_jobs",
+    "_build_report",
     "_make_finding",
     "_alt_text_to_findings",
     "_contrast_to_findings",
     "_crawler_text_spacing_to_findings",
     "_form_to_findings",
+    "_images_of_text_to_findings",
     "_lin_to_findings",
+    "_non_text_contrast_to_findings",
     "_psh_to_findings",
     "_ts_to_findings",
     "_resize_text_to_findings",

@@ -13,10 +13,10 @@ const config = {
 
   axe: {
     timeoutMs: parseInt(process.env.AXE_TIMEOUT_MS) || 30_000,
-    defaultTags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'],
+    defaultTags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'],
     runOnly: {
       type: 'tag',
-      values: ['wcag2a', 'wcag2aa', 'wcag2aaa', 'wcag21a', 'wcag21aa', 'best-practice'],
+      values: ['wcag2a', 'wcag2aa', 'wcag2aaa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa', 'best-practice'],
     },
   },
 

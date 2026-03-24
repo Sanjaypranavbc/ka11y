@@ -108,6 +108,7 @@ _SUGGESTED_FIX: Dict[str, str] = {
     "1.4.1": "Do not use colour as the only means to convey information. Add text labels or patterns.",
     "1.4.2": "Provide a mechanism to pause or stop auto-playing audio, or ensure it stops within 3 seconds.",
     "1.4.3": "Ensure text has a contrast ratio of at least 4.5:1 (3:1 for large text ≥ 18pt or bold 14pt).",
+    "1.4.5": "Replace images of text with real text styled via CSS. Logos and logotypes are exempt.",
     "1.4.4": (
         "Remove CSS that prevents text scaling (e.g. fixed px heights on text containers, "
         "overflow: hidden on parent elements). Ensure content reflows correctly at 200% text size."
@@ -162,7 +163,9 @@ _PYTHON_SEVERITY: Dict[str, str] = {
     "1.3.4": "medium",
     "1.4.3": "high",
     "1.4.4": "high",
+    "1.4.5": "medium",
     "1.4.10": "high",
+    "1.4.11": "high",
     "1.4.12": "high",
     "1.4.13": "medium",
     "2.2.2": "high",

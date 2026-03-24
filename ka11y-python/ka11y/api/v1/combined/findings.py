@@ -336,6 +336,96 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
 
 
 
+def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    """Convert image-audit records to WCAG 1.4.5 (Images of Text) findings."""
+    findings: List[Dict] = []
+    sev = _PYTHON_SEVERITY.get("1.4.5")
+    for r in records:
+        status_raw = r.get("wcag_1_4_5_status", "N/A")
+        if status_raw == "N/A":
+            continue
+        reason = r.get("wcag_1_4_5_reason") or ""
+        src = r.get("src", "")
+        alt = r.get("alt_text", "")
+        alt_attr = f' alt="{alt}"' if alt is not None else ""
+        element_html = f'<img src="{src}"{alt_attr}>'
+        element_id = r.get("src") or r.get("filename") or None
+
+        if status_raw == "FAILED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_5_images_of_text",
+                    wcag_sc="1.4.5",
+                    status="fail",
+                    reason=reason or "Image contains text — replace with real CSS-styled text.",
+                    severity=sev,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
+                    page_url=r.get("url") or page_url,
+                )
+            )
+        else:
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_5_images_of_text",
+                    wcag_sc="1.4.5",
+                    status="pass",
+                    reason=reason or "Image does not contain text (or logo exception applies).",
+                    severity=None,
+                    page_url=r.get("url") or page_url,
+                )
+            )
+    return findings
+
+
+def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    """Convert image-audit records to WCAG 1.4.11 (Non-text Contrast) findings."""
+    findings: List[Dict] = []
+    sev = _PYTHON_SEVERITY.get("1.4.11")
+    for r in records:
+        status_raw = r.get("wcag_1_4_11_status", "N/A")
+        if status_raw in ("N/A", "INCOMPLETE"):
+            continue
+        reason = r.get("wcag_1_4_11_reason") or ""
+        src = r.get("src", "")
+        alt = r.get("alt_text", "")
+        alt_attr = f' alt="{alt}"' if alt is not None else ""
+        element_html = f'<img src="{src}"{alt_attr}>'
+        element_id = r.get("src") or r.get("filename") or None
+
+        if status_raw == "FAILED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_11_non_text_contrast",
+                    wcag_sc="1.4.11",
+                    status="fail",
+                    reason=reason or "UI component contrast ratio is below 3:1 minimum.",
+                    severity=sev,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
+                    page_url=r.get("url") or page_url,
+                )
+            )
+        else:
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_11_non_text_contrast",
+                    wcag_sc="1.4.11",
+                    status="pass",
+                    reason=reason or "UI component meets 3:1 contrast ratio.",
+                    severity=None,
+                    page_url=r.get("url") or page_url,
+                )
+            )
+    return findings
+
+
 def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:

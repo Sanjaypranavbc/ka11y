@@ -2,6 +2,7 @@
 
 const dns = require('dns').promises;
 const { mapResults, mapResultsFlat } = require('../utils/axeResultMapper');
+const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 
 const _PRIVATE_IP_RE = [
   /^127\./,
@@ -38,8 +39,8 @@ const MAX_CONCURRENT = parseInt(process.env.PUPPETEER_MAX_CONCURRENT) || 3;
  * "AAA" → Level A + AA + AAA tags
  */
 function _tagsForLevel(level) {
-  const tags = ['wcag2a', 'wcag21a', 'best-practice'];
-  if (level === 'AA' || level === 'AAA') tags.push('wcag2aa', 'wcag21aa');
+  const tags = ['wcag2a', 'wcag21a', 'wcag22a', 'best-practice'];
+  if (level === 'AA' || level === 'AAA') tags.push('wcag2aa', 'wcag21aa', 'wcag22aa');
   if (level === 'AAA') tags.push('wcag2aaa');
   return tags;
 }
@@ -135,7 +136,11 @@ class AccessibilityService {
         `incomplete: ${(axeResults.incomplete || []).length}`
       );
 
-      return mapResults(axeResults, criteriaId);
+      this._logger.info('Running static custom checks...');
+      const customResults = await runStaticChecks(page);
+      this._logger.info(`Custom checks complete — ${customResults.length} SC(s) checked.`);
+
+      return mergeWithAxe(mapResults(axeResults, criteriaId), customResults);
     } catch (err) {
       this._logger.error('Error during accessibility analysis:', err.message);
       throw err;
@@ -202,7 +207,11 @@ class AccessibilityService {
         `incomplete: ${(axeResults.incomplete || []).length}`
       );
 
-      return mapResults(axeResults, criteriaId);
+      this._logger.info('Running all custom checks (static + interactive)...');
+      const customResults = await runAll(page);
+      this._logger.info(`Custom checks complete — ${customResults.length} SC(s) checked.`);
+
+      return mergeWithAxe(mapResults(axeResults, criteriaId), customResults);
     } catch (err) {
       this._logger.error(`Error during URL accessibility analysis: ${err.message}`);
       throw err;
