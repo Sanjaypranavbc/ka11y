@@ -3,7 +3,7 @@
 const SC = '1.3.2';
 const RULE_ID = 'custom-meaningful-sequence';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/meaningful-sequence';
-const MAX_CONTAINERS = 100;
+const MAX_CONTAINERS = 150;
 
 async function run(page) {
   const violations = await page.evaluate((maxC) => {
@@ -11,25 +11,53 @@ async function run(page) {
     let count = 0;
 
     for (const el of document.querySelectorAll('*')) {
-      if (count++ > maxC) break;
+      if (count++ >= maxC) break;
       const style = window.getComputedStyle(el);
       const display = style.display;
 
-      const isFlexOrGrid = display === 'flex' || display === 'inline-flex' ||
-                           display === 'grid' || display === 'inline-grid';
-      if (!isFlexOrGrid) continue;
+      const isFlex = display === 'flex' || display === 'inline-flex';
+      const isGrid = display === 'grid' || display === 'inline-grid';
+      if (!isFlex && !isGrid) continue;
 
-      const children = Array.from(el.children);
+      const children = Array.from(el.children).filter(ch => {
+        // Only consider visible children
+        const cs = window.getComputedStyle(ch);
+        return cs.display !== 'none' && cs.visibility !== 'hidden';
+      });
       if (children.length < 2) continue;
 
-      const orders = children.map(ch => parseInt(window.getComputedStyle(ch).order) || 0);
-      if (orders.every(o => o === 0)) continue; // no reordering
+      // Bug fix 1: detect flex-direction reversal (visually reverses DOM order)
+      const flexDir = style.flexDirection || '';
+      const isReversed = flexDir === 'row-reverse' || flexDir === 'column-reverse';
+
+      // Bug fix 2: detect CSS order property — use parseInt with radix 10
+      // Note: parseInt('auto', 10) = NaN; we treat NaN as 0 (default order)
+      const orders = children.map(ch => {
+        const o = parseInt(window.getComputedStyle(ch).order, 10);
+        return isNaN(o) ? 0 : o;
+      });
+      const hasExplicitOrder = !orders.every(o => o === 0);
+
+      // Check if the order property actually reorders relative to DOM position
+      // (ascending order = same as DOM → no reordering issue)
+      let orderReorders = false;
+      if (hasExplicitOrder) {
+        const domIndices = orders.map((_, i) => i);
+        const visualOrder = [...orders.keys()].sort((a, b) => orders[a] - orders[b]);
+        orderReorders = visualOrder.some((vi, di) => vi !== domIndices[di]);
+      }
+
+      if (!isReversed && !orderReorders) continue;
 
       results.push({
         tagName: el.tagName.toLowerCase(),
         id: el.id || null,
         display,
-        orders,
+        flexDir: flexDir || null,
+        orders: hasExplicitOrder ? orders : null,
+        reason: isReversed
+          ? `flex-direction: ${flexDir} reverses DOM order visually`
+          : `CSS order property reorders children from DOM sequence (orders: [${orders.join(', ')}])`,
         html: el.outerHTML.slice(0, 200),
       });
     }
@@ -40,9 +68,11 @@ async function run(page) {
   if (violations.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Reading and navigation order must be programmatically determinable', impact: null, status: 'pass', reason: 'No CSS reordering (flex/grid order property) detected that diverges from DOM order.', helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Reading and navigation order must be programmatically determinable', impact: null, status: 'pass', reason: 'No CSS reordering (flex-direction reverse or order property) detected that diverges from DOM order.', helpUrl: HELP_URL }],
     };
   }
+
+  const sample = violations.slice(0, 3).map(v => v.reason).join('; ');
 
   return {
     successCriteriaId: SC,
@@ -51,7 +81,7 @@ async function run(page) {
       description: 'Reading and navigation order must be programmatically determinable',
       impact: 'moderate',
       status: 'incomplete',
-      reason: `${violations.length} flex/grid container(s) use CSS order property which may cause reading order to diverge from visual order. Verify that the DOM order matches the intended reading sequence.`,
+      reason: `${violations.length} flex/grid container(s) visually reorder content relative to DOM order. Verify the DOM order matches the intended reading sequence. Details: ${sample}.`,
       helpUrl: HELP_URL,
     }],
   };

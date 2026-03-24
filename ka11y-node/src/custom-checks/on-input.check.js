@@ -3,8 +3,23 @@
 const SC = '3.2.2';
 const RULE_ID = 'custom-on-input';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
-const MAX_INPUTS = 10;
-const SETTLE_MS = 100;
+const MAX_INPUTS = 15;
+const SETTLE_MS = 120;
+
+// Safe test values per input type to avoid validation-induced navigation
+const TYPE_CHAR = {
+  number: '1', tel: '1', range: '1',
+  email: 'a', search: 'a', url: 'a', text: 'a', textarea: 'a', default: 'a',
+};
+
+// Selector includes select elements (Bug fix: selects with onchange can navigate)
+const SELECTOR = [
+  'input:not([type="submit"]):not([type="button"]):not([type="reset"])',
+  ':not([type="hidden"]):not([type="file"]):not([type="checkbox"])',
+  ':not([type="radio"]):not([disabled])',
+  ', textarea:not([disabled])',
+  ', select:not([disabled])',
+].join('');
 
 async function run(page) {
   const violations = [];
@@ -15,38 +30,51 @@ async function run(page) {
   page.on('framenavigated', onNavigated);
 
   try {
-    const inputs = await page.evaluate((max) => {
-      const SELECTOR = 'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled]), textarea:not([disabled])';
-      return Array.from(document.querySelectorAll(SELECTOR)).slice(0, max).map((el, i) => ({
+    const inputs = await page.evaluate((sel, max) => {
+      return Array.from(document.querySelectorAll(sel)).slice(0, max).map((el, i) => ({
         index: i,
         tagName: el.tagName.toLowerCase(),
-        type: el.type || null,
+        type: el.type || el.tagName.toLowerCase(),
         id: el.id || null,
+        isSelect: el.tagName.toLowerCase() === 'select',
         html: el.outerHTML.slice(0, 150),
       }));
-    }, MAX_INPUTS);
+    }, SELECTOR, MAX_INPUTS);
 
     for (const inputInfo of inputs) {
       navigationDetected = false;
+      const urlBefore = page.url();
 
-      // Focus and type a single safe character
-      await page.evaluate((idx) => {
-        const SELECTOR = 'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled]), textarea:not([disabled])';
-        const el = document.querySelectorAll(SELECTOR)[idx];
+      await page.evaluate((sel, idx) => {
+        const el = document.querySelectorAll(sel)[idx];
         if (el) el.focus({ preventScroll: true });
-      }, inputInfo.index);
+      }, SELECTOR, inputInfo.index);
 
-      await page.keyboard.type('a');
+      if (inputInfo.isSelect) {
+        // For selects: change selection value programmatically and fire change event
+        await page.evaluate((sel, idx) => {
+          const el = document.querySelectorAll(sel)[idx];
+          if (!el || el.options.length < 2) return;
+          el.selectedIndex = el.selectedIndex === 0 ? 1 : 0;
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }, SELECTOR, inputInfo.index);
+      } else {
+        const char = TYPE_CHAR[inputInfo.type] || TYPE_CHAR.default;
+        await page.keyboard.type(char);
+      }
+
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      if (navigationDetected || currentUrl !== initialUrl) {
+      if (navigationDetected || currentUrl !== urlBefore) {
         violations.push(inputInfo);
-        break;
+        break; // page may have navigated; can't continue safely
       }
 
-      // Clean up typed character
-      await page.keyboard.press('Backspace');
+      // Clean up
+      if (!inputInfo.isSelect) {
+        await page.keyboard.press('Backspace');
+      }
     }
   } finally {
     page.off('framenavigated', onNavigated);
@@ -66,7 +94,7 @@ async function run(page) {
       description: 'Changing an input value must not trigger a context change',
       impact: 'serious',
       status: 'fail',
-      reason: `Typing into <${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}> triggered an unexpected navigation or context change.`,
+      reason: `Changing <${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}> triggered an unexpected navigation or context change.`,
       helpUrl: HELP_URL,
     }],
   };

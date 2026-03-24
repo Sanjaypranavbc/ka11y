@@ -9,7 +9,10 @@ async function run(page) {
     const liveRegions = Array.from(document.querySelectorAll(
       '[aria-live], [role="status"], [role="alert"], [role="log"], [role="timer"], [role="marquee"]'
     ));
-    const forms = document.querySelectorAll('form');
+
+    const forms     = document.querySelectorAll('form');
+    const formCount = forms.length;
+
     const hasAlerts = liveRegions.some(el =>
       el.getAttribute('role') === 'alert' ||
       el.getAttribute('aria-live') === 'assertive'
@@ -18,18 +21,44 @@ async function run(page) {
       el.getAttribute('role') === 'status' ||
       el.getAttribute('aria-live') === 'polite'
     );
+
+    // Bug fix: detect other dynamic-content contexts beyond forms
+    // that would need status messages (search results, cart, notifications)
+    const hasSearchResults = !!(
+      document.querySelector('[role="region"][aria-label*="result" i]') ||
+      document.querySelector('[aria-live][id*="result" i]') ||
+      document.querySelector('[id*="search-result" i], [class*="search-result" i]')
+    );
+    const hasCartOrCounter = !!(
+      document.querySelector('[aria-label*="cart" i], [aria-label*="basket" i]') ||
+      document.querySelector('[class*="cart-count" i], [class*="badge" i]')
+    );
+    const hasNotificationArea = !!(
+      document.querySelector('[class*="notification" i], [class*="toast" i], [class*="snackbar" i], [class*="flash" i]') ||
+      document.querySelector('[role="status"], [role="log"]')
+    );
+
+    const needsLiveRegions = formCount > 0 || hasSearchResults || hasCartOrCounter || hasNotificationArea;
+
     return {
       liveRegionCount: liveRegions.length,
-      formCount: forms.length,
+      formCount,
       hasAlerts,
       hasPolite,
+      needsLiveRegions,
+      dynamicContexts: [
+        formCount > 0 && `${formCount} form(s)`,
+        hasSearchResults && 'search results',
+        hasCartOrCounter && 'cart/counter',
+        hasNotificationArea && 'notification area',
+      ].filter(Boolean),
     };
   });
 
-  const { liveRegionCount, formCount, hasAlerts, hasPolite } = data;
+  const { liveRegionCount, formCount, hasAlerts, hasPolite, needsLiveRegions, dynamicContexts } = data;
 
-  // If the page has forms but no live regions: fail (errors won't be announced)
-  if (formCount > 0 && liveRegionCount === 0) {
+  // Page has dynamic contexts but no live regions at all
+  if (needsLiveRegions && liveRegionCount === 0) {
     return {
       successCriteriaId: SC,
       rules: [{
@@ -37,24 +66,23 @@ async function run(page) {
         description: 'Status messages must be programmatically determinable',
         impact: 'serious',
         status: 'fail',
-        reason: `Page has ${formCount} form(s) but no ARIA live regions (role="status/alert" or aria-live). Validation errors and success messages will not be announced to screen readers.`,
+        reason: `Dynamic content contexts detected (${dynamicContexts.join(', ')}) but no ARIA live regions found. Validation errors and status updates will not be announced to screen readers.`,
         helpUrl: HELP_URL,
       }],
     };
   }
 
-  // If live regions exist, pass (dynamic check would need form submission)
   if (liveRegionCount > 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'pass', reason: `${liveRegionCount} ARIA live region(s) found (alerts: ${hasAlerts}, polite: ${hasPolite}).`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'pass', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}).`, helpUrl: HELP_URL }],
     };
   }
 
-  // No forms, no live regions — incomplete (can't tell without dynamic interaction)
+  // No dynamic contexts and no live regions — not enough info, mark incomplete
   return {
     successCriteriaId: SC,
-    rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: 'moderate', status: 'incomplete', reason: 'No ARIA live regions detected. If this page displays status updates (notifications, alerts, form feedback), verify they use role="status", role="alert", or aria-live.', helpUrl: HELP_URL }],
+    rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: 'moderate', status: 'incomplete', reason: 'No ARIA live regions detected. If this page displays status updates (alerts, notifications, form feedback), verify they use role="status", role="alert", or aria-live.', helpUrl: HELP_URL }],
   };
 }
 

@@ -1,16 +1,27 @@
 'use strict';
 
-const htmlParsing       = require('./html-parsing.check');
-const focusVisible      = require('./focus-visible.check');
-const statusMessages    = require('./status-messages.check');
-const multipleWays      = require('./multiple-ways.check');
-const onFocus           = require('./on-focus.check');
-const onInput           = require('./on-input.check');
-const keyboardTrap      = require('./keyboard-trap.check');
-const meaningfulSeq     = require('./meaningful-sequence.check');
+const htmlParsing         = require('./html-parsing.check');
+const focusVisible        = require('./focus-visible.check');
+const statusMessages      = require('./status-messages.check');
+const multipleWays        = require('./multiple-ways.check');
+const onFocus             = require('./on-focus.check');
+const onInput             = require('./on-input.check');
+const keyboardTrap        = require('./keyboard-trap.check');
+const meaningfulSeq       = require('./meaningful-sequence.check');
+const charKeyShortcuts    = require('./character-key-shortcuts.check');
+const pointerCancellation = require('./pointer-cancellation.check');
+const draggingMovements   = require('./dragging-movements.check');
+const consistentHelp      = require('./consistent-help.check');
+const errorSuggestion     = require('./error-suggestion.check');
+const errorPrevention     = require('./error-prevention.check');
+const accessibleAuth      = require('./accessible-auth.check');
 
 // Static checks: only DOM inspection, safe for raw HTML pages
-const STATIC_CHECKS = [htmlParsing, statusMessages, multipleWays, meaningfulSeq];
+const STATIC_CHECKS = [
+  htmlParsing, statusMessages, multipleWays, meaningfulSeq,
+  charKeyShortcuts, pointerCancellation, draggingMovements,
+  consistentHelp, errorSuggestion, errorPrevention, accessibleAuth,
+];
 
 // Interactive checks: require a live navigable page with events
 const INTERACTIVE_CHECKS = [focusVisible, onFocus, onInput, keyboardTrap];
@@ -37,8 +48,18 @@ function mergeWithAxe(axeResults, customResults) {
 async function _runChecks(checks, page) {
   const results = await Promise.allSettled(checks.map(c => c.run(page)));
   return results
-    .filter(r => r.status === 'fulfilled')
-    .map(r => r.value);
+    .map((r, i) => {
+      if (r.status === 'rejected') {
+        // Bug fix: log failures instead of silently discarding them
+        const name = checks[i] && checks[i].run && checks[i].run.name
+          ? checks[i].run.name
+          : `check[${i}]`;
+        console.warn(`[custom-checks] ${name} failed:`, r.reason && r.reason.message || r.reason);
+        return null;
+      }
+      return r.value;
+    })
+    .filter(Boolean);
 }
 
 async function runStaticChecks(page) {

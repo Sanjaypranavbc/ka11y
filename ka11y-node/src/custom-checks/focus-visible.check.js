@@ -3,12 +3,26 @@
 const SC = '2.4.7';
 const RULE_ID = 'custom-focus-visible';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-visible';
-const MAX_ELEMENTS = 30;
+const MAX_ELEMENTS = 50; // Increased from 30
 
 async function run(page) {
   const violations = await page.evaluate((maxEl) => {
-    const SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-    const elements = Array.from(document.querySelectorAll(SELECTOR)).slice(0, maxEl);
+    const SELECTOR = [
+      'a[href]',
+      'button:not([disabled])',
+      'input:not([disabled]):not([type="hidden"])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(', ');
+
+    const seen = new Set();
+    const elements = [];
+    for (const el of document.querySelectorAll(SELECTOR)) {
+      if (!seen.has(el)) { seen.add(el); elements.push(el); }
+      if (elements.length >= maxEl) break;
+    }
+
     const results = [];
 
     for (const el of elements) {
@@ -16,40 +30,53 @@ async function run(page) {
       el.blur();
       const before = window.getComputedStyle(el);
       const unfocused = {
-        outlineWidth: before.outlineWidth,
-        outlineStyle: before.outlineStyle,
-        boxShadow:    before.boxShadow,
-        borderColor:  before.borderColor,
+        outlineWidth:    before.outlineWidth,
+        outlineStyle:    before.outlineStyle,
+        outlineColor:    before.outlineColor,
+        boxShadow:       before.boxShadow,
+        borderColor:     before.borderColor,
+        borderWidth:     before.borderWidth,
         backgroundColor: before.backgroundColor,
+        color:           before.color,
+        opacity:         before.opacity,
       };
 
       el.focus({ preventScroll: true });
       const after = window.getComputedStyle(el);
       const focused = {
-        outlineWidth: after.outlineWidth,
-        outlineStyle: after.outlineStyle,
-        boxShadow:    after.boxShadow,
-        borderColor:  after.borderColor,
+        outlineWidth:    after.outlineWidth,
+        outlineStyle:    after.outlineStyle,
+        outlineColor:    after.outlineColor,
+        boxShadow:       after.boxShadow,
+        borderColor:     after.borderColor,
+        borderWidth:     after.borderWidth,
         backgroundColor: after.backgroundColor,
+        color:           after.color,
+        opacity:         after.opacity,
       };
-
       el.blur();
 
+      // An element passes if ANY visual property changed meaningfully on focus
       const hasVisibleOutline =
         focused.outlineStyle !== 'none' && focused.outlineWidth !== '0px';
       const outlineChanged =
-        focused.outlineWidth !== unfocused.outlineWidth ||
-        focused.outlineStyle !== unfocused.outlineStyle;
-      const boxShadowChanged = focused.boxShadow !== unfocused.boxShadow;
-      const borderChanged    = focused.borderColor !== unfocused.borderColor;
-      const bgChanged        = focused.backgroundColor !== unfocused.backgroundColor;
+        focused.outlineWidth  !== unfocused.outlineWidth  ||
+        focused.outlineStyle  !== unfocused.outlineStyle  ||
+        focused.outlineColor  !== unfocused.outlineColor;
+      const boxShadowChanged   = focused.boxShadow       !== unfocused.boxShadow;
+      const borderChanged      = focused.borderColor     !== unfocused.borderColor ||
+                                 focused.borderWidth     !== unfocused.borderWidth;
+      const bgChanged          = focused.backgroundColor !== unfocused.backgroundColor;
+      const colorChanged       = focused.color           !== unfocused.color;
+      const opacityChanged     = focused.opacity         !== unfocused.opacity;
 
-      const isVisible = hasVisibleOutline || outlineChanged || boxShadowChanged || borderChanged || bgChanged;
+      const isVisible = hasVisibleOutline || outlineChanged || boxShadowChanged ||
+                        borderChanged || bgChanged || colorChanged || opacityChanged;
 
       if (!isVisible) {
         results.push({
           tagName: el.tagName.toLowerCase(),
-          id:   el.id || null,
+          id:   el.id   || null,
           html: el.outerHTML.slice(0, 200),
         });
       }

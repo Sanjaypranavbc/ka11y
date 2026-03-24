@@ -4,16 +4,18 @@ Combined coverage across the **Python pipeline** (`ka11y-python`) and the **Node
 
 Legend: ✅ Covered · ❌ Not covered · 🔶 Partial (automated checks only, not full SC)
 
+Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/FN expected) · 🔴 Low (limited detection, flags for manual review) · — (not covered)
+
 ---
 
 ## Summary
 
 | Level | Total SCs | Python | Node (axe+custom) | Combined | Combined % | Missing |
 |-------|-----------|--------|-------------------|----------|------------|---------|
-| A     | 31        | 6      | 21                | 22       | **71 %**   | 9       |
-| AA    | 26        | 10     | 9                 | 15       | **58 %**   | 11      |
+| A     | 31        | 6      | 23                | 24       | **77 %**   | 7       |
+| AA    | 26        | 10     | 14                | 20       | **77 %**   | 6       |
 | AAA   | 30        | 1      | 0                 | 1        | **3 %**    | 29      |
-| **Total** | **87** | **17** | **30**         | **38**   | **44 %**   | **49** |
+| **Total** | **87** | **17** | **37**        | **45**   | **52 %**   | **42** |
 
 > Numbers reflect *automatable checks only*. Many criteria (colour contrast,
 > reading level, meaningful sequence) require human review and cannot be
@@ -36,7 +38,7 @@ Legend: ✅ Covered · ❌ Not covered · 🔶 Partial (automated checks only, n
 | 1.4.2 | Audio Control | ❌ | 🔶 axe `no-autoplay-audio` | 🔶 | Detects auto-playing audio lacking controls; `audio-caption` rule is deprecated in axe v4 |
 | 2.1.1 | Keyboard | ❌ | ✅ axe `scrollable-region-focusable`, `frame-focusable-content`, `server-side-image-map` | ✅ | |
 | 2.1.2 | No Keyboard Trap | ❌ | 🔶 Node `custom-keyboard-trap` | 🔶 | Puppeteer Tab-walk: detects focus cycling on same element; Escape-key escape test |
-| 2.1.4 | Character Key Shortcuts | ❌ | ❌ | ❌ | Requires JS behaviour analysis |
+| 2.1.4 | Character Key Shortcuts | ❌ | 🔶 Node `custom-character-key-shortcuts` | 🔶 | Detects `accesskey` single-char attributes and inline `onkeydown` handlers without modifier keys |
 | 2.2.1 | Timing Adjustable | ❌ | 🔶 axe `meta-refresh` | ❌ | axe detects `<meta http-equiv="refresh">` only; JS timers not covered |
 | 2.2.2 | Pause, Stop, Hide | ✅ PauseStopHideAuditor | 🔶 axe `blink`, `marquee` only | ✅ | Python goes beyond axe (CSS anims, carousels, autoplay video, GIFs) |
 | 2.3.1 | Three Flashes or Below Threshold | ❌ | ❌ | ❌ | Requires video frame analysis |
@@ -45,7 +47,7 @@ Legend: ✅ Covered · ❌ Not covered · 🔶 Partial (automated checks only, n
 | 2.4.3 | Focus Order | ❌ | 🔶 axe `tabindex` | 🔶 | Full order requires manual check |
 | 2.4.4 | Link Purpose (In Context) | ❌ | ✅ axe `link-name`, `area-alt` | ✅ | `duplicate-id-active` is deprecated in axe v4 |
 | 2.5.1 | Pointer Gestures | ❌ | ❌ | ❌ | Requires JS gesture inspection |
-| 2.5.2 | Pointer Cancellation | ❌ | ❌ | ❌ | Requires event handler analysis |
+| 2.5.2 | Pointer Cancellation | ❌ | 🔶 Node `custom-pointer-cancellation` | 🔶 | Detects elements with `onmousedown`/`onpointerdown` inline handlers that lack a matching `onmouseup`/`onclick` cancellation path |
 | 2.5.3 | Label in Name | ✅ LabelInNameAuditor | ✅ axe `label-content-name-mismatch` | ✅ | Both |
 | 2.5.4 | Motion Actuation | ❌ | ❌ | ❌ | Requires device-motion API analysis |
 | 3.1.1 | Language of Page | ❌ | ✅ axe `html-has-lang`, `html-lang-valid` | ✅ | |
@@ -57,18 +59,16 @@ Legend: ✅ Covered · ❌ Not covered · 🔶 Partial (automated checks only, n
 | 4.1.1 | Parsing | ❌ | 🔶 axe `duplicate-id` (RULE_SC_FALLBACK) + Node `custom-html-parsing` | 🔶 | axe still runs `duplicate-id` under wcag2a-obsolete; custom check adds DOM-level duplicate-ID scan |
 | 4.1.2 | Name, Role, Value | ✅ AltTextAuditor (`_check_4_1_2`) | ✅ axe `aria-*`, `button-name`, `form-field-multiple-labels` | ✅ | Both; Python checks functional images (logos, icons, buttons) |
 
-**Level A covered: 22 / 31 (71 %) · includes 9 partial (🔶) · Missing: 9**
+**Level A covered: 24 / 31 (77 %) · includes 11 partial (🔶) · Missing: 7**
 
 ### Missing Level A
 1. **1.2.1** — Audio-only and Video-only (Prerecorded)
 2. **1.2.3** — Audio Description or Media Alternative (Prerecorded)
 3. **1.3.3** — Sensory Characteristics
-4. **2.1.4** — Character Key Shortcuts
-5. **2.3.1** — Three Flashes or Below Threshold
-6. **2.5.1** — Pointer Gestures
-7. **2.5.2** — Pointer Cancellation
-8. **2.5.4** — Motion Actuation
-9. **3.3.7** — Redundant Entry *(WCAG 2.2 new)*
+4. **2.3.1** — Three Flashes or Below Threshold
+5. **2.5.1** — Pointer Gestures
+6. **2.5.4** — Motion Actuation
+7. **3.3.7** — Redundant Entry *(WCAG 2.2 new)*
 
 ---
 
@@ -92,29 +92,24 @@ Legend: ✅ Covered · ❌ Not covered · 🔶 Partial (automated checks only, n
 | 2.4.7 | Focus Visible | ❌ | 🔶 Node `custom-focus-visible` + axe `focus-visible` (RULE_SC_FALLBACK + wcag22aa tag) | 🔶 | Custom check: Puppeteer compares computed outline/box-shadow before/after focus for each focusable element |
 | 2.4.11 | Focus Not Obscured (Minimum) *(WCAG 2.2 new)* | ✅ FocusNotObscuredMinimumEvaluator (rendered) | ❌ | ✅ | Python: measures obscuration ratio via getBoundingClientRect; full obscuration = FAIL |
 | 2.4.13 | Focus Appearance *(WCAG 2.2 new)* | ❌ | 🔶 axe `focus-appearance` (RULE_SC_FALLBACK + wcag22aa tag) | 🔶 | axe rule active after adding wcag22aa tag to runOnly |
-| 2.5.7 | Dragging Movements *(WCAG 2.2 new)* | ❌ | ❌ | ❌ | Requires gesture/API inspection |
+| 2.5.7 | Dragging Movements *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-dragging-movements` | 🔶 | Puppeteer: detects `draggable="true"`, `ondragstart`, D&D library markers; checks for single-pointer button alternative |
 | 2.5.8 | Target Size (Minimum) *(WCAG 2.2 new)* | ✅ TargetSizeAuditor | ❌ | ✅ | Measures rendered bounding-box; inline + UA-controlled exceptions detected |
 | 3.1.2 | Language of Parts | ❌ | ✅ axe `valid-lang` | ✅ | |
 | 3.2.3 | Consistent Navigation | ❌ | ❌ | ❌ | Requires multi-page analysis |
 | 3.2.4 | Consistent Identification | ❌ | ❌ | ❌ | Requires multi-page analysis |
-| 3.2.6 | Consistent Help *(WCAG 2.2 new)* | ❌ | ❌ | ❌ | Requires multi-page layout analysis |
-| 3.3.3 | Error Suggestion | ❌ | ❌ | ❌ | No axe rule with wcag333 tag in v4.11.1 |
-| 3.3.4 | Error Prevention (Legal, Financial, Data) | ❌ | ❌ | ❌ | Requires form-flow analysis |
-| 3.3.8 | Accessible Authentication (Minimum) *(WCAG 2.2 new)* | ❌ | ❌ | ❌ | Requires auth-flow analysis |
+| 3.2.6 | Consistent Help *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-consistent-help` | 🔶 | Heuristic: detects help/contact/support links, chat widgets; reports position (header/footer/nav); flags absence |
+| 3.3.3 | Error Suggestion | ❌ | 🔶 Node `custom-error-suggestion` | 🔶 | Checks visible error messages for correction guidance (heuristic); flags terse messages like "Invalid" or "Error" |
+| 3.3.4 | Error Prevention (Legal, Financial, Data) | ❌ | 🔶 Node `custom-error-prevention` | 🔶 | Detects financial/legal/destructive forms; checks for review step, confirmation checkbox, or preview button |
+| 3.3.8 | Accessible Authentication (Minimum) *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-accessible-auth` | 🔶 | Detects auth forms; flags CAPTCHA without audio alternative, paste-blocked password fields, cognitive puzzles |
 | 4.1.3 | Status Messages | ❌ | 🔶 Node `custom-status-messages` | 🔶 | Checks for ARIA live regions; fails if forms exist without any live region |
 
-**Level AA covered: 15 / 26 (58 %) · includes 6 partial (🔶) · Missing: 11**
+**Level AA covered: 20 / 26 (77 %) · includes 11 partial (🔶) · Missing: 6**
 
 ### Missing Level AA
 1. **1.2.4** — Captions (Live)
 2. **1.2.5** — Audio Description (Prerecorded)
-3. **2.5.7** — Dragging Movements *(WCAG 2.2 new)*
-4. **3.2.3** — Consistent Navigation
-5. **3.2.4** — Consistent Identification
-6. **3.2.6** — Consistent Help *(WCAG 2.2 new)*
-7. **3.3.3** — Error Suggestion
-8. **3.3.4** — Error Prevention (Legal, Financial, Data)
-9. **3.3.8** — Accessible Authentication (Minimum) *(WCAG 2.2 new)*
+3. **3.2.3** — Consistent Navigation
+4. **3.2.4** — Consistent Identification
 
 ---
 
@@ -168,13 +163,12 @@ for future Python auditors:
 
 | Priority | SC | Name | Approach |
 |----------|----|------|----------|
-| Medium | **3.2.6** | Consistent Help | Check each page for `<a>` or `<button>` containing "help", "contact", "support" in the same position across pages |
-| Medium | **2.5.7** | Dragging Movements | Detect drag-and-drop widgets; verify single-pointer alternative exists |
-| Medium | **2.4.13** | Focus Appearance | Measure CSS focus-ring area and contrast via Playwright |
+| Medium | **2.4.13** | Focus Appearance | Measure CSS focus-ring area and contrast via Playwright (Python rendered evaluator) |
 | Low | **3.3.7** | Redundant Entry | Track form field names across multi-step flows; flag re-asked required fields |
-| Low | **3.3.8** | Accessible Authentication | Detect login forms; flag if CAPTCHA present with no alternative |
+| Low | **3.2.3** | Consistent Navigation | Multi-page crawl: compare nav element order across pages |
+| Low | **3.2.4** | Consistent Identification | Multi-page crawl: compare component labels/names across pages |
 
-> **Previously planned, now implemented:** 2.5.8 Target Size (Minimum), 2.4.11 Focus Not Obscured (Minimum), 1.4.13 Content on Hover or Focus.
+> **Previously planned, now implemented:** 2.5.8 Target Size (Minimum), 2.4.11 Focus Not Obscured (Minimum), 1.4.13 Content on Hover or Focus, 3.2.6 Consistent Help (Node), 2.5.7 Dragging Movements (Node), 3.3.8 Accessible Authentication (Node), 3.3.3 Error Suggestion (Node), 3.3.4 Error Prevention (Node), 2.1.4 Character Key Shortcuts (Node), 2.5.2 Pointer Cancellation (Node).
 
 ---
 
@@ -201,12 +195,12 @@ for future Python auditors:
 
 ### Node.js (`ka11y-node`) — axe-core + Custom Puppeteer Checks
 
-Covers **30 unique WCAG SCs** (21 Level A + 9 Level AA) through axe-core v4.9+ and 8 custom Puppeteer check modules.
+Covers **37 unique WCAG SCs** (23 Level A + 14 Level AA) through axe-core v4.9+ and 15 custom Puppeteer check modules.
 Results are merged and returned grouped by `successCriteriaId` with `fail / pass / incomplete` status per rule.
 
-**Level A SCs (21):** 1.1.1, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2
+**Level A SCs (23):** 1.1.1, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2
 
-**Level AA SCs (9):** 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.12 🔶, 2.4.5 🔶, 2.4.6, 2.4.7 🔶, 2.4.13 🔶, 3.1.2, 4.1.3 🔶
+**Level AA SCs (14):** 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.12 🔶, 2.4.5 🔶, 2.4.6, 2.4.7 🔶, 2.4.13 🔶, 2.5.7 🔶, 3.1.2, 3.2.6 🔶, 3.3.3 🔶, 3.3.4 🔶, 3.3.8 🔶, 4.1.3 🔶
 
 **axe-core config:** `wcag22a` and `wcag22aa` tags added to `runOnly` — activates WCAG 2.2 rules (`focus-appearance` → 2.4.13, `focus-visible` → 2.4.7, `target-size` → 2.5.8).
 
@@ -222,6 +216,13 @@ Results are merged and returned grouped by `successCriteriaId` with `fail / pass
 | `on-input.check.js` | 3.2.2 | Type into each input; detect unexpected URL navigation |
 | `keyboard-trap.check.js` | 2.1.2 | Tab-walk 60 iterations; detect focus cycling + Escape-key escape test |
 | `meaningful-sequence.check.js` | 1.3.2 | Detect CSS `order` property in flex/grid containers diverging from DOM order |
+| `character-key-shortcuts.check.js` | 2.1.4 | Detect `accesskey` single-char attributes and inline key handlers without modifier keys |
+| `pointer-cancellation.check.js` | 2.5.2 | Detect `onmousedown`/`onpointerdown` handlers without matching `onmouseup`/`onclick` cancellation path |
+| `dragging-movements.check.js` | 2.5.7 | Detect `draggable="true"`, `ondragstart`, D&D library markers; check for single-pointer button alternative |
+| `consistent-help.check.js` | 3.2.6 | Detect help/contact/support links and chat widgets; report position (header/footer/nav); flag absence |
+| `error-suggestion.check.js` | 3.3.3 | Check visible error messages for correction guidance; flag terse messages like "Invalid" or "Error" |
+| `error-prevention.check.js` | 3.3.4 | Detect financial/legal/destructive forms; check for review step, confirmation checkbox, or preview button |
+| `accessible-auth.check.js` | 3.3.8 | Detect auth forms; flag CAPTCHA without audio alternative, paste-blocked password fields, cognitive puzzles |
 
 **Node.js future possibilities (custom Puppeteer):**
 
@@ -232,4 +233,4 @@ Results are merged and returned grouped by `successCriteriaId` with `fail / pass
 
 ---
 
-*Generated: 2026-03-17 · Updated: 2026-03-24 (axe v4.9 audit + 8 custom Puppeteer checks + Python 1.4.3/1.4.5/1.4.11 image pipeline) · WCAG 2.2 (W3C Recommendation 2023-10-05)*
+*Generated: 2026-03-17 · Updated: 2026-03-24 (axe v4.9 audit + 15 custom Puppeteer checks + Python 1.4.3/1.4.5/1.4.11 image pipeline; +7 new Node checks: 2.1.4, 2.5.2, 2.5.7, 3.2.6, 3.3.3, 3.3.4, 3.3.8) · WCAG 2.2 (W3C Recommendation 2023-10-05)*

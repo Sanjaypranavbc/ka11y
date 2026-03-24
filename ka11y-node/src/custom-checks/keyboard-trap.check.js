@@ -4,13 +4,17 @@ const SC = '2.1.2';
 const RULE_ID = 'custom-keyboard-trap';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/no-keyboard-trap';
 const MAX_TABS = 60;
-const CONSECUTIVE_REPEATS_THRESHOLD = 3;
+// Bug fix: use consecutive repeat count (not total), to avoid false positives
+// from elements that legitimately appear multiple times in DOM (e.g. same nav on mobile/desktop)
+const CONSECUTIVE_THRESHOLD = 3;
 
 async function run(page) {
   // Focus the page body to start from a known position
-  await page.evaluate(() => document.body.focus());
+  await page.evaluate(() => { try { document.body.focus(); } catch (_) {} });
 
-  const seen = {};
+  // Bug fix: track the LAST N focus targets to detect consecutive repetition
+  // rather than cumulative count which caused false positives on identical elements
+  const recentKeys = [];
   let trapHtml = null;
 
   for (let i = 0; i < MAX_TABS; i++) {
@@ -19,31 +23,42 @@ async function run(page) {
     const activeInfo = await page.evaluate(() => {
       const el = document.activeElement;
       if (!el || el === document.body || el === document.documentElement) return null;
-      const key = (el.id || '') + '|' + el.tagName + '|' + (el.className || '').slice(0, 30);
+      // Bug fix: use position-stable key combining tag + position in DOM
+      // to avoid key collision between elements with same class/no id
+      const allEls = Array.from(document.querySelectorAll('*'));
+      const pos = allEls.indexOf(el);
+      const key = `${pos}:${el.tagName}`;
       return { key, html: el.outerHTML.slice(0, 150), tagName: el.tagName.toLowerCase() };
     });
 
-    if (!activeInfo) break;
+    if (!activeInfo) break; // focus left the page or hit body
 
-    seen[activeInfo.key] = (seen[activeInfo.key] || 0) + 1;
+    recentKeys.push(activeInfo.key);
+    if (recentKeys.length > CONSECUTIVE_THRESHOLD) recentKeys.shift();
 
-    if (seen[activeInfo.key] >= CONSECUTIVE_REPEATS_THRESHOLD) {
-      // Potential trap: same element focused 3 times — try Escape to break out
+    // Consecutive repeat: same element focused N times in a row
+    const isConsecutiveTrap = recentKeys.length === CONSECUTIVE_THRESHOLD &&
+      recentKeys.every(k => k === activeInfo.key);
+
+    if (isConsecutiveTrap) {
+      // Verify it's a real trap: try Escape then Tab
       await page.keyboard.press('Escape');
       await page.keyboard.press('Tab');
 
       const afterEscape = await page.evaluate(() => {
         const el = document.activeElement;
         if (!el || el === document.body) return null;
-        return (el.id || '') + '|' + el.tagName + '|' + (el.className || '').slice(0, 30);
+        const allEls = Array.from(document.querySelectorAll('*'));
+        const pos = allEls.indexOf(el);
+        return `${pos}:${el.tagName}`;
       });
 
       if (afterEscape === activeInfo.key) {
         trapHtml = activeInfo.html;
         break;
       }
-      // Escape worked — not a trap, reset counter
-      seen[activeInfo.key] = 0;
+      // Escape worked — reset tracking and continue
+      recentKeys.length = 0;
     }
   }
 
