@@ -122,7 +122,7 @@ class AccessibilityService {
         return new Promise((resolve, reject) => {
           // axe is available as a global after script injection
           // eslint-disable-next-line no-undef
-          axe.run(document, runOptions, (err, results) => {
+          axe.run(document, { runOnly: runOptions }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });
@@ -189,7 +189,7 @@ class AccessibilityService {
       const axeResults = await page.evaluate((runOptions) => {
         return new Promise((resolve, reject) => {
           // eslint-disable-next-line no-undef
-          axe.run(document, runOptions, (err, results) => {
+          axe.run(document, { runOnly: runOptions }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });
@@ -257,7 +257,7 @@ class AccessibilityService {
       const axeResults = await page.evaluate((runOptions) => {
         return new Promise((resolve, reject) => {
           // eslint-disable-next-line no-undef
-          axe.run(document, runOptions, (err, results) => {
+          axe.run(document, { runOnly: runOptions }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });
