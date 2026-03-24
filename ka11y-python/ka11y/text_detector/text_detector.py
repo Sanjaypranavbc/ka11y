@@ -219,32 +219,56 @@ class OCRPreprocessing:
                                 fg_color = extracted["foreground"]
                                 bg_colors = extracted["background_palette"]
 
-                                color_info = {
-                                    "foreground": fg_color,
-                                    "background_palette": bg_colors,
-                                    "contrast_checks": [],
-                                }
+                                # Dominant background = cluster with highest pixel %.
+                                # All violation decisions are made from this single cluster
+                                # so that the ratio shown in the UI and the hex in the
+                                # violation badge always refer to the same color pair.
+                                dominant_bg = max(bg_colors, key=lambda c: c["percent"])
 
                                 fg_lum = fg_color["luminance"]
+
+                                # Build contrast_checks for all clusters (for reporting).
+                                contrast_checks = []
                                 for bg in bg_colors:
                                     bg_lum = bg["luminance"]
                                     l1 = max(fg_lum, bg_lum)
                                     l2 = min(fg_lum, bg_lum)
                                     ratio = (l1 + 0.05) / (l2 + 0.05)
-                                    compliance = (
-                                        contrast_analyser.check_wcag_compliance(ratio)
-                                    )
-                                    color_info["contrast_checks"].append(
+                                    compliance = contrast_analyser.check_wcag_compliance(ratio)
+                                    contrast_checks.append(
                                         {
                                             "bg_color": bg,
                                             "ratio": round(ratio, 2),
                                             "compliance": compliance,
                                         }
                                     )
-                                    if not compliance["AA_normal"]:
-                                        violations.append(
-                                            f"Fails AA Normal vs BG {bg['hex']}"
-                                        )
+
+                                # Compute dominant ratio separately so ratio + hex
+                                # are always in sync — fixes the "5.23:1 Fails AA"
+                                # mismatch where ratio came from one cluster and hex
+                                # from another.
+                                dom_bg_lum = dominant_bg["luminance"]
+                                l1 = max(fg_lum, dom_bg_lum)
+                                l2 = min(fg_lum, dom_bg_lum)
+                                dominant_ratio = round((l1 + 0.05) / (l2 + 0.05), 2)
+                                dominant_compliance = contrast_analyser.check_wcag_compliance(dominant_ratio)
+
+                                color_info = {
+                                    "foreground": fg_color,
+                                    "background_palette": bg_colors,
+                                    "contrast_checks": contrast_checks,
+                                    # Single authoritative pair used for violation + UI display.
+                                    "dominant_contrast": {
+                                        "bg_color": dominant_bg,
+                                        "ratio": dominant_ratio,
+                                        "compliance": dominant_compliance,
+                                    },
+                                }
+
+                                if not dominant_compliance["AA_normal"]:
+                                    violations.append(
+                                        f"Fails AA Normal vs BG {dominant_bg['hex']}"
+                                    )
                             else:
                                 logger.warning(
                                     f"Color extraction failed: {extracted['error']}"
@@ -253,11 +277,14 @@ class OCRPreprocessing:
                         except Exception as cp_err:
                             logger.warning(f"Color picker failed for region: {cp_err}")
 
-                    if contrast_info and not contrast_info.get("error"):
+                    if not violations and contrast_info and not contrast_info.get("error"):
                         if "compliance" in contrast_info:
                             compliance = contrast_info["compliance"]
                             if not compliance.get("AA_normal", False):
-                                violations.append("Fails AA Normal")
+                                fg_rgb = contrast_info.get("foreground_color", (0, 0, 0))
+                                bg_rgb = contrast_info.get("background_color", (255, 255, 255))
+                                bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
+                                violations.append(f"Fails AA Normal vs BG {bg_hex}")
 
                     if violations:
                         result.contrast_violations_count += 1

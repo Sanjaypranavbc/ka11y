@@ -109,6 +109,12 @@ def extract_colors_from_mask(
 
     k_bg=0 (default) uses adaptive cluster count based on pixel diversity.
     Pass an explicit positive integer to override.
+
+    FIX: The background mask is eroded by 2px before pixel sampling.
+    This removes the 1-2px ring of anti-aliased / border-bleed pixels
+    that sit between the text and true background, preventing minority
+    edge colours (e.g. UI chrome grey) from forming spurious clusters
+    that trigger false WCAG violations.
     """
 
     if region is None or mask is None:
@@ -118,7 +124,16 @@ def extract_colors_from_mask(
     region_rgb = cv2.cvtColor(region, cv2.COLOR_BGR2RGB)
 
     text_pixels = region_rgb[mask == 255]
-    bg_pixels = region_rgb[mask == 0]
+
+    # Erode background mask to strip border/anti-aliasing pixels before clustering.
+    bg_mask_uint8 = (mask == 0).astype(np.uint8) * 255
+    kernel = np.ones((3, 3), np.uint8)
+    eroded_bg_mask = cv2.erode(bg_mask_uint8, kernel, iterations=2)
+    bg_pixels = region_rgb[eroded_bg_mask == 255]
+
+    # Fall back to un-eroded mask if erosion consumed all pixels (tiny regions).
+    if len(bg_pixels) == 0:
+        bg_pixels = region_rgb[mask == 0]
 
     if len(text_pixels) == 0 or len(bg_pixels) == 0:
         return {"error": "Invalid segmentation"}
