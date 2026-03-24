@@ -575,6 +575,7 @@ def _reflow_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     )
 
 
+
 def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     return _rendered_rule_to_findings(
         records, page_url,
@@ -583,6 +584,7 @@ def _text_spacing_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         wcag_sc="1.4.12",
         pass_reason="No content or functionality is lost after text spacing overrides.",
     )
+
 
 
 def _orientation_to_findings(records: List[Dict], page_url: str) -> List[Dict]:

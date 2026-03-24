@@ -42,6 +42,8 @@ class TextSpacingData(BaseModel):
     has_overflow_hidden: bool
 
     html_snippet: str
+    is_clipped: bool
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -50,59 +52,94 @@ class TextSpacingData(BaseModel):
 
 class AsyncTextSpacingCrawler:
 
-    EXTRACT_JS = r"""() => {
-        const results = [];
-        let index = 0;
+    INJECT_SPACING_JS = r"""() => {
+        if (document.getElementById("wcag-text-spacing-test")) return;
 
-        const all = document.querySelectorAll("*");
+        const style = document.createElement("style");
+        style.id = "wcag-text-spacing-test";
 
-        for (const el of all) {
-            const style = window.getComputedStyle(el);
-
-            const text = (el.innerText || "").trim();
-            const textLength = text.length;
-
-            const height = style.height;
-            const minHeight = style.minHeight;
-            const overflow = style.overflow;
-
-            const hasFixedHeight =
-                height &&
-                height !== "auto" &&
-                !height.includes("%") &&
-                /^\d+(\.\d+)?px$/.test(height) &&
-                parseFloat(height) > 0;
-
-            const hasOverflowHidden =
-                overflow === "hidden" || overflow === "clip";
-
-            // Only capture relevant elements
-            if (!hasFixedHeight && !hasOverflowHidden && textLength < 30) {
-                continue;
+        style.innerHTML = `
+            * {
+                line-height: 1.5 !important;
+                letter-spacing: 0.12em !important;
+                word-spacing: 0.16em !important;
             }
 
-            results.push({
-                element_index: index++,
-                tag: el.tagName.toLowerCase(),
-                element_id: el.id || null,
-                class_name: el.className || null,
+            p, div, section, article {
+                margin-bottom: 2em !important;
+            }
+        `;
 
-                text_length: textLength,
-                text_preview: text.slice(0, 150),
-
-                height: height,
-                min_height: minHeight,
-                overflow: overflow,
-
-                has_fixed_height: hasFixedHeight,
-                has_overflow_hidden: hasOverflowHidden,
-
-                html_snippet: el.outerHTML.slice(0, 400)
-            });
-        }
-
-        return results;
+        document.head.appendChild(style);
     }"""
+
+    EXTRACT_JS = r"""() => {
+    const results = [];
+    let index = 0;
+
+    const ignoredTags = ["html","head","body","script","style","img","svg","canvas"];
+
+    const all = document.querySelectorAll("*");
+
+    for (const el of all) {
+
+        const tag = el.tagName.toLowerCase();
+        if (ignoredTags.includes(tag)) continue;
+
+        const style = window.getComputedStyle(el);
+
+        // ✅ Only consider block-like elements (important)
+        const display = style.display;
+        const isBlockLike = ["block", "inline-block", "flex", "grid"].includes(display);
+        if (!isBlockLike) continue;
+
+        const text = (el.innerText || "").trim();
+        const textLength = text.length;
+
+        // ✅ Ignore low-text elements
+        if (textLength < 20) continue;
+
+        const height = style.height;
+        const minHeight = style.minHeight;
+        const overflow = style.overflow;
+
+        const hasFixedHeight =
+            height &&
+            height !== "auto" &&
+            /^\d+(\.\d+)?px$/.test(height);
+
+        const hasOverflowHidden =
+            overflow === "hidden" || overflow === "clip";
+
+        // ✅ Only treat clipping as relevant if overflow is restricted
+        const isClipped =
+            (hasOverflowHidden && el.scrollHeight > el.clientHeight) ||
+            (hasOverflowHidden && el.scrollWidth > el.clientWidth);
+
+        results.push({
+            element_index: index++,
+            tag,
+            element_id: el.id || null,
+            class_name: el.className || null,
+
+            text_length: textLength,
+            text_preview: text.slice(0, 150),
+
+            height,
+            min_height: minHeight,
+            overflow,
+
+            has_fixed_height: hasFixedHeight,
+            has_overflow_hidden: hasOverflowHidden,
+            is_clipped: isClipped,
+
+            html_snippet: el.outerHTML.slice(0, 400)
+        });
+    }
+
+    return results;
+}"""
+
 
     def __init__(self, base_url: str, output_dir: str, max_depth: int = 0):
         self.base_url = base_url
@@ -134,8 +171,7 @@ class AsyncTextSpacingCrawler:
         page = await context.new_page()
 
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_timeout(1500)
+            await page.goto(url, wait_until="domcontentloaded")
 
             raw = await page.evaluate(self.EXTRACT_JS)
 
