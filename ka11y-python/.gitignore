@@ -21,3 +21,4 @@ env/
 # Output folders (Docker volumes)
 output/crawled_images/
 output/logs/
+output/
