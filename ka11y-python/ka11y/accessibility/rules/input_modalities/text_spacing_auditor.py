@@ -15,29 +15,34 @@ from typing import List, Dict, Any
 from ka11y.crawler.text_spacing_crawler import TextSpacingData
 
 
+def _is_text_relevant(item: TextSpacingData):
+    if item.text_length < 20:
+        return False
+
+    if item.tag in ["html", "body", "img", "svg", "canvas"]:
+        return False
+
+    return True
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _check_1412(item: TextSpacingData):
 
-    # ❌ REAL WCAG failure
-    if item.is_clipped:
-        return "FAILED", (
-            "1.4.12: Text is clipped when spacing is increased."
-        )
+    if not _is_text_relevant(item):
+        return "PASSED", ""
 
-    # ⚠️ Risk (not guaranteed failure)
     if item.has_fixed_height and item.has_overflow_hidden:
         return "WARNING", (
-            "1.4.12: Potential clipping risk (fixed height + overflow hidden)."
+            "1.4.12: Potential clipping risk — fixed height with overflow hidden. "
+            "Needs visual verification with increased spacing."
         )
 
     if item.has_fixed_height:
         return "INFO", (
-            "1.4.12: Fixed height detected — verify with manual testing."
+            "1.4.12: Fixed height detected. Verify text does not clip when spacing increases."
         )
 
     return "PASSED", ""
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 

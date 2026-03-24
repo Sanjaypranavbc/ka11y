@@ -1,0 +1,1536 @@
+page_url,element_index,tag,role,element_id,input_type,visible_label,aria_label,aria_labelledby,aria_labelledby_text,title_attr,value_attr,alt_attr,accessible_name,wcag_2_5_3_status,wcag_2_5_3_violation,overall_status,html_snippet
+https://www.bluecaffeine.com/,0,A,,,,"<img class=""logo"" style=""height: 65px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"">",,,,,,,"<img class=""logo"" style=""height: 65px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"">",FAILED,"2.5.3: Accessible name ""<img class=""logo"" style=""height: 65px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"">"" does not contain visible label ""<img class=""logo"" style=""height: 65px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"">"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/"">
+							<img class=""logo lazyloaded"" style=""height: 65px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"" data-ll-status=""loaded""><noscript><img class=""logo"" style=""height: 65px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo""></noscript>
+						</a"
+https://www.bluecaffeine.com/,1,A,,,,CASE STUDIES,,,,,,,CASE STUDIES,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/case-studies""><span>CASE STUDIES</span></a>"
+https://www.bluecaffeine.com/,2,A,,,,SERVICES,,,,,,,SERVICES,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/services/""><span>SERVICES</span></a>"
+https://www.bluecaffeine.com/,3,A,,,,Marketing Services for Amazon,,,,,,,Marketing Services for Amazon,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/marketing-services-for-amazon/""><i class=""fa fa-angle-double-right""></i><span>Marketing Services for Amazon</span></a>"
+https://www.bluecaffeine.com/,4,A,,,,Digital Brand Strategy,,,,,,,Digital Brand Strategy,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/strategy/""><i class=""fa fa-angle-double-right""></i><span>Digital Brand Strategy</span></a>"
+https://www.bluecaffeine.com/,5,A,,,,Search Engine Marketing,,,,,,,Search Engine Marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-marketing/""><i class=""fa fa-angle-double-right""></i><span>Search Engine Marketing</span></a>"
+https://www.bluecaffeine.com/,6,A,,,,Social Media Ads,,,,,,,Social Media Ads,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/social-media-ads/""><i class=""fa fa-angle-double-right""></i><span>Social Media Ads</span></a>"
+https://www.bluecaffeine.com/,7,A,,,,Search Engine Optimization,,,,,,,Search Engine Optimization,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-optimization/""><i class=""fa fa-angle-double-right""></i><span>Search Engine Optimization</span></a>"
+https://www.bluecaffeine.com/,8,A,,,,Saas Services,,,,,,,Saas Services,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/saas-services/""><span>Saas Services</span></a>"
+https://www.bluecaffeine.com/,9,A,,,,Analytics,,,,,,,Analytics,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/analytics/""><i class=""fa fa-angle-double-right""></i><span>Analytics</span></a>"
+https://www.bluecaffeine.com/,10,A,,,,E-mail Marketing,,,,,,,E-mail Marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/e-mail-marketing/""><i class=""fa fa-angle-double-right""></i><span>E-mail Marketing</span></a>"
+https://www.bluecaffeine.com/,11,A,,,,Conversion Rate Optimization,,,,,,,Conversion Rate Optimization,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/conversion-rate-optimization/""><i class=""fa fa-angle-double-right""></i><span>Conversion Rate Optimization</span></a>"
+https://www.bluecaffeine.com/,12,A,,,,Website & Apps,,,,,,,Website & Apps,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/website-and-apps/""><i class=""fa fa-angle-double-right""></i><span>Website &amp; Apps</span></a>"
+https://www.bluecaffeine.com/,13,A,,,,BLOG,,,,,,,BLOG,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/blog-home/""><span>BLOG</span></a>"
+https://www.bluecaffeine.com/,14,A,,,,CONTACT,,,,,,,CONTACT,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/#contact-us""><span>CONTACT</span></a>"
+https://www.bluecaffeine.com/,15,A,,,,AI LABS,,,,,,,AI LABS,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/ai-labs/""><span>AI LABS</span></a>"
+https://www.bluecaffeine.com/,16,A,,,,AI CHATBOT,,,,,,,AI CHATBOT,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/ai-chatbot/""><span>AI CHATBOT</span></a>"
+https://www.bluecaffeine.com/,17,A,,,,"<img class=""logo"" style=""height: 60px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2022/12/BC-WHITE-Hat-1-2.png"" alt=""Logo""/>",,,,,,,"<img class=""logo"" style=""height: 60px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2022/12/BC-WHITE-Hat-1-2.png"" alt=""Logo""/>",FAILED,"2.5.3: Accessible name ""<img class=""logo"" style=""height: 60px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2022/12/BC-WHITE-Hat-1-2.png"" alt=""Logo""/>"" does not contain visible label ""<img class=""logo"" style=""height: 60px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2022/12/BC-WHITE-Hat-1-2.png"" alt=""Logo""/>"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/""><img class=""logo lazyloaded"" style=""height: 60px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2022/12/BC-WHITE-Hat-1-2.png"" alt=""Logo"" data-ll-status=""loaded""><noscript><img class=""logo"" style=""height: 60px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2022/12/BC-WHITE-Hat-1-2.png"" alt=""Logo""/></noscript></a>"
+https://www.bluecaffeine.com/,18,A,,,,CASE STUDIES,,,,,,,CASE STUDIES,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/case-studies""><span>CASE STUDIES</span></a>"
+https://www.bluecaffeine.com/,19,A,,,,SERVICES,,,,,,,SERVICES,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/services/""><span>SERVICES</span></a>"
+https://www.bluecaffeine.com/,20,A,,,,Marketing Services for Amazon,,,,,,,Marketing Services for Amazon,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/marketing-services-for-amazon/""><i class=""fa fa-angle-double-right""></i><span>Marketing Services for Amazon</span></a>"
+https://www.bluecaffeine.com/,21,A,,,,Digital Brand Strategy,,,,,,,Digital Brand Strategy,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/strategy/""><i class=""fa fa-angle-double-right""></i><span>Digital Brand Strategy</span></a>"
+https://www.bluecaffeine.com/,22,A,,,,Search Engine Marketing,,,,,,,Search Engine Marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-marketing/""><i class=""fa fa-angle-double-right""></i><span>Search Engine Marketing</span></a>"
+https://www.bluecaffeine.com/,23,A,,,,Social Media Ads,,,,,,,Social Media Ads,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/social-media-ads/""><i class=""fa fa-angle-double-right""></i><span>Social Media Ads</span></a>"
+https://www.bluecaffeine.com/,24,A,,,,Search Engine Optimization,,,,,,,Search Engine Optimization,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-optimization/""><i class=""fa fa-angle-double-right""></i><span>Search Engine Optimization</span></a>"
+https://www.bluecaffeine.com/,25,A,,,,Saas Services,,,,,,,Saas Services,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/saas-services/""><span>Saas Services</span></a>"
+https://www.bluecaffeine.com/,26,A,,,,Analytics,,,,,,,Analytics,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/analytics/""><i class=""fa fa-angle-double-right""></i><span>Analytics</span></a>"
+https://www.bluecaffeine.com/,27,A,,,,E-mail Marketing,,,,,,,E-mail Marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/e-mail-marketing/""><i class=""fa fa-angle-double-right""></i><span>E-mail Marketing</span></a>"
+https://www.bluecaffeine.com/,28,A,,,,Conversion Rate Optimization,,,,,,,Conversion Rate Optimization,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/conversion-rate-optimization/""><i class=""fa fa-angle-double-right""></i><span>Conversion Rate Optimization</span></a>"
+https://www.bluecaffeine.com/,29,A,,,,Website & Apps,,,,,,,Website & Apps,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/website-and-apps/""><i class=""fa fa-angle-double-right""></i><span>Website &amp; Apps</span></a>"
+https://www.bluecaffeine.com/,30,A,,,,BLOG,,,,,,,BLOG,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/blog-home/""><span>BLOG</span></a>"
+https://www.bluecaffeine.com/,31,A,,,,CONTACT,,,,,,,CONTACT,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/#contact-us""><span>CONTACT</span></a>"
+https://www.bluecaffeine.com/,32,A,,,,AI LABS,,,,,,,AI LABS,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/ai-labs/""><span>AI LABS</span></a>"
+https://www.bluecaffeine.com/,33,A,,,,AI CHATBOT,,,,,,,AI CHATBOT,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/ai-chatbot/""><span>AI CHATBOT</span></a>"
+https://www.bluecaffeine.com/,34,A,,,,"<img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"">",,,,,,,"<img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"">",FAILED,"2.5.3: Accessible name ""<img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"">"" does not contain visible label ""<img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png"" alt=""Logo"">"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/""><img class=""logo"" style=""height: 44px; width: auto;"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Logo"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/BC-WHITE-116.png""><noscript><img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp"
+https://www.bluecaffeine.com/,35,A,,,,"<img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/07/BC-WHITE-116.png"" alt=""Logo""/>",,,,,,,"<img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/07/BC-WHITE-116.png"" alt=""Logo""/>",FAILED,"2.5.3: Accessible name ""<img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/07/BC-WHITE-116.png"" alt=""Logo""/>"" does not contain visible label ""<img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/07/BC-WHITE-116.png"" alt=""Logo""/>"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/""><img class=""logo"" style=""height: 44px; width: auto;"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Logo"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/07/BC-WHITE-116.png""><noscript><img class=""logo"" style=""height: 44px; width: auto;"" src=""https://www.bluecaffeine.com/wp"
+https://www.bluecaffeine.com/,36,A,,,,CASE STUDIES,,,,,,,CASE STUDIES,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/case-studies""><span>CASE STUDIES</span></a>"
+https://www.bluecaffeine.com/,37,A,,,,SERVICES,,,,,,,SERVICES,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/services/""><i class=""fa fa-angle-right""></i><span>SERVICES</span></a>"
+https://www.bluecaffeine.com/,38,A,,,,PR and Media,,,,,,,PR and Media,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/pr-social-media-and-events/""><span>PR and Media</span></a>"
+https://www.bluecaffeine.com/,39,A,,,,Amazon Marketing Services,,,,,,,Amazon Marketing Services,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/marketing-services-for-amazon/""><span>Amazon Marketing Services</span></a>"
+https://www.bluecaffeine.com/,40,A,,,,Digital Brand Strategy,,,,,,,Digital Brand Strategy,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/strategy/""><span>Digital Brand Strategy</span></a>"
+https://www.bluecaffeine.com/,41,A,,,,Search Engine Marketing,,,,,,,Search Engine Marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-marketing-3/""><span>Search Engine Marketing</span></a>"
+https://www.bluecaffeine.com/,42,A,,,,Social Media Ads,,,,,,,Social Media Ads,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/social-media-ads/""><span>Social Media Ads</span></a>"
+https://www.bluecaffeine.com/,43,A,,,,Search Engine Optimization,,,,,,,Search Engine Optimization,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-optimization/""><span>Search Engine Optimization</span></a>"
+https://www.bluecaffeine.com/,44,A,,,,SaaS  Services,,,,,,,SaaS  Services,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/saas-services/""><span>SaaS  Services</span></a>"
+https://www.bluecaffeine.com/,45,A,,,,Analytics,,,,,,,Analytics,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/analytics/""><span>Analytics</span></a>"
+https://www.bluecaffeine.com/,46,A,,,,E-mail Marketing,,,,,,,E-mail Marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/e-mail-marketing/""><span>E-mail Marketing</span></a>"
+https://www.bluecaffeine.com/,47,A,,,,Conversion Rate Optimization,,,,,,,Conversion Rate Optimization,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/conversion-rate-optimization/""><span>Conversion Rate Optimization</span></a>"
+https://www.bluecaffeine.com/,48,A,,,,search engine marketing,,,,,,,search engine marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-marketing/""><span>search engine marketing</span></a>"
+https://www.bluecaffeine.com/,49,A,,,,BLOG,,,,,,,BLOG,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/blog-home/""><i class=""fa fa-angle-right""></i><span>BLOG</span></a>"
+https://www.bluecaffeine.com/,50,A,,,,CONTACT,,,,,,,CONTACT,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/contact-us/""><i class=""fa fa-angle-right""></i><span>CONTACT</span></a>"
+https://www.bluecaffeine.com/,51,A,,,,AI LABS,,,,,,,AI LABS,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/ai-labs/""><span>AI LABS</span></a>"
+https://www.bluecaffeine.com/,52,A,,,,AI CHATBOT,,,,,,,AI CHATBOT,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/ai-chatbot/""><span>AI CHATBOT</span></a>"
+https://www.bluecaffeine.com/,53,A,,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<a class=""bt-facebook"" href=""#"">
+					</a>"
+https://www.bluecaffeine.com/,54,A,,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<a class=""bt-linkedin"" href=""#"">
+					</a>"
+https://www.bluecaffeine.com/,55,A,,,,"<img loading=""lazy"" decoding=""async"" class=""alignnone wp-image-14321 size-full"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/03/PremierBadgeClickable.png"" alt="""" width=""152"" height=""146""/>",,,,,,,"<img loading=""lazy"" decoding=""async"" class=""alignnone wp-image-14321 size-full"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/03/PremierBadgeClickable.png"" alt="""" width=""152"" height=""146""/>",FAILED,"2.5.3: Accessible name ""<img loading=""lazy"" decoding=""async"" class=""alignnone wp-image-14321 size-full"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/03/PremierBadgeClickable.png"" alt="""" width=""152"" height=""146""/>"" does not contain visible label ""<img loading=""lazy"" decoding=""async"" class=""alignnone wp-image-14321 size-full"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/03/PremierBadgeClickable.png"" alt="""" width=""152"" height=""146""/>"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.google.com/partners/agency?id=3026234250"" target=""_blank"" rel=""noopener""><img loading=""lazy"" decoding=""async"" class=""alignnone wp-image-14321 size-full lazyloaded"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/03/PremierBadgeClickable.png"" alt="""" width=""152"" height=""146"" data-ll-status=""loaded""><noscript><img loading=""lazy"" decoding=""async"" class=""alignnone wp-imag"
+https://www.bluecaffeine.com/,56,BUTTON,button,,button,,Previous,,,,,,Previous,N/A,No visible text label — rule does not apply.,N/A,"<button type=""button"" role=""button"" aria-label=""Previous"" style=""color: rgb(51, 51, 51); font-size: 20px;"" class=""slick-prev default slick-arrow""><i class=""ultsl-arrow-left4""></i></button>"
+https://www.bluecaffeine.com/,57,BUTTON,button,,button,,Next,,,,,,Next,N/A,No visible text label — rule does not apply.,N/A,"<button type=""button"" role=""button"" aria-label=""Next"" style=""color: rgb(51, 51, 51); font-size: 20px;"" class=""slick-next default slick-arrow""><i class=""ultsl-arrow-right4""></i></button>"
+https://www.bluecaffeine.com/,58,A,,,,LEARN MORE,,,,,,,LEARN MORE,PASSED,,PASSED,"<a class=""ubtn-link ult-adjust-bottom-margin ubtn-left ubtn-normal "" href=""https://www.bluecaffeine.com/goof-x-blue-caffeine-partnership/""><button type=""button"" id=""ubtn-1304"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-left   tooltip-69c2413c0adf5"" data-hover="""" data-border-color="""" data-bg=""#202833"" data-hover-bg="""" data-border-hover="""" data-shado"
+https://www.bluecaffeine.com/,59,BUTTON,,ubtn-1304,button,LEARN MORE,,,,,,,LEARN MORE,PASSED,,PASSED,"<button type=""button"" id=""ubtn-1304"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-left   tooltip-69c2413c0adf5"" data-hover="""" data-border-color="""" data-bg=""#202833"" data-hover-bg="""" data-border-hover="""" data-shadow-hover="""" data-shadow-click=""none"" data-shadow="""" data-shd-shadow="""" data-ultimate-target=""#ubtn-1304"" data-responsive-json-new=""{&quot;fo"
+https://www.bluecaffeine.com/,60,A,,,,How to Overcome Common SaaS Marketing Challenges and Drive Growth Through Strategic Campaigns,,,,,,,How to Overcome Common SaaS Marketing Challenges and Drive Growth Through Strategic Campaigns,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/how-to-overcome-common-saas-marketing-challenges-and-drive-growth-through-strategic-campaigns/"">
+<img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/SaaS-1.png""><noscript><img decodin"
+https://www.bluecaffeine.com/,61,A,,,,Mastering Prompt Engineering: The Strategic Advantage for Smarter AI,,,,,,,Mastering Prompt Engineering: The Strategic Advantage for Smarter AI,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/mastering-prompt-engineering-the-strategic-advantage-for-smarter-ai/"">
+<img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/Prompt-1.png""><noscript><img decoding=""async"" class="" image"""
+https://www.bluecaffeine.com/,62,A,,,,About Customer Journey Mapping Automation,,,,,,,About Customer Journey Mapping Automation,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/about-customer-journey-mapping/""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/map1-1.png""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-co"
+https://www.bluecaffeine.com/,63,A,,,,ALL BLOGS,,,,,,,ALL BLOGS,PASSED,,PASSED,"<a class=""ubtn-link ult-adjust-bottom-margin ubtn-center ubtn-normal "" href=""https://www.bluecaffeine.com/blog-home/""><button type=""button"" id=""ubtn-4365"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-center   tooltip-69c2413c1d11c"" data-hover=""#ffffff"" data-border-color="""" data-bg=""#202833"" data-hover-bg="""" data-border-hover="""" data-shadow-hover="""" d"
+https://www.bluecaffeine.com/,64,BUTTON,,ubtn-4365,button,ALL BLOGS,,,,,,,ALL BLOGS,PASSED,,PASSED,"<button type=""button"" id=""ubtn-4365"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-center   tooltip-69c2413c1d11c"" data-hover=""#ffffff"" data-border-color="""" data-bg=""#202833"" data-hover-bg="""" data-border-hover="""" data-shadow-hover="""" data-shadow-click=""none"" data-shadow="""" data-shd-shadow="""" data-ultimate-target=""#ubtn-4365"" data-responsive-json-new="""
+https://www.bluecaffeine.com/,65,A,,,,"We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts...",,,,,,,"We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts...",FAILED,"2.5.3: Accessible name ""We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts..."" does not contain visible label ""We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #fff !important;"" href=""https://www.bluecaffeine.com/social-media-ads/"">We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts...</a>"
+https://www.bluecaffeine.com/,66,A,,,,"We conduct digital brand audits, competitor research & analysis, SEO compliance, PPC account audits...",,,,,,,"We conduct digital brand audits, competitor research & analysis, SEO compliance, PPC account audits...",FAILED,"2.5.3: Accessible name ""We conduct digital brand audits, competitor research & analysis, SEO compliance, PPC account audits..."" does not contain visible label ""We conduct digital brand audits, competitor research & analysis, SEO compliance, PPC account audits..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #000 !important;"" href=""https://www.bluecaffeine.com/search-engine-marketing/"">We conduct digital brand audits, competitor research &amp; analysis, SEO compliance, PPC account audits...</a>"
+https://www.bluecaffeine.com/,67,A,,,,"What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...",,,,,,,"What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...",FAILED,"2.5.3: Accessible name ""What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework..."" does not contain visible label ""What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #fff !important;"" href=""https://www.bluecaffeine.com/analytics/"">What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...</a>"
+https://www.bluecaffeine.com/,68,A,,,,"Enable the industry to understand who you are, what you offer and the impact you have on the industry.",,,,,,,"Enable the industry to understand who you are, what you offer and the impact you have on the industry.",FAILED,"2.5.3: Accessible name ""Enable the industry to understand who you are, what you offer and the impact you have on the industry."" does not contain visible label ""Enable the industry to understand who you are, what you offer and the impact you have on the industry."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #000 !important;"" href=""https://www.bluecaffeine.com/search-engine-optimization/"">Enable the industry to understand who you are, what you offer and the impact you have on the industry.</a>"
+https://www.bluecaffeine.com/,69,A,,,,"Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy...",,,,,,,"Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy...",FAILED,"2.5.3: Accessible name ""Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy..."" does not contain visible label ""Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #fff !important;"" href=""https://www.bluecaffeine.com/strategy/"">Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy...</a>"
+https://www.bluecaffeine.com/,70,A,,,,"Enable the industry to understand who you are, what you offer and the impact you have on the industry.",,,,,,,"Enable the industry to understand who you are, what you offer and the impact you have on the industry.",FAILED,"2.5.3: Accessible name ""Enable the industry to understand who you are, what you offer and the impact you have on the industry."" does not contain visible label ""Enable the industry to understand who you are, what you offer and the impact you have on the industry."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #000 !important;"" href=""https://www.bluecaffeine.com/e-mail-marketing/"">Enable the industry to understand who you are, what you offer and the impact you have on the industry.</a>"
+https://www.bluecaffeine.com/,71,A,,,,"We create a program that suits your needs by establishing new platforms, create a single ...",,,,,,,"We create a program that suits your needs by establishing new platforms, create a single ...",FAILED,"2.5.3: Accessible name ""We create a program that suits your needs by establishing new platforms, create a single ..."" does not contain visible label ""We create a program that suits your needs by establishing new platforms, create a single ..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #fff !important;"" href=""https://www.bluecaffeine.com/conversion-rate-optimization/"">We create a program that suits your needs by establishing new platforms, create a single ...</a>"
+https://www.bluecaffeine.com/,72,A,,,,"What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework....",,,,,,,"What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework....",FAILED,"2.5.3: Accessible name ""What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...."" does not contain visible label ""What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #000 !important;"" href=""https://www.bluecaffeine.com/website-and-apps/"">What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework....</a>"
+https://www.bluecaffeine.com/,73,A,,,,"We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend.",,,,,,,"We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend.",FAILED,"2.5.3: Accessible name ""We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend."" does not contain visible label ""We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""font-size: 16px; line-height: 28px; color: #fff !important; padding-top: 10px;"" href=""https://www.bluecaffeine.com/Marketing-Services-for-Amazon/"">We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend.</a>"
+https://www.bluecaffeine.com/,74,A,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/SaaS-1.png"" alt=""Alt text""/>
+                        
+                            How to Overcome Common SaaS Marketing Challenges and Drive Growth Through
+                                Strategic Campaigns",,,,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/SaaS-1.png"" alt=""Alt text""/>
+                        
+                            How to Overcome Common SaaS Marketing Challenges and Drive Growth Through
+                                Strategic Campaigns",FAILED,"2.5.3: Accessible name ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/SaaS-1.png"" alt=""Alt text""/>
+                        
+                            How to Overcome Common SaaS Marketing Challenges and Drive Growth Through
+                                Strategic Campaigns"" does not contain visible label ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/SaaS-1.png"" alt=""Alt text""/>
+                        
+                            How to Overcome Common SaaS Marketing Challenges and Drive Growth Through
+                                Strategic Campaigns"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/how-to-overcome-common-saas-marketing-challenges-and-drive-growth-through-strategic-campaigns/""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/SaaS-1.png""><noscript><img decoding"
+https://www.bluecaffeine.com/,75,A,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/Prompt-1.png"" alt=""Alt text""/>
+                        
+                            Mastering Prompt Engineering: The Strategic Advantage for Smarter AI",,,,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/Prompt-1.png"" alt=""Alt text""/>
+                        
+                            Mastering Prompt Engineering: The Strategic Advantage for Smarter AI",FAILED,"2.5.3: Accessible name ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/Prompt-1.png"" alt=""Alt text""/>
+                        
+                            Mastering Prompt Engineering: The Strategic Advantage for Smarter AI"" does not contain visible label ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/Prompt-1.png"" alt=""Alt text""/>
+                        
+                            Mastering Prompt Engineering: The Strategic Advantage for Smarter AI"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/mastering-prompt-engineering-the-strategic-advantage-for-smarter-ai/""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/Prompt-1.png""><noscript><img decoding=""async"" class="" image"" "
+https://www.bluecaffeine.com/,76,A,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/map1-1.png"" alt=""Alt text""/>
+                        
+                            About Customer Journey Mapping Automation",,,,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/map1-1.png"" alt=""Alt text""/>
+                        
+                            About Customer Journey Mapping Automation",FAILED,"2.5.3: Accessible name ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/map1-1.png"" alt=""Alt text""/>
+                        
+                            About Customer Journey Mapping Automation"" does not contain visible label ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/map1-1.png"" alt=""Alt text""/>
+                        
+                            About Customer Journey Mapping Automation"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/about-customer-journey-mapping/""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/map1-1.png""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-co"
+https://www.bluecaffeine.com/,77,A,,,,READ MORE,,,,,,,READ MORE,PASSED,,PASSED,"<a class=""ubtn-link ult-adjust-bottom-margin ubtn-center ubtn-normal read-more"" href=""https://www.bluecaffeine.com/blog-home/""><button type=""button"" id=""ubtn-3319"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-center   tooltip-69c2413c1fdae"" data-hover=""#000000"" data-border-color="""" data-bg=""#202833"" data-hover-bg="""" data-border-hover="""" data-shadow-h"
+https://www.bluecaffeine.com/,78,BUTTON,,ubtn-3319,button,READ MORE,,,,,,,READ MORE,PASSED,,PASSED,"<button type=""button"" id=""ubtn-3319"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-center   tooltip-69c2413c1fdae"" data-hover=""#000000"" data-border-color="""" data-bg=""#202833"" data-hover-bg="""" data-border-hover="""" data-shadow-hover="""" data-shadow-click=""none"" data-shadow="""" data-shd-shadow="""" data-ultimate-target=""#ubtn-3319"" data-responsive-json-new="""
+https://www.bluecaffeine.com/,79,A,,,,"We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts...",,,,,,,"We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts...",FAILED,"2.5.3: Accessible name ""We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts..."" does not contain visible label ""We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #fff !important;"" href=""https://www.bluecaffeine.com/social-media-ads/"">We create a program that suits your needs by establishing new platforms, create a single platform to centralize all social efforts...</a>"
+https://www.bluecaffeine.com/,80,A,,,,"We conduct digital brand audits, competitor research & analysis, SEO compliance, PPC account audits...",,,,,,,"We conduct digital brand audits, competitor research & analysis, SEO compliance, PPC account audits...",FAILED,"2.5.3: Accessible name ""We conduct digital brand audits, competitor research & analysis, SEO compliance, PPC account audits..."" does not contain visible label ""We conduct digital brand audits, competitor research & analysis, SEO compliance, PPC account audits..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #000 !important;"" href=""https://www.bluecaffeine.com/search-engine-marketing/"">We conduct digital brand audits, competitor research &amp; analysis, SEO compliance, PPC account audits...</a>"
+https://www.bluecaffeine.com/,81,A,,,,"What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...",,,,,,,"What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...",FAILED,"2.5.3: Accessible name ""What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework..."" does not contain visible label ""What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #fff !important;"" href=""https://www.bluecaffeine.com/analytics/"">What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...</a>"
+https://www.bluecaffeine.com/,82,A,,,,"Enable the industry to understand who you are, what you offer and the impact you have on the industry.",,,,,,,"Enable the industry to understand who you are, what you offer and the impact you have on the industry.",FAILED,"2.5.3: Accessible name ""Enable the industry to understand who you are, what you offer and the impact you have on the industry."" does not contain visible label ""Enable the industry to understand who you are, what you offer and the impact you have on the industry."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #000 !important;"" href=""https://www.bluecaffeine.com/search-engine-optimization/"">Enable the industry to understand who you are, what you offer and the impact you have on the industry.</a>"
+https://www.bluecaffeine.com/,83,A,,,,"Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy...",,,,,,,"Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy...",FAILED,"2.5.3: Accessible name ""Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy..."" does not contain visible label ""Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #fff !important;"" href=""https://www.bluecaffeine.com/strategy/"">Set yourself up for success with our comprehensive strategy engagements, including customer journey mapping, channel strategy...</a>"
+https://www.bluecaffeine.com/,84,A,,,,"Enable the industry to understand who you are, what you offer and the impact you have on the industry.",,,,,,,"Enable the industry to understand who you are, what you offer and the impact you have on the industry.",FAILED,"2.5.3: Accessible name ""Enable the industry to understand who you are, what you offer and the impact you have on the industry."" does not contain visible label ""Enable the industry to understand who you are, what you offer and the impact you have on the industry."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #000 !important;"" href=""https://www.bluecaffeine.com/e-mail-marketing/"">Enable the industry to understand who you are, what you offer and the impact you have on the industry.</a>"
+https://www.bluecaffeine.com/,85,A,,,,"We create a program that suits your needs by establishing new platforms, create a single ...",,,,,,,"We create a program that suits your needs by establishing new platforms, create a single ...",FAILED,"2.5.3: Accessible name ""We create a program that suits your needs by establishing new platforms, create a single ..."" does not contain visible label ""We create a program that suits your needs by establishing new platforms, create a single ..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #fff !important;"" href=""https://www.bluecaffeine.com/conversion-rate-optimization/"">We create a program that suits your needs by establishing new platforms, create a single ...</a>"
+https://www.bluecaffeine.com/,86,A,,,,"What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework....",,,,,,,"What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework....",FAILED,"2.5.3: Accessible name ""What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...."" does not contain visible label ""What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework...."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #000 !important;"" href=""https://www.bluecaffeine.com/website-and-apps/"">What you cannot measure, you cannot improve. We help define marketing KPIs, build a measurement framework....</a>"
+https://www.bluecaffeine.com/,87,A,,,,"We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend.",,,,,,,"We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend.",FAILED,"2.5.3: Accessible name ""We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend."" does not contain visible label ""We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a style=""color: #fff !important; padding-top: 10px;"" href=""https://www.bluecaffeine.com/Marketing-Services-for-Amazon/"">We help businesses plan, implement and optimize marketing strategies on Amazon, driving maximum return on ad spend.</a>"
+https://www.bluecaffeine.com/,88,BUTTON,button,,button,1,,,,,,,1,PASSED,,PASSED,"<button type=""button"" data-role=""none"" role=""button"" tabindex=""0"">1</button>"
+https://www.bluecaffeine.com/,89,BUTTON,button,,button,2,,,,,,,2,PASSED,,PASSED,"<button type=""button"" data-role=""none"" role=""button"" tabindex=""0"">2</button>"
+https://www.bluecaffeine.com/,90,BUTTON,button,,button,3,,,,,,,3,PASSED,,PASSED,"<button type=""button"" data-role=""none"" role=""button"" tabindex=""0"">3</button>"
+https://www.bluecaffeine.com/,91,BUTTON,button,,button,1,,,,,,,1,PASSED,,PASSED,"<button type=""button"" data-role=""none"" role=""button"" tabindex=""0"">1</button>"
+https://www.bluecaffeine.com/,92,BUTTON,button,,button,2,,,,,,,2,PASSED,,PASSED,"<button type=""button"" data-role=""none"" role=""button"" tabindex=""0"">2</button>"
+https://www.bluecaffeine.com/,93,BUTTON,button,,button,3,,,,,,,3,PASSED,,PASSED,"<button type=""button"" data-role=""none"" role=""button"" tabindex=""0"">3</button>"
+https://www.bluecaffeine.com/,94,A,,,,"Facebook Case Study
+Acute targeting on Facebook using custom audiences",,,,,,,"Facebook Case Study
+Acute targeting on Facebook using custom audiences",PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/facebook-case-study/"" tabindex=""0""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/ia_100000066.png""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.c"
+https://www.bluecaffeine.com/,95,A,,,,"SEO Audit Case Study
+Customized SEO Audit for a prospective client of a creative agency",,,,,,,"SEO Audit Case Study
+Customized SEO Audit for a prospective client of a creative agency",PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/seo-audit-case-study/"" tabindex=""0""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/seo.jpg""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-co"
+https://www.bluecaffeine.com/,96,A,,,,"LiveWorld Case Study
+Digital Marketing strategy for a social customer experience company",,,,,,,"LiveWorld Case Study
+Digital Marketing strategy for a social customer experience company",PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/liveworld-case-study/"" tabindex=""0""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/social-1.jpg""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/"
+https://www.bluecaffeine.com/,97,A,,,,"StockSnips Case Study
+Email marketing for a Fintech audience ...",,,,,,,"StockSnips Case Study
+Email marketing for a Fintech audience ...",FAILED,"2.5.3: Accessible name ""StockSnips Case Study
+Email marketing for a Fintech audience ..."" does not contain visible label ""StockSnips Case Study
+Email marketing for a Fintech audience ..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/stocksnips-case-study/"" tabindex=""-1""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/stocksnips.jpg""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine."
+https://www.bluecaffeine.com/,98,A,,,,"Converge Point Case Study
+Bidding on non-branded keywords that you already rank for...",,,,,,,"Converge Point Case Study
+Bidding on non-branded keywords that you already rank for...",FAILED,"2.5.3: Accessible name ""Converge Point Case Study
+Bidding on non-branded keywords that you already rank for..."" does not contain visible label ""Converge Point Case Study
+Bidding on non-branded keywords that you already rank for..."". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/converge-point-case-study/"" tabindex=""-1""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/converge.jpg""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffein"
+https://www.bluecaffeine.com/,99,A,,,,"3 Phase Strategy-New
+How a three-phase strategy helped improve AdWords performance",,,,,,,"3 Phase Strategy-New
+How a three-phase strategy helped improve AdWords performance",PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/3-phase-strategy-new/"" tabindex=""-1""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/3phase.png""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/w"
+https://www.bluecaffeine.com/,100,A,,,,"Profit Case Study
+Profit.co introduced their Objectives & Key Results (OKR) solution in 2018",,,,,,,"Profit Case Study
+Profit.co introduced their Objectives & Key Results (OKR) solution in 2018",PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/profit-case-study/"" tabindex=""-1""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/07/image-profit-b-w.jpg""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffein"
+https://www.bluecaffeine.com/,101,A,,,,VIEW ALL CASE STUDIES,,,,,,,VIEW ALL CASE STUDIES,PASSED,,PASSED,"<a class=""ubtn-link ult-adjust-bottom-margin ubtn-center ubtn-normal read-more"" href=""https://www.bluecaffeine.com/case-studies/""><button type=""button"" id=""ubtn-7103"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-center   tooltip-69c2413e59010"" data-hover=""#ffffff"" data-border-color="""" data-bg=""#202833"" data-hover-bg=""#202932"" data-border-hover="""" dat"
+https://www.bluecaffeine.com/,102,BUTTON,,ubtn-7103,button,VIEW ALL CASE STUDIES,,,,,,,VIEW ALL CASE STUDIES,PASSED,,PASSED,"<button type=""button"" id=""ubtn-7103"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-center   tooltip-69c2413e59010"" data-hover=""#ffffff"" data-border-color="""" data-bg=""#202833"" data-hover-bg=""#202932"" data-border-hover="""" data-shadow-hover="""" data-shadow-click=""none"" data-shadow="""" data-shd-shadow="""" data-ultimate-target=""#ubtn-7103"" data-responsive-jso"
+https://www.bluecaffeine.com/,103,A,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/seo.jpg"" alt=""Alt text""/>
+          
+            SEO Audit Case Study
+            
+            A 65 point SEO audit was conducted to assess the health
+            
+            Read More",,,,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/seo.jpg"" alt=""Alt text""/>
+          
+            SEO Audit Case Study
+            
+            A 65 point SEO audit was conducted to assess the health
+            
+            Read More",FAILED,"2.5.3: Accessible name ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/seo.jpg"" alt=""Alt text""/>
+          
+            SEO Audit Case Study
+            
+            A 65 point SEO audit was conducted to assess the health
+            
+            Read More"" does not contain visible label ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/seo.jpg"" alt=""Alt text""/>
+          
+            SEO Audit Case Study
+            
+            A 65 point SEO audit was conducted to assess the health
+            
+            Read More"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/facebook-case-study/""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/seo.jpg""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/"
+https://www.bluecaffeine.com/,104,A,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/social-1.jpg"" alt=""Alt text""/>
+          
+            LiveWorld Case Study
+            LiveWorld is a Social Customer Experience company helping companies
+            Read More",,,,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/social-1.jpg"" alt=""Alt text""/>
+          
+            LiveWorld Case Study
+            LiveWorld is a Social Customer Experience company helping companies
+            Read More",FAILED,"2.5.3: Accessible name ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/social-1.jpg"" alt=""Alt text""/>
+          
+            LiveWorld Case Study
+            LiveWorld is a Social Customer Experience company helping companies
+            Read More"" does not contain visible label ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/social-1.jpg"" alt=""Alt text""/>
+          
+            LiveWorld Case Study
+            LiveWorld is a Social Customer Experience company helping companies
+            Read More"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/liveworld-case-study/""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/social-1.jpg""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/up"
+https://www.bluecaffeine.com/,105,A,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/stocksnips.jpg"" alt=""Alt text""/>
+          
+            StockSnips Case Study
+            
+            Email marketing for a Fintech audience ...
+            
+            Read More",,,,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/stocksnips.jpg"" alt=""Alt text""/>
+          
+            StockSnips Case Study
+            
+            Email marketing for a Fintech audience ...
+            
+            Read More",FAILED,"2.5.3: Accessible name ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/stocksnips.jpg"" alt=""Alt text""/>
+          
+            StockSnips Case Study
+            
+            Email marketing for a Fintech audience ...
+            
+            Read More"" does not contain visible label ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/stocksnips.jpg"" alt=""Alt text""/>
+          
+            StockSnips Case Study
+            
+            Email marketing for a Fintech audience ...
+            
+            Read More"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/stocksnips-case-study/""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/stocksnips.jpg""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content"
+https://www.bluecaffeine.com/,106,A,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/3phase.png"" alt=""Alt text""/>
+          
+            3 Phase Strategy-New
+            How a three-phase strategy helped improve AdWords performance
+            Read More",,,,,,,"<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/3phase.png"" alt=""Alt text""/>
+          
+            3 Phase Strategy-New
+            How a three-phase strategy helped improve AdWords performance
+            Read More",FAILED,"2.5.3: Accessible name ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/3phase.png"" alt=""Alt text""/>
+          
+            3 Phase Strategy-New
+            How a three-phase strategy helped improve AdWords performance
+            Read More"" does not contain visible label ""<img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/3phase.png"" alt=""Alt text""/>
+          
+            3 Phase Strategy-New
+            How a three-phase strategy helped improve AdWords performance
+            Read More"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.bluecaffeine.com/3-phase-strategy-new/""><img decoding=""async"" class="" image"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%200%200'%3E%3C/svg%3E"" alt=""Alt text"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2021/04/3phase.png""><noscript><img decoding=""async"" class="" image"" src=""https://www.bluecaffeine.com/wp-content/uplo"
+https://www.bluecaffeine.com/,107,A,,,,VIEW ALL CASE STUDIES,,,,,,,VIEW ALL CASE STUDIES,PASSED,,PASSED,"<a class=""ubtn-link ult-adjust-bottom-margin ubtn-center ubtn-normal read-more"" href=""https://www.bluecaffeine.com/case-studies/""><button type=""button"" id=""ubtn-7158"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-center   tooltip-69c2413e5948b"" data-hover=""#000000"" data-border-color="""" data-bg=""#202833"" data-hover-bg="""" data-border-hover="""" data-shado"
+https://www.bluecaffeine.com/,108,BUTTON,,ubtn-7158,button,VIEW ALL CASE STUDIES,,,,,,,VIEW ALL CASE STUDIES,PASSED,,PASSED,"<button type=""button"" id=""ubtn-7158"" class=""ubtn ult-adjust-bottom-margin ult-responsive ubtn-normal ubtn-no-hover-bg  none  ubtn-center   tooltip-69c2413e5948b"" data-hover=""#000000"" data-border-color="""" data-bg=""#202833"" data-hover-bg="""" data-border-hover="""" data-shadow-hover="""" data-shadow-click=""none"" data-shadow="""" data-shd-shadow="""" data-ultimate-target=""#ubtn-7158"" data-responsive-json-new="""
+https://www.bluecaffeine.com/,109,INPUT,,,submit,SUBMIT NOW,,,,,SUBMIT NOW,,SUBMIT NOW,PASSED,,PASSED,"<input type=""submit"" value=""SUBMIT NOW"" class=""wpcf7-form-control wpcf7-submit"">"
+https://www.bluecaffeine.com/,110,INPUT,,,submit,SUBMIT NOW,,,,,SUBMIT NOW,,SUBMIT NOW,PASSED,,PASSED,"<input type=""submit"" value=""SUBMIT NOW"" class=""wpcf7-form-control wpcf7-submit"">"
+https://www.bluecaffeine.com/,111,A,,,,About,,,,,,,About,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/#about-us""><span>About</span></a>"
+https://www.bluecaffeine.com/,112,A,,,,Services,,,,,,,Services,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/services/""><span>Services</span></a>"
+https://www.bluecaffeine.com/,113,A,,,,Solutions,,,,,,,Solutions,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/saas-services/""><span>Solutions</span></a>"
+https://www.bluecaffeine.com/,114,A,,,,Blog,,,,,,,Blog,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/blog-home/""><span>Blog</span></a>"
+https://www.bluecaffeine.com/,115,A,,,,Contact,,,,,,,Contact,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/#contact-us""><span>Contact</span></a>"
+https://www.bluecaffeine.com/,116,A,,,,Marketing Services for Amazon,,,,,,,Marketing Services for Amazon,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/marketing-services-for-amazon/""><span>Marketing Services for Amazon</span></a>"
+https://www.bluecaffeine.com/,117,A,,,,Digital Brand Strategy,,,,,,,Digital Brand Strategy,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/strategy/""><span>Digital Brand Strategy</span></a>"
+https://www.bluecaffeine.com/,118,A,,,,Search Engine Marketing,,,,,,,Search Engine Marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-marketing/""><span>Search Engine Marketing</span></a>"
+https://www.bluecaffeine.com/,119,A,,,,Social Media Ads,,,,,,,Social Media Ads,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/social-media-ads/""><span>Social Media Ads</span></a>"
+https://www.bluecaffeine.com/,120,A,,,,Search Engine Optimization,,,,,,,Search Engine Optimization,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/search-engine-optimization/""><span>Search Engine Optimization</span></a>"
+https://www.bluecaffeine.com/,121,A,,,,Analytics,,,,,,,Analytics,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/analytics/""><span>Analytics</span></a>"
+https://www.bluecaffeine.com/,122,A,,,,Saas services,,,,,,,Saas services,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/saas-services/""><span>Saas services</span></a>"
+https://www.bluecaffeine.com/,123,A,,,,E-mail Marketing,,,,,,,E-mail Marketing,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/e-mail-marketing/""><span>E-mail Marketing</span></a>"
+https://www.bluecaffeine.com/,124,A,,,,Conversion Rate Optimization,,,,,,,Conversion Rate Optimization,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/conversion-rate-optimization/""><span>Conversion Rate Optimization</span></a>"
+https://www.bluecaffeine.com/,125,A,,,,Website and Apps,,,,,,,Website and Apps,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/website-and-apps/""><span>Website and Apps</span></a>"
+https://www.bluecaffeine.com/,126,A,,,,+91 9884095151,,,,,,,+91 9884095151,FAILED,"2.5.3: Accessible name ""+91 9884095151"" does not contain visible label ""+91 9884095151"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""tel:9884095151"">+91 9884095151</a>"
+https://www.bluecaffeine.com/,127,A,,,,connect@bluecaffeine.com,,,,,,,connect@bluecaffeine.com,PASSED,,PASSED,"<a href=""mailto:connect@bluecaffeine.com"">connect@bluecaffeine.com</a>"
+https://www.bluecaffeine.com/,128,A,,,,rad@bluecaffeine.com,,,,,,,rad@bluecaffeine.com,PASSED,,PASSED,"<a href=""mailto:rad@bluecaffeine.com"">rad@bluecaffeine.com</a>"
+https://www.bluecaffeine.com/,129,A,,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<a class=""bt-facebook"" href=""https://www.facebook.com/bluecaffeinedigital/"">
+  </a>"
+https://www.bluecaffeine.com/,130,A,,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<a class=""bt-linkedin"" href=""https://www.linkedin.com/company/bluecaffeine/"">
+  </a>"
+https://www.bluecaffeine.com/,131,A,,,,"<img class=""alignnone size-full wp-image-4101 g-partner-new"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/92-2.png"" alt=""googlepartner"" width=""121"" height=""114""/>",,,,,,,"<img class=""alignnone size-full wp-image-4101 g-partner-new"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/92-2.png"" alt=""googlepartner"" width=""121"" height=""114""/>",FAILED,"2.5.3: Accessible name ""<img class=""alignnone size-full wp-image-4101 g-partner-new"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/92-2.png"" alt=""googlepartner"" width=""121"" height=""114""/>"" does not contain visible label ""<img class=""alignnone size-full wp-image-4101 g-partner-new"" src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/92-2.png"" alt=""googlepartner"" width=""121"" height=""114""/>"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://www.google.com/partners/agency?id=3026234250""><img class=""alignnone size-full wp-image-4101 g-partner-new"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20121%20114'%3E%3C/svg%3E"" alt=""googlepartner"" width=""121"" height=""114"" data-lazy-src=""https://www.bluecaffeine.com/wp-content/uploads/2025/10/92-2.png""><noscript><img class=""alignnone size-f"
+https://www.bluecaffeine.com/,132,A,,,,"<img class=""alignnone size-full wp-image-4101"" src=""https://www.bluecaffeine.com/wp-content/uploads/2024/12/ads-footer.png"" alt=""googlepartner"" width=""120"" height=""70""/>",,,,,,,"<img class=""alignnone size-full wp-image-4101"" src=""https://www.bluecaffeine.com/wp-content/uploads/2024/12/ads-footer.png"" alt=""googlepartner"" width=""120"" height=""70""/>",FAILED,"2.5.3: Accessible name ""<img class=""alignnone size-full wp-image-4101"" src=""https://www.bluecaffeine.com/wp-content/uploads/2024/12/ads-footer.png"" alt=""googlepartner"" width=""120"" height=""70""/>"" does not contain visible label ""<img class=""alignnone size-full wp-image-4101"" src=""https://www.bluecaffeine.com/wp-content/uploads/2024/12/ads-footer.png"" alt=""googlepartner"" width=""120"" height=""70""/>"". Speech-input users cannot activate this control by speaking the visible label.",FAILED,"<a href=""https://advertising.amazon.com/partners/directory/details/amzn1.ads1.ma1.ezm4diuu0f0t7guc2d0d88o6/Blue-Caffeine-Evisco-Systems-Pvt-Ltd?ref_=prtdrl_shr_cy""><img class=""alignnone size-full wp-image-4101"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20120%2070'%3E%3C/svg%3E"" alt=""googlepartner"" width=""120"" height=""70"" data-lazy-src=""https://www.bluecaf"
+https://www.bluecaffeine.com/,133,A,,,,Terms of Use,,,,,,,Terms of Use,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/terms-of-use"">Terms of Use</a>"
+https://www.bluecaffeine.com/,134,A,,,,Privacy Policy,,,,,,,Privacy Policy,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/privacy-policy"">Privacy Policy</a>"
+https://www.bluecaffeine.com/,135,A,,,,Terms of Use,,,,,,,Terms of Use,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/terms-of-use"">Terms of Use</a>"
+https://www.bluecaffeine.com/,136,A,,,,Privacy Policy,,,,,,,Privacy Policy,PASSED,,PASSED,"<a href=""https://www.bluecaffeine.com/privacy-policy"">Privacy Policy</a>"
+https://www.bluecaffeine.com/,137,DIV,listbox,,,".imgBox56{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Capital-luxx.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox57{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/osaze.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox58{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Titans.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox59{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/O2Matic.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox60{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Spiced.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox47{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/nba-logo-on-transparent-background-free-vector-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox46{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/m-full-logo-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox45{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/134783_upload-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+.imgBox48{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/ASE.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox49{width:158px;height:80px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Croppico.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox50{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Cron-AI.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox51{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Bubble.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox52{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/EvolutionIQ.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox53{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Truliv.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox54{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Brickbiyte.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox55{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Grizzly-Blades.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox56{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Capital-luxx.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox57{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/osaze.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox58{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Titans.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox59{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/O2Matic.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox60{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Spiced.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox47{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/nba-logo-on-transparent-background-free-vector-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox46{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/m-full-logo-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox45{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/134783_upload-1.png) center center no-repeat}",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox56{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Capital-luxx.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox57{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/osaze.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox58{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Titans.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox59{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/O2Matic.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox60{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Spiced.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox47{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/nba-logo-on-transparent-background-free-vector-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox46{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/m-full-logo-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox45{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/134783_upload-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+.imgBox48{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/ASE.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox49{width:158px;height:80px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Croppico.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox50{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Cron-AI.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox51{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Bubble.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox52{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/EvolutionIQ.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox53{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Truliv.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox54{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Brickbiyte.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox55{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Grizzly-Blades.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox56{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Capital-luxx.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox57{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/osaze.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox58{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Titans.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox59{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/O2Matic.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.imgBox60{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Spiced.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox47{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/nba-logo-on-transparent-background-free-vector-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox46{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/m-full-logo-1.png) center center no-repeat}
+		
+	
+
+	
+		
+			  
+.wpb_wrapper .imgBox45{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/134783_upload-1.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""slick-track"" style=""opacity: 1; width: 14136px; transform: translate3d(1140px, 0px, 0px);"" role=""listbox""><div class=""ult-item-wrap slick-slide slick-cloned"" data-animation=""animated no-animation"" data-slick-index=""-5"" id="""" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""im"
+https://www.bluecaffeine.com/,138,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide slick-current slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""0"" aria-hidden=""false"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide00"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox36""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,139,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""1"" aria-hidden=""false"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide01"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox2""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,140,DIV,option,,,.wpb_wrapper .imgBox47{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/nba-logo-on-transparent-background-free-vector-1.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".wpb_wrapper .imgBox47{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/nba-logo-on-transparent-background-free-vector-1.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""2"" aria-hidden=""false"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide02"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox47""> </div>
+<style>.wpb_wrapper .imgBox47{width:100"
+https://www.bluecaffeine.com/,141,DIV,option,,,.wpb_wrapper .imgBox46{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/m-full-logo-1.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".wpb_wrapper .imgBox46{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/m-full-logo-1.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""3"" aria-hidden=""false"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide03"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox46""> </div>
+<style>.wpb_wrapper .imgBox46{width:100"
+https://www.bluecaffeine.com/,142,DIV,option,,,.wpb_wrapper .imgBox45{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/134783_upload-1.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".wpb_wrapper .imgBox45{width:100%;height:60px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/10/134783_upload-1.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""4"" aria-hidden=""false"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide04"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox45""> </div>
+<style>.wpb_wrapper .imgBox45{width:100"
+https://www.bluecaffeine.com/,143,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""5"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide05"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox3""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,144,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""6"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide06"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox4""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,145,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""7"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide07"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox5""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,146,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""8"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide08"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox6""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,147,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""9"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide09"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox7""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,148,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""10"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide010"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox10""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,149,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""11"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide011"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox11""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,150,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""12"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide012"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox12""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,151,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""13"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide013"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox13""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,152,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""14"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide014"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox21""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,153,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""15"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide015"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox15""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,154,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""16"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide016"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox16""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,155,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""17"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide017"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox17""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,156,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""18"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide018"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox18""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,157,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""19"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide019"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox19""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,158,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""20"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide020"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox20""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,159,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""21"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide021"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox22""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,160,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""22"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide022"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox23""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,161,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""23"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide023"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox24""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,162,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""24"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide024"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox25""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,163,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""25"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide025"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox26""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,164,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""26"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide026"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox27""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,165,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""27"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide027"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox28""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,166,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""28"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide028"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox29""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,167,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""29"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide029"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox32""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,168,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""30"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide030"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox34""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,169,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""31"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide031"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox35""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,170,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""32"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide032"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox37""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,171,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""33"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide033"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox39""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,172,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""34"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide034"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox40""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,173,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""35"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide035"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox41""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,174,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""36"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide036"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox42""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,175,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""37"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide037"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox43""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,176,DIV,option,,,,,,,,,,,N/A,No visible text label — rule does not apply.,N/A,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""38"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide038"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox44""> </div>
+		</div>
+	</div>
+</div>"
+https://www.bluecaffeine.com/,177,DIV,option,,,.imgBox48{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/ASE.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox48{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/ASE.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""39"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide039"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox48""> </div>
+<style>.imgBox48{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,178,DIV,option,,,.imgBox49{width:158px;height:80px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Croppico.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox49{width:158px;height:80px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Croppico.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""40"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide040"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox49""> </div>
+<style>.imgBox49{width:158px;height:80px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,179,DIV,option,,,.imgBox50{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Cron-AI.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox50{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Cron-AI.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""41"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide041"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox50""> </div>
+<style>.imgBox50{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,180,DIV,option,,,.imgBox51{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Bubble.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox51{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Bubble.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""42"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide042"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox51""> </div>
+<style>.imgBox51{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,181,DIV,option,,,.imgBox52{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/EvolutionIQ.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox52{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/EvolutionIQ.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""43"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide043"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox52""> </div>
+<style>.imgBox52{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,182,DIV,option,,,.imgBox53{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Truliv.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox53{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Truliv.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""44"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide044"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox53""> </div>
+<style>.imgBox53{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,183,DIV,option,,,.imgBox54{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Brickbiyte.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox54{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Brickbiyte.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""45"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide045"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox54""> </div>
+<style>.imgBox54{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,184,DIV,option,,,.imgBox55{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Grizzly-Blades.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox55{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Grizzly-Blades.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""46"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide046"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox55""> </div>
+<style>.imgBox55{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,185,DIV,option,,,.imgBox56{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Capital-luxx.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox56{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Capital-luxx.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""47"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide047"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox56""> </div>
+<style>.imgBox56{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,186,DIV,option,,,.imgBox57{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/osaze.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox57{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/osaze.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""48"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide048"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox57""> </div>
+<style>.imgBox57{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,187,DIV,option,,,.imgBox58{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Titans.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox58{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Titans.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""49"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide049"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox58""> </div>
+<style>.imgBox58{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,188,DIV,option,,,.imgBox59{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/O2Matic.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox59{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/O2Matic.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""50"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide050"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox59""> </div>
+<style>.imgBox59{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,189,DIV,option,,,.imgBox60{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Spiced.png) center center no-repeat},,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is "".imgBox60{width:158px;height:66px;background:url(https://www.bluecaffeine.com/wp-content/uploads/2025/11/Spiced.png) center center no-repeat}"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""51"" aria-hidden=""true"" style=""width: 198px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide051"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			 <div class=""imgBox60""> </div>
+<style>.imgBox60{width:158px;height:66px;background:url(https://www.bluec"
+https://www.bluecaffeine.com/,190,SPAN,button,,,,Go to slide 1,,,,,,Go to slide 1,N/A,No visible text label — rule does not apply.,N/A,"<span class=""swiper-pagination-bullet swiper-pagination-bullet-active"" tabindex=""0"" role=""button"" aria-label=""Go to slide 1"" aria-current=""true""></span>"
+https://www.bluecaffeine.com/,191,SPAN,button,,,,Go to slide 1,,,,,,Go to slide 1,N/A,No visible text label — rule does not apply.,N/A,"<span class=""swiper-pagination-bullet swiper-pagination-bullet-active"" tabindex=""0"" role=""button"" aria-label=""Go to slide 1"" aria-current=""true""></span>"
+https://www.bluecaffeine.com/,192,DIV,listbox,,,"<img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/1-1-150x150-1-e1604563284815.png"" class=""tfree-client-image wp-post-image"" alt=""""/>“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+JASON KAPLERVP, Marketing, LiveWorld Inc., San Jose, CA<img loading=""lazy"" decoding=""async"" width=""280"" height=""280"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png 280w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-150x150.png 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-120x120.png 120w"" sizes=""(max-width: 280px) 100vw, 280px""/>“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+ARNOLD HUFFMANCEO, Digital Yalo, Atlanta, GA<img loading=""lazy"" decoding=""async"" width=""150"" height=""150"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1.jpg"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1.jpg 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1-120x120.jpg 120w"" sizes=""(max-width: 150px) 100vw, 150px""/>“For an early stage startup like us, Blue Caffeine has been a trusted partner for user acquistion and a cost effective launch strategy. Blue Caffeine played a key role in our growth with their quick turn around times, transparent processes and consistent communication”
+RAVI KOKACEO, Stocksnips, Pittsburgh, PA<img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/1-1-150x150-1-e1604563284815.png"" class=""tfree-client-image wp-post-image"" alt=""""/>“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+JASON KAPLERVP, Marketing, LiveWorld Inc., San Jose, CA<img loading=""lazy"" decoding=""async"" width=""280"" height=""280"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png 280w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-150x150.png 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-120x120.png 120w"" sizes=""(max-width: 280px) 100vw, 280px""/>“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+ARNOLD HUFFMANCEO, Digital Yalo, Atlanta, GA",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""<img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/1-1-150x150-1-e1604563284815.png"" class=""tfree-client-image wp-post-image"" alt=""""/>“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+JASON KAPLERVP, Marketing, LiveWorld Inc., San Jose, CA<img loading=""lazy"" decoding=""async"" width=""280"" height=""280"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png 280w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-150x150.png 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-120x120.png 120w"" sizes=""(max-width: 280px) 100vw, 280px""/>“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+ARNOLD HUFFMANCEO, Digital Yalo, Atlanta, GA<img loading=""lazy"" decoding=""async"" width=""150"" height=""150"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1.jpg"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1.jpg 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1-120x120.jpg 120w"" sizes=""(max-width: 150px) 100vw, 150px""/>“For an early stage startup like us, Blue Caffeine has been a trusted partner for user acquistion and a cost effective launch strategy. Blue Caffeine played a key role in our growth with their quick turn around times, transparent processes and consistent communication”
+RAVI KOKACEO, Stocksnips, Pittsburgh, PA<img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/1-1-150x150-1-e1604563284815.png"" class=""tfree-client-image wp-post-image"" alt=""""/>“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+JASON KAPLERVP, Marketing, LiveWorld Inc., San Jose, CA<img loading=""lazy"" decoding=""async"" width=""280"" height=""280"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png 280w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-150x150.png 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-120x120.png 120w"" sizes=""(max-width: 280px) 100vw, 280px""/>“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+ARNOLD HUFFMANCEO, Digital Yalo, Atlanta, GA"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""slick-track"" style=""opacity: 1; width: 0px; transform: translate3d(0px, 0px, 0px);"" role=""listbox""><div class=""sp-testimonial-free-item slick-slide slick-cloned"" data-slick-index=""-1"" id="""" aria-hidden=""true"" tabindex=""-1"" style=""width: 0px;""><div class=""sp-testimonial-free""><div class=""sp-tfree-client-image""><img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""data:image/s"
+https://www.bluecaffeine.com/,193,DIV,option,,,"<img loading=""lazy"" decoding=""async"" width=""280"" height=""280"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png 280w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-150x150.png 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-120x120.png 120w"" sizes=""(max-width: 280px) 100vw, 280px""/>“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+ARNOLD HUFFMANCEO, Digital Yalo, Atlanta, GA",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""<img loading=""lazy"" decoding=""async"" width=""280"" height=""280"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x.png 280w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-150x150.png 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/ia_100000082@2x-120x120.png 120w"" sizes=""(max-width: 280px) 100vw, 280px""/>“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+ARNOLD HUFFMANCEO, Digital Yalo, Atlanta, GA"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""sp-testimonial-free-item slick-slide slick-current slick-active"" data-slick-index=""0"" aria-hidden=""false"" style=""width: 0px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide20""><div class=""sp-testimonial-free""><div class=""sp-tfree-client-image""><img loading=""lazy"" decoding=""async"" width=""280"" height=""280"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20v"
+https://www.bluecaffeine.com/,194,DIV,option,,,"<img loading=""lazy"" decoding=""async"" width=""150"" height=""150"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1.jpg"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1.jpg 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1-120x120.jpg 120w"" sizes=""(max-width: 150px) 100vw, 150px""/>“For an early stage startup like us, Blue Caffeine has been a trusted partner for user acquistion and a cost effective launch strategy. Blue Caffeine played a key role in our growth with their quick turn around times, transparent processes and consistent communication”
+RAVI KOKACEO, Stocksnips, Pittsburgh, PA",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""<img loading=""lazy"" decoding=""async"" width=""150"" height=""150"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1.jpg"" class=""tfree-client-image wp-post-image"" alt="""" srcset=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1.jpg 150w, https://www.bluecaffeine.com/wp-content/uploads/2020/09/rav-150x150-1-120x120.jpg 120w"" sizes=""(max-width: 150px) 100vw, 150px""/>“For an early stage startup like us, Blue Caffeine has been a trusted partner for user acquistion and a cost effective launch strategy. Blue Caffeine played a key role in our growth with their quick turn around times, transparent processes and consistent communication”
+RAVI KOKACEO, Stocksnips, Pittsburgh, PA"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""sp-testimonial-free-item slick-slide"" data-slick-index=""1"" aria-hidden=""true"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide21"" style=""width: 0px;""><div class=""sp-testimonial-free""><div class=""sp-tfree-client-image""><img loading=""lazy"" decoding=""async"" width=""150"" height=""150"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20150%20150'%3"
+https://www.bluecaffeine.com/,195,DIV,option,,,"<img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/1-1-150x150-1-e1604563284815.png"" class=""tfree-client-image wp-post-image"" alt=""""/>“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+JASON KAPLERVP, Marketing, LiveWorld Inc., San Jose, CA",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""<img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""https://www.bluecaffeine.com/wp-content/uploads/2020/09/1-1-150x150-1-e1604563284815.png"" class=""tfree-client-image wp-post-image"" alt=""""/>“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+JASON KAPLERVP, Marketing, LiveWorld Inc., San Jose, CA"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""sp-testimonial-free-item slick-slide"" data-slick-index=""2"" aria-hidden=""true"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide22"" style=""width: 0px;""><div class=""sp-testimonial-free""><div class=""sp-tfree-client-image""><img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2080%2080'%3E%3C"
+https://www.bluecaffeine.com/,196,DIV,listbox,,,"“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+
+ARNOLD HUFFMAN
+CEO, Digital Yalo, Atlanta, GA
+
+“For an early stage startup like us, Blue Caffeine has been a trusted partner for user acquistion and a cost effective launch strategy. Blue Caffeine played a key role in our growth with their quick turn around times, transparent processes and consistent communication”
+
+RAVI KOKA
+CEO, Stocksnips, Pittsburgh, PA
+
+“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+
+JASON KAPLER
+VP, Marketing, LiveWorld Inc., San Jose, CA",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+
+ARNOLD HUFFMAN
+CEO, Digital Yalo, Atlanta, GA
+
+“For an early stage startup like us, Blue Caffeine has been a trusted partner for user acquistion and a cost effective launch strategy. Blue Caffeine played a key role in our growth with their quick turn around times, transparent processes and consistent communication”
+
+RAVI KOKA
+CEO, Stocksnips, Pittsburgh, PA
+
+“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+
+JASON KAPLER
+VP, Marketing, LiveWorld Inc., San Jose, CA"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""slick-track"" style=""opacity: 1; width: 2502px; transform: translate3d(0px, 0px, 0px);"" role=""listbox""><div class=""sp-testimonial-free-item slick-slide slick-current slick-active"" data-slick-index=""0"" aria-hidden=""false"" style=""width: 834px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide30""><div class=""sp-testimonial-free""><div class=""sp-tfree-client-image""><img loading=""laz"
+https://www.bluecaffeine.com/,197,DIV,option,,,"“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+
+ARNOLD HUFFMAN
+CEO, Digital Yalo, Atlanta, GA",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""“Blue Caffeine’s customer-first attitude is a direct reflection of its expertise and the founders’ successful history as big-time consultants for major global players. They understand requirements well and execute even better”
+
+ARNOLD HUFFMAN
+CEO, Digital Yalo, Atlanta, GA"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""sp-testimonial-free-item slick-slide slick-current slick-active"" data-slick-index=""0"" aria-hidden=""false"" style=""width: 834px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide30""><div class=""sp-testimonial-free""><div class=""sp-tfree-client-image""><img loading=""lazy"" decoding=""async"" width=""280"" height=""280"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%2"
+https://www.bluecaffeine.com/,198,DIV,option,,,"“For an early stage startup like us, Blue Caffeine has been a trusted partner for user acquistion and a cost effective launch strategy. Blue Caffeine played a key role in our growth with their quick turn around times, transparent processes and consistent communication”
+
+RAVI KOKA
+CEO, Stocksnips, Pittsburgh, PA",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""“For an early stage startup like us, Blue Caffeine has been a trusted partner for user acquistion and a cost effective launch strategy. Blue Caffeine played a key role in our growth with their quick turn around times, transparent processes and consistent communication”
+
+RAVI KOKA
+CEO, Stocksnips, Pittsburgh, PA"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""sp-testimonial-free-item slick-slide"" data-slick-index=""1"" aria-hidden=""true"" style=""width: 834px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide31""><div class=""sp-testimonial-free""><div class=""sp-tfree-client-image""><img loading=""lazy"" decoding=""async"" width=""150"" height=""150"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20150%20150'"
+https://www.bluecaffeine.com/,199,DIV,option,,,"“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+
+JASON KAPLER
+VP, Marketing, LiveWorld Inc., San Jose, CA",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""“Blue Caffeine started off as our SEM agency and quickly enhanced our Paid Search efforts and SEO. They took over our Social Media advertising, list building & database management, helping us streamline contact acquisition efforts. They are responsive, knowledgeable and a valued extension of our marketing team.”
+
+JASON KAPLER
+VP, Marketing, LiveWorld Inc., San Jose, CA"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""sp-testimonial-free-item slick-slide"" data-slick-index=""2"" aria-hidden=""true"" style=""width: 834px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide32""><div class=""sp-testimonial-free""><div class=""sp-tfree-client-image""><img loading=""lazy"" decoding=""async"" width=""80"" height=""80"" src=""data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2080%2080'%3E%"
+https://www.bluecaffeine.com/,200,DIV,listbox,,,"Facebook Case Study
+Acute targeting on Facebook using custom audiences
+SEO Audit Case Study
+Customized SEO Audit for a prospective client of a creative agency
+LiveWorld Case Study
+Digital Marketing strategy for a social customer experience company
+StockSnips Case Study
+Email marketing for a Fintech audience ...
+Converge Point Case Study
+Bidding on non-branded keywords that you already rank for...
+3 Phase Strategy-New
+How a three-phase strategy helped improve AdWords performance
+Profit Case Study
+Profit.co introduced their Objectives & Key Results (OKR) solution in 2018",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""Facebook Case Study
+Acute targeting on Facebook using custom audiences
+SEO Audit Case Study
+Customized SEO Audit for a prospective client of a creative agency
+LiveWorld Case Study
+Digital Marketing strategy for a social customer experience company
+StockSnips Case Study
+Email marketing for a Fintech audience ...
+Converge Point Case Study
+Bidding on non-branded keywords that you already rank for...
+3 Phase Strategy-New
+How a three-phase strategy helped improve AdWords performance
+Profit Case Study
+Profit.co introduced their Objectives & Key Results (OKR) solution in 2018"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""slick-track"" style=""opacity: 1; width: 2660px; transform: translate3d(0px, 0px, 0px);"" role=""listbox""><div class=""ult-item-wrap slick-slide slick-current slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""0"" aria-hidden=""false"" style=""width: 340px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide10"">
+	<div class=""wpb_raw_code wpb_cont"
+https://www.bluecaffeine.com/,201,DIV,option,,,"Facebook Case Study
+Acute targeting on Facebook using custom audiences",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""Facebook Case Study
+Acute targeting on Facebook using custom audiences"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide slick-current slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""0"" aria-hidden=""false"" style=""width: 340px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide10"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			<div class=""overlay-image"">
+  <a href=""https://www.bluec"
+https://www.bluecaffeine.com/,202,DIV,option,,,"SEO Audit Case Study
+Customized SEO Audit for a prospective client of a creative agency",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""SEO Audit Case Study
+Customized SEO Audit for a prospective client of a creative agency"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""1"" aria-hidden=""false"" style=""width: 340px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide11"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			<div class="" overlay-image"">
+  <a href=""https://www.bluecaffeine.com/s"
+https://www.bluecaffeine.com/,203,DIV,option,,,"LiveWorld Case Study
+Digital Marketing strategy for a social customer experience company",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""LiveWorld Case Study
+Digital Marketing strategy for a social customer experience company"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide slick-active animated no-animation"" data-animation=""animated no-animation"" data-slick-index=""2"" aria-hidden=""false"" style=""width: 340px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide12"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			<div class="" overlay-image"">
+  <a href=""https://www.bluecaffeine.com/l"
+https://www.bluecaffeine.com/,204,DIV,option,,,"StockSnips Case Study
+Email marketing for a Fintech audience ...",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""StockSnips Case Study
+Email marketing for a Fintech audience ..."" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""3"" aria-hidden=""true"" style=""width: 340px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide13"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			<div class="" overlay-image"">
+  <a href=""https://www.bluecaffeine.com/stocksnips-case-study/"" tabindex=""-1"""
+https://www.bluecaffeine.com/,205,DIV,option,,,"Converge Point Case Study
+Bidding on non-branded keywords that you already rank for...",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""Converge Point Case Study
+Bidding on non-branded keywords that you already rank for..."" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""4"" aria-hidden=""true"" style=""width: 340px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide14"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			<div class="" overlay-image"">
+  <a href=""https://www.bluecaffeine.com/converge-point-case-study/"" tabindex="
+https://www.bluecaffeine.com/,206,DIV,option,,,"3 Phase Strategy-New
+How a three-phase strategy helped improve AdWords performance",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""3 Phase Strategy-New
+How a three-phase strategy helped improve AdWords performance"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""5"" aria-hidden=""true"" style=""width: 340px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide15"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			<div class="" overlay-image"">
+  <a href=""https://www.bluecaffeine.com/3-phase-strategy-new/"" tabindex=""-1"">"
+https://www.bluecaffeine.com/,207,DIV,option,,,"Profit Case Study
+Profit.co introduced their Objectives & Key Results (OKR) solution in 2018",,,,,,,,FAILED,"2.5.3: No accessible name found. Visible label is ""Profit Case Study
+Profit.co introduced their Objectives & Key Results (OKR) solution in 2018"" but the element has no aria-label, aria-labelledby, title, or computed text name.",FAILED,"<div class=""ult-item-wrap slick-slide"" data-animation=""animated no-animation"" data-slick-index=""6"" aria-hidden=""true"" style=""width: 340px;"" tabindex=""-1"" role=""option"" aria-describedby=""slick-slide16"">
+	<div class=""wpb_raw_code wpb_content_element wpb_raw_html"">
+		<div class=""wpb_wrapper"">
+			<div class="" overlay-image"">
+  <a href=""https://www.bluecaffeine.com/profit-case-study/"" tabindex=""-1""><im"
+https://www.bluecaffeine.com/,208,SPAN,button,,,,Go to slide 1,,,,,,Go to slide 1,N/A,No visible text label — rule does not apply.,N/A,"<span class=""swiper-pagination-bullet swiper-pagination-bullet-active"" tabindex=""0"" role=""button"" aria-label=""Go to slide 1"" aria-current=""true""></span>"
+,,,,,,,,,,,,,,,,,
+── SUMMARY ──,,Total elements          : 209,Checked (N/A excluded)  : 164,PASSED                  : 96,FAILED                  : 68,N/A (no visible text)   : 45,,,,,,,Pass rate               : 58.5%,FAILED,,FAILED,

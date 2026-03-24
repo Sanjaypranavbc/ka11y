@@ -74,59 +74,71 @@ class AsyncTextSpacingCrawler:
     }"""
 
     EXTRACT_JS = r"""() => {
-        const results = [];
-        let index = 0;
+    const results = [];
+    let index = 0;
 
-        const ignoredTags = ["html","head","body","script","style","img","svg","canvas"];
+    const ignoredTags = ["html","head","body","script","style","img","svg","canvas"];
 
-        const all = document.querySelectorAll("*");
+    const all = document.querySelectorAll("*");
 
-        for (const el of all) {
+    for (const el of all) {
 
-            const tag = el.tagName.toLowerCase();
-            if (ignoredTags.includes(tag)) continue;
+        const tag = el.tagName.toLowerCase();
+        if (ignoredTags.includes(tag)) continue;
 
-            const text = (el.innerText || "").trim();
-            const textLength = text.length;
+        const style = window.getComputedStyle(el);
 
-            if (textLength < 20) continue;
+        // ✅ Only consider block-like elements (important)
+        const display = style.display;
+        const isBlockLike = ["block", "inline-block", "flex", "grid"].includes(display);
+        if (!isBlockLike) continue;
 
-            const style = window.getComputedStyle(el);
+        const text = (el.innerText || "").trim();
+        const textLength = text.length;
 
-            const height = style.height;
-            const overflow = style.overflow;
+        // ✅ Ignore low-text elements
+        if (textLength < 20) continue;
 
-            const hasFixedHeight =
-                height &&
-                height !== "auto" &&
-                /^\d+(\.\d+)?px$/.test(height);
+        const height = style.height;
+        const minHeight = style.minHeight;
+        const overflow = style.overflow;
 
-            const hasOverflowHidden =
-                overflow === "hidden" || overflow === "clip";
+        const hasFixedHeight =
+            height &&
+            height !== "auto" &&
+            /^\d+(\.\d+)?px$/.test(height);
 
-            const isClipped =
-                el.scrollHeight > el.clientHeight ||
-                el.scrollWidth > el.clientWidth;
+        const hasOverflowHidden =
+            overflow === "hidden" || overflow === "clip";
 
-            results.push({
-                element_index: index++,
-                tag,
-                element_id: el.id || null,
-                class_name: el.className || null,
-                text_length: textLength,
-                text_preview: text.slice(0, 150),
-                height,
-                min_height: style.minHeight,
-                overflow,
-                has_fixed_height: hasFixedHeight,
-                has_overflow_hidden: hasOverflowHidden,
-                is_clipped: isClipped,
-                html_snippet: el.outerHTML.slice(0, 400)
-            });
-        }
+        // ✅ Only treat clipping as relevant if overflow is restricted
+        const isClipped =
+            (hasOverflowHidden && el.scrollHeight > el.clientHeight) ||
+            (hasOverflowHidden && el.scrollWidth > el.clientWidth);
 
-        return results;
-    }"""
+        results.push({
+            element_index: index++,
+            tag,
+            element_id: el.id || null,
+            class_name: el.className || null,
+
+            text_length: textLength,
+            text_preview: text.slice(0, 150),
+
+            height,
+            min_height: minHeight,
+            overflow,
+
+            has_fixed_height: hasFixedHeight,
+            has_overflow_hidden: hasOverflowHidden,
+            is_clipped: isClipped,
+
+            html_snippet: el.outerHTML.slice(0, 400)
+        });
+    }
+
+    return results;
+}"""
 
 
     def __init__(self, base_url: str, output_dir: str, max_depth: int = 0):
@@ -161,13 +173,6 @@ class AsyncTextSpacingCrawler:
         try:
             await page.goto(url, wait_until="domcontentloaded")
 
-            # Inject WCAG spacing styles
-            await page.evaluate(INJECT_SPACING_JS)
-
-            # Allow layout recalculation
-            await page.wait_for_timeout(1200)
-
-            # Extract AFTER spacing applied
             raw = await page.evaluate(self.EXTRACT_JS)
 
             for item in raw:
