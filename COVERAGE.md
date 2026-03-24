@@ -25,39 +25,39 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 
 ## Level A — 31 Success Criteria
 
-| SC | Name | Python | Node (axe) | Combined | Notes |
-|----|------|--------|------------|----------|-------|
-| 1.1.1 | Non-text Content | ✅ AltTextAuditor | ✅ axe `image-alt`, `input-image-alt` | ✅ | Both; Python adds OCR contrast |
-| 1.2.1 | Audio-only and Video-only (Prerecorded) | ❌ | ❌ | ❌ | Requires content inspection |
-| 1.2.2 | Captions (Prerecorded) | ❌ | ✅ axe `video-caption` | ✅ | axe checks `<video>` for missing `<track kind="captions">` |
-| 1.2.3 | Audio Description or Media Alternative (Prerecorded) | ❌ | ❌ | ❌ | Requires media analysis |
-| 1.3.1 | Info and Relationships | ❌ | ✅ axe `landmark-*`, `list`, `table-*` | ✅ | |
-| 1.3.2 | Meaningful Sequence | ❌ | 🔶 Node `custom-meaningful-sequence` | 🔶 | Detects CSS `order` property diverging from DOM order in flex/grid containers |
-| 1.3.3 | Sensory Characteristics | ❌ | ❌ | ❌ | Requires NLP content analysis |
-| 1.4.1 | Use of Color | ❌ | 🔶 axe `link-in-text-block` | 🔶 | Detects links distinguished only by colour; not fully automatable |
-| 1.4.2 | Audio Control | ❌ | 🔶 axe `no-autoplay-audio` | 🔶 | Detects auto-playing audio lacking controls; `audio-caption` rule is deprecated in axe v4 |
-| 2.1.1 | Keyboard | ❌ | ✅ axe `scrollable-region-focusable`, `frame-focusable-content`, `server-side-image-map` | ✅ | |
-| 2.1.2 | No Keyboard Trap | ❌ | 🔶 Node `custom-keyboard-trap` | 🔶 | Puppeteer Tab-walk: detects focus cycling on same element; Escape-key escape test |
-| 2.1.4 | Character Key Shortcuts | ❌ | 🔶 Node `custom-character-key-shortcuts` | 🔶 | Detects `accesskey` single-char attributes and inline `onkeydown` handlers without modifier keys |
-| 2.2.1 | Timing Adjustable | ❌ | 🔶 axe `meta-refresh` | ❌ | axe detects `<meta http-equiv="refresh">` only; JS timers not covered |
-| 2.2.2 | Pause, Stop, Hide | ✅ PauseStopHideAuditor | 🔶 axe `blink`, `marquee` only | ✅ | Python goes beyond axe (CSS anims, carousels, autoplay video, GIFs) |
-| 2.3.1 | Three Flashes or Below Threshold | ❌ | ❌ | ❌ | Requires video frame analysis |
-| 2.4.1 | Bypass Blocks | ❌ | ✅ axe `bypass` | ✅ | |
-| 2.4.2 | Page Titled | ❌ | ✅ axe `document-title` | ✅ | |
-| 2.4.3 | Focus Order | ❌ | 🔶 axe `tabindex` | 🔶 | Full order requires manual check |
-| 2.4.4 | Link Purpose (In Context) | ❌ | ✅ axe `link-name`, `area-alt` | ✅ | `duplicate-id-active` is deprecated in axe v4 |
-| 2.5.1 | Pointer Gestures | ❌ | ❌ | ❌ | Requires JS gesture inspection |
-| 2.5.2 | Pointer Cancellation | ❌ | 🔶 Node `custom-pointer-cancellation` | 🔶 | Detects elements with `onmousedown`/`onpointerdown` inline handlers that lack a matching `onmouseup`/`onclick` cancellation path |
-| 2.5.3 | Label in Name | ✅ LabelInNameAuditor | ✅ axe `label-content-name-mismatch` | ✅ | Both |
-| 2.5.4 | Motion Actuation | ❌ | ❌ | ❌ | Requires device-motion API analysis |
-| 3.1.1 | Language of Page | ❌ | ✅ axe `html-has-lang`, `html-lang-valid` | ✅ | |
-| 3.2.1 | On Focus | ❌ | 🔶 Node `custom-on-focus` | 🔶 | Puppeteer: focuses each interactive element, detects unexpected URL change or navigation |
-| 3.2.2 | On Input | ❌ | 🔶 Node `custom-on-input` | 🔶 | Puppeteer: types into each input, detects unexpected URL change or navigation |
-| 3.3.1 | Error Identification | ✅ FormAuditor | ❌ | ✅ | Python only; axe `aria-required-attr` maps to SC 4.1.2 (wcag412 tag), not 3.3.1 |
-| 3.3.2 | Labels or Instructions | ✅ FormAuditor | 🔶 axe `form-field-multiple-labels` | ✅ | Python covers fully; axe detects multiple-label ambiguity only; `label` maps to 4.1.2 |
-| 3.3.7 | Redundant Entry *(WCAG 2.2 new)* | ❌ | ❌ | ❌ | Requires multi-step form tracking |
-| 4.1.1 | Parsing | ❌ | 🔶 axe `duplicate-id` (RULE_SC_FALLBACK) + Node `custom-html-parsing` | 🔶 | axe still runs `duplicate-id` under wcag2a-obsolete; custom check adds DOM-level duplicate-ID scan |
-| 4.1.2 | Name, Role, Value | ✅ AltTextAuditor (`_check_4_1_2`) | ✅ axe `aria-*`, `button-name`, `form-field-multiple-labels` | ✅ | Both; Python checks functional images (logos, icons, buttons) |
+| SC | Name | Python | Node (axe) | Combined | Confidence | Notes |
+|----|------|--------|------------|----------|------------|-------|
+| 1.1.1 | Non-text Content | ✅ AltTextAuditor | ✅ axe `image-alt`, `input-image-alt` | ✅ | 🟢 High | Both; Python adds OCR cosine-similarity alt-adequacy check |
+| 1.2.1 | Audio-only and Video-only (Prerecorded) | ❌ | ❌ | ❌ | — | Requires content inspection |
+| 1.2.2 | Captions (Prerecorded) | ❌ | ✅ axe `video-caption` | ✅ | 🟢 High | axe reliably checks `<video>` for missing `<track kind="captions">` |
+| 1.2.3 | Audio Description or Media Alternative (Prerecorded) | ❌ | ❌ | ❌ | — | Requires media analysis |
+| 1.3.1 | Info and Relationships | ❌ | ✅ axe `landmark-*`, `list`, `table-*` | ✅ | 🟢 High | axe landmark/table rules are well-established |
+| 1.3.2 | Meaningful Sequence | ❌ | 🔶 Node `custom-meaningful-sequence` | 🔶 | 🟡 Medium | Fixed: now detects `flex-direction: row/column-reverse` AND CSS `order` that actually reorders from DOM sequence |
+| 1.3.3 | Sensory Characteristics | ❌ | ❌ | ❌ | — | Requires NLP content analysis |
+| 1.4.1 | Use of Color | ❌ | 🔶 axe `link-in-text-block` | 🔶 | 🔴 Low | Detects links distinguished only by colour; not fully automatable |
+| 1.4.2 | Audio Control | ❌ | 🔶 axe `no-autoplay-audio` | 🔶 | 🟡 Medium | Detects auto-playing audio lacking controls; `audio-caption` rule deprecated in axe v4 |
+| 2.1.1 | Keyboard | ❌ | ✅ axe `scrollable-region-focusable`, `frame-focusable-content`, `server-side-image-map` | ✅ | 🟢 High | axe rules are reliable and comprehensive |
+| 2.1.2 | No Keyboard Trap | ❌ | 🔶 Node `custom-keyboard-trap` | 🔶 | 🟡 Medium | Fixed: consecutive-repeat key tracking (not cumulative), position-based element ID prevents false positives from shared classes |
+| 2.1.4 | Character Key Shortcuts | ❌ | 🔶 Node `custom-character-key-shortcuts` | 🔶 | 🔴 Low | Only catches `accesskey` attrs and inline handlers; misses `addEventListener`-based shortcuts |
+| 2.2.1 | Timing Adjustable | ❌ | 🔶 axe `meta-refresh` | 🔶 | 🔴 Low | axe detects `<meta http-equiv="refresh">` only; JS timers and session timeouts not detectable statically |
+| 2.2.2 | Pause, Stop, Hide | ✅ PauseStopHideAuditor | 🔶 axe `blink`, `marquee` only | ✅ | 🟢 High | Python covers CSS anims, carousels, autoplay video, animated GIFs — far beyond axe |
+| 2.3.1 | Three Flashes or Below Threshold | ❌ | ❌ | ❌ | — | Requires video frame analysis |
+| 2.4.1 | Bypass Blocks | ❌ | ✅ axe `bypass` | ✅ | 🟢 High | axe `bypass` reliably checks for skip links and landmarks |
+| 2.4.2 | Page Titled | ❌ | ✅ axe `document-title` | ✅ | 🟢 High | Simple deterministic check |
+| 2.4.3 | Focus Order | ❌ | 🔶 axe `tabindex` | 🔶 | 🔴 Low | Detects positive tabindex only; full logical order requires manual check |
+| 2.4.4 | Link Purpose (In Context) | ❌ | ✅ axe `link-name`, `area-alt` | ✅ | 🟢 High | axe reliably catches empty link names |
+| 2.5.1 | Pointer Gestures | ❌ | ❌ | ❌ | — | Requires JS event listener introspection |
+| 2.5.2 | Pointer Cancellation | ❌ | 🔶 Node `custom-pointer-cancellation` | 🔶 | 🔴 Low | Fixed: action-pattern matching + onpointerup check; only inline handlers detectable, not `addEventListener` |
+| 2.5.3 | Label in Name | ✅ LabelInNameAuditor | ✅ axe `label-content-name-mismatch` | ✅ | 🟢 High | Both tools reliable; Python uses NLP normalisation |
+| 2.5.4 | Motion Actuation | ❌ | ❌ | ❌ | — | Requires device-motion API analysis |
+| 3.1.1 | Language of Page | ❌ | ✅ axe `html-has-lang`, `html-lang-valid` | ✅ | 🟢 High | Simple deterministic check |
+| 3.2.1 | On Focus | ❌ | 🔶 Node `custom-on-focus` | 🔶 | 🟡 Medium | Fixed: now includes form controls (input/select/textarea) in focus selector; URL-change + framenavigated detection |
+| 3.2.2 | On Input | ❌ | 🔶 Node `custom-on-input` | 🔶 | 🟡 Medium | Fixed: `<select>` onchange included; type-appropriate test chars; URL-change detection |
+| 3.3.1 | Error Identification | ✅ FormAuditor | ❌ | ✅ | 🟢 High | Python only; checks required fields + error messaging patterns |
+| 3.3.2 | Labels or Instructions | ✅ FormAuditor | 🔶 axe `form-field-multiple-labels` | ✅ | 🟢 High | Python covers fully; axe detects multiple-label ambiguity only |
+| 3.3.7 | Redundant Entry *(WCAG 2.2 new)* | ❌ | ❌ | ❌ | — | Requires multi-step form tracking |
+| 4.1.1 | Parsing | ❌ | 🔶 axe `duplicate-id` + Node `custom-html-parsing` | 🔶 | 🟡 Medium | Duplicate-ID detection is reliable; broader parsing errors require HTML validator |
+| 4.1.2 | Name, Role, Value | ✅ AltTextAuditor (`_check_4_1_2`) | ✅ axe `aria-*`, `button-name` | ✅ | 🟢 High | Both; Python checks functional images; axe covers ARIA roles/states |
 
 **Level A covered: 24 / 31 (77 %) · includes 11 partial (🔶) · Missing: 7**
 
@@ -74,34 +74,34 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 
 ## Level AA — 26 Additional Success Criteria
 
-| SC | Name | Python | Node (axe) | Combined | Notes |
-|----|------|--------|------------|----------|-------|
-| 1.2.4 | Captions (Live) | ❌ | ❌ | ❌ | Live stream; not automatable |
-| 1.2.5 | Audio Description (Prerecorded) | ❌ | ❌ | ❌ | Requires media analysis |
-| 1.3.4 | Orientation | ✅ OrientationEvaluator (rendered) | ✅ axe `css-orientation-lock` | ✅ | Both |
-| 1.3.5 | Identify Input Purpose | ❌ | ✅ axe `autocomplete-valid` | ✅ | |
-| 1.4.3 | Contrast (Minimum) | ✅ `OCRPreprocessing` + `_contrast_to_findings` | ✅ axe `color-contrast` | ✅ | Both; Python checks text-in-image contrast (OCR bbox) via `contrast_analyser`; axe checks page text |
-| 1.4.4 | Resize Text | ✅ ResizeTextEvaluator (rendered) | ✅ axe `meta-viewport` | ✅ | Both; Python detects overflow/clip after 200% zoom |
-| 1.4.5 | Images of Text | 🔶 `AltTextAuditor` (`_check_1_4_5`) | ❌ | 🔶 | Python: OCR detects text in image + classifier determines type; logos exempt (essential exception); non-logo images with OCR text → FAIL |
-| 1.4.10 | Reflow | ✅ ReflowEvaluator (rendered) | ❌ | ✅ | Python only; axe `meta-viewport` maps to SC 1.4.4 not 1.4.10 |
-| 1.4.11 | Non-text Contrast | 🔶 `AltTextAuditor` (`_check_1_4_11`) | ❌ | 🔶 | Python: OCR contrast ratio used as proxy for button/icon images (3:1 threshold); non-UI or no OCR data → INCOMPLETE; `non-text-contrast` absent from axe v4.11.1 |
-| 1.4.12 | Text Spacing | ✅ TextSpacingAuditor (crawler) + TextSpacingEvaluator (rendered) | 🔶 axe `avoid-inline-spacing` | ✅ | Python: static fixed-height/overflow detection + Playwright override test |
-| 1.4.13 | Content on Hover or Focus | ✅ HoverFocusContentEvaluator (rendered) | ❌ | ✅ | Python: Playwright hover simulation — checks dismissible, persistent, hoverable |
-| 2.4.5 | Multiple Ways | ❌ | 🔶 Node `custom-multiple-ways` | 🔶 | Heuristic: checks for search form, sitemap link, and nav elements; passes if ≥ 2 found |
-| 2.4.6 | Headings and Labels | ❌ | ✅ axe `heading-order`, `empty-heading` | ✅ | |
-| 2.4.7 | Focus Visible | ❌ | 🔶 Node `custom-focus-visible` + axe `focus-visible` (RULE_SC_FALLBACK + wcag22aa tag) | 🔶 | Custom check: Puppeteer compares computed outline/box-shadow before/after focus for each focusable element |
-| 2.4.11 | Focus Not Obscured (Minimum) *(WCAG 2.2 new)* | ✅ FocusNotObscuredMinimumEvaluator (rendered) | ❌ | ✅ | Python: measures obscuration ratio via getBoundingClientRect; full obscuration = FAIL |
-| 2.4.13 | Focus Appearance *(WCAG 2.2 new)* | ❌ | 🔶 axe `focus-appearance` (RULE_SC_FALLBACK + wcag22aa tag) | 🔶 | axe rule active after adding wcag22aa tag to runOnly |
-| 2.5.7 | Dragging Movements *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-dragging-movements` | 🔶 | Puppeteer: detects `draggable="true"`, `ondragstart`, D&D library markers; checks for single-pointer button alternative |
-| 2.5.8 | Target Size (Minimum) *(WCAG 2.2 new)* | ✅ TargetSizeAuditor | ❌ | ✅ | Measures rendered bounding-box; inline + UA-controlled exceptions detected |
-| 3.1.2 | Language of Parts | ❌ | ✅ axe `valid-lang` | ✅ | |
-| 3.2.3 | Consistent Navigation | ❌ | ❌ | ❌ | Requires multi-page analysis |
-| 3.2.4 | Consistent Identification | ❌ | ❌ | ❌ | Requires multi-page analysis |
-| 3.2.6 | Consistent Help *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-consistent-help` | 🔶 | Heuristic: detects help/contact/support links, chat widgets; reports position (header/footer/nav); flags absence |
-| 3.3.3 | Error Suggestion | ❌ | 🔶 Node `custom-error-suggestion` | 🔶 | Checks visible error messages for correction guidance (heuristic); flags terse messages like "Invalid" or "Error" |
-| 3.3.4 | Error Prevention (Legal, Financial, Data) | ❌ | 🔶 Node `custom-error-prevention` | 🔶 | Detects financial/legal/destructive forms; checks for review step, confirmation checkbox, or preview button |
-| 3.3.8 | Accessible Authentication (Minimum) *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-accessible-auth` | 🔶 | Detects auth forms; flags CAPTCHA without audio alternative, paste-blocked password fields, cognitive puzzles |
-| 4.1.3 | Status Messages | ❌ | 🔶 Node `custom-status-messages` | 🔶 | Checks for ARIA live regions; fails if forms exist without any live region |
+| SC | Name | Python | Node (axe) | Combined | Confidence | Notes |
+|----|------|--------|------------|----------|------------|-------|
+| 1.2.4 | Captions (Live) | ❌ | ❌ | ❌ | — | Live stream; not automatable |
+| 1.2.5 | Audio Description (Prerecorded) | ❌ | ❌ | ❌ | — | Requires media analysis |
+| 1.3.4 | Orientation | ✅ OrientationEvaluator (rendered) | ✅ axe `css-orientation-lock` | ✅ | 🟢 High | Both; Python takes actual portrait+landscape snapshots |
+| 1.3.5 | Identify Input Purpose | ❌ | ✅ axe `autocomplete-valid` | ✅ | 🟢 High | axe autocomplete-valid is reliable |
+| 1.4.3 | Contrast (Minimum) | ✅ `OCRPreprocessing` + `_contrast_to_findings` | ✅ axe `color-contrast` | ✅ | 🟢 High | Both; Python checks text-in-image contrast via OCR; axe checks page text |
+| 1.4.4 | Resize Text | ✅ ResizeTextEvaluator (rendered) | ✅ axe `meta-viewport` | ✅ | 🟢 High | Both; Python detects overflow/clip after 200% zoom |
+| 1.4.5 | Images of Text | 🔶 `AltTextAuditor` (`_check_1_4_5`) | ❌ | 🔶 | 🟡 Medium | OCR detects text in image; logo-exempt (essential exception); false positives possible on decorative images |
+| 1.4.10 | Reflow | ✅ ReflowEvaluator (rendered) | ❌ | ✅ | 🟢 High | Playwright viewport resize to 320 px; detects horizontal scroll and oversized elements |
+| 1.4.11 | Non-text Contrast | 🔶 `AltTextAuditor` (`_check_1_4_11`) | ❌ | 🔶 | 🔴 Low | OCR contrast ratio used as proxy for button/icon images only; non-UI elements → INCOMPLETE |
+| 1.4.12 | Text Spacing | ✅ TextSpacingAuditor (crawler) + TextSpacingEvaluator (rendered) | 🔶 axe `avoid-inline-spacing` | ✅ | 🟢 High | Static + rendered Playwright override test; comprehensive coverage |
+| 1.4.13 | Content on Hover or Focus | ✅ HoverFocusContentEvaluator (rendered) | ❌ | ✅ | 🟢 High | Playwright hover simulation — checks dismissible, persistent, hoverable |
+| 2.4.5 | Multiple Ways | ❌ | 🔶 Node `custom-multiple-ways` | 🔶 | 🟡 Medium | Heuristic: search form, sitemap link, nav elements; passes if ≥ 2 found; misses AJAX/JS-based search |
+| 2.4.6 | Headings and Labels | ❌ | ✅ axe `heading-order`, `empty-heading` | ✅ | 🟢 High | axe heading-order is reliable |
+| 2.4.7 | Focus Visible | ❌ | 🔶 Node `custom-focus-visible` + axe `focus-visible` | 🔶 | 🟡 Medium | Fixed: now checks 50 elements, detects color/opacity/border changes; misses CSS `:focus-within` and Shadow DOM |
+| 2.4.11 | Focus Not Obscured (Minimum) *(WCAG 2.2 new)* | ✅ FocusNotObscuredMinimumEvaluator (rendered) | ❌ | ✅ | 🟢 High | getBoundingClientRect obscuration ratio measurement; full obscuration = FAIL |
+| 2.4.13 | Focus Appearance *(WCAG 2.2 new)* | ❌ | 🔶 axe `focus-appearance` | 🔶 | 🔴 Low | axe rule is experimental; does not measure contrast ratio of focus ring |
+| 2.5.7 | Dragging Movements *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-dragging-movements` | 🔶 | 🟡 Medium | Fixed: detects native drag + D&D libraries; checks alternatives in element AND parent; misses `addEventListener`-based drag |
+| 2.5.8 | Target Size (Minimum) *(WCAG 2.2 new)* | ✅ TargetSizeAuditor | ❌ | ✅ | 🟢 High | Bounding-box measurement; inline + UA-controlled exceptions detected |
+| 3.1.2 | Language of Parts | ❌ | ✅ axe `valid-lang` | ✅ | 🟢 High | axe valid-lang is reliable |
+| 3.2.3 | Consistent Navigation | ❌ | ❌ | ❌ | — | Requires multi-page analysis |
+| 3.2.4 | Consistent Identification | ❌ | ❌ | ❌ | — | Requires multi-page analysis |
+| 3.2.6 | Consistent Help *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-consistent-help` | 🔶 | 🟡 Medium | Keyword-based detection of help/contact links; reports position; single-page only — consistency across pages requires multi-page crawl |
+| 3.3.3 | Error Suggestion | ❌ | 🔶 Node `custom-error-suggestion` | 🔶 | 🔴 Low | Fixed: narrowed error selectors to reduce FP; heuristic text analysis; requires errors to be visible on page load |
+| 3.3.4 | Error Prevention (Legal, Financial, Data) | ❌ | 🔶 Node `custom-error-prevention` | 🔶 | 🟡 Medium | Fixed: expanded financial/legal/destructive patterns + multi-step wizard detection; keyword-based, no semantic understanding |
+| 3.3.8 | Accessible Authentication (Minimum) *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-accessible-auth` | 🔶 | 🟡 Medium | Fixed: expanded CAPTCHA alt detection, paste-blocking, cognitive tests; misses `addEventListener`-based paste blocking |
+| 4.1.3 | Status Messages | ❌ | 🔶 Node `custom-status-messages` | 🔶 | 🟡 Medium | Fixed: detects forms + search results + cart/counter + notification areas; live region presence verified |
 
 **Level AA covered: 20 / 26 (77 %) · includes 11 partial (🔶) · Missing: 6**
 
