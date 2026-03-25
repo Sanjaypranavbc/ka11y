@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SuggestedFixModal } from "./SuggestedFixModal";
 import { AlertTriangle, Wrench, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCriterionId, formatCriterionName } from "@/lib/audit-format";
 
 interface NeedsReviewTabProps {
   items: AuditNeedsReview[];
@@ -174,6 +175,13 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-xs text-muted-foreground text-center py-8">
+                  No manual-review items match the current filters.
+                </TableCell>
+              </TableRow>
+            )}
             {filtered.slice(0, visibleCount).map((v, i) => (
               <TableRow key={i}>
                 <TableCell>
@@ -194,8 +202,8 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
                     {v.source}
                   </Badge>
                 </TableCell>
-                <TableCell className="font-mono text-xs">{v.wcag_sc ?? "—"}</TableCell>
-                <TableCell className="text-xs">{v.criterion_name ?? "—"}</TableCell>
+                <TableCell className="font-mono text-xs">{formatCriterionId(v.wcag_sc)}</TableCell>
+                <TableCell className="text-xs">{formatCriterionName(v.criterion_name, v.wcag_sc)}</TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{v.reason}</TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>

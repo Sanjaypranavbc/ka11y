@@ -26,27 +26,6 @@ _STAGE_TIMEOUT_SECONDS = 120
 
 import httpx
 
-from ka11y.crawler.crawler import AsyncImageCrawler
-from ka11y.crawler.forms_crawler import AsyncFormCrawler
-from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
-from ka11y.crawler.moving_content_crawler import MovingContentCrawler
-from ka11y.crawler.rendered_layout_crawler import (
-    RenderedLayoutCrawler,
-    run_all_evaluators,
-)
-from ka11y.crawler.target_size_crawler import TargetSizeCrawler
-from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
-from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
-from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
-from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
-    LabelInNameAuditor,
-)
-from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
-    TargetSizeAuditor,
-)
-from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
-    PauseStopHideAuditor,
-)
 from ka11y.config.logger import setup_logger
 
 from .findings import (
@@ -69,10 +48,6 @@ from .findings import (
     _ts_to_findings,
 )
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
-from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
-    TextSpacingAuditor,
-)
-from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -121,6 +96,10 @@ async def _stage_image_audit(
         return [], None
 
     try:
+        from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
+        from ka11y.crawler.crawler import AsyncImageCrawler
+        from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
+
         image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
         await image_crawler.crawl_page()
         await asyncio.to_thread(image_crawler.save_results)
@@ -174,6 +153,9 @@ async def _stage_form_audit(
         return []
 
     try:
+        from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
+        from ka11y.crawler.forms_crawler import AsyncFormCrawler
+
         form_crawler = AsyncFormCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
@@ -211,6 +193,11 @@ async def _stage_label_in_name(
         return []
 
     try:
+        from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
+            LabelInNameAuditor,
+        )
+        from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
+
         interactive_crawler = InteractiveElementCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
@@ -246,6 +233,11 @@ async def _stage_pause_stop_hide(
         return []
 
     try:
+        from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
+            PauseStopHideAuditor,
+        )
+        from ka11y.crawler.moving_content_crawler import MovingContentCrawler
+
         moving_crawler = MovingContentCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
@@ -281,6 +273,11 @@ async def _stage_target_size(
         return []
 
     try:
+        from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
+            TargetSizeAuditor,
+        )
+        from ka11y.crawler.target_size_crawler import TargetSizeCrawler
+
         ts_crawler = TargetSizeCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
@@ -316,6 +313,11 @@ async def _stage_text_spacing(
         return []
 
     try:
+        from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
+            TextSpacingAuditor,
+        )
+        from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
+
         ts_crawler = AsyncTextSpacingCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
@@ -367,6 +369,11 @@ async def _stage_rendered_layout_audit(
         return []
 
     try:
+        from ka11y.crawler.rendered_layout_crawler import (
+            RenderedLayoutCrawler,
+            run_all_evaluators,
+        )
+
         crawler = RenderedLayoutCrawler(base_url=url, output_dir=str(output_dir))
         raw = await crawler.crawl()
         await asyncio.to_thread(crawler.save_raw_json)

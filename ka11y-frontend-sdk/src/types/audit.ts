@@ -64,9 +64,9 @@ export interface ContrastReport {
 
 export interface AuditPass {
   rule_id: string;
-  wcag_sc: string;
-  criterion_name: string;
-  level: "A" | "AA" | "AAA";
+  wcag_sc: string | null;
+  criterion_name: string | null;
+  level: "A" | "AA" | "AAA" | null;
   source: AuditSource;
   reason: string;
 }

@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCriterionId, formatCriterionName, formatLevel } from "@/lib/audit-format";
 
 interface PassesTabProps {
   passes: AuditPass[];
@@ -44,14 +45,14 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
   const filtered = useMemo(() => {
     return passes.filter((p) => {
       if (sourceFilter.length && !sourceFilter.includes(p.source)) return false;
-      if (levelFilter.length && !levelFilter.includes(p.level)) return false;
-      if (scFilter.length && !scFilter.includes(p.wcag_sc)) return false;
+      if (levelFilter.length && (!p.level || !levelFilter.includes(p.level))) return false;
+      if (scFilter.length && (!p.wcag_sc || !scFilter.includes(p.wcag_sc))) return false;
       if (!search) return true;
       const q = search.toLowerCase();
       return (
         p.rule_id.toLowerCase().includes(q) ||
-        p.wcag_sc.toLowerCase().includes(q) ||
-        p.criterion_name.toLowerCase().includes(q) ||
+        (p.wcag_sc || "").toLowerCase().includes(q) ||
+        (p.criterion_name || "").toLowerCase().includes(q) ||
         p.reason.toLowerCase().includes(q)
       );
     });
@@ -187,12 +188,19 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    {items.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-xs text-muted-foreground text-center py-8">
+                          No passes are available for this source.
+                        </TableCell>
+                      </TableRow>
+                    )}
                     {items.slice(0, visible).map((p, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-mono text-xs">{p.rule_id}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.wcag_sc}</TableCell>
-                        <TableCell className="text-xs">{p.criterion_name}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-[10px]">{p.level}</Badge></TableCell>
+                        <TableCell className="font-mono text-xs">{formatCriterionId(p.wcag_sc)}</TableCell>
+                        <TableCell className="text-xs">{formatCriterionName(p.criterion_name, p.wcag_sc)}</TableCell>
+                        <TableCell><Badge variant="outline" className="text-[10px]">{formatLevel(p.level)}</Badge></TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{p.reason}</TableCell>
                       </TableRow>
                     ))}

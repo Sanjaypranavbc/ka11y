@@ -8,6 +8,12 @@ import { SuggestedFixModal } from "./SuggestedFixModal";
 import { Wrench, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
+  formatCriterionId,
+  formatCriterionName,
+  formatElementSnippet,
+  formatLevel,
+} from "@/lib/audit-format";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -179,6 +185,13 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
             </TableRow>
           </TableHeader>
           <TableBody>
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-xs text-muted-foreground text-center py-8">
+                  No violations match the current filters.
+                </TableCell>
+              </TableRow>
+            )}
             {filtered.slice(0, visibleCount).map((v, i) => (
               <TableRow key={i} className="hover:bg-muted/30">
                 <TableCell>
@@ -199,10 +212,10 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                     {v.source}
                   </Badge>
                 </TableCell>
-                <TableCell className="font-mono text-xs">{v.wcag_sc ?? "—"}</TableCell>
-                <TableCell className="text-xs">{v.criterion_name ?? "—"}</TableCell>
+                <TableCell className="font-mono text-xs">{formatCriterionId(v.wcag_sc)}</TableCell>
+                <TableCell className="text-xs">{formatCriterionName(v.criterion_name, v.wcag_sc)}</TableCell>
                 <TableCell>
-                  <Badge variant={v.level === "A" ? "default" : "outline"} className="text-[10px]">{v.level ?? "—"}</Badge>
+                  <Badge variant={v.level === "A" ? "default" : "outline"} className="text-[10px]">{formatLevel(v.level)}</Badge>
                 </TableCell>
                 <TableCell>
                   <Tooltip>
@@ -216,7 +229,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                 </TableCell>
                 <TableCell>
                   <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block max-w-[120px]">
-                    {v.element_html}
+                    {formatElementSnippet(v.element_html)}
                   </code>
                 </TableCell>
                 <TableCell>

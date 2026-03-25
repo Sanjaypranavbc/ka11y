@@ -1,53 +1,145 @@
 'use strict';
 
-const htmlParsing         = require('./html-parsing.check');
-const focusVisible        = require('./focus-visible.check');
-const focusAppearance     = require('./focus-appearance.check');
-const statusMessages      = require('./status-messages.check');
-const multipleWays        = require('./multiple-ways.check');
-const onFocus             = require('./on-focus.check');
-const onInput             = require('./on-input.check');
-const keyboardTrap        = require('./keyboard-trap.check');
-const meaningfulSeq       = require('./meaningful-sequence.check');
-const charKeyShortcuts    = require('./character-key-shortcuts.check');
-const pointerCancellation = require('./pointer-cancellation.check');
-const draggingMovements   = require('./dragging-movements.check');
-const consistentHelp      = require('./consistent-help.check');
-const errorSuggestion     = require('./error-suggestion.check');
-const errorPrevention     = require('./error-prevention.check');
-const accessibleAuth      = require('./accessible-auth.check');
-const useOfColor          = require('./use-of-color.check');
-const audioTranscript     = require('./audio-transcript.check');
-const linkPurpose         = require('./link-purpose.check');
-const location            = require('./location.check');
+const fs = require('fs');
+const path = require('path');
 
-// Static checks: only DOM inspection, safe for raw HTML pages
-const STATIC_CHECKS = [
-  { check: htmlParsing,        fallbackDescription: 'HTML id attributes must be unique' },
-  { check: statusMessages,     fallbackDescription: 'Status messages must be programmatically determinable' },
-  { check: multipleWays,       fallbackDescription: 'More than one way must be available to locate a page' },
-  { check: meaningfulSeq,      fallbackDescription: 'Reading and navigation order must be programmatically determinable' },
-  { check: charKeyShortcuts,   fallbackDescription: 'Single character key shortcuts must be remappable or disableable' },
-  { check: pointerCancellation, fallbackDescription: 'Functionality that uses a single pointer must be cancellable' },
-  { check: draggingMovements,  fallbackDescription: 'Dragging movements must have a single-pointer alternative' },
-  { check: consistentHelp,     fallbackDescription: 'Help mechanisms must appear in a consistent location across pages' },
-  { check: errorSuggestion,    fallbackDescription: 'Error messages must suggest how to correct mistakes' },
-  { check: errorPrevention,    fallbackDescription: 'High-risk submissions must be reversible, checked, or confirmed' },
-  { check: accessibleAuth,     fallbackDescription: 'Authentication must not rely solely on cognitive function tests' },
-  { check: useOfColor,         fallbackDescription: 'Color must not be the only visual means of conveying information' },
-  { check: audioTranscript,    fallbackDescription: 'Audio-only prerecorded content must have a text alternative' },
-  { check: linkPurpose,        fallbackDescription: 'Link purpose must be determinable from link text alone' },
-  { check: location,           fallbackDescription: 'Users must be able to determine their location within a set of web pages' },
+const STATIC_ORDER = [
+  'custom-html-parsing',
+  'custom-status-messages',
+  'custom-multiple-ways',
+  'custom-meaningful-sequence',
+  'custom-character-key-shortcuts',
+  'custom-pointer-cancellation',
+  'custom-dragging-movements',
+  'custom-consistent-help',
+  'custom-error-suggestion',
+  'custom-error-prevention',
+  'custom-accessible-auth',
+  'custom-use-of-color',
+  'custom-audio-transcript',
+  'custom-link-purpose',
+  'custom-location',
 ];
 
-// Interactive checks: require a live navigable page with events
-const INTERACTIVE_CHECKS = [
-  { check: focusVisible,    fallbackDescription: 'Focusable elements must have a visible focus indicator' },
-  { check: focusAppearance, fallbackDescription: 'Focus indicators must have sufficient area and contrast' },
-  { check: onFocus,         fallbackDescription: 'Focusing an element must not trigger a context change' },
-  { check: onInput,         fallbackDescription: 'Changing an input value must not trigger a context change' },
-  { check: keyboardTrap,    fallbackDescription: 'Keyboard focus must not be trapped in a component' },
+const INTERACTIVE_ORDER = [
+  'custom-focus-visible',
+  'custom-focus-appearance',
+  'custom-on-focus',
+  'custom-on-input',
+  'custom-keyboard-trap',
 ];
+
+const LEGACY_META = {
+  'custom-html-parsing':          { mode: 'static',      fallbackDescription: 'HTML id attributes must be unique' },
+  'custom-status-messages':       { mode: 'static',      fallbackDescription: 'Status messages must be programmatically determinable' },
+  'custom-multiple-ways':         { mode: 'static',      fallbackDescription: 'More than one way must be available to locate a page' },
+  'custom-meaningful-sequence':   { mode: 'static',      fallbackDescription: 'Reading and navigation order must be programmatically determinable' },
+  'custom-character-key-shortcuts': { mode: 'static',    fallbackDescription: 'Single character key shortcuts must be remappable or disableable' },
+  'custom-pointer-cancellation':  { mode: 'static',      fallbackDescription: 'Functionality that uses a single pointer must be cancellable' },
+  'custom-dragging-movements':    { mode: 'static',      fallbackDescription: 'Dragging movements must have a single-pointer alternative' },
+  'custom-consistent-help':       { mode: 'static',      fallbackDescription: 'Help mechanisms must appear in a consistent location across pages' },
+  'custom-error-suggestion':      { mode: 'static',      fallbackDescription: 'Error messages must suggest how to correct mistakes' },
+  'custom-error-prevention':      { mode: 'static',      fallbackDescription: 'High-risk submissions must be reversible, checked, or confirmed' },
+  'custom-accessible-auth':       { mode: 'static',      fallbackDescription: 'Authentication must not rely solely on cognitive function tests' },
+  'custom-use-of-color':          { mode: 'static',      fallbackDescription: 'Color must not be the only visual means of conveying information' },
+  'custom-audio-transcript':      { mode: 'static',      fallbackDescription: 'Audio-only prerecorded content must have a text alternative' },
+  'custom-link-purpose':          { mode: 'static',      fallbackDescription: 'Link purpose must be determinable from link text alone' },
+  'custom-location':              { mode: 'static',      fallbackDescription: 'Users must be able to determine their location within a set of web pages' },
+  'custom-focus-visible':         { mode: 'interactive', fallbackDescription: 'Focusable elements must have a visible focus indicator' },
+  'custom-focus-appearance':      { mode: 'interactive', fallbackDescription: 'Focus indicators must have sufficient area and contrast' },
+  'custom-on-focus':              { mode: 'interactive', fallbackDescription: 'Focusing an element must not trigger a context change' },
+  'custom-on-input':              { mode: 'interactive', fallbackDescription: 'Changing an input value must not trigger a context change' },
+  'custom-keyboard-trap':         { mode: 'interactive', fallbackDescription: 'Keyboard focus must not be trapped in a component' },
+};
+
+function _ruleIdFromFile(file) {
+  return path.basename(file, '.check.js');
+}
+
+function _normalizeMode(check, ruleId) {
+  const explicit = check && typeof check.MODE === 'string'
+    ? check.MODE.toLowerCase()
+    : null;
+  if (explicit === 'static' || explicit === 'interactive') return explicit;
+  return (LEGACY_META[ruleId] && LEGACY_META[ruleId].mode) || 'static';
+}
+
+function _fallbackDescription(check, ruleId) {
+  return (check && (check.FALLBACK_DESCRIPTION || check.DESCRIPTION))
+    || (LEGACY_META[ruleId] && LEGACY_META[ruleId].fallbackDescription)
+    || 'Custom accessibility check execution failed';
+}
+
+function _sortChecks(a, b) {
+  if (a.mode !== b.mode) return a.mode.localeCompare(b.mode);
+  const order = a.mode === 'interactive' ? INTERACTIVE_ORDER : STATIC_ORDER;
+  const aIdx = order.indexOf(a.ruleId);
+  const bIdx = order.indexOf(b.ruleId);
+  if (aIdx !== -1 || bIdx !== -1) {
+    const aRank = aIdx === -1 ? Number.MAX_SAFE_INTEGER : aIdx;
+    const bRank = bIdx === -1 ? Number.MAX_SAFE_INTEGER : bIdx;
+    if (aRank !== bRank) return aRank - bRank;
+  }
+  return a.ruleId.localeCompare(b.ruleId);
+}
+
+function _buildLoadFailure(file, err) {
+  const message = err && err.message ? err.message : String(err || 'unknown error');
+  const ruleId = `custom-load-failure:${file}`;
+  return {
+    ruleId,
+    mode: 'static',
+    fallbackDescription: 'Custom accessibility check module failed to load',
+    check: {
+      SC: 'best-practice',
+      RULE_ID: ruleId,
+      HELP_URL: null,
+      async run() {
+        return {
+          successCriteriaId: 'best-practice',
+          rules: [{
+            ruleId,
+            description: 'Custom accessibility check module failed to load',
+            impact: 'moderate',
+            status: 'incomplete',
+            reason: `Custom check module failed to load (${file}): ${message}`,
+            helpUrl: null,
+          }],
+        };
+      },
+    },
+  };
+}
+
+function _loadCheckDefinitions(dir = __dirname) {
+  return fs.readdirSync(dir)
+    .filter(file => file.endsWith('.check.js'))
+    .map((file) => {
+      try {
+        const check = require(path.join(dir, file));
+        const ruleId = check && check.RULE_ID ? check.RULE_ID : _ruleIdFromFile(file);
+
+        if (!check || typeof check.run !== 'function') {
+          throw new Error(`Module "${file}" does not export a run(page) function`);
+        }
+
+        return {
+          check,
+          ruleId,
+          mode: _normalizeMode(check, ruleId),
+          fallbackDescription: _fallbackDescription(check, ruleId),
+        };
+      } catch (err) {
+        console.warn(`[custom-checks] failed to load ${file}:`, err && err.message || err);
+        return _buildLoadFailure(file, err);
+      }
+    })
+    .sort(_sortChecks);
+}
+
+const CHECK_DEFINITIONS = _loadCheckDefinitions();
+const STATIC_CHECKS = CHECK_DEFINITIONS.filter(def => def.mode === 'static');
+const INTERACTIVE_CHECKS = CHECK_DEFINITIONS.filter(def => def.mode === 'interactive');
 
 /**
  * Merge custom check results with axe mapResults() output.
@@ -135,4 +227,10 @@ async function runAll(page) {
   return [...staticR, ...interactiveR];
 }
 
-module.exports = { runAll, runStaticChecks, runInteractiveChecks, mergeWithAxe };
+module.exports = {
+  _loadCheckDefinitions,
+  mergeWithAxe,
+  runAll,
+  runInteractiveChecks,
+  runStaticChecks,
+};

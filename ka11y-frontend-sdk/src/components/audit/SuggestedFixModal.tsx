@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Copy, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { formatCriterionName, formatElementSnippet } from "@/lib/audit-format";
 
 function _fallbackCopy(text: string) {
   const ta = document.createElement("textarea");
@@ -50,7 +51,7 @@ export function SuggestedFixModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 flex-wrap">
             {wcagSc && <Badge variant="outline" className="font-mono shrink-0">{wcagSc}</Badge>}
-            <span className="break-words">{criterionName}</span>
+            <span className="break-words">{formatCriterionName(criterionName, wcagSc)}</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -74,7 +75,7 @@ export function SuggestedFixModal({
               </div>
               <div className="bg-muted rounded-md p-3 overflow-x-auto">
                 <pre className="text-xs whitespace-pre-wrap break-all leading-relaxed">
-                  <code>{elementHtml}</code>
+                  <code>{formatElementSnippet(elementHtml)}</code>
                 </pre>
               </div>
             </div>

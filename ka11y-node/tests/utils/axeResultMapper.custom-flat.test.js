@@ -1,6 +1,10 @@
 'use strict';
 
-const { mapCustomResultsFlat, mapResultsFlat } = require('../../src/utils/axeResultMapper');
+const {
+  formatSuccessCriterion,
+  mapCustomResultsFlat,
+  mapResultsFlat,
+} = require('../../src/utils/axeResultMapper');
 
 describe('mapCustomResultsFlat', () => {
   test('maps custom fail/pass/incomplete into flat finding statuses', () => {
@@ -131,5 +135,55 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
     // JSON serialisation must not produce undefined
     const parsed = JSON.parse(JSON.stringify(findings));
     expect(parsed[0]).toHaveProperty('criterion_name', null);
+  });
+
+  test('best-practice axe rule gets a stable criterion label instead of empty values', () => {
+    const axeResults = makeAxeResults({
+      violations: [{
+        id:     'landmark-complementary-is-top-level',
+        tags:   ['cat.semantics', 'best-practice'],
+        impact: 'moderate',
+        nodes:  [{
+          html: '<aside>Related links</aside>',
+          target: ['aside'],
+          failureSummary: 'Fix all of the following: The complementary landmark is contained in another landmark.',
+        }],
+        help:   'The complementary landmark should be top level.',
+        helpUrl: 'https://dequeuniversity.com/rules/axe/4.11/landmark-complementary-is-top-level',
+        description: 'Complementary landmarks should not be nested.',
+      }],
+    });
+
+    const findings = mapResultsFlat(axeResults, 'https://example.com');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].wcag_sc).toBe('best-practice');
+    expect(findings[0].criterion_name).toBe('Complementary Landmark at Top Level');
+    expect(findings[0].suggested_fix).toContain('Move <aside> elements');
+  });
+
+  test('AAA criteria like 1.4.6 resolve to names and levels', () => {
+    const axeResults = makeAxeResults({
+      violations: [{
+        id:     'color-contrast-enhanced',
+        tags:   ['cat.color', 'wcag146'],
+        impact: 'serious',
+        nodes:  [{ html: '<p>Low contrast</p>', target: ['p'], failureSummary: 'Fix all of the following: Text has insufficient contrast.' }],
+        help:   'Text must have enhanced contrast.',
+        helpUrl: 'https://dequeuniversity.com/rules/axe/4.11/color-contrast-enhanced',
+        description: 'Ensure text contrast meets enhanced thresholds.',
+      }],
+    });
+
+    const findings = mapResultsFlat(axeResults, 'https://example.com');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].wcag_sc).toBe('1.4.6');
+    expect(findings[0].criterion_name).toBe('Contrast (Enhanced)');
+    expect(findings[0].level).toBe('AAA');
+  });
+});
+
+describe('formatSuccessCriterion', () => {
+  test('formats best-practice rules without returning null', () => {
+    expect(formatSuccessCriterion(['best-practice'])).toBe('Best Practice');
   });
 });

@@ -17,6 +17,8 @@ it once per request and re-uses the same Path object for every dependency
 that lists it — so all five steps share one directory.
 """
 
+from __future__ import annotations
+
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -24,23 +26,6 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from pydantic import HttpUrl
 
-from ka11y.crawler.crawler import AsyncImageCrawler
-from ka11y.crawler.forms_crawler import AsyncFormCrawler
-from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
-from ka11y.crawler.moving_content_crawler import MovingContentCrawler
-from ka11y.crawler.target_size_crawler import TargetSizeCrawler
-from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
-from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
-from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
-from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
-    LabelInNameAuditor,
-)
-from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
-    TargetSizeAuditor,
-)
-from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
-    PauseStopHideAuditor,
-)
 from ka11y.config.logger import setup_logger
 
 from ka11y.api.v1.dependencies import (
@@ -55,10 +40,6 @@ from ka11y.api.v1.dependencies import (
     get_pause_stop_hide_auditor,
     get_target_size_crawler,
     get_target_size_auditor,
-)
-from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
-from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
-    TextSpacingAuditor,
 )
 from ka11y.api.v1.dependencies import (
     get_text_spacing_crawler,
@@ -313,6 +294,8 @@ async def run_full_pipeline(
         if payload.run_ocr:
             logger.info("\nSTEP 2: TEXT DETECTION & CONTRAST ANALYSIS")
             logger.info("-" * 40)
+
+            from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
 
             detector = OCRPreprocessing(source_directory=image_crawler.output_dir)
             detector.scan_directory()

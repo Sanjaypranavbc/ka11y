@@ -1,6 +1,13 @@
 'use strict';
 
-const { mergeWithAxe, runAll, runStaticChecks } = require('../../src/custom-checks/index');
+const path = require('path');
+
+const {
+  _loadCheckDefinitions,
+  mergeWithAxe,
+  runAll,
+  runStaticChecks,
+} = require('../../src/custom-checks/index');
 
 describe('mergeWithAxe', () => {
   test('merges non-overlapping SC entries', () => {
@@ -70,6 +77,18 @@ describe('runStaticChecks', () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results.every(r => r.rules[0].status === 'incomplete')).toBe(true);
     expect(results[0].rules[0].reason).toContain('Custom check execution failed');
+  });
+});
+
+describe('_loadCheckDefinitions', () => {
+  test('discovers plugin files from the filesystem without editing index.js', () => {
+    const fixtureDir = path.resolve(__dirname, '../fixtures/custom-checks');
+    const checks = _loadCheckDefinitions(fixtureDir);
+
+    expect(checks).toHaveLength(1);
+    expect(checks[0].ruleId).toBe('plugin-smoke-check');
+    expect(checks[0].mode).toBe('static');
+    expect(checks[0].fallbackDescription).toBe('Fixture plugin rule loaded from the filesystem');
   });
 });
 

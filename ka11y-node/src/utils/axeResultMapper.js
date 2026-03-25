@@ -1,5 +1,13 @@
 'use strict';
 
+const rulesGuide = require('./rulesGuide');
+const {
+  BEST_PRACTICE_ID,
+  BEST_PRACTICE_NAME,
+  WCAG_LEVEL,
+  WCAG_NAMES,
+} = require('./wcagMetadata');
+
 /**
  * Maps axe-core raw results into the structured response format.
  * Pure function — no I/O, no side effects.
@@ -23,7 +31,7 @@ function mapResults(axeResults, criteriaFilter = null) {
         ? node.failureSummary.replace(/^Fix (?:any|all) of the following:\s*/i, '').trim()
         : rule.help,
       helpUrl:     rule.helpUrl,
-      _criteriaId: extractSuccessCriteriaId(rule.tags, rule.id),
+      _criteriaId: _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags),
     };
   }
 
@@ -37,7 +45,7 @@ function mapResults(axeResults, criteriaFilter = null) {
       status:      'pass',
       reason:      rule.help,
       helpUrl:     rule.helpUrl,
-      _criteriaId: extractSuccessCriteriaId(rule.tags, rule.id),
+      _criteriaId: _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags),
     };
   }
 
@@ -54,7 +62,7 @@ function mapResults(axeResults, criteriaFilter = null) {
         ? node.failureSummary.replace(/^Fix (?:any|all) of the following:\s*/i, '').trim()
         : rule.help,
       helpUrl:     rule.helpUrl,
-      _criteriaId: extractSuccessCriteriaId(rule.tags, rule.id),
+      _criteriaId: _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags),
     };
   }
 
@@ -181,9 +189,38 @@ function extractSuccessCriteriaId(tags, ruleId = '') {
  * @returns {string|null}
  */
 function formatSuccessCriterion(tags) {
-  const id = extractSuccessCriteriaId(tags);
+  const id = _normalizeCriterionId(extractSuccessCriteriaId(tags), '', tags);
   if (!id) return null;
+  if (id === BEST_PRACTICE_ID) return BEST_PRACTICE_NAME;
   return `WCAG ${id}`;
+}
+
+function _normalizeCriterionId(sc, ruleId, tags = []) {
+  if (sc) return sc;
+  if (Array.isArray(tags) && tags.includes('best-practice')) return BEST_PRACTICE_ID;
+  const guide = ruleId && rulesGuide[ruleId];
+  if (guide && guide.wcagLevel === 'best-practice') return BEST_PRACTICE_ID;
+  return null;
+}
+
+function _criterionName(sc, ruleId, fallbackName = null) {
+  if (!sc) return null;
+  if (sc === BEST_PRACTICE_ID) {
+    const guide = rulesGuide[ruleId];
+    return (guide && guide.title) || fallbackName || BEST_PRACTICE_NAME;
+  }
+  return WCAG_NAMES[sc] || null;
+}
+
+function _criterionLevel(sc) {
+  if (!sc || sc === BEST_PRACTICE_ID) return null;
+  return WCAG_LEVEL[sc] || null;
+}
+
+function _suggestedFix(sc, ruleId) {
+  if (sc && sc !== BEST_PRACTICE_ID && SUGGESTED_FIX[sc]) return SUGGESTED_FIX[sc];
+  const guide = rulesGuide[ruleId];
+  return (guide && guide.fixTip) || null;
 }
 
 /**
@@ -246,7 +283,7 @@ function mapResultsFlat(axeResults, pageUrl = null) {
 
   // ── violations → one finding per node ────────────────────────────────────
   for (const rule of axeResults.violations) {
-    const sc  = extractSuccessCriteriaId(rule.tags, rule.id);
+    const sc  = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
     const sev = IMPACT_TO_SEVERITY[rule.impact] || null;
     for (const node of (rule.nodes || [])) {
       const html = (node.html || '').slice(0, 600);
@@ -254,12 +291,12 @@ function mapResultsFlat(axeResults, pageUrl = null) {
         source:         'axe',
         rule_id:        rule.id,
         wcag_sc:        sc,
-        criterion_name: sc ? (WCAG_NAMES[sc] || null) : null,
-        level:          sc ? (WCAG_LEVEL[sc]  || null) : null,
+        criterion_name: _criterionName(sc, rule.id, rule.description || null),
+        level:          _criterionLevel(sc),
         severity:       sev,
         status:         'fail',
         reason:         cleanReason(node.failureSummary, rule.help),
-        suggested_fix:  SUGGESTED_FIX[sc] || null,
+        suggested_fix:  _suggestedFix(sc, rule.id),
         help_url:       rule.helpUrl,
         element: {
           html:       html,
@@ -274,7 +311,7 @@ function mapResultsFlat(axeResults, pageUrl = null) {
 
   // ── incomplete → one finding per node ────────────────────────────────────
   for (const rule of (axeResults.incomplete || [])) {
-    const sc  = extractSuccessCriteriaId(rule.tags, rule.id);
+    const sc  = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
     const sev = IMPACT_TO_SEVERITY[rule.impact] || null;
     for (const node of (rule.nodes || [])) {
       const html = (node.html || '').slice(0, 600);
@@ -282,12 +319,12 @@ function mapResultsFlat(axeResults, pageUrl = null) {
         source:         'axe',
         rule_id:        rule.id,
         wcag_sc:        sc,
-        criterion_name: sc ? (WCAG_NAMES[sc] || null) : null,
-        level:          sc ? (WCAG_LEVEL[sc]  || null) : null,
+        criterion_name: _criterionName(sc, rule.id, rule.description || null),
+        level:          _criterionLevel(sc),
         severity:       sev,
         status:         'needs_review',
         reason:         cleanReason(node.failureSummary, rule.help),
-        suggested_fix:  SUGGESTED_FIX[sc] || null,
+        suggested_fix:  _suggestedFix(sc, rule.id),
         help_url:       rule.helpUrl,
         element: {
           html:       html,
@@ -302,13 +339,13 @@ function mapResultsFlat(axeResults, pageUrl = null) {
 
   // ── passes → one finding per rule (not per element — too verbose) ─────────
   for (const rule of axeResults.passes) {
-    const sc = extractSuccessCriteriaId(rule.tags, rule.id);
+    const sc = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
     findings.push({
       source:         'axe',
       rule_id:        rule.id,
       wcag_sc:        sc,
-      criterion_name: sc ? (WCAG_NAMES[sc] || null) : null,
-      level:          sc ? (WCAG_LEVEL[sc]  || null) : null,
+      criterion_name: _criterionName(sc, rule.id, rule.description || null),
+      level:          _criterionLevel(sc),
       severity:       null,
       status:         'pass',
       reason:         rule.help,
@@ -359,9 +396,13 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
   };
 
   for (const result of (customResults || [])) {
-    const sc = (result && typeof result.successCriteriaId === 'string')
-      ? result.successCriteriaId
-      : null;
+    const sc = _normalizeCriterionId(
+      (result && typeof result.successCriteriaId === 'string')
+        ? result.successCriteriaId
+        : null,
+      null,
+      []
+    );
     const rules = Array.isArray(result && result.rules) ? result.rules : [];
 
     for (const rule of rules) {
@@ -375,12 +416,12 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
         source:         'custom',
         rule_id:        (rule && rule.ruleId) || 'custom-unknown-rule',
         wcag_sc:        sc,
-        criterion_name: sc ? (WCAG_NAMES[sc] || null) : null,
-        level:          sc ? (WCAG_LEVEL[sc]  || null) : null,
+        criterion_name: _criterionName(sc, null, (rule && rule.description) || null),
+        level:          _criterionLevel(sc),
         severity:       impact ? (IMPACT_TO_SEVERITY[impact] || null) : null,
         status:         status,
         reason:         (rule && rule.reason) || (rule && rule.description) || '',
-        suggested_fix:  sc ? (SUGGESTED_FIX[sc] || null) : null,
+        suggested_fix:  _suggestedFix(sc, null),
         help_url:       (rule && rule.helpUrl) || null,
         element:        null,
       });
@@ -393,90 +434,6 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
 
   return findings;
 }
-
-// ── Static metadata tables used by mapResultsFlat ─────────────────────────────
-
-const WCAG_NAMES = {
-  '1.1.1': 'Non-text Content',
-  '1.2.1': 'Audio-only and Video-only (Prerecorded)',
-  '1.2.2': 'Captions (Prerecorded)',
-  '1.2.3': 'Audio Description or Media Alternative (Prerecorded)',
-  '1.3.1': 'Info and Relationships',
-  '1.3.2': 'Meaningful Sequence',
-  '1.3.3': 'Sensory Characteristics',
-  '1.4.1': 'Use of Color',
-  '1.4.2': 'Audio Control',
-  '2.1.1': 'Keyboard',
-  '2.1.2': 'No Keyboard Trap',
-  '2.1.4': 'Character Key Shortcuts',
-  '2.2.1': 'Timing Adjustable',
-  '2.2.2': 'Pause, Stop, Hide',
-  '2.3.1': 'Three Flashes or Below Threshold',
-  '2.4.1': 'Bypass Blocks',
-  '2.4.2': 'Page Titled',
-  '2.4.3': 'Focus Order',
-  '2.4.4': 'Link Purpose (In Context)',
-  '2.5.1': 'Pointer Gestures',
-  '2.5.2': 'Pointer Cancellation',
-  '2.5.3': 'Label in Name',
-  '2.5.4': 'Motion Actuation',
-  '3.1.1': 'Language of Page',
-  '3.2.1': 'On Focus',
-  '3.2.2': 'On Input',
-  '3.3.1': 'Error Identification',
-  '3.3.2': 'Labels or Instructions',
-  '3.3.7': 'Redundant Entry',
-  '4.1.1': 'Parsing',
-  '4.1.2': 'Name, Role, Value',
-  '1.2.4': 'Captions (Live)',
-  '1.2.5': 'Audio Description (Prerecorded)',
-  '1.3.4': 'Orientation',
-  '1.3.5': 'Identify Input Purpose',
-  '1.4.3': 'Contrast (Minimum)',
-  '1.4.4': 'Resize Text',
-  '1.4.5': 'Images of Text',
-  '1.4.10': 'Reflow',
-  '1.4.11': 'Non-text Contrast',
-  '1.4.12': 'Text Spacing',
-  '1.4.13': 'Content on Hover or Focus',
-  '2.4.5': 'Multiple Ways',
-  '2.4.6': 'Headings and Labels',
-  '2.4.7': 'Focus Visible',
-  '2.4.11': 'Focus Not Obscured (Minimum)',
-  '2.4.13': 'Focus Appearance',
-  '2.5.7': 'Dragging Movements',
-  '2.5.8': 'Target Size (Minimum)',
-  '3.1.2': 'Language of Parts',
-  '3.2.3': 'Consistent Navigation',
-  '3.2.4': 'Consistent Identification',
-  '3.2.6': 'Consistent Help',
-  '3.3.3': 'Error Suggestion',
-  '3.3.4': 'Error Prevention (Legal, Financial, Data)',
-  '3.3.8': 'Accessible Authentication (Minimum)',
-  '4.1.3': 'Status Messages',
-};
-
-const WCAG_LEVEL = {
-  '1.1.1': 'A',  '1.2.1': 'A',  '1.2.2': 'A',  '1.2.3': 'A',
-  '1.3.1': 'A',  '1.3.2': 'A',  '1.3.3': 'A',
-  '1.4.1': 'A',  '1.4.2': 'A',
-  '2.1.1': 'A',  '2.1.2': 'A',  '2.1.4': 'A',
-  '2.2.1': 'A',  '2.2.2': 'A',  '2.3.1': 'A',
-  '2.4.1': 'A',  '2.4.2': 'A',  '2.4.3': 'A',  '2.4.4': 'A',
-  '2.5.1': 'A',  '2.5.2': 'A',  '2.5.3': 'A',  '2.5.4': 'A',
-  '3.1.1': 'A',  '3.2.1': 'A',  '3.2.2': 'A',
-  '3.3.1': 'A',  '3.3.2': 'A',  '3.3.7': 'A',
-  '4.1.1': 'A',  '4.1.2': 'A',
-  '1.2.4': 'AA', '1.2.5': 'AA', '1.3.4': 'AA', '1.3.5': 'AA',
-  '1.4.3': 'AA', '1.4.4': 'AA', '1.4.5': 'AA',
-  '1.4.10': 'AA', '1.4.11': 'AA', '1.4.12': 'AA', '1.4.13': 'AA',
-  '2.4.5': 'AA', '2.4.6': 'AA', '2.4.7': 'AA',
-  '2.4.11': 'AA', '2.4.13': 'AA',
-  '2.5.7': 'AA', '2.5.8': 'AA',
-  '3.1.2': 'AA', '3.2.3': 'AA', '3.2.4': 'AA', '3.2.6': 'AA',
-  '3.3.3': 'AA', '3.3.4': 'AA', '3.3.8': 'AA',
-  '4.1.3': 'AA',
-};
 
 const SUGGESTED_FIX = {
   '1.1.1':  "Add a descriptive alt attribute: <img alt='Description of image'>. For decorative images use alt=''.",
