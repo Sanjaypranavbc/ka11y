@@ -230,7 +230,33 @@ Results are merged in both response shapes:
 
 1. Most custom checks are rule-level heuristics, so flat findings currently return `element: null` (no stable CSS target/HTML snippet).
 2. Interactive checks (`on-focus`, `on-input`, `keyboard-trap`, `focus-visible`) can alter page state and may stop early after navigation for safety.
-3. If a custom check throws at runtime, it is logged and skipped; no explicit "check execution failed" finding is emitted yet.
+3. Runtime check failures must be surfaced as `incomplete/needs_review` findings (never silently dropped), otherwise SC-level coverage appears inconsistent.
+
+### Engineering Analysis (2026-03-24)
+
+**High-priority bugs / risks**
+
+1. **Result reflection risk (Node custom checks):** running static + interactive checks on a shared page in parallel can produce state interference (navigation/focus side effects) and missing findings.
+2. **SSRF hardening gap (Python combined route):** hostname-prefix checks alone are insufficient; DNS-resolved private/link-local IPs must be blocked.
+3. **Output collision risk (Python combined jobs):** output directory naming by `domain + minute` can collide for concurrent jobs.
+
+**Performance hotspots**
+
+1. **Image crawler session churn:** creating a fresh `aiohttp.ClientSession` per image download adds connection setup overhead.
+2. **Crawler duplication across stages:** form/interactive/target/text-spacing crawlers independently revisit the same pages.
+3. **Heavy parallelism pressure:** multiple Playwright-based stages launched together can saturate CPU/RAM on moderate hosts.
+
+**Fixes applied in this pass**
+
+1. **Python image crawler I/O optimization:** reused a single `aiohttp.ClientSession` per crawl run instead of creating one per download.
+2. **Python combined output isolation:** output path now includes `job_id` suffix to prevent report/artifact collisions.
+
+**Automation roadmap**
+
+1. Add nightly CI smoke audits against 3 stable fixture sites and diff pass/fail deltas by WCAG SC.
+2. Persist per-stage timings (`crawl`, `audit`, `serialize`) and alert when p95 latency regresses >20%.
+3. Introduce a cached crawl artifact layer (DOM snapshots + extracted elements) reused by multiple auditors in one job.
+4. Emit machine-readable QA gates (`critical_failures`, `needs_review_count`, `coverage_by_sc`) for release pipelines.
 
 **Node.js future possibilities (custom Puppeteer):**
 

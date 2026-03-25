@@ -20,6 +20,8 @@ const STAGE_LABELS: Record<string, string> = {
   label_in_name:   "Label in name (2.5.3)",
   pause_stop_hide: "Moving content (2.2.2)",
   target_size:     "Target size (2.5.8)",
+  text_spacing:    "Text spacing (1.4.12)",
+  rendered_layout_audit: "Rendered layout checks",
 };
 
 function StageProgress({ stages, currentStage }: { stages: StageInfo[]; currentStage: string }) {

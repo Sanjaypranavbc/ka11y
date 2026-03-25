@@ -19,6 +19,13 @@ const severityColors: Record<string, string> = {
   low: "bg-moderate/60 text-foreground",
 };
 
+const sourceColors: Record<string, string> = {
+  axe: "bg-primary/15 text-primary border-primary/30",
+  python: "bg-accent text-accent-foreground border-accent-foreground/30",
+  custom: "bg-serious/15 text-serious border-serious/30",
+  unknown: "bg-muted text-muted-foreground border-border",
+};
+
 export function NeedsReviewTab({ items }: NeedsReviewTabProps) {
   const [search, setSearch] = useState("");
   const [modalData, setModalData] = useState<AuditNeedsReview | null>(null);
@@ -65,7 +72,14 @@ export function NeedsReviewTab({ items }: NeedsReviewTabProps) {
             {filtered.map((v, i) => (
               <TableRow key={i}>
                 <TableCell><Badge className={cn("text-[10px]", v.severity ? severityColors[v.severity] : "bg-muted text-muted-foreground")}>{v.severity ?? "—"}</Badge></TableCell>
-                <TableCell><Badge variant="outline" className="text-[10px]">{v.source}</Badge></TableCell>
+                <TableCell>
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[10px]", sourceColors[v.source] || sourceColors.unknown)}
+                  >
+                    {v.source}
+                  </Badge>
+                </TableCell>
                 <TableCell className="font-mono text-xs">{v.wcag_sc ?? "—"}</TableCell>
                 <TableCell className="text-xs">{v.criterion_name ?? "—"}</TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{v.reason}</TableCell>

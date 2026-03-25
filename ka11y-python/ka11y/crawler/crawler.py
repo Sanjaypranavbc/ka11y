@@ -312,6 +312,7 @@ class AsyncImageCrawler:
             )
             page = await context.new_page()
             page.set_default_timeout(60_000)
+            download_session = None
 
             # ── page load ──
             console.print(Rule("[dim]Loading page[/dim]"))
@@ -338,6 +339,9 @@ class AsyncImageCrawler:
             await page.wait_for_timeout(500)
 
             try:
+                download_session = aiohttp.ClientSession(
+                    timeout=aiohttp.ClientTimeout(total=30)
+                )
                 # ═══════════════════════════════════════════════════════════
                 # PASS 1 — <img> and <input type="image"> elements
                 # ═══════════════════════════════════════════════════════════
@@ -409,10 +413,9 @@ class AsyncImageCrawler:
                                 )
                                 filename = f"img_{img_hash}{ext}"
                                 save_path = f"{img_dir}/{filename}"
-                                async with aiohttp.ClientSession() as sess:
-                                    saved = await self.classifier._download_file(
-                                        sess, abs_src, save_path
-                                    )
+                                saved = await self.classifier._download_file(
+                                    download_session, abs_src, save_path
+                                )
                                 if not saved:
                                     save_path = f"{img_dir}/img_{img_hash}.png"
                                     filename = f"img_{img_hash}.png"
@@ -432,10 +435,9 @@ class AsyncImageCrawler:
                                 )
                                 filename = f"img_{img_hash}{ext}"
                                 save_path = f"{img_dir}/{filename}"
-                                async with aiohttp.ClientSession() as sess:
-                                    saved = await self.classifier._download_file(
-                                        sess, abs_src, save_path
-                                    )
+                                saved = await self.classifier._download_file(
+                                    download_session, abs_src, save_path
+                                )
                                 if not saved:
                                     try:
                                         await img.screenshot(path=save_path)
@@ -460,10 +462,9 @@ class AsyncImageCrawler:
                                     saved = True
                                 except Exception:
                                     # Fallback: direct download
-                                    async with aiohttp.ClientSession() as sess:
-                                        saved = await self.classifier._download_file(
-                                            sess, abs_src, save_path
-                                        )
+                                    saved = await self.classifier._download_file(
+                                        download_session, abs_src, save_path
+                                    )
 
                             if saved:
                                 captured += 1
@@ -864,10 +865,9 @@ class AsyncImageCrawler:
                         bg_file = f"bg_{bg_hash}{ext}"
                         bg_path = f"{save_dir}/{bg_file}"
 
-                        async with aiohttp.ClientSession() as sess:
-                            ok = await self.classifier._download_file(
-                                sess, abs_src, bg_path
-                            )
+                        ok = await self.classifier._download_file(
+                            download_session, abs_src, bg_path
+                        )
 
                         if ok:
                             captured_bg += 1
@@ -937,6 +937,8 @@ class AsyncImageCrawler:
                 traceback.print_exc()
 
             finally:
+                if download_session is not None and not download_session.closed:
+                    await download_session.close()
                 await context.close()
                 await browser.close()
                 logger.info(f"Browser closed — finished crawling {self.base_url}")

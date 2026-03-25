@@ -46,6 +46,7 @@ const STAGE_LABELS: Record<string, string> = {
   label_in_name:         "Label in name",
   pause_stop_hide:       "Moving content",
   target_size:           "Target size",
+  text_spacing:          "Text spacing",
   rendered_layout_audit: "Rendered layout",
 };
 

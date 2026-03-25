@@ -42,18 +42,41 @@ export function DashboardTab({ result }: DashboardTabProps) {
 
   // Source breakdown
   const sourceData = (() => {
-    const axe = { name: "axe", violations: 0, needs_review: 0, passes: 0 };
-    const python = { name: "python", violations: 0, needs_review: 0, passes: 0 };
-    result.violations.forEach((v) => (v.source === "axe" ? axe : python).violations++);
-    result.needs_review.forEach((v) => (v.source === "axe" ? axe : python).needs_review++);
-    result.passes.forEach((v) => (v.source === "axe" ? axe : python).passes++);
-    return [axe, python];
+    const sourceNames = [
+      ...new Set(
+        [...result.violations, ...result.needs_review, ...result.passes]
+          .map((f) => f.source || "unknown")
+      ),
+    ].sort();
+
+    const rows = sourceNames.map((name) => ({
+      name,
+      violations: 0,
+      needs_review: 0,
+      passes: 0,
+    }));
+    const bySource = new Map(rows.map((r) => [r.name, r]));
+
+    result.violations.forEach((v) => {
+      const bucket = bySource.get(v.source || "unknown");
+      if (bucket) bucket.violations++;
+    });
+    result.needs_review.forEach((v) => {
+      const bucket = bySource.get(v.source || "unknown");
+      if (bucket) bucket.needs_review++;
+    });
+    result.passes.forEach((v) => {
+      const bucket = bySource.get(v.source || "unknown");
+      if (bucket) bucket.passes++;
+    });
+
+    return rows;
   })();
 
   // WCAG Level breakdown
   const wcagLevels = (() => {
     const levels: Record<string, { violations: number; needs_review: number; passes: number }> = {};
-    ["A", "AA"].forEach((l) => (levels[l] = { violations: 0, needs_review: 0, passes: 0 }));
+    ["A", "AA", "AAA"].forEach((l) => (levels[l] = { violations: 0, needs_review: 0, passes: 0 }));
     result.violations.forEach((v) => { if (levels[v.level]) levels[v.level].violations++; });
     result.needs_review.forEach((v) => { if (levels[v.level]) levels[v.level].needs_review++; });
     result.passes.forEach((v) => { if (levels[v.level]) levels[v.level].passes++; });

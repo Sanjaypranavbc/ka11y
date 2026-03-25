@@ -1,10 +1,12 @@
+export type AuditSource = "axe" | "python" | "custom" | "unknown";
+
 export interface AuditViolation {
   rule_id: string;
   wcag_sc: string | null;
   criterion_name: string | null;
   level: "A" | "AA" | "AAA" | null;
   severity: "critical" | "high" | "medium" | "low" | null;
-  source: "axe" | "python";
+  source: AuditSource;
   reason: string;
   element_html: string;
   suggested_fix: string | null;
@@ -17,7 +19,7 @@ export interface AuditNeedsReview {
   criterion_name: string | null;
   level: "A" | "AA" | "AAA" | null;
   severity: "critical" | "high" | "medium" | "low" | null;
-  source: "axe" | "python";
+  source: AuditSource;
   reason: string;
   element_html: string;
   suggested_fix: string | null;
@@ -65,7 +67,7 @@ export interface AuditPass {
   wcag_sc: string;
   criterion_name: string;
   level: "A" | "AA" | "AAA";
-  source: "axe" | "python";
+  source: AuditSource;
   reason: string;
 }
 

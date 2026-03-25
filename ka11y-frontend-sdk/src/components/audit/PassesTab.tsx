@@ -12,7 +12,7 @@ interface PassesTabProps {
 }
 
 export function PassesTab({ passes }: PassesTabProps) {
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ axe: true, python: true });
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
 
   const grouped = passes.reduce(
@@ -24,7 +24,7 @@ export function PassesTab({ passes }: PassesTabProps) {
   );
 
   const toggle = (source: string) => {
-    setOpenSections((prev) => ({ ...prev, [source]: !prev[source] }));
+    setOpenSections((prev) => ({ ...prev, [source]: !(prev[source] ?? true) }));
   };
 
   const showMore = (source: string) => {
@@ -34,11 +34,12 @@ export function PassesTab({ passes }: PassesTabProps) {
   return (
     <div className="p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
       {Object.entries(grouped).map(([source, items]) => {
+        const isOpen = openSections[source] ?? true;
         const visible = visibleCounts[source] ?? 50;
         return (
-          <Collapsible key={source} open={openSections[source]} onOpenChange={() => toggle(source)}>
+          <Collapsible key={source} open={isOpen} onOpenChange={() => toggle(source)}>
             <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-              <ChevronDown className={cn("h-4 w-4 transition-transform", openSections[source] && "rotate-180")} />
+              <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
               <span className="text-sm font-medium capitalize">{source}</span>
               <Badge variant="secondary" className="text-[10px] ml-auto">{items.length} passes</Badge>
             </CollapsibleTrigger>

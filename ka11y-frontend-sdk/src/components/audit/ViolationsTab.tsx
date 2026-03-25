@@ -27,6 +27,8 @@ const severityColors: Record<string, string> = {
 const sourceColors: Record<string, string> = {
   axe: "bg-primary/15 text-primary border-primary/30",
   python: "bg-accent text-accent-foreground border-accent-foreground/30",
+  custom: "bg-serious/15 text-serious border-serious/30",
+  unknown: "bg-muted text-muted-foreground border-border",
 };
 
 export function ViolationsTab({ violations }: ViolationsTabProps) {
@@ -38,7 +40,10 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
   const [visibleCount, setVisibleCount] = useState(50);
 
   const allSeverities = ["critical", "high", "medium", "low"];
-  const allSources = ["axe", "python"];
+  const allSources = useMemo(
+    () => [...new Set(violations.map((v) => v.source).filter(Boolean))].sort(),
+    [violations]
+  );
   const allScs = useMemo(() => [...new Set(violations.map((v) => v.wcag_sc).filter(Boolean))].sort() as string[], [violations]);
 
   const filtered = useMemo(() => {
@@ -165,7 +170,12 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
                   <Badge className={cn("text-[10px]", v.severity ? severityColors[v.severity] : "bg-muted text-muted-foreground")}>{v.severity ?? "—"}</Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={cn("text-[10px]", sourceColors[v.source])}>{v.source}</Badge>
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[10px]", sourceColors[v.source] || sourceColors.unknown)}
+                  >
+                    {v.source}
+                  </Badge>
                 </TableCell>
                 <TableCell className="font-mono text-xs">{v.wcag_sc ?? "—"}</TableCell>
                 <TableCell className="text-xs">{v.criterion_name ?? "—"}</TableCell>

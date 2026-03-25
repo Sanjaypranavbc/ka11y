@@ -47,7 +47,9 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
     node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
     domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
     ts = time.strftime("%m%d_%H%M")
-    output_dir = Path(f"{config['input']['output_dir']}/{domain}_{ts}_combined")
+    output_dir = Path(
+        f"{config['input']['output_dir']}/{domain}_{ts}_{job_id[:8]}_combined"
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     _jobs[job_id]["output_dir"] = str(output_dir)
 
