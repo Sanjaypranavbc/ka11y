@@ -61,10 +61,12 @@ async function run(page) {
       }
     }
 
-    return violations;
+    const totalAccesskeys = document.querySelectorAll('[accesskey]').length;
+    const totalHandlers = document.querySelectorAll('[onkeydown], [onkeypress], [onkeyup]').length;
+    return { violations, totalAccesskeys, totalHandlers };
   }, PRINTABLE_CHAR_RE.source);
 
-  if (data.length === 0) {
+  if (data.violations.length === 0) {
     return {
       successCriteriaId: SC,
       rules: [{
@@ -72,15 +74,16 @@ async function run(page) {
         description: 'Single character key shortcuts must be remappable or disableable',
         impact: null,
         status: 'pass',
-        reason: 'No problematic single character key shortcuts detected.',
+        reason: `${data.totalAccesskeys} accesskey attribute(s) and ${data.totalHandlers} inline key handler(s) checked — none use unguarded single character shortcuts (letters/symbols without Ctrl/Alt/Meta modifier).`,
         helpUrl: HELP_URL,
       }],
     };
   }
 
-  const accesskeyCount = data.filter(d => d.type === 'accesskey').length;
-  const handlerCount   = data.filter(d => d.type === 'inline-handler').length;
-  const sample = data.slice(0, 3).map(d => d.html.slice(0, 80)).join('; ');
+  const violations = data.violations;
+  const accesskeyCount = violations.filter(d => d.type === 'accesskey').length;
+  const handlerCount   = violations.filter(d => d.type === 'inline-handler').length;
+  const sample = violations.slice(0, 3).map(d => d.html.slice(0, 80)).join('; ');
 
   return {
     successCriteriaId: SC,

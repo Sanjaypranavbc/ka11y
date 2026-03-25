@@ -8,7 +8,7 @@ This guide walks through adding a completely new WCAG rule. We will implement **
 By the end you will have:
 - A new **Crawler** that extracts the raw element data
 - A new **Auditor** that applies the WCAG logic
-- A new **finding converter** wired into `combined.py`
+- A new **finding converter** wired into `ka11y/api/v1/combined/findings.py`
 - A new **stage** that appears in the SSE stream and the job status
 
 <Note>
@@ -17,15 +17,18 @@ By the end you will have:
 
 ---
 
-## Overview: the five files you touch
+## Overview: the files you touch
 
 | # | File | What you add |
 |---|------|-------------|
 | 1 | `ka11y/crawler/<name>_crawler.py` | **New file** — Playwright extraction |
 | 2 | `ka11y/accessibility/rules/<category>/<name>_auditor.py` | **New file** — WCAG logic |
-| 3 | `ka11y/api/v1/combined.py` | Finding converter + stage block + request toggle |
-| 4 | *(optional)* `ka11y/api/v1/dependencies.py` | FastAPI `Depends()` provider |
-| 5 | *(optional)* `ka11y/api/v1/pipeline.py` | Wire into sequential pipeline |
+| 3 | `ka11y/api/v1/combined/findings.py` | Finding converter + registry entry |
+| 4 | `ka11y/api/v1/combined/constants.py` | Severity / suggested fix / WCAG metadata |
+| 5 | `ka11y/api/v1/combined/stages.py` | Stage coroutine + `_run_python_stages()` wiring |
+| 6 | `ka11y/api/v1/combined/models.py` | Request toggle in `CombinedRequest` |
+| 7 | *(optional)* `ka11y/api/v1/dependencies.py` | FastAPI `Depends()` provider |
+| 8 | *(optional)* `ka11y/api/v1/pipeline.py` | Wire into sequential pipeline |
 
 ---
 
@@ -224,8 +227,8 @@ Also create the `__init__.py`:
 ### Auditor design rules
 
 <AccordionGroup>
-  <Accordion title="Status values must be exactly FAILED, PASSED, or N/A">
-    The finding converter in `combined.py` pattern-matches these exact strings. Any other value is silently skipped.
+  <Accordion title="Choose raw status values to match the converter you are wiring">
+    For most static auditors, use `FAILED`, `PASSED`, and `N/A`. Rendered-layout converters also accept `NEEDS_REVIEW`, and a few specialized converters map `INCOMPLETE` or `INFO` to `needs_review`. If you introduce a new status value, update the converter logic explicitly instead of assuming it will be picked up automatically.
   </Accordion>
   <Accordion title="Never import Playwright">
     Auditors must be pure Python — no browser, no network. This keeps them unit-testable and fast.
@@ -242,7 +245,7 @@ Also create the `__init__.py`:
 
 ## Step 3 — Add the finding converter
 
-Open `ka11y/api/v1/combined.py` and add two things:
+Open `ka11y/api/v1/combined/constants.py` and `ka11y/api/v1/combined/findings.py` and add two things:
 
 ### 3a — Register severity and suggested fix
 
@@ -268,7 +271,7 @@ _SUGGESTED_FIX: Dict[str, str] = {
 
 ### 3b — Add the converter function
 
-Place it alongside the other converters (`_alt_text_to_findings`, `_form_to_findings`, etc.):
+Place it alongside the other converters (`_alt_text_to_findings`, `_form_to_findings`, etc.) in `findings.py`:
 
 ```python
 def _lang_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
@@ -304,6 +307,8 @@ def _lang_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     return findings
 ```
 
+Register it in the appropriate converter registry near the bottom of `findings.py` so the combined stage picks it up automatically. Today those registries are `IMAGE_AUDIT_RECORD_CONVERTERS` and `OCR_RESULT_CONVERTERS`; rendered-layout rules are wired through their explicit `_..._to_findings()` calls in `stages.py`.
+
 ---
 
 ## Step 4 — Wire the stage into `_run_python_stages()`
@@ -319,38 +324,49 @@ class CombinedRequest(BaseModel):
 
 ### 4b — Add imports
 
-At the top of `combined.py`:
+At the top of `ka11y/api/v1/combined/stages.py`:
 
 ```python
 from ka11y.crawler.lang_crawler import LangCrawler
 from ka11y.accessibility.rules.language.lang_auditor import LangAuditor
 ```
 
-### 4c — Add the stage block
+### 4c — Add the stage coroutine and gather entry
 
-Inside `_run_python_stages()`, add a new stage block **after** `target_size` (or wherever makes sense for your rule):
+Inside `stages.py`, add a new stage coroutine following the existing `_stage_xxx(...)` pattern:
 
 ```python
-# ── Stage: lang_audit (WCAG 3.1.1) ───────────────────────────────────────
-stage_findings = []
-_stage_start(job_id, "lang_audit")
-try:
-    lang_crawler = LangCrawler(
-        base_url=url, output_dir=str(output_dir), max_depth=max_depth,
-    )
-    lang_items = await lang_crawler.crawl()
-    lang_crawler.save_raw_json()
+async def _stage_lang_audit(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_lang_audit: bool,
+    job_id: str,
+) -> List[Dict]:
+    _stage_start(job_id, "lang_audit")
+    if not run_lang_audit:
+        _stage_complete(job_id, "lang_audit", 0)
+        return []
 
-    if run_lang_audit:
+    try:
+        lang_crawler = LangCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
+        )
+        lang_items = await lang_crawler.crawl()
+        await asyncio.to_thread(lang_crawler.save_raw_json)
+
         lang_auditor = LangAuditor(output_dir=str(output_dir))
-        records = lang_auditor.generate_audit_report(lang_items)
-        stage_findings = _lang_to_findings(records, url)
-        all_findings.extend(stage_findings)
+        records = await asyncio.to_thread(lang_auditor.generate_audit_report, lang_items)
+        findings = _lang_to_findings(records, url)
 
-    _stage_complete(job_id, "lang_audit", len(stage_findings))
-except Exception as _exc:
-    _stage_error_and_warn(job_id, "lang_audit", _exc)
+        _stage_complete(job_id, "lang_audit", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "lang_audit", _exc)
+        return []
 ```
+
+Then add `_timed(_stage_lang_audit(...))` to the `asyncio.gather(...)` call inside `_run_python_stages()`.
 
 ### 4d — Pass the toggle through `_run_job()`
 
@@ -366,7 +382,7 @@ python_task = asyncio.create_task(
 )
 ```
 
-And update the `_run_python_stages` signature:
+And update the `_run_python_stages` signature in `stages.py`:
 
 ```python
 async def _run_python_stages(
@@ -381,7 +397,7 @@ async def _run_python_stages(
 
 ## Step 5 — Update the SSE stage label (frontend)
 
-Open `ka11y-frontend-sdk/src/pages/Index.tsx` and add an entry to `STAGE_LABELS`:
+Open the stage label map used by the frontend and add an entry for the new stage:
 
 ```typescript
 const STAGE_LABELS: Record<string, string> = {
@@ -462,13 +478,13 @@ poetry run pytest tests/test_lang_auditor.py -v
     `ka11y/accessibility/rules/language/lang_auditor.py` — records carry `wcag_3_1_1_status` and `wcag_3_1_1_violation`.
   </Step>
   <Step title="Severity registered">
-    `_PYTHON_SEVERITY["3.1.1"]` set in `combined.py`.
+    `_PYTHON_SEVERITY["3.1.1"]` set in `combined/constants.py`.
   </Step>
   <Step title="Suggested fix registered">
-    `_SUGGESTED_FIX["3.1.1"]` set in `combined.py`.
+    `_SUGGESTED_FIX["3.1.1"]` set in `combined/constants.py`.
   </Step>
   <Step title="Finding converter added">
-    `_lang_to_findings()` in `combined.py`.
+    `_lang_to_findings()` plus registry entry in `combined/findings.py`.
   </Step>
   <Step title="Toggle added to CombinedRequest">
     `run_lang_audit: bool = True` in `CombinedRequest`.

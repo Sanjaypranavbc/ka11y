@@ -5,7 +5,7 @@ description: "ka11y — AI-powered WCAG accessibility auditing for the web"
 
 <img
   className="block dark:hidden"
-  src="/logo/hero-light.png"
+  src="/logo/light.svg"
   alt="ka11y hero"
 />
 
@@ -16,9 +16,9 @@ description: "ka11y — AI-powered WCAG accessibility auditing for the web"
 | Engine | What it checks |
 |--------|---------------|
 | **axe-core** (Node.js) | DOM structure, ARIA semantics, colour contrast, keyboard, 80+ rules |
-| **Python auditors** | Alt-text quality (OCR + ML), forms, label-in-name, moving content, target size |
+| **Python auditors** | OCR-backed image/text checks, forms, label-in-name, moving content, target size, and rendered-layout WCAG checks |
 
-The two engines run **in parallel** for every audit. Results are merged into a single flat findings list, deduplicated by WCAG success criterion, and returned via a REST job API with real-time Server-Sent Events (SSE) progress streaming.
+The two engines run **in parallel** for every audit. Results are merged into a single flat findings list, summarized by WCAG success criterion, and returned via a REST job API with real-time Server-Sent Events (SSE) progress streaming.
 
 ---
 
@@ -57,7 +57,7 @@ The two engines run **in parallel** for every audit. Results are merged into a s
     Connect to `GET /api/v1/combined/{job_id}/stream` immediately after submitting an audit to receive live stage events: `stage_start`, `stage_complete`, `stage_error`, `job_complete`, `job_failed`. Heartbeat keepalives fire every 25 s.
   </Accordion>
   <Accordion title="Pluggable rule architecture">
-    Each WCAG rule is a self-contained Crawler + Auditor pair. Adding a new rule requires no changes to existing code — only new files and a single wiring block in `combined.py`. See [Adding a Rule](/guides/adding-a-rule).
+    Each WCAG rule is a self-contained Crawler + Auditor pair. Adding a new rule means adding new files plus explicit registration in the `combined/` package (`findings.py`, `constants.py`, `stages.py`, and request models). See [Adding a Rule](/guides/adding-a-rule).
   </Accordion>
   <Accordion title="CSV + JSON output">
     Every auditor writes a per-stage CSV report alongside the consolidated `combined_report.json`. Artefacts are stored in a timestamped directory under `crawled_images/`.
@@ -75,7 +75,11 @@ ka11y-python/
 │   ├── api/
 │   │   ├── router.py              # Top-level /api/v1 router
 │   │   └── v1/
-│   │       ├── combined.py        # ★ Primary endpoint (async job + SSE)
+│   │       ├── combined/          # ★ Primary endpoint package (async job + SSE)
+│   │       │   ├── routes.py      # FastAPI routes
+│   │       │   ├── runner.py      # Background job orchestration
+│   │       │   ├── stages.py      # Python audit stages
+│   │       │   └── findings.py    # Flat finding converters
 │   │       ├── pipeline.py        # Sequential 11-step pipeline endpoint
 │   │       ├── crawl.py           # Image + form crawl-only endpoint
 │   │       ├── forms.py           # Forms-only endpoint
@@ -88,7 +92,7 @@ ka11y-python/
 │   │   ├── target_size_crawler.py # TargetSizeCrawler
 │   │   └── models.py              # Shared Pydantic models
 │   ├── accessibility/rules/
-│   │   ├── non_text/alttext.py    # AltTextAccessibilityAuditor  (1.1.1)
+│   │   ├── non_text/alttext.py    # AltTextAccessibilityAuditor  (1.1.1 / 4.1.2 / 1.4.5 / 1.4.11)
 │   │   ├── forms/form_auditor.py  # FormAccessibilityAuditor     (3.3.1 / 3.3.2)
 │   │   └── input_modalities/
 │   │       ├── label_in_name_auditor.py  # LabelInNameAuditor   (2.5.3)

@@ -22,11 +22,11 @@ The combined endpoint is the **primary API**. It runs axe-core (Node) and all Py
 </ParamField>
 
 <ParamField body="run_ocr" type="boolean" default="true">
-  Run EasyOCR on crawled images to detect embedded text before auditing alt attributes.
+  Run EasyOCR on crawled images to detect embedded text and compute image-text contrast. This powers Python findings for `1.4.3`, `1.4.6`, and the OCR-backed parts of `1.1.1`, `1.4.5`, and `1.4.11`.
 </ParamField>
 
 <ParamField body="run_image_audit" type="boolean" default="true">
-  Enable the WCAG 1.1.1 alt-text auditor.
+  Enable the image auditor. This stage emits Python findings for `1.1.1 Non-text Content`, `4.1.2 Name, Role, Value` on functional images, `1.4.5 Images of Text`, and `1.4.11 Non-text Contrast` when applicable.
 </ParamField>
 
 <ParamField body="run_form_audit" type="boolean" default="true">

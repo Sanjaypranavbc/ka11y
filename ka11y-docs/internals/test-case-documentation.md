@@ -32,6 +32,7 @@
 
 ---
 
+<div id="2-test_rendered_geometrypy--geometry-helpers"></div>
 ## 2. `test_rendered_geometry.py` — Geometry Helpers
 
 **WCAG context:** Supports all seven rendered-layout checks (1.4.4, 1.4.10, 1.4.12, 1.3.4, 1.4.13, 2.4.11, 2.4.12). These helper functions are the mathematical foundation for deciding whether elements overflow their containers, overlap overlays, or are scrolled off-screen. Getting the geometry wrong would silently produce incorrect pass/fail verdicts on every rendered check.
@@ -223,6 +224,7 @@
 
 ---
 
+<div id="3-test_rendered_evaluatorspy--rendered-layout-evaluators"></div>
 ## 3. `test_rendered_evaluators.py` — Rendered Layout Evaluators
 
 **WCAG context:** Seven evaluators, one per rendered-layout WCAG SC: 1.4.10 (Reflow), 1.4.12 (Text Spacing), 1.4.4 (Resize Text), 1.3.4 (Orientation), 1.4.13 (Hover/Focus Content), 2.4.11 (Focus Not Obscured Min), 2.4.12 (Focus Not Obscured Enh).
@@ -257,7 +259,7 @@
 
 #### `test_multiple_overflows_all_reported`
 - **Input:** Three overflowing elements.
-- **Why:** Confirms that the evaluator collects all failures, not just the first. The consumer (combined.py converter) needs the full list to generate per-element findings.
+- **Why:** Confirms that the evaluator collects all failures, not just the first. The consumer (`combined/findings.py` converter path) needs the full list to generate per-element findings.
 
 ---
 
@@ -385,6 +387,7 @@
 
 ---
 
+<div id="4-test_rendered_converterspy--rendered-layout-converters"></div>
 ## 4. `test_rendered_converters.py` — Rendered Layout Converters
 
 **WCAG context:** Converters translate raw `RuleAuditRecord` dicts (with `{rule_key}_status` and `{rule_key}_violation` fields) into the unified finding format consumed by the combined pipeline and frontend.
@@ -432,9 +435,10 @@ Each converter class follows the same pattern. Representative explanations below
 
 ---
 
+<div id="5-test_alt_text_auditorpy--wcag-111-alt-text"></div>
 ## 5. `test_alt_text_auditor.py` — WCAG 1.1.1 Alt Text
 
-**WCAG context:** WCAG 1.1.1 requires that every non-text content item has a text alternative. The auditor uses OCR (via Tesseract), image classification (via classifier ML model), and cosine similarity to detect missing, generic, or misleading alt text.
+**WCAG context:** WCAG 1.1.1 requires that every non-text content item has a text alternative. The auditor uses OCR (via EasyOCR), image classification, and OCR-word matching to detect missing, generic, or misleading alt text.
 
 **Technique pattern:** Unit tests use **pre-built `ImageData` objects** (Pydantic models) populated with synthetic field values, bypassing the Playwright crawler and the OCR pipeline. This keeps tests fast and deterministic — OCR output is non-deterministic and browser-dependent.
 
@@ -584,10 +588,11 @@ Each converter class follows the same pattern. Representative explanations below
 - **Why:** The audit report header-level status must reflect the worst finding. If any image is CRITICAL, the overall report is CRITICAL.
 
 #### `test_csv_written_to_output_dir`
-- **Why:** The CSV is consumed by `combined.py` as an intermediate artifact. If not written, the pipeline fails silently.
+- **Why:** The CSV is consumed by the combined image-audit pipeline as an intermediate artifact. If not written, the pipeline fails silently.
 
 ---
 
+<div id="6-test_form_auditorpy--wcag-331--332-forms"></div>
 ## 6. `test_form_auditor.py` — WCAG 3.3.1 / 3.3.2 Forms
 
 **WCAG context:** 3.3.2 requires that every input has a visible label. 3.3.1 requires that error messages are programmatically associated (via `aria-describedby` pointing to an element with `role="alert"` or `aria-live`).
@@ -729,6 +734,7 @@ Each converter class follows the same pattern. Representative explanations below
 
 ---
 
+<div id="7-test_label_in_name_auditorpy--wcag-253-label-in-name"></div>
 ## 7. `test_label_in_name_auditor.py` — WCAG 2.5.3 Label in Name
 
 **WCAG context:** WCAG 2.5.3 requires that when an interactive element has a visible text label, the accessible name (from `aria-label`, `aria-labelledby`, or button text) must *contain* that visible label verbatim. This ensures voice-control users can activate elements by speaking the visible text.
@@ -851,6 +857,7 @@ Each converter class follows the same pattern. Representative explanations below
 
 ---
 
+<div id="8-test_target_size_auditorpy--wcag-258-target-size"></div>
 ## 8. `test_target_size_auditor.py` — WCAG 2.5.8 Target Size
 
 **WCAG context:** WCAG 2.5.8 requires that interactive elements (buttons, links, etc.) have a minimum rendered size of 24×24 CSS px, with exceptions for inline text links and UA-controlled widgets (native checkboxes/radios).
@@ -934,7 +941,7 @@ Each converter class follows the same pattern. Representative explanations below
 - **Why:** One record per element. Auditor must not drop or duplicate records.
 
 #### `test_csv_has_correct_columns`
-- **Why:** The CSV schema is a contract between the auditor and the `combined.py` converter. If a column is renamed or added, the converter must be updated. This test pins the schema as a regression guard.
+- **Why:** The CSV schema is a contract between the auditor and the `combined/findings.py` converter. If a column is renamed or added, the converter must be updated. This test pins the schema as a regression guard.
 - **Technique:** Reads the CSV header with `csv.DictReader` and asserts exact column list equality (order matters because some downstream tools process columns positionally).
 
 #### `test_summary_row_present_in_csv`
@@ -969,10 +976,11 @@ Each converter class follows the same pattern. Representative explanations below
 - **Why:** The `failed_by_tag` breakdown tells developers which element types have the most target-size violations. If mostly `A` tags fail, the fix is CSS on links; if mostly `BUTTON`, it's button styling.
 
 #### `test_all_keys_present`
-- **Why:** The summarize output is destructured by `combined.py` without `.get()` guards. A missing key would raise `KeyError` at runtime. This test pins all required keys.
+- **Why:** The summarize output is consumed by the combined result pipeline without `.get()` guards. A missing key would raise `KeyError` at runtime. This test pins all required keys.
 
 ---
 
+<div id="9-test_pause_stop_hide_auditorpy--wcag-222-pausestophide"></div>
 ## 9. `test_pause_stop_hide_auditor.py` — WCAG 2.2.2 Pause/Stop/Hide
 
 **WCAG context:** WCAG 2.2.2 requires that automatically-playing moving content lasting more than 5 seconds can be paused, stopped, or hidden. This covers videos, carousels, GIFs, CSS animations, and deprecated `<marquee>`/`<blink>` elements.

@@ -38,7 +38,11 @@ async function run(page) {
         : false;
 
       if (!hasTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasAriaDescription) {
-        issues.push({ html: audio.outerHTML.slice(0, 150) });
+        issues.push({
+          html: audio.outerHTML.slice(0, 150),
+          id: audio.id || null,
+          src: (audio.getAttribute('src') || audio.querySelector('source')?.getAttribute('src') || '').slice(0, 80),
+        });
       }
     }
 
@@ -73,6 +77,11 @@ async function run(page) {
     };
   }
 
+  const elementList = data.issues
+    .slice(0, 3)
+    .map(i => i.id ? `<audio id="${i.id}">` : (i.src ? `<audio src="${i.src}">` : i.html.slice(0, 60)))
+    .join(', ');
+
   return {
     successCriteriaId: SC,
     rules: [{
@@ -80,7 +89,7 @@ async function run(page) {
       description: 'Audio-only prerecorded content must have a text alternative',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable text alternative (no <track>, no nearby transcript link, no <figcaption>, no aria-describedby). Verify a full text transcript is available adjacent to each audio element.`,
+      reason: `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable text alternative (no <track>, no nearby transcript link, no <figcaption>, no aria-describedby). Provide a full text transcript adjacent to each: ${elementList}.`,
       helpUrl: HELP_URL,
     }],
   };

@@ -7,7 +7,7 @@ description: "Coverage map — which rules are checked by axe-core vs Python aud
 
 | WCAG SC | Criterion | Level | axe-core | Python | Engine | Notes |
 |---------|-----------|-------|----------|--------|--------|-------|
-| **1.1.1** | Non-text Content | A | Partial | **Full** | Static | Python adds OCR, classification, cosine similarity |
+| **1.1.1** | Non-text Content | A | Partial | **Full** | Static | Python adds OCR-backed text checks and image classification |
 | **1.3.1** | Info and Relationships | A | ✓ | — | Static | axe-core only |
 | **1.3.4** | Orientation | AA | — | **Full** | Rendered | Portrait/landscape scenarios; rotate-overlay detection |
 | **1.3.5** | Identify Input Purpose | AA | ✓ | — | Static | axe-core only |
@@ -49,8 +49,11 @@ Python auditors map each WCAG SC to a default severity level:
 | 1.1.1 | `critical` |
 | 1.3.4 | `medium` |
 | 1.4.3 | `high` |
+| 1.4.5 | `medium` |
+| 1.4.6 | `medium` |
 | 1.4.4 | `high` |
 | 1.4.10 | `high` |
+| 1.4.11 | `high` |
 | 1.4.12 | `high` |
 | 1.4.13 | `medium` |
 | 2.2.2 | `high` |
@@ -60,6 +63,7 @@ Python auditors map each WCAG SC to a default severity level:
 | 2.5.8 | `medium` |
 | 3.3.1 | `high` |
 | 3.3.2 | `high` |
+| 4.1.2 | `high` |
 
 axe-core assigns its own severity values (`critical`, `serious`, `moderate`, `minor`) which are mapped to the ka11y schema (`critical`, `high`, `medium`, `low`) in `axeResultMapper.js`.
 

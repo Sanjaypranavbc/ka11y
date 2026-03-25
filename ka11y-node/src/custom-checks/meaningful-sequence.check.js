@@ -73,7 +73,7 @@ async function run(page) {
   if (violations.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Reading and navigation order must be programmatically determinable', impact: null, status: 'pass', reason: 'No CSS reordering (flex-direction reverse or order property) detected that diverges from DOM order.', helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Reading and navigation order must be programmatically determinable', impact: null, status: 'pass', reason: `Up to ${MAX_CONTAINERS} flex/grid containers inspected — no CSS reordering (flex-direction reverse or order property) found that diverges from DOM order.`, helpUrl: HELP_URL }],
     };
   }
 

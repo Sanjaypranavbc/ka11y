@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCriterionId, formatCriterionName, formatLevel } from "@/lib/audit-format";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface PassesTabProps {
   passes: AuditPass[];
@@ -201,7 +202,14 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                         <TableCell className="font-mono text-xs">{formatCriterionId(p.wcag_sc)}</TableCell>
                         <TableCell className="text-xs">{formatCriterionName(p.criterion_name, p.wcag_sc)}</TableCell>
                         <TableCell><Badge variant="outline" className="text-[10px]">{formatLevel(p.level)}</Badge></TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{p.reason}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground max-w-xs">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0} className="cursor-help truncate block max-w-xs">{p.reason}</span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-sm text-xs">{p.reason}</TooltipContent>
+                          </Tooltip>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

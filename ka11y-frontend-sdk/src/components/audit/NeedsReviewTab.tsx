@@ -8,6 +8,7 @@ import { SuggestedFixModal } from "./SuggestedFixModal";
 import { AlertTriangle, Wrench, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCriterionId, formatCriterionName } from "@/lib/audit-format";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface NeedsReviewTabProps {
   items: AuditNeedsReview[];
@@ -59,7 +60,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
       if (scFilter.length && !scFilter.includes(v.wcag_sc)) return false;
       if (!search) return true;
       const q = search.toLowerCase();
-      return v.reason.toLowerCase().includes(q) || v.element_html.toLowerCase().includes(q);
+      return v.reason.toLowerCase().includes(q) || (v.element_html || '').toLowerCase().includes(q);
     });
   }, [items, search, severityFilter, sourceFilter, scFilter]);
 
@@ -204,7 +205,14 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
                 </TableCell>
                 <TableCell className="font-mono text-xs">{formatCriterionId(v.wcag_sc)}</TableCell>
                 <TableCell className="text-xs">{formatCriterionName(v.criterion_name, v.wcag_sc)}</TableCell>
-                <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{v.reason}</TableCell>
+                <TableCell className="text-xs text-muted-foreground max-w-xs">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={0} className="cursor-help truncate block max-w-xs">{v.reason}</span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-sm text-xs">{v.reason}</TooltipContent>
+                  </Tooltip>
+                </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>
                     <Wrench className="h-3 w-3" aria-hidden="true" />
