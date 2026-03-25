@@ -93,7 +93,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
       {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 cursor-pointer bg-background/80 backdrop-blur-sm md:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -137,8 +137,8 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
               key={item.value}
               onClick={() => { onTabChange(item.value); onClose(); }}
               aria-current={activeTab === item.value ? "page" : undefined}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-colors border-l-2",
+            className={cn(
+                "w-full cursor-pointer flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-colors border-l-2",
                 activeTab === item.value
                   ? "border-l-primary text-primary bg-primary/5"
                   : "border-l-transparent text-muted-foreground hover:text-foreground hover:bg-black/[0.04]"
@@ -196,7 +196,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                     type="button"
                     onClick={() => setConfig((c) => ({ ...c, wcag_level: lvl }))}
                     className={cn(
-                      "flex-1 py-1.5 transition-colors",
+                      "flex-1 cursor-pointer py-1.5 transition-colors",
                       config.wcag_level === lvl
                         ? "bg-primary text-primary-foreground"
                         : "bg-[hsl(var(--input))] text-muted-foreground hover:text-foreground"

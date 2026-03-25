@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { AuditViolation } from "@/types/audit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 
 interface ViolationsTabProps {
   violations: AuditViolation[];
+  pageSize?: number;
 }
 
 const severityColors: Record<string, string> = {
@@ -31,15 +32,21 @@ const sourceColors: Record<string, string> = {
   unknown: "bg-muted text-muted-foreground border-border",
 };
 
-export function ViolationsTab({ violations }: ViolationsTabProps) {
+export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps) {
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [scFilter, setScFilter] = useState<string[]>([]);
   const [modalData, setModalData] = useState<AuditViolation | null>(null);
-  const [visibleCount, setVisibleCount] = useState(50);
+  const [visibleCount, setVisibleCount] = useState(pageSize);
 
-  const allSeverities = ["critical", "high", "medium", "low"];
+  const allSeverities = useMemo(() => {
+    const preferred = ["critical", "high", "medium", "low"];
+    const present = [...new Set(violations.map((v) => v.severity).filter(Boolean))] as string[];
+    const ordered = preferred.filter((s) => present.includes(s));
+    const extras = present.filter((s) => !preferred.includes(s)).sort();
+    return [...ordered, ...extras];
+  }, [violations]);
   const allSources = useMemo(
     () => [...new Set(violations.map((v) => v.source).filter(Boolean))].sort(),
     [violations]
@@ -69,10 +76,14 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
     setSeverityFilter([]);
     setSourceFilter([]);
     setScFilter([]);
-    setVisibleCount(50);
+    setVisibleCount(pageSize);
   };
 
-  const resetVisibleCount = useCallback(() => setVisibleCount(50), []);
+  const resetVisibleCount = useCallback(() => setVisibleCount(pageSize), [pageSize]);
+
+  useEffect(() => {
+    setVisibleCount(pageSize);
+  }, [pageSize]);
 
   const hasFilters = search || severityFilter.length || sourceFilter.length || scFilter.length;
 
@@ -95,7 +106,9 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
               aria-pressed={severityFilter.includes(s)}
               className={cn(
                 "px-2 py-1 rounded text-xs font-medium border transition-colors",
-                severityFilter.includes(s) ? severityColors[s] : "bg-muted text-muted-foreground border-border"
+                severityFilter.includes(s)
+                  ? (severityColors[s] || "bg-primary text-primary-foreground border-primary/50")
+                  : "bg-muted text-muted-foreground border-border"
               )}
             >
               {s}
@@ -112,7 +125,9 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
               aria-pressed={sourceFilter.includes(s)}
               className={cn(
                 "px-2 py-1 rounded text-xs font-medium border transition-colors",
-                sourceFilter.includes(s) ? sourceColors[s] : "bg-muted text-muted-foreground border-border"
+                sourceFilter.includes(s)
+                  ? (sourceColors[s] || "bg-primary text-primary-foreground border-primary/50")
+                  : "bg-muted text-muted-foreground border-border"
               )}
             >
               {s}
@@ -167,7 +182,14 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
             {filtered.slice(0, visibleCount).map((v, i) => (
               <TableRow key={i} className="hover:bg-muted/30">
                 <TableCell>
-                  <Badge className={cn("text-[10px]", v.severity ? severityColors[v.severity] : "bg-muted text-muted-foreground")}>{v.severity ?? "—"}</Badge>
+                  <Badge
+                    className={cn(
+                      "text-[10px]",
+                      v.severity ? (severityColors[v.severity] || "bg-muted text-muted-foreground") : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {v.severity ?? "—"}
+                  </Badge>
                 </TableCell>
                 <TableCell>
                   <Badge
@@ -210,7 +232,7 @@ export function ViolationsTab({ violations }: ViolationsTabProps) {
 
       {visibleCount < filtered.length && (
         <div className="flex justify-center pt-2">
-          <Button variant="outline" size="sm" className="text-xs" onClick={() => setVisibleCount((n) => n + 50)}>
+          <Button variant="outline" size="sm" className="text-xs" onClick={() => setVisibleCount((n) => n + pageSize)}>
             Show more ({filtered.length - visibleCount} remaining)
           </Button>
         </div>

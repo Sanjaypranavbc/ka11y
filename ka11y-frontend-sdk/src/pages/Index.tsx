@@ -86,10 +86,21 @@ function StageProgress({ stages, currentStage }: { stages: StageInfo[]; currentS
 const Index = () => {
   const [activeTab, setActiveTab] = useState<TabValue>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [maxRows, setMaxRows] = useState<number>(() => {
+    const raw = localStorage.getItem("ka11y_max_rows");
+    const parsed = raw ? parseInt(raw, 10) : 50;
+    return Number.isNaN(parsed) ? 50 : Math.max(10, Math.min(500, parsed));
+  });
   const { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings } =
     useAudit();
 
   const isLoading = jobStatus === "pending" || jobStatus === "running";
+
+  const handleMaxRowsChange = (value: number) => {
+    const clamped = Math.max(10, Math.min(500, value));
+    setMaxRows(clamped);
+    localStorage.setItem("ka11y_max_rows", String(clamped));
+  };
 
   return (
     <div className="h-screen flex bg-background overflow-hidden">
@@ -165,11 +176,13 @@ const Index = () => {
                 </div>
               )}
               {activeTab === "dashboard"           && <DashboardTab result={result} />}
-              {activeTab === "violations"          && <ViolationsTab violations={result.violations} />}
-              {activeTab === "needs-review"        && <NeedsReviewTab items={result.needs_review} />}
-              {activeTab === "passes"              && <PassesTab passes={result.passes} />}
+              {activeTab === "violations"          && <ViolationsTab violations={result.violations} pageSize={maxRows} />}
+              {activeTab === "needs-review"        && <NeedsReviewTab items={result.needs_review} pageSize={maxRows} />}
+              {activeTab === "passes"              && <PassesTab passes={result.passes} pageSize={maxRows} />}
               {activeTab === "image-visualisation" && <ImageVisualisationTab contrastReport={result.contrast_report} />}
-              {activeTab === "settings"            && <SettingsTab />}
+              {activeTab === "settings"            && (
+                <SettingsTab maxRows={maxRows} onMaxRowsChange={handleMaxRowsChange} />
+              )}
             </>
           )}
         </main>

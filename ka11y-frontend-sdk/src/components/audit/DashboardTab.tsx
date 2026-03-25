@@ -109,6 +109,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
     needs_review: { label: "Needs Review", color: SOURCE_COLORS.needs_review },
     passes: { label: "Passes", color: SOURCE_COLORS.passes },
   };
+  const sourceNamesForLabel = sourceData.map((row) => row.name).join(", ");
 
   return (
     <div className="space-y-5 p-5 grid-bg min-h-full">
@@ -154,7 +155,13 @@ export function DashboardTab({ result }: DashboardTabProps) {
             <CardTitle className="text-sm font-medium">Findings by Source</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={sourceChartConfig} className="h-64" role="img" tabIndex={0} aria-label="Bar chart showing violations, needs review, and passes broken down by axe and python sources">
+            <ChartContainer
+              config={sourceChartConfig}
+              className="h-64"
+              role="img"
+              tabIndex={0}
+              aria-label={`Bar chart showing violations, needs review, and passes by source: ${sourceNamesForLabel || "none"}`}
+            >
               <BarChart data={sourceData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="name" className="text-xs" />

@@ -1,4 +1,4 @@
-export type AuditSource = "axe" | "python" | "custom" | "unknown";
+export type AuditSource = "axe" | "python" | "custom" | "unknown" | (string & {});
 
 export interface AuditViolation {
   rule_id: string;
