@@ -3,6 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from ka11y.api.v1.combined import (
+    IMAGE_AUDIT_RECORD_CONVERTERS,
+    OCR_RESULT_CONVERTERS,
     _contrast_enhanced_to_findings,
     _contrast_to_findings,
     _crawler_text_spacing_to_findings,
@@ -29,6 +31,19 @@ def _ocr_result(*, compliance: dict | None = None) -> SimpleNamespace:
         contrast_violations_count=0,
         detections=[detection],
     )
+
+
+def test_image_audit_converter_registry_covers_all_raw_status_keys():
+    assert {key for key, _ in IMAGE_AUDIT_RECORD_CONVERTERS} == {
+        "wcag_1_1_1_status",
+        "wcag_4_1_2_status",
+        "wcag_1_4_5_status",
+        "wcag_1_4_11_status",
+    }
+
+
+def test_ocr_converter_registry_covers_all_combined_contrast_rules():
+    assert {key for key, _ in OCR_RESULT_CONVERTERS} == {"1.4.3", "1.4.6"}
 
 
 def test_1_4_3_missing_contrast_compliance_becomes_needs_review():

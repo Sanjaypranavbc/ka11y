@@ -391,8 +391,14 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
 
   const STATUS_MAP = {
     fail: 'fail',
+    failed: 'fail',
     pass: 'pass',
+    passed: 'pass',
     incomplete: 'needs_review',
+    needs_review: 'needs_review',
+    warning: 'needs_review',
+    info: 'needs_review',
+    manual_review: 'needs_review',
   };
 
   for (const result of (customResults || [])) {
@@ -407,7 +413,7 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
 
     for (const rule of rules) {
       const rawStatus = (rule && typeof rule.status === 'string')
-        ? rule.status
+        ? rule.status.trim().toLowerCase()
         : 'incomplete';
       const status = STATUS_MAP[rawStatus] || 'needs_review';
       const impact = rule && rule.impact ? rule.impact : null;
@@ -418,10 +424,10 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
         wcag_sc:        sc,
         criterion_name: _criterionName(sc, null, (rule && rule.description) || null),
         level:          _criterionLevel(sc),
-        severity:       impact ? (IMPACT_TO_SEVERITY[impact] || null) : null,
+        severity:       status === 'pass' ? null : (impact ? (IMPACT_TO_SEVERITY[impact] || null) : null),
         status:         status,
         reason:         (rule && rule.reason) || (rule && rule.description) || '',
-        suggested_fix:  _suggestedFix(sc, null),
+        suggested_fix:  status === 'pass' ? null : _suggestedFix(sc, null),
         help_url:       (rule && rule.helpUrl) || null,
         element:        null,
       });

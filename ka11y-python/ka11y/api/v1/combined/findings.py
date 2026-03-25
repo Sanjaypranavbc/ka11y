@@ -1019,3 +1019,22 @@ def _focus_not_obscured_enh_to_findings(
         wcag_sc="2.4.12",
         pass_reason="No focused element is obscured (even partially) by author-created content.",
     )
+
+
+# ── Converter registries ─────────────────────────────────────────────────────
+
+# Register image-audit rules here so new raw status keys are wired to the
+# combined result model in one place.
+IMAGE_AUDIT_RECORD_CONVERTERS = (
+    ("wcag_1_1_1_status", _alt_text_to_findings),
+    ("wcag_4_1_2_status", _name_role_value_to_findings),
+    ("wcag_1_4_5_status", _images_of_text_to_findings),
+    ("wcag_1_4_11_status", _non_text_contrast_to_findings),
+)
+
+# Register OCR-derived rule converters here so new image-text/contrast checks
+# cannot be added without explicitly joining the combined result path.
+OCR_RESULT_CONVERTERS = (
+    ("1.4.3", _contrast_to_findings),
+    ("1.4.6", _contrast_enhanced_to_findings),
+)

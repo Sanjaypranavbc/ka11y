@@ -52,6 +52,32 @@ describe('mapCustomResultsFlat', () => {
     expect(findings[0].wcag_sc).toBe('2.4.7');
     expect(findings[1].wcag_sc).toBe('3.2.6');
     expect(findings[2].wcag_sc).toBe('4.1.1');
+    expect(findings[2].suggested_fix).toBeNull();
+  });
+
+  test('normalizes custom status aliases into fail/pass/needs_review', () => {
+    const findings = mapCustomResultsFlat([
+      {
+        successCriteriaId: '4.1.2',
+        rules: [{ ruleId: 'custom-a', status: 'FAILED', reason: 'bad' }],
+      },
+      {
+        successCriteriaId: '1.4.12',
+        rules: [{ ruleId: 'custom-b', status: 'warning', reason: 'check manually' }],
+      },
+      {
+        successCriteriaId: '2.4.7',
+        rules: [{ ruleId: 'custom-c', status: 'needs_review', reason: 'manual' }],
+      },
+      {
+        successCriteriaId: '2.4.1',
+        rules: [{ ruleId: 'custom-d', status: 'PASSED', reason: 'ok', impact: 'serious' }],
+      },
+    ]);
+
+    expect(findings.map(f => f.status)).toEqual(['fail', 'needs_review', 'needs_review', 'pass']);
+    expect(findings[3].severity).toBeNull();
+    expect(findings[3].suggested_fix).toBeNull();
   });
 
   test('handles malformed custom rule payloads safely', () => {

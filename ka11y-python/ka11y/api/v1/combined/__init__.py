@@ -36,6 +36,8 @@ Step 2 — Auditor  (ka11y/accessibility/rules/<category>/)
 Step 3 — Finding converter  (findings.py)
   Add _myrule_to_findings(records, page_url) → List[Dict].
   Call _make_finding() and _PYTHON_SEVERITY[wcag_sc].
+  Register it in the appropriate converter registry so the combined result
+  pipeline automatically includes it.
 
 Step 4 — Register metadata  (constants.py)
   Add to _PYTHON_SEVERITY and _SUGGESTED_FIX.
@@ -53,6 +55,8 @@ from .routes import router
 from .store import _evict_old_jobs
 from .report import _build_report
 from .findings import (
+    IMAGE_AUDIT_RECORD_CONVERTERS,
+    OCR_RESULT_CONVERTERS,
     _make_finding,
     _alt_text_to_findings,
     _name_role_value_to_findings,
@@ -78,6 +82,8 @@ __all__ = [
     "router",
     "_evict_old_jobs",
     "_build_report",
+    "IMAGE_AUDIT_RECORD_CONVERTERS",
+    "OCR_RESULT_CONVERTERS",
     "_make_finding",
     "_alt_text_to_findings",
     "_name_role_value_to_findings",

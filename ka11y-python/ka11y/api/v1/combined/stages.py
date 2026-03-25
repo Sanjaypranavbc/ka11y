@@ -29,19 +29,15 @@ import httpx
 from ka11y.config.logger import setup_logger
 
 from .findings import (
-    _alt_text_to_findings,
+    IMAGE_AUDIT_RECORD_CONVERTERS,
+    OCR_RESULT_CONVERTERS,
     _build_contrast_report,
-    _contrast_to_findings,
-    _contrast_enhanced_to_findings,
     _crawler_text_spacing_to_findings,
     _focus_not_obscured_enh_to_findings,
     _focus_not_obscured_min_to_findings,
     _form_to_findings,
     _hover_focus_content_to_findings,
-    _images_of_text_to_findings,
     _lin_to_findings,
-    _name_role_value_to_findings,
-    _non_text_contrast_to_findings,
     _orientation_to_findings,
     _psh_to_findings,
     _reflow_to_findings,
@@ -120,8 +116,8 @@ async def _stage_image_audit(
 
             ocr_results = detector.results
             contrast_report = _build_contrast_report(ocr_results)
-            findings.extend(_contrast_to_findings(ocr_results, url))
-            findings.extend(_contrast_enhanced_to_findings(ocr_results, url))
+            for _, converter in OCR_RESULT_CONVERTERS:
+                findings.extend(converter(ocr_results, url))
 
         if run_image_audit:
             auditor = AltTextAccessibilityAuditor()
@@ -131,10 +127,8 @@ async def _stage_image_audit(
                 ocr_results=ocr_results,
                 output_dir=image_crawler.output_dir,
             )
-            findings.extend(_alt_text_to_findings(records, url))
-            findings.extend(_name_role_value_to_findings(records, url))
-            findings.extend(_images_of_text_to_findings(records, url))
-            findings.extend(_non_text_contrast_to_findings(records, url))
+            for _, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
+                findings.extend(converter(records, url))
 
         _stage_complete(job_id, "image_audit", len(findings))
         return findings, contrast_report

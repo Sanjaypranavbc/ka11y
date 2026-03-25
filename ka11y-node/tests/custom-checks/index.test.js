@@ -1,6 +1,11 @@
 'use strict';
 
 const path = require('path');
+const {
+  BEST_PRACTICE_ID,
+  WCAG_LEVEL,
+  WCAG_NAMES,
+} = require('../../src/utils/wcagMetadata');
 
 const {
   _loadCheckDefinitions,
@@ -89,6 +94,25 @@ describe('_loadCheckDefinitions', () => {
     expect(checks[0].ruleId).toBe('plugin-smoke-check');
     expect(checks[0].mode).toBe('static');
     expect(checks[0].fallbackDescription).toBe('Fixture plugin rule loaded from the filesystem');
+  });
+
+  test('all shipped custom checks expose mappable metadata', () => {
+    const checksDir = path.resolve(__dirname, '../../src/custom-checks');
+    const checks = _loadCheckDefinitions(checksDir);
+
+    expect(checks.length).toBeGreaterThan(0);
+
+    for (const def of checks) {
+      expect(def.ruleId).toMatch(/^custom-/);
+      expect(['static', 'interactive']).toContain(def.mode);
+      expect(typeof def.check.run).toBe('function');
+      expect(typeof def.check.SC).toBe('string');
+
+      if (def.check.SC !== BEST_PRACTICE_ID) {
+        expect(WCAG_NAMES[def.check.SC]).toBeTruthy();
+        expect(WCAG_LEVEL[def.check.SC]).toBeTruthy();
+      }
+    }
   });
 });
 
