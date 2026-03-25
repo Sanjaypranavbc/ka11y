@@ -23,6 +23,7 @@ _WCAG_NAMES: Dict[str, str] = {
     "1.4.3": "Contrast (Minimum)",
     "1.4.4": "Resize Text",
     "1.4.5": "Images of Text",
+    "1.4.6": "Contrast (Enhanced)",
     "1.4.10": "Reflow",
     "1.4.11": "Non-text Contrast",
     "1.4.12": "Text Spacing",
@@ -118,6 +119,7 @@ _WCAG_LEVEL: Dict[str, str] = {
     "2.4.11": "AA",
     "2.4.13": "AA",
     # Level AAA
+    "1.4.6": "AAA",
     "2.4.12": "AAA",  # Focus Not Obscured (Enhanced) is AAA in WCAG 2.2
     "2.5.7": "AA",
     "2.5.8": "AA",
@@ -142,11 +144,12 @@ _SUGGESTED_FIX: Dict[str, str] = {
     "1.4.1": "Do not use colour as the only means to convey information. Add text labels or patterns.",
     "1.4.2": "Provide a mechanism to pause or stop auto-playing audio, or ensure it stops within 3 seconds.",
     "1.4.3": "Ensure text has a contrast ratio of at least 4.5:1 (3:1 for large text ≥ 18pt or bold 14pt).",
-    "1.4.5": "Replace images of text with real text styled via CSS. Logos and logotypes are exempt.",
     "1.4.4": (
         "Remove CSS that prevents text scaling (e.g. fixed px heights on text containers, "
         "overflow: hidden on parent elements). Ensure content reflows correctly at 200% text size."
     ),
+    "1.4.5": "Replace images of text with real text styled via CSS. Logos and logotypes are exempt.",
+    "1.4.6": "Ensure text has a contrast ratio of at least 7:1 (4.5:1 for large text ≥ 18pt or bold 14pt) to meet AAA enhanced contrast.",
     "1.4.10": (
         "Use responsive CSS layouts (Flexbox/Grid, relative units). Avoid fixed-width containers "
         "that overflow at 320 CSS px. Content must not require horizontal scrolling to read."
@@ -198,6 +201,7 @@ _PYTHON_SEVERITY: Dict[str, str] = {
     "1.4.3": "high",
     "1.4.4": "high",
     "1.4.5": "medium",
+    "1.4.6": "medium",
     "1.4.10": "high",
     "1.4.11": "high",
     "1.4.12": "high",

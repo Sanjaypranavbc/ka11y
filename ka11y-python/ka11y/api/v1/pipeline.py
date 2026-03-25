@@ -132,15 +132,13 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
             col = det.color_info or {}
 
             ratio: Optional[float] = None
-            aa_n = aa_l = aaa_n = aaa_l = None
+            aa_n = aaa_n = None
 
             compliance = ci.get("compliance") or {}
             if compliance:
                 ratio = compliance.get("contrast_ratio")
-                aa_n = compliance.get("AA_normal")
-                aa_l = compliance.get("AA_large")
-                aaa_n = compliance.get("AAA_normal")
-                aaa_l = compliance.get("AAA_large")
+                aa_n = compliance.get("AA_passes")
+                aaa_n = compliance.get("AAA_passes")
 
             # ── foreground / background from color_info (cluster-based) ──────────
             fg = col.get("foreground") or {}
@@ -165,9 +163,7 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
                     "background_lum": dominant_bg.get("luminance"),
                     "contrast_ratio": ratio,
                     "AA_normal": aa_n,
-                    "AA_large": aa_l,
                     "AAA_normal": aaa_n,
-                    "AAA_large": aaa_l,
                     "violations": list(det.wcag_violations or []),
                 }
             )
@@ -188,9 +184,7 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
                     "wcag_violations": list(det.wcag_violations or []),
                     "ratio": ratio,
                     "AA_normal": aa_n,
-                    "AA_large": aa_l,
                     "AAA_normal": aaa_n,
-                    "AAA_large": aaa_l,
                 }
             )
 

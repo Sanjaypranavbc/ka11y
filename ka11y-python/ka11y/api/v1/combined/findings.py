@@ -131,17 +131,13 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
             if dom_compliance:
                 ratio = dom_compliance.get("contrast_ratio")
                 aa_n  = dom_compliance.get("AA_passes")
-                aa_l  = dom_compliance.get("AA_large")
                 aaa_n = dom_compliance.get("AAA_passes")
-                aaa_l = dom_compliance.get("AAA_large")
             else:
                 compliance = ci.get("compliance") or {}
                 if compliance:
                     ratio = compliance.get("contrast_ratio")
                     aa_n  = compliance.get("AA_passes")
-                    aa_l  = compliance.get("AA_large")
                     aaa_n = compliance.get("AAA_passes")
-                    aaa_l = compliance.get("AAA_large")
 
             fg = col.get("foreground") or {}
             bg_pal = col.get("background_palette") or []
@@ -268,9 +264,9 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     Convert per-detection contrast data from OCR results into WCAG 1.4.3 findings.
 
     Decision logic:
-      aa_normal is False  → fail  (ratio < 4.5:1)
-      aa_normal is True   → pass  (ratio >= 4.5:1)
-      aa_normal is None   → skip  (no contrast data available)
+      aa_passes is False  → fail  (ratio < threshold)
+      aa_passes is True   → pass  (ratio >= threshold)
+      aa_passes is None   → skip  (no contrast data available)
     """
     findings: List[Dict] = []
 
@@ -286,12 +282,16 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             dom = col.get("dominant_contrast") or {}
             dom_compliance = dom.get("compliance") or {}
             if dom_compliance:
-                aa_normal = dom_compliance.get("AA_passes")
-                ratio = dom_compliance.get("contrast_ratio")
+                aa_normal  = dom_compliance.get("AA_passes")
+                ratio      = dom_compliance.get("contrast_ratio")
+                is_large   = dom_compliance.get("is_large_text", False)
+                threshold  = dom_compliance.get("aa_threshold_used", 4.5)
             else:
                 compliance = ci.get("compliance") or {}
-                aa_normal = compliance.get("AA_passes")
-                ratio = compliance.get("contrast_ratio")
+                aa_normal  = compliance.get("AA_passes")
+                ratio      = compliance.get("contrast_ratio")
+                is_large   = compliance.get("is_large_text", False)
+                threshold  = compliance.get("aa_threshold_used", 4.5)
 
             if aa_normal is None:
                 logger.warning(
@@ -309,6 +309,7 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             bg_hex = dominant_bg.get("hex") or ci.get("background_color") or "?"
             ratio_str = f"{ratio:.2f}:1" if ratio is not None else "unknown"
             text_snippet = (det.text or "")[:60].replace('"', "'")
+            text_type = "large text" if is_large else "normal text"
             element_html = (
                 f'<img-text fg="{fg_hex}" bg="{bg_hex}" '
                 f'ratio="{ratio_str}">{text_snippet}</img-text>'
@@ -326,7 +327,7 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                             f'Text in image "{result.filename}" fails WCAG 1.4.3 '
                             f"AA contrast. Ratio {ratio_str} "
                             f"(fg {fg_hex} on bg {bg_hex}). "
-                            f"Required minimum: 4.5:1 for normal text."
+                            f"Required minimum: {threshold}:1 for {text_type}."
                         ),
                         severity=_PYTHON_SEVERITY["1.4.3"],
                         element_html=element_html,
@@ -344,6 +345,93 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                         status="pass",
                         reason=(
                             f"Text in {image_label} passes WCAG 1.4.3 AA contrast. "
+                            f"Ratio {ratio_str} (fg {fg_hex} on bg {bg_hex})."
+                        ),
+                        severity=None,
+                        page_url=page_url,
+                    )
+                )
+
+    return findings
+
+def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
+    """
+    WCAG 1.4.6 AAA Enhanced Contrast.
+      AAA normal text : 7.0:1
+      AAA large text  : 4.5:1
+    """
+    findings: List[Dict] = []
+
+    for result in ocr_results:
+        if not result.has_text:
+            continue
+
+        for det in result.detections:
+            ci = det.contrast_info or {}
+            col = det.color_info or {}
+
+            dom = col.get("dominant_contrast") or {}
+            dom_compliance = dom.get("compliance") or {}
+            if dom_compliance:
+                aaa_passes = dom_compliance.get("AAA_passes")
+                ratio = dom_compliance.get("contrast_ratio")
+                is_large = dom_compliance.get("is_large_text", False)
+                threshold = 4.5 if is_large else 7.0
+            else:
+                compliance = ci.get("compliance") or {}
+                aaa_passes = compliance.get("AAA_passes")
+                ratio = compliance.get("contrast_ratio")
+                is_large = compliance.get("is_large_text", False)
+                threshold = 4.5 if is_large else 7.0
+
+            if aaa_passes is None:
+                continue
+
+            fg = col.get("foreground") or {}
+            bg_pal = col.get("background_palette") or []
+            dom_bg_obj = dom.get("bg_color") or {}
+            dominant_bg = dom_bg_obj if dom_bg_obj else (bg_pal[0] if bg_pal else {})
+
+            fg_hex = fg.get("hex") or ci.get("foreground_color") or "?"
+            bg_hex = dominant_bg.get("hex") or ci.get("background_color") or "?"
+            ratio_str = f"{ratio:.2f}:1" if ratio is not None else "unknown"
+            text_snippet = (det.text or "")[:60].replace('"', "'")
+            text_type = "large text" if is_large else "normal text"
+            element_html = (
+                f'<img-text fg="{fg_hex}" bg="{bg_hex}" '
+                f'ratio="{ratio_str}">{text_snippet}</img-text>'
+            )
+            image_label = f'{result.filename} -- "{text_snippet}"'
+
+            if not aaa_passes:
+                findings.append(
+                    _make_finding(
+                        source="python",
+                        rule_id="python_1_4_6_contrast_enhanced",
+                        wcag_sc="1.4.6",
+                        status="fail",
+                        reason=(
+                            f'Text in image "{result.filename}" fails WCAG 1.4.6 '
+                            f"AAA enhanced contrast. Ratio {ratio_str} "
+                            f"(fg {fg_hex} on bg {bg_hex}). "
+                            f"Required minimum: {threshold}:1 for {text_type}."
+                        ),
+                        severity=_PYTHON_SEVERITY.get("1.4.6"),
+                        element_html=element_html,
+                        element_id=None,
+                        element_tag="img",
+                        page_url=page_url,
+                    )
+                )
+            else:
+                findings.append(
+                    _make_finding(
+                        source="python",
+                        rule_id="python_1_4_6_contrast_enhanced",
+                        wcag_sc="1.4.6",
+                        status="pass",
+                        reason=(
+                            f"Text in {image_label} passes WCAG 1.4.6 AAA enhanced contrast. "
                             f"Ratio {ratio_str} (fg {fg_hex} on bg {bg_hex})."
                         ),
                         severity=None,

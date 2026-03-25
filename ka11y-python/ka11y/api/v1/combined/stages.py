@@ -32,6 +32,7 @@ from .findings import (
     _alt_text_to_findings,
     _build_contrast_report,
     _contrast_to_findings,
+    _contrast_enhanced_to_findings,
     _crawler_text_spacing_to_findings,
     _focus_not_obscured_enh_to_findings,
     _focus_not_obscured_min_to_findings,
@@ -119,6 +120,7 @@ async def _stage_image_audit(
             ocr_results = detector.results
             contrast_report = _build_contrast_report(ocr_results)
             findings.extend(_contrast_to_findings(ocr_results, url))
+            findings.extend(_contrast_enhanced_to_findings(ocr_results, url))
 
         if run_image_audit:
             auditor = AltTextAccessibilityAuditor()
