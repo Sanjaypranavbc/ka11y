@@ -525,6 +525,20 @@ class TestAltTextAuditorReport:
         )
         assert records[0]["wcag_4_1_2_status"] == "N/A"
 
+    def test_ui_component_without_ocr_marks_1_4_11_incomplete(self, tmp_output):
+        img = make_image(
+            classification="functional",
+            sub_type="icons",
+            is_functional=True,
+            is_icon=True,
+            alt_text="Search",
+        )
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[], output_dir=tmp_output
+        )
+        assert records[0]["wcag_1_4_11_status"] == "INCOMPLETE"
+        assert records[0]["wcag_1_4_11_reason"].startswith("INCOMPLETE")
+
     def test_csv_created(self, tmp_output):
         AltTextAccessibilityAuditor().generate_audit_report(
             images_data=[make_image()], ocr_results=[], output_dir=tmp_output

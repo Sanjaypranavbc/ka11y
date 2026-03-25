@@ -63,6 +63,11 @@ def _make_finding(
     }
 
 
+def _is_incomplete_reason(reason: str) -> bool:
+    """Identify manual-review reasons that should surface as needs_review."""
+    return reason.strip().upper().startswith("INCOMPLETE")
+
+
 # ── Image classification inference ────────────────────────────────────────────
 
 
@@ -259,6 +264,51 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     return findings
 
 
+def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    findings = []
+    sev = _PYTHON_SEVERITY.get("4.1.2")
+    for r in records:
+        status_raw = r.get("wcag_4_1_2_status", "")
+        if status_raw == "N/A":
+            continue
+
+        reason = r.get("wcag_4_1_2_reason") or ""
+        src = r.get("src", "")
+        alt = r.get("alt_text", "")
+        alt_attr = f' alt="{alt}"' if alt is not None else ""
+        element_html = f'<img src="{src}"{alt_attr}>'
+        element_id = r.get("src") or r.get("filename") or None
+
+        if status_raw == "FAILED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_4_1_2_name_role_value",
+                    wcag_sc="4.1.2",
+                    status="fail",
+                    reason=reason or "Functional image is missing a meaningful accessible name.",
+                    severity=sev,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
+                    page_url=r.get("url") or page_url,
+                )
+            )
+        elif status_raw == "PASSED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_4_1_2_name_role_value",
+                    wcag_sc="4.1.2",
+                    status="pass",
+                    reason=reason or "Functional image has a meaningful accessible name.",
+                    severity=None,
+                    page_url=r.get("url") or page_url,
+                )
+            )
+    return findings
+
+
 def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     """
     Convert per-detection contrast data from OCR results into WCAG 1.4.3 findings.
@@ -266,7 +316,7 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     Decision logic:
       aa_passes is False  → fail  (ratio < threshold)
       aa_passes is True   → pass  (ratio >= threshold)
-      aa_passes is None   → skip  (no contrast data available)
+      aa_passes is None   → needs_review  (contrast data unavailable)
     """
     findings: List[Dict] = []
 
@@ -293,13 +343,6 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                 is_large   = compliance.get("is_large_text", False)
                 threshold  = compliance.get("aa_threshold_used", 4.5)
 
-            if aa_normal is None:
-                logger.warning(
-                    f"[combined] contrast_to_findings: no AA_passes for "
-                    f'"{det.text[:40]!r}" in {result.filename} — skipping'
-                )
-                continue
-
             fg = col.get("foreground") or {}
             bg_pal = col.get("background_palette") or []
             dom_bg_obj = dom.get("bg_color") or {}
@@ -315,6 +358,32 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                 f'ratio="{ratio_str}">{text_snippet}</img-text>'
             )
             image_label = f'{result.filename} -- "{text_snippet}"'
+
+            if aa_normal is None:
+                logger.warning(
+                    f"[combined] contrast_to_findings: no AA_passes for "
+                    f'"{det.text[:40]!r}" in {result.filename} — emitting needs_review'
+                )
+                findings.append(
+                    _make_finding(
+                        source="python",
+                        rule_id="python_1_4_3_contrast",
+                        wcag_sc="1.4.3",
+                        status="needs_review",
+                        reason=(
+                            f'Text in image "{result.filename}" could not be '
+                            f"verified for WCAG 1.4.3 AA contrast because OCR "
+                            f"contrast compliance data is missing. Manual review required. "
+                            f"Observed ratio: {ratio_str} (fg {fg_hex} on bg {bg_hex})."
+                        ),
+                        severity=_PYTHON_SEVERITY["1.4.3"],
+                        element_html=element_html,
+                        element_id=None,
+                        element_tag="img",
+                        page_url=page_url,
+                    )
+                )
+                continue
 
             if not aa_normal:
                 findings.append(
@@ -384,9 +453,6 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
                 is_large = compliance.get("is_large_text", False)
                 threshold = 4.5 if is_large else 7.0
 
-            if aaa_passes is None:
-                continue
-
             fg = col.get("foreground") or {}
             bg_pal = col.get("background_palette") or []
             dom_bg_obj = dom.get("bg_color") or {}
@@ -402,6 +468,32 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
                 f'ratio="{ratio_str}">{text_snippet}</img-text>'
             )
             image_label = f'{result.filename} -- "{text_snippet}"'
+
+            if aaa_passes is None:
+                logger.warning(
+                    f"[combined] contrast_enhanced_to_findings: no AAA_passes for "
+                    f'"{det.text[:40]!r}" in {result.filename} — emitting needs_review'
+                )
+                findings.append(
+                    _make_finding(
+                        source="python",
+                        rule_id="python_1_4_6_contrast_enhanced",
+                        wcag_sc="1.4.6",
+                        status="needs_review",
+                        reason=(
+                            f'Text in image "{result.filename}" could not be '
+                            f"verified for WCAG 1.4.6 AAA enhanced contrast because OCR "
+                            f"contrast compliance data is missing. Manual review required. "
+                            f"Observed ratio: {ratio_str} (fg {fg_hex} on bg {bg_hex})."
+                        ),
+                        severity=_PYTHON_SEVERITY.get("1.4.6"),
+                        element_html=element_html,
+                        element_id=None,
+                        element_tag="img",
+                        page_url=page_url,
+                    )
+                )
+                continue
 
             if not aaa_passes:
                 findings.append(
@@ -495,16 +587,34 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
     sev = _PYTHON_SEVERITY.get("1.4.11")
     for r in records:
         status_raw = r.get("wcag_1_4_11_status", "N/A")
-        if status_raw in ("N/A", "INCOMPLETE"):
-            continue
         reason = r.get("wcag_1_4_11_reason") or ""
+        needs_review = status_raw == "INCOMPLETE" or (
+            status_raw == "N/A" and _is_incomplete_reason(reason)
+        )
+        if status_raw == "N/A" and not needs_review:
+            continue
         src = r.get("src", "")
         alt = r.get("alt_text", "")
         alt_attr = f' alt="{alt}"' if alt is not None else ""
         element_html = f'<img src="{src}"{alt_attr}>'
         element_id = r.get("src") or r.get("filename") or None
 
-        if status_raw == "FAILED":
+        if needs_review:
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_11_non_text_contrast",
+                    wcag_sc="1.4.11",
+                    status="needs_review",
+                    reason=reason or "UI component contrast could not be verified automatically.",
+                    severity=sev,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
+                    page_url=r.get("url") or page_url,
+                )
+            )
+        elif status_raw == "FAILED":
             findings.append(
                 _make_finding(
                     source="python",
@@ -785,7 +895,7 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
     sev = _PYTHON_SEVERITY.get("1.4.12")
     for r in records:
         status_raw = r.get("wcag_1_4_12_status", "")
-        if status_raw in ("N/A", "INFO"):
+        if status_raw == "N/A":
             continue
         violation = r.get("wcag_1_4_12_violation", "")
         if status_raw == "FAILED":
@@ -812,6 +922,22 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     status="needs_review",
                     reason=violation
                     or "Fixed height with overflow hidden may clip text when spacing increases.",
+                    severity=sev,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=r.get("page_url") or page_url,
+                )
+            )
+        elif status_raw == "INFO":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_12_text_spacing_static",
+                    wcag_sc="1.4.12",
+                    status="needs_review",
+                    reason=violation
+                    or "Fixed height detected. Verify text does not clip when spacing increases.",
                     severity=sev,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),

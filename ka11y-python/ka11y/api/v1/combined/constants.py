@@ -213,4 +213,5 @@ _PYTHON_SEVERITY: Dict[str, str] = {
     "2.5.8": "medium",
     "3.3.1": "high",
     "3.3.2": "high",
+    "4.1.2": "high",
 }

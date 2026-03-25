@@ -55,6 +55,7 @@ from .report import _build_report
 from .findings import (
     _make_finding,
     _alt_text_to_findings,
+    _name_role_value_to_findings,
     _contrast_to_findings,
     _contrast_enhanced_to_findings,
     _crawler_text_spacing_to_findings,
@@ -79,6 +80,7 @@ __all__ = [
     "_build_report",
     "_make_finding",
     "_alt_text_to_findings",
+    "_name_role_value_to_findings",
     "_contrast_to_findings",
     "_contrast_enhanced_to_findings",
     "_crawler_text_spacing_to_findings",

@@ -40,6 +40,7 @@ from .findings import (
     _hover_focus_content_to_findings,
     _images_of_text_to_findings,
     _lin_to_findings,
+    _name_role_value_to_findings,
     _non_text_contrast_to_findings,
     _orientation_to_findings,
     _psh_to_findings,
@@ -131,6 +132,7 @@ async def _stage_image_audit(
                 output_dir=image_crawler.output_dir,
             )
             findings.extend(_alt_text_to_findings(records, url))
+            findings.extend(_name_role_value_to_findings(records, url))
             findings.extend(_images_of_text_to_findings(records, url))
             findings.extend(_non_text_contrast_to_findings(records, url))
 

@@ -20,8 +20,7 @@ EXCEPT where:
 
 This auditor checks exceptions 1 (inline) and 4 (UA-controlled) automatically.
 Elements failing neither exception with rendered size < 24×24 are flagged as
-FAILED.  When width or height is in [20, 24) with sufficient padding to reach
-24 px, the element is flagged WARNING (close to threshold).
+FAILED.
 
 CSV output: audit_target_size_report.csv
 

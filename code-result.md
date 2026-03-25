@@ -14,10 +14,11 @@ This file supersedes the earlier stale review. Items previously tracked as unres
 
 | Area | Command / Source | Current result |
 |---|---|---|
-| Node unit/integration tests | `ka11y-node/npm test` | `164` tests passed, `0` failed |
+| Node unit/integration tests | `ka11y-node/npm test` | `165` tests passed, `0` failed |
 | Python tests | `ka11y-python/python -m pytest` | `515` passed |
 | Browser-backed rule proof | `ka11y-node/npm run evidence` | `0` bugs after 1 attempt |
 | Evidence artifact | `ka11y-node/logs/evidence-report.md` | generated successfully |
+| Live SC check test | All 20 custom checks against 3 real sites (W3C bad demo, BBC, Bootstrap) | `0` check execution errors; legitimate findings on real violations |
 | Live website test | Python combined API against `httpbin.org/forms/post` | 64 findings emitted; form field `tag` and `element_id` populated correctly; violation text from auditor passed through (not generic fallback) |
 
 What the evidence loop proved in a real browser:
@@ -25,6 +26,7 @@ What the evidence loop proved in a real browser:
 - `1.4.6` now resolves as `Contrast (Enhanced) / AAA`
 - custom rules reflect both fail/pass or `needs_review` correctly
 - pluggable custom checks load from new `*.check.js` files
+- All 20 SC checks execute without errors on live production websites
 
 ---
 
@@ -55,7 +57,16 @@ These issues were stale in the previous report and are now fixed.
 - Unknown SC handling now returns `null` rather than leaking `undefined`, and the tests covering that are in `ka11y-node/tests/utils/axeResultMapper.custom-flat.test.js`.
 - Digit shortcuts are no longer falsely flagged for WCAG `2.1.4`; the fix and tests are in `ka11y-node/src/custom-checks/character-key-shortcuts.check.js` and `ka11y-node/tests/custom-checks/character-key-shortcuts.check.test.js`.
 - Failing custom checks are no longer silently dropped; the safety behavior is covered in `ka11y-node/tests/custom-checks/index.test.js`.
-- **NEW** `_runChecks()` filter changed from `.filter(Boolean)` to `.filter(r => r != null)` in `ka11y-node/src/custom-checks/index.js:199` — prevents silently dropping a check result that is a valid falsy value (e.g. `0` or `false`).
+- **NEW** `_runChecks()` filter changed from `.filter(Boolean)` to `.filter(r => r != null)` in `ka11y-node/src/custom-checks/index.js:199` — prevents silently dropping a check result that is a valid falsy value.
+- **NEW** `keyboard-trap.check.js`: Critical runtime fix — `page.keyboard.press('Shift+Tab')` is not a valid Puppeteer key; replaced with `keyboard.down('Shift')` + `keyboard.press('Tab')` + `keyboard.up('Shift')` pattern. Check was silently failing on every page with an `"Unknown key"` error.
+- **NEW** `keyboard-trap.check.js`: Element key stability improved — now uses `id`/`name`/`aria-label` attributes as primary identifier before falling back to DOM position index. Applied to all three key-capture points (Tab loop, Shift+Tab loop, post-Escape verification).
+- **NEW** `status-messages.check.js`: Pass logic fixed — when `needsLiveRegions` is true AND live regions exist, now correctly returns `incomplete` (needs manual review) instead of `pass`. Added correct test: notification element properly inside a live region → `needsLiveRegions:false` → `pass`.
+- **NEW** `meaningful-sequence.check.js`: The `MAX_CONTAINERS` counter was counting ALL elements scanned (including non-flex/grid), so on a page with 150+ elements the actual flex/grid containers checked were very few. Counter now increments only on flex/grid containers; limit raised from 150 → 500.
+- **NEW** `dragging-movements.check.js`: Added `Set`-based dedup for library marker matching to prevent the same element being counted multiple times when it matches multiple library selectors.
+- **NEW** `character-key-shortcuts.check.js`: Inline handler detection now matches symbol keys (e.g. `event.key === '!'`) consistent with `PRINTABLE_CHAR_RE`, not just letter keys.
+- **NEW** `focus-visible.check.js`: Outline transparency check expanded from literal string equality to regex covering `rgba(0,0,0,0)`, `transparent`, `inherit`, and `initial`.
+- **NEW** `pointer-cancellation.check.js`: Added `[onpointermove]` to the selector and handler extraction — covers implementations that define the action in `pointermove` and cancellation in `pointerup`.
+- **NEW** `use-of-color.check.js`: `MAX_LINKS` increased from 80 → 150 to avoid missing violations in link-heavy pages.
 
 ### Python
 
