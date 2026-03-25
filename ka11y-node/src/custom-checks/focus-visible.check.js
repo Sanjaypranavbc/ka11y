@@ -94,12 +94,18 @@ async function run(page) {
     if (!focused) continue;
 
     // ── Step 4: Determine if a visual change occurred ─────────────────────────
-    const hasVisibleOutline =
-      focused.outlineStyle !== 'none' && focused.outlineWidth !== '0px';
+    // N9 fix: also verify the focused outline is not transparent before counting it visible
+    const outlineActuallyVisible =
+      focused.outlineStyle !== 'none' &&
+      focused.outlineWidth !== '0px' &&
+      focused.outlineColor !== 'rgba(0, 0, 0, 0)' &&
+      focused.outlineColor !== 'transparent';
+    const hasVisibleOutline = outlineActuallyVisible;
     const outlineChanged =
-      focused.outlineWidth  !== unfocused.outlineWidth  ||
-      focused.outlineStyle  !== unfocused.outlineStyle  ||
-      focused.outlineColor  !== unfocused.outlineColor;
+      (focused.outlineWidth  !== unfocused.outlineWidth  ||
+       focused.outlineStyle  !== unfocused.outlineStyle  ||
+       focused.outlineColor  !== unfocused.outlineColor) &&
+      outlineActuallyVisible;
     const boxShadowChanged   = focused.boxShadow       !== unfocused.boxShadow &&
                                focused.boxShadow       !== 'none';
     const borderChanged      = focused.borderColor     !== unfocused.borderColor ||

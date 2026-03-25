@@ -12,14 +12,12 @@ const TYPE_CHAR = {
   email: 'a', search: 'a', url: 'a', text: 'a', textarea: 'a', default: 'a',
 };
 
-// Selector includes select elements (Bug fix: selects with onchange can navigate)
+// Selector includes select elements — selects with onchange can navigate
 const SELECTOR = [
-  'input:not([type="submit"]):not([type="button"]):not([type="reset"])',
-  ':not([type="hidden"]):not([type="file"]):not([type="checkbox"])',
-  ':not([type="radio"]):not([disabled])',
-  ', textarea:not([disabled])',
-  ', select:not([disabled])',
-].join('');
+  'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([disabled])',
+  'textarea:not([disabled])',
+  'select:not([disabled])',
+].join(', ');
 
 async function run(page) {
   const violations = [];

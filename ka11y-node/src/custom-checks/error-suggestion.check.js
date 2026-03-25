@@ -23,10 +23,11 @@ async function run(page) {
       '[aria-errormessage]',
     ];
 
-    // Class/ID based selectors: require meaningful text (> 3 chars, not just a symbol)
+    // Class/ID based selectors: scoped to form descendants to avoid false positives
+    // from documentation pages and decorative elements that happen to have "error" in their class.
     const classSelectors = [
-      '.error-message', '.field-error', '.form-error', '.validation-error',
-      '.help-block.error', '[class*="error-msg"]', '[class*="error-text"]',
+      'form .error-message', 'form .field-error', 'form .form-error', 'form .validation-error',
+      'form .help-block.error', 'form [class*="error-msg"]', 'form [class*="error-text"]',
     ];
 
     const allSelectors = [...errorSelectors, ...classSelectors];

@@ -2,46 +2,121 @@
 
 const { run } = require('../../src/custom-checks/focus-visible.check');
 
-function makePage(evalResult) {
-  return { evaluate: jest.fn().mockResolvedValue(evalResult) };
+// Base style object matching what getComputedStyle returns for a default unfocused element
+const BASE_STYLES = {
+  outlineWidth:    '0px',
+  outlineStyle:    'none',
+  outlineColor:    'rgba(0, 0, 0, 0)',
+  boxShadow:       'none',
+  borderColor:     'rgb(0, 0, 0)',
+  borderWidth:     '1px',
+  backgroundColor: 'rgba(0, 0, 0, 0)',
+  color:           'rgb(0, 0, 0)',
+  opacity:         '1',
+};
+
+// Focused style with a clearly visible outline
+const FOCUSED_OUTLINE = {
+  ...BASE_STYLES,
+  outlineStyle:  'solid',
+  outlineWidth:  '3px',
+  outlineColor:  'rgb(0, 95, 204)',
+};
+
+// Focused style where outline changed to transparent (invisible — should still fail N9)
+const FOCUSED_TRANSPARENT_OUTLINE = {
+  ...BASE_STYLES,
+  outlineStyle: 'solid',
+  outlineWidth: '2px',
+  outlineColor: 'rgba(0, 0, 0, 0)',  // transparent — not actually visible
+};
+
+/**
+ * Build a mock page where:
+ *  - First evaluate() call returns `elements` (element list)
+ *  - Subsequent calls per element follow the 4-call pattern:
+ *      [0] unfocused styles, [1] focus action (null), [2] focused styles, [3] blur action (null)
+ *  - All elements share the same unfocusedStyles and focusedStyles for simplicity
+ */
+function makePage({ elements = [], unfocusedStyles = BASE_STYLES, focusedStyles = BASE_STYLES } = {}) {
+  let callNum = 0;
+  return {
+    evaluate: jest.fn().mockImplementation(() => {
+      callNum++;
+      if (callNum === 1) return Promise.resolve(elements);
+      // Each element uses 4 evaluate calls (unfocused, focus, focused, blur)
+      const callInGroup = (callNum - 2) % 4;
+      if (callInGroup === 0) return Promise.resolve({ ...unfocusedStyles }); // unfocused styles
+      if (callInGroup === 2) return Promise.resolve({ ...focusedStyles });   // focused styles
+      return Promise.resolve(null);  // focus/blur actions
+    }),
+  };
+}
+
+// Use fake timers so SETTLE_MS delays don't slow the test suite
+beforeEach(() => jest.useFakeTimers());
+afterEach(() => {
+  jest.runAllTimers();
+  jest.useRealTimers();
+});
+
+async function runWithTimers(page) {
+  const resultPromise = run(page);
+  await jest.runAllTimersAsync();
+  return resultPromise;
 }
 
 describe('focus-visible.check (WCAG 2.4.7)', () => {
-  test('passes when no elements lack focus indicators', async () => {
-    const page = makePage([]);
-    const result = await run(page);
+  test('passes when no focusable elements exist', async () => {
+    const result = await runWithTimers(makePage({ elements: [] }));
     expect(result.successCriteriaId).toBe('2.4.7');
     expect(result.rules[0].status).toBe('pass');
     expect(result.rules[0].impact).toBeNull();
   });
 
-  test('fails when elements lack focus indicators', async () => {
-    const page = makePage([
-      { tagName: 'button', id: 'submit', html: '<button id="submit">Click</button>' },
-      { tagName: 'a',      id: null,    html: '<a href="#">Link</a>' },
-    ]);
-    const result = await run(page);
+  test('passes when all elements have a visible outline on focus', async () => {
+    const elements = [{ idx: 0, tagName: 'button', id: 'submit', html: '<button id="submit">Save</button>' }];
+    const result = await runWithTimers(makePage({ elements, unfocusedStyles: BASE_STYLES, focusedStyles: FOCUSED_OUTLINE }));
+    expect(result.rules[0].status).toBe('pass');
+    expect(result.rules[0].impact).toBeNull();
+  });
+
+  test('fails when element has no style change between unfocused and focused', async () => {
+    const elements = [{ idx: 0, tagName: 'button', id: 'submit', html: '<button id="submit">Save</button>' }];
+    // unfocused === focused → no visible change → violation
+    const result = await runWithTimers(makePage({ elements, unfocusedStyles: BASE_STYLES, focusedStyles: BASE_STYLES }));
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].impact).toBe('serious');
-    expect(result.rules[0].reason).toMatch('2 focusable');
     expect(result.rules[0].reason).toMatch('<button');
   });
 
-  test('reason names up to 3 violating elements', async () => {
-    const page = makePage([
-      { tagName: 'a',      id: null, html: '' },
-      { tagName: 'button', id: null, html: '' },
-      { tagName: 'input',  id: null, html: '' },
-      { tagName: 'select', id: null, html: '' },
-    ]);
-    const result = await run(page);
-    const reason = result.rules[0].reason;
-    expect(reason).toMatch('4 focusable');
+  test('fails when focused outline color is transparent (N9 fix)', async () => {
+    const elements = [{ idx: 0, tagName: 'a', id: null, html: '<a href="#">link</a>' }];
+    // Outline style/width changed but color is transparent → not actually visible
+    const result = await runWithTimers(makePage({ elements, unfocusedStyles: BASE_STYLES, focusedStyles: FOCUSED_TRANSPARENT_OUTLINE }));
+    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].reason).toMatch('<a');
+  });
+
+  test('reports count of multiple violating elements', async () => {
+    const elements = [
+      { idx: 0, tagName: 'button', id: 'a', html: '<button id="a">A</button>' },
+      { idx: 1, tagName: 'a',      id: null, html: '<a href="#">link</a>' },
+    ];
+    const result = await runWithTimers(makePage({ elements, unfocusedStyles: BASE_STYLES, focusedStyles: BASE_STYLES }));
+    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].reason).toMatch('2 focusable');
+  });
+
+  test('passes when focus indicator is box-shadow change', async () => {
+    const focusedWithShadow = { ...BASE_STYLES, boxShadow: '0 0 0 3px rgb(0, 95, 204)' };
+    const elements = [{ idx: 0, tagName: 'input', id: 'email', html: '<input id="email">' }];
+    const result = await runWithTimers(makePage({ elements, unfocusedStyles: BASE_STYLES, focusedStyles: focusedWithShadow }));
+    expect(result.rules[0].status).toBe('pass');
   });
 
   test('ruleId is custom-focus-visible', async () => {
-    const page = makePage([]);
-    const result = await run(page);
+    const result = await runWithTimers(makePage({ elements: [] }));
     expect(result.rules[0].ruleId).toBe('custom-focus-visible');
   });
 });

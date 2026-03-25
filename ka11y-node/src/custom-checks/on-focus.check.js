@@ -6,15 +6,15 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
 const MAX_ELEMENTS = 25;
 const SETTLE_MS = 100;
 
-// Bug fix: include form controls (input, select, textarea) — they can carry onfocus handlers
+// Includes form controls (input, select, textarea) — they can carry onfocus handlers
 const SELECTOR = [
   'a[href]',
-  ', button:not([disabled])',
-  ', input:not([disabled]):not([type="hidden"])',
-  ', select:not([disabled])',
-  ', textarea:not([disabled])',
-  ', [tabindex]:not([tabindex="-1"])',
-].join('');
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
 
 async function run(page) {
   const violations = [];

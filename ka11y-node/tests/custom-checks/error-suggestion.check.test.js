@@ -46,4 +46,22 @@ describe('error-suggestion.check (WCAG 3.3.3)', () => {
     expect(result.rules[0].status).toBe('pass');
     expect(result.rules[0].reason).toContain('2 error message(s) checked');
   });
+
+  test('N11 fix: class-based selectors in source are scoped to form descendants', () => {
+    // Regression test: class-based error selectors must start with "form " to avoid
+    // matching documentation/decorative elements outside forms.
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/error-suggestion.check.js'),
+      'utf8'
+    );
+    // Extract classSelectors array content
+    const match = src.match(/const classSelectors\s*=\s*\[([\s\S]*?)\]/);
+    expect(match).not.toBeNull();
+    const selectors = match[1].match(/'([^']+)'/g) || [];
+    expect(selectors.length).toBeGreaterThan(0);
+    selectors.forEach(sel => {
+      const clean = sel.replace(/'/g, '');
+      expect(clean).toMatch(/^form /);
+    });
+  });
 });

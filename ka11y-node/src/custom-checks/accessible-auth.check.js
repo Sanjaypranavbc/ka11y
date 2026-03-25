@@ -24,10 +24,16 @@ async function run(page) {
         form.querySelector('img[src*="captcha" i], img[alt*="captcha" i]') ||
         form.querySelector('[class*="captcha" i], [id*="captcha" i]')
       );
+      // N10 fix: require multiple independent signals before flagging reCAPTCHA/hCaptcha.
+      // [data-sitekey] alone is too broad — it's used by many non-CAPTCHA widgets.
+      // Require either a recognisable CAPTCHA class/iframe OR data-sitekey combined with class context.
       const hasReCaptcha = !!(
-        document.querySelector('iframe[src*="recaptcha" i], [class*="g-recaptcha" i], [data-sitekey]') ||
+        document.querySelector('iframe[src*="recaptcha" i]') ||
+        document.querySelector('[class*="g-recaptcha" i]') ||
+        document.querySelector('[data-sitekey][class*="captcha" i], [data-sitekey][class*="recaptcha" i]') ||
         // hCaptcha
-        document.querySelector('[class*="h-captcha" i], [data-hcaptcha-widget-id]')
+        document.querySelector('[class*="h-captcha" i], [data-hcaptcha-widget-id]') ||
+        document.querySelector('[data-sitekey][class*="hcaptcha" i]')
       );
       const hasAnyCaptcha = hasCaptchaImg || hasReCaptcha;
 

@@ -17,6 +17,9 @@ const errorSuggestion     = require('./error-suggestion.check');
 const errorPrevention     = require('./error-prevention.check');
 const accessibleAuth      = require('./accessible-auth.check');
 const useOfColor          = require('./use-of-color.check');
+const audioTranscript     = require('./audio-transcript.check');
+const linkPurpose         = require('./link-purpose.check');
+const location            = require('./location.check');
 
 // Static checks: only DOM inspection, safe for raw HTML pages
 const STATIC_CHECKS = [
@@ -32,6 +35,9 @@ const STATIC_CHECKS = [
   { check: errorPrevention,    fallbackDescription: 'High-risk submissions must be reversible, checked, or confirmed' },
   { check: accessibleAuth,     fallbackDescription: 'Authentication must not rely solely on cognitive function tests' },
   { check: useOfColor,         fallbackDescription: 'Color must not be the only visual means of conveying information' },
+  { check: audioTranscript,    fallbackDescription: 'Audio-only prerecorded content must have a text alternative' },
+  { check: linkPurpose,        fallbackDescription: 'Link purpose must be determinable from link text alone' },
+  { check: location,           fallbackDescription: 'Users must be able to determine their location within a set of web pages' },
 ];
 
 // Interactive checks: require a live navigable page with events

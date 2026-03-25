@@ -13,7 +13,30 @@ function makePage({ inputs = [], url = 'https://example.com' } = {}) {
   return page;
 }
 
+const { SELECTOR: INPUT_SELECTOR } = (() => {
+  const src = require('fs').readFileSync(require('path').resolve(__dirname, '../../src/custom-checks/on-input.check.js'), 'utf8');
+  const match = src.match(/^const SELECTOR\s*=\s*([\s\S]*?)\.join\((.*?)\)/m);
+  if (!match) return { SELECTOR: null };
+  try {
+    // eslint-disable-next-line no-new-func
+    const SELECTOR = Function(`"use strict"; return (${match[1]}).join(${match[2]})`)();
+    return { SELECTOR };
+  } catch (_) { return { SELECTOR: null }; }
+})();
+
 describe('on-input.check (WCAG 3.2.2)', () => {
+  test('SELECTOR (N8 fix): is a valid flat CSS selector with no stray :not() fragments', () => {
+    // Regression test: the old pattern split ':not(...)' across array lines joined with '',
+    // producing 'input:not(...):not(...):not(...), textarea...' which worked but was fragile.
+    expect(INPUT_SELECTOR).not.toBeNull();
+    expect(INPUT_SELECTOR.trimStart()).not.toMatch(/^,/);
+    // Each comma-separated part must start with a valid tag or selector character
+    const parts = INPUT_SELECTOR.split(',').map(s => s.trim());
+    parts.forEach(p => {
+      expect(p).toMatch(/^[a-zA-Z\[.#]/);
+    });
+  });
+
   test('passes when no inputs exist', async () => {
     const page = makePage({ inputs: [] });
     const result = await run(page);

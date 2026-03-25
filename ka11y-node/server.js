@@ -50,9 +50,9 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (!origin) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
   }
+  // N13 fix: do NOT set Access-Control-Allow-Origin: * for requests without an Origin
+  // header (server-to-server calls). Omitting the header is the safe default.
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID');
   res.setHeader('Vary', 'Origin');

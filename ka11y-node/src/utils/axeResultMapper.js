@@ -480,6 +480,9 @@ const WCAG_LEVEL = {
 
 const SUGGESTED_FIX = {
   '1.1.1':  "Add a descriptive alt attribute: <img alt='Description of image'>. For decorative images use alt=''.",
+  '1.2.1':  "Provide a full text transcript adjacent to every <audio> element, or add a <track kind='captions'> / <track kind='descriptions'>. Link to the transcript with descriptive link text (e.g. 'Read transcript').",
+  '2.4.8':  "Add a breadcrumb navigation (e.g. <nav aria-label='Breadcrumb'>) or mark the current page in navigation using aria-current='page'. This helps users understand where they are within the site.",
+  '2.4.9':  "Replace generic link text ('click here', 'read more', 'more') with descriptive text that makes sense when read in isolation. Use aria-label if the surrounding context must remain brief.",
   '1.3.1':  "Use semantic HTML (headings, lists, tables). Add appropriate ARIA landmark roles where needed.",
   '1.3.5':  "Add autocomplete attributes: <input autocomplete='email'>.",
   '1.4.1':  "Do not use colour as the only visual means to convey information. Add a non-colour cue such as underline, border-bottom, font-weight change, or background change to links within text blocks.",
