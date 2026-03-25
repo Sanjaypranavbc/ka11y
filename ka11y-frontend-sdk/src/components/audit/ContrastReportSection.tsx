@@ -14,8 +14,12 @@ export function ContrastReportSection({ report }: ContrastReportSectionProps) {
   const { summary, images } = report;
   const [passingOpen, setPassingOpen] = useState(false);
 
-  const violating = images.filter((img) => img.contrast_violations_count > 0);
-  const passing   = images.filter((img) => img.contrast_violations_count === 0);
+  // Defensive: also check detections directly in case contrast_violations_count is stale.
+  const hasViol = (img: ContrastImageDetail) =>
+    img.contrast_violations_count > 0 ||
+    img.detections.some((d) => d.wcag_violations.length > 0);
+  const violating = images.filter(hasViol);
+  const passing   = images.filter((img) => !hasViol(img));
 
   return (
     <Card className="animate-fade-up">

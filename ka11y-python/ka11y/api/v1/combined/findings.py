@@ -192,12 +192,17 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
             images_with_violations += 1
 
         if image_detections:
+            # Compute from actual detections — result.contrast_violations_count can be
+            # stale or miscounted by the OCR pipeline, causing violations to disappear.
+            local_violations_count = sum(
+                1 for d in image_detections if d.get("wcag_violations")
+            )
             images_detail.append(
                 {
                     "filename": result.filename,
                     "path": result.original_path,
                     "classification": _infer_classification(result.original_path),
-                    "contrast_violations_count": result.contrast_violations_count,
+                    "contrast_violations_count": local_violations_count,
                     "detections": image_detections,
                 }
             )
