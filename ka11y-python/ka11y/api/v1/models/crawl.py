@@ -1,9 +1,9 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class CrawlRequest(BaseModel):
     url: HttpUrl = "https://www.kao.com/global/en/"
-    max_depth: int = 0
+    max_depth: int = Field(default=0, ge=0, le=5)
     run_ocr: bool = True
     run_audit: bool = True
     run_form_audit: bool = True

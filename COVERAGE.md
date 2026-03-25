@@ -1,275 +1,200 @@
-# ka11y — WCAG 2.2 Coverage Report
+# ka11y WCAG Coverage Metadata Report / ka11y WCAGカバレッジメタデータ報告書
 
-Combined coverage across the **Python pipeline** (`ka11y-python`) and the **Node.js axe-core engine** (`ka11y-node`).
+This report is based on direct code inspection of `ka11y-node` and `ka11y-python`, plus the validated proof run completed on 2026-03-25. It is intentionally bilingual at the metadata and explanation level so both the engineering team and non-specialists can read it. English WCAG criterion names are kept canonical; the plain-language explanation is shown in English and Japanese.
 
-Legend: ✅ Covered · ❌ Not covered · 🔶 Partial (automated checks only, not full SC)
+## Validation Snapshot / 検証スナップショット
 
-Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/FN expected) · 🔴 Low (limited detection, flags for manual review) · — (not covered)
+| Item / 項目 | Value / 値 |
+| --- | --- |
+| Report date / レポート日 | 2026-03-25 |
+| Repositories inspected / 対象リポジトリ | `ka11y-node`, `ka11y-python` |
+| Proof artifacts / 証拠ファイル | `ka11y-node/logs/evidence-report.md`, `ka11y-node/logs/evidence-report.json`, `ka11y-node/junit.xml`, `ka11y-python/tests/report/ka11y_test_report.html` |
+| Node validation / Node検証 | `164` tests passed |
+| Python validation / Python検証 | `515` tests passed |
+| Feedback loop result / フィードバックループ結果 | `0` bugs after `1` evidence-loop attempt |
+| Counting rule / 集計ルール | Only WCAG 2.2 success criteria are counted. axe `best-practice` rules are tracked separately and are not included in the `87` SC total. / WCAG 2.2の達成基準のみを集計対象とし、axeの`best-practice`は87件の合計には含めません。 |
 
----
+## Coverage Totals / カバレッジ総計
 
-## Summary
+| Level / レベル | Total SC / 総達成基準 | Node | Python | Overlap / 重複 | Combined covered / 合計カバー | Missing / 未対応 | Coverage / カバー率 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | 31 | 24 | 6 | 5 | 25 | 6 | 81% |
+| AA | 26 | 17 | 10 | 5 | 22 | 4 | 85% |
+| AAA | 30 | 3 | 1 | 0 | 4 | 26 | 13% |
+| Total | 87 | 44 | 17 | 10 | 51 | 36 | 59% |
 
-| Level | Total SCs | Python | Node (axe+custom) | Combined | Combined % | Missing |
-|-------|-----------|--------|-------------------|----------|------------|---------|
-| A     | 31        | 6      | 24                | 25       | **81 %**   | 6       |
-| AA    | 26        | 10     | 16                | 22       | **85 %**   | 4       |
-| AAA   | 30        | 1      | 2                 | 3        | **10 %**   | 27      |
-| **Total** | **87** | **17** | **42**        | **50**   | **57 %**   | **37** |
+## Confidence Totals / 信頼度総計
 
-> Numbers reflect *automatable checks only*. Many criteria (colour contrast,
-> reading level, meaningful sequence) require human review and cannot be
-> 100 % automated.
+Confidence here means "how reliable the current automation is for this rule", not "how important the WCAG rule is". / ここでの信頼度は「その規則に対する自動検出の確からしさ」を示し、「WCAG上の重要度」ではありません。
 
----
+| Level / レベル | High / 高 | Medium / 中 | Low / 低 | Covered / カバー済み |
+| --- | ---: | ---: | ---: | ---: |
+| A | 13 | 9 | 3 | 25 |
+| AA | 11 | 10 | 1 | 22 |
+| AAA | 2 | 2 | 0 | 4 |
+| Total | 26 | 21 | 4 | 51 |
 
-## Level A — 31 Success Criteria
+## Confidence Legend / 信頼度の意味
 
-| SC | Name | Python | Node (axe) | Combined | Confidence | Notes |
-|----|------|--------|------------|----------|------------|-------|
-| 1.1.1 | Non-text Content | ✅ AltTextAuditor | ✅ axe `image-alt`, `input-image-alt` | ✅ | 🟢 High | Both; Python adds OCR cosine-similarity alt-adequacy check |
-| 1.2.1 | Audio-only and Video-only (Prerecorded) | ❌ | 🔶 Node `custom-audio-transcript` | 🔶 | 🟡 Medium | Checks `<audio>` elements for adjacent `<track>`, nearby transcript links, `figcaption`, `aria-describedby`; returns `incomplete` (not `fail`) since transcript quality is unverifiable |
-| 1.2.2 | Captions (Prerecorded) | ❌ | ✅ axe `video-caption` | ✅ | 🟢 High | axe reliably checks `<video>` for missing `<track kind="captions">` |
-| 1.2.3 | Audio Description or Media Alternative (Prerecorded) | ❌ | ❌ | ❌ | — | Requires media analysis |
-| 1.3.1 | Info and Relationships | ❌ | ✅ axe `landmark-*`, `list`, `table-*` | ✅ | 🟢 High | axe landmark/table rules are well-established |
-| 1.3.2 | Meaningful Sequence | ❌ | 🔶 Node `custom-meaningful-sequence` | 🔶 | 🟡 Medium | Fixed: now detects `flex-direction: row/column-reverse` AND CSS `order` that actually reorders from DOM sequence |
-| 1.3.3 | Sensory Characteristics | ❌ | ❌ | ❌ | — | Requires NLP content analysis |
-| 1.4.1 | Use of Color | ❌ | 🔶 axe `link-in-text-block` + Node `custom-use-of-color` | 🔶 | 🟡 Medium | Custom check detects inline links with no non-color cue (underline/border/font-weight/bg); covers axe's gap for text-block links |
-| 1.4.2 | Audio Control | ❌ | 🔶 axe `no-autoplay-audio` | 🔶 | 🟡 Medium | Detects auto-playing audio lacking controls; `audio-caption` rule deprecated in axe v4 |
-| 2.1.1 | Keyboard | ❌ | ✅ axe `scrollable-region-focusable`, `frame-focusable-content`, `server-side-image-map` | ✅ | 🟢 High | axe rules are reliable and comprehensive |
-| 2.1.2 | No Keyboard Trap | ❌ | 🔶 Node `custom-keyboard-trap` | 🔶 | 🟡 Medium | Fixed: consecutive-repeat key tracking + 60ms settle delay after Tab press for accurate focus detection |
-| 2.1.4 | Character Key Shortcuts | ❌ | 🔶 Node `custom-character-key-shortcuts` | 🔶 | 🟡 Medium | Fixed: modifier guard now uses proximity check (key + modifier within 120 chars) to reduce false-negatives from unrelated branches; still only catches inline handlers |
-| 2.2.1 | Timing Adjustable | ❌ | 🔶 axe `meta-refresh` | 🔶 | 🔴 Low | axe detects `<meta http-equiv="refresh">` only; JS timers and session timeouts not detectable statically |
-| 2.2.2 | Pause, Stop, Hide | ✅ PauseStopHideAuditor | 🔶 axe `blink`, `marquee` only | ✅ | 🟢 High | Python covers CSS anims, carousels, autoplay video, animated GIFs — far beyond axe |
-| 2.3.1 | Three Flashes or Below Threshold | ❌ | ❌ | ❌ | — | Requires video frame analysis |
-| 2.4.1 | Bypass Blocks | ❌ | ✅ axe `bypass` | ✅ | 🟢 High | axe `bypass` reliably checks for skip links and landmarks |
-| 2.4.2 | Page Titled | ❌ | ✅ axe `document-title` | ✅ | 🟢 High | Simple deterministic check |
-| 2.4.3 | Focus Order | ❌ | 🔶 axe `tabindex` | 🔶 | 🔴 Low | Detects positive tabindex only; full logical order requires manual check |
-| 2.4.4 | Link Purpose (In Context) | ❌ | ✅ axe `link-name`, `area-alt` | ✅ | 🟢 High | axe reliably catches empty link names |
-| 2.5.1 | Pointer Gestures | ❌ | ❌ | ❌ | — | Requires JS event listener introspection |
-| 2.5.2 | Pointer Cancellation | ❌ | 🔶 Node `custom-pointer-cancellation` | 🔶 | 🔴 Low | Fixed: action-pattern matching + onpointerup check; only inline handlers detectable, not `addEventListener` |
-| 2.5.3 | Label in Name | ✅ LabelInNameAuditor | ✅ axe `label-content-name-mismatch` | ✅ | 🟢 High | Both tools reliable; Python uses NLP normalisation |
-| 2.5.4 | Motion Actuation | ❌ | ❌ | ❌ | — | Requires device-motion API analysis |
-| 3.1.1 | Language of Page | ❌ | ✅ axe `html-has-lang`, `html-lang-valid` | ✅ | 🟢 High | Simple deterministic check |
-| 3.2.1 | On Focus | ❌ | 🔶 Node `custom-on-focus` | 🔶 | 🟡 Medium | Fixed: now includes form controls (input/select/textarea) in focus selector; URL-change + framenavigated detection |
-| 3.2.2 | On Input | ❌ | 🔶 Node `custom-on-input` | 🔶 | 🟡 Medium | Fixed: `<select>` onchange included; type-appropriate test chars; URL-change detection |
-| 3.3.1 | Error Identification | ✅ FormAuditor | ❌ | ✅ | 🟢 High | Python only; checks required fields + error messaging patterns |
-| 3.3.2 | Labels or Instructions | ✅ FormAuditor | 🔶 axe `form-field-multiple-labels` | ✅ | 🟢 High | Python covers fully; axe detects multiple-label ambiguity only |
-| 3.3.7 | Redundant Entry *(WCAG 2.2 new)* | ❌ | ❌ | ❌ | — | Requires multi-step form tracking |
-| 4.1.1 | Parsing | ❌ | 🔶 axe `duplicate-id` + Node `custom-html-parsing` | 🔶 | 🟡 Medium | Duplicate-ID detection is reliable; broader parsing errors require HTML validator |
-| 4.1.2 | Name, Role, Value | ✅ AltTextAuditor (`_check_4_1_2`) | ✅ axe `aria-*`, `button-name` | ✅ | 🟢 High | Both; Python checks functional images; axe covers ARIA roles/states |
+| Rating / 評価 | Meaning / 意味 |
+| --- | --- |
+| High / 高 | Deterministic or strongly repeatable automation with evidence-backed pass/fail behaviour. / 証拠付きで再現しやすく、合否が安定している自動検出。 |
+| Medium / 中 | Useful automation, but partly heuristic or dependent on runtime/context. / 有用だが、ヒューリスティックや画面文脈に一部依存する自動検出。 |
+| Low / 低 | Proxy coverage or manual-review-leaning automation. / 代理指標に近く、手動確認寄りの自動検出。 |
+| `-` | Not covered today. / 現時点では未対応。 |
 
-**Level A covered: 25 / 31 (81 %) · includes 13 partial (🔶) · Missing: 6**
+## Technique Legend / 技術凡例
 
-### Missing Level A
-1. **1.2.3** — Audio Description or Media Alternative (Prerecorded)
-2. **1.3.3** — Sensory Characteristics
-3. **2.3.1** — Three Flashes or Below Threshold
-4. **2.5.1** — Pointer Gestures
-5. **2.5.4** — Motion Actuation
-6. **3.3.7** — Redundant Entry *(requires multi-step form tracking)*
+| Code | Meaning / 意味 |
+| --- | --- |
+| `N-AXE` | Node-side `axe-core` or DOM rule mapping. / Node側の`axe-core`またはDOMマッピング。 |
+| `N-CUSTOM` | Node-side custom pluggable rule. / Node側の独自プラグイン型ルール。 |
+| `P-OCR` | Python OCR or image-analysis pipeline. / Python側のOCRや画像解析パイプライン。 |
+| `P-RENDER` | Python real-browser rendered layout, focus, hover, or interaction evaluator. / Python側の実ブラウザ描画・フォーカス・ホバー・操作評価。 |
+| `P-CRAWL` | Python crawler or multi-page collector. / Python側のクローラや複数ページ収集。 |
+| `NEXT-MEDIA` | Add caption, transcript, audio-description, or flash-analysis pipeline. / 字幕、書き起こし、音声解説、点滅解析の仕組みを追加。 |
+| `NEXT-CROSS` | Add cross-page diff for repeated navigation/components. / ページ間差分で繰り返しナビや部品の一貫性を比較。 |
+| `NEXT-FLOW` | Add stateful multi-step form or authentication replay. / 状態付きの複数ステップフォームや認証の再実行を追加。 |
+| `NEXT-NLP` | Add text, language, or instruction parser. / テキスト、言語、説明文の解析器を追加。 |
+| `NEXT-MOTION` | Add gesture, animation, or device-motion instrumentation. / ジェスチャー、アニメーション、端末モーションの計測を追加。 |
+| `NEXT-TIME` | Add timeout, interruption, and session-state instrumentation. / タイムアウト、中断、セッション状態の計測を追加。 |
+| `NEXT-LAYOUT` | Add stronger outline, geometry, or presentation heuristics. / 見出し構造、幾何情報、表示制御の強化ヒューリスティックを追加。 |
+| `NEXT-INTERACT` | Add deeper keyboard, pointer, or input-path simulation. / キーボード、ポインター、入力経路のより深いシミュレーションを追加。 |
 
----
+## Missing Rules Summary / 未対応規則の要約
 
-## Level AA — 26 Additional Success Criteria
+| Level / レベル | Missing count / 未対応数 | Missing SC / 未対応達成基準 | Main next techniques / 主な次手法 |
+| --- | ---: | --- | --- |
+| A | 6 | `1.2.3`, `1.3.3`, `2.3.1`, `2.5.1`, `2.5.4`, `3.3.7` | `NEXT-MEDIA`, `NEXT-NLP`, `NEXT-MOTION`, `NEXT-FLOW` |
+| AA | 4 | `1.2.4`, `1.2.5`, `3.2.3`, `3.2.4` | `NEXT-MEDIA`, `NEXT-CROSS` |
+| AAA | 26 | `1.2.6`, `1.2.7`, `1.2.8`, `1.2.9`, `1.3.6`, `1.4.7`, `1.4.8`, `1.4.9`, `2.1.3`, `2.2.3`, `2.2.4`, `2.2.5`, `2.2.6`, `2.3.2`, `2.3.3`, `2.4.10`, `2.5.5`, `2.5.6`, `3.1.3`, `3.1.4`, `3.1.5`, `3.1.6`, `3.2.5`, `3.3.5`, `3.3.6`, `3.3.9` | `NEXT-MEDIA`, `NEXT-NLP`, `NEXT-TIME`, `NEXT-MOTION`, `NEXT-LAYOUT`, `NEXT-INTERACT`, `NEXT-FLOW`, `P-CRAWL` upgrade |
 
-| SC | Name | Python | Node (axe) | Combined | Confidence | Notes |
-|----|------|--------|------------|----------|------------|-------|
-| 1.2.4 | Captions (Live) | ❌ | ❌ | ❌ | — | Live stream; not automatable |
-| 1.2.5 | Audio Description (Prerecorded) | ❌ | ❌ | ❌ | — | Requires media analysis |
-| 1.3.4 | Orientation | ✅ OrientationEvaluator (rendered) | ✅ axe `css-orientation-lock` | ✅ | 🟢 High | Both; Python takes actual portrait+landscape snapshots |
-| 1.3.5 | Identify Input Purpose | ❌ | ✅ axe `autocomplete-valid` | ✅ | 🟢 High | axe autocomplete-valid is reliable |
-| 1.4.3 | Contrast (Minimum) | ✅ `OCRPreprocessing` + `_contrast_to_findings` | ✅ axe `color-contrast` | ✅ | 🟢 High | Both; Python checks text-in-image contrast via OCR; axe checks page text |
-| 1.4.4 | Resize Text | ✅ ResizeTextEvaluator (rendered) | ✅ axe `meta-viewport` | ✅ | 🟢 High | Both; Python detects overflow/clip after 200% zoom |
-| 1.4.5 | Images of Text | 🔶 `AltTextAuditor` (`_check_1_4_5`) | ❌ | 🔶 | 🟡 Medium | OCR detects text in image; logo-exempt (essential exception); false positives possible on decorative images |
-| 1.4.10 | Reflow | ✅ ReflowEvaluator (rendered) | ❌ | ✅ | 🟢 High | Playwright viewport resize to 320 px; detects horizontal scroll and oversized elements |
-| 1.4.11 | Non-text Contrast | 🔶 `AltTextAuditor` (`_check_1_4_11`) | ❌ | 🔶 | 🔴 Low | OCR contrast ratio used as proxy for button/icon images only; non-UI elements → INCOMPLETE |
-| 1.4.12 | Text Spacing | ✅ TextSpacingAuditor (crawler) + TextSpacingEvaluator (rendered) | 🔶 axe `avoid-inline-spacing` | ✅ | 🟢 High | Static + rendered Playwright override test; comprehensive coverage |
-| 1.4.13 | Content on Hover or Focus | ✅ HoverFocusContentEvaluator (rendered) | ❌ | ✅ | 🟢 High | Playwright hover simulation — checks dismissible, persistent, hoverable |
-| 2.4.5 | Multiple Ways | ❌ | 🔶 Node `custom-multiple-ways` | 🔶 | 🟡 Medium | Extended: now also detects breadcrumb navigation and table of contents; passes if ≥ 2 of: search/sitemap/nav/breadcrumb/toc |
-| 2.4.6 | Headings and Labels | ❌ | ✅ axe `heading-order`, `empty-heading` | ✅ | 🟢 High | axe heading-order is reliable |
-| 2.4.7 | Focus Visible | ❌ | 🔶 Node `custom-focus-visible` + axe `focus-visible` | 🔶 | 🟡 Medium | Fixed: per-element evaluate calls with 80ms settle delay after focus — CSS transitions now captured correctly; checks 40 elements |
-| 2.4.11 | Focus Not Obscured (Minimum) *(WCAG 2.2 new)* | ✅ FocusNotObscuredMinimumEvaluator (rendered) | ❌ | ✅ | 🟢 High | getBoundingClientRect obscuration ratio measurement; full obscuration = FAIL |
-| 2.4.13 | Focus Appearance *(WCAG 2.2 new)* | ❌ | 🔶 axe `focus-appearance` + Node `custom-focus-appearance` | 🔶 | 🟡 Medium | Custom Puppeteer check: measures outline-width (≥2px area req proxy) and contrast ratio (≥3:1) with per-element settle delay |
-| 2.5.7 | Dragging Movements *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-dragging-movements` | 🔶 | 🟡 Medium | Fixed: detects native drag + D&D libraries; checks alternatives in element AND parent; misses `addEventListener`-based drag |
-| 2.5.8 | Target Size (Minimum) *(WCAG 2.2 new)* | ✅ TargetSizeAuditor | ❌ | ✅ | 🟢 High | Bounding-box measurement; inline + UA-controlled exceptions detected |
-| 3.1.2 | Language of Parts | ❌ | ✅ axe `valid-lang` | ✅ | 🟢 High | axe valid-lang is reliable |
-| 3.2.3 | Consistent Navigation | ❌ | ❌ | ❌ | — | Requires multi-page analysis |
-| 3.2.4 | Consistent Identification | ❌ | ❌ | ❌ | — | Requires multi-page analysis |
-| 3.2.6 | Consistent Help *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-consistent-help` | 🔶 | 🟡 Medium | Extended: detects help/support links, chat widgets, `tel:` phone links, `mailto:` email links; reports position; single-page only |
-| 3.3.3 | Error Suggestion | ❌ | 🔶 Node `custom-error-suggestion` | 🔶 | 🟡 Medium | Fixed: class-based selectors scoped to `form` descendants (N11) to prevent FP on documentation pages; heuristic text analysis; requires errors to be visible on page load |
-| 3.3.4 | Error Prevention (Legal, Financial, Data) | ❌ | 🔶 Node `custom-error-prevention` | 🔶 | 🟡 Medium | Fixed: expanded financial/legal/destructive patterns + multi-step wizard detection; keyword-based, no semantic understanding |
-| 3.3.8 | Accessible Authentication (Minimum) *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-accessible-auth` | 🔶 | 🟡 Medium | Fixed: expanded CAPTCHA alt detection, paste-blocking, cognitive tests; misses `addEventListener`-based paste blocking |
-| 4.1.3 | Status Messages | ❌ | 🔶 Node `custom-status-messages` | 🔶 | 🟡 Medium | Fixed: detects forms + search results + cart/counter + notification areas; live region presence verified |
+## High-Value Next Coverage Candidates / 次に実装価値が高い候補
 
-**Level AA covered: 22 / 26 (85 %) · includes 11 partial (🔶) · Missing: 4**
+| Priority / 優先度 | SC | Why it matters / 重要性 | Technique to add / 追加手法 | Expected confidence / 期待信頼度 |
+| --- | --- | --- | --- | --- |
+| P1 | `3.3.7` Redundant Entry | High user pain in long forms and checkout flows. / 長いフォームや購入導線で負担が大きい。 | `NEXT-FLOW` with multi-step memory graph | Medium to High |
+| P2 | `3.2.3` Consistent Navigation | Very suitable for crawl-based automation across repeated templates. / 繰り返しテンプレート間の自動比較に向く。 | `NEXT-CROSS` navigation diff | High |
+| P3 | `3.2.4` Consistent Identification | Same component consistency is measurable across pages. / 同一部品の一貫性はページ横断で計測しやすい。 | `NEXT-CROSS` component diff | High |
+| P4 | `2.5.1` Pointer Gestures | Mobile/touch usability gap with clear runtime signals. / モバイル操作で価値が高く、実行時シグナルも取りやすい。 | `NEXT-MOTION` gesture listener inspection | Medium |
+| P5 | `2.5.4` Motion Actuation | Device-motion API use can be detected directly. / 端末モーションAPIの使用検知が可能。 | `NEXT-MOTION` device API instrumentation | Medium |
+| P6 | `2.5.5` Target Size | Current `2.5.8` crawler can be upgraded to AAA threshold. / 既存の`2.5.8`クローラをAAA基準へ拡張しやすい。 | `P-CRAWL` upgrade to `44x44` threshold | High |
+| P7 | `1.4.9` Images of Text (No Exception) | Existing OCR stack already provides a base. / 既存OCR基盤を流用しやすい。 | `P-OCR` + stricter exception classifier | Medium |
+| P8 | `2.2.6` Timeouts | Real-world data-loss issue with clear product impact. / 実務上のデータ損失リスクが高い。 | `NEXT-TIME` timeout detector | Medium |
+| P9 | `2.4.10` Section Headings | Strong document-outline heuristic can cover many cases. / 見出し構造ヒューリスティックで多くのケースを拾える。 | `NEXT-LAYOUT` outline analyzer | Medium |
+| P10 | `3.3.5` Help | Current help consistency logic can be extended. / 既存ヘルプ整合性ロジックを拡張できる。 | `NEXT-FLOW` or `NEXT-CROSS` help locator | Medium |
+| P11 | `3.3.9` Accessible Authentication (Enhanced) | Builds naturally on the current `3.3.8` rule. / 現在の`3.3.8`検査を自然に拡張できる。 | `NEXT-FLOW` auth pattern extension | Medium |
+| P12 | `1.2.3` and `1.2.5` media alternatives | One media pipeline can unlock several missing SCs. / 一つのメディア解析基盤で複数SCを増やせる。 | `NEXT-MEDIA` transcript and audio-description analysis | Medium |
 
-### Missing Level AA
-1. **1.2.4** — Captions (Live)
-2. **1.2.5** — Audio Description (Prerecorded)
-3. **3.2.3** — Consistent Navigation
-4. **3.2.4** — Consistent Identification
+## Complete Rule Inventory / 完全な規則一覧
 
----
+### Level A
 
-## Level AAA — 30 Additional Success Criteria
+| SC | Criterion / 達成基準 | Lv | Plain meaning / やさしい説明 | Current implementation / 現在の実装 | Confidence / 信頼度 | Evidence or next technique / 根拠または次の手法 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1.1.1 | Non-text Content | A | Images, icons, and charts need text alternatives. / 画像やアイコンや図表には代替テキストが必要。 | Both | High | `N-AXE` + `P-OCR` |
+| 1.2.1 | Audio-only and Video-only (Prerecorded) | A | Pre-recorded audio-only or video-only media needs an equivalent alternative. / 録音音声のみ・録画映像のみのコンテンツには同等の代替手段が必要。 | Node | Medium | `N-AXE` |
+| 1.2.2 | Captions (Prerecorded) | A | Pre-recorded video with sound needs captions. / 音声付きの録画動画には字幕が必要。 | Node | High | `N-AXE` |
+| 1.2.3 | Audio Description or Media Alternative (Prerecorded) | A | Pre-recorded video needs audio description or a full text alternative. / 録画動画には音声解説または完全な代替テキストが必要。 | Missing | - | `NEXT-MEDIA` |
+| 1.3.1 | Info and Relationships | A | Headings, labels, and tables must be coded so assistive tech can understand them. / 見出し、ラベル、表の構造は支援技術が理解できるように実装する必要。 | Node | High | `N-AXE` |
+| 1.3.2 | Meaningful Sequence | A | Reading order must still make sense when the page is read linearly. / ページを順番に読んでも意味が通る並びである必要。 | Node | Medium | `N-AXE` |
+| 1.3.3 | Sensory Characteristics | A | Instructions must not depend only on shape, size, color, or position. / 説明を色、形、位置だけに頼ってはいけない。 | Missing | - | `NEXT-NLP` |
+| 1.4.1 | Use of Color | A | Color alone must not carry the message. / 情報伝達を色だけに頼ってはいけない。 | Node | Medium | `N-AXE` |
+| 1.4.2 | Audio Control | A | Auto-playing sound must be stoppable or controllable. / 自動再生音声は停止または音量調整できる必要。 | Node | Medium | `N-AXE` |
+| 2.1.1 | Keyboard | A | All functionality must work with a keyboard. / すべての操作はキーボードで使える必要。 | Node | High | `N-AXE` |
+| 2.1.2 | No Keyboard Trap | A | Keyboard users must be able to move focus away. / キーボード操作でフォーカスから抜け出せる必要。 | Node | Medium | `N-AXE` |
+| 2.1.4 | Character Key Shortcuts | A | Single-key shortcuts need disable, remap, or focus-only behaviour. / 単一文字ショートカットは無効化、変更、またはフォーカス時限定が必要。 | Node | Medium | `N-CUSTOM` |
+| 2.2.1 | Timing Adjustable | A | Users need enough time or a way to extend it. / 制限時間は延長や停止などで調整できる必要。 | Node | Low | `N-AXE` |
+| 2.2.2 | Pause, Stop, Hide | A | Moving or auto-updating content must be pausable or stoppable. / 動く、点滅する、自動更新する内容は停止や非表示にできる必要。 | Both | High | `N-AXE` + `P-RENDER` |
+| 2.3.1 | Three Flashes or Below Threshold | A | Content must not flash in a seizure-risk pattern. / 発作リスクのある点滅を避ける必要。 | Missing | - | `NEXT-MEDIA` |
+| 2.4.1 | Bypass Blocks | A | Users need a way to skip repeated blocks. / 繰り返し部分を飛ばす手段が必要。 | Node | High | `N-AXE` |
+| 2.4.2 | Page Titled | A | Each page needs a clear title. / 各ページには分かりやすいタイトルが必要。 | Node | High | `N-AXE` |
+| 2.4.3 | Focus Order | A | Keyboard focus should move in a sensible order. / キーボードのフォーカス順は自然である必要。 | Node | Low | `N-AXE` |
+| 2.4.4 | Link Purpose (In Context) | A | Link purpose should be clear from its text or nearby context. / リンクの目的が文脈から分かる必要。 | Node | High | `N-AXE` |
+| 2.5.1 | Pointer Gestures | A | Complex gestures need a simple pointer alternative. / 複雑なジェスチャーには単純な代替操作が必要。 | Missing | - | `NEXT-MOTION` |
+| 2.5.2 | Pointer Cancellation | A | Pointer actions should not trigger unexpectedly on the down event. / ポインター操作は押した瞬間に確定しないなど誤操作防止が必要。 | Node | Low | `N-AXE` |
+| 2.5.3 | Label in Name | A | Visible label text should also exist in the accessible name. / 画面に見えるラベルは支援技術向けの名前にも含まれる必要。 | Both | High | `N-AXE` + `P-RENDER` |
+| 2.5.4 | Motion Actuation | A | Motion-based actions need an alternative and an off switch. / 端末の動きで行う操作には代替手段と無効化が必要。 | Missing | - | `NEXT-MOTION` |
+| 3.1.1 | Language of Page | A | The main page language must be declared. / ページの主言語を宣言する必要。 | Node | High | `N-AXE` |
+| 3.2.1 | On Focus | A | Focusing an element should not unexpectedly change context. / フォーカスしただけで予期しない画面変化を起こしてはいけない。 | Node | Medium | `N-AXE` |
+| 3.2.2 | On Input | A | Changing a field should not unexpectedly submit or navigate. / 入力変更だけで予期しない送信や遷移を起こしてはいけない。 | Node | Medium | `N-AXE` |
+| 3.3.1 | Error Identification | A | Input errors must be identified clearly. / 入力エラーは明確に示す必要。 | Python | High | `P-CRAWL` |
+| 3.3.2 | Labels or Instructions | A | Controls need labels or instructions before use. / 入力欄や操作には事前にラベルや説明が必要。 | Both | High | `N-AXE` + `P-CRAWL` |
+| 3.3.7 | Redundant Entry | A | Users should not have to re-enter the same data in one process. / 同じ手続き内で同じ情報を繰り返し入力させない。 | Missing | - | `NEXT-FLOW` |
+| 4.1.1 | Parsing | A | Markup should not break because of duplicate IDs or invalid structure. / 重複IDや壊れた構造でマークアップが破綻してはいけない。 | Node | Medium | `N-CUSTOM` |
+| 4.1.2 | Name, Role, Value | A | Custom controls need correct name, role, state, and value. / カスタムUIには正しい名前、役割、状態、値が必要。 | Both | High | `N-AXE` + `P-RENDER` |
 
-> **1 criterion now covered (2.4.12 by Python rendered evaluator).** Most AAA criteria require deep content
-> analysis, multi-page behavioural testing, or human judgement and remain beyond
-> the scope of automated tools.
+### Level AA
 
-| SC | Name | Combined | Notes |
-|----|------|----------|-------|
-| 1.2.6 | Sign Language (Prerecorded) | ❌ | |
-| 1.2.7 | Extended Audio Description (Prerecorded) | ❌ | |
-| 1.2.8 | Media Alternative (Prerecorded) | ❌ | |
-| 1.2.9 | Audio-only (Live) | ❌ | |
-| 1.3.6 | Identify Purpose | ❌ | |
-| 1.4.6 | Contrast (Enhanced) | ❌ | Higher ratio variant of 1.4.3 |
-| 1.4.7 | Low or No Background Audio | ❌ | |
-| 1.4.8 | Visual Presentation | ❌ | |
-| 1.4.9 | Images of Text (No Exception) | ❌ | |
-| 2.1.3 | Keyboard (No Exception) | ❌ | |
-| 2.2.3 | No Timing | ❌ | |
-| 2.2.4 | Interruptions | ❌ | |
-| 2.2.5 | Re-authenticating | ❌ | |
-| 2.2.6 | Timeouts | ❌ | |
-| 2.3.2 | Three Flashes | ❌ | |
-| 2.3.3 | Animation from Interactions | ❌ | |
-| 2.4.8 | Location | 🔶 Node `custom-location` | Detects breadcrumb navigation, `aria-current="page"` in nav, active nav item (`.active`), or sitemap link; returns `incomplete` when no indicator found |
-| 2.4.9 | Link Purpose (Link Only) | 🔶 Node `custom-link-purpose` | Checks accessible name (aria-label > aria-labelledby > img alt > text) against generic phrases ("click here", "read more", "here", "more", "learn more", etc.); returns `fail` for generic text |
-| 2.4.10 | Section Headings | ❌ | |
-| 2.4.12 | Focus Not Obscured (Enhanced) *(WCAG 2.2 new)* | ✅ FocusNotObscuredEnhancedEvaluator (rendered) | Python: stricter than 2.4.11 — any non-trivial overlap fails |
-| 2.5.5 | Target Size | ❌ | |
-| 2.5.6 | Concurrent Input Mechanisms | ❌ | |
-| 3.1.3 | Unusual Words | ❌ | |
-| 3.1.4 | Abbreviations | ❌ | |
-| 3.1.5 | Reading Level | ❌ | |
-| 3.1.6 | Pronunciation | ❌ | |
-| 3.2.5 | Change on Request | ❌ | |
-| 3.3.5 | Help | ❌ | |
-| 3.3.6 | Error Prevention (All) | ❌ | |
-| 3.3.9 | Accessible Authentication (Enhanced) *(WCAG 2.2 new)* | ❌ | |
+| SC | Criterion / 達成基準 | Lv | Plain meaning / やさしい説明 | Current implementation / 現在の実装 | Confidence / 信頼度 | Evidence or next technique / 根拠または次の手法 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1.2.4 | Captions (Live) | AA | Live audio or video needs captions. / ライブ配信の音声には字幕が必要。 | Missing | - | `NEXT-MEDIA` |
+| 1.2.5 | Audio Description (Prerecorded) | AA | Recorded video needs audio description for important visuals. / 録画動画の重要な視覚情報には音声解説が必要。 | Missing | - | `NEXT-MEDIA` |
+| 1.3.4 | Orientation | AA | Content should work in portrait and landscape unless essential. / 必須でない限り縦向きと横向きの両方で使える必要。 | Both | High | `N-AXE` + `P-RENDER` |
+| 1.3.5 | Identify Input Purpose | AA | Common personal-data fields should expose machine-readable purpose. / 氏名や住所などの一般的な入力欄は目的を機械可読で示す必要。 | Node | High | `N-AXE` |
+| 1.4.3 | Contrast (Minimum) | AA | Text contrast must reach the minimum readability ratio. / 文字コントラストは最低基準を満たす必要。 | Both | High | `N-AXE` + `P-OCR` |
+| 1.4.4 | Resize Text | AA | Text should stay usable when enlarged to 200 percent. / 文字を200パーセント拡大しても使える必要。 | Both | High | `N-AXE` + `P-RENDER` |
+| 1.4.5 | Images of Text | AA | Use real text instead of text baked into images where possible. / 可能な限り画像化文字ではなく本物のテキストを使う。 | Python | Medium | `P-OCR` |
+| 1.4.10 | Reflow | AA | Content should work without two-dimensional scrolling at small viewport or zoom. / 小さい画面や拡大時に縦横両方向スクロールへ依存しない必要。 | Python | High | `P-RENDER` |
+| 1.4.11 | Non-text Contrast | AA | UI parts and graphics need enough contrast against surrounding colors. / UI部品や図形は周囲に対して十分なコントラストが必要。 | Python | Low | `P-OCR` |
+| 1.4.12 | Text Spacing | AA | Pages should remain usable when line, letter, and word spacing increase. / 行間や文字間を広げても壊れず使える必要。 | Both | High | `N-AXE` + `P-RENDER` |
+| 1.4.13 | Content on Hover or Focus | AA | Hover or focus popups must be dismissible and stable. / ホバーやフォーカスで出る内容は閉じられ、安定して表示される必要。 | Python | High | `P-RENDER` |
+| 2.4.5 | Multiple Ways | AA | More than one way should exist to find a page. / ページへ到達する手段は複数あることが望ましい。 | Node | Medium | `N-AXE` |
+| 2.4.6 | Headings and Labels | AA | Headings and labels should describe their purpose clearly. / 見出しやラベルは内容を分かりやすく示す必要。 | Node | High | `N-AXE` |
+| 2.4.7 | Focus Visible | AA | The keyboard focus indicator must be visible. / キーボードフォーカスは見える必要。 | Node | Medium | `N-AXE` |
+| 2.4.11 | Focus Not Obscured (Minimum) | AA | Focused items should not be fully hidden behind overlays. / フォーカス要素は重なり物で完全に隠れてはいけない。 | Python | High | `P-RENDER` |
+| 2.4.13 | Focus Appearance | AA | Focus indicator size and contrast must be strong enough. / フォーカス表示は十分な大きさとコントラストが必要。 | Node | Medium | `N-AXE` |
+| 2.5.7 | Dragging Movements | AA | Drag operations need a simpler non-drag alternative. / ドラッグ操作にはドラッグ不要の代替手段が必要。 | Node | Medium | `N-CUSTOM` |
+| 2.5.8 | Target Size (Minimum) | AA | Tap and click targets need minimum size or safe spacing. / タップ対象は最小サイズまたは十分な間隔が必要。 | Both | High | `N-AXE` + `P-CRAWL` |
+| 3.1.2 | Language of Parts | AA | Passages in another language should be marked with that language. / 異なる言語の部分はその言語を明示する必要。 | Node | High | `N-AXE` |
+| 3.2.3 | Consistent Navigation | AA | Repeated navigation should stay in a consistent order. / 繰り返し出るナビゲーションは一貫した順序である必要。 | Missing | - | `NEXT-CROSS` |
+| 3.2.4 | Consistent Identification | AA | The same component should be identified consistently across pages. / 同じ機能の部品は一貫した名前や見せ方にする必要。 | Missing | - | `NEXT-CROSS` |
+| 3.2.6 | Consistent Help | AA | Repeated help mechanisms should appear consistently. / ヘルプ手段はページ間で一貫して見つけられる必要。 | Node | Medium | `N-CUSTOM` |
+| 3.3.3 | Error Suggestion | AA | When possible, tell users how to fix an error. / 可能ならエラーの直し方を示す必要。 | Node | Medium | `N-AXE` |
+| 3.3.4 | Error Prevention (Legal, Financial, Data) | AA | Important submissions need review, confirmation, or reversal. / 重要な送信は確認、見直し、取り消しが必要。 | Node | Medium | `N-AXE` |
+| 3.3.8 | Accessible Authentication (Minimum) | AA | Login should not depend only on hard memory or cognitive tests. / 認証が過度な記憶や認知負荷だけに依存してはいけない。 | Node | Medium | `N-CUSTOM` |
+| 4.1.3 | Status Messages | AA | Important status updates must reach assistive tech without stealing focus. / 状態メッセージはフォーカス移動なしで支援技術に伝わる必要。 | Node | Medium | `N-AXE` |
 
-**Level AAA covered: 3 / 30 (10 %) · 2.4.12 covered by Python rendered evaluator; 2.4.8 + 2.4.9 (🔶 partial) covered by Node custom checks**
+### Level AAA
 
----
+| SC | Criterion / 達成基準 | Lv | Plain meaning / やさしい説明 | Current implementation / 現在の実装 | Confidence / 信頼度 | Evidence or next technique / 根拠または次の手法 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1.2.6 | Sign Language (Prerecorded) | AAA | Recorded video should provide sign language for spoken content. / 録画動画の音声内容には手話の提供が望ましい。 | Missing | - | `NEXT-MEDIA` |
+| 1.2.7 | Extended Audio Description (Prerecorded) | AAA | Recorded video should offer extended audio description when needed. / 必要に応じて拡張音声解説を提供する必要。 | Missing | - | `NEXT-MEDIA` |
+| 1.2.8 | Media Alternative (Prerecorded) | AAA | Recorded media should have a full text alternative. / 録画メディアには完全な代替テキストが必要。 | Missing | - | `NEXT-MEDIA` |
+| 1.2.9 | Audio-only (Live) | AAA | Live audio-only content should have a text alternative. / ライブ音声のみコンテンツには代替テキストが必要。 | Missing | - | `NEXT-MEDIA` |
+| 1.3.6 | Identify Purpose | AAA | More UI elements should expose programmatic purpose. / より多くのUI要素で目的を機械可読に示す必要。 | Missing | - | `NEXT-NLP` |
+| 1.4.6 | Contrast (Enhanced) | AAA | Text needs higher-than-AA contrast. / 文字はAAより高いコントラストが必要。 | Node | High | `N-AXE` |
+| 1.4.7 | Low or No Background Audio | AAA | Background audio should be absent or very low behind speech. / 音声の背後にあるBGMは無いか非常に小さい必要。 | Missing | - | `NEXT-MEDIA` |
+| 1.4.8 | Visual Presentation | AAA | Users should have strong control over text presentation. / テキスト表示に対する利用者の調整余地が大きい必要。 | Missing | - | `NEXT-LAYOUT` |
+| 1.4.9 | Images of Text (No Exception) | AAA | Avoid images of text except where truly essential. / 本当に必要な場合を除き文字画像を避ける必要。 | Missing | - | `P-OCR` + stricter exception classifier |
+| 2.1.3 | Keyboard (No Exception) | AAA | Everything must work by keyboard with no exceptions. / 例外なくすべての機能がキーボードで使える必要。 | Missing | - | `NEXT-INTERACT` |
+| 2.2.3 | No Timing | AAA | Tasks should not depend on time limits. / 作業が時間制限に依存しないことが望ましい。 | Missing | - | `NEXT-TIME` |
+| 2.2.4 | Interruptions | AAA | Interruptions should be postponable or suppressible. / 中断は延期または抑制できる必要。 | Missing | - | `NEXT-TIME` |
+| 2.2.5 | Re-authenticating | AAA | Re-authentication should not cause data loss. / 再認証で入力内容を失わない必要。 | Missing | - | `NEXT-TIME` |
+| 2.2.6 | Timeouts | AAA | Users should be warned about data-loss timeouts. / データ消失につながるタイムアウトは事前警告が必要。 | Missing | - | `NEXT-TIME` |
+| 2.3.2 | Three Flashes | AAA | Content should avoid any unsafe flashing. / 危険な点滅を避ける必要。 | Missing | - | `NEXT-MEDIA` |
+| 2.3.3 | Animation from Interactions | AAA | Motion triggered by interaction should be disableable. / 操作に伴うアニメーションは無効化できる必要。 | Missing | - | `NEXT-MOTION` |
+| 2.4.8 | Location | AAA | Users should know where they are within the site structure. / サイト内で現在地が分かる必要。 | Node | Medium | `N-AXE` |
+| 2.4.9 | Link Purpose (Link Only) | AAA | Link text alone should make the purpose clear. / リンク単体の文言だけで目的が分かる必要。 | Node | Medium | `N-AXE` |
+| 2.4.10 | Section Headings | AAA | Sections should use helpful headings. / 各セクションには役立つ見出しが必要。 | Missing | - | `NEXT-LAYOUT` |
+| 2.4.12 | Focus Not Obscured (Enhanced) | AAA | Focused items should not be obscured at all. / フォーカス要素は少しも隠れてはいけない。 | Python | High | `P-RENDER` |
+| 2.5.5 | Target Size | AAA | Targets should use the larger AAA minimum size. / 操作対象はAAAのより大きな最小サイズが必要。 | Missing | - | `P-CRAWL` upgrade to `44x44` threshold |
+| 2.5.6 | Concurrent Input Mechanisms | AAA | Different input methods should remain available together. / 異なる入力方法を同時に使える必要。 | Missing | - | `NEXT-INTERACT` |
+| 3.1.3 | Unusual Words | AAA | Uncommon words should be explained. / 珍しい語句には説明が必要。 | Missing | - | `NEXT-NLP` |
+| 3.1.4 | Abbreviations | AAA | Abbreviations should be explained. / 略語には説明が必要。 | Missing | - | `NEXT-NLP` |
+| 3.1.5 | Reading Level | AAA | Content should be readable at lower reading complexity or have support. / 内容は低い読解難度で読めるか補助が必要。 | Missing | - | `NEXT-NLP` |
+| 3.1.6 | Pronunciation | AAA | When pronunciation affects meaning, it should be provided. / 発音で意味が変わる場合は発音情報が必要。 | Missing | - | `NEXT-NLP` |
+| 3.2.5 | Change on Request | AAA | Context changes should happen only when requested. / 画面変化は利用者の要求時だけ起こす必要。 | Missing | - | `NEXT-INTERACT` |
+| 3.3.5 | Help | AAA | Context-sensitive help should be available for complex tasks. / 複雑な作業には状況に応じたヘルプが必要。 | Missing | - | `NEXT-FLOW` |
+| 3.3.6 | Error Prevention (All) | AAA | More workflows should prevent irreversible mistakes. / より広い操作で取り返しのつかないミスを防ぐ必要。 | Missing | - | `NEXT-FLOW` |
+| 3.3.9 | Accessible Authentication (Enhanced) | AAA | Authentication should avoid cognitive barriers more strongly. / 認証は認知的負荷をさらに強く避ける必要。 | Missing | - | `NEXT-FLOW` |
 
-## Planned Improvements
+## Interpretation Notes / 読み方メモ
 
-The following uncovered criteria are **partially automatable** and are candidates
-for future Python auditors:
+- `Both` means the rule is emitted by both `ka11y-node` and `ka11y-python`. `Node` or `Python` means only that stack currently emits the SC. `Missing` means neither stack currently produces that SC in the flattened result set.
+- `best-practice` axe rules are valuable, but they are not WCAG success criteria. They were kept out of the `87`-SC coverage percentage to avoid inflating the compliance number.
+- The current gap pattern is clear: ka11y is already strong on Level A and AA structure, contrast, focus, and form basics, but still thin on AAA content-heavy rules, media alternatives, and cross-page workflow rules.
+- The most efficient path to grow coverage is not "one rule at a time". It is to add a few reusable technique families: `NEXT-MEDIA`, `NEXT-CROSS`, `NEXT-FLOW`, `NEXT-MOTION`, and `NEXT-TIME`. Each of those unlocks multiple missing SCs.
+- Node custom rules are already pluggable through file-based discovery, so future coverage expansion should add three things together: the new rule file, the WCAG metadata entry, and one proof scenario in the evidence loop.
 
-| Priority | SC | Name | Approach |
-|----------|----|------|----------|
-| Low | **3.3.7** | Redundant Entry | Track form field names across multi-step flows; flag re-asked required fields |
-| Low | **3.2.3** | Consistent Navigation | Multi-page crawl: compare nav element order across pages |
-| Low | **3.2.4** | Consistent Identification | Multi-page crawl: compare component labels/names across pages |
-
-> **Previously planned, now implemented:** 2.5.8 Target Size (Minimum), 2.4.11 Focus Not Obscured (Minimum), 1.4.13 Content on Hover or Focus, 3.2.6 Consistent Help (Node), 2.5.7 Dragging Movements (Node), 3.3.8 Accessible Authentication (Node), 3.3.3 Error Suggestion (Node), 3.3.4 Error Prevention (Node), 2.1.4 Character Key Shortcuts (Node), 2.5.2 Pointer Cancellation (Node), 1.4.1 Use of Color custom check (Node), 2.4.13 Focus Appearance custom check (Node).
-
----
-
-## Tool Coverage Breakdown
-
-### Python (`ka11y-python`) — Unique Capabilities
-
-| Auditor / Evaluator | WCAG SC | What it detects beyond axe |
-|---------------------|---------|---------------------------|
-| `AltTextAccessibilityAuditor` | 1.1.1, 1.4.5, 1.4.11, 4.1.2 | OCR text-in-image detection, generic alt text ("image", "photo"), cosine-similarity alt adequacy; `_check_4_1_2` validates accessible name for functional images (logos, icons, buttons); `_check_1_4_5` flags non-logo images with OCR text; `_check_1_4_11` checks button/icon contrast ratio via OCR proxy (3:1 threshold) |
-| `OCRPreprocessing` (`_contrast_to_findings`) | 1.4.3 | EasyOCR detects text regions in images; `contrast_analyser` computes luminance-based contrast ratio per bbox; flags AA-normal failures (< 4.5:1) |
-| `FormAccessibilityAuditor` | 3.3.1, 3.3.2 | `required` without error messaging, placeholder-only labels, hidden-label patterns, missing autocomplete on personal-data fields |
-| `LabelInNameAuditor` | 2.5.3 | Checks visible label text is substring of accessible name using NLP normalisation |
-| `PauseStopHideAuditor` | 2.2.2 | CSS keyframe animations (> 5 s / infinite), autoplay video, animated GIFs, carousels (Bootstrap/Swiper/Slick/Owl/Glide/Splide) — all missed by axe |
-| `TargetSizeAuditor` | 2.5.8 | Measures rendered bounding-box (getBoundingClientRect) of all interactive elements; detects inline-link and UA-controlled exceptions automatically |
-| `TextSpacingAuditor` (crawler) | 1.4.12 | Static heuristic: flags fixed-height containers with `overflow:hidden` as WARNING/INFO (never FAILED); definitive test is the `TextSpacingEvaluator` below |
-| `ReflowEvaluator` (rendered) | 1.4.10 | Playwright viewport resize to 320 px; detects actual horizontal scroll and oversized elements |
-| `ResizeTextEvaluator` (rendered) | 1.4.4 | Playwright 200% text-size override; flags overflow, scroll and clipped text |
-| `TextSpacingEvaluator` (rendered) | 1.4.12 | Playwright CSS override (1.5× line-height, 0.12em letter-spacing, etc.); flags newly-clipped elements |
-| `OrientationEvaluator` (rendered) | 1.3.4 | Both portrait + landscape snapshots; detects "please rotate" overlays and missing content in either orientation |
-| `HoverFocusContentEvaluator` (rendered) | 1.4.13 | Playwright hover simulation; checks popup appeared, dismissible-by-Escape, pointer-can-move-over |
-| `FocusNotObscuredMinimumEvaluator` (rendered) | 2.4.11 | Tab-key focus walk; measures obscuration ratio via getBoundingClientRect; full obscuration = FAIL, partial = NEEDS_REVIEW |
-| `FocusNotObscuredEnhancedEvaluator` (rendered) | 2.4.12 (AAA) | Same as above but stricter: any non-trivial overlap (≥ 10%) = FAIL |
-
-### Node.js (`ka11y-node`) — axe-core + Custom Puppeteer Checks
-
-Covers **42 unique WCAG SCs** (24 Level A + 16 Level AA + 2 Level AAA) through axe-core v4.9+ and 20 custom Puppeteer check modules.
-Results are merged in both response shapes:
-- grouped APIs (`/api/v1/analyze-accessibility`, `/api/v1/analyse-url`) return `fail / pass / incomplete` per rule
-- flat API (`/api/v1/analyse-url-flat`) now includes custom-check findings with `fail / pass / needs_review` status (custom `incomplete` is normalised to `needs_review`) and applies WCAG level filtering (`A/AA/AAA`).
-
-**Level A SCs (24):** 1.1.1, 1.2.1 🔶, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2
-
-**Level AA SCs (16):** 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.12 🔶, 2.4.5 🔶, 2.4.6, 2.4.7 🔶, 2.4.13 🔶, 2.5.7 🔶, 3.1.2, 3.2.6 🔶, 3.3.3 🔶, 3.3.4 🔶, 3.3.8 🔶, 4.1.3 🔶
-
-**Level AAA SCs (2):** 2.4.8 🔶, 2.4.9 🔶
-
-**axe-core config:** `wcag22a` and `wcag22aa` tags added to `runOnly` — activates WCAG 2.2 rules (`focus-appearance` → 2.4.13, `focus-visible` → 2.4.7, `target-size` → 2.5.8).
-
-**Custom check modules** (`src/custom-checks/`):
-
-| Module | SC | Mechanism |
-|---|---|---|
-| `html-parsing.check.js` | 4.1.1 | DOM scan for duplicate `id` attributes |
-| `focus-visible.check.js` | 2.4.7 | Compare computed `outline`/`box-shadow` before/after `el.focus()` |
-| `status-messages.check.js` | 4.1.3 | Check `role="status/alert"` and `aria-live` presence; fail if forms exist with no live regions |
-| `multiple-ways.check.js` | 2.4.5 | Detect search form, sitemap link, nav elements; pass if ≥ 2 found |
-| `on-focus.check.js` | 3.2.1 | Focus each interactive element; detect unexpected URL navigation |
-| `on-input.check.js` | 3.2.2 | Type into each input; detect unexpected URL navigation |
-| `keyboard-trap.check.js` | 2.1.2 | Tab-walk 60 iterations; detect focus cycling + Escape-key escape test |
-| `meaningful-sequence.check.js` | 1.3.2 | Detect CSS `order` property in flex/grid containers diverging from DOM order |
-| `character-key-shortcuts.check.js` | 2.1.4 | Detect `accesskey` single-char attributes and inline key handlers without modifier keys |
-| `pointer-cancellation.check.js` | 2.5.2 | Detect `onmousedown`/`onpointerdown` handlers without matching `onmouseup`/`onclick` cancellation path |
-| `dragging-movements.check.js` | 2.5.7 | Detect `draggable="true"`, `ondragstart`, D&D library markers; check for single-pointer button alternative |
-| `consistent-help.check.js` | 3.2.6 | Detect help/contact/support links and chat widgets; report position (header/footer/nav); flag absence |
-| `error-suggestion.check.js` | 3.3.3 | Check visible error messages for correction guidance; flag terse messages like "Invalid" or "Error" |
-| `error-prevention.check.js` | 3.3.4 | Detect financial/legal/destructive forms; check for review step, confirmation checkbox, or preview button |
-| `accessible-auth.check.js` | 3.3.8 | Detect auth forms; flag CAPTCHA without audio alternative, paste-blocked password fields, cognitive puzzles |
-| `use-of-color.check.js` | 1.4.1 | Detect inline links (in `<p>`, `<li>`, `<td>`, etc.) that rely solely on color difference (no underline/border/bg/font-weight change) |
-| `focus-appearance.check.js` | 2.4.13 | Measure outline-width (≥2px area requirement) and contrast ratio (≥3:1) between focused and unfocused states with settle delay |
-| `audio-transcript.check.js` | 1.2.1 | Check `<audio>` elements for `<track>`, adjacent transcript links, `figcaption`, or `aria-describedby`; returns `incomplete` (not `fail`) when no text alternative detected |
-| `location.check.js` | 2.4.8 (AAA) | Detect breadcrumb nav, `aria-current="page"` in nav, active nav item (`.active`), or sitemap link; returns `incomplete` when none found |
-| `link-purpose.check.js` | 2.4.9 (AAA) | Check link accessible name (aria-label > aria-labelledby > img alt > text) against generic phrases ("click here", "read more", "here", etc.); returns `fail` for non-descriptive links |
-
-**Current backdrops (Node custom checks):**
-
-1. Most custom checks are rule-level heuristics, so flat findings currently return `element: null` (no stable CSS target/HTML snippet).
-2. Interactive checks (`on-focus`, `on-input`, `keyboard-trap`, `focus-visible`) can alter page state and may stop early after navigation for safety.
-3. Runtime check failures must be surfaced as `incomplete/needs_review` findings (never silently dropped), otherwise SC-level coverage appears inconsistent.
-
-### Engineering Analysis (2026-03-24)
-
-**High-priority bugs / risks**
-
-1. **Result reflection risk (Node custom checks):** running static + interactive checks on a shared page in parallel can produce state interference (navigation/focus side effects) and missing findings.
-2. **SSRF hardening gap (Python combined route):** hostname-prefix checks alone are insufficient; DNS-resolved private/link-local IPs must be blocked.
-3. **Output collision risk (Python combined jobs):** output directory naming by `domain + minute` can collide for concurrent jobs.
-
-**Performance hotspots**
-
-1. **Image crawler session churn:** creating a fresh `aiohttp.ClientSession` per image download adds connection setup overhead.
-2. **Crawler duplication across stages:** form/interactive/target/text-spacing crawlers independently revisit the same pages.
-3. **Heavy parallelism pressure:** multiple Playwright-based stages launched together can saturate CPU/RAM on moderate hosts.
-
-**Fixes applied in this pass**
-
-1. **Python image crawler I/O optimization:** reused a single `aiohttp.ClientSession` per crawl run instead of creating one per download.
-2. **Python combined output isolation:** output path now includes `job_id` suffix to prevent report/artifact collisions.
-
-**Automation roadmap**
-
-1. Add nightly CI smoke audits against 3 stable fixture sites and diff pass/fail deltas by WCAG SC.
-2. Persist per-stage timings (`crawl`, `audit`, `serialize`) and alert when p95 latency regresses >20%.
-3. Introduce a cached crawl artifact layer (DOM snapshots + extracted elements) reused by multiple auditors in one job.
-4. Emit machine-readable QA gates (`critical_failures`, `needs_review_count`, `coverage_by_sc`) for release pipelines.
-
-**Node.js future possibilities (custom Puppeteer):**
-
-| SC | Name | Approach |
-|----|------|----------|
-| 1.4.5 | Images of Text | `page.evaluate` to find `<img>` inside `<button>`/`<a>` with matching text content; or Canvas pixel-sampling after rendering to detect text-like patterns. Requires OCR — full implementation is Python-side. |
-| 1.4.11 | Non-text Contrast | Puppeteer screenshot + Canvas pixel-sampling around UI component boundaries; measure contrast of component edge colour vs adjacent background. Complex but feasible without OCR. |
-
----
-
-*Generated: 2026-03-17 · Updated: 2026-03-25 (+3 new Node checks: custom-audio-transcript 1.2.1, custom-location 2.4.8 AAA, custom-link-purpose 2.4.9 AAA; bug fixes N7–N13: on-focus/on-input selector leading comma, focus-visible transparent outline FP, accessible-auth dual-signal CAPTCHA detection, error-suggestion form-scoped selectors → confidence 🔴→🟡, server CORS wildcard removal; focus-visible test rewrite with jest.runAllTimersAsync(); +2 new Node checks: 1.4.1 custom-use-of-color, 2.4.13 custom-focus-appearance; count updates: Level A 25/31 81%, AAA 3/30 10%, Node 42 SCs 24A+16AA+2AAA, 20 custom modules) · WCAG 2.2 (W3C Recommendation 2023-10-05)*
