@@ -12,10 +12,10 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 
 | Level | Total SCs | Python | Node (axe+custom) | Combined | Combined % | Missing |
 |-------|-----------|--------|-------------------|----------|------------|---------|
-| A     | 31        | 6      | 23                | 24       | **77 %**   | 7       |
+| A     | 31        | 6      | 24                | 25       | **81 %**   | 6       |
 | AA    | 26        | 10     | 16                | 22       | **85 %**   | 4       |
-| AAA   | 30        | 1      | 0                 | 1        | **3 %**    | 29      |
-| **Total** | **87** | **17** | **39**        | **47**   | **54 %**   | **40** |
+| AAA   | 30        | 1      | 2                 | 3        | **10 %**   | 27      |
+| **Total** | **87** | **17** | **42**        | **50**   | **57 %**   | **37** |
 
 > Numbers reflect *automatable checks only*. Many criteria (colour contrast,
 > reading level, meaningful sequence) require human review and cannot be
@@ -28,7 +28,7 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | SC | Name | Python | Node (axe) | Combined | Confidence | Notes |
 |----|------|--------|------------|----------|------------|-------|
 | 1.1.1 | Non-text Content | ✅ AltTextAuditor | ✅ axe `image-alt`, `input-image-alt` | ✅ | 🟢 High | Both; Python adds OCR cosine-similarity alt-adequacy check |
-| 1.2.1 | Audio-only and Video-only (Prerecorded) | ❌ | ❌ | ❌ | — | Requires content inspection |
+| 1.2.1 | Audio-only and Video-only (Prerecorded) | ❌ | 🔶 Node `custom-audio-transcript` | 🔶 | 🟡 Medium | Checks `<audio>` elements for adjacent `<track>`, nearby transcript links, `figcaption`, `aria-describedby`; returns `incomplete` (not `fail`) since transcript quality is unverifiable |
 | 1.2.2 | Captions (Prerecorded) | ❌ | ✅ axe `video-caption` | ✅ | 🟢 High | axe reliably checks `<video>` for missing `<track kind="captions">` |
 | 1.2.3 | Audio Description or Media Alternative (Prerecorded) | ❌ | ❌ | ❌ | — | Requires media analysis |
 | 1.3.1 | Info and Relationships | ❌ | ✅ axe `landmark-*`, `list`, `table-*` | ✅ | 🟢 High | axe landmark/table rules are well-established |
@@ -59,16 +59,15 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 4.1.1 | Parsing | ❌ | 🔶 axe `duplicate-id` + Node `custom-html-parsing` | 🔶 | 🟡 Medium | Duplicate-ID detection is reliable; broader parsing errors require HTML validator |
 | 4.1.2 | Name, Role, Value | ✅ AltTextAuditor (`_check_4_1_2`) | ✅ axe `aria-*`, `button-name` | ✅ | 🟢 High | Both; Python checks functional images; axe covers ARIA roles/states |
 
-**Level A covered: 24 / 31 (77 %) · includes 12 partial (🔶) · Missing: 7**
+**Level A covered: 25 / 31 (81 %) · includes 13 partial (🔶) · Missing: 6**
 
 ### Missing Level A
-1. **1.2.1** — Audio-only and Video-only (Prerecorded)
-2. **1.2.3** — Audio Description or Media Alternative (Prerecorded)
-3. **1.3.3** — Sensory Characteristics
-4. **2.3.1** — Three Flashes or Below Threshold
-5. **2.5.1** — Pointer Gestures
-6. **2.5.4** — Motion Actuation
-7. **3.3.7** — Redundant Entry *(requires multi-step form tracking)*
+1. **1.2.3** — Audio Description or Media Alternative (Prerecorded)
+2. **1.3.3** — Sensory Characteristics
+3. **2.3.1** — Three Flashes or Below Threshold
+4. **2.5.1** — Pointer Gestures
+5. **2.5.4** — Motion Actuation
+6. **3.3.7** — Redundant Entry *(requires multi-step form tracking)*
 
 ---
 
@@ -98,7 +97,7 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 3.2.3 | Consistent Navigation | ❌ | ❌ | ❌ | — | Requires multi-page analysis |
 | 3.2.4 | Consistent Identification | ❌ | ❌ | ❌ | — | Requires multi-page analysis |
 | 3.2.6 | Consistent Help *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-consistent-help` | 🔶 | 🟡 Medium | Extended: detects help/support links, chat widgets, `tel:` phone links, `mailto:` email links; reports position; single-page only |
-| 3.3.3 | Error Suggestion | ❌ | 🔶 Node `custom-error-suggestion` | 🔶 | 🔴 Low | Fixed: narrowed error selectors to reduce FP; heuristic text analysis; requires errors to be visible on page load |
+| 3.3.3 | Error Suggestion | ❌ | 🔶 Node `custom-error-suggestion` | 🔶 | 🟡 Medium | Fixed: class-based selectors scoped to `form` descendants (N11) to prevent FP on documentation pages; heuristic text analysis; requires errors to be visible on page load |
 | 3.3.4 | Error Prevention (Legal, Financial, Data) | ❌ | 🔶 Node `custom-error-prevention` | 🔶 | 🟡 Medium | Fixed: expanded financial/legal/destructive patterns + multi-step wizard detection; keyword-based, no semantic understanding |
 | 3.3.8 | Accessible Authentication (Minimum) *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-accessible-auth` | 🔶 | 🟡 Medium | Fixed: expanded CAPTCHA alt detection, paste-blocking, cognitive tests; misses `addEventListener`-based paste blocking |
 | 4.1.3 | Status Messages | ❌ | 🔶 Node `custom-status-messages` | 🔶 | 🟡 Medium | Fixed: detects forms + search results + cart/counter + notification areas; live region presence verified |
@@ -137,8 +136,8 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 2.2.6 | Timeouts | ❌ | |
 | 2.3.2 | Three Flashes | ❌ | |
 | 2.3.3 | Animation from Interactions | ❌ | |
-| 2.4.8 | Location | ❌ | |
-| 2.4.9 | Link Purpose (Link Only) | ❌ | |
+| 2.4.8 | Location | 🔶 Node `custom-location` | Detects breadcrumb navigation, `aria-current="page"` in nav, active nav item (`.active`), or sitemap link; returns `incomplete` when no indicator found |
+| 2.4.9 | Link Purpose (Link Only) | 🔶 Node `custom-link-purpose` | Checks accessible name (aria-label > aria-labelledby > img alt > text) against generic phrases ("click here", "read more", "here", "more", "learn more", etc.); returns `fail` for generic text |
 | 2.4.10 | Section Headings | ❌ | |
 | 2.4.12 | Focus Not Obscured (Enhanced) *(WCAG 2.2 new)* | ✅ FocusNotObscuredEnhancedEvaluator (rendered) | Python: stricter than 2.4.11 — any non-trivial overlap fails |
 | 2.5.5 | Target Size | ❌ | |
@@ -152,7 +151,7 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 3.3.6 | Error Prevention (All) | ❌ | |
 | 3.3.9 | Accessible Authentication (Enhanced) *(WCAG 2.2 new)* | ❌ | |
 
-**Level AAA covered: 1 / 30 (3 %) · 2.4.12 now covered by Python rendered evaluator**
+**Level AAA covered: 3 / 30 (10 %) · 2.4.12 covered by Python rendered evaluator; 2.4.8 + 2.4.9 (🔶 partial) covered by Node custom checks**
 
 ---
 
@@ -194,14 +193,16 @@ for future Python auditors:
 
 ### Node.js (`ka11y-node`) — axe-core + Custom Puppeteer Checks
 
-Covers **39 unique WCAG SCs** (23 Level A + 16 Level AA) through axe-core v4.9+ and 17 custom Puppeteer check modules.
+Covers **42 unique WCAG SCs** (24 Level A + 16 Level AA + 2 Level AAA) through axe-core v4.9+ and 20 custom Puppeteer check modules.
 Results are merged in both response shapes:
 - grouped APIs (`/api/v1/analyze-accessibility`, `/api/v1/analyse-url`) return `fail / pass / incomplete` per rule
 - flat API (`/api/v1/analyse-url-flat`) now includes custom-check findings with `fail / pass / needs_review` status (custom `incomplete` is normalised to `needs_review`) and applies WCAG level filtering (`A/AA/AAA`).
 
-**Level A SCs (23):** 1.1.1, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2
+**Level A SCs (24):** 1.1.1, 1.2.1 🔶, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2
 
 **Level AA SCs (16):** 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.12 🔶, 2.4.5 🔶, 2.4.6, 2.4.7 🔶, 2.4.13 🔶, 2.5.7 🔶, 3.1.2, 3.2.6 🔶, 3.3.3 🔶, 3.3.4 🔶, 3.3.8 🔶, 4.1.3 🔶
+
+**Level AAA SCs (2):** 2.4.8 🔶, 2.4.9 🔶
 
 **axe-core config:** `wcag22a` and `wcag22aa` tags added to `runOnly` — activates WCAG 2.2 rules (`focus-appearance` → 2.4.13, `focus-visible` → 2.4.7, `target-size` → 2.5.8).
 
@@ -226,6 +227,9 @@ Results are merged in both response shapes:
 | `accessible-auth.check.js` | 3.3.8 | Detect auth forms; flag CAPTCHA without audio alternative, paste-blocked password fields, cognitive puzzles |
 | `use-of-color.check.js` | 1.4.1 | Detect inline links (in `<p>`, `<li>`, `<td>`, etc.) that rely solely on color difference (no underline/border/bg/font-weight change) |
 | `focus-appearance.check.js` | 2.4.13 | Measure outline-width (≥2px area requirement) and contrast ratio (≥3:1) between focused and unfocused states with settle delay |
+| `audio-transcript.check.js` | 1.2.1 | Check `<audio>` elements for `<track>`, adjacent transcript links, `figcaption`, or `aria-describedby`; returns `incomplete` (not `fail`) when no text alternative detected |
+| `location.check.js` | 2.4.8 (AAA) | Detect breadcrumb nav, `aria-current="page"` in nav, active nav item (`.active`), or sitemap link; returns `incomplete` when none found |
+| `link-purpose.check.js` | 2.4.9 (AAA) | Check link accessible name (aria-label > aria-labelledby > img alt > text) against generic phrases ("click here", "read more", "here", etc.); returns `fail` for non-descriptive links |
 
 **Current backdrops (Node custom checks):**
 
@@ -268,4 +272,4 @@ Results are merged in both response shapes:
 
 ---
 
-*Generated: 2026-03-17 · Updated: 2026-03-25 (+2 new Node checks: 1.4.1 custom-use-of-color, 2.4.13 custom-focus-appearance; bug fixes: keyboard-trap settle delay, meaningful-sequence visibility detection, character-key-shortcuts proximity modifier guard, status-messages hasNotificationArea, focus-visible CSS-transition race condition; multiple-ways + breadcrumb/toc detection; consistent-help + phone/email contact detection; Python stage_events missing-stage warnings; count corrections: Level A 24/31 77%, Level AA 22/26 85%, Node 39 SCs 23A+16AA, 2.4.13 removed from planned table, TextSpacingAuditor clarified as WARNING-only heuristic) · WCAG 2.2 (W3C Recommendation 2023-10-05)*
+*Generated: 2026-03-17 · Updated: 2026-03-25 (+3 new Node checks: custom-audio-transcript 1.2.1, custom-location 2.4.8 AAA, custom-link-purpose 2.4.9 AAA; bug fixes N7–N13: on-focus/on-input selector leading comma, focus-visible transparent outline FP, accessible-auth dual-signal CAPTCHA detection, error-suggestion form-scoped selectors → confidence 🔴→🟡, server CORS wildcard removal; focus-visible test rewrite with jest.runAllTimersAsync(); +2 new Node checks: 1.4.1 custom-use-of-color, 2.4.13 custom-focus-appearance; count updates: Level A 25/31 81%, AAA 3/30 10%, Node 42 SCs 24A+16AA+2AAA, 20 custom modules) · WCAG 2.2 (W3C Recommendation 2023-10-05)*

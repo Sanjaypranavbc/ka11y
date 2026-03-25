@@ -25,13 +25,13 @@
 |---|---|---|
 | Files reviewed | 22 | 23 |
 | Bugs found (total) | 14 | 11 |
-| Bugs fixed | 6 | 4 |
+| Bugs fixed | 13 | 4 |
 | Critical bugs | 0 | 0 |
 | High bugs | 3 | 3 |
 | Medium bugs | 7 | 5 |
 | Low bugs | 4 | 3 |
-| WCAG SCs covered | 25 (Level A+AA) | 17 |
-| New checks added | 2 (1.4.1, 2.4.13) | — |
+| WCAG SCs covered | 42 (24A + 16AA + 2AAA) | 17 |
+| New checks added | 5 (1.2.1, 1.4.1, 2.4.8 AAA, 2.4.9 AAA, 2.4.13) | — |
 
 ---
 
@@ -47,6 +47,12 @@
 | N4 | `meaningful-sequence.check.js` | 22–26 | **Medium** | Hidden element filter only excluded `display:none` and `visibility:hidden` — children with `opacity:0` or `visibility:collapse` were counted as visible and flagged as reordered | Added `cs.opacity !== '0'` and `cs.visibility !== 'collapse'` checks |
 | N5 | `character-key-shortcuts.check.js` | 41–42 | **Medium** | Modifier guard check (`/ctrlKey|altKey|metaKey/.test(handler)`) matched the modifier string anywhere in the handler — an unrelated `if (event.ctrlKey)` branch elsewhere would prevent a real violation from being flagged | Replaced with proximity check: modifier and key check must be within 120 characters of each other |
 | N6 | `status-messages.check.js` | 37–39 | **Medium** | `hasNotificationArea` included `[role="status"], [role="log"]` — those ARE live regions and were already counted in `liveRegions`; including them in "needs live regions" logic conflated two different concepts | Removed live-region roles from `hasNotificationArea`; replaced with class-based patterns for non-ARIA notification elements |
+| N7 | `on-focus.check.js` | 11–17 | **Low** | SELECTOR array used leading commas on each element after the first joined with `.join('')` — fragile and misleading | Replaced with clean `[...].join(', ')` without leading commas |
+| N8 | `on-input.check.js` | 16–22 | **Low** | Same leading-comma pattern as N7; `:not()` chains split across array lines | Flattened `input` selector to one string; clean `.join(', ')` |
+| N9 | `focus-visible.check.js` | 73–74 | **Low** | `outlineChanged` returned `true` even when `outlineColor` changed to `transparent` — transparent outline counted as a visible change | Added `outlineColor !== 'rgba(0,0,0,0)'` and `!== 'transparent'` guards in `outlineActuallyVisible` |
+| N10 | `accessible-auth.check.js` | 27–31 | **Medium** | `[data-sitekey]` alone matched non-CAPTCHA widgets → false positives | Dual-signal: now requires `iframe[src*="recaptcha"]` OR captcha-specific class alongside `data-sitekey` |
+| N11 | `error-suggestion.check.js` | 27–31 | **Medium** | Class-based error selectors matched decorative or documentation elements outside forms → false positives | Scoped all class selectors to `form` descendants (`form .error-message`, etc.) → confidence 🔴 Low → 🟡 Medium |
+| N13 | `server.js` | 49–54 | **Medium** | `Access-Control-Allow-Origin: *` set for requests without `Origin` header (server-to-server requests) — partially negated the allowlist | Removed wildcard fallback; header only set when `origin` is in the allowlist |
 
 ### ka11y-python
 
