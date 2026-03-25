@@ -1,7 +1,7 @@
 """
 ka11y/accessibility/rendered/evaluators/focus_not_obscured_enhanced.py
 ========================================================================
-WCAG 2.4.12 — Focus Not Obscured (Enhanced) (Level AA)
+WCAG 2.4.12 — Focus Not Obscured (Enhanced) (Level AAA)
 
 Goal: When a UI component receives keyboard focus, it is not obscured *at all*
 by author-created content.

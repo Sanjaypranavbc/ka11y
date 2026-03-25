@@ -10,32 +10,43 @@ Auditors receive a `List[Dict]` from a crawler and return a `List[Dict]` with st
 ## AltTextAccessibilityAuditor
 
 **File**: `ka11y/accessibility/rules/non_text/alttext.py`
-**WCAG**: 1.1.1 Non-text Content (Level A)
+**WCAG**: 1.1.1 Non-text Content (Level A), 4.1.2 Name, Role, Value (Level A), 1.4.5 Images of Text (Level AA), 1.4.11 Non-text Contrast (Level AA)
 
 ### Check logic per image classification
 
 | Classification | Rule applied |
 |----------------|-------------|
 | `decorative/*` | `alt=""` (empty string) required — any other value is a violation |
-| `informative/*` | `alt` must be non-empty and semantically accurate. If OCR detected text in the image, cosine similarity between alt text and OCR words must exceed a threshold. |
-| `functional/logos` | `alt` must include "logo" or "home" |
-| `functional/icons` | `alt` must describe the action, or include "icon". Social brand icons must include the brand name + "icon". |
-| `functional/buttons` | `alt` must be an action phrase (uses a 100+ word action vocabulary: submit, close, play, delete, etc.) |
-| `functional/images` | `alt` must be non-empty |
-| `complex/charts` | `alt` + `aria-describedby` (long description) must both be present |
+| `informative/*` | `1.1.1`: `alt` must be non-empty and semantically accurate. If OCR detected text in the image, one or more meaningful OCR words should be reflected in the alt text. `1.4.5`: fails when embedded text is detected in a non-exempt image. |
+| `functional/logos` | `1.1.1`: `alt` must identify the logo. `4.1.2`: accessible name must include "logo" or "home". `1.4.5`: exempt as a logotype. |
+| `functional/icons` | `1.1.1`: `alt` must describe the action. `4.1.2`: social brand icons must include the brand name + "icon". `1.4.11`: OCR-derived contrast is checked when data is available. |
+| `functional/buttons` | `1.1.1`: `alt` must describe the action. `4.1.2`: accessible name must be meaningful. `1.4.11`: OCR-derived contrast is checked when data is available. |
+| `functional/images` | `1.1.1`: `alt` must be non-empty. `4.1.2`: applies when the image acts as an interactive control. `1.4.5`: fails when embedded text is detected. |
+| `complex/charts` | `1.1.1`: meaningful alt text is still required. `1.4.5`: treated as an essential-presentation exception instead of a violation. |
 
 ### OCR integration
 
-When `run_ocr=true`, EasyOCR results are passed alongside image metadata. For informative images, the auditor computes a cosine similarity score between the alt text and the OCR-detected text. If the score is below the threshold, the alt text is considered inaccurate.
+When `run_ocr=true`, EasyOCR results are passed alongside image metadata. The alt-text auditor uses OCR output to:
+
+- verify whether visible image text is reflected in `alt` for `1.1.1`
+- detect embedded text for `1.4.5`
+- decide whether image buttons/icons can be checked automatically for `1.4.11`
 
 ### Output record keys
 
 | Key | Type | Description |
 |-----|------|-------------|
 | `wcag_1_1_1_status` | `"FAILED"` \| `"PASSED"` | Audit result |
-| `wcag_1_1_1_violation` | str | Human-readable reason for failure |
-| `html_snippet` | str | Element HTML |
+| `wcag_4_1_2_status` | `"FAILED"` \| `"PASSED"` \| `"N/A"` | Functional-image accessible-name result |
+| `wcag_1_4_5_status` | `"FAILED"` \| `"PASSED"` \| `"N/A"` | Images-of-text result |
+| `wcag_1_4_11_status` | `"FAILED"` \| `"PASSED"` \| `"INCOMPLETE"` \| `"N/A"` | Non-text contrast result |
+| `wcag_1_1_1_reason` | str | Human-readable explanation |
+| `wcag_4_1_2_reason` | str | Human-readable explanation |
+| `wcag_1_4_5_reason` | str | Human-readable explanation |
+| `wcag_1_4_11_reason` | str | Human-readable explanation |
 | `src` | str | Image source URL |
+| `has_ocr_text` | bool | Whether OCR found visible text in the image |
+| `detected_text` | str | OCR text snippet(s) joined for debugging/reporting |
 
 ---
 
@@ -169,7 +180,7 @@ Every interactive element must have a rendered size of at least **24 × 24 CSS p
 ## ContrastAnalyser
 
 **File**: `ka11y/accessibility/rules/non_text/contrast_analyser.py`
-**WCAG**: 1.4.3 Contrast (Minimum), 1.4.11 Non-text Contrast
+**WCAG**: 1.4.3 Contrast (Minimum), 1.4.6 Contrast (Enhanced), 1.4.11 Non-text Contrast
 
 The contrast analyser is a utility used by the OCR pipeline, not a standalone auditor. Given an image and a bounding box from EasyOCR, it:
 
@@ -178,4 +189,8 @@ The contrast analyser is a utility used by the OCR pipeline, not a standalone au
 3. Calculates the contrast ratio
 4. Returns pass/fail for AA_normal (4.5:1), AA_large (3:1), AAA_normal (7:1), AAA_large (4.5:1)
 
-Results are embedded in OCR detection records and surfaced in the text-in-image contrast findings.
+Results are embedded in OCR detection records and surfaced in:
+
+- `1.4.3` AA text contrast findings
+- `1.4.6` AAA text contrast findings
+- `1.4.11` image-based button/icon checks when OCR contrast data is available

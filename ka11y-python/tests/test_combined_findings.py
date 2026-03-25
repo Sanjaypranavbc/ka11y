@@ -11,6 +11,7 @@ from ka11y.api.v1.combined import (
     _name_role_value_to_findings,
     _non_text_contrast_to_findings,
 )
+from ka11y.api.v1.combined.models import CombinedRequest
 from ka11y.api.v1.combined.stages import _allowed_levels
 
 PAGE_URL = "https://example.com"
@@ -164,3 +165,9 @@ def test_1_4_6_is_excluded_at_aa_and_kept_at_aaa():
 
     assert [f["wcag_sc"] for f in aa_filtered] == ["1.4.3"]
     assert [f["wcag_sc"] for f in aaa_filtered] == ["1.4.3", "1.4.6"]
+
+
+def test_combined_request_defaults_to_aaa():
+    request = CombinedRequest(url="https://example.com")
+
+    assert request.wcag_level == "AAA"

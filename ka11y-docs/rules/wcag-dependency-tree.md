@@ -37,15 +37,17 @@ Legend:
 
 ```
 1.1.1  Non-text Content                    (A)  [✓] py-static
-├── 1.4.5  Images of Text                 (AA)  [✓] axe-core
+├── 1.4.5  Images of Text                 (AA)  [✓] py-static
 │   └── 1.4.3  Contrast (Minimum)         (AA)  [✓] axe-core + py-static (OCR)
-│       └── 1.4.11  Non-text Contrast     (AA)  [✓] axe-core
+│       ├── 1.4.6  Contrast (Enhanced)    (AAA) [✓] axe-core + py-static (OCR)
+│       └── 1.4.11  Non-text Contrast     (AA)  [✓] py-static (image buttons/icons)
 └── 1.3.3  Sensory Characteristics         (A)  [✓] axe-core
 ```
 
 **Why**: You can only audit contrast of text that exists. Embedded text in images
 (`1.4.5`) requires OCR to surface (`1.1.1` check), then contrast (`1.4.3`) applies.
-`1.4.11` extends contrast to UI components, so `1.4.3` is its prerequisite.
+`1.4.6` is the stricter AAA version of the same OCR-driven text contrast pipeline.
+`1.4.11` extends contrast to image-based UI components, so `1.4.3` is its prerequisite.
 
 ---
 
@@ -180,8 +182,9 @@ messages identify the field (`3.3.1`). Error suggestion (`3.3.3`) and prevention
 | 1.3.1 | 4.1.2 | 1.3.2, 1.3.3, 2.4.6 |
 | 1.3.2 | 1.3.1 | 2.4.6 |
 | 1.1.1 | — | 1.4.5, 1.4.3, 1.3.3 |
-| 1.4.3 | 1.1.1, 1.4.5 | 1.4.11 |
+| 1.4.3 | 1.1.1, 1.4.5 | 1.4.6, 1.4.11 |
 | 1.4.5 | 1.1.1 | 1.4.3 |
+| 1.4.6 | 1.4.3 | — |
 | 2.1.1 | — | 2.1.2, 2.4.3 |
 | 2.4.3 | 2.1.1 | 2.4.7 |
 | 2.4.7 | 2.4.3 | 2.4.11, 2.4.12, 2.4.13 |

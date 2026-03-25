@@ -17,8 +17,8 @@ The combined endpoint is the **primary API**. It runs axe-core (Node) and all Py
   How many link-levels deep to crawl. `0` audits only the submitted URL. `1` follows internal links one level deep. Keep low (≤ 2) to avoid long runtimes.
 </ParamField>
 
-<ParamField body="wcag_level" type="string" default="AA">
-  Conformance target: `"A"` | `"AA"` | `"AAA"`. Controls which axe-core tags are used and filters Python findings by WCAG level.
+<ParamField body="wcag_level" type="string" default="AAA">
+  Conformance target: `"A"` | `"AA"` | `"AAA"`. Controls which axe-core tags are used and filters Python findings by WCAG level. Use `AAA` if you want `1.4.6 Contrast (Enhanced)` in the final finding arrays; lowering the level hides higher-level findings.
 </ParamField>
 
 <ParamField body="run_ocr" type="boolean" default="true">
@@ -79,7 +79,7 @@ curl -X POST http://localhost:8000/api/v1/combined/ \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com",
-    "wcag_level": "AA",
+    "wcag_level": "AAA",
     "max_depth": 0,
     "run_ocr": true,
     "run_image_audit": true,
@@ -102,7 +102,7 @@ import httpx
 
 resp = httpx.post("http://localhost:8000/api/v1/combined/", json={
     "url": "https://example.com",
-    "wcag_level": "AA",
+    "wcag_level": "AAA",
     "max_depth": 0,
 })
 job_id = resp.json()["job_id"]
@@ -166,7 +166,7 @@ Returns the full job record. Poll every 3 – 5 s until `status` is `"completed"
       "needs_review": 7,
       "passes": 45,
       "by_severity": { "critical": 2, "high": 8, "medium": 7, "low": 3 },
-      "by_level": { "A": { "violations": 14 }, "AA": { "violations": 6 } },
+      "by_level": { "A": { "violations": 14 }, "AA": { "violations": 6 }, "AAA": { "violations": 2 } },
       "by_wcag_sc": { "1.1.1": { "violations": 8 }, "4.1.2": { "violations": 5 } },
       "by_source": {
         "axe":    { "violations": 12, "needs_review": 7, "passes": 35 },

@@ -47,7 +47,7 @@ export const ReportFooter = ({ onDownload, onRescan, onBackHome }: ReportFooterP
             </p>
             <p className="text-xs text-muted-foreground">
               Version 2.1.0 • Report generated on {new Date().toLocaleDateString()} • 
-              Following WCAG 2.1 Level AA guidelines
+              Generated using the selected WCAG conformance profile
             </p>
           </div>
         </div>

@@ -46,7 +46,7 @@ export const ReportHeader = ({
               <span className="hidden sm:inline">•</span>
               <div className="flex items-center gap-2">
                 <span className="font-medium text-foreground">Standard:</span>
-                <span>WCAG 2.1 Level AA</span>
+                <span>Selected WCAG conformance level</span>
               </div>
             </div>
 

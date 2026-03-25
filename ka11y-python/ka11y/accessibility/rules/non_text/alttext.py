@@ -466,6 +466,13 @@ def _check_1_4_5(
     if classification == "decorative":
         return None, "N/A — decorative images are not evaluated for 1.4.5"
 
+    # Complex charts/diagrams use text as part of essential presentation.
+    if classification == "complex" or sub_type == "charts":
+        return (
+            True,
+            "PASS [1.4.5] Complex chart/diagram uses text as part of essential presentation",
+        )
+
     # Logo / logotype exception (WCAG Note: logotypes are considered essential)
     if is_logo or sub_type == "logos":
         return (
