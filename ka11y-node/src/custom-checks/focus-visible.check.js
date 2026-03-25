@@ -94,12 +94,15 @@ async function run(page) {
     if (!focused) continue;
 
     // ── Step 4: Determine if a visual change occurred ─────────────────────────
-    // N9 fix: also verify the focused outline is not transparent before counting it visible
+    // N9 fix: also verify the focused outline is not transparent before counting it visible.
+    // Covers: rgba(0,0,0,0), transparent keyword, inherit/initial (which resolve to no color).
+    const _outlineColorInvisible = /^(transparent|rgba?\(\s*0,\s*0,\s*0,\s*0\s*\)|inherit|initial)$/i.test(
+      (focused.outlineColor || '').trim()
+    );
     const outlineActuallyVisible =
       focused.outlineStyle !== 'none' &&
       focused.outlineWidth !== '0px' &&
-      focused.outlineColor !== 'rgba(0, 0, 0, 0)' &&
-      focused.outlineColor !== 'transparent';
+      !_outlineColorInvisible;
     const hasVisibleOutline = outlineActuallyVisible;
     const outlineChanged =
       (focused.outlineWidth  !== unfocused.outlineWidth  ||

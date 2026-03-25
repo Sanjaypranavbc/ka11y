@@ -3,21 +3,23 @@
 const SC = '1.3.2';
 const RULE_ID = 'custom-meaningful-sequence';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/meaningful-sequence';
-const MAX_CONTAINERS = 150;
+// MAX_CONTAINERS limits how many flex/grid containers are inspected (not total elements).
+const MAX_CONTAINERS = 500;
 
 async function run(page) {
   const violations = await page.evaluate((maxC) => {
     const results = [];
-    let count = 0;
+    let containerCount = 0;
 
     for (const el of document.querySelectorAll('*')) {
-      if (count++ >= maxC) break;
       const style = window.getComputedStyle(el);
       const display = style.display;
 
       const isFlex = display === 'flex' || display === 'inline-flex';
       const isGrid = display === 'grid' || display === 'inline-grid';
       if (!isFlex && !isGrid) continue;
+      // Only increment the container counter for actual flex/grid containers
+      if (containerCount++ >= maxC) break;
 
       const children = Array.from(el.children).filter(ch => {
         // Only consider visible children — exclude all common hiding patterns

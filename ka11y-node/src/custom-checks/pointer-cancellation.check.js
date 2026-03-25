@@ -12,14 +12,16 @@ async function run(page) {
     const results = [];
     const actionRe = new RegExp(actionPat, 'i');
 
-    // Bug fix: check for onpointerup too (not just onmouseup)
-    const SELECTOR = '[onmousedown], [onpointerdown]';
+    // Bug fix: also include onpointermove — some implementations define the action
+    // in the move phase and use pointerup for cancellation.
+    const SELECTOR = '[onmousedown], [onpointerdown], [onpointermove]';
     const elements = Array.from(document.querySelectorAll(SELECTOR));
 
     for (const el of elements) {
-      const mousedown   = el.getAttribute('onmousedown') || '';
-      const pointerdown = el.getAttribute('onpointerdown') || '';
-      const downHandler = (mousedown + ' ' + pointerdown).trim();
+      const mousedown    = el.getAttribute('onmousedown') || '';
+      const pointerdown  = el.getAttribute('onpointerdown') || '';
+      const pointermove  = el.getAttribute('onpointermove') || '';
+      const downHandler  = (mousedown + ' ' + pointerdown + ' ' + pointermove).trim();
 
       if (!downHandler) continue;
 

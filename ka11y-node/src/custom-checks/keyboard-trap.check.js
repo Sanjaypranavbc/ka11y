@@ -27,11 +27,12 @@ async function run(page) {
     const activeInfo = await page.evaluate(() => {
       const el = document.activeElement;
       if (!el || el === document.body || el === document.documentElement) return null;
-      // Bug fix: use position-stable key combining tag + position in DOM
-      // to avoid key collision between elements with same class/no id
+      // Bug fix: prefer stable identifiers (id, name, aria-label) over DOM position.
+      // Fall back to position+tag only when no stable attribute is available.
       const allEls = Array.from(document.querySelectorAll('*'));
       const pos = allEls.indexOf(el);
-      const key = `${pos}:${el.tagName}`;
+      const stable = el.id || el.getAttribute('name') || el.getAttribute('aria-label') || '';
+      const key = stable ? `${el.tagName}:${stable}` : `${pos}:${el.tagName}`;
       return { key, html: el.outerHTML.slice(0, 150), tagName: el.tagName.toLowerCase() };
     });
 
@@ -57,7 +58,8 @@ async function run(page) {
         if (!el || el === document.body) return null;
         const allEls = Array.from(document.querySelectorAll('*'));
         const pos = allEls.indexOf(el);
-        return `${pos}:${el.tagName}`;
+        const stable = el.id || el.getAttribute('name') || el.getAttribute('aria-label') || '';
+        return stable ? `${el.tagName}:${stable}` : `${pos}:${el.tagName}`;
       });
 
       if (afterEscape === activeInfo.key) {
@@ -71,11 +73,18 @@ async function run(page) {
 
   // FN fix: also test Shift+Tab (backward) navigation for traps.
   // A trap may only manifest when tabbing backward through the component.
+  // Puppeteer helper: 'Shift+Tab' is not a valid key name — use down/press/up.
+  const shiftTab = async () => {
+    await page.keyboard.down('Shift');
+    await page.keyboard.press('Tab');
+    await page.keyboard.up('Shift');
+  };
+
   if (!trapHtml) {
     const recentShiftKeys = [];
 
     for (let i = 0; i < MAX_TABS; i++) {
-      await page.keyboard.press('Shift+Tab');
+      await shiftTab();
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const activeInfo = await page.evaluate(() => {
@@ -83,7 +92,8 @@ async function run(page) {
         if (!el || el === document.body || el === document.documentElement) return null;
         const allEls = Array.from(document.querySelectorAll('*'));
         const pos = allEls.indexOf(el);
-        const key = `${pos}:${el.tagName}`;
+        const stable = el.id || el.getAttribute('name') || el.getAttribute('aria-label') || '';
+        const key = stable ? `${el.tagName}:${stable}` : `${pos}:${el.tagName}`;
         return { key, html: el.outerHTML.slice(0, 150), tagName: el.tagName.toLowerCase() };
       });
 
@@ -99,7 +109,7 @@ async function run(page) {
         // Verify: try Escape then Shift+Tab
         await page.keyboard.press('Escape');
         await new Promise(r => setTimeout(r, SETTLE_MS));
-        await page.keyboard.press('Shift+Tab');
+        await shiftTab();
         await new Promise(r => setTimeout(r, SETTLE_MS));
 
         const afterEscape = await page.evaluate(() => {
@@ -107,7 +117,8 @@ async function run(page) {
           if (!el || el === document.body) return null;
           const allEls = Array.from(document.querySelectorAll('*'));
           const pos = allEls.indexOf(el);
-          return `${pos}:${el.tagName}`;
+          const stable = el.id || el.getAttribute('name') || el.getAttribute('aria-label') || '';
+          return stable ? `${el.tagName}:${stable}` : `${pos}:${el.tagName}`;
         });
 
         if (afterEscape === activeInfo.key) {
