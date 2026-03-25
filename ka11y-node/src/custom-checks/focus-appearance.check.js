@@ -25,14 +25,33 @@ async function run(page) {
     '[tabindex]:not([tabindex="-1"])',
   ].join(', ');
 
-  // Collect elements to test
+  // Collect elements to test.
+  // Each item stores a stable_sel: either "#id" (if unique ID exists) or the
+  // nth-of-type selector, so re-queries in subsequent evaluate() calls target
+  // the SAME element even if sibling DOM mutations have occurred.
   const elements = await page.evaluate((sel, max) => {
     const seen = new Set();
     const items = [];
+    const idCounts = {};
+    // Count IDs to detect duplicates (which would make "#id" non-unique)
+    for (const el of document.querySelectorAll('[id]')) {
+      idCounts[el.id] = (idCounts[el.id] || 0) + 1;
+    }
     for (const el of document.querySelectorAll(sel)) {
       if (seen.has(el)) continue;
       seen.add(el);
-      items.push({ idx: items.length, tag: el.tagName.toLowerCase(), id: el.id || null, html: el.outerHTML.slice(0, 150) });
+      // Build a stable selector: prefer unique id, fallback to global DOM index
+      let stableSel = null;
+      if (el.id && idCounts[el.id] === 1) {
+        stableSel = `#${CSS.escape(el.id)}`;
+      }
+      items.push({
+        idx:       items.length,
+        stableSel,
+        tag:       el.tagName.toLowerCase(),
+        id:        el.id || null,
+        html:      el.outerHTML.slice(0, 150),
+      });
       if (items.length >= max) break;
     }
     return items;
@@ -61,11 +80,24 @@ async function run(page) {
     return lighter / darker;
   }
 
+  // Helper to resolve an element inside page.evaluate, preferring the stable
+  // selector (unique #id) over the potentially stale DOM-index fallback.
+  const RESOLVE_FN = `
+    function resolveEl(sel, idx, stableSel) {
+      if (stableSel) {
+        const e = document.querySelector(stableSel);
+        if (e) return e;
+      }
+      return Array.from(document.querySelectorAll(sel))[idx] || null;
+    }
+  `;
+
   for (const el of elements) {
     // Capture unfocused styles
-    const unfocused = await page.evaluate((sel, idx) => {
-      const allEls = Array.from(document.querySelectorAll(sel));
-      const e = allEls[idx];
+    const unfocused = await page.evaluate((sel, idx, stableSel, resolveFn) => {
+      // eslint-disable-next-line no-eval
+      eval(resolveFn);
+      const e = resolveEl(sel, idx, stableSel);
       if (!e) return null;
       e.blur();
       const cs = window.getComputedStyle(e);
@@ -78,7 +110,7 @@ async function run(page) {
         borderColor:     cs.borderColor,
         borderWidth:     cs.borderWidth,
       };
-    }, SELECTOR, el.idx);
+    }, SELECTOR, el.idx, el.stableSel, RESOLVE_FN);
 
     if (!unfocused) continue;
 
@@ -86,9 +118,9 @@ async function run(page) {
     await new Promise(r => setTimeout(r, SETTLE_MS));
 
     // Capture focused styles
-    const focused = await page.evaluate((sel, idx) => {
-      const allEls = Array.from(document.querySelectorAll(sel));
-      const e = allEls[idx];
+    const focused = await page.evaluate((sel, idx, stableSel, resolveFn) => {
+      eval(resolveFn);
+      const e = resolveEl(sel, idx, stableSel);
       if (!e) return null;
       e.focus({ preventScroll: true });
       const cs = window.getComputedStyle(e);
@@ -101,15 +133,15 @@ async function run(page) {
         borderColor:     cs.borderColor,
         borderWidth:     cs.borderWidth,
       };
-    }, SELECTOR, el.idx);
+    }, SELECTOR, el.idx, el.stableSel, RESOLVE_FN);
 
     // Settle then blur
     await new Promise(r => setTimeout(r, SETTLE_MS));
-    await page.evaluate((sel, idx) => {
-      const allEls = Array.from(document.querySelectorAll(sel));
-      const e = allEls[idx];
+    await page.evaluate((sel, idx, stableSel, resolveFn) => {
+      eval(resolveFn);
+      const e = resolveEl(sel, idx, stableSel);
       if (e) e.blur();
-    }, SELECTOR, el.idx);
+    }, SELECTOR, el.idx, el.stableSel, RESOLVE_FN);
 
     if (!focused) continue;
 

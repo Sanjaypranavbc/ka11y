@@ -26,14 +26,20 @@ async function run(page) {
 
     /**
      * Walk up the DOM to find the first ancestor that is NOT an <a>, collecting
-     * its computed text color and background — used to compare against the link.
+     * its computed text color, background, fontWeight, and fontStyle — used to
+     * compare against the link's own styles.
      */
     function getAncestorTextStyle(el) {
       let node = el.parentElement;
       while (node && node !== document.body) {
         if (node.tagName !== 'A') {
           const cs = window.getComputedStyle(node);
-          return { color: cs.color, background: cs.backgroundColor };
+          return {
+            color:       cs.color,
+            background:  cs.backgroundColor,
+            fontWeight:  cs.fontWeight,
+            fontStyle:   cs.fontStyle,
+          };
         }
         node = node.parentElement;
       }
@@ -84,13 +90,15 @@ async function run(page) {
         : ls.backgroundColor !== 'rgba(0, 0, 0, 0)' && ls.backgroundColor !== 'transparent';
 
       // 5. Font-weight substantially heavier than ancestor
+      // Use ancestor.fontWeight (from getAncestorTextStyle) — NOT link.parentElement
+      // which could itself be an <a> element and give incorrect comparison values.
       const linkFontWeight     = parseInt(ls.fontWeight, 10) || 400;
-      const ancestorFontWeight = ancestor ? (parseInt(window.getComputedStyle(link.parentElement).fontWeight, 10) || 400) : 400;
+      const ancestorFontWeight = ancestor ? (parseInt(ancestor.fontWeight, 10) || 400) : 400;
       const hasFontWeightCue   = linkFontWeight >= ancestorFontWeight + 200;
 
       // 6. Font style difference (e.g. italic vs normal)
       const hasFontStyleCue = ancestor
-        ? ls.fontStyle !== window.getComputedStyle(link.parentElement).fontStyle
+        ? ls.fontStyle !== ancestor.fontStyle
         : false;
 
       const hasNonColorCue = hasTextDecoration || hasBorderBottom || hasOutline ||

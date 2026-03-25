@@ -12,8 +12,8 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 
 | Level | Total SCs | Python | Node (axe+custom) | Combined | Combined % | Missing |
 |-------|-----------|--------|-------------------|----------|------------|---------|
-| A     | 31        | 6      | 24                | 25       | **81 %**   | 6       |
-| AA    | 26        | 10     | 15                | 21       | **81 %**   | 5       |
+| A     | 31        | 6      | 23                | 24       | **77 %**   | 7       |
+| AA    | 26        | 10     | 16                | 22       | **85 %**   | 4       |
 | AAA   | 30        | 1      | 0                 | 1        | **3 %**    | 29      |
 | **Total** | **87** | **17** | **39**        | **47**   | **54 %**   | **40** |
 
@@ -59,7 +59,7 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 4.1.1 | Parsing | ❌ | 🔶 axe `duplicate-id` + Node `custom-html-parsing` | 🔶 | 🟡 Medium | Duplicate-ID detection is reliable; broader parsing errors require HTML validator |
 | 4.1.2 | Name, Role, Value | ✅ AltTextAuditor (`_check_4_1_2`) | ✅ axe `aria-*`, `button-name` | ✅ | 🟢 High | Both; Python checks functional images; axe covers ARIA roles/states |
 
-**Level A covered: 25 / 31 (81 %) · includes 12 partial (🔶) · Missing: 6**
+**Level A covered: 24 / 31 (77 %) · includes 12 partial (🔶) · Missing: 7**
 
 ### Missing Level A
 1. **1.2.1** — Audio-only and Video-only (Prerecorded)
@@ -68,7 +68,7 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 4. **2.3.1** — Three Flashes or Below Threshold
 5. **2.5.1** — Pointer Gestures
 6. **2.5.4** — Motion Actuation
-7. ~~3.3.7~~ — *Removed from missing: 1.4.1 now covered by custom-use-of-color; 3.3.7 (Redundant Entry) remains uncovered*
+7. **3.3.7** — Redundant Entry *(requires multi-step form tracking)*
 
 ---
 
@@ -103,7 +103,7 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 3.3.8 | Accessible Authentication (Minimum) *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-accessible-auth` | 🔶 | 🟡 Medium | Fixed: expanded CAPTCHA alt detection, paste-blocking, cognitive tests; misses `addEventListener`-based paste blocking |
 | 4.1.3 | Status Messages | ❌ | 🔶 Node `custom-status-messages` | 🔶 | 🟡 Medium | Fixed: detects forms + search results + cart/counter + notification areas; live region presence verified |
 
-**Level AA covered: 21 / 26 (81 %) · includes 12 partial (🔶) · Missing: 5**
+**Level AA covered: 22 / 26 (85 %) · includes 11 partial (🔶) · Missing: 4**
 
 ### Missing Level AA
 1. **1.2.4** — Captions (Live)
@@ -163,7 +163,6 @@ for future Python auditors:
 
 | Priority | SC | Name | Approach |
 |----------|----|------|----------|
-| Medium | **2.4.13** | Focus Appearance | Measure CSS focus-ring area and contrast via Playwright (Python rendered evaluator) |
 | Low | **3.3.7** | Redundant Entry | Track form field names across multi-step flows; flag re-asked required fields |
 | Low | **3.2.3** | Consistent Navigation | Multi-page crawl: compare nav element order across pages |
 | Low | **3.2.4** | Consistent Identification | Multi-page crawl: compare component labels/names across pages |
@@ -184,7 +183,7 @@ for future Python auditors:
 | `LabelInNameAuditor` | 2.5.3 | Checks visible label text is substring of accessible name using NLP normalisation |
 | `PauseStopHideAuditor` | 2.2.2 | CSS keyframe animations (> 5 s / infinite), autoplay video, animated GIFs, carousels (Bootstrap/Swiper/Slick/Owl/Glide/Splide) — all missed by axe |
 | `TargetSizeAuditor` | 2.5.8 | Measures rendered bounding-box (getBoundingClientRect) of all interactive elements; detects inline-link and UA-controlled exceptions automatically |
-| `TextSpacingAuditor` (crawler) | 1.4.12 | Static detection of fixed-height containers with overflow:hidden that clip user-adjusted text spacing |
+| `TextSpacingAuditor` (crawler) | 1.4.12 | Static heuristic: flags fixed-height containers with `overflow:hidden` as WARNING/INFO (never FAILED); definitive test is the `TextSpacingEvaluator` below |
 | `ReflowEvaluator` (rendered) | 1.4.10 | Playwright viewport resize to 320 px; detects actual horizontal scroll and oversized elements |
 | `ResizeTextEvaluator` (rendered) | 1.4.4 | Playwright 200% text-size override; flags overflow, scroll and clipped text |
 | `TextSpacingEvaluator` (rendered) | 1.4.12 | Playwright CSS override (1.5× line-height, 0.12em letter-spacing, etc.); flags newly-clipped elements |
@@ -195,14 +194,14 @@ for future Python auditors:
 
 ### Node.js (`ka11y-node`) — axe-core + Custom Puppeteer Checks
 
-Covers **37 unique WCAG SCs** (23 Level A + 14 Level AA) through axe-core v4.9+ and 15 custom Puppeteer check modules.
+Covers **39 unique WCAG SCs** (23 Level A + 16 Level AA) through axe-core v4.9+ and 17 custom Puppeteer check modules.
 Results are merged in both response shapes:
 - grouped APIs (`/api/v1/analyze-accessibility`, `/api/v1/analyse-url`) return `fail / pass / incomplete` per rule
 - flat API (`/api/v1/analyse-url-flat`) now includes custom-check findings with `fail / pass / needs_review` status (custom `incomplete` is normalised to `needs_review`) and applies WCAG level filtering (`A/AA/AAA`).
 
-**Level A SCs (24):** 1.1.1, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2 *(+1.4.1 via custom-use-of-color)*
+**Level A SCs (23):** 1.1.1, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2
 
-**Level AA SCs (15):** 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.12 🔶, 2.4.5 🔶, 2.4.6, 2.4.7 🔶, 2.4.13 🔶, 2.5.7 🔶, 3.1.2, 3.2.6 🔶, 3.3.3 🔶, 3.3.4 🔶, 3.3.8 🔶, 4.1.3 🔶 *(+custom-focus-appearance for 2.4.13 upgrade)*
+**Level AA SCs (16):** 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.12 🔶, 2.4.5 🔶, 2.4.6, 2.4.7 🔶, 2.4.13 🔶, 2.5.7 🔶, 3.1.2, 3.2.6 🔶, 3.3.3 🔶, 3.3.4 🔶, 3.3.8 🔶, 4.1.3 🔶
 
 **axe-core config:** `wcag22a` and `wcag22aa` tags added to `runOnly` — activates WCAG 2.2 rules (`focus-appearance` → 2.4.13, `focus-visible` → 2.4.7, `target-size` → 2.5.8).
 
@@ -269,4 +268,4 @@ Results are merged in both response shapes:
 
 ---
 
-*Generated: 2026-03-17 · Updated: 2026-03-25 (+2 new Node checks: 1.4.1 custom-use-of-color, 2.4.13 custom-focus-appearance; bug fixes: keyboard-trap settle delay, meaningful-sequence visibility detection, character-key-shortcuts proximity modifier guard, status-messages hasNotificationArea, focus-visible CSS-transition race condition; multiple-ways + breadcrumb/toc detection; consistent-help + phone/email contact detection; Python stage_events missing-stage warnings) · WCAG 2.2 (W3C Recommendation 2023-10-05)*
+*Generated: 2026-03-17 · Updated: 2026-03-25 (+2 new Node checks: 1.4.1 custom-use-of-color, 2.4.13 custom-focus-appearance; bug fixes: keyboard-trap settle delay, meaningful-sequence visibility detection, character-key-shortcuts proximity modifier guard, status-messages hasNotificationArea, focus-visible CSS-transition race condition; multiple-ways + breadcrumb/toc detection; consistent-help + phone/email contact detection; Python stage_events missing-stage warnings; count corrections: Level A 24/31 77%, Level AA 22/26 85%, Node 39 SCs 23A+16AA, 2.4.13 removed from planned table, TextSpacingAuditor clarified as WARNING-only heuristic) · WCAG 2.2 (W3C Recommendation 2023-10-05)*

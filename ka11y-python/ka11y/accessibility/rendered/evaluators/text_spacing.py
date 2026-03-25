@@ -74,7 +74,7 @@ def evaluate(
     for el in modified.elements:
         if el.tag not in _TEXT_TAGS:
             continue
-        if not el.text or len(el.text.strip()) < 3:
+        if not el.text or not el.text.strip():
             continue
         if el.text_clipped and _selector_key(el) in baseline_keys:
             newly_clipped.append(el)

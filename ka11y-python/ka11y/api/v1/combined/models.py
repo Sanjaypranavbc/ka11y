@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class CombinedRequest(BaseModel):
     url: HttpUrl
-    max_depth: int = 0
+    # max_depth: 0 = single-page; capped at 5 to prevent exponential crawl DoS
+    max_depth: int = Field(default=0, ge=0, le=5)
     wcag_level: str = "AA"  # "A" | "AA" | "AAA"
     run_ocr: bool = True
     run_image_audit: bool = True

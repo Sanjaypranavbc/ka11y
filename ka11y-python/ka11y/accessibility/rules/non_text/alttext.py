@@ -719,7 +719,7 @@ class AltTextAccessibilityAuditor:
                     "wcag_1_4_11_status": (
                         "PASSED"
                         if wcag_1_4_11_pass is True
-                        else "FAILED" if wcag_1_4_11_pass is False else "INCOMPLETE"
+                        else "FAILED" if wcag_1_4_11_pass is False else "N/A"
                     ),
                     "overall_status": overall,
                     "wcag_1_1_1_reason": wcag_1_1_1_reason,

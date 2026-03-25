@@ -46,8 +46,11 @@ async function run(page) {
 
     if (isConsecutiveTrap) {
       // Verify it's a real trap: try Escape then Tab
+      // Settle after Escape to allow modal-close / focus-restore handlers to run
       await page.keyboard.press('Escape');
+      await new Promise(r => setTimeout(r, SETTLE_MS));
       await page.keyboard.press('Tab');
+      await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const afterEscape = await page.evaluate(() => {
         const el = document.activeElement;
