@@ -39,15 +39,17 @@ async function run(page) {
 
       // Match: event.key === 'x'  /  event.key == 'x'  /  event.code === 'KeyX'
       //        event.key.toLowerCase() === 'x'  /  e.key === 'X'
-      // N12 fix: only match letter keys (a-z, A-Z) in key/code checks; exclude digit keys (0-9).
+      //        event.key === '!'  /  event.key === '@'  (symbol shortcuts — same as PRINTABLE_CHAR_RE)
+      // N12 fix: letters + symbols only; exclude digit keys (0-9) per WCAG 2.1.4.
       // keyCode range 65-90 = A-Z only (digits are 48-57, excluded).
-      const hasSingleKey = /(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z]['"]|keyCode\s*===?\s*(?:6[5-9]|[7-8]\d|90)/.test(handler);
+      const KEY_RE = /(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z!-/:-@[\-`{-~]['"]|keyCode\s*===?\s*(?:6[5-9]|[7-8]\d|90)/;
+      const hasSingleKey = KEY_RE.test(handler);
 
       // Check that a modifier guard (Ctrl/Alt/Meta) is co-located with the key check.
       // Strategy: find the index of the first key match and the nearest modifier mention;
       // if they are within 120 chars of each other, the modifier plausibly guards the key.
       // This prevents false-negatives from handlers that check a modifier in an unrelated branch.
-      const keyIdx = handler.search(/(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z]['"]|keyCode\s*===?\s*(?:6[5-9]|[7-8]\d|90)/);
+      const keyIdx = handler.search(KEY_RE);
       const modIdx = handler.search(/ctrlKey|altKey|metaKey/);
       const hasModifierGuard = keyIdx >= 0 && modIdx >= 0 && Math.abs(keyIdx - modIdx) <= 120;
 

@@ -196,7 +196,7 @@ async function _runChecks(checkDefs, page) {
       }
       return r.value;
     })
-    .filter(Boolean);
+    .filter(r => r != null);
 }
 
 async function runStaticChecks(page) {

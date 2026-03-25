@@ -75,7 +75,7 @@ async function run(page) {
 
   const { liveRegionCount, formCount, hasAlerts, hasPolite, needsLiveRegions, dynamicContexts } = data;
 
-  // Page has dynamic contexts but no live regions at all
+  // Page has dynamic contexts but no live regions at all → clear fail
   if (needsLiveRegions && liveRegionCount === 0) {
     return {
       successCriteriaId: SC,
@@ -90,6 +90,15 @@ async function run(page) {
     };
   }
 
+  // Dynamic contexts exist AND live regions exist → needs_review (can't verify coverage statically)
+  if (needsLiveRegions && liveRegionCount > 0) {
+    return {
+      successCriteriaId: SC,
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}) alongside dynamic contexts (${dynamicContexts.join(', ')}). Verify live regions are correctly wired to each status update.`, helpUrl: HELP_URL }],
+    };
+  }
+
+  // Live regions present, no unprotected dynamic contexts → pass
   if (liveRegionCount > 0) {
     return {
       successCriteriaId: SC,

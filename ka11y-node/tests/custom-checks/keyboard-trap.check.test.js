@@ -17,12 +17,10 @@ const { run } = require('../../src/custom-checks/keyboard-trap.check');
  *      b. page.evaluate() → activeInfo
  *      c. [if trap detected] press('Escape'), evaluate(), press('Tab'), evaluate()
  *   3. For each Shift+Tab iteration (FN fix):
- *      a. page.keyboard.press('Shift+Tab')
- *      b. page.evaluate() → activeInfo
- *      c. [if trap detected] press('Escape'), evaluate(), press('Shift+Tab'), evaluate()
+ *      The implementation uses keyboard.down('Shift') + press('Tab') + keyboard.up('Shift').
+ *      Phase transitions to 'shift' when keyboard.down('Shift') is called.
  */
 function makePage({ tabElements = [], shiftTabElements = [null] } = {}) {
-  let pressCount = 0;
   let evaluateCount = 0;
 
   // We use a stateful evaluate mock that tracks call sequences.
@@ -53,13 +51,13 @@ function makePage({ tabElements = [], shiftTabElements = [null] } = {}) {
       return Promise.resolve(val);
     }),
     keyboard: {
-      press: jest.fn().mockImplementation((key) => {
-        pressCount++;
-        if (key === 'Shift+Tab' && phase !== 'shift') {
-          phase = 'shift';
-        }
+      press: jest.fn().mockResolvedValue(undefined),
+      // down('Shift') signals start of the Shift+Tab sequence — transition to shift phase
+      down: jest.fn().mockImplementation((key) => {
+        if (key === 'Shift' && phase !== 'shift') phase = 'shift';
         return Promise.resolve();
       }),
+      up: jest.fn().mockResolvedValue(undefined),
     },
   };
 
@@ -91,12 +89,14 @@ describe('keyboard-trap.check (WCAG 2.1.2)', () => {
 
   // FN fix: Shift+Tab backward trap detection
   describe('FN fix: Shift+Tab backward trap detection', () => {
-    test('FN fix: Shift+Tab loop is present in source', () => {
+    test('FN fix: Shift+Tab loop is present in source (via keyboard.down/up)', () => {
       const src = require('fs').readFileSync(
         require('path').resolve(__dirname, '../../src/custom-checks/keyboard-trap.check.js'),
         'utf8'
       );
-      expect(src).toMatch(/Shift\+Tab/);
+      // Implementation uses down('Shift') + press('Tab') + up('Shift') pattern
+      expect(src).toMatch(/keyboard\.down/);
+      expect(src).toMatch(/'Shift'/);
     });
 
     test('Escape key allows exit from component — no trap detected', async () => {

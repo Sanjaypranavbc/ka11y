@@ -5,7 +5,7 @@ const RULE_ID = 'custom-use-of-color';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/use-of-color';
 
 // Maximum links to sample (performance guard)
-const MAX_LINKS = 80;
+const MAX_LINKS = 150;
 
 async function run(page) {
   const data = await page.evaluate((maxLinks) => {

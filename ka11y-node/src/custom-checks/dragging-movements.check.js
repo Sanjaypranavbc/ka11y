@@ -45,15 +45,20 @@ async function run(page) {
     }
 
     // Bug fix: library detection — only flag if actual draggable markers are present
+    // Dedup fix: use a Set to prevent the same element being counted multiple times
+    // when it matches more than one library marker selector.
+    const _libSeen = new Set();
     const libraryDraggables = libraryMarkers
       .flatMap(sel => Array.from(document.querySelectorAll(sel)))
       .filter(el => {
+        if (_libSeen.has(el)) return false;
         // Check if it's actually meant to be dragged (not just a container)
         if (el.getAttribute('draggable') === 'false') return false;
         // FP fix: for react-beautiful-dnd, skip elements with empty data-rbd-draggable-id
         // (empty value indicates a container/droppable, not an actual draggable item)
         const rbdId = el.getAttribute('data-rbd-draggable-id');
         if (rbdId !== null && rbdId.trim() === '') return false;
+        _libSeen.add(el);
         return true;
       });
     const hasLibraryDnd = libraryDraggables.length > 0;

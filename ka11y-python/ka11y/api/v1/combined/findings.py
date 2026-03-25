@@ -451,13 +451,15 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
         html = r.get("html_snippet", "")
-        tag = r.get("tag", "INPUT")
-        eid = r.get("element_id") or r.get("element_name")
+        # form_auditor.py uses "field_tag" / "field_id" / "field_name" keys
+        tag = r.get("field_tag") or r.get("tag", "INPUT")
+        eid = r.get("field_id") or r.get("element_id") or r.get("field_name") or r.get("element_name")
         for sc, status_key in [
             ("3.3.1", "wcag_3_3_1_status"),
             ("3.3.2", "wcag_3_3_2_status"),
         ]:
-            violation_key = status_key.replace("_status", "_violation")
+            # form_auditor.py stores plural "wcag_3_3_1_violations" / "wcag_3_3_2_violations"
+            violation_key = status_key.replace("_status", "_violations")
             status_raw = r.get(status_key, "")
             rule_id = f"python_{sc.replace('.', '_')}"
             if status_raw == "FAILED":

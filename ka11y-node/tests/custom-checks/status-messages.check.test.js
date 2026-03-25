@@ -7,8 +7,9 @@ function makePage(data) {
 }
 
 describe('status-messages.check (WCAG 4.1.3)', () => {
-  test('passes when live regions exist', async () => {
-    const page = makePage({ liveRegionCount: 2, formCount: 1, hasAlerts: true, hasPolite: true });
+  test('passes when live regions exist and no unprotected dynamic contexts', async () => {
+    // needsLiveRegions is falsy → all dynamic contexts are covered by live regions
+    const page = makePage({ liveRegionCount: 2, formCount: 1, hasAlerts: true, hasPolite: true, needsLiveRegions: false, dynamicContexts: [] });
     const result = await run(page);
     expect(result.successCriteriaId).toBe('4.1.3');
     expect(result.rules[0].status).toBe('pass');
@@ -52,20 +53,35 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
 
   // FP fix: notification elements already inside live regions should not trigger "needs" message
   describe('FP fix: notification elements inside existing live regions', () => {
-    test('notification area with live regions present should PASS (not report as needing live regions)', async () => {
-      // When liveRegionCount > 0, the check passes regardless of needsLiveRegions flag.
-      // This covers the case where notification elements are inside existing live regions.
+    test('notification area INSIDE a live region → needsLiveRegions false → PASS', async () => {
+      // When the source code's ancestor walk finds a live region ancestor, it sets
+      // hasNotificationArea=false, so needsLiveRegions is false even though live regions exist.
       const page = makePage({
         liveRegionCount: 1,
         formCount: 0,
         hasAlerts: false,
         hasPolite: true,
-        needsLiveRegions: true,   // notification area detected...
+        needsLiveRegions: false,  // notification area IS inside a live region → not a problem
+        dynamicContexts: [],
+      });
+      const result = await run(page);
+      expect(result.rules[0].status).toBe('pass');
+      expect(result.rules[0].reason).toContain('live region');
+    });
+
+    test('dynamic contexts present AND live regions exist → INCOMPLETE (needs manual review)', async () => {
+      // needsLiveRegions: true means at least one dynamic context lacks a live region ancestor.
+      // Even though live regions exist, we cannot verify they cover every context statically.
+      const page = makePage({
+        liveRegionCount: 1,
+        formCount: 0,
+        hasAlerts: false,
+        hasPolite: true,
+        needsLiveRegions: true,
         dynamicContexts: ['notification area'],
       });
       const result = await run(page);
-      // liveRegionCount > 0 → should pass, not fail
-      expect(result.rules[0].status).toBe('pass');
+      expect(result.rules[0].status).toBe('incomplete');
       expect(result.rules[0].reason).toContain('live region');
     });
 
