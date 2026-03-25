@@ -196,12 +196,16 @@ class OCRPreprocessing:
                 img = cv2.imread(image_path)
 
                 for bbox, text, conf in detections:
+                    is_bold = False
                     clean_bbox = [(int(p[0]), int(p[1])) for p in bbox]
 
+                    # Estimate rendered font height from bbox (px ≈ pt at 96 dpi screen captures).
+                    # Use the vertical span of the bounding box; floor at 8 px to avoid div-by-zero.
+                    bbox_height = abs(clean_bbox[2][1] - clean_bbox[0][1])
+                    font_size_px = max(bbox_height, 8)
+
                     try:
-                        contrast_info = contrast_analyser.analyze_text_region(
-                            img, clean_bbox
-                        )
+                        contrast_info = contrast_analyser.analyze_text_region(img, clean_bbox, font_size_px=font_size_px)
                     except Exception as e:
                         logger.warning(f"Contrast analysis failed: {e}")
                         contrast_info = None
@@ -219,10 +223,6 @@ class OCRPreprocessing:
                                 fg_color = extracted["foreground"]
                                 bg_colors = extracted["background_palette"]
 
-                                # Dominant background = cluster with highest pixel %.
-                                # All violation decisions are made from this single cluster
-                                # so that the ratio shown in the UI and the hex in the
-                                # violation badge always refer to the same color pair.
                                 dominant_bg = max(bg_colors, key=lambda c: c["percent"])
 
                                 fg_lum = fg_color["luminance"]
@@ -234,9 +234,7 @@ class OCRPreprocessing:
                                     l1 = max(fg_lum, bg_lum)
                                     l2 = min(fg_lum, bg_lum)
                                     ratio = (l1 + 0.05) / (l2 + 0.05)
-                                    compliance = (
-                                        contrast_analyser.check_wcag_compliance(ratio)
-                                    )
+                                    compliance = contrast_analyser.check_wcag_compliance(ratio, font_size_px=font_size_px, is_bold=is_bold)
                                     contrast_checks.append(
                                         {
                                             "bg_color": bg,
@@ -245,18 +243,12 @@ class OCRPreprocessing:
                                         }
                                     )
 
-                                # Compute dominant ratio separately so ratio + hex
-                                # are always in sync — fixes the "5.23:1 Fails AA"
-                                # mismatch where ratio came from one cluster and hex
-                                # from another.
                                 dom_bg_lum = dominant_bg["luminance"]
                                 l1 = max(fg_lum, dom_bg_lum)
                                 l2 = min(fg_lum, dom_bg_lum)
                                 dominant_ratio = round((l1 + 0.05) / (l2 + 0.05), 2)
-                                dominant_compliance = (
-                                    contrast_analyser.check_wcag_compliance(
-                                        dominant_ratio
-                                    )
+                                dominant_compliance = contrast_analyser.check_wcag_compliance(
+                                    dominant_ratio, font_size_px=font_size_px, is_bold=is_bold
                                 )
 
                                 color_info = {
@@ -271,7 +263,7 @@ class OCRPreprocessing:
                                     },
                                 }
 
-                                if not dominant_compliance["AA_normal"]:
+                                if not dominant_compliance["AA_passes"]:
                                     violations.append(
                                         f"Fails AA Normal vs BG {dominant_bg['hex']}"
                                     )
@@ -283,23 +275,16 @@ class OCRPreprocessing:
                         except Exception as cp_err:
                             logger.warning(f"Color picker failed for region: {cp_err}")
 
-                    if (
-                        not violations
-                        and contrast_info
-                        and not contrast_info.get("error")
-                    ):
-                        if "compliance" in contrast_info:
-                            compliance = contrast_info["compliance"]
-                            if not compliance.get("AA_normal", False):
-                                fg_rgb = contrast_info.get(
-                                    "foreground_color", (0, 0, 0)
-                                )
-                                bg_rgb = contrast_info.get(
-                                    "background_color", (255, 255, 255)
-                                )
-                                bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
-                                violations.append(f"Fails AA Normal vs BG {bg_hex}")
-
+                    if color_info is None and contrast_info and not contrast_info.get("error"):
+                        ratio_fb = contrast_info.get("contrast_ratio", 0)
+                        compliance_fb = contrast_analyser.check_wcag_compliance(
+                            ratio_fb, font_size_px=font_size_px, is_bold=is_bold
+                        )
+                        if not compliance_fb.get("AA_passes", False):
+                            fg_rgb = contrast_info.get("foreground_color", (0, 0, 0))
+                            bg_rgb = contrast_info.get("background_color", (255, 255, 255))
+                            bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
+                            violations.append(f"Fails AA Normal vs BG {bg_hex}")
                     if violations:
                         result.contrast_violations_count += 1
 
@@ -387,10 +372,6 @@ class TextClassification:
         # Create output directory structure
         self._create_directories()
 
-        # Initialize EasyOCR Reader
-        logger.info("Initializing EasyOCR Reader (loading models)...")
-        self.reader = OCRReader(source_directory)
-        logger.info("EasyOCR Reader initialized")
 
     def _create_directories(self):
         """Create necessary output directories"""
@@ -413,6 +394,17 @@ class TextClassification:
 
     def save_reports(self):
         """Save JSON, CSV and Contrast Markdown reports"""
+        total_detections = sum(len(r.detections) for r in self.results)
+        detections_with_color = sum(
+            1 for r in self.results
+            for d in r.detections
+            if d.color_info
+        )
+        logger.info(
+            f"save_reports: {len(self.results)} results | "
+            f"{total_detections} detections | "
+            f"{detections_with_color} with color_info"
+        )
 
         # JSON Report (Full Report)
         json_file = os.path.join(self.text_detected_dir, "text_detection_report.json")
@@ -503,10 +495,10 @@ class TextClassification:
                                 ratio = check["ratio"]
                                 comp = check["compliance"]
 
-                                aa = "✅" if comp["AA_normal"] else "❌"
-                                aa_lg = "✅" if comp["AA_large"] else "❌"
-                                aaa = "✅" if comp["AAA_normal"] else "❌"
-                                aaa_lg = "✅" if comp["AAA_large"] else "❌"
+                                aa = "✅" if comp.get("AA_passes") else "❌"
+                                aa_lg = "✅" if comp.get("AA_passes") else "❌"  # no separate large key anymore
+                                aaa = "✅" if comp.get("AAA_passes") else "❌"
+                                aaa_lg = "✅" if comp.get("AAA_passes") else "❌"
 
                                 f.write(
                                     f"| {bg['hex']} | {ratio}:1 | {aa} | {aa_lg} | {aaa} | {aaa_lg} |\n"
@@ -553,10 +545,10 @@ class TextClassification:
                                     fg,
                                     bg,
                                     ratio,
-                                    comp["AA_normal"],
-                                    comp["AA_large"],
-                                    comp["AAA_normal"],
-                                    comp["AAA_large"],
+                                    comp.get("AA_passes"),
+                                    comp.get("AA_passes"),
+                                    comp.get("AAA_passes"),
+                                    comp.get("AAA_passes"),
                                 ]
                             )
 
@@ -590,12 +582,10 @@ def main():
     if len(sys.argv) > 1:
         source_directory = sys.argv[1]
     else:
-        # Default fallback logic
         source_directory = "crawled_images"
         if os.path.exists(source_directory):
             crawl_dirs = [
-                d
-                for d in os.listdir(source_directory)
+                d for d in os.listdir(source_directory)
                 if os.path.isdir(os.path.join(source_directory, d))
             ]
             if crawl_dirs:
@@ -611,7 +601,9 @@ def main():
 
     detector = OCRPreprocessing(source_directory)
     detector.scan_directory()
+
     save = TextClassification(source_directory)
+    save.results = detector.results  # ← THIS is the fix
     save.save_reports()
 
 

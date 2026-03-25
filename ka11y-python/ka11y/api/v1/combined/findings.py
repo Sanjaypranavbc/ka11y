@@ -121,20 +121,35 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
             col = det.color_info or {}
 
             ratio: Optional[float] = None
-            aa_n = aa_l = aaa_n = aaa_l = None
+            aa_n = aaa_n = None
 
-            compliance = ci.get("compliance") or {}
-            if compliance:
-                ratio = compliance.get("contrast_ratio")
-                aa_n = compliance.get("AA_normal")
-                aa_l = compliance.get("AA_large")
-                aaa_n = compliance.get("AAA_normal")
-                aaa_l = compliance.get("AAA_large")
+            # Prefer dominant_contrast (same source as wcag_violations) so that
+            # the displayed ratio is always in sync with the Pass/Fail verdict.
+            # Fall back to the Otsu-segmentation compliance when color_info is absent.
+            dom = col.get("dominant_contrast") or {}
+            dom_compliance = dom.get("compliance") or {}
+            if dom_compliance:
+                ratio = dom_compliance.get("contrast_ratio")
+                aa_n  = dom_compliance.get("AA_passes")
+                aa_l  = dom_compliance.get("AA_large")
+                aaa_n = dom_compliance.get("AAA_passes")
+                aaa_l = dom_compliance.get("AAA_large")
+            else:
+                compliance = ci.get("compliance") or {}
+                if compliance:
+                    ratio = compliance.get("contrast_ratio")
+                    aa_n  = compliance.get("AA_passes")
+                    aa_l  = compliance.get("AA_large")
+                    aaa_n = compliance.get("AAA_passes")
+                    aaa_l = compliance.get("AAA_large")
 
             fg = col.get("foreground") or {}
             bg_pal = col.get("background_palette") or []
             checks = col.get("contrast_checks") or []
-            dominant_bg: Dict[str, Any] = bg_pal[0] if bg_pal else {}
+            # Use dominant_bg from dominant_contrast when available so that
+            # the background hex shown is the one that triggered the violation.
+            dom_bg_obj = dom.get("bg_color") or {}
+            dominant_bg: Dict[str, Any] = dom_bg_obj if dom_bg_obj else (bg_pal[0] if bg_pal else {})
 
             table_rows.append(
                 {
@@ -147,10 +162,8 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
                     "background_hex": dominant_bg.get("hex"),
                     "background_lum": dominant_bg.get("luminance"),
                     "contrast_ratio": ratio,
-                    "AA_normal": aa_n,
-                    "AA_large": aa_l,
-                    "AAA_normal": aaa_n,
-                    "AAA_large": aaa_l,
+                    "AA_passes": aa_n,
+                    "AAA_passes": aaa_n,
                     "violations": list(det.wcag_violations or []),
                 }
             )
@@ -169,10 +182,8 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
                     "contrast_checks": checks,
                     "wcag_violations": list(det.wcag_violations or []),
                     "ratio": ratio,
-                    "AA_normal": aa_n,
-                    "AA_large": aa_l,
-                    "AAA_normal": aaa_n,
-                    "AAA_large": aaa_l,
+                    "AA_passes": aa_n,
+                    "AAA_passes": aaa_n
                 }
             )
 
@@ -271,20 +282,28 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             ci = det.contrast_info or {}
             col = det.color_info or {}
 
-            compliance = ci.get("compliance") or {}
-            aa_normal = compliance.get("AA_normal")
-            ratio = compliance.get("contrast_ratio")
+            # Use dominant_contrast for ratio/compliance — same source as wcag_violations.
+            dom = col.get("dominant_contrast") or {}
+            dom_compliance = dom.get("compliance") or {}
+            if dom_compliance:
+                aa_normal = dom_compliance.get("AA_passes")
+                ratio = dom_compliance.get("contrast_ratio")
+            else:
+                compliance = ci.get("compliance") or {}
+                aa_normal = compliance.get("AA_passes")
+                ratio = compliance.get("contrast_ratio")
 
             if aa_normal is None:
                 logger.warning(
-                    f"[combined] contrast_to_findings: no AA_normal for "
+                    f"[combined] contrast_to_findings: no AA_passes for "
                     f'"{det.text[:40]!r}" in {result.filename} — skipping'
                 )
                 continue
 
             fg = col.get("foreground") or {}
             bg_pal = col.get("background_palette") or []
-            dominant_bg = bg_pal[0] if bg_pal else {}
+            dom_bg_obj = dom.get("bg_color") or {}
+            dominant_bg = dom_bg_obj if dom_bg_obj else (bg_pal[0] if bg_pal else {})
 
             fg_hex = fg.get("hex") or ci.get("foreground_color") or "?"
             bg_hex = dominant_bg.get("hex") or ci.get("background_color") or "?"

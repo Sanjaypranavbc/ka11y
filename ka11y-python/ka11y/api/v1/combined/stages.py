@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # Maximum wall-clock seconds allowed for a single crawl stage.  A
 # slow/unresponsive target would otherwise hold a Playwright browser instance
 # indefinitely.  120 s is a generous budget; typical pages finish in < 30 s.
-_STAGE_TIMEOUT_SECONDS = 120
+_STAGE_TIMEOUT_SECONDS = 600
 
 import httpx
 

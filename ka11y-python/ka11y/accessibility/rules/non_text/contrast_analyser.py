@@ -118,15 +118,38 @@ def get_average_rgb(
 # -------------------------
 
 
-def check_wcag_compliance(ratio: float) -> Dict[str, Any]:
+def check_wcag_compliance(
+    ratio: float,
+    font_size_px: float = 16,
+    is_bold: bool = False,
+    is_ui_component: bool = False,
+) -> Dict[str, Any]:
+    """
+    WCAG 2.1 AA/AAA thresholds:
+      Large text  = ≥24px regular  OR  ≥18.5px bold
+      AA  normal  : 4.5:1
+      AA  large   : 3.0:1
+      AAA normal  : 7.0:1
+      AAA large   : 4.5:1
+    """
+    if is_ui_component:  # ← add early return
+        return {
+            "contrast_ratio": round(ratio, 2),
+            "AA_ui_component": ratio >= 3.0,
+            "is_ui_component": True,
+        }
+    is_large = (font_size_px >= 24) or (is_bold and font_size_px >= 18.5)
+
+    aa_threshold  = 3.0 if is_large else 4.5
+    aaa_threshold = 4.5 if is_large else 7.0
+
     return {
         "contrast_ratio": round(ratio, 2),
-        "AA_normal": ratio >= 4.5,
-        "AA_large": ratio >= 3.0,
-        "AAA_normal": ratio >= 7.0,
-        "AAA_large": ratio >= 4.5,
+        "AA_passes": ratio >= aa_threshold,
+        "AAA_passes": ratio >= aaa_threshold,
+        "is_large_text": is_large,
+        "aa_threshold_used": aa_threshold,
     }
-
 
 # -------------------------
 # MAIN ENTRY
@@ -134,7 +157,7 @@ def check_wcag_compliance(ratio: float) -> Dict[str, Any]:
 
 
 def analyze_text_region(
-    image: Union[str, np.ndarray], bbox: List[Tuple[int, int]]
+    image: Union[str, np.ndarray], bbox: List[Tuple[int, int]], font_size_px: float = 16, is_bold: bool = False
 ) -> Dict[str, Any]:
 
     try:
@@ -166,7 +189,7 @@ def analyze_text_region(
             return {"error": "Segmentation failed"}
 
         fg_rgb, bg_rgb = get_average_rgb(region, mask)
-        compliance = check_wcag_compliance(ratio)
+        compliance = check_wcag_compliance(ratio, font_size_px=font_size_px, is_bold=is_bold)
 
         return {
             "region": region,
