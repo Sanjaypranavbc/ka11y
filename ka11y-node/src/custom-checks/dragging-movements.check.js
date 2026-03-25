@@ -49,7 +49,12 @@ async function run(page) {
       .flatMap(sel => Array.from(document.querySelectorAll(sel)))
       .filter(el => {
         // Check if it's actually meant to be dragged (not just a container)
-        return el.getAttribute('draggable') !== 'false';
+        if (el.getAttribute('draggable') === 'false') return false;
+        // FP fix: for react-beautiful-dnd, skip elements with empty data-rbd-draggable-id
+        // (empty value indicates a container/droppable, not an actual draggable item)
+        const rbdId = el.getAttribute('data-rbd-draggable-id');
+        if (rbdId !== null && rbdId.trim() === '') return false;
+        return true;
       });
     const hasLibraryDnd = libraryDraggables.length > 0;
 

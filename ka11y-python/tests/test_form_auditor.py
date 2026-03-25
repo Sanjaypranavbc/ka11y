@@ -541,3 +541,88 @@ class TestFormAuditorEdgeCases:
         assert records[0]["form_index"] == 0
         assert records[1]["form_index"] == 1
         assert records[2]["form_index"] == 2
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Additional edge cases (per test spec)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestFormAuditorAdditionalEdgeCases:
+    @pytest.fixture()
+    def tmp_output(self, tmp_path):
+        return str(tmp_path)
+
+    def test_required_with_no_error_message_patterns(self, tmp_output):
+        """
+        Edge case: field has `required` attribute but no aria-describedby and
+        no error element — should produce a 3.3.1 violation.
+        """
+        f = make_field(
+            required=True,
+            aria_describedby=None,
+            error_element_id=None,
+        )
+        auditor = FormAccessibilityAuditor(output_dir=tmp_output)
+        records = auditor.generate_audit_report([f])
+        assert records[0]["wcag_3_3_1_status"] == "FAILED"
+        assert "aria-describedby" in records[0]["wcag_3_3_1_violations"]
+
+    def test_placeholder_only_label_detection(self, tmp_output):
+        """
+        Edge case: placeholder is the only label — no proper accessible label.
+        Should generate both 'no accessible label' and 'placeholder' violations.
+        """
+        f = make_field(
+            has_any_label=False,
+            placeholder="Enter your name",
+            label_text=None,
+            aria_label=None,
+        )
+        auditor = FormAccessibilityAuditor(output_dir=tmp_output)
+        records = auditor.generate_audit_report([f])
+        viols = records[0]["wcag_3_3_2_violations"].lower()
+        assert "no accessible label" in viols or "placeholder" in viols
+
+    def test_hidden_label_detection_via_has_any_label_false(self, tmp_output):
+        """
+        Edge case: form field where has_any_label=False (label may exist in
+        DOM but is hidden/invisible) — still triggers 3.3.2 violation.
+        """
+        f = make_field(
+            has_any_label=False,
+            label_text="Hidden label",  # label text exists but is_any_label=False
+            placeholder=None,
+        )
+        auditor = FormAccessibilityAuditor(output_dir=tmp_output)
+        records = auditor.generate_audit_report([f])
+        assert records[0]["wcag_3_3_2_status"] == "FAILED"
+
+    def test_aria_required_without_describedby_triggers_331(self, tmp_output):
+        """aria-required=true should be treated same as required=True for 3.3.1."""
+        f = make_field(
+            required=False,
+            aria_required="true",
+            aria_describedby=None,
+        )
+        auditor = FormAccessibilityAuditor(output_dir=tmp_output)
+        records = auditor.generate_audit_report([f])
+        assert records[0]["wcag_3_3_1_status"] == "FAILED"
+
+    def test_field_with_label_and_proper_error_has_no_violations(self, tmp_output):
+        """A fully-compliant field should pass both 3.3.1 and 3.3.2."""
+        f = make_field(
+            type="email",
+            has_any_label=True,
+            label_text="Email address",
+            required=True,
+            aria_describedby="err-email",
+            error_element_id="err-email",
+            error_has_role_alert=True,
+            autocomplete="email",
+        )
+        auditor = FormAccessibilityAuditor(output_dir=tmp_output)
+        records = auditor.generate_audit_report([f])
+        assert records[0]["overall_status"] == "PASSED"
+        assert records[0]["wcag_3_3_1_violations"] == ""
+        assert records[0]["wcag_3_3_2_violations"] == ""

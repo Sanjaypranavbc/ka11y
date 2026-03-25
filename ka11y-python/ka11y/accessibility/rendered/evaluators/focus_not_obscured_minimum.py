@@ -20,9 +20,15 @@ from ..models import FocusStep, RuleAuditRecord
 
 _RULE_KEY = "wcag_2_4_11"
 
-# Threshold for "fully obscured" per 2.4.11 (minimum — fully hidden)
-_FULLY_OBSCURED_THRESHOLD = 0.95
-_PARTIAL_THRESHOLD = 0.10
+# WCAG 2.4.11 — Focus Not Obscured (Minimum):
+# "Any focus indicator obscured = FAIL; we use 95% to allow 1-2px scroll bars"
+# Reference: https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum
+OBSCURATION_FAIL_THRESHOLD = 0.95   # >= this ratio → FAIL
+OBSCURATION_REVIEW_THRESHOLD = 0.10  # >= this ratio → NEEDS_REVIEW
+
+# Keep legacy private names as aliases so existing callers are not broken.
+_FULLY_OBSCURED_THRESHOLD = OBSCURATION_FAIL_THRESHOLD
+_PARTIAL_THRESHOLD = OBSCURATION_REVIEW_THRESHOLD
 
 
 def evaluate(focus_steps: List[FocusStep]) -> List[RuleAuditRecord]:

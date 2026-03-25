@@ -67,15 +67,33 @@ def _has_word_chars(text: str) -> bool:
     return bool(re.search(r"[^\W_]", text, re.UNICODE))
 
 
+def _strip_punctuation(text: str) -> str:
+    """Remove leading/trailing punctuation so word-boundary checks work correctly.
+
+    Without this, a visible label like "Go!" would have its word boundary fall
+    between "o" and "!" (both non-word characters), making ``\\bGo\\b`` fail to
+    match even though the text clearly contains the word "Go".
+    """
+    return re.sub(r"[^\w\s]", "", text).strip()
+
+
 def _label_in_name(visible: str, acc_name: str) -> bool:
     """Return True if *visible* appears as a whole word within *acc_name*.
 
     Uses a word-boundary regex so that visible="Go" does not match "Gorilla".
     Both inputs should already be normalised via _normalize().
+
+    Punctuation is stripped from *visible* before applying the word-boundary
+    check so that labels like "Go!" still match an accessible name of "Go to
+    the next page".
     """
     if not visible:
         return True
-    pattern = r"\b" + re.escape(visible) + r"\b"
+    stripped = _strip_punctuation(visible)
+    # Fall back to plain substring match if stripping removes everything.
+    if not stripped:
+        return visible in acc_name
+    pattern = r"\b" + re.escape(stripped) + r"\b"
     return bool(re.search(pattern, acc_name))
 
 

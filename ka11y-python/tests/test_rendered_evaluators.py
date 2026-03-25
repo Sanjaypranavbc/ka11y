@@ -181,6 +181,65 @@ class TestOrientation:
         records = ev_orientation.evaluate(portrait, landscape)
         assert any(r.status == "NEEDS_REVIEW" for r in records)
 
+    def _focusable_el(self, idx: int) -> ElementSnapshot:
+        return _el(
+            tag="a", text=f"Link {idx}", element_id=f"a{idx}",
+            focusable=True, visible=True,
+        )
+
+    def test_zero_interactive_portrait_triggers_needs_review(self):
+        """P10: portrait returns 0 interactive elements → NEEDS_REVIEW (no division)."""
+        portrait = _snap(
+            scenario="orientation_portrait", vw=390, vh=844, elements=[]
+        )
+        landscape_els = [self._focusable_el(i) for i in range(5)]
+        landscape = _snap(
+            scenario="orientation_landscape", vw=844, vh=390, elements=landscape_els
+        )
+        records = ev_orientation.evaluate(portrait, landscape)
+        assert any(r.status == "NEEDS_REVIEW" for r in records)
+
+    def test_zero_interactive_landscape_triggers_needs_review(self):
+        """P10: landscape returns 0 interactive elements → NEEDS_REVIEW (hamburger menu)."""
+        portrait_els = [self._focusable_el(i) for i in range(5)]
+        portrait = _snap(
+            scenario="orientation_portrait", vw=390, vh=844, elements=portrait_els
+        )
+        landscape = _snap(
+            scenario="orientation_landscape", vw=844, vh=390, elements=[]
+        )
+        records = ev_orientation.evaluate(portrait, landscape)
+        assert any(r.status == "NEEDS_REVIEW" for r in records)
+
+    def test_zero_interactive_both_orientations_no_ratio_crash(self):
+        """P10: both orientations have 0 interactive elements — must not crash with ZeroDivisionError.
+        When both counts are zero it is not a meaningful asymmetry, so no NEEDS_REVIEW for the ratio.
+        """
+        portrait = _snap(scenario="orientation_portrait", vw=390, vh=844, elements=[])
+        landscape = _snap(scenario="orientation_landscape", vw=844, vh=390, elements=[])
+        # Should not raise
+        records = ev_orientation.evaluate(portrait, landscape)
+        assert isinstance(records, list)
+        # No ratio-related NEEDS_REVIEW when both are zero (no asymmetry)
+        ratio_violations = [
+            r for r in records
+            if r.status == "NEEDS_REVIEW" and "interactive elements" in (r.violation or "")
+        ]
+        assert len(ratio_violations) == 0
+
+    def test_equal_interactive_counts_no_ratio_issue(self):
+        """Equal counts → ratio = 1.0 → no issue flagged for ratio check."""
+        els = [self._focusable_el(i) for i in range(4)]
+        portrait = _snap(scenario="orientation_portrait", vw=390, vh=844, elements=els)
+        landscape = _snap(scenario="orientation_landscape", vw=844, vh=390, elements=els)
+        records = ev_orientation.evaluate(portrait, landscape)
+        # Should pass (no ratio violation)
+        ratio_violations = [
+            r for r in records
+            if r.status == "NEEDS_REVIEW" and "Dramatic difference" in (r.violation or "")
+        ]
+        assert len(ratio_violations) == 0
+
 
 # ── WCAG 1.4.13 Content on Hover or Focus ─────────────────────────────────────
 
@@ -258,6 +317,35 @@ class TestFocusNotObscuredMinimum:
         # 50% overlap → needs_review for 2.4.11 (not a hard fail)
         statuses = {r.status for r in records}
         assert "FAILED" not in statuses or "NEEDS_REVIEW" in statuses
+
+    def test_94_percent_obscuration_is_needs_review_not_fail(self):
+        """P9 boundary: 94% < 95% threshold → NEEDS_REVIEW, not FAIL."""
+        records = ev_fnom.evaluate([self._step(0.94)])
+        statuses = {r.status for r in records}
+        assert "NEEDS_REVIEW" in statuses
+        assert "FAILED" not in statuses
+
+    def test_95_percent_obscuration_is_fail(self):
+        """P9 boundary: 95% >= threshold → FAIL."""
+        records = ev_fnom.evaluate([self._step(0.95)])
+        assert any(r.status == "FAILED" for r in records)
+
+    def test_96_percent_obscuration_is_fail(self):
+        """P9 boundary: 96% > threshold → FAIL."""
+        records = ev_fnom.evaluate([self._step(0.96)])
+        assert any(r.status == "FAILED" for r in records)
+
+    def test_9_percent_obscuration_passes_minimum(self):
+        """P9 boundary: 9% < 10% partial threshold → PASSED (not NEEDS_REVIEW)."""
+        records = ev_fnom.evaluate([self._step(0.09)])
+        statuses = {r.status for r in records}
+        assert "FAILED" not in statuses
+        assert "NEEDS_REVIEW" not in statuses
+
+    def test_10_percent_obscuration_is_needs_review(self):
+        """P9 boundary: 10% >= partial threshold → NEEDS_REVIEW."""
+        records = ev_fnom.evaluate([self._step(0.10)])
+        assert any(r.status == "NEEDS_REVIEW" for r in records)
 
 
 # ── WCAG 2.4.12 Focus Not Obscured (Enhanced) ────────────────────────────────

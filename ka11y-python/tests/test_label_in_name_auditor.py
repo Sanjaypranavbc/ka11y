@@ -12,6 +12,8 @@ from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
     LabelInNameAuditor,
     _normalize,
     _has_word_chars,
+    _label_in_name,
+    _strip_punctuation,
     _check_253,
 )
 
@@ -296,3 +298,98 @@ class TestLabelInNameSummarize:
         summary = LabelInNameAuditor.summarize(records)
         assert summary["pass_rate_pct"] == 100.0
         assert summary["failed"] == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P11: Punctuation stripping — _strip_punctuation and _label_in_name
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestStripPunctuation:
+    def test_trailing_exclamation_stripped(self):
+        assert _strip_punctuation("Go!") == "Go"
+
+    def test_leading_punctuation_stripped(self):
+        assert _strip_punctuation("!Go") == "Go"
+
+    def test_multiple_punctuation_stripped(self):
+        assert _strip_punctuation("Go!!!") == "Go"
+
+    def test_text_with_no_punctuation_unchanged(self):
+        assert _strip_punctuation("Submit") == "Submit"
+
+    def test_empty_string_stays_empty(self):
+        assert _strip_punctuation("") == ""
+
+    def test_punctuation_only_becomes_empty(self):
+        assert _strip_punctuation("!!!") == ""
+
+
+class TestLabelInNamePunctuation:
+    def test_label_ending_exclamation_matches_name(self):
+        """P11: 'Go!' should match accessible name 'Go to next page'."""
+        assert _label_in_name("go!", "go to next page") is True
+
+    def test_label_with_multiple_punctuation_matches(self):
+        assert _label_in_name("go!!!", "go to next page") is True
+
+    def test_plain_label_still_works(self):
+        assert _label_in_name("submit", "submit the form") is True
+
+    def test_non_matching_label_still_fails(self):
+        assert _label_in_name("read more!", "learn more about accessibility") is False
+
+    def test_empty_label_always_matches(self):
+        assert _label_in_name("", "anything") is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P11: _check_253 — punctuation-in-label integration tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestCheck253Punctuation:
+    def test_label_ending_exclamation_matches_accessible_name(self):
+        """P11: visible label 'Go!' must match accessible name 'Go to next page'."""
+        el = make_element(
+            visible_label="Go!",
+            accessible_name="Go to next page",
+        )
+        status, _ = _check_253(el)
+        assert status == "PASSED"
+
+    def test_label_with_multiple_punctuation_matches(self):
+        el = make_element(
+            visible_label="Submit!!",
+            accessible_name="Submit the registration form",
+        )
+        status, _ = _check_253(el)
+        assert status == "PASSED"
+
+    def test_label_submit_exclamation_matches_submit_form(self):
+        """'Submit!' should match accessible name 'Submit form'."""
+        el = make_element(
+            visible_label="Submit!",
+            accessible_name="Submit form",
+        )
+        status, _ = _check_253(el)
+        assert status == "PASSED"
+
+    def test_punctuation_does_not_cause_false_positive(self):
+        """'Buy!' should NOT match 'Purchase this item'."""
+        el = make_element(
+            visible_label="Buy!",
+            accessible_name="Purchase this item",
+        )
+        status, _ = _check_253(el)
+        assert status == "FAILED"
+
+    def test_empty_label_after_punctuation_strip_is_na(self):
+        """A label that is purely punctuation has no word chars → N/A."""
+        el = make_element(
+            visible_label="!!!",
+            accessible_name="Click here",
+        )
+        status, _ = _check_253(el)
+        # "!!!" has no word characters → N/A (no visible text rule)
+        assert status == "N/A"

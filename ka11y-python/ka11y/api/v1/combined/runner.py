@@ -99,8 +99,14 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
 
         if isinstance(python_result, Exception):
             pass  # all stages failed — warnings already recorded
-        else:
+        elif isinstance(python_result, tuple) and len(python_result) == 2:
             python_findings, contrast_report = python_result
+        else:
+            # Unexpected return type — degrade gracefully rather than raising
+            logger.warning(
+                f"[combined] job {job_id}: _run_python_stages() returned "
+                f"unexpected type {type(python_result)!r}; ignoring python findings."
+            )
 
         if not node_findings and not python_findings:
             raise RuntimeError(
@@ -156,7 +162,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
             f"report → {report_path}"
         )
 
-        _broadcast(
+        await _broadcast(
             job_id,
             "job_complete",
             {"job_id": job_id, "summary": report["summary"]},
@@ -172,7 +178,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
                 "current_stage": None,
             }
         )
-        _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
+        await _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
 
     finally:
-        _close_subscribers(job_id)
+        await _close_subscribers(job_id)

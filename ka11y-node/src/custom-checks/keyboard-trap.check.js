@@ -69,6 +69,56 @@ async function run(page) {
     }
   }
 
+  // FN fix: also test Shift+Tab (backward) navigation for traps.
+  // A trap may only manifest when tabbing backward through the component.
+  if (!trapHtml) {
+    const recentShiftKeys = [];
+
+    for (let i = 0; i < MAX_TABS; i++) {
+      await page.keyboard.press('Shift+Tab');
+      await new Promise(r => setTimeout(r, SETTLE_MS));
+
+      const activeInfo = await page.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body || el === document.documentElement) return null;
+        const allEls = Array.from(document.querySelectorAll('*'));
+        const pos = allEls.indexOf(el);
+        const key = `${pos}:${el.tagName}`;
+        return { key, html: el.outerHTML.slice(0, 150), tagName: el.tagName.toLowerCase() };
+      });
+
+      if (!activeInfo) break;
+
+      recentShiftKeys.push(activeInfo.key);
+      if (recentShiftKeys.length > CONSECUTIVE_THRESHOLD) recentShiftKeys.shift();
+
+      const isConsecutiveTrap = recentShiftKeys.length === CONSECUTIVE_THRESHOLD &&
+        recentShiftKeys.every(k => k === activeInfo.key);
+
+      if (isConsecutiveTrap) {
+        // Verify: try Escape then Shift+Tab
+        await page.keyboard.press('Escape');
+        await new Promise(r => setTimeout(r, SETTLE_MS));
+        await page.keyboard.press('Shift+Tab');
+        await new Promise(r => setTimeout(r, SETTLE_MS));
+
+        const afterEscape = await page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el || el === document.body) return null;
+          const allEls = Array.from(document.querySelectorAll('*'));
+          const pos = allEls.indexOf(el);
+          return `${pos}:${el.tagName}`;
+        });
+
+        if (afterEscape === activeInfo.key) {
+          trapHtml = activeInfo.html;
+          break;
+        }
+        recentShiftKeys.length = 0;
+      }
+    }
+  }
+
   if (!trapHtml) {
     return {
       successCriteriaId: SC,

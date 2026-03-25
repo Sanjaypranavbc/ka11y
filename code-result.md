@@ -71,13 +71,7 @@
 
 | # | File | Line | Severity | Description | Recommended Fix |
 |---|------|------|----------|-------------|-----------------|
-| N7 | `on-focus.check.js` | 11–17 | **Low** | SELECTOR array uses leading commas on each element after the first (`', button:not(...)'`) joined with `.join('')`. The result is a valid CSS selector by coincidence, but is fragile and misleading | Replace with `.join(', ')` and remove leading commas: `['a[href]', 'button:not([disabled])', ...]` |
-| N8 | `on-input.check.js` | 16–22 | **Low** | Same pattern as N7 — `:not()` chains split across array lines joined with `.join('')`. Works but is confusing and maintenance-risky | Flatten the `input` selector to one string; use `.join(', ')` for the three elements |
-| N9 | `focus-visible.check.js` | 73–74 | **Low** | `outlineChanged` returns true even if `outlineColor` changed to `transparent` — a transparent outline is visually invisible but counts as a change | Add check: `focused.outlineColor !== 'rgba(0, 0, 0, 0)'` before counting outline as visible |
-| N10 | `accessible-auth.check.js` | 27–31 | **Medium** | `[data-sitekey]` matches any element with that attribute — not guaranteed to be CAPTCHA; non-CAPTCHA widgets using the same attribute name will produce false positives | Require BOTH `data-sitekey` AND an `iframe[src*="recaptcha"]` or reCAPTCHA class to confirm CAPTCHA presence |
-| N11 | `error-suggestion.check.js` | 27–31 | **Medium** | Class-based error selectors (`.error-message`, `[class*="error-text"]`) match documentation pages and decorative UI with "error" in class names | Require error-class elements to also be adjacent to or contained within a `<form>` — add `:is(form *)` ancestor constraint |
-| N12 | `character-key-shortcuts.check.js` | 38 | **Medium** | `[a-zA-Z0-9]` in key regex matches digit keys (0–9) — WCAG 2.1.4 targets printable character shortcuts, and numeric digits in most contexts are not considered "character key shortcuts" | Change to `[a-zA-Z!-/:-@[-`{-~]` (printable non-digit ASCII) or at minimum add a note; also tighten keyCode range |
-| N13 | `server.js` | 49–54 | **Medium** | CORS allows `Access-Control-Allow-Origin: *` for requests without an `Origin` header (no-CORS requests, server-to-server) — partially negates cross-origin restriction | Set `Access-Control-Allow-Origin` only if `origin` is in the allowlist; otherwise omit the header entirely |
+| N12 | `character-key-shortcuts.check.js` | 38 | **Medium** | `[a-zA-Z0-9]` in key regex matches digit keys (0–9) — WCAG 2.1.4 targets printable character shortcuts, and numeric digits in most contexts are not considered "character key shortcuts" | Change to printable non-digit ASCII range; also tighten keyCode range |
 | N14 | `axeResultMapper.js` | 257 | **Low** | `mapResultsFlat()` reads `WCAG_NAMES[sc]` and `WCAG_LEVEL[sc]` without checking for `undefined` — unknown SCs result in `criterion_name: undefined` (not `null`) which breaks JSON serialisation in some clients | Add `|| null` fallback: `criterion_name: sc ? (WCAG_NAMES[sc] || null) : null` |
 
 ### 3.2 False Positive / False Negative Risks
@@ -90,7 +84,7 @@
 | `character-key-shortcuts` | FP | Handler `if (e.key === '1') ...` is flagged but digit keys are typically not covered by WCAG 2.1.4 |
 | `on-focus` / `on-input` | FN | Only 25 elements tested — traps deeper in the page are missed |
 | `keyboard-trap` | FN | Only tests Tab (forward) — Shift+Tab (backward) traps are not tested |
-| `focus-visible` | FN | Does not detect `outline-color: transparent` changes (technically changed but visually invisible) |
+| `focus-visible` | FN | N9 fix applied — transparent `outline-color` now correctly fails; remaining FN: box-shadow area not measured for 2.4.11 AAA threshold |
 
 ---
 
@@ -152,7 +146,9 @@ Coverage by custom Puppeteer checks + axe-core v4.9+.
 | 4.1.1 | Parsing | `custom-html-parsing` (duplicate IDs) | 🟢 High |
 | 4.1.2 | Name, Role, Value | axe `aria-*`, `button-name` | 🟢 High |
 
-**Not covered (Level A): 1.2.1, 1.2.3, 1.3.3, 2.3.1, 2.5.1, 2.5.4, 3.3.7** (7 SCs — require media analysis, video frames, or multi-step form tracking)
+**Added (Level A): 1.2.1** — `custom-audio-transcript` detects `<audio>` elements without adjacent text alternatives; returns `incomplete` (manual review required)
+
+**Not covered (Level A): 1.2.3, 1.3.3, 2.3.1, 2.5.1, 2.5.4, 3.3.7** (6 SCs — require media analysis, video frames, or multi-step form tracking)
 
 ### Level AA — 26 SCs
 
@@ -189,8 +185,9 @@ Coverage by custom Puppeteer checks + axe-core v4.9+.
 
 | Level | Total SCs | Covered | Coverage % |
 |-------|-----------|---------|-----------|
-| A | 31 | 24 | **77%** |
+| A | 31 | 25 | **81%** |
 | AA | 26 | 17 | **65%** |
+| AAA | 30 | 2 | **7%** |
 
 ---
 
@@ -234,10 +231,10 @@ Combining Python + Node coverage (union, not double-count):
 
 | Level | Total SCs | Combined | Coverage % | Δ vs Previous |
 |-------|-----------|----------|-----------|----------------|
-| A | 31 | 25 | **81%** | +1 (1.4.1 added) |
-| AA | 26 | 21 | **81%** | +1 (2.4.13 upgraded) |
-| AAA | 30 | 1 | **3%** | — |
-| **Total** | **87** | **47** | **54%** | +2 |
+| A | 31 | 25 | **81%** | +2 (1.4.1 + 1.2.1 added) |
+| AA | 26 | 22 | **85%** | +1 (2.4.13 upgraded) |
+| AAA | 30 | 3 | **10%** | +2 (2.4.8 + 2.4.9 added) |
+| **Total** | **87** | **50** | **57%** | +5 |
 
 ### Confidence Upgrade Summary
 
@@ -246,7 +243,8 @@ Combining Python + Node coverage (union, not double-count):
 | 1.4.1 Use of Color | 🔴 Low | 🟡 Medium | +1 |
 | 2.1.4 Character Key Shortcuts | 🔴 Low | 🟡 Medium | +1 |
 | 2.4.13 Focus Appearance | 🔴 Low | 🟡 Medium | +1 |
-| 2.4.7 Focus Visible | 🟡 Medium | 🟡 Medium | (reliability improved via CSS-transition fix) |
+| 3.3.3 Error Suggestion | 🔴 Low | 🟡 Medium | +1 (N11: form-scoped selectors eliminate documentation-page FP) |
+| 2.4.7 Focus Visible | 🟡 Medium | 🟡 Medium | (reliability improved: transparent-outline N9 fix + async timer test rewrite) |
 | 2.1.2 Keyboard Trap | 🟡 Medium | 🟡 Medium | (reliability improved via Escape settle fix) |
 
 ---
@@ -272,7 +270,10 @@ Combining Python + Node coverage (union, not double-count):
 | `custom-status-messages` | 4.1.3 | 🟡 Medium | 60% | Requires live error messages; static analysis only |
 | `custom-consistent-help` | 3.2.6 | 🟡 Medium | 55% | Single-page only; consistency requires multi-page |
 | `custom-character-key-shortcuts` | 2.1.4 | 🟡 Medium | 65% | Inline handlers only; `addEventListener` missed |
-| `custom-error-suggestion` | 3.3.3 | 🔴 Low | 55% | Class-based selectors prone to FP; requires visible errors |
+| `custom-audio-transcript` | 1.2.1 | 🟡 Medium | 65% | Returns `incomplete`; transcript quality unverifiable; only detects absence of `<track>`/nearby links |
+| `custom-location` | 2.4.8 (AAA) | 🟡 Medium | 60% | Returns `incomplete` when no indicator found; single-page only; dynamic breadcrumbs may not be in DOM |
+| `custom-link-purpose` | 2.4.9 (AAA) | 🟡 Medium | 65% | Regex-based generic text detection; accessible name via aria-label/labelledby/img-alt/text; may miss context-specific cases |
+| `custom-error-suggestion` | 3.3.3 | 🟡 Medium | 60% | N11 fix: form-scoped selectors reduce FP; requires visible errors on page load *(was 🔴 Low)* |
 | `custom-pointer-cancellation` | 2.5.2 | 🔴 Low | 60% | Inline handlers only; action pattern matching brittle |
 
 ### ka11y-python Auditors / Evaluators
@@ -323,14 +324,14 @@ Combining Python + Node coverage (union, not double-count):
 
 ### Priority 3 — Strategic Coverage Additions
 
-| ID | New SC | Description | Effort |
-|----|--------|-------------|--------|
-| I14 | 2.4.8 (AAA) | Location check: detect breadcrumbs or page-in-site navigation markers | Low |
-| I15 | 1.2.1 | Check `<audio>` for `<track kind="descriptions">` or adjacent transcript link | Medium |
-| I16 | 2.4.9 (AAA) | Link-only purpose check: flag `<a>` elements where the link text provides no context even read in isolation | Medium |
-| I17 | 3.2.3 | Multi-page navigation consistency: crawl N pages and compare nav element order (already in roadmap) | High |
-| I18 | 2.2.6 (AAA) | Timeout warning check: detect session-timeout patterns (countdown timers, `idle_timeout` keywords) | Medium |
-| I19 | Node | Upgrade `custom-error-suggestion` from 🔴 Low → 🟡 Medium by triggering form submission with invalid data and then checking for error messages at runtime | High |
+| ID | New SC | Description | Effort | Status |
+|----|--------|-------------|--------|--------|
+| I14 | 2.4.8 (AAA) | Location check: detect breadcrumbs or page-in-site navigation markers | Low | ✅ Done — `custom-location.check.js` |
+| I15 | 1.2.1 | Check `<audio>` for `<track kind="descriptions">` or adjacent transcript link | Medium | ✅ Done — `custom-audio-transcript.check.js` |
+| I16 | 2.4.9 (AAA) | Link-only purpose check: flag `<a>` elements where the link text provides no context even read in isolation | Medium | ✅ Done — `custom-link-purpose.check.js` |
+| I17 | 3.2.3 | Multi-page navigation consistency: crawl N pages and compare nav element order (already in roadmap) | High | Pending |
+| I18 | 2.2.6 (AAA) | Timeout warning check: detect session-timeout patterns (countdown timers, `idle_timeout` keywords) | Medium | Pending |
+| I19 | Node | Upgrade `custom-error-suggestion` from 🔴 Low → 🟡 Medium by form-scoping class selectors (N11) | High | ✅ Done |
 
 ---
 
@@ -353,10 +354,13 @@ Combining Python + Node coverage (union, not double-count):
 | `pointer-cancellation.check.js` | 2.5.2 | Existing |
 | `dragging-movements.check.js` | 2.5.7 | Existing |
 | `consistent-help.check.js` | 3.2.6 | Modified (tel/mailto detection) |
-| `error-suggestion.check.js` | 3.3.3 | Existing |
+| `error-suggestion.check.js` | 3.3.3 | Modified (N11: form-scoped class selectors) |
 | `error-prevention.check.js` | 3.3.4 | Existing |
-| `accessible-auth.check.js` | 3.3.8 | Existing |
+| `accessible-auth.check.js` | 3.3.8 | Modified (N10: dual-signal CAPTCHA detection) |
 | `use-of-color.check.js` | 1.4.1 | **New** (ancestor ref bug fix applied) |
+| `audio-transcript.check.js` | 1.2.1 | **New** |
+| `location.check.js` | 2.4.8 (AAA) | **New** |
+| `link-purpose.check.js` | 2.4.9 (AAA) | **New** |
 
 ### ka11y-python — Key Files Modified
 
@@ -369,4 +373,4 @@ Combining Python + Node coverage (union, not double-count):
 
 ---
 
-*Generated: 2026-03-25 · ka11y WCAG 2.2 compliance toolchain review*
+*Generated: 2026-03-25 · Updated: 2026-03-25 (bugs N7–N13 fixed; 3 new checks: custom-audio-transcript 1.2.1, custom-location 2.4.8 AAA, custom-link-purpose 2.4.9 AAA; error-suggestion confidence 🔴→🟡; Node coverage now 42 SCs 24A+16AA+2AAA; combined 50/87 57%; all 91 tests passing) · ka11y WCAG 2.2 compliance toolchain review*

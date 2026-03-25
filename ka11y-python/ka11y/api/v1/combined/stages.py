@@ -19,6 +19,11 @@ import functools
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Maximum wall-clock seconds allowed for a single crawl stage.  A
+# slow/unresponsive target would otherwise hold a Playwright browser instance
+# indefinitely.  120 s is a generous budget; typical pages finish in < 30 s.
+_STAGE_TIMEOUT_SECONDS = 120
+
 import httpx
 
 from ka11y.crawler.crawler import AsyncImageCrawler
@@ -449,20 +454,25 @@ async def _run_python_stages(
 
     Returns (all_findings, contrast_report).
     """
+    # Each stage is wrapped with asyncio.wait_for so that a slow/unresponsive
+    # target cannot hold a Playwright browser instance indefinitely (D2).
+    def _timed(coro):
+        return asyncio.wait_for(coro, timeout=_STAGE_TIMEOUT_SECONDS)
+
     results = await asyncio.gather(
-        _stage_image_audit(
+        _timed(_stage_image_audit(
             url, output_dir, max_depth, run_ocr, run_image_audit, job_id
-        ),
-        _stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id),
-        _stage_label_in_name(
+        )),
+        _timed(_stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id)),
+        _timed(_stage_label_in_name(
             url, output_dir, max_depth, run_label_in_name_audit, job_id
-        ),
-        _stage_pause_stop_hide(
+        )),
+        _timed(_stage_pause_stop_hide(
             url, output_dir, max_depth, run_pause_stop_hide_audit, job_id
-        ),
-        _stage_target_size(url, output_dir, max_depth, run_target_size_audit, job_id),
-        _stage_text_spacing(url, output_dir, max_depth, run_text_spacing_audit, job_id),
-        _stage_rendered_layout_audit(
+        )),
+        _timed(_stage_target_size(url, output_dir, max_depth, run_target_size_audit, job_id)),
+        _timed(_stage_text_spacing(url, output_dir, max_depth, run_text_spacing_audit, job_id)),
+        _timed(_stage_rendered_layout_audit(
             url,
             output_dir,
             run_resize_text_audit,
@@ -473,7 +483,7 @@ async def _run_python_stages(
             run_focus_not_obscured_min_audit,
             run_focus_not_obscured_enh_audit,
             job_id,
-        ),
+        )),
         return_exceptions=True,
     )
 

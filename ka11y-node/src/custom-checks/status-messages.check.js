@@ -33,13 +33,28 @@ async function run(page) {
       document.querySelector('[aria-label*="cart" i], [aria-label*="basket" i]') ||
       document.querySelector('[class*="cart-count" i], [class*="badge" i]')
     );
-    // Detect visual notification patterns that would need live regions but may not have them.
-    // Do NOT include [role="status"] / [role="log"] here — those ARE live regions already
-    // counted in liveRegions; including them would conflate "has live regions" with "needs them".
-    const hasNotificationArea = !!(
-      document.querySelector('[class*="notification" i], [class*="toast" i], [class*="snackbar" i], [class*="flash" i]') ||
-      document.querySelector('[class*="alert" i]:not([role]), [class*="banner" i]:not([role])')
-    );
+    // FP fix: detect visual notification patterns only when they are NOT already
+    // contained within an existing live region. If the notification element is already
+    // inside a [role="status"], [role="alert"], or [aria-live] ancestor, it already
+    // has a live region and should not trigger "needs live regions".
+    const notificationCandidates = Array.from(document.querySelectorAll(
+      '[class*="notification" i], [class*="toast" i], [class*="snackbar" i], [class*="flash" i], ' +
+      '[class*="alert" i]:not([role]), [class*="banner" i]:not([role])'
+    ));
+    const hasNotificationArea = notificationCandidates.some(el => {
+      // Walk up ancestors to check if this element is already inside a live region
+      let node = el;
+      while (node && node !== document.body) {
+        const role = node.getAttribute('role');
+        const ariaLive = node.getAttribute('aria-live');
+        if (role === 'status' || role === 'alert' || role === 'log' ||
+            ariaLive === 'polite' || ariaLive === 'assertive') {
+          return false; // already inside a live region — not a problem
+        }
+        node = node.parentElement;
+      }
+      return true; // notification element has no live region ancestor
+    });
 
     const needsLiveRegions = formCount > 0 || hasSearchResults || hasCartOrCounter || hasNotificationArea;
 

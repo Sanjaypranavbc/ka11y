@@ -35,18 +35,28 @@ _JOB_TTL_SECONDS: int = 3600
 # ── SSE subscriber bus ────────────────────────────────────────────────────────
 
 
-def _broadcast(job_id: str, event_type: str, data: Dict[str, Any]) -> None:
-    """Push an SSE event dict to every subscriber queue for this job."""
+async def _broadcast(job_id: str, event_type: str, data: Dict[str, Any]) -> None:
+    """Push an SSE event dict to every subscriber queue for this job.
+
+    Acquires ``_subscribers_lock`` before iterating so that a concurrent
+    ``add-subscriber`` coroutine cannot slip between the snapshot and the
+    ``put_nowait`` loop, which would cause a subscriber to miss the event.
+    """
     msg = {"event": event_type, "data": data}
-    for q in list(_subscribers.get(job_id, [])):
-        q.put_nowait(msg)
+    async with _subscribers_lock:
+        for q in list(_subscribers.get(job_id, [])):
+            q.put_nowait(msg)
 
 
-def _close_subscribers(job_id: str) -> None:
-    """Send sentinel None to all queues so their generators exit, then clean up."""
-    for q in list(_subscribers.get(job_id, [])):
-        q.put_nowait(None)
-    _subscribers.pop(job_id, None)
+async def _close_subscribers(job_id: str) -> None:
+    """Send sentinel None to all queues so their generators exit, then clean up.
+
+    Also lock-protected so it is consistent with _broadcast.
+    """
+    async with _subscribers_lock:
+        for q in list(_subscribers.get(job_id, [])):
+            q.put_nowait(None)
+        _subscribers.pop(job_id, None)
 
 
 # ── TTL eviction ──────────────────────────────────────────────────────────────

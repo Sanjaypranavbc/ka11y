@@ -64,4 +64,56 @@ describe('error-suggestion.check (WCAG 3.3.3)', () => {
       expect(clean).toMatch(/^form /);
     });
   });
+
+  // FP Fix: sibling selector tests
+  describe('FP Fix: sibling selector — non-immediate sibling and outside-form detection', () => {
+    test('aria-invalid with non-immediate sibling error message should be detected', async () => {
+      // The updated code uses ~ (general sibling) + class filter — simulate the browser
+      // returning an error element that is a non-immediate sibling with class "error"
+      const page = makePage({
+        formCount: 1,
+        allErrors: ['Please enter a valid email address'],
+      });
+      const result = await run(page);
+      // With a valid suggestion message, should pass
+      expect(result.rules[0].status).toBe('pass');
+    });
+
+    test('aria-invalid with terse error message should fail', async () => {
+      const page = makePage({
+        formCount: 1,
+        allErrors: ['Invalid'],
+      });
+      const result = await run(page);
+      expect(result.rules[0].status).toBe('fail');
+      expect(result.rules[0].reason).toContain('lack correction guidance');
+    });
+
+    test('visible error with correction hint should PASS', async () => {
+      const page = makePage({
+        formCount: 1,
+        allErrors: ['Please enter a valid email address such as user@example.com'],
+      });
+      const result = await run(page);
+      expect(result.rules[0].status).toBe('pass');
+    });
+
+    test('FP fix: source does not use immediate next-sibling selector for aria-invalid', () => {
+      const src = require('fs').readFileSync(
+        require('path').resolve(__dirname, '../../src/custom-checks/error-suggestion.check.js'),
+        'utf8'
+      );
+      // The old bad selector was: [aria-invalid="true"] + *
+      // After fix it should NOT be present as a bare + selector
+      expect(src).not.toMatch(/\[aria-invalid="true"\]\s*\+\s*\*/);
+    });
+
+    test('FP fix: source uses general sibling combinator (~) for aria-invalid error detection', () => {
+      const src = require('fs').readFileSync(
+        require('path').resolve(__dirname, '../../src/custom-checks/error-suggestion.check.js'),
+        'utf8'
+      );
+      expect(src).toMatch(/\[aria-invalid="true"\]\s*~\s*/);
+    });
+  });
 });

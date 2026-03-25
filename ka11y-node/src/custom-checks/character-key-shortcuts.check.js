@@ -4,8 +4,12 @@ const SC = '2.1.4';
 const RULE_ID = 'custom-character-key-shortcuts';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts';
 
-// Bug fix: only flag printable ASCII characters (codes 33–126) — not control/special keys
-const PRINTABLE_CHAR_RE = /^[!-~]$/; // matches any single printable ASCII
+// N12 fix: only flag letter characters (a-z, A-Z) as character key shortcuts.
+// WCAG 2.1.4 targets character shortcuts that could fire unexpectedly; digit keys (0-9)
+// are not typically considered character key shortcuts in most contexts.
+// We also flag common punctuation/symbols that could be used as shortcuts,
+// but intentionally exclude the 0-9 digit range (ASCII codes 48-57).
+const PRINTABLE_CHAR_RE = /^[a-zA-Z!-/:-@[-`{-~]$/; // letters + symbols, NOT digits
 
 async function run(page) {
   const data = await page.evaluate((printableRe) => {
@@ -35,13 +39,15 @@ async function run(page) {
 
       // Match: event.key === 'x'  /  event.key == 'x'  /  event.code === 'KeyX'
       //        event.key.toLowerCase() === 'x'  /  e.key === 'X'
-      const hasSingleKey = /(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z0-9]['"]|keyCode\s*===?\s*(?:[3-9]\d|1[01]\d|12[0-6])/.test(handler);
+      // N12 fix: only match letter keys (a-z, A-Z) in key/code checks; exclude digit keys (0-9).
+      // keyCode range 65-90 = A-Z only (digits are 48-57, excluded).
+      const hasSingleKey = /(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z]['"]|keyCode\s*===?\s*(?:6[5-9]|[7-8]\d|90)/.test(handler);
 
       // Check that a modifier guard (Ctrl/Alt/Meta) is co-located with the key check.
       // Strategy: find the index of the first key match and the nearest modifier mention;
       // if they are within 120 chars of each other, the modifier plausibly guards the key.
       // This prevents false-negatives from handlers that check a modifier in an unrelated branch.
-      const keyIdx = handler.search(/(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z0-9]['"]|keyCode\s*===?\s*(?:[3-9]\d|1[01]\d|12[0-6])/);
+      const keyIdx = handler.search(/(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z]['"]|keyCode\s*===?\s*(?:6[5-9]|[7-8]\d|90)/);
       const modIdx = handler.search(/ctrlKey|altKey|metaKey/);
       const hasModifierGuard = keyIdx >= 0 && modIdx >= 0 && Math.abs(keyIdx - modIdx) <= 120;
 
@@ -87,4 +93,4 @@ async function run(page) {
   };
 }
 
-module.exports = { run, SC, RULE_ID, HELP_URL };
+module.exports = { run, SC, RULE_ID, HELP_URL, PRINTABLE_CHAR_RE };

@@ -19,7 +19,11 @@ async function run(page) {
     const errorSelectors = [
       '[role="alert"]',
       '[aria-live="assertive"]',
-      '[aria-invalid="true"] + *',     // element immediately after invalid input
+      // FP fix: use general sibling combinator scoped to known error/alert classes
+      // instead of immediate next sibling (+) which may match unrelated elements.
+      '[aria-invalid="true"] ~ *[class*="error"]',
+      '[aria-invalid="true"] ~ *[role="alert"]',
+      '[aria-invalid="true"] ~ *[aria-live]',
       '[aria-errormessage]',
     ];
 

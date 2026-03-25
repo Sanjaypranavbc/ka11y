@@ -31,7 +31,9 @@ def _is_text_relevant(item: TextSpacingData):
 def _check_1412(item: TextSpacingData):
 
     if not _is_text_relevant(item):
-        return "PASSED", ""
+        # Return N/A so the downstream converter does not count this as a genuine
+        # pass, which would artificially inflate pass rates.
+        return "N/A", "Element is not relevant for 1.4.12 text-spacing check."
 
     if item.has_fixed_height and item.has_overflow_hidden:
         return "WARNING", (
@@ -100,7 +102,11 @@ class TextSpacingAuditor:
                 "overall_status": (
                     "FAILED"
                     if status == "FAILED"
-                    else ("WARNING" if status == "WARNING" else "PASSED")
+                    else (
+                        "WARNING"
+                        if status == "WARNING"
+                        else ("N/A" if status == "N/A" else "PASSED")
+                    )
                 ),
                 "html_snippet": item.html_snippet[:400],
             }

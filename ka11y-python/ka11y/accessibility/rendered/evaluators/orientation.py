@@ -74,7 +74,25 @@ def evaluate(
     p_count = len(portrait_interactive)
     l_count = len(landscape_interactive)
 
-    if p_count > 0 and l_count > 0:
+    if (p_count == 0) != (l_count == 0):
+        # Exactly one orientation returned zero interactive elements while the
+        # other has some — this is a meaningful asymmetry that could indicate a
+        # collapsed hamburger menu or orientation-locked content.  Division
+        # would be undefined (or trivially 0), so we flag NEEDS_REVIEW instead.
+        records.append(
+            RuleAuditRecord(
+                rule_key=_RULE_KEY,
+                status="NEEDS_REVIEW",
+                violation=(
+                    f"One orientation has no interactive elements "
+                    f"(portrait: {p_count}, landscape: {l_count}). "
+                    "A collapsed navigation (e.g. hamburger menu) or orientation-locked "
+                    "content may be hiding functionality. Verify manually."
+                ),
+                page_url=portrait.page_url,
+            )
+        )
+    elif p_count > 0 and l_count > 0:
         ratio = min(p_count, l_count) / max(p_count, l_count)
         if ratio < 0.5:
             records.append(
