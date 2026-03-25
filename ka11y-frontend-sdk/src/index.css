@@ -9,6 +9,8 @@
 
 @layer base {
   :root {
+    color-scheme: light;
+
     /* ── Core palette ────────────────────────────────────────────── */
     --background:        0 0% 100%;
     --foreground:        213 60% 15%;
@@ -73,6 +75,72 @@
     --sidebar-border:             213 25% 88%;
     --sidebar-ring:               213 94% 48%;
   }
+
+  .dark {
+    color-scheme: dark;
+
+    /* ── Core palette ────────────────────────────────────────────── */
+    --background:        222 47% 8%;
+    --foreground:        210 40% 96%;
+
+    --card:              222 32% 11%;
+    --card-foreground:   210 40% 96%;
+
+    --popover:           222 30% 11%;
+    --popover-foreground: 210 40% 96%;
+
+    /* Electric blue stays primary in dark mode */
+    --primary:           213 94% 62%;
+    --primary-foreground: 222 47% 10%;
+
+    --secondary:         217 26% 18%;
+    --secondary-foreground: 210 28% 88%;
+
+    --muted:             217 24% 17%;
+    --muted-foreground:  215 18% 68%;
+
+    --accent:            213 34% 22%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive:       0 70% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border:            217 18% 24%;
+    --input:             217 22% 16%;
+    --ring:              213 94% 62%;
+
+    /* ── Severity tokens ─────────────────────────────────────────── */
+    --critical:          0 78% 58%;
+    --critical-foreground: 0 0% 100%;
+
+    --serious:           24 92% 60%;
+    --serious-foreground: 0 0% 100%;
+
+    --moderate:          45 96% 56%;
+    --moderate-foreground: 0 0% 8%;
+
+    --minor:             199 82% 62%;
+    --minor-foreground:  222 47% 10%;
+
+    --success:           152 65% 46%;
+    --success-foreground: 0 0% 100%;
+
+    --score-excellent:   152 65% 46%;
+    --score-good:        45 96% 56%;
+    --score-poor:        0 78% 58%;
+
+    --report-shadow:     220deg 36% 8% / 0.45;
+
+    /* ── Sidebar ─────────────────────────────────────────────────── */
+    --sidebar-background:         223 36% 10%;
+    --sidebar-foreground:         214 26% 88%;
+    --sidebar-primary:            213 94% 62%;
+    --sidebar-primary-foreground: 222 47% 10%;
+    --sidebar-accent:             217 28% 18%;
+    --sidebar-accent-foreground:  210 40% 96%;
+    --sidebar-border:             217 18% 22%;
+    --sidebar-ring:               213 94% 62%;
+  }
 }
 
 @layer base {
@@ -90,7 +158,10 @@
   }
 
   .grid-bg {
-    background: white;
+    background-color: hsl(var(--background));
+    background-image: radial-gradient(hsl(var(--border) / 0.35) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-position: -10px -10px;
   }
 
   /* Thin scrollbar */

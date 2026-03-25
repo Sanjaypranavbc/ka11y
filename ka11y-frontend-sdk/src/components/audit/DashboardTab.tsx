@@ -3,10 +3,11 @@ import { ContrastReportSection } from "./ContrastReportSection";
 import { MetricCard } from "./MetricCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend, Tooltip,
 } from "recharts";
-import { BarChart3, AlertTriangle, HelpCircle, CheckCircle2, Activity } from "lucide-react";
+import { AlertTriangle, HelpCircle, CheckCircle2, Activity } from "lucide-react";
 
 interface DashboardTabProps {
   result: AuditResult;
@@ -26,6 +27,8 @@ const SOURCE_COLORS = {
 };
 
 export function DashboardTab({ result }: DashboardTabProps) {
+  const isMobile = useIsMobile();
+
   // Severity breakdown
   const severityCounts = result.violations.reduce(
     (acc, v) => {
@@ -112,7 +115,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
   const sourceNamesForLabel = sourceData.map((row) => row.name).join(", ");
 
   return (
-    <div className="space-y-5 p-5 grid-bg min-h-full">
+    <div className="space-y-5 p-3 sm:p-5 grid-bg min-h-full">
       {/* Metric cards — staggered reveal */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -135,7 +138,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
             <CardTitle className="text-sm font-medium">Violations by Severity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={severityChartConfig} className="h-64" role="img" tabIndex={0} aria-label={`Pie chart: ${severityData.map((d) => `${d.name} ${d.value}`).join(", ")}`}>
+            <ChartContainer config={severityChartConfig} className="h-56 sm:h-64" role="img" tabIndex={0} aria-label={`Pie chart: ${severityData.map((d) => `${d.name} ${d.value}`).join(", ")}`}>
               <PieChart>
                 <Pie data={severityData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} dataKey="value" paddingAngle={2}>
                   {severityData.map((entry, i) => (
@@ -157,7 +160,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
           <CardContent>
             <ChartContainer
               config={sourceChartConfig}
-              className="h-64"
+              className="h-56 sm:h-64"
               role="img"
               tabIndex={0}
               aria-label={`Bar chart showing violations, needs review, and passes by source: ${sourceNamesForLabel || "none"}`}
@@ -183,7 +186,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
           <CardTitle className="text-sm font-medium">WCAG Level Breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={sourceChartConfig} className="h-48">
+          <ChartContainer config={sourceChartConfig} className="h-44 sm:h-48">
             <BarChart data={wcagLevels} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
               <XAxis type="number" className="text-xs" />
@@ -204,12 +207,12 @@ export function DashboardTab({ result }: DashboardTabProps) {
           <CardTitle className="text-sm font-medium">Top Failing WCAG Criteria</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-72">
+          <div className="h-64 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topCriteria} layout="vertical" margin={{ left: 20 }}>
+              <BarChart data={topCriteria} layout="vertical" margin={{ left: isMobile ? 0 : 20 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis type="number" className="text-xs" />
-                <YAxis dataKey="name" type="category" width={200} className="text-xs" tick={{ fontSize: 11 }} />
+                <YAxis dataKey="name" type="category" width={isMobile ? 120 : 200} className="text-xs" tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {topCriteria.map((entry, i) => (
@@ -222,7 +225,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex gap-5 mt-2 justify-center" aria-hidden="true">
+          <div className="flex gap-3 sm:gap-5 mt-2 justify-center flex-wrap" aria-hidden="true">
             <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
               <div className="w-2.5 h-2.5" style={{ background: "hsl(213, 94%, 55%)" }} /> Level A
             </div>

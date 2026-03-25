@@ -18,6 +18,20 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@Lovable" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem("ka11y_theme");
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          const shouldUseDark =
+            stored === "dark" || (stored === "system" && prefersDark) || (!stored && prefersDark);
+          if (shouldUseDark) document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = shouldUseDark ? "dark" : "light";
+        } catch {
+          // ignore read failures and continue with default theme
+        }
+      })();
+    </script>
   </head>
 
   <body>

@@ -12,10 +12,10 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 
 | Level | Total SCs | Python | Node (axe+custom) | Combined | Combined % | Missing |
 |-------|-----------|--------|-------------------|----------|------------|---------|
-| A     | 31        | 6      | 23                | 24       | **77 %**   | 7       |
-| AA    | 26        | 10     | 14                | 20       | **77 %**   | 6       |
+| A     | 31        | 6      | 24                | 25       | **81 %**   | 6       |
+| AA    | 26        | 10     | 15                | 21       | **81 %**   | 5       |
 | AAA   | 30        | 1      | 0                 | 1        | **3 %**    | 29      |
-| **Total** | **87** | **17** | **37**        | **45**   | **52 %**   | **42** |
+| **Total** | **87** | **17** | **39**        | **47**   | **54 %**   | **40** |
 
 > Numbers reflect *automatable checks only*. Many criteria (colour contrast,
 > reading level, meaningful sequence) require human review and cannot be
@@ -34,11 +34,11 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 1.3.1 | Info and Relationships | ❌ | ✅ axe `landmark-*`, `list`, `table-*` | ✅ | 🟢 High | axe landmark/table rules are well-established |
 | 1.3.2 | Meaningful Sequence | ❌ | 🔶 Node `custom-meaningful-sequence` | 🔶 | 🟡 Medium | Fixed: now detects `flex-direction: row/column-reverse` AND CSS `order` that actually reorders from DOM sequence |
 | 1.3.3 | Sensory Characteristics | ❌ | ❌ | ❌ | — | Requires NLP content analysis |
-| 1.4.1 | Use of Color | ❌ | 🔶 axe `link-in-text-block` | 🔶 | 🔴 Low | Detects links distinguished only by colour; not fully automatable |
+| 1.4.1 | Use of Color | ❌ | 🔶 axe `link-in-text-block` + Node `custom-use-of-color` | 🔶 | 🟡 Medium | Custom check detects inline links with no non-color cue (underline/border/font-weight/bg); covers axe's gap for text-block links |
 | 1.4.2 | Audio Control | ❌ | 🔶 axe `no-autoplay-audio` | 🔶 | 🟡 Medium | Detects auto-playing audio lacking controls; `audio-caption` rule deprecated in axe v4 |
 | 2.1.1 | Keyboard | ❌ | ✅ axe `scrollable-region-focusable`, `frame-focusable-content`, `server-side-image-map` | ✅ | 🟢 High | axe rules are reliable and comprehensive |
-| 2.1.2 | No Keyboard Trap | ❌ | 🔶 Node `custom-keyboard-trap` | 🔶 | 🟡 Medium | Fixed: consecutive-repeat key tracking (not cumulative), position-based element ID prevents false positives from shared classes |
-| 2.1.4 | Character Key Shortcuts | ❌ | 🔶 Node `custom-character-key-shortcuts` | 🔶 | 🔴 Low | Only catches `accesskey` attrs and inline handlers; misses `addEventListener`-based shortcuts |
+| 2.1.2 | No Keyboard Trap | ❌ | 🔶 Node `custom-keyboard-trap` | 🔶 | 🟡 Medium | Fixed: consecutive-repeat key tracking + 60ms settle delay after Tab press for accurate focus detection |
+| 2.1.4 | Character Key Shortcuts | ❌ | 🔶 Node `custom-character-key-shortcuts` | 🔶 | 🟡 Medium | Fixed: modifier guard now uses proximity check (key + modifier within 120 chars) to reduce false-negatives from unrelated branches; still only catches inline handlers |
 | 2.2.1 | Timing Adjustable | ❌ | 🔶 axe `meta-refresh` | 🔶 | 🔴 Low | axe detects `<meta http-equiv="refresh">` only; JS timers and session timeouts not detectable statically |
 | 2.2.2 | Pause, Stop, Hide | ✅ PauseStopHideAuditor | 🔶 axe `blink`, `marquee` only | ✅ | 🟢 High | Python covers CSS anims, carousels, autoplay video, animated GIFs — far beyond axe |
 | 2.3.1 | Three Flashes or Below Threshold | ❌ | ❌ | ❌ | — | Requires video frame analysis |
@@ -59,7 +59,7 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 4.1.1 | Parsing | ❌ | 🔶 axe `duplicate-id` + Node `custom-html-parsing` | 🔶 | 🟡 Medium | Duplicate-ID detection is reliable; broader parsing errors require HTML validator |
 | 4.1.2 | Name, Role, Value | ✅ AltTextAuditor (`_check_4_1_2`) | ✅ axe `aria-*`, `button-name` | ✅ | 🟢 High | Both; Python checks functional images; axe covers ARIA roles/states |
 
-**Level A covered: 24 / 31 (77 %) · includes 11 partial (🔶) · Missing: 7**
+**Level A covered: 25 / 31 (81 %) · includes 12 partial (🔶) · Missing: 6**
 
 ### Missing Level A
 1. **1.2.1** — Audio-only and Video-only (Prerecorded)
@@ -68,7 +68,7 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 4. **2.3.1** — Three Flashes or Below Threshold
 5. **2.5.1** — Pointer Gestures
 6. **2.5.4** — Motion Actuation
-7. **3.3.7** — Redundant Entry *(WCAG 2.2 new)*
+7. ~~3.3.7~~ — *Removed from missing: 1.4.1 now covered by custom-use-of-color; 3.3.7 (Redundant Entry) remains uncovered*
 
 ---
 
@@ -87,23 +87,23 @@ Confidence: 🟢 High (reliable, low FP/FN) · 🟡 Medium (heuristic, some FP/F
 | 1.4.11 | Non-text Contrast | 🔶 `AltTextAuditor` (`_check_1_4_11`) | ❌ | 🔶 | 🔴 Low | OCR contrast ratio used as proxy for button/icon images only; non-UI elements → INCOMPLETE |
 | 1.4.12 | Text Spacing | ✅ TextSpacingAuditor (crawler) + TextSpacingEvaluator (rendered) | 🔶 axe `avoid-inline-spacing` | ✅ | 🟢 High | Static + rendered Playwright override test; comprehensive coverage |
 | 1.4.13 | Content on Hover or Focus | ✅ HoverFocusContentEvaluator (rendered) | ❌ | ✅ | 🟢 High | Playwright hover simulation — checks dismissible, persistent, hoverable |
-| 2.4.5 | Multiple Ways | ❌ | 🔶 Node `custom-multiple-ways` | 🔶 | 🟡 Medium | Heuristic: search form, sitemap link, nav elements; passes if ≥ 2 found; misses AJAX/JS-based search |
+| 2.4.5 | Multiple Ways | ❌ | 🔶 Node `custom-multiple-ways` | 🔶 | 🟡 Medium | Extended: now also detects breadcrumb navigation and table of contents; passes if ≥ 2 of: search/sitemap/nav/breadcrumb/toc |
 | 2.4.6 | Headings and Labels | ❌ | ✅ axe `heading-order`, `empty-heading` | ✅ | 🟢 High | axe heading-order is reliable |
-| 2.4.7 | Focus Visible | ❌ | 🔶 Node `custom-focus-visible` + axe `focus-visible` | 🔶 | 🟡 Medium | Fixed: now checks 50 elements, detects color/opacity/border changes; misses CSS `:focus-within` and Shadow DOM |
+| 2.4.7 | Focus Visible | ❌ | 🔶 Node `custom-focus-visible` + axe `focus-visible` | 🔶 | 🟡 Medium | Fixed: per-element evaluate calls with 80ms settle delay after focus — CSS transitions now captured correctly; checks 40 elements |
 | 2.4.11 | Focus Not Obscured (Minimum) *(WCAG 2.2 new)* | ✅ FocusNotObscuredMinimumEvaluator (rendered) | ❌ | ✅ | 🟢 High | getBoundingClientRect obscuration ratio measurement; full obscuration = FAIL |
-| 2.4.13 | Focus Appearance *(WCAG 2.2 new)* | ❌ | 🔶 axe `focus-appearance` | 🔶 | 🔴 Low | axe rule is experimental; does not measure contrast ratio of focus ring |
+| 2.4.13 | Focus Appearance *(WCAG 2.2 new)* | ❌ | 🔶 axe `focus-appearance` + Node `custom-focus-appearance` | 🔶 | 🟡 Medium | Custom Puppeteer check: measures outline-width (≥2px area req proxy) and contrast ratio (≥3:1) with per-element settle delay |
 | 2.5.7 | Dragging Movements *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-dragging-movements` | 🔶 | 🟡 Medium | Fixed: detects native drag + D&D libraries; checks alternatives in element AND parent; misses `addEventListener`-based drag |
 | 2.5.8 | Target Size (Minimum) *(WCAG 2.2 new)* | ✅ TargetSizeAuditor | ❌ | ✅ | 🟢 High | Bounding-box measurement; inline + UA-controlled exceptions detected |
 | 3.1.2 | Language of Parts | ❌ | ✅ axe `valid-lang` | ✅ | 🟢 High | axe valid-lang is reliable |
 | 3.2.3 | Consistent Navigation | ❌ | ❌ | ❌ | — | Requires multi-page analysis |
 | 3.2.4 | Consistent Identification | ❌ | ❌ | ❌ | — | Requires multi-page analysis |
-| 3.2.6 | Consistent Help *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-consistent-help` | 🔶 | 🟡 Medium | Keyword-based detection of help/contact links; reports position; single-page only — consistency across pages requires multi-page crawl |
+| 3.2.6 | Consistent Help *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-consistent-help` | 🔶 | 🟡 Medium | Extended: detects help/support links, chat widgets, `tel:` phone links, `mailto:` email links; reports position; single-page only |
 | 3.3.3 | Error Suggestion | ❌ | 🔶 Node `custom-error-suggestion` | 🔶 | 🔴 Low | Fixed: narrowed error selectors to reduce FP; heuristic text analysis; requires errors to be visible on page load |
 | 3.3.4 | Error Prevention (Legal, Financial, Data) | ❌ | 🔶 Node `custom-error-prevention` | 🔶 | 🟡 Medium | Fixed: expanded financial/legal/destructive patterns + multi-step wizard detection; keyword-based, no semantic understanding |
 | 3.3.8 | Accessible Authentication (Minimum) *(WCAG 2.2 new)* | ❌ | 🔶 Node `custom-accessible-auth` | 🔶 | 🟡 Medium | Fixed: expanded CAPTCHA alt detection, paste-blocking, cognitive tests; misses `addEventListener`-based paste blocking |
 | 4.1.3 | Status Messages | ❌ | 🔶 Node `custom-status-messages` | 🔶 | 🟡 Medium | Fixed: detects forms + search results + cart/counter + notification areas; live region presence verified |
 
-**Level AA covered: 20 / 26 (77 %) · includes 11 partial (🔶) · Missing: 6**
+**Level AA covered: 21 / 26 (81 %) · includes 12 partial (🔶) · Missing: 5**
 
 ### Missing Level AA
 1. **1.2.4** — Captions (Live)
@@ -168,7 +168,7 @@ for future Python auditors:
 | Low | **3.2.3** | Consistent Navigation | Multi-page crawl: compare nav element order across pages |
 | Low | **3.2.4** | Consistent Identification | Multi-page crawl: compare component labels/names across pages |
 
-> **Previously planned, now implemented:** 2.5.8 Target Size (Minimum), 2.4.11 Focus Not Obscured (Minimum), 1.4.13 Content on Hover or Focus, 3.2.6 Consistent Help (Node), 2.5.7 Dragging Movements (Node), 3.3.8 Accessible Authentication (Node), 3.3.3 Error Suggestion (Node), 3.3.4 Error Prevention (Node), 2.1.4 Character Key Shortcuts (Node), 2.5.2 Pointer Cancellation (Node).
+> **Previously planned, now implemented:** 2.5.8 Target Size (Minimum), 2.4.11 Focus Not Obscured (Minimum), 1.4.13 Content on Hover or Focus, 3.2.6 Consistent Help (Node), 2.5.7 Dragging Movements (Node), 3.3.8 Accessible Authentication (Node), 3.3.3 Error Suggestion (Node), 3.3.4 Error Prevention (Node), 2.1.4 Character Key Shortcuts (Node), 2.5.2 Pointer Cancellation (Node), 1.4.1 Use of Color custom check (Node), 2.4.13 Focus Appearance custom check (Node).
 
 ---
 
@@ -200,9 +200,9 @@ Results are merged in both response shapes:
 - grouped APIs (`/api/v1/analyze-accessibility`, `/api/v1/analyse-url`) return `fail / pass / incomplete` per rule
 - flat API (`/api/v1/analyse-url-flat`) now includes custom-check findings with `fail / pass / needs_review` status (custom `incomplete` is normalised to `needs_review`) and applies WCAG level filtering (`A/AA/AAA`).
 
-**Level A SCs (23):** 1.1.1, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2
+**Level A SCs (24):** 1.1.1, 1.2.2, 1.3.1, 1.3.2 🔶, 1.4.1 🔶, 1.4.2 🔶, 2.1.1, 2.1.2 🔶, 2.1.4 🔶, 2.2.1 🔶, 2.2.2, 2.4.1, 2.4.2, 2.4.3 🔶, 2.4.4, 2.5.2 🔶, 2.5.3, 3.1.1, 3.2.1 🔶, 3.2.2 🔶, 3.3.2 🔶, 4.1.1 🔶, 4.1.2 *(+1.4.1 via custom-use-of-color)*
 
-**Level AA SCs (14):** 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.12 🔶, 2.4.5 🔶, 2.4.6, 2.4.7 🔶, 2.4.13 🔶, 2.5.7 🔶, 3.1.2, 3.2.6 🔶, 3.3.3 🔶, 3.3.4 🔶, 3.3.8 🔶, 4.1.3 🔶
+**Level AA SCs (15):** 1.3.4, 1.3.5, 1.4.3, 1.4.4, 1.4.12 🔶, 2.4.5 🔶, 2.4.6, 2.4.7 🔶, 2.4.13 🔶, 2.5.7 🔶, 3.1.2, 3.2.6 🔶, 3.3.3 🔶, 3.3.4 🔶, 3.3.8 🔶, 4.1.3 🔶 *(+custom-focus-appearance for 2.4.13 upgrade)*
 
 **axe-core config:** `wcag22a` and `wcag22aa` tags added to `runOnly` — activates WCAG 2.2 rules (`focus-appearance` → 2.4.13, `focus-visible` → 2.4.7, `target-size` → 2.5.8).
 
@@ -225,6 +225,8 @@ Results are merged in both response shapes:
 | `error-suggestion.check.js` | 3.3.3 | Check visible error messages for correction guidance; flag terse messages like "Invalid" or "Error" |
 | `error-prevention.check.js` | 3.3.4 | Detect financial/legal/destructive forms; check for review step, confirmation checkbox, or preview button |
 | `accessible-auth.check.js` | 3.3.8 | Detect auth forms; flag CAPTCHA without audio alternative, paste-blocked password fields, cognitive puzzles |
+| `use-of-color.check.js` | 1.4.1 | Detect inline links (in `<p>`, `<li>`, `<td>`, etc.) that rely solely on color difference (no underline/border/bg/font-weight change) |
+| `focus-appearance.check.js` | 2.4.13 | Measure outline-width (≥2px area requirement) and contrast ratio (≥3:1) between focused and unfocused states with settle delay |
 
 **Current backdrops (Node custom checks):**
 
@@ -267,4 +269,4 @@ Results are merged in both response shapes:
 
 ---
 
-*Generated: 2026-03-17 · Updated: 2026-03-24 (axe v4.9 audit + 15 custom Puppeteer checks + Python 1.4.3/1.4.5/1.4.11 image pipeline; +7 new Node checks: 2.1.4, 2.5.2, 2.5.7, 3.2.6, 3.3.3, 3.3.4, 3.3.8; flat endpoint now includes custom-check findings) · WCAG 2.2 (W3C Recommendation 2023-10-05)*
+*Generated: 2026-03-17 · Updated: 2026-03-25 (+2 new Node checks: 1.4.1 custom-use-of-color, 2.4.13 custom-focus-appearance; bug fixes: keyboard-trap settle delay, meaningful-sequence visibility detection, character-key-shortcuts proximity modifier guard, status-messages hasNotificationArea, focus-visible CSS-transition race condition; multiple-ways + breadcrumb/toc detection; consistent-help + phone/email contact detection; Python stage_events missing-stage warnings) · WCAG 2.2 (W3C Recommendation 2023-10-05)*

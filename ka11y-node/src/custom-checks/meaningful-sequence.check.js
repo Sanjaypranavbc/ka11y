@@ -20,9 +20,12 @@ async function run(page) {
       if (!isFlex && !isGrid) continue;
 
       const children = Array.from(el.children).filter(ch => {
-        // Only consider visible children
+        // Only consider visible children — exclude all common hiding patterns
         const cs = window.getComputedStyle(ch);
-        return cs.display !== 'none' && cs.visibility !== 'hidden';
+        return cs.display !== 'none' &&
+               cs.visibility !== 'hidden' &&
+               cs.visibility !== 'collapse' &&
+               cs.opacity !== '0';
       });
       if (children.length < 2) continue;
 

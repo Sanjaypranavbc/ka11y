@@ -93,7 +93,7 @@ export function ImageVisualisationTab({ contrastReport }: ImageVisualisationTabP
   const passedByClass   = groupByClassification(passedFiltered);
 
   return (
-    <div className="p-5 space-y-6 grid-bg min-h-full animate-fade-up">
+    <div className="p-3 sm:p-5 space-y-6 grid-bg min-h-full animate-fade-up">
       {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SummaryTile label="Regions Analysed"    value={summary.total_regions_analysed} />
@@ -106,7 +106,7 @@ export function ImageVisualisationTab({ contrastReport }: ImageVisualisationTabP
       </div>
 
       {/* Search */}
-      <div className="relative w-64">
+      <div className="relative w-full sm:w-64">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" aria-hidden="true" />
         <Input
           placeholder="Filter by filename…"

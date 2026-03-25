@@ -2,6 +2,7 @@
 
 const htmlParsing         = require('./html-parsing.check');
 const focusVisible        = require('./focus-visible.check');
+const focusAppearance     = require('./focus-appearance.check');
 const statusMessages      = require('./status-messages.check');
 const multipleWays        = require('./multiple-ways.check');
 const onFocus             = require('./on-focus.check');
@@ -15,6 +16,7 @@ const consistentHelp      = require('./consistent-help.check');
 const errorSuggestion     = require('./error-suggestion.check');
 const errorPrevention     = require('./error-prevention.check');
 const accessibleAuth      = require('./accessible-auth.check');
+const useOfColor          = require('./use-of-color.check');
 
 // Static checks: only DOM inspection, safe for raw HTML pages
 const STATIC_CHECKS = [
@@ -29,14 +31,16 @@ const STATIC_CHECKS = [
   { check: errorSuggestion,    fallbackDescription: 'Error messages must suggest how to correct mistakes' },
   { check: errorPrevention,    fallbackDescription: 'High-risk submissions must be reversible, checked, or confirmed' },
   { check: accessibleAuth,     fallbackDescription: 'Authentication must not rely solely on cognitive function tests' },
+  { check: useOfColor,         fallbackDescription: 'Color must not be the only visual means of conveying information' },
 ];
 
 // Interactive checks: require a live navigable page with events
 const INTERACTIVE_CHECKS = [
-  { check: focusVisible, fallbackDescription: 'Focusable elements must have a visible focus indicator' },
-  { check: onFocus,      fallbackDescription: 'Focusing an element must not trigger a context change' },
-  { check: onInput,      fallbackDescription: 'Changing an input value must not trigger a context change' },
-  { check: keyboardTrap, fallbackDescription: 'Keyboard focus must not be trapped in a component' },
+  { check: focusVisible,    fallbackDescription: 'Focusable elements must have a visible focus indicator' },
+  { check: focusAppearance, fallbackDescription: 'Focus indicators must have sufficient area and contrast' },
+  { check: onFocus,         fallbackDescription: 'Focusing an element must not trigger a context change' },
+  { check: onInput,         fallbackDescription: 'Changing an input value must not trigger a context change' },
+  { check: keyboardTrap,    fallbackDescription: 'Keyboard focus must not be trapped in a component' },
 ];
 
 /**

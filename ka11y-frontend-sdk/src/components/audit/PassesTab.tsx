@@ -91,16 +91,16 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
   };
 
   return (
-    <div className="p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
+    <div className="p-3 sm:p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           placeholder="Search rule, SC, criterion, reason..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-72 h-8 text-xs"
+          className="w-full sm:w-72 h-8 text-xs"
         />
 
-        <div role="group" aria-label="Filter by source" className="flex gap-1">
+        <div role="group" aria-label="Filter by source" className="flex flex-wrap gap-1">
           {allSources.map((s) => (
             <button
               key={s}
@@ -116,7 +116,7 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label="Filter by WCAG level" className="flex gap-1">
+        <div role="group" aria-label="Filter by WCAG level" className="flex flex-wrap gap-1">
           {allLevels.map((lvl) => (
             <button
               key={lvl}
@@ -176,7 +176,7 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="rounded-lg border border-border overflow-hidden mt-2">
-                <Table>
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow className="bg-muted/30">
                       <TableHead className="text-xs">Rule ID</TableHead>

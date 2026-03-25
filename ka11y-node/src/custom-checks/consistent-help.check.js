@@ -37,15 +37,28 @@ async function run(page) {
     // Also check for common help widgets: chat bubbles, phone icons
     const chatWidget = !!(
       document.querySelector('[id*="chat" i], [class*="chat" i], [id*="intercom" i], [id*="zendesk" i]') ||
-      document.querySelector('iframe[src*="chat"], iframe[src*="support"]')
+      document.querySelector('iframe[src*="chat"], iframe[src*="support"]') ||
+      document.querySelector('[data-testid*="chat" i], [aria-label*="live chat" i]')
     );
 
-    return { helpLinks, chatWidget };
+    // Phone / email contact mechanisms count as human contact mechanisms
+    const hasPhoneLink = !!(
+      document.querySelector('a[href^="tel:"]') ||
+      Array.from(document.querySelectorAll('a')).some(a =>
+        /\+?\d[\d\s\-().]{7,}\d/.test(a.textContent || '')
+      )
+    );
+    const hasEmailLink = !!(
+      document.querySelector('a[href^="mailto:"]')
+    );
+
+    return { helpLinks, chatWidget, hasPhoneLink, hasEmailLink };
   }, HELP_PATTERNS.source);
 
-  const { helpLinks, chatWidget } = data;
+  const { helpLinks, chatWidget, hasPhoneLink, hasEmailLink } = data;
+  const hasAnyHelpMechanism = helpLinks.length > 0 || chatWidget || hasPhoneLink || hasEmailLink;
 
-  if (helpLinks.length === 0 && !chatWidget) {
+  if (!hasAnyHelpMechanism) {
     return {
       successCriteriaId: SC,
       rules: [{
@@ -67,7 +80,12 @@ async function run(page) {
   });
   const uniqueLocations = [...new Set(locations)];
   const locationStr = uniqueLocations.length > 0 ? ` in: ${uniqueLocations.join(', ')}` : '';
-  const chatStr = chatWidget ? ' + chat widget' : '';
+  const extras = [
+    chatWidget && 'chat widget',
+    hasPhoneLink && 'phone link',
+    hasEmailLink && 'email link',
+  ].filter(Boolean);
+  const extrasStr = extras.length > 0 ? ` + ${extras.join(', ')}` : '';
 
   return {
     successCriteriaId: SC,
@@ -76,7 +94,7 @@ async function run(page) {
       description: 'Help mechanisms must appear in a consistent location across pages',
       impact: null,
       status: 'pass',
-      reason: `${helpLinks.length} help mechanism(s) detected${chatStr}${locationStr}. Verify placement is consistent across all pages of the site.`,
+      reason: `${helpLinks.length} help link(s)${extrasStr} detected${locationStr}. Verify placement is consistent across all pages of the site.`,
       helpUrl: HELP_URL,
     }],
   };

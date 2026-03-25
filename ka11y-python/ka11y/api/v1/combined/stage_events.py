@@ -29,12 +29,19 @@ def _stage_start(job_id: str, name: str) -> None:
 
 def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
     now = datetime.now(timezone.utc).isoformat()
+    matched = False
     for s in _jobs[job_id].get("stages", []):
         if s["name"] == name and s["status"] == "running":
             s.update(
                 status="completed", completed_at=now, findings_count=findings_count
             )
+            matched = True
             break
+    if not matched:
+        logger.warning(
+            f"[combined] _stage_complete: stage '{name}' not found in running state "
+            f"for job {job_id} — SSE progress may appear stale"
+        )
     _broadcast(
         job_id,
         "stage_complete",
@@ -44,10 +51,17 @@ def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
 
 def _stage_error(job_id: str, name: str, error: str) -> None:
     now = datetime.now(timezone.utc).isoformat()
+    matched = False
     for s in _jobs[job_id].get("stages", []):
         if s["name"] == name and s["status"] == "running":
             s.update(status="error", completed_at=now, error=error)
+            matched = True
             break
+    if not matched:
+        logger.warning(
+            f"[combined] _stage_error: stage '{name}' not found in running state "
+            f"for job {job_id} — stage record will not be updated"
+        )
     _broadcast(job_id, "stage_error", {"stage_name": name, "error": error})
 
 

@@ -33,9 +33,12 @@ async function run(page) {
       document.querySelector('[aria-label*="cart" i], [aria-label*="basket" i]') ||
       document.querySelector('[class*="cart-count" i], [class*="badge" i]')
     );
+    // Detect visual notification patterns that would need live regions but may not have them.
+    // Do NOT include [role="status"] / [role="log"] here — those ARE live regions already
+    // counted in liveRegions; including them would conflate "has live regions" with "needs them".
     const hasNotificationArea = !!(
       document.querySelector('[class*="notification" i], [class*="toast" i], [class*="snackbar" i], [class*="flash" i]') ||
-      document.querySelector('[role="status"], [role="log"]')
+      document.querySelector('[class*="alert" i]:not([role]), [class*="banner" i]:not([role])')
     );
 
     const needsLiveRegions = formCount > 0 || hasSearchResults || hasCartOrCounter || hasNotificationArea;

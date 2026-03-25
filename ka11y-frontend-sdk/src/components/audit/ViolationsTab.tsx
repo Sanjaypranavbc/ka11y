@@ -88,17 +88,17 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
   const hasFilters = search || severityFilter.length || sourceFilter.length || scFilter.length;
 
   return (
-    <div className="p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
+    <div className="p-3 sm:p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           placeholder="Search reason or HTML..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); resetVisibleCount(); }}
-          className="w-64 h-8 text-xs"
+          className="w-full sm:w-64 h-8 text-xs"
         />
 
         {/* Severity filters */}
-        <div role="group" aria-label="Filter by severity" className="flex gap-1">
+        <div role="group" aria-label="Filter by severity" className="flex flex-wrap gap-1">
           {allSeverities.map((s) => (
             <button
               key={s}
@@ -117,7 +117,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
         </div>
 
         {/* Source filters */}
-        <div role="group" aria-label="Filter by source" className="flex gap-1">
+        <div role="group" aria-label="Filter by source" className="flex flex-wrap gap-1">
           {allSources.map((s) => (
             <button
               key={s}
@@ -165,7 +165,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       </p>
 
       <div className="rounded-lg border border-border overflow-hidden">
-        <Table>
+        <Table className="min-w-[960px]">
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="text-xs w-20">Severity</TableHead>

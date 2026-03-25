@@ -7,6 +7,8 @@ const MAX_TABS = 60;
 // Bug fix: use consecutive repeat count (not total), to avoid false positives
 // from elements that legitimately appear multiple times in DOM (e.g. same nav on mobile/desktop)
 const CONSECUTIVE_THRESHOLD = 3;
+// Settle delay: allow focus event handlers and page mutations to complete before reading state
+const SETTLE_MS = 60;
 
 async function run(page) {
   // Focus the page body to start from a known position
@@ -19,6 +21,8 @@ async function run(page) {
 
   for (let i = 0; i < MAX_TABS; i++) {
     await page.keyboard.press('Tab');
+    // Wait for focus event handlers and React/Vue re-renders to settle
+    await new Promise(r => setTimeout(r, SETTLE_MS));
 
     const activeInfo = await page.evaluate(() => {
       const el = document.activeElement;

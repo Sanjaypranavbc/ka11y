@@ -37,9 +37,13 @@ async function run(page) {
       //        event.key.toLowerCase() === 'x'  /  e.key === 'X'
       const hasSingleKey = /(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z0-9]['"]|keyCode\s*===?\s*(?:[3-9]\d|1[01]\d|12[0-6])/.test(handler);
 
-      // Check that ALL paths require a modifier (Ctrl, Alt, Meta)
-      // Bug fix: ensure modifier check is co-located with the key check, not just present somewhere
-      const hasModifierGuard = /ctrlKey|altKey|metaKey/.test(handler);
+      // Check that a modifier guard (Ctrl/Alt/Meta) is co-located with the key check.
+      // Strategy: find the index of the first key match and the nearest modifier mention;
+      // if they are within 120 chars of each other, the modifier plausibly guards the key.
+      // This prevents false-negatives from handlers that check a modifier in an unrelated branch.
+      const keyIdx = handler.search(/(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z0-9]['"]|keyCode\s*===?\s*(?:[3-9]\d|1[01]\d|12[0-6])/);
+      const modIdx = handler.search(/ctrlKey|altKey|metaKey/);
+      const hasModifierGuard = keyIdx >= 0 && modIdx >= 0 && Math.abs(keyIdx - modIdx) <= 120;
 
       if (hasSingleKey && !hasModifierGuard) {
         violations.push({

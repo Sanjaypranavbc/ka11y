@@ -26,14 +26,39 @@ async function run(page) {
     const navEls = document.querySelectorAll('nav, [role="navigation"]');
     const navCount = navEls.length;
 
-    return { hasSearch, hasSitemap, navCount };
+    // Additional navigation mechanisms per WCAG 2.4.5 technique list
+    const hasBreadcrumb = !!(
+      document.querySelector('[aria-label*="breadcrumb" i], [class*="breadcrumb" i], [id*="breadcrumb" i]') ||
+      document.querySelector('nav[aria-label*="breadcrumb" i]') ||
+      // Schema.org breadcrumb structured data
+      document.querySelector('[itemtype*="BreadcrumbList"]')
+    );
+
+    const hasTableOfContents = !!(
+      document.querySelector('[aria-label*="table of contents" i], [id*="toc" i], [class*="toc" i]') ||
+      Array.from(document.querySelectorAll('a')).some(a =>
+        /table\s+of\s+content/i.test(a.textContent || '')
+      )
+    );
+
+    return { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents };
   });
 
-  const { hasSearch, hasSitemap, navCount } = data;
-  const ways = (hasSearch ? 1 : 0) + (hasSitemap ? 1 : 0) + (navCount >= 1 ? 1 : 0);
+  const { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents } = data;
+  const ways = (hasSearch ? 1 : 0) +
+               (hasSitemap ? 1 : 0) +
+               (navCount >= 1 ? 1 : 0) +
+               (hasBreadcrumb ? 1 : 0) +
+               (hasTableOfContents ? 1 : 0);
 
   if (ways >= 2) {
-    const list = [hasSearch && 'search', hasSitemap && 'sitemap', navCount >= 1 && `${navCount} nav element(s)`].filter(Boolean);
+    const list = [
+      hasSearch && 'search',
+      hasSitemap && 'sitemap',
+      navCount >= 1 && `${navCount} nav element(s)`,
+      hasBreadcrumb && 'breadcrumb',
+      hasTableOfContents && 'table of contents',
+    ].filter(Boolean);
     return {
       successCriteriaId: SC,
       rules: [{ ruleId: RULE_ID, description: 'More than one way must be available to locate a page', impact: null, status: 'pass', reason: `Multiple navigation mechanisms found: ${list.join(', ')}.`, helpUrl: HELP_URL }],
@@ -47,7 +72,7 @@ async function run(page) {
       description: 'More than one way must be available to locate a page',
       impact: 'moderate',
       status: 'incomplete',
-      reason: `Only ${ways} navigation mechanism(s) detected (search: ${hasSearch}, sitemap: ${hasSitemap}, nav: ${navCount}). Provide at least two of: site search, sitemap, navigation menu.`,
+      reason: `Only ${ways} navigation mechanism(s) detected (search: ${hasSearch}, sitemap: ${hasSitemap}, nav: ${navCount}, breadcrumb: ${hasBreadcrumb}, toc: ${hasTableOfContents}). Provide at least two of: site search, sitemap, navigation menu, breadcrumb, or table of contents.`,
       helpUrl: HELP_URL,
     }],
   };

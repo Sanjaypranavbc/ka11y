@@ -102,7 +102,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
       <aside
         aria-label="Audit controls"
         className={cn(
-          "fixed top-0 left-0 z-50 h-full w-64 bg-[hsl(var(--sidebar-background))] border-r border-[hsl(var(--sidebar-border))] flex flex-col transition-transform duration-200",
+          "fixed top-0 left-0 z-50 h-full w-[85vw] max-w-72 md:w-64 bg-[hsl(var(--sidebar-background))] border-r border-[hsl(var(--sidebar-border))] flex flex-col transition-transform duration-200",
           "md:translate-x-0 md:static md:z-auto",
           open ? "translate-x-0" : "-translate-x-full"
         )}
