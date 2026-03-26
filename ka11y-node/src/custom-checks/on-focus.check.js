@@ -16,6 +16,12 @@ const SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 
+// Compare only pathname + search (not hash) to avoid false positives on skip-links
+// and hash-based anchor navigation (B7), while still catching real navigations (B10).
+function urlPathAndSearch(url) {
+  try { const u = new URL(url); return u.pathname + u.search; } catch { return url; }
+}
+
 async function run(page) {
   const violations = [];
   let navigationDetected = false;
@@ -60,9 +66,11 @@ async function run(page) {
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      if (navigationDetected || currentUrl !== urlBefore) {
+      // Only flag pathname/search changes — hash-only changes (skip-links, anchor navigation)
+      // are not a WCAG 3.2.1 context change.
+      if (navigationDetected || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
         violations.push(focusable[i]);
-        break; // page may have navigated; unsafe to continue
+        break; // page may have navigated; unsafe to continue testing other elements
       }
     }
   } finally {
@@ -83,7 +91,7 @@ async function run(page) {
       description: 'Focusing an element must not trigger a context change',
       impact: 'serious',
       status: 'fail',
-      reason: `Focusing <${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}> triggered an unexpected navigation or context change.`,
+      reason: `Focusing <${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}> triggered an unexpected navigation or context change. Testing stopped at the first violation — additional elements may be affected. Review all focusable elements for focus-triggered navigation.`,
       helpUrl: HELP_URL,
     }],
   };

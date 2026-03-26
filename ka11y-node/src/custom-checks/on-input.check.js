@@ -6,15 +6,19 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
 const MAX_INPUTS = 15;
 const SETTLE_MS = 120;
 
-// Safe test values per input type to avoid validation-induced navigation
+// Safe test values per input type — use syntactically valid values to avoid
+// triggering browser validation events that could cause false-positive navigations (B9).
 const TYPE_CHAR = {
   number: '1', tel: '1', range: '1',
-  email: 'a', search: 'a', url: 'a', text: 'a', textarea: 'a', default: 'a',
+  email: 'a@b.co',        // valid partial email — avoids 'invalid' event on email inputs
+  url: 'https://x.com',   // valid URL — avoids 'invalid' event on url inputs
+  search: 'a', text: 'a', textarea: 'a', default: 'a',
 };
 
-// Selector includes select elements — selects with onchange can navigate
+// Selector now includes checkbox and radio — toggling these is a common source of
+// on-input context changes (B8: they were previously excluded from testing).
 const SELECTOR = [
-  'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([type="checkbox"]):not([type="radio"]):not([disabled])',
+  'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled])',
   'textarea:not([disabled])',
   'select:not([disabled])',
 ].join(', ');
@@ -32,9 +36,10 @@ async function run(page) {
       return Array.from(document.querySelectorAll(sel)).slice(0, max).map((el, i) => ({
         index: i,
         tagName: el.tagName.toLowerCase(),
-        type: el.type || el.tagName.toLowerCase(),
+        type: (el.getAttribute('type') || el.tagName).toLowerCase(),
         id: el.id || null,
         isSelect: el.tagName.toLowerCase() === 'select',
+        isCheckboxOrRadio: ['checkbox', 'radio'].includes((el.getAttribute('type') || '').toLowerCase()),
         html: el.outerHTML.slice(0, 150),
       }));
     }, SELECTOR, MAX_INPUTS);
@@ -56,6 +61,12 @@ async function run(page) {
           el.selectedIndex = el.selectedIndex === 0 ? 1 : 0;
           el.dispatchEvent(new Event('change', { bubbles: true }));
         }, SELECTOR, inputInfo.index);
+      } else if (inputInfo.isCheckboxOrRadio) {
+        // For checkbox/radio: click to toggle and fire change event (B8)
+        await page.evaluate((sel, idx) => {
+          const el = document.querySelectorAll(sel)[idx];
+          if (el) el.click();
+        }, SELECTOR, inputInfo.index);
       } else {
         const char = TYPE_CHAR[inputInfo.type] || TYPE_CHAR.default;
         await page.keyboard.type(char);
@@ -69,9 +80,17 @@ async function run(page) {
         break; // page may have navigated; can't continue safely
       }
 
-      // Clean up
-      if (!inputInfo.isSelect) {
-        await page.keyboard.press('Backspace');
+      // Clean up: restore original state
+      if (!inputInfo.isSelect && !inputInfo.isCheckboxOrRadio) {
+        // Remove typed character(s) — length varies by type (url/email use multi-char values)
+        const charLen = (TYPE_CHAR[inputInfo.type] || TYPE_CHAR.default).length;
+        for (let b = 0; b < charLen; b++) await page.keyboard.press('Backspace');
+      } else if (inputInfo.isCheckboxOrRadio) {
+        // Toggle back to original state
+        await page.evaluate((sel, idx) => {
+          const el = document.querySelectorAll(sel)[idx];
+          if (el) el.click();
+        }, SELECTOR, inputInfo.index);
       }
     }
   } finally {

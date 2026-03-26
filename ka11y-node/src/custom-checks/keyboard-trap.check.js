@@ -4,9 +4,10 @@ const SC = '2.1.2';
 const RULE_ID = 'custom-keyboard-trap';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/no-keyboard-trap';
 const MAX_TABS = 60;
-// Bug fix: use consecutive repeat count (not total), to avoid false positives
-// from elements that legitimately appear multiple times in DOM (e.g. same nav on mobile/desktop)
-const CONSECUTIVE_THRESHOLD = 3;
+// Buffer size for cycle detection: tracks last 4 focused keys.
+// This detects both single-element stuck traps (A,A,A) and two-element cycling
+// traps (A,B,A,B) — the most common real-world pattern (dialog with 2 focusable elements).
+const CYCLE_WINDOW = 4;
 // Settle delay: allow focus event handlers and page mutations to complete before reading state
 const SETTLE_MS = 60;
 
@@ -31,7 +32,9 @@ async function run(page) {
       // Fall back to position+tag only when no stable attribute is available.
       const allEls = Array.from(document.querySelectorAll('*'));
       const pos = allEls.indexOf(el);
-      const stable = el.id || el.getAttribute('name') || el.getAttribute('aria-label') || '';
+      // Use only id or name as stable key — NOT aria-label, which is often shared across
+      // multiple elements (e.g. three "Close" buttons) and would produce false-positive traps.
+      const stable = el.id || el.getAttribute('name') || '';
       const key = stable ? `${el.tagName}:${stable}` : `${pos}:${el.tagName}`;
       return { key, html: el.outerHTML.slice(0, 150), tagName: el.tagName.toLowerCase() };
     });
@@ -39,11 +42,18 @@ async function run(page) {
     if (!activeInfo) break; // focus left the page or hit body
 
     recentKeys.push(activeInfo.key);
-    if (recentKeys.length > CONSECUTIVE_THRESHOLD) recentKeys.shift();
+    if (recentKeys.length > CYCLE_WINDOW) recentKeys.shift();
 
-    // Consecutive repeat: same element focused N times in a row
-    const isConsecutiveTrap = recentKeys.length === CONSECUTIVE_THRESHOLD &&
-      recentKeys.every(k => k === activeInfo.key);
+    // Detect two trap patterns:
+    // 1. Stuck: same element focused 3+ times consecutively (1-element trap)
+    const isStuck = recentKeys.length >= 3 && recentKeys.every(k => k === recentKeys[0]);
+    // 2. Two-element cycle: A→B→A→B (most common dialog/tooltip trap)
+    const n = recentKeys.length;
+    const isTwoElemCycle = n >= 4 &&
+      recentKeys[n - 1] === recentKeys[n - 3] &&
+      recentKeys[n - 2] === recentKeys[n - 4] &&
+      recentKeys[n - 1] !== recentKeys[n - 2];
+    const isConsecutiveTrap = isStuck || isTwoElemCycle;
 
     if (isConsecutiveTrap) {
       // Verify it's a real trap: try Escape then Tab
@@ -92,7 +102,7 @@ async function run(page) {
         if (!el || el === document.body || el === document.documentElement) return null;
         const allEls = Array.from(document.querySelectorAll('*'));
         const pos = allEls.indexOf(el);
-        const stable = el.id || el.getAttribute('name') || el.getAttribute('aria-label') || '';
+        const stable = el.id || el.getAttribute('name') || '';
         const key = stable ? `${el.tagName}:${stable}` : `${pos}:${el.tagName}`;
         return { key, html: el.outerHTML.slice(0, 150), tagName: el.tagName.toLowerCase() };
       });
@@ -100,10 +110,15 @@ async function run(page) {
       if (!activeInfo) break;
 
       recentShiftKeys.push(activeInfo.key);
-      if (recentShiftKeys.length > CONSECUTIVE_THRESHOLD) recentShiftKeys.shift();
+      if (recentShiftKeys.length > CYCLE_WINDOW) recentShiftKeys.shift();
 
-      const isConsecutiveTrap = recentShiftKeys.length === CONSECUTIVE_THRESHOLD &&
-        recentShiftKeys.every(k => k === activeInfo.key);
+      const sn = recentShiftKeys.length;
+      const isShiftStuck = sn >= 3 && recentShiftKeys.every(k => k === recentShiftKeys[0]);
+      const isShiftTwoElemCycle = sn >= 4 &&
+        recentShiftKeys[sn - 1] === recentShiftKeys[sn - 3] &&
+        recentShiftKeys[sn - 2] === recentShiftKeys[sn - 4] &&
+        recentShiftKeys[sn - 1] !== recentShiftKeys[sn - 2];
+      const isConsecutiveTrap = isShiftStuck || isShiftTwoElemCycle;
 
       if (isConsecutiveTrap) {
         // Verify: try Escape then Shift+Tab
@@ -117,7 +132,7 @@ async function run(page) {
           if (!el || el === document.body) return null;
           const allEls = Array.from(document.querySelectorAll('*'));
           const pos = allEls.indexOf(el);
-          const stable = el.id || el.getAttribute('name') || el.getAttribute('aria-label') || '';
+          const stable = el.id || el.getAttribute('name') || '';
           return stable ? `${el.tagName}:${stable}` : `${pos}:${el.tagName}`;
         });
 
