@@ -271,7 +271,7 @@ class AsyncImageCrawler:
         return ImageData(
             url=url,
             src=src,
-            alt_text=alt,  # None = absent, "" = explicit empty (F18)
+            alt_text=alt,
             title=title,
             classification=cr.type,
             sub_type=cr.sub_type,
