@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote, urlparse
 
 from ka11y.config.logger import setup_logger
+from ka11y.preprocessor.text_helper_models import _json_serializer
 from ka11y.utils.config_loader import load_config
 
 from .models import CombinedRequest
@@ -183,7 +184,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
-            json.dump(report, fh, indent=2, ensure_ascii=False)
+            json.dump(report, fh, indent=2, ensure_ascii=False, default=_json_serializer)
 
         _jobs[job_id].update(
             {
