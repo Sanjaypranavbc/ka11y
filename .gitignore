@@ -1,6 +1,10 @@
-*.xml
+
 .idea
 .idea/
 output
+
+
+# Ignore Claude Files For Good Cause
 .claude
 *.xlsx
+WCAG_Solution_Document.md

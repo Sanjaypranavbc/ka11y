@@ -13,7 +13,8 @@
 #   docker compose up                      # start all services
 #   docker compose up --build              # build + start
 #   docker compose logs -f                 # follow logs
-#   docker compose down -v                 # stop + remove volumes
+#   docker compose down                    # stop services
+#   rm -rf output/crawled_images output/logs  # optional: clear bind-mounted audit output
 # =============================================================================
 
 services:

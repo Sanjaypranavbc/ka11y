@@ -136,8 +136,9 @@ docker compose logs -f docs
 # Stop all services (keep volumes)
 docker compose down
 
-# Stop and remove volumes (clears crawled output)
-docker compose down -v
+# Stop all services, then clear bind-mounted audit output if needed
+docker compose down
+rm -rf output/crawled_images output/logs
 
 # Rebuild a single image
 docker compose build python
