@@ -200,7 +200,10 @@ class RenderedLayoutCrawler:
         containing the raw data consumed by each evaluator.
         """
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
             try:
                 results = await self._run_all_scenarios(browser)
             finally:

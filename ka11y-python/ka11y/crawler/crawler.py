@@ -34,7 +34,7 @@ from ka11y.utils.config_loader import load_config
 
 CONFIG = load_config()
 
-console = Console()
+console = Console(force_terminal=True)
 logger = setup_logger(name="KAC", tag="crawler")
 
 
@@ -306,7 +306,10 @@ class AsyncImageCrawler:
         )
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
             context = await browser.new_context(
                 viewport={
                     "width": CONFIG["crawl_browser"]["width"],

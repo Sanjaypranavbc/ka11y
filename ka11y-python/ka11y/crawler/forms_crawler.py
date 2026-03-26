@@ -193,7 +193,10 @@ class AsyncFormCrawler:
 
     async def crawl(self) -> List[FormInputData]:
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
             context = await browser.new_context(
                 viewport={"width": 1440, "height": 900},
                 user_agent=(

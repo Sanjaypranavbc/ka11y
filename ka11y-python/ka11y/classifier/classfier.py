@@ -10,7 +10,7 @@ from rich import box
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.models import ImageData
 
-console = Console()
+console = Console(force_terminal=True)
 logger = setup_logger(name="KAC", tag="classify_assets")
 
 
