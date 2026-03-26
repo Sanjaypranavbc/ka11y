@@ -1,5 +1,7 @@
 'use strict';
 
+const { SsrfGuardError } = require('../services/accessibility.service');
+
 /**
  * AccessibilityController — SRP: handles HTTP requests for accessibility analysis.
  */
@@ -287,6 +289,13 @@ class AccessibilityController {
       this._logger.info(`analyseUrlFlat done findings=${findings.length}`);
       res.json({ url, findings });
     } catch (err) {
+      // Bug 4 fix: SSRF guard failures are caused by invalid/private URLs submitted by the
+      // client — they are not server faults. Return 400 so clients classify them correctly
+      // and retry logic / monitoring treats them as bad input rather than server instability.
+      if (err instanceof SsrfGuardError) {
+        this._logger.warn(`analyseUrlFlat rejected (SSRF guard): ${err.message}`);
+        return res.status(400).json({ error: 'Invalid URL', message: err.message });
+      }
       this._logger.error(`analyseUrlFlat failed: ${err.message}`);
       res.status(500).json({ error: 'URL flat analysis failed', message: err.message });
     }
@@ -324,6 +333,10 @@ class AccessibilityController {
       this._logger.info(`analyseUrl done results=${results.length}`);
       res.json({ url, results });
     } catch (err) {
+      if (err instanceof SsrfGuardError) {
+        this._logger.warn(`analyseUrl rejected (SSRF guard): ${err.message}`);
+        return res.status(400).json({ error: 'Invalid URL', message: err.message });
+      }
       this._logger.error(`analyseUrl failed: ${err.message}`);
       res.status(500).json({
         error:   'URL accessibility analysis failed',

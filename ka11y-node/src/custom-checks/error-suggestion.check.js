@@ -46,6 +46,18 @@ async function run(page) {
       }
     }
 
+    // B21: also resolve aria-describedby on invalid inputs. Error messages are commonly
+    // injected via aria-describedby pointing to an element elsewhere in the DOM (not a
+    // sibling or child). Without this, the error text exists in the page but is never
+    // collected, causing hasSuggestion to be computed on an incomplete set → false fail.
+    for (const el of document.querySelectorAll('[aria-invalid="true"][aria-describedby]')) {
+      const ids = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+      for (const id of ids) {
+        const target = document.getElementById(id);
+        if (target && !errorEls.includes(target)) errorEls.push(target);
+      }
+    }
+
     // Deduplicate
     const seen = new Set();
     const allErrors = [];

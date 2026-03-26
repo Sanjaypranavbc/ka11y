@@ -35,6 +35,18 @@ async function run(page) {
       const flexDir = style.flexDirection || '';
       const isReversed = flexDir === 'row-reverse' || flexDir === 'column-reverse';
 
+      // B13: RTL layout exemption — row-reverse is the CORRECT implementation for
+      // Arabic, Hebrew, Persian, and Urdu sites. Flag it only when the document/element
+      // writing direction is LTR. column-reverse is still flagged regardless of directionality.
+      if (flexDir === 'row-reverse') {
+        const docDir  = (document.documentElement.getAttribute('dir') || '').toLowerCase();
+        const docLang = document.documentElement.getAttribute('lang') || '';
+        const isRtlDoc = docDir === 'rtl' ||
+          /^(ar|he|fa|ur|yi|arc|ckb)\b/i.test(docLang);
+        const isRtlEl  = !!el.closest('[dir="rtl"]');
+        if (isRtlDoc || isRtlEl) continue; // correct usage for RTL — skip
+      }
+
       // Bug fix 2: detect CSS order property — use parseInt with radix 10
       // Note: parseInt('auto', 10) = NaN; we treat NaN as 0 (default order)
       const orders = children.map(ch => {

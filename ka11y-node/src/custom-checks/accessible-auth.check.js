@@ -52,14 +52,21 @@ async function run(page) {
         })
       );
 
-      // 2. Check if password field blocks copy-paste (inline attribute only — addEventListener not detectable)
+      // 2. Check if password field blocks copy-paste.
+      // B20: addEventListener-based paste blocking (the most common production pattern in
+      // React/Vue/Angular apps) is invisible to getAttribute('onpaste'). Fix: dispatch a
+      // synthetic cancelable paste event and check whether it was defaultPrevented.
+      // This detects both inline onpaste attributes AND addEventListener('paste', ...) handlers.
       const passwordField = form.querySelector('input[type="password"]');
       let blocksCopyPaste = false;
       if (passwordField) {
         const onPaste = passwordField.getAttribute('onpaste') || '';
         const onCopy  = passwordField.getAttribute('oncopy') || '';
-        // Bug fix: check for any variation of blocking patterns
-        blocksCopyPaste = /return\s+false|preventDefault|false/i.test(onPaste + onCopy);
+        const inlineBlocks = /return\s+false|preventDefault|false/i.test(onPaste + onCopy);
+        // Dispatch a synthetic paste event and see if it's cancelled
+        const testEvent = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+        passwordField.dispatchEvent(testEvent);
+        blocksCopyPaste = inlineBlocks || testEvent.defaultPrevented;
       }
 
       // 3. Cognitive function tests (expanded patterns)

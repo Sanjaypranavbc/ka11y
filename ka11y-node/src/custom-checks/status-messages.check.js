@@ -29,9 +29,21 @@ async function run(page) {
       document.querySelector('[aria-live][id*="result" i]') ||
       document.querySelector('[id*="search-result" i], [class*="search-result" i]')
     );
+    // B14: '[class*="badge" i]' was too broad — it matched Bootstrap decorative labels
+    // ("New", "Pro", "Beta") and other non-counter badge components, causing false
+    // positives. Only count a badge as a dynamic counter if it contains a number or
+    // an aria-label that explicitly signals counter behaviour.
+    const badgeEls = Array.from(document.querySelectorAll('[class*="badge" i]'));
+    const hasCounterBadge = badgeEls.some(el => {
+      const text = (el.textContent || '').trim();
+      const label = (el.getAttribute('aria-label') || '').toLowerCase();
+      return /^\d+\+?$/.test(text) ||
+             /count|counter|notification|unread|\bnew\b/i.test(label);
+    });
     const hasCartOrCounter = !!(
       document.querySelector('[aria-label*="cart" i], [aria-label*="basket" i]') ||
-      document.querySelector('[class*="cart-count" i], [class*="badge" i]')
+      document.querySelector('[class*="cart-count" i]') ||
+      hasCounterBadge
     );
     // FP fix: detect visual notification patterns only when they are NOT already
     // contained within an existing live region. If the notification element is already

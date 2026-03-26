@@ -1,29 +1,14 @@
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, HttpUrl
+"""
+ka11y/api/v1/models/combined.py
+=================================
+Bug 8 fix: this module was a stale duplicate of ka11y/api/v1/combined/models.py
+that was missing the newer rendered-layout audit flags added to CombinedRequest
+(run_resize_text_audit, run_reflow_audit, run_orientation_audit, etc.).
 
+All definitions are now re-exported from the canonical source of truth so that
+any existing import path continues to work without drifting from the real schema.
+"""
 
-class CombinedRequest(BaseModel):
-    url: HttpUrl
-    max_depth: int = 0
-    wcag_level: str = "AAA"  # "A" | "AA" | "AAA"
-    run_ocr: bool = True
-    run_image_audit: bool = True
-    run_form_audit: bool = True
-    run_label_in_name_audit: bool = True
-    run_pause_stop_hide_audit: bool = True
-    run_target_size_audit: bool = True
-    run_text_spacing_audit: bool = True
+from ka11y.api.v1.combined.models import CombinedRequest, JobStatusResponse
 
-
-class JobStatusResponse(BaseModel):
-    job_id: str
-    status: str  # pending | running | completed | failed
-    url: str
-    submitted_at: str
-    completed_at: Optional[str] = None
-    report_path: Optional[str] = None
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    current_stage: Optional[str] = None
-    stages: List[Dict[str, Any]] = []
-    warnings: List[str] = []
+__all__ = ["CombinedRequest", "JobStatusResponse"]

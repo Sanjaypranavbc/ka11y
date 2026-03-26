@@ -63,10 +63,20 @@ async function run(page) {
       });
     const hasLibraryDnd = libraryDraggables.length > 0;
 
-    return { draggables, hasLibraryDnd, libraryCount: libraryDraggables.length };
+    // B15: also check alternatives for library DnD elements so that well-implemented
+    // library-based drag lists (e.g. react-beautiful-dnd with "Move up/down" buttons)
+    // can receive a pass verdict instead of always being marked incomplete.
+    let libraryMissingAlt = 0;
+    for (const el of libraryDraggables) {
+      const altInside   = !!el.querySelector(altSel);
+      const altInParent = !!(el.parentElement && el.parentElement.querySelector(altSel));
+      if (!altInside && !altInParent) libraryMissingAlt++;
+    }
+
+    return { draggables, hasLibraryDnd, libraryCount: libraryDraggables.length, libraryMissingAlt };
   }, DND_LIBRARY_MARKERS, ALT_SELECTOR);
 
-  const { draggables, hasLibraryDnd, libraryCount } = data;
+  const { draggables, hasLibraryDnd, libraryCount, libraryMissingAlt } = data;
   const totalCount = draggables.length + libraryCount;
 
   if (totalCount === 0) {
@@ -85,9 +95,9 @@ async function run(page) {
 
   const missingAlternative = draggables.filter(d => !d.hasAlternative);
 
-  // Bug fix: library-only case → always incomplete (can't verify alt from static DOM)
-  // draggables with alternatives → pass, without → incomplete
-  if (missingAlternative.length === 0 && !hasLibraryDnd) {
+  // B15 fix: library DnD can now pass if every library draggable has a detectable
+  // single-pointer alternative nearby. Previously it always returned incomplete regardless.
+  if (missingAlternative.length === 0 && (!hasLibraryDnd || libraryMissingAlt === 0)) {
     return {
       successCriteriaId: SC,
       rules: [{
@@ -95,12 +105,13 @@ async function run(page) {
         description: 'All functionality that uses dragging movements must have a single-pointer alternative',
         impact: null,
         status: 'pass',
-        reason: `${draggables.length} draggable element(s) detected — each appears to have a single-pointer alternative nearby.`,
+        reason: `${totalCount} draggable element(s) detected — each appears to have a single-pointer alternative nearby.`,
         helpUrl: HELP_URL,
       }],
     };
   }
 
+  const totalMissing = missingAlternative.length + libraryMissingAlt;
   const sample = missingAlternative.slice(0, 3).map(d => d.html.slice(0, 80)).join('; ');
   return {
     successCriteriaId: SC,
@@ -109,7 +120,7 @@ async function run(page) {
       description: 'All functionality that uses dragging movements must have a single-pointer alternative',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${totalCount} draggable element(s) detected${hasLibraryDnd ? ` (incl. ${libraryCount} from D&D library)` : ''}. ${missingAlternative.length} appear to lack a nearby single-pointer alternative (button/link). Verify each drag action has an accessible equivalent: ${sample || 'D&D library elements present — verify alternatives exist'}.`,
+      reason: `${totalCount} draggable element(s) detected${hasLibraryDnd ? ` (incl. ${libraryCount} from D&D library)` : ''}. ${totalMissing} appear to lack a nearby single-pointer alternative (button/link). Verify each drag action has an accessible equivalent: ${sample || 'D&D library elements present — verify alternatives exist'}.`,
       helpUrl: HELP_URL,
     }],
   };
