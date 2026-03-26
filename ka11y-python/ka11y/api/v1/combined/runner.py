@@ -30,6 +30,49 @@ from .store import _broadcast, _close_subscribers, _jobs
 logger = setup_logger(name="KAC", tag="combined")
 
 
+def _merge_findings(
+    node_findings: List[Dict], python_findings: List[Dict]
+) -> List[Dict]:
+    """
+    Merge axe-core and Python findings with deduplication.
+
+    Dedup key: (wcag_sc, status, element_signature)
+      - element_signature is the first 120 chars of element.html (or element_id)
+        normalised to lower-case so minor HTML differences don't create dupes.
+      - Findings with no element info are never deduplicated (always kept).
+
+    Override rule: when both axe-core and Python fire on the same key, the
+    Python finding wins — it carries richer OCR-based contrast data for 1.4.3
+    and more precise image-level diagnostics for other criteria.
+    """
+    # Index Python findings first so they take precedence in the merge table.
+    merged: dict = {}  # key -> finding dict
+    no_key: list = []  # findings with no dedup key (keep all)
+
+    def _sig(f: Dict) -> tuple:
+        el = f.get("element") or {}
+        el_id = (el.get("element_id") or "").strip()
+        el_html = (el.get("html") or "").strip()[:120].lower()
+        ident = el_id or el_html
+        return (f.get("wcag_sc", ""), f.get("status", ""), ident)
+
+    for f in python_findings:
+        key = _sig(f)
+        if not key[2]:  # no element identifier
+            no_key.append(f)
+        else:
+            merged[key] = f  # Python always wins
+
+    for f in node_findings:
+        key = _sig(f)
+        if not key[2]:
+            no_key.append(f)
+        elif key not in merged:
+            merged[key] = f  # axe only added when Python has no match
+
+    return list(merged.values()) + no_key
+
+
 async def _run_job(job_id: str, payload: CombinedRequest) -> None:
     """
     Background task: run axe-core (Node) and Python stages in parallel.
@@ -122,7 +165,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
             if f.get("level") in allowed or f.get("level") is None
         ]
 
-        all_findings = node_findings + python_findings
+        all_findings = _merge_findings(node_findings, python_findings)
         all_findings.sort(
             key=lambda f: {"fail": 0, "needs_review": 1, "pass": 2}.get(f["status"], 3)
         )

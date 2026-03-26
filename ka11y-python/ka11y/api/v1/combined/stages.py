@@ -24,7 +24,9 @@ _STAGE_TIMEOUT_SECONDS = 600
 # Maximum seconds for the crawler pass only.  OCR always runs on whatever
 # images were saved before this deadline, so a slow/stuck target never
 # prevents contrast analysis from completing.
-_CRAWL_TIMEOUT_SECONDS = 120
+# Button/icon screenshots are now capped at 5 s each (crawler.py), so 300 s
+# handles up to ~60 stuck elements before we cut over to OCR on partial images.
+_CRAWL_TIMEOUT_SECONDS = 300
 
 import httpx
 
