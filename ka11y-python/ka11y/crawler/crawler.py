@@ -435,7 +435,9 @@ class AsyncImageCrawler:
                             }""")
 
                             # 🔽 BUILD NEW DEDUP KEY
-                            dedup_key = f"{abs_src}|{alt.strip()}|{el_context['role']}|{el_context['parentTag']}|{el_context['clickable']}"
+                            alt_for_key = alt.strip() if isinstance(alt, str) else ""
+                            dedup_key = f"{abs_src}|{alt_for_key}|{el_context['role']}|{el_context['parentTag']}|{el_context['clickable']}"
+
 
                             # 🔽 REPLACE OLD seen_srcs CHECK
                             if dedup_key in seen_images:
@@ -1030,7 +1032,7 @@ class AsyncImageCrawler:
                         bg_hash = hashlib.md5(abs_src.encode()).hexdigest()[:12]
 
                         role = (bg["role"] or "").strip().lower()
-                        has_label = bool(bg["ariaLabel"].strip())
+                        has_label = bool((bg["ariaLabel"] or "").strip())
                         is_hidden = bg["ariaHidden"] == "true" or role in ("presentation", "none")
 
                         if is_hidden:

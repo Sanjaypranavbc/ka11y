@@ -109,9 +109,6 @@ async def _stage_image_audit(
 
         image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
 
-        # Give the crawler its own deadline so that slow/stuck element
-        # screenshots don't eat the OCR budget.  Images already written to
-        # disk before the timeout are still picked up by the OCR step.
         async def _crawl_and_save() -> None:
             await image_crawler.crawl_page()
             await asyncio.to_thread(image_crawler.save_results)
