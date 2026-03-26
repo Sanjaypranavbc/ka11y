@@ -46,7 +46,7 @@ _THEME = Theme(
     }
 )
 
-_console = Console(theme=_THEME, stderr=False, highlight=False)
+_console = Console(theme=_THEME, stderr=False, highlight=False, force_terminal=True)
 
 _FILE_FMT = logging.Formatter(
     "%(asctime)s | %(levelname)-8s | [%(tag)-14s] | %(name)s | %(message)s",

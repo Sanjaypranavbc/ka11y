@@ -136,7 +136,10 @@ class AsyncTextSpacingCrawler:
 
     async def crawl(self) -> List[TextSpacingData]:
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
             context = await browser.new_context(viewport={"width": 1440, "height": 900})
             await install_ssrf_guard(context)  # Bug 1 fix
 

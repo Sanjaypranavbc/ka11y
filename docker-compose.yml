@@ -68,6 +68,10 @@ services:
     image: ka11y-python:latest
     container_name: ka11y-python
     restart: unless-stopped
+    shm_size: '256m'
+
+    security_opt:
+      - seccomp:unconfined
 
     depends_on:
       node:
