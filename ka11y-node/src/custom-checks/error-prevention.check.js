@@ -19,10 +19,20 @@ async function run(page) {
     const riskForms = [];
 
     for (const form of forms) {
-      const formText = (form.textContent || '').replace(/\s+/g, ' ');
-      const isFinancial   = financialRe.test(formText);
-      const isLegal       = legalRe.test(formText);
-      const isDestructive = destructiveRe.test(formText);
+      // Scope matching to high-signal elements: headings, submit buttons, fieldset legends,
+      // and form action/id attributes. Avoid matching all form text to prevent false positives
+      // from inline links like "Read our privacy policy" inside checkbox labels.
+      const submitLabels = Array.from(
+        form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])')
+      ).map(b => ((b.textContent || '') + (b.getAttribute('value') || '')).trim()).join(' ');
+      const headings = Array.from(form.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,label[class*="head"]'))
+        .map(h => h.textContent || '').join(' ');
+      const formMeta = [(form.id || ''), (form.getAttribute('action') || ''), (form.getAttribute('name') || '')].join(' ');
+      const focusedText = [submitLabels, headings, formMeta].join(' ').replace(/\s+/g, ' ');
+
+      const isFinancial   = financialRe.test(focusedText);
+      const isLegal       = legalRe.test(focusedText);
+      const isDestructive = destructiveRe.test(focusedText);
 
       if (!isFinancial && !isLegal && !isDestructive) continue;
 

@@ -16,18 +16,19 @@ description: "Get ka11y running locally in under 5 minutes"
 ## 1 — Clone and start
 
 ```bash
-git clone https://github.com/your-org/ka11y.git
+git clone https://github.com/Sanjaypranavbc/ka11y.git
 cd ka11y
 docker compose up --build
 ```
 
-This builds and starts three services:
+This builds and starts four services:
 
 | Container | Port | Purpose |
 |-----------|------|---------|
 | `ka11y-node` | 3000 | axe-core / Puppeteer engine |
 | `ka11y-python` | 8000 | FastAPI + Python auditors |
 | `ka11y-frontend` | 8080 | React dashboard (nginx) |
+| `ka11y-docs` | 3001 | Mintlify documentation site |
 
 <Warning>
   First build downloads EasyOCR language models (~300 MB) and Playwright Chromium (~150 MB). Subsequent builds use the Docker layer cache and are fast.
@@ -43,7 +44,13 @@ The dashboard streams live stage progress as each auditor completes. When the jo
 
 ---
 
-## 3 — Run an audit via the API
+## 3 — Open the documentation site
+
+Open **http://localhost:3001** to browse the Mintlify docs locally. The docs container runs from the same repository and is included in `docker compose up`.
+
+---
+
+## 4 — Run an audit via the API
 
 ```bash
 # Submit an audit
@@ -87,7 +94,7 @@ Expected poll response once complete:
 
 ---
 
-## 4 — View the interactive API docs
+## 5 — View the interactive API docs
 
 FastAPI auto-generates Swagger UI at **http://localhost:8000/docs** and ReDoc at **http://localhost:8000/redoc**.
 

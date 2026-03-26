@@ -1,9 +1,10 @@
 # =============================================================================
 # ka11y — Docker Compose (project root)
-# Services: ka11y-node · ka11y-python · ka11y-frontend
+# Services: ka11y-node · ka11y-python · ka11y-frontend · ka11y-docs
 #
 # Port map
 #   host:8080  →  frontend (nginx)  →  internal:80
+#   host:3001  →  docs (Mintlify)   →  internal:3000
 #   host:8000  →  python (FastAPI)  →  internal:8000
 #   host:3000  →  node (axe-core)   →  internal:3000  (debug only; not needed by frontend)
 #
@@ -84,10 +85,6 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
 
-#    volumes:
-#      - crawled_output:/app/crawled_images
-#      - python_logs:/app/logs
-    # In the python service:
     volumes:
       - ./output/crawled_images:/app/crawled_images
       - ./output/logs:/app/logs
@@ -139,12 +136,36 @@ services:
         max-file: "5"
 
 
-# ── Named volumes ──────────────────────────────────────────────────────────────
-volumes:
-  crawled_output:
-    driver: local
-  python_logs:
-    driver: local
+  # ── Mintlify documentation site ────────────────────────────────────────────
+  docs:
+    build:
+      context: ./ka11y-docs
+      dockerfile: Dockerfile
+    image: ka11y-docs:latest
+    container_name: ka11y-docs
+    restart: unless-stopped
+
+    networks:
+      - ka11y-net
+
+    ports:
+      - "3001:3000"
+
+    volumes:
+      - ./ka11y-docs:/docs
+
+    healthcheck:
+      test:         ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval:     30s
+      timeout:      10s
+      start_period: 30s
+      retries:      5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 
 # ── Networks ───────────────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@
   "topbarLinks": [
     {
       "name": "GitHub",
-      "url": "https://github.com/your-org/ka11y"
+      "url": "https://github.com/Sanjaypranavbc/ka11y"
     }
   ],
   "topbarCtaButton": {
@@ -111,6 +111,6 @@
     }
   ],
   "footerSocials": {
-    "github": "https://github.com/your-org/ka11y"
+    "github": "https://github.com/Sanjaypranavbc/ka11y"
   }
 }
