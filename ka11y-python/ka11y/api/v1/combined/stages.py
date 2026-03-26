@@ -94,9 +94,14 @@ async def _stage_image_audit(
         return [], None
 
     try:
-        from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
+        from ka11y.accessibility.rules.non_text.alttext import (
+            AltTextAccessibilityAuditor,
+        )
         from ka11y.crawler.crawler import AsyncImageCrawler
-        from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
+        from ka11y.text_detector.text_detector import (
+            OCRPreprocessing,
+            TextClassification,
+        )
 
         image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
         await image_crawler.crawl_page()
@@ -151,7 +156,9 @@ async def _stage_form_audit(
         return []
 
     try:
-        from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
+        from ka11y.accessibility.rules.forms.form_auditor import (
+            FormAccessibilityAuditor,
+        )
         from ka11y.crawler.forms_crawler import AsyncFormCrawler
 
         form_crawler = AsyncFormCrawler(
@@ -459,36 +466,53 @@ async def _run_python_stages(
 
     Returns (all_findings, contrast_report).
     """
+
     # Each stage is wrapped with asyncio.wait_for so that a slow/unresponsive
     # target cannot hold a Playwright browser instance indefinitely (D2).
     def _timed(coro):
         return asyncio.wait_for(coro, timeout=_STAGE_TIMEOUT_SECONDS)
 
     results = await asyncio.gather(
-        _timed(_stage_image_audit(
-            url, output_dir, max_depth, run_ocr, run_image_audit, job_id
-        )),
+        _timed(
+            _stage_image_audit(
+                url, output_dir, max_depth, run_ocr, run_image_audit, job_id
+            )
+        ),
         _timed(_stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id)),
-        _timed(_stage_label_in_name(
-            url, output_dir, max_depth, run_label_in_name_audit, job_id
-        )),
-        _timed(_stage_pause_stop_hide(
-            url, output_dir, max_depth, run_pause_stop_hide_audit, job_id
-        )),
-        _timed(_stage_target_size(url, output_dir, max_depth, run_target_size_audit, job_id)),
-        _timed(_stage_text_spacing(url, output_dir, max_depth, run_text_spacing_audit, job_id)),
-        _timed(_stage_rendered_layout_audit(
-            url,
-            output_dir,
-            run_resize_text_audit,
-            run_reflow_audit,
-            run_text_spacing_audit,
-            run_orientation_audit,
-            run_hover_focus_content_audit,
-            run_focus_not_obscured_min_audit,
-            run_focus_not_obscured_enh_audit,
-            job_id,
-        )),
+        _timed(
+            _stage_label_in_name(
+                url, output_dir, max_depth, run_label_in_name_audit, job_id
+            )
+        ),
+        _timed(
+            _stage_pause_stop_hide(
+                url, output_dir, max_depth, run_pause_stop_hide_audit, job_id
+            )
+        ),
+        _timed(
+            _stage_target_size(
+                url, output_dir, max_depth, run_target_size_audit, job_id
+            )
+        ),
+        _timed(
+            _stage_text_spacing(
+                url, output_dir, max_depth, run_text_spacing_audit, job_id
+            )
+        ),
+        _timed(
+            _stage_rendered_layout_audit(
+                url,
+                output_dir,
+                run_resize_text_audit,
+                run_reflow_audit,
+                run_text_spacing_audit,
+                run_orientation_audit,
+                run_hover_focus_content_audit,
+                run_focus_not_obscured_min_audit,
+                run_focus_not_obscured_enh_audit,
+                job_id,
+            )
+        ),
         return_exceptions=True,
     )
 

@@ -25,8 +25,8 @@ _RULE_KEY = "wcag_2_4_12"
 # WCAG 2.4.12 (AAA) — Focus Not Obscured (Enhanced):
 # "Enhanced - any non-trivial overlap fails"
 # Reference: https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-enhanced
-ENHANCED_FAIL_THRESHOLD = 0.10    # >= this ratio → FAIL (stricter than 2.4.11)
-ENHANCED_MINOR_THRESHOLD = 0.02   # >= this ratio → NEEDS_REVIEW
+ENHANCED_FAIL_THRESHOLD = 0.10  # >= this ratio → FAIL (stricter than 2.4.11)
+ENHANCED_MINOR_THRESHOLD = 0.02  # >= this ratio → NEEDS_REVIEW
 
 # Keep legacy private names as aliases so existing callers are not broken.
 _FAIL_THRESHOLD = ENHANCED_FAIL_THRESHOLD

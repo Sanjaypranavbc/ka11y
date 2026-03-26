@@ -140,7 +140,7 @@ def check_wcag_compliance(
         }
     is_large = (font_size_px >= 24) or (is_bold and font_size_px >= 18.5)
 
-    aa_threshold  = 3.0 if is_large else 4.5
+    aa_threshold = 3.0 if is_large else 4.5
     aaa_threshold = 4.5 if is_large else 7.0
 
     return {
@@ -151,13 +151,17 @@ def check_wcag_compliance(
         "aa_threshold_used": aa_threshold,
     }
 
+
 # -------------------------
 # MAIN ENTRY
 # -------------------------
 
 
 def analyze_text_region(
-    image: Union[str, np.ndarray], bbox: List[Tuple[int, int]], font_size_px: float = 16, is_bold: bool = False
+    image: Union[str, np.ndarray],
+    bbox: List[Tuple[int, int]],
+    font_size_px: float = 16,
+    is_bold: bool = False,
 ) -> Dict[str, Any]:
 
     try:
@@ -189,7 +193,9 @@ def analyze_text_region(
             return {"error": "Segmentation failed"}
 
         fg_rgb, bg_rgb = get_average_rgb(region, mask)
-        compliance = check_wcag_compliance(ratio, font_size_px=font_size_px, is_bold=is_bold)
+        compliance = check_wcag_compliance(
+            ratio, font_size_px=font_size_px, is_bold=is_bold
+        )
 
         return {
             "region": region,

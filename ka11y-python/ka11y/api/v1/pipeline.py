@@ -289,7 +289,10 @@ async def run_full_pipeline(
             logger.info("\nSTEP 2: TEXT DETECTION & CONTRAST ANALYSIS")
             logger.info("-" * 40)
 
-            from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
+            from ka11y.text_detector.text_detector import (
+                OCRPreprocessing,
+                TextClassification,
+            )
 
             detector = OCRPreprocessing(source_directory=image_crawler.output_dir)
             detector.scan_directory()
