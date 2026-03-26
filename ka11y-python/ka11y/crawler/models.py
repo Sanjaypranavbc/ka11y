@@ -20,7 +20,7 @@ class WcagViolation(BaseModel):
 class ImageData(BaseModel):
     url: str
     src: str
-    alt_text: str = ""
+    alt_text: Optional[str] = None
     title: str = ""
     classification: str
     sub_type: Optional[str] = None
