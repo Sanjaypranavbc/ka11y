@@ -680,17 +680,17 @@ class AltTextAccessibilityAuditor:
             detected_joined = " | ".join(detected_texts)
             ocr_result = _ocr_result_for_file(ocr_results, filename)
 
-            # ---------------- F11 FIX ----------------
+
             classifier_text_flag = getattr(img, "is_text_image", False)
             ocr_text_flag = has_ocr_text and len(detected_texts) > 0
 
-            f11_mismatch = False
-            f11_reason = ""
+            text_flag = False
+            _1_4_5reason = ""
 
             if not classifier_text_flag and ocr_text_flag:
-                f11_mismatch = True
-                f11_reason = (
-                    "F11: OCR detected text but classifier marked as non-text image"
+                text_flag = True
+                _1_4_5reason = (
+                    "OCR detected text but classifier marked as non-text image"
                 )
 
             # ── Determine functional sub_type for WCAG checks ────────────
@@ -764,10 +764,10 @@ class AltTextAccessibilityAuditor:
                 effective_has_text,
             )
 
-            if f11_mismatch:
+            if text_flag:
                 wcag_1_4_5_pass = False
                 wcag_1_4_5_reason = (
-                        "FAIL [1.4.5] " + f11_reason +
+                        "FAIL [1.4.5] " + _1_4_5reason +
                         " — OCR found text but classifier missed it"
                 )
 
