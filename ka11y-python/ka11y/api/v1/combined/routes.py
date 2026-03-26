@@ -28,7 +28,7 @@ from typing import AsyncGenerator
 
 from .models import CombinedRequest, JobStatusResponse
 from .runner import _run_job
-from .store import _jobs, _subscribers, _subscribers_lock
+from .store import _get_subscribers_lock, _jobs, _subscribers
 
 # Private/reserved IP ranges that must never be fetched (SSRF guard for redirects).
 # These CIDR networks cover: loopback, RFC-1918 private, link-local, unique-local
@@ -305,7 +305,7 @@ async def stream_combined_audit(job_id: str):
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
     q: asyncio.Queue = asyncio.Queue()
-    async with _subscribers_lock:
+    async with _get_subscribers_lock():
         _subscribers.setdefault(job_id, []).append(q)
 
     async def generator() -> AsyncGenerator[str, None]:
@@ -343,7 +343,7 @@ async def stream_combined_audit(job_id: str):
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"
         finally:
-            async with _subscribers_lock:
+            async with _get_subscribers_lock():
                 subs = _subscribers.get(job_id, [])
                 if q in subs:
                     subs.remove(q)

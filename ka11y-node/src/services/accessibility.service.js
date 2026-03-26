@@ -4,21 +4,39 @@ const dns = require('dns').promises;
 const { mapResults, mapResultsFlat, mapCustomResultsFlat } = require('../utils/axeResultMapper');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 
+// Bug 3 fix: expanded from narrow RFC-1918/loopback/link-local set to include all
+// non-public ranges matched by the Python-side guard (0.0.0.0/8, shared-address
+// 100.64/10, TEST-NET documentation ranges, and multicast/reserved space).
 const _PRIVATE_IP_RE = [
-  /^127\./,
-  /^10\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^::1$/,
-  /^::ffff:127\./i,
-  /^::ffff:10\./i,
-  /^::ffff:172\.(1[6-9]|2\d|3[01])\./i,
-  /^::ffff:192\.168\./i,
-  /^::ffff:169\.254\./i,
-  /^f[cd][0-9a-f]{2}:/i,
-  /^fe80:/i,
+  /^127\./,                                       // IPv4 loopback (127.0.0.0/8)
+  /^0\./,                                         // "this" network (0.0.0.0/8)
+  /^10\./,                                        // RFC-1918 class A (10.0.0.0/8)
+  /^172\.(1[6-9]|2\d|3[01])\./,                  // RFC-1918 class B (172.16.0.0/12)
+  /^192\.168\./,                                  // RFC-1918 class C (192.168.0.0/16)
+  /^169\.254\./,                                  // IPv4 link-local (169.254.0.0/16)
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,   // Shared address space (100.64.0.0/10)
+  /^192\.0\.2\./,                                 // TEST-NET-1 (192.0.2.0/24)
+  /^198\.51\.100\./,                              // TEST-NET-2 (198.51.100.0/24)
+  /^203\.0\.113\./,                               // TEST-NET-3 (203.0.113.0/24)
+  /^(22[4-9]|23\d)\./,                           // Multicast (224.0.0.0/4)
+  /^::1$/,                                        // IPv6 loopback
+  /^::ffff:127\./i,                               // IPv4-mapped IPv6 loopback
+  /^::ffff:10\./i,                                // IPv4-mapped RFC-1918 class A
+  /^::ffff:172\.(1[6-9]|2\d|3[01])\./i,          // IPv4-mapped RFC-1918 class B
+  /^::ffff:192\.168\./i,                          // IPv4-mapped RFC-1918 class C
+  /^::ffff:169\.254\./i,                          // IPv4-mapped link-local
+  /^f[cd][0-9a-f]{2}:/i,                          // IPv6 unique-local (fc00::/7)
+  /^fe80:/i,                                      // IPv6 link-local (fe80::/10)
 ];
+
+// Bug 4 fix: typed error so controllers can distinguish client input failures
+// (bad URL / private IP) from internal server errors and return 400 vs 500.
+class SsrfGuardError extends Error {
+  constructor(msg) {
+    super(msg);
+    this.name = 'SsrfGuardError';
+  }
+}
 
 async function _assertPublicUrl(url) {
   const { hostname } = new URL(url);
@@ -28,16 +46,32 @@ async function _assertPublicUrl(url) {
     // lookup() honours system resolver policy and returns all families.
     addresses = await dns.lookup(hostname, { all: true, verbatim: true });
   } catch {
-    throw new Error(`SSRF guard: DNS resolution failed for ${hostname}`);
+    throw new SsrfGuardError(`SSRF guard: DNS resolution failed for ${hostname}`);
   }
   if (!Array.isArray(addresses) || addresses.length === 0) {
-    throw new Error(`SSRF guard: DNS resolution returned no addresses for ${hostname}`);
+    throw new SsrfGuardError(`SSRF guard: DNS resolution returned no addresses for ${hostname}`);
   }
   for (const { address: ip } of addresses) {
     if (_PRIVATE_IP_RE.some(re => re.test(ip))) {
-      throw new Error(`SSRF guard: ${hostname} resolves to private IP ${ip}`);
+      throw new SsrfGuardError(`SSRF guard: ${hostname} resolves to blocked IP ${ip}`);
     }
   }
+}
+
+// Bug 2 fix: block SSRF via redirect-time hops. Install this interceptor on every
+// Puppeteer page used for live-URL analysis so that even if the initial DNS check
+// passes, a server-side redirect to a private IP is blocked before the browser follows it.
+function _installSsrfInterceptor(page) {
+  page.on('request', (request) => {
+    try {
+      const { hostname } = new URL(request.url());
+      if (_PRIVATE_IP_RE.some(re => re.test(hostname))) {
+        request.abort('addressunreachable');
+        return;
+      }
+    } catch { /* invalid URL — let the request continue and fail naturally */ }
+    request.continue();
+  });
 }
 
 const MAX_CONCURRENT = parseInt(process.env.PUPPETEER_MAX_CONCURRENT) || 3;
@@ -204,6 +238,10 @@ class AccessibilityService {
         }
       });
 
+      // Bug 2 fix: enable request interception to block redirect-time SSRF hops.
+      await page.setRequestInterception(true);
+      _installSsrfInterceptor(page);
+
       this._logger.info(`Navigating to ${url}...`);
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
@@ -279,6 +317,10 @@ class AccessibilityService {
         }
       });
 
+      // Bug 2 fix: enable request interception to block redirect-time SSRF hops.
+      await page.setRequestInterception(true);
+      _installSsrfInterceptor(page);
+
       this._logger.info(`[flat] Navigating to ${url}...`);
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
@@ -327,3 +369,4 @@ class AccessibilityService {
 }
 
 module.exports = AccessibilityService;
+module.exports.SsrfGuardError = SsrfGuardError;

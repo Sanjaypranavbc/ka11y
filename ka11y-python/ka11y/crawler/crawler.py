@@ -5,6 +5,8 @@ import hashlib
 import asyncio
 from urllib.parse import urljoin, urlparse
 from playwright.async_api import async_playwright
+
+from ka11y.crawler._ssrf_guard import install_ssrf_guard
 from pathlib import Path
 from typing import List, Set
 from pydantic import BaseModel, Field
@@ -311,6 +313,9 @@ class AsyncImageCrawler:
                     "height": CONFIG["crawl_browser"]["height"],
                 }
             )
+            # Bug 1 fix: install SSRF route guard on the context so all pages
+            # (including redirect hops) are protected against private-IP access.
+            await install_ssrf_guard(context)
             page = await context.new_page()
             page.set_default_timeout(60_000)
             download_session = None

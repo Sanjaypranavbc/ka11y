@@ -46,15 +46,20 @@ async function run(page) {
       return null;
     }
 
-    // Candidate selectors: links that appear inside typical text containers
+    // Candidate selectors: links that appear inside typical text containers.
+    // B12: 'section a[href]' removed — it matched virtually every link on modern
+    // pages (nav cards, hero CTAs, standalone card links) because almost all content
+    // lives in <section>. WCAG 1.4.1 applies to links within a block of TEXT that are
+    // distinguished from surrounding non-link text solely by colour; standalone links
+    // with no surrounding text are not subject to the criterion.
+    // 'article a[href]' narrowed to 'article > p a[href]' for the same reason.
     const SELECTORS = [
       'p a[href]',
       'li a[href]',
       'td a[href]',
       'th a[href]',
       'blockquote a[href]',
-      'article a[href]',
-      'section a[href]',
+      'article > p a[href]',
       'dd a[href]',
     ].join(', ');
 
@@ -94,7 +99,10 @@ async function run(page) {
       // which could itself be an <a> element and give incorrect comparison values.
       const linkFontWeight     = parseInt(ls.fontWeight, 10) || 400;
       const ancestorFontWeight = ancestor ? (parseInt(ancestor.fontWeight, 10) || 400) : 400;
-      const hasFontWeightCue   = linkFontWeight >= ancestorFontWeight + 200;
+      // B17: threshold reduced from 200 to 100. Many design systems use 400→500
+      // (normal→medium) as a visually meaningful non-color cue; the original 200-unit
+      // delta required 400→600 (semi-bold) and produced false violations for those systems.
+      const hasFontWeightCue   = linkFontWeight >= ancestorFontWeight + 100;
 
       // 6. Font style difference (e.g. italic vs normal)
       const hasFontStyleCue = ancestor

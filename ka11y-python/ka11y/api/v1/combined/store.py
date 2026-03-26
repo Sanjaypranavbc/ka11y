@@ -26,7 +26,21 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 
 # SSE subscriber bus: job_id → list of per-client asyncio.Queue
 _subscribers: Dict[str, List[asyncio.Queue]] = {}
-_subscribers_lock: asyncio.Lock = asyncio.Lock()
+
+# Bug 7 fix: do NOT create asyncio.Lock() at import time. Locks created at
+# module-import time can be bound to the wrong event loop under pytest-asyncio,
+# dev-server hot-reload, and alternative ASGI worker startup patterns.
+# Use lazy initialisation via _get_subscribers_lock() instead.
+_subscribers_lock: asyncio.Lock | None = None
+
+
+def _get_subscribers_lock() -> asyncio.Lock:
+    """Return the subscribers lock, creating it lazily inside the running loop."""
+    global _subscribers_lock
+    if _subscribers_lock is None:
+        _subscribers_lock = asyncio.Lock()
+    return _subscribers_lock
+
 
 # TTL for completed/failed jobs (1 hour)
 _JOB_TTL_SECONDS: int = 3600
@@ -38,12 +52,12 @@ _JOB_TTL_SECONDS: int = 3600
 async def _broadcast(job_id: str, event_type: str, data: Dict[str, Any]) -> None:
     """Push an SSE event dict to every subscriber queue for this job.
 
-    Acquires ``_subscribers_lock`` before iterating so that a concurrent
-    ``add-subscriber`` coroutine cannot slip between the snapshot and the
-    ``put_nowait`` loop, which would cause a subscriber to miss the event.
+    Acquires the subscribers lock before iterating so that a concurrent
+    add-subscriber coroutine cannot slip between the snapshot and the
+    put_nowait loop, which would cause a subscriber to miss the event.
     """
     msg = {"event": event_type, "data": data}
-    async with _subscribers_lock:
+    async with _get_subscribers_lock():
         for q in list(_subscribers.get(job_id, [])):
             q.put_nowait(msg)
 
@@ -53,7 +67,7 @@ async def _close_subscribers(job_id: str) -> None:
 
     Also lock-protected so it is consistent with _broadcast.
     """
-    async with _subscribers_lock:
+    async with _get_subscribers_lock():
         for q in list(_subscribers.get(job_id, [])):
             q.put_nowait(None)
         _subscribers.pop(job_id, None)

@@ -39,7 +39,7 @@ async function run(page) {
       const category = isDestructive ? 'destructive' : isFinancial ? 'financial' : 'legal';
 
       // Safeguard 1: Review/confirm step text present
-      const hasReviewText = /\b(review|confirm|verify|check\s+your|summary|order\s+summary|please\s+review|are\s+you\s+sure)\b/i.test(formText);
+      const hasReviewText = /\b(review|confirm|verify|check\s+your|summary|order\s+summary|please\s+review|are\s+you\s+sure)\b/i.test(focusedText);
 
       // Safeguard 2: Required confirmation checkbox
       const hasConfirmCheckbox = !!(

@@ -210,7 +210,11 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
             )
 
     total = len(table_rows)
-    pass_rate = round((total - total_violations) / total * 100, 1) if total else 0.0
+    # Bug 6 fix: total_violations counts WCAG violations (a single region can fail both
+    # 1.4.3 and 1.4.6, contributing 2), so (total - total_violations) can be negative.
+    # Use failing REGIONS instead: each region contributes at most 1 to the failure count.
+    failing_regions = sum(1 for row in table_rows if row.get("violations"))
+    pass_rate = round((total - failing_regions) / total * 100, 1) if total else 0.0
 
     return {
         "summary": {

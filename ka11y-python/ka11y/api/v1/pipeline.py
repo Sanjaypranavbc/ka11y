@@ -202,9 +202,12 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
             )
 
     total_regions = len(table_rows)
-    violations_free = total_regions - total_violations
+    # Bug 6 fix: total_violations counts per-criterion failures (a single region can
+    # fail both 1.4.3 and 1.4.6), so subtracting it from total_regions can produce a
+    # negative result. Count failing REGIONS instead (each region contributes at most 1).
+    failing_regions = sum(1 for row in table_rows if row.get("violations"))
     pass_rate = (
-        round(violations_free / total_regions * 100, 1) if total_regions else 0.0
+        round((total_regions - failing_regions) / total_regions * 100, 1) if total_regions else 0.0
     )
 
     return {

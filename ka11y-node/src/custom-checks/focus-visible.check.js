@@ -17,14 +17,21 @@ const SELECTOR = [
 ].join(', ');
 
 async function run(page) {
-  // Collect element metadata once (no interaction yet)
+  // Collect element metadata once — include stable selectors (B11: DOM index shifts when
+  // focus triggers DOM mutations; stable selectors survive re-queries after mutations).
   const elements = await page.evaluate((sel, max) => {
     const seen = new Set();
     const items = [];
+    const idCounts = {};
+    for (const el of document.querySelectorAll('[id]')) {
+      idCounts[el.id] = (idCounts[el.id] || 0) + 1;
+    }
     for (const el of document.querySelectorAll(sel)) {
       if (seen.has(el)) continue;
       seen.add(el);
-      items.push({ idx: items.length, tagName: el.tagName.toLowerCase(), id: el.id || null, html: el.outerHTML.slice(0, 200) });
+      let stableSel = null;
+      if (el.id && idCounts[el.id] === 1) stableSel = `#${CSS.escape(el.id)}`;
+      items.push({ idx: items.length, stableSel, tagName: el.tagName.toLowerCase(), id: el.id || null, html: el.outerHTML.slice(0, 200) });
       if (items.length >= max) break;
     }
     return items;
@@ -34,9 +41,11 @@ async function run(page) {
 
   for (const el of elements) {
     // ── Step 1: Capture unfocused styles ─────────────────────────────────────
-    const unfocused = await page.evaluate((sel, idx) => {
-      const all = Array.from(document.querySelectorAll(sel));
-      const e = all[idx];
+    // Use stable selector when available to survive DOM mutations caused by focus (B11).
+    const unfocused = await page.evaluate((sel, idx, stableSel) => {
+      const e = stableSel
+        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
+        : Array.from(document.querySelectorAll(sel))[idx];
       if (!e) return null;
       e.blur();
       const cs = window.getComputedStyle(e);
@@ -49,25 +58,26 @@ async function run(page) {
         borderWidth:     cs.borderWidth,
         backgroundColor: cs.backgroundColor,
         color:           cs.color,
-        opacity:         cs.opacity,
       };
-    }, SELECTOR, el.idx);
+    }, SELECTOR, el.idx, el.stableSel);
 
     if (!unfocused) continue;
 
     // ── Step 2: Focus the element and wait for transitions to settle ──────────
-    await page.evaluate((sel, idx) => {
-      const all = Array.from(document.querySelectorAll(sel));
-      const e = all[idx];
+    await page.evaluate((sel, idx, stableSel) => {
+      const e = stableSel
+        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
+        : Array.from(document.querySelectorAll(sel))[idx];
       if (e) e.focus({ preventScroll: true });
-    }, SELECTOR, el.idx);
+    }, SELECTOR, el.idx, el.stableSel);
 
     await new Promise(r => setTimeout(r, SETTLE_MS));
 
     // ── Step 3: Capture focused styles ────────────────────────────────────────
-    const focused = await page.evaluate((sel, idx) => {
-      const all = Array.from(document.querySelectorAll(sel));
-      const e = all[idx];
+    const focused = await page.evaluate((sel, idx, stableSel) => {
+      const e = stableSel
+        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
+        : Array.from(document.querySelectorAll(sel))[idx];
       if (!e) return null;
       const cs = window.getComputedStyle(e);
       return {
@@ -79,16 +89,16 @@ async function run(page) {
         borderWidth:     cs.borderWidth,
         backgroundColor: cs.backgroundColor,
         color:           cs.color,
-        opacity:         cs.opacity,
       };
-    }, SELECTOR, el.idx);
+    }, SELECTOR, el.idx, el.stableSel);
 
     // Blur and wait before next element
-    await page.evaluate((sel, idx) => {
-      const all = Array.from(document.querySelectorAll(sel));
-      const e = all[idx];
+    await page.evaluate((sel, idx, stableSel) => {
+      const e = stableSel
+        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
+        : Array.from(document.querySelectorAll(sel))[idx];
       if (e) e.blur();
-    }, SELECTOR, el.idx);
+    }, SELECTOR, el.idx, el.stableSel);
     await new Promise(r => setTimeout(r, SETTLE_MS));
 
     if (!focused) continue;
@@ -117,10 +127,11 @@ async function run(page) {
                                focused.borderWidth     !== unfocused.borderWidth;
     const bgChanged          = focused.backgroundColor !== unfocused.backgroundColor;
     const colorChanged       = focused.color           !== unfocused.color;
-    const opacityChanged     = focused.opacity         !== unfocused.opacity;
-
+    // B16: opacity change alone is NOT a visible focus indicator — it reflects CSS animations
+    // or transitions on child elements and produces false passes (e.g. a loading spinner
+    // child transitioning 0→1 while the button itself has no focus style).
     const isVisible = hasVisibleOutline || outlineChanged || boxShadowChanged ||
-                      borderChanged || bgChanged || colorChanged || opacityChanged;
+                      borderChanged || bgChanged || colorChanged;
 
     if (!isVisible) {
       violations.push({ tagName: el.tagName, id: el.id, html: el.html });

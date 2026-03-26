@@ -80,24 +80,12 @@ async function run(page) {
     return lighter / darker;
   }
 
-  // Helper to resolve an element inside page.evaluate, preferring the stable
-  // selector (unique #id) over the potentially stale DOM-index fallback.
-  const RESOLVE_FN = `
-    function resolveEl(sel, idx, stableSel) {
-      if (stableSel) {
-        const e = document.querySelector(stableSel);
-        if (e) return e;
-      }
-      return Array.from(document.querySelectorAll(sel))[idx] || null;
-    }
-  `;
-
   for (const el of elements) {
-    // Capture unfocused styles
-    const unfocused = await page.evaluate((sel, idx, stableSel, resolveFn) => {
-      // eslint-disable-next-line no-eval
-      eval(resolveFn);
-      const e = resolveEl(sel, idx, stableSel);
+    // Capture unfocused styles — resolve element via stable selector first, then DOM index fallback
+    const unfocused = await page.evaluate((sel, idx, stableSel) => {
+      const e = stableSel
+        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
+        : Array.from(document.querySelectorAll(sel))[idx];
       if (!e) return null;
       e.blur();
       const cs = window.getComputedStyle(e);
@@ -110,17 +98,18 @@ async function run(page) {
         borderColor:     cs.borderColor,
         borderWidth:     cs.borderWidth,
       };
-    }, SELECTOR, el.idx, el.stableSel, RESOLVE_FN);
+    }, SELECTOR, el.idx, el.stableSel);
 
     if (!unfocused) continue;
 
     // Settle before focusing
     await new Promise(r => setTimeout(r, SETTLE_MS));
 
-    // Capture focused styles
-    const focused = await page.evaluate((sel, idx, stableSel, resolveFn) => {
-      eval(resolveFn);
-      const e = resolveEl(sel, idx, stableSel);
+    // Capture focused styles; also capture body background for transparent-element fallback (B5)
+    const focused = await page.evaluate((sel, idx, stableSel) => {
+      const e = stableSel
+        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
+        : Array.from(document.querySelectorAll(sel))[idx];
       if (!e) return null;
       e.focus({ preventScroll: true });
       const cs = window.getComputedStyle(e);
@@ -132,16 +121,18 @@ async function run(page) {
         backgroundColor: cs.backgroundColor,
         borderColor:     cs.borderColor,
         borderWidth:     cs.borderWidth,
+        bodyBg:          window.getComputedStyle(document.body).backgroundColor,
       };
-    }, SELECTOR, el.idx, el.stableSel, RESOLVE_FN);
+    }, SELECTOR, el.idx, el.stableSel);
 
     // Settle then blur
     await new Promise(r => setTimeout(r, SETTLE_MS));
-    await page.evaluate((sel, idx, stableSel, resolveFn) => {
-      eval(resolveFn);
-      const e = resolveEl(sel, idx, stableSel);
+    await page.evaluate((sel, idx, stableSel) => {
+      const e = stableSel
+        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
+        : Array.from(document.querySelectorAll(sel))[idx];
       if (e) e.blur();
-    }, SELECTOR, el.idx, el.stableSel, RESOLVE_FN);
+    }, SELECTOR, el.idx, el.stableSel);
 
     if (!focused) continue;
 
@@ -164,17 +155,35 @@ async function run(page) {
       continue;
     }
 
-    // ── Check 2: Outline width ≥ 2 px (area requirement proxy) ───────────────
-    const meetsAreaReq = !hasVisibleOutline || outlineWidthPx >= MIN_OUTLINE_WIDTH_PX;
+    // ── Check 2: Area requirement proxy ──────────────────────────────────────
+    // For outline: width ≥ MIN_OUTLINE_WIDTH_PX.
+    // For box-shadow: spread radius ≥ MIN_OUTLINE_WIDTH_PX (B4: was always true when no outline).
+    let meetsAreaReq;
+    if (hasVisibleOutline) {
+      meetsAreaReq = outlineWidthPx >= MIN_OUTLINE_WIDTH_PX;
+    } else if (boxShadowAdded) {
+      // Extract spread radius (4th px-length) from box-shadow first layer
+      const firstLayer = (focused.boxShadow || '').split(',')[0];
+      const pxVals = (firstLayer.match(/-?[\d.]+px/g) || []).map(parseFloat);
+      const spreadPx = pxVals.length >= 4 ? Math.abs(pxVals[3]) : 0;
+      meetsAreaReq = spreadPx >= MIN_OUTLINE_WIDTH_PX;
+    } else {
+      // border-based indicators assumed to meet area requirement
+      meetsAreaReq = true;
+    }
 
     // ── Check 3: Contrast ≥ 3:1 between focused indicator and adjacent area ──
     // We compare the outline/box-shadow color against the element background color.
+    // B5: when element background is transparent, fall back to the page body background
+    // rather than treating transparent as black (which produced wrong contrast ratios).
     let meetsContrast = true; // assume pass if we can't measure
     const focusColor = hasVisibleOutline ? focused.outlineColor : focused.borderColor;
-    const bgColor    = focused.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
-                       focused.backgroundColor !== 'transparent'
+    const isTransparent = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
+    const bgColor = !isTransparent(focused.backgroundColor)
       ? focused.backgroundColor
-      : unfocused.backgroundColor;
+      : !isTransparent(unfocused.backgroundColor)
+        ? unfocused.backgroundColor
+        : (!isTransparent(focused.bodyBg) ? focused.bodyBg : 'rgb(255, 255, 255)');
 
     const lumFocus = relativeLuminance(focusColor);
     const lumBg    = relativeLuminance(bgColor);

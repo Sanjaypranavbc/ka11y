@@ -224,4 +224,12 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
         await _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
 
     finally:
+        # Bug 5 fix: stage-event broadcasts are scheduled via loop.create_task() and are
+        # not awaited by their callers. If _close_subscribers() runs before those tasks
+        # execute, subscriber queues are removed first and stage events are silently lost.
+        # Yielding to the event loop here lets all pending broadcast tasks deliver their
+        # events before the queues are closed. A single sleep(0) is sufficient because
+        # _broadcast() only performs queue puts (no further I/O awaits), so each task
+        # completes in one scheduling tick.
+        await asyncio.sleep(0)
         await _close_subscribers(job_id)
