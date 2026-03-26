@@ -19,10 +19,12 @@ import functools
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Maximum wall-clock seconds allowed for a single crawl stage.  A
-# slow/unresponsive target would otherwise hold a Playwright browser instance
-# indefinitely.  120 s is a generous budget; typical pages finish in < 30 s.
+# Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
 _STAGE_TIMEOUT_SECONDS = 600
+# Maximum seconds for the crawler pass only.  OCR always runs on whatever
+# images were saved before this deadline, so a slow/stuck target never
+# prevents contrast analysis from completing.
+_CRAWL_TIMEOUT_SECONDS = 120
 
 import httpx
 
@@ -104,8 +106,21 @@ async def _stage_image_audit(
         )
 
         image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
-        await image_crawler.crawl_page()
-        await asyncio.to_thread(image_crawler.save_results)
+
+        # Give the crawler its own deadline so that slow/stuck element
+        # screenshots don't eat the OCR budget.  Images already written to
+        # disk before the timeout are still picked up by the OCR step.
+        async def _crawl_and_save() -> None:
+            await image_crawler.crawl_page()
+            await asyncio.to_thread(image_crawler.save_results)
+
+        try:
+            await asyncio.wait_for(_crawl_and_save(), timeout=_CRAWL_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[combined] image_audit: crawler exceeded {_CRAWL_TIMEOUT_SECONDS}s "
+                f"— proceeding with partial image set from {image_crawler.output_dir}"
+            )
 
         ocr_results: list = []
         contrast_report: Optional[Dict[str, Any]] = None

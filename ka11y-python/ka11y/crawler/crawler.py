@@ -539,7 +539,7 @@ class AsyncImageCrawler:
 
                         btn_file = f"btn_{html_hash}.png"
                         btn_path = f"{btn_dir}/{btn_file}"
-                        await btn.screenshot(path=btn_path)
+                        await btn.screenshot(path=btn_path, timeout=5_000)
 
                         # Reject near-empty screenshots
                         if os.path.getsize(btn_path) < 500:
@@ -753,9 +753,9 @@ class AsyncImageCrawler:
                                 "el => el.closest('a,button,li,[role=\"button\"]') "
                                 "     || el.parentElement || el"
                             )
-                            await parent_h.screenshot(path=fi_path)
+                            await parent_h.screenshot(path=fi_path, timeout=5_000)
                         except Exception:
-                            await fi.screenshot(path=fi_path)
+                            await fi.screenshot(path=fi_path, timeout=5_000)
 
                         captured_fi += 1
                         console.print(
