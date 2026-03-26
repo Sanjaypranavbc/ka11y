@@ -18,6 +18,11 @@ from ka11y.preprocessor.text_helper_models import (
     DetailedDetection,
     _json_serializer,
 )
+from ka11y.utils.text_detector_helper import (
+    estimate_boldness,
+    bbox_height_rotated,
+    load_image_with_alpha
+)
 from ka11y.text_detector.ocrbase import OCRReader
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
@@ -193,21 +198,47 @@ class OCRPreprocessing:
 
             if len(detections) > 0:
                 result.has_text = True
-                img = cv2.imread(image_path)
+                img = load_image_with_alpha(image_path)
+
+                if img is None:
+                    logger.error(f"Failed to load image: {image_path}")
+                    return result
+
+                device_pixel_ratio = config.get("device_pixel_ratio", 1.0)
 
                 for bbox, text, conf in detections:
-                    is_bold = False
                     clean_bbox = [(int(p[0]), int(p[1])) for p in bbox]
 
-                    # Estimate rendered font height from bbox (px ≈ pt at 96 dpi screen captures).
-                    # Use the vertical span of the bounding box; floor at 8 px to avoid div-by-zero.
-                    bbox_height = abs(clean_bbox[2][1] - clean_bbox[0][1])
-                    font_size_px = max(bbox_height, 8)
+                    # ✅ NEW: clamp bbox to image bounds
+                    h, w = img.shape[:2]
+                    clean_bbox = [
+                        (max(0, min(x, w - 1)), max(0, min(y, h - 1)))
+                        for x, y in clean_bbox
+                    ]
 
+                    # ✅ F10: correct rotated bbox height
+                    bbox_height = bbox_height_rotated(clean_bbox)
+
+                    # ✅ F6: DPR-aware normalization
+                    font_size_px = max(bbox_height / device_pixel_ratio, 8)
+
+                    # ✅ F5: detect bold text
+                    is_bold = estimate_boldness(img, clean_bbox)
+
+                    # ✅ F15: route UI components (buttons/icons) through
+                    # analyze_ui_component so the is_ui_component path in
+                    # check_wcag_compliance is reachable and the 3:1 AA
+                    # threshold is correctly applied.
+                    is_ui_component = category == "button_text"
                     try:
-                        contrast_info = contrast_analyser.analyze_text_region(
-                            img, clean_bbox, font_size_px=font_size_px
-                        )
+                        if is_ui_component:
+                            contrast_info = contrast_analyser.analyze_ui_component(
+                                img, clean_bbox
+                            )
+                        else:
+                            contrast_info = contrast_analyser.analyze_text_region(
+                                img, clean_bbox, font_size_px=font_size_px
+                            )
                     except Exception as e:
                         logger.warning(f"Contrast analysis failed: {e}")
                         contrast_info = None
@@ -217,6 +248,12 @@ class OCRPreprocessing:
                     color_info = None
                     if contrast_info and not contrast_info.get("error"):
                         try:
+                            # analyze_ui_component does not return "region"/"mask"
+                            # keys — only analyze_text_region does.  Skip colour
+                            # extraction when the keys are absent to avoid KeyError.
+                            if "region" not in contrast_info or "mask" not in contrast_info:
+                                raise ValueError("No region/mask available for colour extraction")
+
                             extracted = extract_color.extract_colors_from_mask(
                                 contrast_info["region"], contrast_info["mask"], k_bg=3
                             )
@@ -241,6 +278,7 @@ class OCRPreprocessing:
                                             ratio,
                                             font_size_px=font_size_px,
                                             is_bold=is_bold,
+                                            is_ui_component=is_ui_component,  # F15
                                         )
                                     )
                                     contrast_checks.append(
@@ -260,6 +298,7 @@ class OCRPreprocessing:
                                         dominant_ratio,
                                         font_size_px=font_size_px,
                                         is_bold=is_bold,
+                                        is_ui_component=is_ui_component,  # F15
                                     )
                                 )
 
@@ -291,18 +330,31 @@ class OCRPreprocessing:
                         color_info is None
                         and contrast_info
                         and not contrast_info.get("error")
+                        and not contrast_info.get("needs_review")
                     ):
                         ratio_fb = contrast_info.get("contrast_ratio", 0)
+                        # ✅ F15: pass is_ui_component so check_wcag_compliance
+                        # applies the 3:1 threshold instead of 4.5:1 for
+                        # button/icon images.
                         compliance_fb = contrast_analyser.check_wcag_compliance(
-                            ratio_fb, font_size_px=font_size_px, is_bold=is_bold
+                            ratio_fb,
+                            font_size_px=font_size_px,
+                            is_bold=is_bold,
+                            is_ui_component=is_ui_component,
                         )
                         if not compliance_fb.get("AA_passes", False):
-                            fg_rgb = contrast_info.get("foreground_color", (0, 0, 0))
-                            bg_rgb = contrast_info.get(
-                                "background_color", (255, 255, 255)
-                            )
-                            bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
-                            violations.append(f"Fails AA Normal vs BG {bg_hex}")
+                            if is_ui_component:
+                                violations.append(
+                                    f"Fails 1.4.11 Non-text contrast "
+                                    f"{ratio_fb:.2f}:1 (minimum 3:1)"
+                                )
+                            else:
+                                fg_rgb = contrast_info.get("foreground_color", (0, 0, 0))
+                                bg_rgb = contrast_info.get(
+                                    "background_color", (255, 255, 255)
+                                )
+                                bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
+                                violations.append(f"Fails AA Normal vs BG {bg_hex}")
                     if violations:
                         result.contrast_violations_count += 1
 
@@ -621,7 +673,7 @@ def main():
     detector.scan_directory()
 
     save = TextClassification(source_directory)
-    save.results = detector.results  # ← THIS is the fix
+    save.results = detector.results
     save.save_reports()
 
 

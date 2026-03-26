@@ -22,7 +22,7 @@ def srgb_to_linear(channel: np.ndarray) -> np.ndarray:
 
 def segment_text_region(region: np.ndarray) -> np.ndarray:
     """
-    Segment text vs background using Otsu + heuristic inversion.
+    Segment text vs background using Otsu + luminance-based polarity detection.
     Returns mask: 255 = text, 0 = background
     """
     gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
@@ -30,14 +30,43 @@ def segment_text_region(region: np.ndarray) -> np.ndarray:
 
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # Heuristic: text occupies less area than background
-    if np.sum(thresh == 255) > thresh.size / 2:
-        mask = cv2.bitwise_not(thresh)
+    # --- NEW: determine correct polarity using luminance ---
+    # Assume two candidates:
+    # 1. thresh == 0 is text
+    # 2. thresh == 255 is text
+
+    mask_candidate_1 = thresh            # text = white (255)
+    mask_candidate_2 = cv2.bitwise_not(thresh)  # text = black (0 → 255)
+
+    def compute_separation(mask):
+        rgb = cv2.cvtColor(region, cv2.COLOR_BGR2RGB) / 255.0
+
+        linear = np.zeros_like(rgb)
+        for i in range(3):
+            linear[:, :, i] = srgb_to_linear(rgb[:, :, i])
+
+        luminance = (
+            0.2126 * linear[:, :, 0]
+            + 0.7152 * linear[:, :, 1]
+            + 0.0722 * linear[:, :, 2]
+        )
+
+        text_pixels = luminance[mask == 255]
+        bg_pixels = luminance[mask == 0]
+
+        if len(text_pixels) == 0 or len(bg_pixels) == 0:
+            return 0
+
+        return abs(np.mean(text_pixels) - np.mean(bg_pixels))
+
+    sep1 = compute_separation(mask_candidate_1)
+    sep2 = compute_separation(mask_candidate_2)
+
+    # Choose mask with stronger separation
+    if sep2 > sep1:
+        return mask_candidate_2
     else:
-        mask = thresh
-
-    return mask
-
+        return mask_candidate_1
 
 # -------------------------
 # Luminance + contrast
@@ -132,11 +161,13 @@ def check_wcag_compliance(
       AAA normal  : 7.0:1
       AAA large   : 4.5:1
     """
-    if is_ui_component:  # ← add early return
+    if is_ui_component:
         return {
             "contrast_ratio": round(ratio, 2),
-            "AA_ui_component": ratio >= 3.0,
+            "AA_passes": ratio >= 3.0,  # ✅ normalize key name
+            "AAA_passes": ratio >= 3.0,  # (AAA same as AA for UI components)
             "is_ui_component": True,
+            "aa_threshold_used": 3.0,
         }
     is_large = (font_size_px >= 24) or (is_bold and font_size_px >= 18.5)
 
@@ -206,6 +237,120 @@ def analyze_text_region(
             "luminance_bg": round(bg_L, 4),
             "contrast_ratio": round(ratio, 2),
             "compliance": compliance,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+# -------------------------
+# UI COMPONENT CONTRAST (WCAG 1.4.11)
+# -------------------------
+
+def _compute_luminance_map(region: np.ndarray) -> np.ndarray:
+    """Convert region to luminance map."""
+    rgb = cv2.cvtColor(region, cv2.COLOR_BGR2RGB) / 255.0
+
+    linear = np.zeros_like(rgb)
+    for i in range(3):
+        linear[:, :, i] = srgb_to_linear(rgb[:, :, i])
+
+    luminance = (
+        0.2126 * linear[:, :, 0]
+        + 0.7152 * linear[:, :, 1]
+        + 0.0722 * linear[:, :, 2]
+    )
+    return luminance
+
+
+def analyze_ui_component(
+    image: Union[str, np.ndarray],
+    bbox: List[Tuple[int, int]],
+    context_pad: int = 8,   # 🔑 important for F14
+) -> Dict[str, Any]:
+    """
+    Analyze non-text contrast (WCAG 1.4.11) for UI components.
+
+    Measures contrast between:
+      - component region
+      - surrounding page background (context)
+
+    Fixes:
+      F14 — ensures page context is included
+      F15 — actually uses is_ui_component path
+    """
+    try:
+        if isinstance(image, str):
+            img = cv2.imread(image)
+            if img is None:
+                return {"error": "Could not load image"}
+        else:
+            img = image
+
+        pts = np.array(bbox, dtype=np.int32)
+        x, y, w, h = cv2.boundingRect(pts)
+
+        H, W = img.shape[:2]
+
+        # --- Expand bbox to include surrounding context (F14 fix) ---
+        x0 = max(0, x - context_pad)
+        y0 = max(0, y - context_pad)
+        x1 = min(W, x + w + context_pad)
+        y1 = min(H, y + h + context_pad)
+
+        outer = img[y0:y1, x0:x1]
+        if outer.size == 0:
+            return {"error": "Empty region"}
+
+        # If bbox touches edge → no context → cannot evaluate properly
+        if x0 == 0 or y0 == 0 or x1 == W or y1 == H:
+            return {
+                "needs_review": True,
+                "reason": "Insufficient surrounding context for UI contrast evaluation",
+            }
+
+        # --- Create masks ---
+        mask = np.zeros(outer.shape[:2], dtype=np.uint8)
+
+        inner_x0 = context_pad
+        inner_y0 = context_pad
+        inner_x1 = inner_x0 + w
+        inner_y1 = inner_y0 + h
+
+        mask[inner_y0:inner_y1, inner_x0:inner_x1] = 255
+
+        component_pixels = mask == 255
+        surround_pixels = mask == 0
+
+        # --- Luminance ---
+        luminance = _compute_luminance_map(outer)
+
+        comp_vals = luminance[component_pixels]
+        bg_vals = luminance[surround_pixels]
+
+        if len(comp_vals) == 0 or len(bg_vals) == 0:
+            return {"error": "Failed to compute luminance"}
+
+        # Use robust percentiles (avoid noise)
+        comp_L = float(np.percentile(comp_vals, 50))
+        bg_L = float(np.percentile(bg_vals, 50))
+
+        lighter = max(comp_L, bg_L)
+        darker = min(comp_L, bg_L)
+
+        ratio = (lighter + 0.05) / (darker + 0.05)
+
+        # --- WCAG 1.4.11 ---
+        compliance = check_wcag_compliance(
+            ratio,
+            is_ui_component=True  # 🔑 F15 fix
+        )
+
+        return {
+            "contrast_ratio": round(ratio, 2),
+            "luminance_component": round(comp_L, 4),
+            "luminance_background": round(bg_L, 4),
+            "compliance": compliance,
+            "type": "ui_component",
         }
 
     except Exception as e:

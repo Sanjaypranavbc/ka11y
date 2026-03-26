@@ -37,7 +37,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from ka11y.config.logger import setup_logger
-
+from ka11y.accessibility.rules.non_text import contrast_analyser
 logger = setup_logger(name="KAC", tag="audit")
 
 
@@ -481,11 +481,20 @@ def _check_1_4_5(
             "PASS [1.4.5] Complex chart/diagram uses text as part of essential presentation",
         )
 
-    # Logo / logotype exception (WCAG Note: logotypes are considered essential)
-    if is_logo or sub_type == "logos":
+    # ---------------- F12 FIX ----------------
+    # Apply logo exception ONLY if classifier confidently says it's a logo
+
+    if is_logo:
         return (
             True,
             "PASS [1.4.5] Logo/logotype exception — customised branding text is exempt",
+        )
+
+    if sub_type == "logos" and has_ocr_text:
+        return (
+            False,
+            "FAIL [1.4.5] Image stored as logo but contains readable text "
+            "(likely plain wordmark, not exempt)"
         )
 
     if not has_ocr_text:
@@ -510,31 +519,78 @@ def _check_1_4_11(
     sub_type: str,
     has_ocr_text: bool,
     ocr_result,
+    *,
+    full_page_image=None,
+    component_bbox=None,
 ) -> tuple[bool | None, str]:
     """
     WCAG 1.4.11: Non-text Contrast — UI components (buttons, icons used as
-    controls) must have a contrast ratio of at least 3:1 against adjacent colours.
+    controls) must have a contrast ratio of at least 3:1 against the adjacent
+    page background colour.
 
-    We repurpose the OCR contrast data for button/icon images: if EasyOCR
-    detected text inside the image the measured contrast_ratio is used as a
-    proxy for the component's visual boundary contrast.
+    Strategy (in priority order):
+      1. If a full-page image + component bounding-box are supplied, call
+         ``analyze_ui_component`` which measures the boundary of the component
+         against the *surrounding page pixels*.  This is the correct F14 fix:
+         a white button on a white page will correctly yield ~1.0:1.
+      2. Fall back to the minimum OCR text-contrast ratio only when no page
+         context is available.  This is an acknowledged approximation and the
+         reason string says so.
 
     Returns:
         (True, reason)   — PASS: meets 3:1 minimum
         (False, reason)  — FAIL: below 3:1 minimum
-        (None, reason)   — N/A/INCOMPLETE: not a UI component, or no contrast data
+        (None, reason)   — N/A / INCOMPLETE
     """
     is_ui_component = is_button or is_icon or sub_type in ("buttons", "icons")
     if not is_ui_component:
         return None, "N/A — 1.4.11 applies to UI components (buttons/icons)"
 
+    # ── Path 1: pixel-accurate boundary contrast (F14 fix) ───────────────
+    if full_page_image is not None and component_bbox is not None:
+        result = contrast_analyser.analyze_ui_component(
+            full_page_image,
+            component_bbox,
+        )
+
+        if result.get("needs_review"):
+            return (
+                None,
+                "INCOMPLETE [1.4.11] Component is at the page edge — "
+                "insufficient surrounding context for automated evaluation. "
+                "Manual check required.",
+            )
+
+        if "error" in result:
+            # Fall through to OCR-proxy path rather than returning immediately
+            pass
+        else:
+            ratio = result["contrast_ratio"]
+            ratio_str = f"{ratio:.2f}:1"
+            if ratio < 3.0:
+                return (
+                    False,
+                    f"FAIL [1.4.11] Boundary contrast {ratio_str} is below "
+                    f"the 3:1 minimum required for UI components "
+                    f"(measured against surrounding page background).",
+                )
+            return (
+                True,
+                f"PASS [1.4.11] Boundary contrast {ratio_str} meets the "
+                f"3:1 minimum (measured against surrounding page background).",
+            )
+
+    # ── Path 2: OCR text-contrast proxy (no full-page context available) ─
     if not has_ocr_text or ocr_result is None:
         return (
             None,
-            "INCOMPLETE [1.4.11] No OCR contrast data available — manual check required",
+            "INCOMPLETE [1.4.11] No page context or OCR contrast data available "
+            "— manual check required.",
         )
 
-    # Find the minimum contrast ratio across all detected regions
+    # Find the minimum contrast ratio across all detected text regions.
+    # NOTE: this measures text-vs-background *inside* the cropped screenshot,
+    # not the component boundary vs the page.  It is an approximation only.
     min_ratio: float | None = None
     for det in ocr_result.detections:
         ci = det.contrast_info or {}
@@ -547,7 +603,7 @@ def _check_1_4_11(
     if min_ratio is None:
         return (
             None,
-            "INCOMPLETE [1.4.11] Contrast data unavailable — manual check required",
+            "INCOMPLETE [1.4.11] Contrast data unavailable — manual check required.",
         )
 
     ratio_str = f"{min_ratio:.2f}:1"
@@ -555,12 +611,14 @@ def _check_1_4_11(
         return (
             False,
             f"FAIL [1.4.11] Non-text contrast ratio {ratio_str} is below the "
-            f"3:1 minimum required for UI components.",
+            f"3:1 minimum required for UI components "
+            f"(approximated from internal OCR contrast; no full-page context).",
         )
 
     return (
         True,
-        f"PASS [1.4.11] Non-text contrast ratio {ratio_str} meets the 3:1 minimum.",
+        f"PASS [1.4.11] Non-text contrast ratio {ratio_str} meets the 3:1 minimum "
+        f"(approximated from internal OCR contrast; no full-page context).",
     )
 
 
@@ -621,6 +679,19 @@ class AltTextAccessibilityAuditor:
             )
             detected_joined = " | ".join(detected_texts)
             ocr_result = _ocr_result_for_file(ocr_results, filename)
+
+            # ---------------- F11 FIX ----------------
+            classifier_text_flag = getattr(img, "is_text_image", False)
+            ocr_text_flag = has_ocr_text and len(detected_texts) > 0
+
+            f11_mismatch = False
+            f11_reason = ""
+
+            if not classifier_text_flag and ocr_text_flag:
+                f11_mismatch = True
+                f11_reason = (
+                    "F11: OCR detected text but classifier marked as non-text image"
+                )
 
             # ── Determine functional sub_type for WCAG checks ────────────
             # sub_type from classifier: "logos" | "icons" | "buttons" | "images"
@@ -684,13 +755,36 @@ class AltTextAccessibilityAuditor:
                 )
 
             # ── WCAG 1.4.5 (Images of Text) ──────────────────────────────
+            effective_has_text = ocr_text_flag or classifier_text_flag
+
             wcag_1_4_5_pass, wcag_1_4_5_reason = _check_1_4_5(
-                classification, sub_type, is_logo, has_ocr_text
+                classification,
+                sub_type,
+                is_logo,
+                effective_has_text,
             )
 
+            if f11_mismatch:
+                wcag_1_4_5_pass = False
+                wcag_1_4_5_reason = (
+                        "FAIL [1.4.5] " + f11_reason +
+                        " — OCR found text but classifier missed it"
+                )
+
             # ── WCAG 1.4.11 (Non-text Contrast) ─────────────────────────
+            # F14 fix: supply the full-page screenshot and bounding-box so
+            # _check_1_4_11 can measure boundary contrast against the real
+            # surrounding page background instead of cropped-screenshot pixels.
+            _full_page_img = getattr(img, "full_page_screenshot_path", None) or None
+            _component_bbox = getattr(img, "page_bbox", None) or None
             wcag_1_4_11_pass, wcag_1_4_11_reason = _check_1_4_11(
-                is_button, is_icon, sub_type, has_ocr_text, ocr_result
+                is_button,
+                is_icon,
+                sub_type,
+                has_ocr_text,
+                ocr_result,
+                full_page_image=_full_page_img,
+                component_bbox=_component_bbox,
             )
 
             # Overall: all definitive checks must pass (None = N/A, skip)

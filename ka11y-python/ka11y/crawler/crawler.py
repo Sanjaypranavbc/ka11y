@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 import time
 import aiohttp
-
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -264,12 +263,13 @@ class AsyncImageCrawler:
         return cr.type  # informative / decorative
 
     def _make_image_data(
-        self, *, url, src, alt, title, cr: _CR, screenshot_path, filename
+        self, *, url, src, alt, title, cr: _CR, screenshot_path, filename,
+        element_id: str | None = None,
     ) -> ImageData:
         return ImageData(
             url=url,
             src=src,
-            alt_text=alt,
+            alt_text=alt,  # None = absent, "" = explicit empty (F18)
             title=title,
             classification=cr.type,
             sub_type=cr.sub_type,
@@ -283,6 +283,7 @@ class AsyncImageCrawler:
             file_format=cr.file_format,
             screenshot_path=screenshot_path,
             filename=filename,
+            element_id=element_id,
         )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -357,7 +358,7 @@ class AsyncImageCrawler:
                 console.print(f"  Found [bold]{len(img_els)}[/bold] elements")
                 logger.info(f"PASS 1: {len(img_els)} img elements")
 
-                seen_srcs: set[str] = set()
+                seen_images: set[str] = set()
                 captured = skipped_hidden = skipped_no_src = 0
 
                 with Progress(
@@ -388,11 +389,55 @@ class AsyncImageCrawler:
                             if not abs_src:
                                 skipped_no_src += 1
                                 continue
-                            if abs_src in seen_srcs:
-                                continue
-                            seen_srcs.add(abs_src)
 
-                            alt = await img.get_attribute("alt") or ""
+                            # F18 fix: preserve None (absent) vs "" (explicit empty).
+                            # None  → alt attribute missing → 1.1.1 fail candidate.
+                            # ""    → alt="" present → intentionally decorative.
+                            alt = await img.get_attribute("alt")
+
+                            # F17 fix: resolve aria-labelledby for <img>.
+                            # acc-name spec: aria-labelledby > aria-label > alt.
+                            resolved_label = await img.evaluate("""el => {
+                                const labelledby = el.getAttribute("aria-labelledby");
+                                if (labelledby) {
+                                    const text = labelledby.trim().split(/\\s+/)
+                                        .map(id => {
+                                            const node = document.getElementById(id);
+                                            return node ? node.textContent.trim() : "";
+                                        })
+                                        .filter(Boolean)
+                                        .join(" ");
+                                    if (text) return text;
+                                }
+                                const ariaLabel = el.getAttribute("aria-label");
+                                if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+                                return null;  // fall back to alt attribute
+                            }""")
+                            if resolved_label is not None:
+                                alt = resolved_label
+
+                            # 🔽 ADD CONTEXT EXTRACTION HERE
+                            el_context = await img.evaluate("""el => {
+                                const parent = el.closest("a, button, header, footer, nav, main, section, article") || el.parentElement;
+
+                                return {
+                                    role: el.getAttribute("role") || "",
+                                    ariaHidden: el.getAttribute("aria-hidden") || "",
+                                    parentTag: parent ? parent.tagName.toLowerCase() : "",
+                                    parentRole: parent ? (parent.getAttribute("role") || "") : "",
+                                    clickable: !!el.closest("a, button, [role='button'], [onclick]"),
+                                };
+                            }""")
+
+                            # 🔽 BUILD NEW DEDUP KEY
+                            dedup_key = f"{abs_src}|{alt.strip()}|{el_context['role']}|{el_context['parentTag']}|{el_context['clickable']}"
+
+                            # 🔽 REPLACE OLD seen_srcs CHECK
+                            if dedup_key in seen_images:
+                                continue
+                            seen_images.add(dedup_key)
+
+
                             title = await img.get_attribute("title") or ""
 
                             cr = _CR(await self.classifier.classify_image(img, page))
@@ -472,11 +517,12 @@ class AsyncImageCrawler:
                                     self._make_image_data(
                                         url=self.base_url,
                                         src=abs_src,
-                                        alt=alt,
+                                        alt=alt,   # None=absent, ""=explicit-empty (F18)
                                         title=title,
                                         cr=cr,
                                         screenshot_path=save_path,
                                         filename=filename,
+                                        element_id=f"img_{img_hash}",
                                     )
                                 )
                                 logger.info(
@@ -523,11 +569,50 @@ class AsyncImageCrawler:
                         if not await self._is_visible(btn):
                             continue
 
-                        info = await btn.evaluate("""el => ({
-                            tag:  el.tagName.toLowerCase(),
-                            text: (el.innerText || el.value || el.getAttribute("aria-label") || "").trim().slice(0,80),
-                            type: el.getAttribute("type") || ""
-                        })""")
+                        info = await btn.evaluate("""el => {
+                            // F17 fix: full accName resolution for buttons.
+                            // Priority: aria-labelledby > aria-label > innerText/value.
+
+                            // 1. aria-labelledby
+                            const labelledby = el.getAttribute("aria-labelledby");
+                            if (labelledby) {
+                                const resolved = labelledby.trim().split(/\\s+/)
+                                    .map(id => {
+                                        const node = document.getElementById(id);
+                                        return node ? node.textContent.trim() : "";
+                                    })
+                                    .filter(Boolean)
+                                    .join(" ");
+                                if (resolved) {
+                                    return {
+                                        tag: el.tagName.toLowerCase(),
+                                        text: resolved.slice(0, 80),
+                                        type: el.getAttribute("type") || "",
+                                        nameSource: "aria-labelledby"
+                                    };
+                                }
+                            }
+
+                            // 2. aria-label
+                            const ariaLabel = (el.getAttribute("aria-label") || "").trim();
+                            if (ariaLabel) {
+                                return {
+                                    tag: el.tagName.toLowerCase(),
+                                    text: ariaLabel.slice(0, 80),
+                                    type: el.getAttribute("type") || "",
+                                    nameSource: "aria-label"
+                                };
+                            }
+
+                            // 3. innerText / value (F16: may be "" for icon-only buttons)
+                            const innerName = (el.innerText || el.value || "").trim();
+                            return {
+                                tag: el.tagName.toLowerCase(),
+                                text: innerName.slice(0, 80),
+                                type: el.getAttribute("type") || "",
+                                nameSource: innerName ? "innerText" : "none"
+                            };
+                        }""")
                         html_hash = hashlib.md5(
                             (
                                 await btn.evaluate("el => el.outerHTML.slice(0,200)")
@@ -536,6 +621,10 @@ class AsyncImageCrawler:
                         if html_hash in seen_btns:
                             continue
                         seen_btns.add(html_hash)
+                        # F16 fix: stable element_id for dedup — two icon-only buttons
+                        # both produce text="" but have distinct html_hash values, so
+                        # each gets its own record and neither masks the other.
+                        btn_element_id = f"btn_{html_hash}"
 
                         btn_file = f"btn_{html_hash}.png"
                         btn_path = f"{btn_dir}/{btn_file}"
@@ -556,17 +645,25 @@ class AsyncImageCrawler:
                             pass
 
                         captured_btns += 1
-                        lbl = info["text"] or f"<{info['tag']}>"
+                        # F16: use resolved accessible name; icon-only buttons
+                        # will have text="" (no innerText) but a non-empty
+                        # nameSource tells the auditor which resolution path fired.
+                        lbl = info["text"] or f"<{info['tag']} icon-only>"
                         console.print(
-                            f"  [green]✓[/green] Button: [dim]{lbl[:60]}[/dim]"
+                            f"  [green]✓[/green] Button: [dim]{lbl[:60]}[/dim] "
+                            f"[dim](name via {info.get('nameSource','?')})[/dim]"
                         )
                         logger.info(f"  ✓ Button captured: {btn_path} ({lbl})")
 
+                        # F16/F18: alt_text=None signals "no accessible name found"
+                        # so the auditor can raise a 4.1.2 violation rather than
+                        # treating it the same as a named button.
+                        btn_alt = info["text"] if info["text"] else None
                         self.images_data.append(
                             ImageData(
                                 url=self.base_url,
                                 src=self.base_url,
-                                alt_text=info["text"],
+                                alt_text=btn_alt,
                                 title=info["text"],
                                 classification="functional",
                                 sub_type="buttons",
@@ -579,6 +676,7 @@ class AsyncImageCrawler:
                                 is_button=True,
                                 screenshot_path=btn_path,
                                 filename=btn_file,
+                                element_id=btn_element_id,
                             )
                         )
                     except Exception as e:
@@ -664,12 +762,51 @@ class AsyncImageCrawler:
                             f"  [green]✓[/green] SVG {kind}: [dim]{sub_dir}[/dim]"
                         )
                         logger.info(f"  ✓ SVG {kind} saved: {svg_path}")
+                        # Extract accessible name properly
+                        alt_text = await svg.evaluate("""el => {
+                            // 1. aria-labelledby
+                            const labelledby = el.getAttribute("aria-labelledby");
+                            if (labelledby) {
+                                const ids = labelledby.split(/\\s+/);
+                                let text = "";
+                                ids.forEach(id => {
+                                    const ref = document.getElementById(id);
+                                    if (ref) text += ref.textContent.trim() + " ";
+                                });
+                                if (text.trim()) return text.trim();
+                            }
+
+                            // 2. aria-label
+                            const ariaLabel = el.getAttribute("aria-label");
+                            if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
+
+                            // 3. <title>
+                            const titleEl = el.querySelector("title");
+                            if (titleEl && titleEl.textContent.trim()) {
+                                return titleEl.textContent.trim();
+                            }
+
+                            // 4. <desc> (optional fallback)
+                            const descEl = el.querySelector("desc");
+                            if (descEl && descEl.textContent.trim()) {
+                                return descEl.textContent.trim();
+                            }
+
+                            return "";
+                        }""")
+
+                        # 2. Apply aria-hidden override
+                        if (
+                                svg_ctx["ariaHidden"] == "true"
+                                or svg_ctx["role"] in ("presentation", "none")
+                        ):
+                            alt_text = ""
 
                         self.images_data.append(
                             ImageData(
                                 url=self.base_url,
                                 src=self.base_url,
-                                alt_text=svg_ctx["ariaLabel"],
+                                alt_text=alt_text,
                                 title="",
                                 classification=(
                                     "functional" if is_icon_svg else "complex"
@@ -728,17 +865,59 @@ class AsyncImageCrawler:
                         seen_fi.add(fi_hash)
 
                         fi_info = await fi.evaluate("""el => {
-                            const a   = el.closest("a");
-                            const btn = el.closest("button,[role='button']");
+                            const interactiveParent = el.closest(`
+                                a,
+                                button,
+                                [role="button"],
+                                [role="link"],
+                                [onclick],
+                                [tabindex]
+                            `);
+
+                            const hasClick = el.closest("[onclick]") !== null;
+                            const hasTabindex = el.closest("[tabindex]") !== null;
+
+                            // F17 fix: resolve aria-labelledby for font-icons.
+                            // Check the icon itself and its nearest interactive parent.
+                            let label = "";
+                            const labelTarget = interactiveParent || el;
+                            const labelledby = labelTarget.getAttribute("aria-labelledby");
+                            if (labelledby) {
+                                const resolved = labelledby.trim().split(/\\s+/)
+                                    .map(id => {
+                                        const node = document.getElementById(id);
+                                        return node ? node.textContent.trim() : "";
+                                    })
+                                    .filter(Boolean)
+                                    .join(" ");
+                                if (resolved) label = resolved;
+                            }
+                            if (!label) {
+                                label = (labelTarget.getAttribute("aria-label") || "").trim()
+                                     || (el.getAttribute("aria-label") || "").trim()
+                                     || (el.getAttribute("title") || "").trim();
+                            }
+
                             return {
-                                inLink:   a   !== null,
-                                inButton: btn !== null,
-                                label:    el.getAttribute("aria-label") ||
-                                          el.getAttribute("title") || ""
+                                inLink: el.closest("a") !== null,
+                                inButton: el.closest("button,[role='button']") !== null,
+                                hasRoleButton: el.closest('[role="button"]') !== null,
+                                hasRoleLink: el.closest('[role="link"]') !== null,
+                                hasOnClick: hasClick,
+                                hasTabindex: hasTabindex,
+                                isInteractive: interactiveParent !== null,
+                                label: label
                             };
                         }""")
 
-                        is_functional = fi_info["inLink"] or fi_info["inButton"]
+                        is_functional = (
+                                fi_info["inLink"]
+                                or fi_info["inButton"]
+                                or fi_info["hasRoleButton"]
+                                or fi_info["hasRoleLink"]
+                                or fi_info["hasOnClick"]
+                                or (fi_info["hasTabindex"] and fi_info["hasOnClick"])
+                        )
                         fi_sub_dir = (
                             "functional/icons" if is_functional else "decorative"
                         )
@@ -839,23 +1018,29 @@ class AsyncImageCrawler:
                 for bg in bg_candidates:
                     try:
                         abs_src = urljoin(self.base_url, bg["src"])
-                        if abs_src in seen_bgs or abs_src in seen_srcs:
+                        if abs_src in seen_bgs or abs_src in seen_images:
                             continue
                         seen_bgs.add(abs_src)
 
                         bg_hash = hashlib.md5(abs_src.encode()).hexdigest()[:12]
 
-                        # Classify
-                        is_hidden = bg["ariaHidden"] == "true" or bg["role"] in (
-                            "presentation",
-                            "none",
-                        )
+                        role = (bg["role"] or "").strip().lower()
                         has_label = bool(bg["ariaLabel"].strip())
+                        is_hidden = bg["ariaHidden"] == "true" or role in ("presentation", "none")
 
                         if is_hidden:
                             cls, sub = "decorative", "presentational"
+
+                        elif role == "img":
+                            # Explicitly declared as image → must be informative
+                            if has_label:
+                                cls, sub = "informative", "succinct_information"
+                            else:
+                                cls, sub = "informative", "missing_alt"  # 🔥 key fix
+
                         elif has_label:
                             cls, sub = "informative", "succinct_information"
+
                         else:
                             cls, sub = "decorative", "decorative"
 
@@ -1076,7 +1261,5 @@ class AsyncImageCrawler:
             f"  [dim]CSV  → {csv_path} ({len(self.images_data)} rows, "
             f"all images including decorative)[/dim]"
         )
-
-        from ka11y.config.logger import setup_logger
 
         setup_logger(name="KAC", tag="crawler").info(f"CSV saved: {csv_path}")

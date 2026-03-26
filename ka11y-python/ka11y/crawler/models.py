@@ -32,6 +32,7 @@ class ImageData(BaseModel):
     is_icon: bool = False
     is_button: bool = False
     file_format: Optional[str] = None
+    element_id: str | None = None
     screenshot_path: str
     filename: str
 

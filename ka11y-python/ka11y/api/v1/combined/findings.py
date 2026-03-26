@@ -455,13 +455,13 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
                 aaa_passes = dom_compliance.get("AAA_passes")
                 ratio = dom_compliance.get("contrast_ratio")
                 is_large = dom_compliance.get("is_large_text", False)
-                threshold = 4.5 if is_large else 7.0
+                threshold = dom_compliance.get("aaa_threshold_used", 7.0)
             else:
                 compliance = ci.get("compliance") or {}
                 aaa_passes = compliance.get("AAA_passes")
                 ratio = compliance.get("contrast_ratio")
                 is_large = compliance.get("is_large_text", False)
-                threshold = 4.5 if is_large else 7.0
+                threshold = compliance.get("aaa_threshold_used", 7.0)
 
             fg = col.get("foreground") or {}
             bg_pal = col.get("background_palette") or []
