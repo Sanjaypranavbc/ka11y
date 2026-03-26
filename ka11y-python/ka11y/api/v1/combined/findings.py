@@ -135,13 +135,13 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
             dom_compliance = dom.get("compliance") or {}
             if dom_compliance:
                 ratio = dom_compliance.get("contrast_ratio")
-                aa_n  = dom_compliance.get("AA_passes")
+                aa_n = dom_compliance.get("AA_passes")
                 aaa_n = dom_compliance.get("AAA_passes")
             else:
                 compliance = ci.get("compliance") or {}
                 if compliance:
                     ratio = compliance.get("contrast_ratio")
-                    aa_n  = compliance.get("AA_passes")
+                    aa_n = compliance.get("AA_passes")
                     aaa_n = compliance.get("AAA_passes")
 
             fg = col.get("foreground") or {}
@@ -150,7 +150,9 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
             # Use dominant_bg from dominant_contrast when available so that
             # the background hex shown is the one that triggered the violation.
             dom_bg_obj = dom.get("bg_color") or {}
-            dominant_bg: Dict[str, Any] = dom_bg_obj if dom_bg_obj else (bg_pal[0] if bg_pal else {})
+            dominant_bg: Dict[str, Any] = (
+                dom_bg_obj if dom_bg_obj else (bg_pal[0] if bg_pal else {})
+            )
 
             table_rows.append(
                 {
@@ -184,7 +186,7 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
                     "wcag_violations": list(det.wcag_violations or []),
                     "ratio": ratio,
                     "AA_passes": aa_n,
-                    "AAA_passes": aaa_n
+                    "AAA_passes": aaa_n,
                 }
             )
 
@@ -291,7 +293,8 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     rule_id="python_4_1_2_name_role_value",
                     wcag_sc="4.1.2",
                     status="fail",
-                    reason=reason or "Functional image is missing a meaningful accessible name.",
+                    reason=reason
+                    or "Functional image is missing a meaningful accessible name.",
                     severity=sev,
                     element_html=element_html,
                     element_id=element_id,
@@ -306,7 +309,8 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     rule_id="python_4_1_2_name_role_value",
                     wcag_sc="4.1.2",
                     status="pass",
-                    reason=reason or "Functional image has a meaningful accessible name.",
+                    reason=reason
+                    or "Functional image has a meaningful accessible name.",
                     severity=None,
                     page_url=r.get("url") or page_url,
                 )
@@ -337,16 +341,16 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             dom = col.get("dominant_contrast") or {}
             dom_compliance = dom.get("compliance") or {}
             if dom_compliance:
-                aa_normal  = dom_compliance.get("AA_passes")
-                ratio      = dom_compliance.get("contrast_ratio")
-                is_large   = dom_compliance.get("is_large_text", False)
-                threshold  = dom_compliance.get("aa_threshold_used", 4.5)
+                aa_normal = dom_compliance.get("AA_passes")
+                ratio = dom_compliance.get("contrast_ratio")
+                is_large = dom_compliance.get("is_large_text", False)
+                threshold = dom_compliance.get("aa_threshold_used", 4.5)
             else:
                 compliance = ci.get("compliance") or {}
-                aa_normal  = compliance.get("AA_passes")
-                ratio      = compliance.get("contrast_ratio")
-                is_large   = compliance.get("is_large_text", False)
-                threshold  = compliance.get("aa_threshold_used", 4.5)
+                aa_normal = compliance.get("AA_passes")
+                ratio = compliance.get("contrast_ratio")
+                is_large = compliance.get("is_large_text", False)
+                threshold = compliance.get("aa_threshold_used", 4.5)
 
             fg = col.get("foreground") or {}
             bg_pal = col.get("background_palette") or []
@@ -427,6 +431,7 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                 )
 
     return findings
+
 
 def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     """
@@ -611,7 +616,8 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     rule_id="python_1_4_11_non_text_contrast",
                     wcag_sc="1.4.11",
                     status="needs_review",
-                    reason=reason or "UI component contrast could not be verified automatically.",
+                    reason=reason
+                    or "UI component contrast could not be verified automatically.",
                     severity=sev,
                     element_html=element_html,
                     element_id=element_id,
@@ -656,7 +662,12 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         html = r.get("html_snippet", "")
         # form_auditor.py uses "field_tag" / "field_id" / "field_name" keys
         tag = r.get("field_tag") or r.get("tag", "INPUT")
-        eid = r.get("field_id") or r.get("element_id") or r.get("field_name") or r.get("element_name")
+        eid = (
+            r.get("field_id")
+            or r.get("element_id")
+            or r.get("field_name")
+            or r.get("element_name")
+        )
         for sc, status_key in [
             ("3.3.1", "wcag_3_3_1_status"),
             ("3.3.2", "wcag_3_3_2_status"),

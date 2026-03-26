@@ -371,7 +371,10 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
             f"(verify it describes the action, not the appearance)",
         )
 
-    return False, f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose or is too short (min 3 chars)"
+    return (
+        False,
+        f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose or is too short (min 3 chars)",
+    )
 
 
 def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
@@ -399,7 +402,10 @@ def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
             f"(verify it describes the button action)",
         )
 
-    return False, f"FAIL [1.1.1] Button alt '{alt}' is not descriptive or is too short (min 3 chars)"
+    return (
+        False,
+        f"FAIL [1.1.1] Button alt '{alt}' is not descriptive or is too short (min 3 chars)",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -728,11 +734,15 @@ class AltTextAccessibilityAuditor:
                     "wcag_1_4_11_status": (
                         "PASSED"
                         if wcag_1_4_11_pass is True
-                        else "FAILED"
-                        if wcag_1_4_11_pass is False
-                        else "INCOMPLETE"
-                        if str(wcag_1_4_11_reason).startswith("INCOMPLETE")
-                        else "N/A"
+                        else (
+                            "FAILED"
+                            if wcag_1_4_11_pass is False
+                            else (
+                                "INCOMPLETE"
+                                if str(wcag_1_4_11_reason).startswith("INCOMPLETE")
+                                else "N/A"
+                            )
+                        )
                     ),
                     "overall_status": overall,
                     "wcag_1_1_1_reason": wcag_1_1_1_reason,

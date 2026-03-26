@@ -23,7 +23,7 @@ _RULE_KEY = "wcag_2_4_11"
 # WCAG 2.4.11 — Focus Not Obscured (Minimum):
 # "Any focus indicator obscured = FAIL; we use 95% to allow 1-2px scroll bars"
 # Reference: https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum
-OBSCURATION_FAIL_THRESHOLD = 0.95   # >= this ratio → FAIL
+OBSCURATION_FAIL_THRESHOLD = 0.95  # >= this ratio → FAIL
 OBSCURATION_REVIEW_THRESHOLD = 0.10  # >= this ratio → NEEDS_REVIEW
 
 # Keep legacy private names as aliases so existing callers are not broken.

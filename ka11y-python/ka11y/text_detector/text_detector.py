@@ -205,7 +205,9 @@ class OCRPreprocessing:
                     font_size_px = max(bbox_height, 8)
 
                     try:
-                        contrast_info = contrast_analyser.analyze_text_region(img, clean_bbox, font_size_px=font_size_px)
+                        contrast_info = contrast_analyser.analyze_text_region(
+                            img, clean_bbox, font_size_px=font_size_px
+                        )
                     except Exception as e:
                         logger.warning(f"Contrast analysis failed: {e}")
                         contrast_info = None
@@ -234,7 +236,13 @@ class OCRPreprocessing:
                                     l1 = max(fg_lum, bg_lum)
                                     l2 = min(fg_lum, bg_lum)
                                     ratio = (l1 + 0.05) / (l2 + 0.05)
-                                    compliance = contrast_analyser.check_wcag_compliance(ratio, font_size_px=font_size_px, is_bold=is_bold)
+                                    compliance = (
+                                        contrast_analyser.check_wcag_compliance(
+                                            ratio,
+                                            font_size_px=font_size_px,
+                                            is_bold=is_bold,
+                                        )
+                                    )
                                     contrast_checks.append(
                                         {
                                             "bg_color": bg,
@@ -247,8 +255,12 @@ class OCRPreprocessing:
                                 l1 = max(fg_lum, dom_bg_lum)
                                 l2 = min(fg_lum, dom_bg_lum)
                                 dominant_ratio = round((l1 + 0.05) / (l2 + 0.05), 2)
-                                dominant_compliance = contrast_analyser.check_wcag_compliance(
-                                    dominant_ratio, font_size_px=font_size_px, is_bold=is_bold
+                                dominant_compliance = (
+                                    contrast_analyser.check_wcag_compliance(
+                                        dominant_ratio,
+                                        font_size_px=font_size_px,
+                                        is_bold=is_bold,
+                                    )
                                 )
 
                                 color_info = {
@@ -275,14 +287,20 @@ class OCRPreprocessing:
                         except Exception as cp_err:
                             logger.warning(f"Color picker failed for region: {cp_err}")
 
-                    if color_info is None and contrast_info and not contrast_info.get("error"):
+                    if (
+                        color_info is None
+                        and contrast_info
+                        and not contrast_info.get("error")
+                    ):
                         ratio_fb = contrast_info.get("contrast_ratio", 0)
                         compliance_fb = contrast_analyser.check_wcag_compliance(
                             ratio_fb, font_size_px=font_size_px, is_bold=is_bold
                         )
                         if not compliance_fb.get("AA_passes", False):
                             fg_rgb = contrast_info.get("foreground_color", (0, 0, 0))
-                            bg_rgb = contrast_info.get("background_color", (255, 255, 255))
+                            bg_rgb = contrast_info.get(
+                                "background_color", (255, 255, 255)
+                            )
                             bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
                             violations.append(f"Fails AA Normal vs BG {bg_hex}")
                     if violations:
@@ -372,7 +390,6 @@ class TextClassification:
         # Create output directory structure
         self._create_directories()
 
-
     def _create_directories(self):
         """Create necessary output directories"""
         self.categories = {
@@ -396,9 +413,7 @@ class TextClassification:
         """Save JSON, CSV and Contrast Markdown reports"""
         total_detections = sum(len(r.detections) for r in self.results)
         detections_with_color = sum(
-            1 for r in self.results
-            for d in r.detections
-            if d.color_info
+            1 for r in self.results for d in r.detections if d.color_info
         )
         logger.info(
             f"save_reports: {len(self.results)} results | "
@@ -496,7 +511,9 @@ class TextClassification:
                                 comp = check["compliance"]
 
                                 aa = "✅" if comp.get("AA_passes") else "❌"
-                                aa_lg = "✅" if comp.get("AA_passes") else "❌"  # no separate large key anymore
+                                aa_lg = (
+                                    "✅" if comp.get("AA_passes") else "❌"
+                                )  # no separate large key anymore
                                 aaa = "✅" if comp.get("AAA_passes") else "❌"
                                 aaa_lg = "✅" if comp.get("AAA_passes") else "❌"
 
@@ -585,7 +602,8 @@ def main():
         source_directory = "crawled_images"
         if os.path.exists(source_directory):
             crawl_dirs = [
-                d for d in os.listdir(source_directory)
+                d
+                for d in os.listdir(source_directory)
                 if os.path.isdir(os.path.join(source_directory, d))
             ]
             if crawl_dirs:
