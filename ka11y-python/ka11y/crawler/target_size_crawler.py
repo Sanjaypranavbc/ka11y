@@ -32,6 +32,8 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
+from ka11y.crawler._ssrf_guard import install_ssrf_guard
+
 
 class TargetSizeData(BaseModel):
     """One interactive element record, consumed by TargetSizeAuditor."""
@@ -210,6 +212,7 @@ class TargetSizeCrawler:
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
+            await install_ssrf_guard(context)  # Bug 1 fix
             try:
                 await self._crawl_page(context, self.base_url, depth=0)
             finally:

@@ -24,6 +24,8 @@ from PIL import Image
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
+from ka11y.crawler._ssrf_guard import install_ssrf_guard
+
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="moving_content")
@@ -449,6 +451,7 @@ class MovingContentCrawler:
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
+            await install_ssrf_guard(context)  # Bug 1 fix
             try:
                 await self._crawl_page(context, self.base_url, depth=0)
             finally:
