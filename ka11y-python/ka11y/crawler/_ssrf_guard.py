@@ -52,6 +52,11 @@ def _ip_is_blocked(ip_str: str) -> bool:
         addr = ipaddress.ip_address(ip_str)
     except ValueError:
         return False
+    # Use Python's built-in address classification (covers multicast, reserved, etc.)
+    # in addition to the explicit CIDR network list for comprehensive coverage.
+    if addr.is_private or addr.is_loopback or addr.is_link_local or \
+       addr.is_multicast or addr.is_reserved or addr.is_unspecified:
+        return True
     return any(addr in net for net in _BLOCKED_NETWORKS)
 
 
