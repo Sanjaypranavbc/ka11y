@@ -169,15 +169,18 @@ def check_wcag_compliance(
             "is_ui_component": True,
             "aa_threshold_used": 3.0,
         }
-    is_large = (font_size_px >= 24) or (is_bold and font_size_px >= 18.5)
+    # Cast to plain Python bool: font_size_px may be np.float64 (from
+    # np.linalg.norm in bbox_height_rotated), which makes comparisons return
+    # np.bool_ — not JSON-serializable by the standard library encoder.
+    is_large = bool((font_size_px >= 24) or (is_bold and font_size_px >= 18.5))
 
     aa_threshold = 3.0 if is_large else 4.5
     aaa_threshold = 4.5 if is_large else 7.0
 
     return {
         "contrast_ratio": round(ratio, 2),
-        "AA_passes": ratio >= aa_threshold,
-        "AAA_passes": ratio >= aaa_threshold,
+        "AA_passes": bool(ratio >= aa_threshold),
+        "AAA_passes": bool(ratio >= aaa_threshold),
         "is_large_text": is_large,
         "aa_threshold_used": aa_threshold,
     }

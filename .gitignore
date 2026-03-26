@@ -2,7 +2,7 @@
 .idea
 .idea/
 output
-
+.ai
 
 # Ignore Claude Files For Good Cause
 .claude
