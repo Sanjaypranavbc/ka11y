@@ -339,10 +339,10 @@ All issues from 2.4.11 apply. The 10% threshold additionally raises the false-po
 |-------|----------|--------|
 | Anti-aliasing / subpixel rendering on focus ring can produce 2–4% measured overlap | Medium | Focus indicator edge bleeding under overlay → false FAIL |
 | Border elements at viewport edge may overlap with sticky bar by a few pixels | Medium | Normal scroll-to-focus behaviour → false FAIL |
-| 2.4.12 is technically **AAA** in WCAG 2.2, not AA — filter in `_WCAG_LEVEL` may mismatch | Low | Shown when `wcag_level = AA` even though it is AAA |
+| 2.4.12 is **AAA** in WCAG 2.2 and the level metadata is now corrected | Low | Historical mismatch fixed; keep regression coverage so AA runs do not surface 2.4.12 |
 
 **What to fix first**
-Fix the level metadata (`_WCAG_LEVEL["2.4.12"] = "AAA"`). Add a 5% grace margin below the 10% threshold to absorb subpixel errors (i.e., fail at ≥ 15%). Apply all 2.4.11 fixes first.
+Keep `_WCAG_LEVEL["2.4.12"] = "AAA"` covered by regression tests. Add a 5% grace margin below the 10% threshold to absorb subpixel errors (i.e., fail at ≥ 15%). Apply all 2.4.11 fixes first.
 
 ---
 
@@ -396,7 +396,7 @@ These are not per-rule but affect multiple rules simultaneously.
 |----------|-----|----------------|--------|
 | 🔴 P0 | Fix inverted UA-controlled exception in `target_size_crawler.py` | 2.5.8 | 5 min |
 | 🔴 P0 | Fix `aria-describedby` to resolve ALL IDs (not just first) | 3.3.1, 3.3.2 | 30 min |
-| 🔴 P0 | Fix `_WCAG_LEVEL["2.4.12"]` to `"AAA"` | 2.4.12 | 1 min |
+| ✅ Done | Keep `_WCAG_LEVEL["2.4.12"]` pinned to `"AAA"` with regression coverage | 2.4.12 | complete |
 | 🟠 P1 | Replace tag+text fallback with stable CSS selector matching | 1.4.4, 1.4.12 | 2 hrs |
 | 🟠 P1 | Re-collect overlays each N Tab steps | 2.4.11, 2.4.12 | 1 hr |
 | 🟠 P1 | Replace OCR substring matching with word-boundary regex | 1.1.1 | 30 min |

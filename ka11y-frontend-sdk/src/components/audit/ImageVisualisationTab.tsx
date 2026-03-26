@@ -87,8 +87,14 @@ export function ImageVisualisationTab({ contrastReport }: ImageVisualisationTabP
     ? images.filter((img) => img.filename.toLowerCase().includes(search.toLowerCase()))
     : images;
 
-  const failedFiltered  = filtered.filter((img) => img.contrast_violations_count > 0);
-  const passedFiltered  = filtered.filter((img) => img.contrast_violations_count === 0);
+  // Use contrast_violations_count as primary signal; fall back to inspecting
+  // detections directly in case the backend count is stale (backend bug guard).
+  const hasViolations = (img: ContrastImageDetail) =>
+    img.contrast_violations_count > 0 ||
+    img.detections.some((d) => d.wcag_violations.length > 0);
+
+  const failedFiltered  = filtered.filter(hasViolations);
+  const passedFiltered  = filtered.filter((img) => !hasViolations(img));
   const failedByClass   = groupByClassification(failedFiltered);
   const passedByClass   = groupByClassification(passedFiltered);
 

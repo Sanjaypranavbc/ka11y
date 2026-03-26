@@ -29,7 +29,7 @@ interface SuggestedFixModalProps {
   criterionName: string | null;
   suggestedFix: string | null;
   elementHtml: string;
-  helpUrl?: string;
+  helpUrl?: string | null;
 }
 
 export function SuggestedFixModal({

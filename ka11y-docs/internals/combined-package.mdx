@@ -1,13 +1,13 @@
 ---
 title: "combined/ Package Structure"
-description: "How ka11y/api/v1/combined/ is organised after the module split"
+description: "How ka11y/api/v1/combined/ is organised today"
 ---
 
-The combined audit module was split from a single `combined.py` file into a package to keep each concern small and independently testable.
+The combined audit module is organised as a package so each concern stays small, explicit, and independently testable.
 
 ```
 ka11y/api/v1/combined/
-├── __init__.py        re-exports router + _evict_old_jobs for backward compat
+├── __init__.py        package exports for router + shared helpers
 ├── constants.py       _WCAG_NAMES, _WCAG_LEVEL, _SUGGESTED_FIX, _PYTHON_SEVERITY
 ├── models.py          CombinedRequest, JobStatusResponse (Pydantic)
 ├── store.py           in-memory job dict, SSE subscriber bus, TTL eviction
@@ -87,9 +87,9 @@ Four FastAPI routes. Imports `_run_job` and schedules it via `asyncio.create_tas
 
 ---
 
-## Backward compatibility
+## Package entry points
 
-`main.py` imports `_evict_old_jobs` and `api/router.py` imports `router`. Both continue to work unchanged because `__init__.py` re-exports them:
+`main.py` imports `_evict_old_jobs` and `api/router.py` imports `router`. `__init__.py` remains the package entry point and re-exports both:
 
 ```python
 # Still works after the split:

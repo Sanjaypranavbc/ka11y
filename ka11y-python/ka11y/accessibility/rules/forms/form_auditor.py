@@ -98,8 +98,12 @@ def _violations_332(f: FormInputData) -> List[str]:
     # (b) Required but not marked in HTML/ARIA
     is_marked_required = f.required or (f.aria_required or "").strip().lower() == "true"
     if not is_marked_required and _field_appears_required(f):
-        # heuristic: placeholder contains *, label contains *
-        pass  # covered below with placeholder heuristic
+        # heuristic: placeholder or label contains * but required attribute is absent
+        viols.append(
+            "3.3.2: Field appears required (label/placeholder contains '*') "
+            "but is not marked with required or aria-required='true' — "
+            "screen readers cannot programmatically determine it is mandatory."
+        )
 
     # (c) Placeholder used as sole label (placeholder ≠ label)
     if not f.has_any_label and f.placeholder and f.placeholder.strip():

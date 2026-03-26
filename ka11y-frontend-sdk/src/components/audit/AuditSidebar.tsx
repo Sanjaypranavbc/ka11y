@@ -54,7 +54,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
   const [config, setConfig] = useState<AuditConfig>({
     url: localStorage.getItem("ka11y_last_url") ?? "",
     max_depth: 0,
-    wcag_level: "AA",
+    wcag_level: "AAA",
     run_ocr: true,
     run_image_audit: true,
     run_form_audit: true,
@@ -206,6 +206,9 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                   </button>
                 ))}
               </div>
+              <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+                `1.4.6 Contrast (Enhanced)` is AAA. Selecting `AA` or `A` hides higher-level findings from the combined result.
+              </p>
             </div>
           </div>
 

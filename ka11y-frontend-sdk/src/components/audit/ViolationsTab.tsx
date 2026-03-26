@@ -66,7 +66,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       if (scFilter.length && !scFilter.includes(v.wcag_sc)) return false;
       if (search) {
         const q = search.toLowerCase();
-        return v.reason.toLowerCase().includes(q) || v.element_html.toLowerCase().includes(q);
+        return v.reason.toLowerCase().includes(q) || (v.element_html || '').toLowerCase().includes(q);
       }
       return true;
     });

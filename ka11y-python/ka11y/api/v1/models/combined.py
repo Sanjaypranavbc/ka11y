@@ -5,7 +5,7 @@ from pydantic import BaseModel, HttpUrl
 class CombinedRequest(BaseModel):
     url: HttpUrl
     max_depth: int = 0
-    wcag_level: str = "AA"  # "A" | "AA" | "AAA"
+    wcag_level: str = "AAA"  # "A" | "AA" | "AAA"
     run_ocr: bool = True
     run_image_audit: bool = True
     run_form_audit: bool = True

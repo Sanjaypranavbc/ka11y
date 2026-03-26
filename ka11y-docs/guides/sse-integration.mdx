@@ -15,7 +15,7 @@ async function runAudit(url: string) {
   const res = await fetch("/api/v1/combined/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, wcag_level: "AA" }),
+    body: JSON.stringify({ url, wcag_level: "AAA" }),
   });
   const { job_id } = await res.json();
 
@@ -73,7 +73,7 @@ async def stream_audit(url: str):
 
     # Submit
     async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{base}/combined/", json={"url": url, "wcag_level": "AA"})
+        resp = await client.post(f"{base}/combined/", json={"url": url, "wcag_level": "AAA"})
         job_id = resp.json()["job_id"]
 
     # Stream

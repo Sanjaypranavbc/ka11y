@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">ka11y favicon</title>
+  <desc id="desc">Stylized letter K inside a rounded square</desc>
+  <rect width="64" height="64" rx="16" fill="#0969da"/>
+  <path d="M20 44V20h6v8.2L33.1 20H41l-8.3 8.6L41.5 44h-8.1L26 34.2V44Z" fill="#ffffff"/>
+</svg>

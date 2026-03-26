@@ -19,6 +19,7 @@ from ka11y.accessibility.rules.non_text.alttext import (
     _check_1_1_1_informative,
     _check_1_1_1_logo,
     _check_1_1_1_missing_alt,
+    _check_1_4_5,
     _check_4_1_2,
     _is_empty,
     _norm,
@@ -409,6 +410,18 @@ class TestCheck412:
         assert passed is False
 
 
+class TestCheck145:
+    def test_complex_chart_is_exempt_even_when_text_is_detected(self):
+        passed, msg = _check_1_4_5("complex", "charts", False, True)
+        assert passed is True
+        assert "essential presentation" in msg.lower()
+
+    def test_non_logo_image_with_detected_text_fails(self):
+        passed, msg = _check_1_4_5("informative", "images", False, True)
+        assert passed is False
+        assert "replace with real css-styled text" in msg.lower()
+
+
 # ── AltTextAccessibilityAuditor.generate_audit_report ────────────────────────
 
 
@@ -600,6 +613,7 @@ class TestAltTextAuditorReport:
             images_data=[img], ocr_results=[], output_dir=tmp_output
         )
         assert records[0]["wcag_1_1_1_status"] == "PASSED"
+        assert records[0]["wcag_1_4_5_status"] == "PASSED"
 
     def test_complex_image_empty_alt_fails(self, tmp_output):
         img = make_image(classification="complex", is_complex=True, alt_text="")
@@ -607,6 +621,22 @@ class TestAltTextAuditorReport:
             images_data=[img], ocr_results=[], output_dir=tmp_output
         )
         assert records[0]["wcag_1_1_1_status"] == "FAILED"
+
+    def test_complex_image_with_ocr_text_keeps_1_4_5_exemption(self, tmp_output):
+        img = make_image(
+            classification="complex",
+            is_complex=True,
+            sub_type="charts",
+            filename="chart.png",
+            alt_text="Quarterly revenue chart",
+        )
+        ocr = _MockOCRResult(filename="chart.png", has_text=True, texts=["Q1", "Revenue"])
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[ocr], output_dir=tmp_output
+        )
+        assert records[0]["has_ocr_text"] is True
+        assert records[0]["wcag_1_4_5_status"] == "PASSED"
+        assert "essential presentation" in records[0]["wcag_1_4_5_reason"].lower()
 
     def test_overall_status_failed_when_any_check_fails(self, tmp_output):
         img = make_image(

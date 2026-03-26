@@ -9,7 +9,7 @@
   "colors": {
     "primary": "#0969da",
     "light": "#3b82f6",
-    "dark": "#1d4ed8",
+    "dark": "#3b82f6",
     "background": {
       "light": "#ffffff",
       "dark": "#0a0a0a"
@@ -22,7 +22,7 @@
   "topbarLinks": [
     {
       "name": "GitHub",
-      "url": "https://github.com/your-org/ka11y"
+      "url": "https://github.com/Sanjaypranavbc/ka11y"
     }
   ],
   "topbarCtaButton": {
@@ -111,6 +111,6 @@
     }
   ],
   "footerSocials": {
-    "github": "https://github.com/your-org/ka11y"
+    "github": "https://github.com/Sanjaypranavbc/ka11y"
   }
 }

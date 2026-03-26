@@ -19,6 +19,8 @@ const STATIC_ORDER = [
   'custom-audio-transcript',
   'custom-link-purpose',
   'custom-location',
+  'custom-orientation',
+  'custom-images-of-text',
 ];
 
 const INTERACTIVE_ORDER = [
@@ -45,6 +47,8 @@ const LEGACY_META = {
   'custom-audio-transcript':      { mode: 'static',      fallbackDescription: 'Audio-only prerecorded content must have a text alternative' },
   'custom-link-purpose':          { mode: 'static',      fallbackDescription: 'Link purpose must be determinable from link text alone' },
   'custom-location':              { mode: 'static',      fallbackDescription: 'Users must be able to determine their location within a set of web pages' },
+  'custom-orientation':           { mode: 'static',      fallbackDescription: 'Content must not restrict its view and operation to a single display orientation' },
+  'custom-images-of-text':        { mode: 'static',      fallbackDescription: 'Images of text must not be used when real text can achieve the same visual presentation' },
   'custom-focus-visible':         { mode: 'interactive', fallbackDescription: 'Focusable elements must have a visible focus indicator' },
   'custom-focus-appearance':      { mode: 'interactive', fallbackDescription: 'Focus indicators must have sufficient area and contrast' },
   'custom-on-focus':              { mode: 'interactive', fallbackDescription: 'Focusing an element must not trigger a context change' },

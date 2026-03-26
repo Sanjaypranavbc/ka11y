@@ -31,11 +31,15 @@ export interface ContrastDetection {
   confidence: number;
   bbox: number[];
   ratio: number | null;
-  AA_normal: boolean | null;
-  AA_large: boolean | null;
-  AAA_normal: boolean | null;
-  AAA_large: boolean | null;
+  /** Backend field: overall AA compliance (normal + large text combined) */
+  AA_passes: boolean | null;
+  /** Backend field: overall AAA compliance */
+  AAA_passes: boolean | null;
   wcag_violations: string[];
+  // Extra fields returned by the backend but not rendered directly
+  foreground?: Record<string, unknown> | null;
+  background_palette?: unknown[];
+  contrast_checks?: unknown[];
 }
 
 export type ImageClassification =

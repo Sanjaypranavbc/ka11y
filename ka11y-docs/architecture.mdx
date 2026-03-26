@@ -18,13 +18,15 @@ Browser / CI
 │         │                                             │    │
 │  ┌──────▼──────────┐         ┌───────────────────┐   │    │
 │  │  Python stages  │         │  axe-core (Node)  │   │    │
-│  │  (sequential)   │         │  POST /analyse-   │   │    │
+│  │  (concurrent)   │         │  POST /analyse-   │   │    │
 │  │                 │         │  url-flat         │   │    │
 │  │  image_audit    │         └────────┬──────────┘   │    │
 │  │  form_audit     │                  │               │    │
 │  │  label_in_name  │◄─────────────────┘               │    │
 │  │  pause_stop_hide│    merged findings                │    │
 │  │  target_size    │                                   │    │
+│  │  text_spacing   │                                   │    │
+│  │  rendered_layout│                                   │    │
 │  └────────┬────────┘                                  │    │
 │           │                                           │    │
 │  ┌────────▼────────────────────────────────────────┐  │    │
@@ -69,7 +71,9 @@ POST /combined/
       ├─── form_audit stage
       ├─── label_in_name stage
       ├─── pause_stop_hide stage
-      └─── target_size stage
+      ├─── target_size stage
+      ├─── text_spacing stage
+      └─── rendered_layout_audit stage
               │
               ▼
         merge findings
@@ -94,7 +98,7 @@ POST /combined/
 ## Parallel execution model
 
 ```python
-# combined.py — _run_job()
+# combined/runner.py — _run_job()
 node_task   = asyncio.create_task(_call_node_flat(...))
 python_task = asyncio.create_task(_run_python_stages(...))
 
@@ -104,7 +108,7 @@ node_result, python_result = await asyncio.gather(
 )
 ```
 
-The Node task (axe-core) and the Python pipeline run concurrently. The Python pipeline itself is **sequential** across its five stages to avoid overwhelming Playwright with concurrent browser instances.
+The Node task (axe-core) and the Python pipeline run concurrently. The Python pipeline itself now runs its Python stages concurrently via `asyncio.gather(...)`, with per-stage timeouts and graceful degradation.
 
 ---
 
@@ -210,9 +214,10 @@ crawled_images/
 └── example_com_0317_1430_combined/
     ├── combined_report.json          # Final merged report
     ├── images_report.json            # Image crawler summary
-    ├── images_with_alt_text.csv      # Alt-text per image
-    ├── text_detected/                # EasyOCR per-image results
-    │   └── img_abc123.json
+    ├── audit_report.csv              # Image auditor results (1.1.1 / 4.1.2 / 1.4.5 / 1.4.11)
+    ├── text_detected/                # EasyOCR artefacts and classifications
+    │   ├── text_detection_report.json
+    │   └── contrast/
     ├── forms_raw.json                # Raw form field data
     ├── audit_form_report.csv         # Form auditor findings
     ├── interactive_elements_raw.json

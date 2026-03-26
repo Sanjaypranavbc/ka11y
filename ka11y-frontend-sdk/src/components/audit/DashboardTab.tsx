@@ -26,6 +26,12 @@ const SOURCE_COLORS = {
   passes:       "hsl(151, 68%, 46%)",
 };
 
+const LEVEL_COLORS: Record<string, string> = {
+  A: "hsl(213, 94%, 55%)",
+  AA: "hsl(199, 78%, 56%)",
+  AAA: "hsl(277, 70%, 62%)",
+};
+
 export function DashboardTab({ result }: DashboardTabProps) {
   const isMobile = useIsMobile();
 
@@ -218,7 +224,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
                   {topCriteria.map((entry, i) => (
                     <Cell
                       key={i}
-                      fill={entry.level === "A" ? "hsl(213, 94%, 55%)" : "hsl(199, 78%, 56%)"}
+                      fill={LEVEL_COLORS[entry.level] ?? "hsl(199, 78%, 56%)"}
                     />
                   ))}
                 </Bar>
@@ -227,10 +233,13 @@ export function DashboardTab({ result }: DashboardTabProps) {
           </div>
           <div className="flex gap-3 sm:gap-5 mt-2 justify-center flex-wrap" aria-hidden="true">
             <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
-              <div className="w-2.5 h-2.5" style={{ background: "hsl(213, 94%, 55%)" }} /> Level A
+              <div className="w-2.5 h-2.5" style={{ background: LEVEL_COLORS.A }} /> Level A
             </div>
             <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
-              <div className="w-2.5 h-2.5" style={{ background: "hsl(199, 78%, 56%)" }} /> Level AA
+              <div className="w-2.5 h-2.5" style={{ background: LEVEL_COLORS.AA }} /> Level AA
+            </div>
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
+              <div className="w-2.5 h-2.5" style={{ background: LEVEL_COLORS.AAA }} /> Level AAA
             </div>
           </div>
         </CardContent>

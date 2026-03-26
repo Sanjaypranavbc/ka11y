@@ -2,8 +2,14 @@
 
 const { run, PRINTABLE_CHAR_RE } = require('../../src/custom-checks/character-key-shortcuts.check');
 
-function makePage(result) {
-  return { evaluate: jest.fn().mockResolvedValue(result) };
+// The check's page.evaluate returns { violations, totalAccesskeys, totalHandlers }
+function makePage(violations, totalAccesskeys, totalHandlers) {
+  const data = {
+    violations: violations || [],
+    totalAccesskeys: totalAccesskeys !== undefined ? totalAccesskeys : (violations || []).filter(v => v.type === 'accesskey').length,
+    totalHandlers: totalHandlers !== undefined ? totalHandlers : (violations || []).filter(v => v.type === 'inline-handler').length,
+  };
+  return { evaluate: jest.fn().mockResolvedValue(data) };
 }
 
 describe('character-key-shortcuts.check (WCAG 2.1.4)', () => {
@@ -47,7 +53,7 @@ describe('character-key-shortcuts.check (WCAG 2.1.4)', () => {
     test('digit accesskey (e.g. accesskey="1") should NOT be flagged', async () => {
       // The page.evaluate mock returns what the browser-side code would return.
       // With N12 fix the in-browser regex excludes digits, so no violations should come back.
-      // We simulate this by returning empty violations.
+      // We simulate this by returning empty violations (object format).
       const page = makePage([]);
       const result = await run(page);
       expect(result.rules[0].status).toBe('pass');

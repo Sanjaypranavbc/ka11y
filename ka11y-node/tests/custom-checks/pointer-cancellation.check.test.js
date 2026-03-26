@@ -2,8 +2,13 @@
 
 const { run } = require('../../src/custom-checks/pointer-cancellation.check');
 
-function makePage(violations) {
-  return { evaluate: jest.fn().mockResolvedValue(violations) };
+// The check's page.evaluate returns { results, totalChecked }
+function makePage(results, totalChecked) {
+  const data = {
+    results: results || [],
+    totalChecked: totalChecked !== undefined ? totalChecked : (results || []).length,
+  };
+  return { evaluate: jest.fn().mockResolvedValue(data) };
 }
 
 describe('pointer-cancellation.check (WCAG 2.5.2)', () => {

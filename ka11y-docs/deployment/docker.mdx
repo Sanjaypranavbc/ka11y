@@ -7,7 +7,7 @@ description: "Deploy the full ka11y stack with Docker Compose"
 
 - Docker Engine 24+ and Docker Compose v2
 - At least **4 GB RAM** available to Docker (Playwright + Puppeteer both launch Chromium)
-- Ports `3000`, `8000`, and `8080` free on the host
+- Ports `3000`, `3001`, `8000`, and `8080` free on the host
 
 ---
 
@@ -15,7 +15,7 @@ description: "Deploy the full ka11y stack with Docker Compose"
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-org/ka11y.git
+git clone https://github.com/Sanjaypranavbc/ka11y.git
 cd ka11y
 
 # Build all images in parallel and start
@@ -26,7 +26,7 @@ docker compose build --parallel
 docker compose up
 ```
 
-The frontend is available at **http://localhost:8080** once all health checks pass (~90 s on first run).
+The frontend is available at **http://localhost:8080** and the Mintlify docs at **http://localhost:3001** once the services are healthy.
 
 ---
 
@@ -45,6 +45,10 @@ The frontend is available at **http://localhost:8080** once all health checks pa
               │ http://node:3000
 ┌─────────────────────────────────────────┐
 │          ka11y-node   :3000             │  Node + Puppeteer + axe-core
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│          ka11y-docs   :3001             │  Mintlify local docs preview
 └─────────────────────────────────────────┘
 ```
 
@@ -67,8 +71,8 @@ The frontend is available at **http://localhost:8080** once all health checks pa
 | Base | `python:3.13-slim` + Playwright Chromium |
 | Port | `8000` |
 | Depends on | `node` (healthy) |
-| Volume | `crawled_output:/app/crawled_images` |
-| Healthcheck | `curl http://localhost:8000/docs` |
+| Volume | `./output/crawled_images:/app/crawled_images`, `./output/logs:/app/logs` |
+| Healthcheck | `curl http://localhost:8000/api/v1/health` |
 | Start period | 90 s |
 
 ### ka11y-frontend
@@ -80,6 +84,17 @@ The frontend is available at **http://localhost:8080** once all health checks pa
 | Port | `8080 → 80` |
 | Depends on | `python` (healthy) |
 | Healthcheck | `wget http://localhost:80/` |
+
+### ka11y-docs
+
+| Property | Value |
+|----------|-------|
+| Image | `ka11y-docs:latest` |
+| Base | `node:24-slim` + `@mintlify/cli` |
+| Port | `3001 → 3000` |
+| Depends on | none |
+| Volume | `./ka11y-docs:/docs` |
+| Healthcheck | `curl http://localhost:3000/` |
 
 ---
 
@@ -94,10 +109,13 @@ docker compose up
     ├─► python starts, Playwright Chromium + NLTK download (~60 s)
     │       healthcheck passes
     │
-    └─► frontend starts, nginx serves React app (~10 s)
+    ├─► frontend starts, nginx serves React app (~10 s)
+    │       healthcheck passes
+    │
+    └─► docs starts, Mintlify prepares local preview (~15 s)
             healthcheck passes
 
-Total: ~90–120 s on first run (images already built: ~30 s)
+Total: ~90–120 s on first run (plus docs preview startup time)
 ```
 
 ---
@@ -113,12 +131,14 @@ docker compose logs -f
 
 # Follow a single service
 docker compose logs -f python
+docker compose logs -f docs
 
 # Stop all services (keep volumes)
 docker compose down
 
-# Stop and remove volumes (clears crawled output)
-docker compose down -v
+# Stop all services, then clear bind-mounted audit output if needed
+docker compose down
+rm -rf output/crawled_images output/logs
 
 # Rebuild a single image
 docker compose build python
@@ -129,15 +149,18 @@ docker compose restart python
 # Open a shell in a running container
 docker compose exec python bash
 docker compose exec node sh
+docker compose exec docs bash
 ```
 
 ---
 
-## Volumes
+## Bind mounts
 
 | Name | Mount point | Contents |
 |------|-------------|----------|
-| `crawled_output` | `/app/crawled_images` (python) | Downloaded images, raw JSON crawler output, `combined_report.json` |
+| `./output/crawled_images` | `/app/crawled_images` (python) | Downloaded images, raw JSON crawler output, `combined_report.json` |
+| `./output/logs` | `/app/logs` (python) | Python-side logs and runtime artefacts |
+| `./ka11y-docs` | `/docs` (docs) | Live Mintlify content served by the docs container |
 
 To inspect the output:
 
@@ -153,7 +176,7 @@ docker compose exec python cat /app/crawled_images/example.com/<job-id>/combined
 
 ## Health checks
 
-All three services define Docker health checks. `docker compose up` waits for each dependency to be healthy before starting the next service.
+All four services define Docker health checks. `docker compose up` waits for dependent services to be healthy before starting the next service in the audit path.
 
 ```bash
 # Check health status

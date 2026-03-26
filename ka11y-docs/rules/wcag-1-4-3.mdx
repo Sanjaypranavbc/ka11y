@@ -4,7 +4,7 @@ description: "WCAG 1.4.3 — text-in-image contrast check via OCR and per-region
 ---
 
 <Info>
-  **Level AA** · Auditor: `ContrastAuditor` (via OCR pipeline) · File: `ka11y/api/v1/combined.py` (`_contrast_to_findings`)
+  **Level AA** · Auditor: OCR contrast pipeline · Files: `ka11y/api/v1/combined/findings.py` and `ka11y/accessibility/rules/non_text/contrast_analyser.py`
 </Info>
 
 ## What it checks
@@ -16,6 +16,8 @@ The pipeline:
 2. Each region's foreground and background colours are sampled
 3. The WCAG contrast ratio is computed and checked against the AA thresholds
 4. Regions that fail are aggregated into a `ContrastReport` attached to the audit result
+
+The same OCR pipeline also feeds **WCAG 1.4.6 Contrast (Enhanced)** at AAA. Those `1.4.6` findings are present when the audit runs with `wcag_level="AAA"`.
 
 ## Contrast thresholds (WCAG AA)
 
@@ -46,7 +48,7 @@ OCRPreprocessing  ── EasyOCR ──▶  detected text regions
                     → pass finding                 → violation finding
 ```
 
-Each detected region produces one finding in `violations` or `passes`. If a region cannot be analysed (e.g. insufficient contrast data), it is excluded.
+Each detected region produces one finding in `violations`, `passes`, or `needs_review`. If the OCR pipeline cannot determine compliance (for example because contrast metadata is missing), ka11y emits `needs_review` instead of silently dropping the detection.
 
 ## Output: ContrastReport
 
@@ -89,7 +91,7 @@ interface ContrastDetection {
 
 ## `_contrast_to_findings` logic
 
-The internal `_contrast_to_findings` function in `combined.py` converts the contrast table into the standard `Finding` schema:
+The internal `_contrast_to_findings` function in `ka11y/api/v1/combined/findings.py` converts the contrast table into the standard `Finding` schema:
 
 ```python
 for row in contrast_table:

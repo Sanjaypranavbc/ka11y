@@ -65,6 +65,21 @@ async function run(page) {
     };
   }
 
+  const found = [
+    hasSearch && 'search',
+    hasSitemap && 'sitemap',
+    navCount >= 1 && `${navCount} nav element(s)`,
+    hasBreadcrumb && 'breadcrumb',
+    hasTableOfContents && 'table of contents',
+  ].filter(Boolean);
+  const missing = [
+    !hasSearch && 'search',
+    !hasSitemap && 'sitemap',
+    navCount < 1 && 'navigation menu',
+    !hasBreadcrumb && 'breadcrumb',
+    !hasTableOfContents && 'table of contents',
+  ].filter(Boolean);
+
   return {
     successCriteriaId: SC,
     rules: [{
@@ -72,7 +87,7 @@ async function run(page) {
       description: 'More than one way must be available to locate a page',
       impact: 'moderate',
       status: 'incomplete',
-      reason: `Only ${ways} navigation mechanism(s) detected (search: ${hasSearch}, sitemap: ${hasSitemap}, nav: ${navCount}, breadcrumb: ${hasBreadcrumb}, toc: ${hasTableOfContents}). Provide at least two of: site search, sitemap, navigation menu, breadcrumb, or table of contents.`,
+      reason: `Only ${ways} navigation mechanism(s) detected${found.length ? ': ' + found.join(', ') : ''}. At least 2 are required — consider adding: ${missing.slice(0, 3).join(', ')}.`,
       helpUrl: HELP_URL,
     }],
   };

@@ -66,7 +66,7 @@ def _allowed_levels(wcag_level: str) -> set:
 
 
 async def _call_node_flat(
-    url: str, node_base_url: str, wcag_level: str = "AA"
+    url: str, node_base_url: str, wcag_level: str = "AAA"
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings."""
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"

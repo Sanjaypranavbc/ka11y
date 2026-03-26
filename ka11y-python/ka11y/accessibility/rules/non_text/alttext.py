@@ -363,14 +363,15 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
     if has_qualifier or is_action:
         return True, f"PASS [1.1.1] Icon alt describes purpose: '{alt}'"
 
-    if len(norm) >= 2 and not norm.isdigit():
+    # Require at least 3 chars to filter out uninformative initials like "ab" or "XY"
+    if len(norm) >= 3 and not norm.isdigit():
         return (
             True,
             f"PASS [1.1.1] Icon alt is non-empty: '{alt}' "
             f"(verify it describes the action, not the appearance)",
         )
 
-    return False, f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose"
+    return False, f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose or is too short (min 3 chars)"
 
 
 def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
@@ -390,14 +391,15 @@ def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
             f"PASS [1.1.1] Button alt contains action word(s) {matched}: '{alt}'",
         )
 
-    if len(norm) >= 2 and not norm.isdigit():
+    # Require at least 3 chars to filter out uninformative initials like "ab" or "OK" shortcuts
+    if len(norm) >= 3 and not norm.isdigit():
         return (
             True,
             f"PASS [1.1.1] Button alt is non-empty: '{alt}' "
             f"(verify it describes the button action)",
         )
 
-    return False, f"FAIL [1.1.1] Button alt '{alt}' is not descriptive"
+    return False, f"FAIL [1.1.1] Button alt '{alt}' is not descriptive or is too short (min 3 chars)"
 
 
 # ---------------------------------------------------------------------------
@@ -465,6 +467,13 @@ def _check_1_4_5(
     """
     if classification == "decorative":
         return None, "N/A — decorative images are not evaluated for 1.4.5"
+
+    # Complex charts/diagrams use text as part of essential presentation.
+    if classification == "complex" or sub_type == "charts":
+        return (
+            True,
+            "PASS [1.4.5] Complex chart/diagram uses text as part of essential presentation",
+        )
 
     # Logo / logotype exception (WCAG Note: logotypes are considered essential)
     if is_logo or sub_type == "logos":

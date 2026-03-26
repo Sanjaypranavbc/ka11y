@@ -35,7 +35,7 @@ Before auditing, every image passes through a deterministic classification casca
     `alt=""` is required. Any non-empty alt text on a decorative image is a **violation** — it will be read by screen readers unnecessarily.
   </Accordion>
   <Accordion title="informative — alt must describe content (OCR-backed)">
-    alt must be non-empty. If OCR detects text in the image, the cosine similarity between the alt text and the OCR words must exceed the configured threshold. A low-similarity alt text is flagged as inaccurate.
+    alt must be non-empty. If OCR detects text in the image, one or more meaningful OCR words should appear in the alt text. If the visible text and alt text do not line up, the alt text is flagged as inaccurate.
   </Accordion>
   <Accordion title="functional/logos — alt must include logo/home">
     The alt text must contain the word "logo" or "home" so screen-reader users understand the image is a navigation landmark.
@@ -62,13 +62,13 @@ EasyOCR → text regions + confidence → contrast check → category
                                                         └── button_text / logo_text
 ```
 
-The detected words are then used in the cosine similarity check for informative images.
+The detected words are then used to validate whether informative-image alt text reflects the visible text content.
 
 ## Output
 
 **CSV file:** `audit_report.csv`
 
-Columns: `filename`, `src`, `url`, `classification`, `sub_type`, `is_logo`, `is_icon`, `is_button`, `is_functional`, `is_decorative`, `alt_text`, `title`, `has_ocr_text`, `detected_text`, `contrast_violations_count`, `wcag_1_1_1_status`, `wcag_4_1_2_status`, `overall_status`, `wcag_1_1_1_reason`, `wcag_4_1_2_reason`, `screenshot_path`
+Columns: `filename`, `src`, `url`, `classification`, `sub_type`, `is_logo`, `is_icon`, `is_button`, `is_functional`, `is_decorative`, `alt_text`, `title`, `has_ocr_text`, `detected_text`, `contrast_violations_count`, `wcag_1_1_1_status`, `wcag_4_1_2_status`, `wcag_1_4_5_status`, `wcag_1_4_11_status`, `overall_status`, `wcag_1_1_1_reason`, `wcag_4_1_2_reason`, `wcag_1_4_5_reason`, `wcag_1_4_11_reason`, `screenshot_path`
 
 Status values: `PASSED` · `FAILED` · `N/A`
 

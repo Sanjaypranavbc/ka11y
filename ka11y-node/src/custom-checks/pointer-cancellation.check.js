@@ -52,10 +52,10 @@ async function run(page) {
       }
     }
 
-    return results;
+    return { results, totalChecked: elements.length };
   }, ACTION_PATTERN.source);
 
-  if (violations.length === 0) {
+  if (violations.results.length === 0) {
     return {
       successCriteriaId: SC,
       rules: [{
@@ -63,11 +63,13 @@ async function run(page) {
         description: 'Functionality that uses a single pointer must be cancellable',
         impact: null,
         status: 'pass',
-        reason: 'No elements detected activating actions solely on pointer-down without a cancellation mechanism.',
+        reason: `${violations.totalChecked} element(s) with pointer-down handlers checked — all action-triggering handlers have a corresponding pointer-up or click event, allowing cancellation by moving the pointer away before release.`,
         helpUrl: HELP_URL,
       }],
     };
   }
+
+  const violations2 = violations.results;
 
   return {
     successCriteriaId: SC,
@@ -76,7 +78,7 @@ async function run(page) {
       description: 'Functionality that uses a single pointer must be cancellable',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${violations.length} element(s) with action-triggering pointer-down handlers detected without matching pointer-up/click handlers. Verify these actions are cancellable by moving the pointer away before release: ${violations.slice(0, 3).map(v => `<${v.tagName}${v.id ? ` id="${v.id}"` : ''}>`).join(', ')}.`,
+      reason: `${violations2.length} of ${violations.totalChecked} element(s) have action-triggering pointer-down handlers without a matching pointer-up or click handler. Actions fire immediately on press with no way to cancel — add onpointerup/onclick or use the up-event for activation: ${violations2.slice(0, 3).map(v => `<${v.tagName}${v.id ? ` id="${v.id}"` : ''}>`).join(', ')}.`,
       helpUrl: HELP_URL,
     }],
   };
