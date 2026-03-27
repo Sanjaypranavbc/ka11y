@@ -4,8 +4,9 @@ const SC = '2.4.9';
 const RULE_ID = 'custom-link-purpose';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/link-purpose-link-only';
 
-// Generic link text that conveys no purpose when read in isolation (AAA criterion)
-const GENERIC_LINK_RE = /^(click\s+here|here|read\s+more|more|learn\s+more|more\s+info(rmation)?|details|continue|go|link|this|see\s+more|view\s+more|find\s+out\s+more|click|tap|press\s+here|start|begin|open|show|hide|toggle)\.?$/i;
+// Generic link text that conveys no purpose when read in isolation (AAA criterion).
+// Includes Japanese equivalents of "click here", "details", "more", etc.
+const GENERIC_LINK_RE = /^(click\s+here|here|read\s+more|more|learn\s+more|more\s+info(rmation)?|details|continue|go|link|this|see\s+more|view\s+more|find\s+out\s+more|click|tap|press\s+here|start|begin|open|show|hide|toggle|こちら|こちらへ|詳細|詳しくはこちら|詳細はこちら|もっと見る|続きを読む|続きはこちら|詳しく見る|もっと詳しく|開く|見る|確認する|ここをクリック|クリック|タップ|詳細を見る)\.?$/i;
 
 const MAX_LINKS = 100;
 
