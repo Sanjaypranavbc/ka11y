@@ -5,12 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, AlertTriangle, CheckCircle2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface ContrastReportSectionProps {
   report: ContrastReport;
 }
 
 export function ContrastReportSection({ report }: ContrastReportSectionProps) {
+  const { t } = useLanguage();
   const { summary, images } = report;
   const [passingOpen, setPassingOpen] = useState(false);
 
@@ -21,31 +23,35 @@ export function ContrastReportSection({ report }: ContrastReportSectionProps) {
   const violating = images.filter(hasViol);
   const passing   = images.filter((img) => !hasViol(img));
 
+  const passingLabel = passing.length === 1
+    ? t("contrast.passingImages", { n: passing.length })
+    : t("contrast.passingImagesPlural", { n: passing.length });
+
   return (
     <Card className="animate-fade-up">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <Eye className="h-4 w-4" aria-hidden="true" />
-          Contrast Analysis — WCAG 1.4.3
+          {t("contrast.title")}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Summary tiles */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <SummaryTile label="Regions Analysed" value={summary.total_regions_analysed} />
-          <SummaryTile label="Contrast Violations" value={summary.total_violations}
+          <SummaryTile label={t("contrast.regionsAnalysed")} value={summary.total_regions_analysed} />
+          <SummaryTile label={t("contrast.violations")} value={summary.total_violations}
             variant={summary.total_violations > 0 ? "danger" : "ok"} />
-          <SummaryTile label="Images Affected" value={summary.images_with_violations}
+          <SummaryTile label={t("contrast.imagesAffected")} value={summary.images_with_violations}
             variant={summary.images_with_violations > 0 ? "warn" : "ok"} />
-          <SummaryTile label="Pass Rate" value={`${summary.pass_rate_pct}%`}
+          <SummaryTile label={t("contrast.passRate")} value={`${summary.pass_rate_pct}%`}
             variant={summary.pass_rate_pct >= 90 ? "ok" : summary.pass_rate_pct >= 60 ? "warn" : "danger"} />
         </div>
 
         {/* Violating images */}
         {violating.length > 0 && (
-          <section aria-label="Images with contrast violations">
+          <section aria-label={t("contrast.withViolations")}>
             <h4 className="text-[10px] font-semibold tracking-widest uppercase text-destructive mb-3">
-              Images with Violations
+              {t("contrast.withViolations")}
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {violating.map((img) => (
@@ -61,7 +67,7 @@ export function ContrastReportSection({ report }: ContrastReportSectionProps) {
             <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors">
               <ChevronDown className={cn("h-3 w-3 transition-transform", passingOpen && "rotate-180")} aria-hidden="true" />
               <CheckCircle2 className="h-3 w-3 text-success" aria-hidden="true" />
-              {passing.length} image{passing.length !== 1 ? "s" : ""} passed contrast check
+              {passingLabel}
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mt-3">
@@ -75,7 +81,7 @@ export function ContrastReportSection({ report }: ContrastReportSectionProps) {
 
         {images.length === 0 && (
           <p className="text-xs text-muted-foreground text-center py-4">
-            No images were analysed for contrast.
+            {t("contrast.noImages")}
           </p>
         )}
       </CardContent>

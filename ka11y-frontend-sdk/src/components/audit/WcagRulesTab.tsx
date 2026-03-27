@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, Search, AlertCircle, Loader2 } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,12 +23,6 @@ interface WcagRulesResponse {
 
 type LevelFilter = "all" | "A" | "AA" | "AAA";
 
-const SUPPORTED_LANGS: { code: string; label: string }[] = [
-  { code: "en", label: "English" },
-  { code: "de", label: "Deutsch" },
-  { code: "ja", label: "日本語" },
-];
-
 // ── Severity helpers ──────────────────────────────────────────────────────────
 
 const SEVERITY_STYLES: Record<string, string> = {
@@ -47,6 +41,7 @@ const LEVEL_STYLES: Record<string, string> = {
 // ── Row component ─────────────────────────────────────────────────────────────
 
 function RuleRow({ rule }: { rule: WcagRule }) {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -105,14 +100,14 @@ function RuleRow({ rule }: { rule: WcagRule }) {
         >
           <div>
             <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
-              Description
+              {t("wcagRules.description")}
             </p>
             <p className="text-xs text-foreground leading-relaxed">{rule.description}</p>
           </div>
           {rule.suggested_fix && (
             <div>
               <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
-                Suggested Fix
+                {t("wcagRules.suggestedFix")}
               </p>
               <p className="text-xs text-foreground leading-relaxed font-mono bg-card border border-border rounded px-3 py-2 whitespace-pre-wrap">
                 {rule.suggested_fix}
@@ -128,12 +123,12 @@ function RuleRow({ rule }: { rule: WcagRule }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function WcagRulesTab() {
-  const [rules, setRules]       = useState<WcagRule[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
-  const [search, setSearch]     = useState("");
-  const [level, setLevel]       = useState<LevelFilter>("all");
-  const [lang, setLang]         = useState("en");
+  const { t, lang } = useLanguage();
+  const [rules, setRules]     = useState<WcagRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+  const [search, setSearch]   = useState("");
+  const [level, setLevel]     = useState<LevelFilter>("all");
 
   // Fetch rules when lang changes
   useEffect(() => {
@@ -186,35 +181,10 @@ export function WcagRulesTab() {
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">WCAG Rules Catalogue</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("wcagRules.title")}</h2>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {loading ? "Loading…" : `${filtered.length} of ${rules.length} rules`}
+            {loading ? t("wcagRules.loading") : t("wcagRules.count", { n: filtered.length, total: rules.length })}
           </p>
-        </div>
-
-        {/* Language selector */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
-            Lang
-          </span>
-          <div className="flex rounded-md overflow-hidden border border-border text-[10px] font-semibold">
-            {SUPPORTED_LANGS.map((l) => (
-              <button
-                key={l.code}
-                type="button"
-                onClick={() => setLang(l.code)}
-                className={cn(
-                  "px-2 py-1 transition-colors cursor-pointer",
-                  lang === l.code
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-input text-muted-foreground hover:text-foreground",
-                )}
-                aria-pressed={lang === l.code}
-              >
-                {l.label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -227,11 +197,11 @@ export function WcagRulesTab() {
             aria-hidden="true"
           />
           <Input
-            placeholder="Search by ID, name, or description…"
+            placeholder={t("wcagRules.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-8 h-8 text-xs bg-input border-border focus-visible:ring-primary/50"
-            aria-label="Search WCAG rules"
+            aria-label={t("wcagRules.searchPlaceholder")}
           />
         </div>
 
@@ -250,7 +220,7 @@ export function WcagRulesTab() {
               )}
               aria-pressed={level === lvl}
             >
-              {lvl === "all" ? "All" : lvl}
+              {lvl === "all" ? t("wcagRules.all") : lvl}
               <span className="ml-1 opacity-60">
                 {counts[lvl]}
               </span>
@@ -263,7 +233,7 @@ export function WcagRulesTab() {
       {loading ? (
         <div className="flex items-center gap-2 py-12 justify-center text-muted-foreground text-xs">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          Loading WCAG rules…
+          {t("wcagRules.loading")}
         </div>
       ) : error ? (
         <div
@@ -275,7 +245,7 @@ export function WcagRulesTab() {
         </div>
       ) : filtered.length === 0 ? (
         <p className="text-xs text-muted-foreground py-12 text-center">
-          No rules match your search.
+          {t("wcagRules.noMatch")}
         </p>
       ) : (
         <div className="space-y-1.5">

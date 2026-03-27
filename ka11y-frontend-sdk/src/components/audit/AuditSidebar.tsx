@@ -20,6 +20,8 @@ import {
   BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/i18n/LanguageContext";
+import { TranslationKey } from "@/i18n/translations";
 
 interface AuditSidebarProps {
   activeTab: TabValue;
@@ -31,28 +33,41 @@ interface AuditSidebarProps {
   onClose: () => void;
 }
 
-const navItems: { label: string; value: TabValue; icon: React.ElementType }[] = [
-  { label: "Dashboard",         value: "dashboard",          icon: LayoutDashboard },
-  { label: "Violations",        value: "violations",         icon: AlertTriangle   },
-  { label: "Needs Review",      value: "needs-review",       icon: HelpCircle      },
-  { label: "Passes",            value: "passes",             icon: CheckCircle2    },
-  { label: "Image Visualiser",  value: "image-visualisation", icon: Images         },
-  { label: "WCAG Rules",        value: "wcag-rules",         icon: BookOpen        },
-  { label: "Settings",          value: "settings",           icon: Settings        },
+const NAV_ITEMS: { key: TranslationKey; value: TabValue; icon: React.ElementType }[] = [
+  { key: "nav.dashboard",       value: "dashboard",           icon: LayoutDashboard },
+  { key: "nav.violations",      value: "violations",          icon: AlertTriangle   },
+  { key: "nav.needsReview",     value: "needs-review",        icon: HelpCircle      },
+  { key: "nav.passes",          value: "passes",              icon: CheckCircle2    },
+  { key: "nav.imageVisualiser", value: "image-visualisation", icon: Images          },
+  { key: "nav.wcagRules",       value: "wcag-rules",          icon: BookOpen        },
+  { key: "nav.settings",        value: "settings",            icon: Settings        },
 ];
 
-const STAGE_LABELS: Record<string, string> = {
-  axe_core:              "axe-core scan",
-  image_audit:           "Image audit",
-  form_audit:            "Form audit",
-  label_in_name:         "Label in name",
-  pause_stop_hide:       "Moving content",
-  target_size:           "Target size",
-  text_spacing:          "Text spacing",
-  rendered_layout_audit: "Rendered layout",
+const TOGGLE_ITEMS: { key: keyof AuditConfig; labelKey: TranslationKey }[] = [
+  { key: "run_ocr",                          labelKey: "toggle.ocr"             },
+  { key: "run_image_audit",                  labelKey: "toggle.imageAudit"      },
+  { key: "run_form_audit",                   labelKey: "toggle.formAudit"       },
+  { key: "run_label_in_name_audit",          labelKey: "toggle.labelInName"     },
+  { key: "run_pause_stop_hide_audit",        labelKey: "toggle.pauseStop"       },
+  { key: "run_target_size_audit",            labelKey: "toggle.targetSize"      },
+  { key: "run_resize_text_audit",            labelKey: "toggle.resizeText"      },
+  { key: "run_reflow_audit",                 labelKey: "toggle.reflow"          },
+  { key: "run_text_spacing_audit",           labelKey: "toggle.textSpacing"     },
+  { key: "run_orientation_audit",            labelKey: "toggle.orientation"     },
+  { key: "run_hover_focus_content_audit",    labelKey: "toggle.hoverFocus"      },
+  { key: "run_focus_not_obscured_min_audit", labelKey: "toggle.focusObscured"   },
+  { key: "run_focus_not_obscured_enh_audit", labelKey: "toggle.focusObscuredPlus" },
+];
+
+const STATUS_KEYS: Record<string, TranslationKey> = {
+  pending:   "status.pending",
+  running:   "status.running",
+  completed: "status.completed",
+  failed:    "status.failed",
 };
 
 export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, currentStage, open, onClose }: AuditSidebarProps) {
+  const { t } = useLanguage();
   const [config, setConfig] = useState<AuditConfig>({
     url: localStorage.getItem("ka11y_last_url") ?? "",
     max_depth: 0,
@@ -72,22 +87,6 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
     run_focus_not_obscured_enh_audit: true,
   });
 
-  const toggles: { key: keyof AuditConfig; label: string }[] = [
-    { key: "run_ocr",                          label: "OCR"             },
-    { key: "run_image_audit",                  label: "Image Audit"     },
-    { key: "run_form_audit",                   label: "Form Audit"      },
-    { key: "run_label_in_name_audit",          label: "Label in Name"   },
-    { key: "run_pause_stop_hide_audit",        label: "Pause/Stop"      },
-    { key: "run_target_size_audit",            label: "Target Size"     },
-    { key: "run_resize_text_audit",            label: "Resize Text"     },
-    { key: "run_reflow_audit",                 label: "Reflow"          },
-    { key: "run_text_spacing_audit",           label: "Text Spacing"    },
-    { key: "run_orientation_audit",            label: "Orientation"     },
-    { key: "run_hover_focus_content_audit",    label: "Hover/Focus"     },
-    { key: "run_focus_not_obscured_min_audit", label: "Focus Obscured"  },
-    { key: "run_focus_not_obscured_enh_audit", label: "Focus Obscured+" },
-  ];
-
   const isRunning = jobStatus === "pending" || jobStatus === "running";
 
   return (
@@ -102,7 +101,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
       )}
 
       <aside
-        aria-label="Audit controls"
+        aria-label={t("sidebar.ariaLabel")}
         className={cn(
           "fixed top-0 left-0 z-50 h-full w-[85vw] max-w-72 md:w-64 bg-[hsl(var(--sidebar-background))] border-r border-[hsl(var(--sidebar-border))] flex flex-col transition-transform duration-200",
           "md:translate-x-0 md:static md:z-auto",
@@ -116,7 +115,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
               ka<span className="text-primary">11</span>y
             </h1>
             <p className="text-[9px] font-mono tracking-[0.2em] uppercase text-muted-foreground mt-1 select-none">
-              a11y diagnostic
+              {t("sidebar.tagline")}
             </p>
           </div>
           <Button
@@ -124,7 +123,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
             size="icon"
             className="md:hidden h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={onClose}
-            aria-label="Close sidebar"
+            aria-label={t("sidebar.closeSidebar")}
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
@@ -133,8 +132,8 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
         <Separator className="bg-[hsl(var(--sidebar-border))]" />
 
         {/* Navigation */}
-        <nav aria-label="Main navigation" className="py-3">
-          {navItems.map((item) => (
+        <nav aria-label={t("sidebar.navAriaLabel")} className="py-3">
+          {NAV_ITEMS.map((item) => (
             <button
               key={item.value}
               onClick={() => { onTabChange(item.value); onClose(); }}
@@ -147,7 +146,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
               )}
             >
               <item.icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              {item.label}
+              {t(item.key)}
             </button>
           ))}
         </nav>
@@ -157,26 +156,26 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
         {/* Audit Controls */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
           <p className="text-[9px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
-            New Audit
+            {t("sidebar.newAudit")}
           </p>
 
           {/* URL & depth */}
           <div className="space-y-3">
             <div>
               <Label htmlFor="audit-url" className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
-                Target URL
+                {t("sidebar.targetUrl")}
               </Label>
               <Input
                 id="audit-url"
                 value={config.url}
                 onChange={(e) => setConfig((c) => ({ ...c, url: e.target.value }))}
-                placeholder="https://example.com"
+                placeholder={t("sidebar.urlPlaceholder")}
                 className="mt-1.5 h-8 text-xs font-mono bg-[hsl(var(--input))] border-border focus-visible:ring-primary/50"
               />
             </div>
             <div>
               <Label htmlFor="audit-max-depth" className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
-                Max Depth
+                {t("sidebar.maxDepth")}
               </Label>
               <Input
                 id="audit-max-depth"
@@ -189,7 +188,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
             </div>
             <div>
               <Label className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
-                WCAG Level
+                {t("sidebar.wcagLevel")}
               </Label>
               <div className="mt-1.5 flex rounded-md overflow-hidden border border-border text-[10px] font-semibold">
                 {(["A", "AA", "AAA"] as const).map((lvl) => (
@@ -209,25 +208,25 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                 ))}
               </div>
               <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-                `1.4.6 Contrast (Enhanced)` is AAA. Selecting `AA` or `A` hides higher-level findings from the combined result.
+                {t("sidebar.wcagLevelNote")}
               </p>
             </div>
           </div>
 
           {/* Toggles */}
           <div className="space-y-2.5">
-            {toggles.map((t) => (
-              <div key={t.key} className="flex items-center justify-between">
+            {TOGGLE_ITEMS.map((item) => (
+              <div key={item.key} className="flex items-center justify-between">
                 <Label
-                  htmlFor={`toggle-${t.key}`}
+                  htmlFor={`toggle-${item.key}`}
                   className="text-[10px] font-medium text-muted-foreground cursor-pointer"
                 >
-                  {t.label}
+                  {t(item.labelKey)}
                 </Label>
                 <Switch
-                  id={`toggle-${t.key}`}
-                  checked={config[t.key] as boolean}
-                  onCheckedChange={(v) => setConfig((c) => ({ ...c, [t.key]: v }))}
+                  id={`toggle-${item.key}`}
+                  checked={config[item.key] as boolean}
+                  onCheckedChange={(v) => setConfig((c) => ({ ...c, [item.key]: v }))}
                   className="scale-[0.7] data-[state=checked]:bg-primary"
                 />
               </div>
@@ -248,7 +247,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
             ) : (
               <Play className="h-3.5 w-3.5 mr-2" aria-hidden="true" />
             )}
-            {isRunning ? "Running…" : "Run Audit"}
+            {isRunning ? t("sidebar.running") : t("sidebar.runAudit")}
           </Button>
 
           {/* Status */}
@@ -270,12 +269,12 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                   jobStatus === "failed"    && "text-destructive",
                   (jobStatus === "pending" || jobStatus === "running") && "text-primary",
                 )}>
-                  {jobStatus}
+                  {t(STATUS_KEYS[jobStatus] ?? "status.pending")}
                 </span>
               </div>
               {currentStage && (jobStatus === "pending" || jobStatus === "running") && (
                 <p className="text-[9px] font-mono text-muted-foreground pl-5 truncate">
-                  {STAGE_LABELS[currentStage] ?? currentStage}
+                  {t((`stage.${currentStage}`) as TranslationKey) || currentStage}
                 </p>
               )}
             </div>
@@ -285,7 +284,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
         {/* Footer rule */}
         <div className="px-4 py-3 border-t border-[hsl(var(--sidebar-border))]">
           <p className="text-[8px] font-mono tracking-widest text-muted-foreground/40 uppercase">
-            WCAG 2.1 A / AA / AAA · axe-core + Python
+            {t("sidebar.footer")}
           </p>
         </div>
       </aside>

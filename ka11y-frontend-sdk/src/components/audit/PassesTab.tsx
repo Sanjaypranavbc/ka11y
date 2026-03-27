@@ -9,6 +9,7 @@ import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCriterionId, formatCriterionName, formatLevel } from "@/lib/audit-format";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface PassesTabProps {
   passes: AuditPass[];
@@ -16,6 +17,7 @@ interface PassesTabProps {
 }
 
 export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
@@ -92,17 +94,21 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
     setVisibleCounts((prev) => ({ ...prev, [source]: (prev[source] ?? pageSize) + pageSize }));
   };
 
+  const showingText = filtered.length !== passes.length
+    ? t("passes.showingFiltered", { n: filtered.length, all: passes.length })
+    : t("passes.showing", { n: filtered.length });
+
   return (
     <div className="p-3 sm:p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
       <div className="flex flex-wrap items-center gap-2">
         <Input
-          placeholder="Search rule, SC, criterion, reason..."
+          placeholder={t("passes.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full sm:w-72 h-8 text-xs"
         />
 
-        <div role="group" aria-label="Filter by source" className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterSource")} className="flex flex-wrap gap-1">
           {allSources.map((s) => (
             <button
               key={s}
@@ -118,7 +124,7 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label="Filter by WCAG level" className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterLevel")} className="flex flex-wrap gap-1">
           {allLevels.map((lvl) => (
             <button
               key={lvl}
@@ -134,7 +140,7 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label="Filter by WCAG success criterion" className="flex gap-1 flex-wrap">
+        <div role="group" aria-label={t("table.filterSC")} className="flex gap-1 flex-wrap">
           {allScs.map((sc) => (
             <button
               key={sc}
@@ -152,18 +158,15 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
 
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-7">
-            <X className="h-3 w-3 mr-1" /> Clear
+            <X className="h-3 w-3 mr-1" /> {t("table.clear")}
           </Button>
         )}
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Showing {filtered.length} passes
-        {filtered.length !== passes.length && ` (${passes.length} total)`}
-      </p>
+      <p className="text-xs text-muted-foreground">{showingText}</p>
 
       {Object.keys(grouped).length === 0 && (
-        <p className="text-xs text-muted-foreground">No passes match the current filters.</p>
+        <p className="text-xs text-muted-foreground">{t("passes.noMatch")}</p>
       )}
 
       {Object.entries(grouped).map(([source, items]) => {
@@ -174,25 +177,27 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
             <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
               <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
               <span className="text-sm font-medium capitalize">{source}</span>
-              <Badge variant="secondary" className="text-[10px] ml-auto">{items.length} passes</Badge>
+              <Badge variant="secondary" className="text-[10px] ml-auto">
+                {t("passes.badge", { n: items.length })}
+              </Badge>
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="rounded-lg border border-border overflow-hidden mt-2">
                 <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow className="bg-muted/30">
-                      <TableHead className="text-xs">Rule ID</TableHead>
-                      <TableHead className="text-xs">SC</TableHead>
-                      <TableHead className="text-xs">Criterion</TableHead>
-                      <TableHead className="text-xs">Level</TableHead>
-                      <TableHead className="text-xs">Reason</TableHead>
+                      <TableHead className="text-xs">{t("table.ruleId")}</TableHead>
+                      <TableHead className="text-xs">{t("table.sc")}</TableHead>
+                      <TableHead className="text-xs">{t("table.criterion")}</TableHead>
+                      <TableHead className="text-xs">{t("table.level")}</TableHead>
+                      <TableHead className="text-xs">{t("table.reason")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {items.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={5} className="text-xs text-muted-foreground text-center py-8">
-                          No passes are available for this source.
+                          {t("passes.noMatchSource")}
                         </TableCell>
                       </TableRow>
                     )}
@@ -218,7 +223,7 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
               {visible < items.length && (
                 <div className="flex justify-center pt-2">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => showMore(source)}>
-                    Show more ({items.length - visible} remaining)
+                    {t("passes.showMore", { n: items.length - visible })}
                   </Button>
                 </div>
               )}

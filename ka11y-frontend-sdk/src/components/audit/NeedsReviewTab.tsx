@@ -9,6 +9,7 @@ import { AlertTriangle, Wrench, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCriterionId, formatCriterionName } from "@/lib/audit-format";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface NeedsReviewTabProps {
   items: AuditNeedsReview[];
@@ -30,6 +31,7 @@ const sourceColors: Record<string, string> = {
 };
 
 export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
@@ -82,24 +84,28 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
 
   const hasFilters = search || severityFilter.length || sourceFilter.length || scFilter.length;
 
+  const showingText = filtered.length !== items.length
+    ? t("needsReview.showingFiltered", { visible: Math.min(visibleCount, filtered.length), total: filtered.length, all: items.length })
+    : t("needsReview.showing", { visible: Math.min(visibleCount, filtered.length), total: filtered.length });
+
   return (
     <div className="p-3 sm:p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
       <div className="bg-moderate/10 border border-moderate/30 rounded-lg p-4 flex items-start gap-3" role="note">
         <AlertTriangle className="h-5 w-5 text-moderate shrink-0 mt-0.5" aria-hidden="true" />
         <p className="text-sm text-foreground">
-          These items require manual verification — automated tools could not determine pass/fail.
+          {t("needsReview.manualNote")}
         </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Input
-          placeholder="Search reason or HTML..."
+          placeholder={t("table.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full sm:w-64 h-8 text-xs"
         />
 
-        <div role="group" aria-label="Filter by severity" className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterSeverity")} className="flex flex-wrap gap-1">
           {allSeverities.map((s) => (
             <button
               key={s}
@@ -117,7 +123,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label="Filter by source" className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterSource")} className="flex flex-wrap gap-1">
           {allSources.map((s) => (
             <button
               key={s}
@@ -135,7 +141,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label="Filter by WCAG success criterion" className="flex gap-1 flex-wrap">
+        <div role="group" aria-label={t("table.filterSC")} className="flex gap-1 flex-wrap">
           {allScs.map((sc) => (
             <button
               key={sc}
@@ -153,33 +159,30 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
 
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-7">
-            <X className="h-3 w-3 mr-1" /> Clear
+            <X className="h-3 w-3 mr-1" /> {t("table.clear")}
           </Button>
         )}
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Showing {Math.min(visibleCount, filtered.length)} of {filtered.length} items
-        {filtered.length !== items.length && ` (${items.length} total)`}
-      </p>
+      <p className="text-xs text-muted-foreground">{showingText}</p>
 
       <div className="rounded-lg border border-border overflow-hidden">
         <Table className="min-w-[760px]">
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="text-xs">Severity</TableHead>
-              <TableHead className="text-xs">Source</TableHead>
-              <TableHead className="text-xs">SC</TableHead>
-              <TableHead className="text-xs">Criterion</TableHead>
-              <TableHead className="text-xs">Reason</TableHead>
-              <TableHead className="text-xs">Fix</TableHead>
+              <TableHead className="text-xs">{t("table.severity")}</TableHead>
+              <TableHead className="text-xs">{t("table.source")}</TableHead>
+              <TableHead className="text-xs">{t("table.sc")}</TableHead>
+              <TableHead className="text-xs">{t("table.criterion")}</TableHead>
+              <TableHead className="text-xs">{t("table.reason")}</TableHead>
+              <TableHead className="text-xs">{t("table.fix")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-xs text-muted-foreground text-center py-8">
-                  No manual-review items match the current filters.
+                  {t("needsReview.noMatch")}
                 </TableCell>
               </TableRow>
             )}
@@ -227,7 +230,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
       {visibleCount < filtered.length && (
         <div className="flex justify-center pt-2">
           <Button variant="outline" size="sm" className="text-xs" onClick={() => setVisibleCount((n) => n + pageSize)}>
-            Show more ({filtered.length - visibleCount} remaining)
+            {t("needsReview.showMore", { n: filtered.length - visibleCount })}
           </Button>
         </div>
       )}

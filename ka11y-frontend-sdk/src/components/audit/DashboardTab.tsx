@@ -8,6 +8,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend, Tooltip,
 } from "recharts";
 import { AlertTriangle, HelpCircle, CheckCircle2, Activity } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface DashboardTabProps {
   result: AuditResult;
@@ -34,6 +35,7 @@ const LEVEL_COLORS: Record<string, string> = {
 
 export function DashboardTab({ result }: DashboardTabProps) {
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
 
   // Severity breakdown
   const severityCounts = result.violations.reduce(
@@ -125,10 +127,10 @@ export function DashboardTab({ result }: DashboardTabProps) {
       {/* Metric cards — staggered reveal */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "Total Findings",  value: result.total,              variant: "default"  as const, icon: <Activity className="h-5 w-5" />,     delay: "delay-0"   },
-          { label: "Violations",      value: result.violations_count,   variant: "critical" as const, icon: <AlertTriangle className="h-5 w-5" />, delay: "delay-75"  },
-          { label: "Needs Review",    value: result.needs_review_count, variant: "serious"  as const, icon: <HelpCircle className="h-5 w-5" />,    delay: "delay-150" },
-          { label: "Passes",          value: result.passes_count,       variant: "success"  as const, icon: <CheckCircle2 className="h-5 w-5" />,  delay: "delay-225" },
+          { label: t("dashboard.totalFindings"),  value: result.total,              variant: "default"  as const, icon: <Activity className="h-5 w-5" />,     delay: "delay-0"   },
+          { label: t("dashboard.violations"),     value: result.violations_count,   variant: "critical" as const, icon: <AlertTriangle className="h-5 w-5" />, delay: "delay-75"  },
+          { label: t("dashboard.needsReview"),    value: result.needs_review_count, variant: "serious"  as const, icon: <HelpCircle className="h-5 w-5" />,    delay: "delay-150" },
+          { label: t("dashboard.passes"),         value: result.passes_count,       variant: "success"  as const, icon: <CheckCircle2 className="h-5 w-5" />,  delay: "delay-225" },
         ].map((m) => (
           <div key={m.label} className={`animate-fade-up ${m.delay}`}>
             <MetricCard label={m.label} value={m.value} variant={m.variant} icon={m.icon} />
@@ -141,7 +143,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
         {/* Severity Pie */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Violations by Severity</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("dashboard.bySeverity")}</CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer config={severityChartConfig} className="h-56 sm:h-64" role="img" tabIndex={0} aria-label={`Pie chart: ${severityData.map((d) => `${d.name} ${d.value}`).join(", ")}`}>
@@ -161,7 +163,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
         {/* Source Bar */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Findings by Source</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("dashboard.bySource")}</CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer
@@ -189,7 +191,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
       {/* WCAG Level Breakdown */}
       <Card className="animate-fade-up delay-450">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">WCAG Level Breakdown</CardTitle>
+          <CardTitle className="text-sm font-medium">{t("dashboard.levelBreakdown")}</CardTitle>
         </CardHeader>
         <CardContent>
           <ChartContainer config={sourceChartConfig} className="h-44 sm:h-48">
@@ -210,7 +212,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
       {/* Top Failing WCAG */}
       <Card className="animate-fade-up delay-600">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Top Failing WCAG Criteria</CardTitle>
+          <CardTitle className="text-sm font-medium">{t("dashboard.topFailing")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-64 sm:h-72">
