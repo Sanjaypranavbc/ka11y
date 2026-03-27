@@ -20,6 +20,7 @@ WORKDIR /app
 
 COPY pyproject.toml poetry.lock ./
 COPY ka11y/ ./ka11y/
+COPY i18n/   ./i18n/
 
 RUN pip install --no-cache-dir --upgrade poetry
 RUN poetry install --only main
