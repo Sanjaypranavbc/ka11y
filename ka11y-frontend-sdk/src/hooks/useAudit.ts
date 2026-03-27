@@ -223,6 +223,7 @@ export function useAudit() {
             url: config.url,
             max_depth: config.max_depth,
             wcag_level: config.wcag_level,
+            lang: config.lang ?? "en",
             run_ocr: config.run_ocr,
             run_image_audit: config.run_image_audit,
             run_form_audit: config.run_form_audit,

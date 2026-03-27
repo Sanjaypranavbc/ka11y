@@ -87,7 +87,7 @@ const {
 } = require('./wcagMetadata');
 const { getRules } = require('./rulesLoader');
 
-// English rules loaded once at startup — used for suggested_fix lookups.
+// English rules cached at startup as fallback.
 const _enRules = getRules('en');
 
 /**
@@ -299,9 +299,10 @@ function _criterionLevel(sc) {
   return WCAG_LEVEL[sc] || null;
 }
 
-function _suggestedFix(sc, ruleId) {
+function _suggestedFix(sc, ruleId, lang = 'en') {
   if (sc && sc !== BEST_PRACTICE_ID) {
-    const yamlFix = _enRules[sc] && _enRules[sc].suggested_fix;
+    const rules = lang === 'en' ? _enRules : getRules(lang);
+    const yamlFix = rules[sc] && rules[sc].suggested_fix;
     if (yamlFix) return yamlFix;
   }
   const guide = rulesGuide[ruleId];
@@ -337,7 +338,7 @@ function _suggestedFix(sc, ruleId) {
  * @param {string} pageUrl    - URL of the page (for element.page_url)
  * @returns {Array<object>}
  */
-function mapResultsFlat(axeResults, pageUrl = null) {
+function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
   const findings = [];
 
   const IMPACT_TO_SEVERITY = {
@@ -381,7 +382,7 @@ function mapResultsFlat(axeResults, pageUrl = null) {
         severity:       sev,
         status:         'fail',
         reason:         cleanReason(node.failureSummary, rule.help),
-        suggested_fix:  _suggestedFix(sc, rule.id),
+        suggested_fix:  _suggestedFix(sc, rule.id, lang),
         help_url:       rule.helpUrl,
         element: {
           html:       html,
@@ -409,7 +410,7 @@ function mapResultsFlat(axeResults, pageUrl = null) {
         severity:       sev,
         status:         'needs_review',
         reason:         cleanReason(node.failureSummary, rule.help),
-        suggested_fix:  _suggestedFix(sc, rule.id),
+        suggested_fix:  _suggestedFix(sc, rule.id, lang),
         help_url:       rule.helpUrl,
         element: {
           html:       html,
@@ -464,7 +465,7 @@ function mapResultsFlat(axeResults, pageUrl = null) {
  * @param {string} pageUrl
  * @returns {Array<object>}
  */
-function mapCustomResultsFlat(customResults, pageUrl = null) {
+function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
   const findings = [];
 
   const IMPACT_TO_SEVERITY = {
@@ -512,7 +513,7 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
         severity:       status === 'pass' ? null : (impact ? (IMPACT_TO_SEVERITY[impact] || null) : null),
         status:         status,
         reason:         (rule && rule.reason) || (rule && rule.description) || '',
-        suggested_fix:  status === 'pass' ? null : _suggestedFix(sc, null),
+        suggested_fix:  status === 'pass' ? null : _suggestedFix(sc, null, lang),
         help_url:       (rule && rule.helpUrl) || null,
         element:        null,
       });

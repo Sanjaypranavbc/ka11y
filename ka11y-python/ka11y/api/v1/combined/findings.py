@@ -13,11 +13,18 @@ HOW TO ADD A NEW CONVERTER
 
 from __future__ import annotations
 
+import contextvars
 from typing import Any, Dict, List, Optional
 
 from ka11y.config.logger import setup_logger
+from ka11y.i18n.loader import get_suggested_fixes, get_wcag_names
 
-from .constants import _PYTHON_SEVERITY, _SUGGESTED_FIX, _WCAG_LEVEL, _WCAG_NAMES
+from .constants import _PYTHON_SEVERITY, _WCAG_LEVEL
+
+# Per-job language context — set in runner._run_job() before creating stage tasks.
+# asyncio.create_task() copies the current Context, so child tasks automatically
+# inherit the language without it being threaded through every function signature.
+_lang_ctx: contextvars.ContextVar[str] = contextvars.ContextVar("combined_lang", default="en")
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -39,16 +46,19 @@ def _make_finding(
     page_url: str = "",
 ) -> Dict[str, Any]:
     is_pass = status == "pass"
+    _lang = _lang_ctx.get()
+    wcag_names = get_wcag_names(_lang)
+    suggested_fixes = get_suggested_fixes(_lang)
     return {
         "source": source,
         "rule_id": rule_id,
         "wcag_sc": wcag_sc,
-        "criterion_name": _WCAG_NAMES.get(wcag_sc),
+        "criterion_name": wcag_names.get(wcag_sc),
         "level": _WCAG_LEVEL.get(wcag_sc),
         "severity": None if is_pass else severity,
         "status": status,
         "reason": reason,
-        "suggested_fix": None if is_pass else _SUGGESTED_FIX.get(wcag_sc),
+        "suggested_fix": None if is_pass else suggested_fixes.get(wcag_sc),
         "help_url": None,
         "element": (
             None

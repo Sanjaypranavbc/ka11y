@@ -292,7 +292,7 @@ class AccessibilityService {
    * @param {string} url - Fully-qualified URL
    * @returns {Promise<Array<object>>} Flat findings array
    */
-  async analyseUrlFlat(url, level = 'AA') {
+  async analyseUrlFlat(url, level = 'AA', lang = 'en') {
     const { timeoutMs } = this._config.axe;
     const runOnly = { type: 'tag', values: _tagsForLevel(level) };
     let browser = null;
@@ -346,12 +346,12 @@ class AccessibilityService {
 
       this._logger.info('[flat] Running all custom checks (static + interactive)...');
       const customResults = await runAll(page);
-      const allCustomFindings = mapCustomResultsFlat(customResults, url);
+      const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);
       const allowedLevels = _allowedLevels(level);
       const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
       this._logger.info(`[flat] Custom checks complete — ${customFindings.length} finding(s).`);
 
-      const findings = [...mapResultsFlat(axeResults, url), ...customFindings];
+      const findings = [...mapResultsFlat(axeResults, url, lang), ...customFindings];
       const ORDER = { fail: 0, needs_review: 1, pass: 2 };
       findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
       return findings;

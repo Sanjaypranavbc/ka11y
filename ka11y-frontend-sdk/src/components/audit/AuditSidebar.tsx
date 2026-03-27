@@ -67,11 +67,12 @@ const STATUS_KEYS: Record<string, TranslationKey> = {
 };
 
 export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, currentStage, open, onClose }: AuditSidebarProps) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [config, setConfig] = useState<AuditConfig>({
     url: localStorage.getItem("ka11y_last_url") ?? "",
     max_depth: 0,
     wcag_level: "AAA",
+    lang: "en",
     run_ocr: true,
     run_image_audit: true,
     run_form_audit: true,
@@ -235,7 +236,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
 
           {/* Run button */}
           <Button
-            onClick={() => { localStorage.setItem("ka11y_last_url", config.url); onRunAudit(config); }}
+            onClick={() => { localStorage.setItem("ka11y_last_url", config.url); onRunAudit({ ...config, lang }); }}
             disabled={isRunning || !config.url}
             className={cn(
               "w-full h-9 text-xs font-semibold tracking-wider uppercase bg-primary text-primary-foreground hover:bg-primary/90 border-0",

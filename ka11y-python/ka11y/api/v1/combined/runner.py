@@ -22,6 +22,7 @@ from ka11y.config.logger import setup_logger
 from ka11y.preprocessor.text_helper_models import _json_serializer
 from ka11y.utils.config_loader import load_config
 
+from .findings import _lang_ctx
 from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
@@ -86,6 +87,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
     """
     _jobs[job_id]["status"] = "running"
     url = str(payload.url)
+    _lang_ctx.set(payload.lang)  # Inherited by all child tasks via context copy
 
     config = load_config()
     node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
@@ -101,7 +103,7 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
         # Fire axe-core and all Python stages concurrently
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
-            _call_node_flat(url, node_base_url, payload.wcag_level)
+            _call_node_flat(url, node_base_url, payload.wcag_level, payload.lang)
         )
         python_task = asyncio.create_task(
             _run_python_stages(
