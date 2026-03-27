@@ -387,7 +387,116 @@ class MovingContentCrawler:
             });
         }
 
-        /* ── 5. <marquee> and <blink> (deprecated; axe-core also flags) ── */
+        /* ── 5. Embedded iframe videos (YouTube, Vimeo, Dailymotion, etc.) ── */
+        // These never appear as <video> elements, so the section above misses them.
+        // We detect known video embed hosts and report them as auto-playing unless
+        // the URL contains explicit autoplay=0 / mute=false (conservative approach).
+        const VIDEO_HOSTS = [
+            'youtube.com/embed', 'youtu.be/', 'youtube-nocookie.com/embed',
+            'player.vimeo.com', 'vimeo.com/video',
+            'dailymotion.com/embed', 'dai.ly/',
+            'fast.wistia.net', 'wistia.com/medias',
+            'player.twitch.tv',
+            'facebook.com/plugins/video',
+            'embed.ted.com',
+        ];
+        const seenIframe = new WeakSet();
+        document.querySelectorAll('iframe[src]').forEach(el => {
+            if (seenIframe.has(el)) return;
+            const src = (el.getAttribute('src') || '').toLowerCase();
+            const isVideoHost = VIDEO_HOSTS.some(h => src.includes(h));
+            if (!isVideoHost) return;
+            seenIframe.add(el);
+
+            // Check if autoplay is explicitly disabled in the URL
+            const url = new URL(el.getAttribute('src'), location.href);
+            const autoplayParam = url.searchParams.get('autoplay');
+            const isAutoplay = autoplayParam === null || autoplayParam === '1' || autoplayParam === 'true';
+            if (!isAutoplay) return;
+
+            const hasPauseBtn = nearbyPauseButton(el);
+            results.push({
+                element_index:              results.length,
+                content_type:              'video_autoplay',
+                tag:                       'IFRAME',
+                element_id:                el.id || null,
+                src:                       el.getAttribute('src') || null,
+                animation_name:            null,
+                animation_duration_seconds: null,
+                animation_iteration_count: null,
+                loops:                     false,
+                duration_seconds:          null,
+                starts_automatically:      true,
+                has_video_controls:        false,
+                has_pause_button:          hasPauseBtn,
+                has_mechanism:             hasPauseBtn,
+                axe_would_catch:           false,
+                html_snippet:              (el.outerHTML || '').slice(0, 400),
+            });
+        });
+
+        /* ── 6. Generic custom sliders/carousels (CSS transform cycling) ── */
+        // Detect containers where child elements cycle position or visibility
+        // automatically — pattern used by many hand-rolled carousels.
+        (function() {
+            const genericCarouselSelectors = [
+                '[class*="slider" i]',
+                '[class*="carousel" i]',
+                '[class*="slideshow" i]',
+                '[class*="rotator" i]',
+            ];
+            const alreadySeen = new WeakSet();
+            for (const sel of genericCarouselSelectors) {
+                document.querySelectorAll(sel).forEach(el => {
+                    if (alreadySeen.has(el) || seenCarousel.has(el)) return;
+                    alreadySeen.add(el);
+
+                    // Must not already be captured by a known library selector
+                    if (
+                        el.classList.contains('slick-initialized') ||
+                        el.classList.contains('swiper-initialized') ||
+                        el.classList.contains('swiper-container') ||
+                        el.classList.contains('swiper') ||
+                        el.classList.contains('owl-carousel') ||
+                        el.classList.contains('flickity-enabled') ||
+                        el.classList.contains('splide') ||
+                        el.classList.contains('glide--carousel')
+                    ) return;
+
+                    // Require evidence of autoplay:
+                    // data-autoplay / data-auto-advance / data-interval attributes
+                    const hasAutoplayAttr = (
+                        el.hasAttribute('data-autoplay') ||
+                        el.hasAttribute('data-auto-advance') ||
+                        el.hasAttribute('data-interval') ||
+                        el.hasAttribute('data-speed')
+                    );
+                    if (!hasAutoplayAttr) return;
+
+                    const hasPauseBtn = carouselHasPauseButton(el);
+                    results.push({
+                        element_index:              results.length,
+                        content_type:              'carousel_autoplay',
+                        tag:                       el.tagName.toUpperCase(),
+                        element_id:                el.id || null,
+                        src:                       null,
+                        animation_name:            null,
+                        animation_duration_seconds: null,
+                        animation_iteration_count: 'infinite',
+                        loops:                     true,
+                        duration_seconds:          -1,
+                        starts_automatically:      true,
+                        has_video_controls:        false,
+                        has_pause_button:          hasPauseBtn,
+                        has_mechanism:             hasPauseBtn,
+                        axe_would_catch:           false,
+                        html_snippet:              (el.outerHTML || '').slice(0, 400),
+                    });
+                });
+            }
+        })();
+
+        /* ── 7. <marquee> and <blink> (deprecated; axe-core also flags) ── */
         document.querySelectorAll('marquee').forEach(el => {
             results.push({
                 element_index:              results.length,
@@ -410,9 +519,9 @@ class MovingContentCrawler:
         });
         document.querySelectorAll('blink').forEach(el => {
             results.push({
-                element_index:              results.length,
-                content_type:               'blink_element',
-                tag:                        'BLINK',
+                element_index:             results.length,
+                content_type:              'blink_element',
+                tag:                       'BLINK',
                 element_id:                 el.id || null,
                 src:                        null,
                 animation_name:             null,

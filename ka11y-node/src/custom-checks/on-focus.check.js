@@ -3,7 +3,7 @@
 const SC = '3.2.1';
 const RULE_ID = 'custom-on-focus';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
-const MAX_ELEMENTS = 25;
+const MAX_ELEMENTS = 60;
 const SETTLE_MS = 100;
 
 // Includes form controls (input, select, textarea) — they can carry onfocus handlers

@@ -32,6 +32,7 @@ CSV columns
 """
 
 import csv
+import re
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -98,9 +99,10 @@ def _violations_332(f: FormInputData) -> List[str]:
     # (b) Required but not marked in HTML/ARIA
     is_marked_required = f.required or (f.aria_required or "").strip().lower() == "true"
     if not is_marked_required and _field_appears_required(f):
-        # heuristic: placeholder or label contains * but required attribute is absent
+        # heuristic: label or placeholder contains a required indicator (*, "(required)", 必須, etc.)
         viols.append(
-            "3.3.2: Field appears required (label/placeholder contains '*') "
+            "3.3.2: Field appears required (label/placeholder contains a required indicator "
+            "such as *, '(required)', or '必須') "
             "but is not marked with required or aria-required='true' — "
             "screen readers cannot programmatically determine it is mandatory."
         )
@@ -144,14 +146,39 @@ def _violations_332(f: FormInputData) -> List[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Monkey-patch: static helper used inside _violations_332
+# Required-field heuristic patterns
 # ─────────────────────────────────────────────────────────────────────────────
-# (kept as a plain function to avoid modifying FormInputData)
+
+# Covers the most common ways sites communicate "this field is required" in
+# label text or placeholder text — across multiple languages and conventions.
+_REQUIRED_PATTERN = re.compile(
+    r"""
+    \*               |   # asterisk (most common)
+    \(required\)     |   # (required)
+    \brequired\b     |   # standalone word "required"
+    \breq(?:uired)?\s*: |  # "req:" or "required:" prefix
+    必須              |   # Japanese: required
+    必要              |   # Japanese: necessary
+    obligatoire      |   # French
+    obrigatório      |   # Portuguese
+    pflichtfeld      |   # German: mandatory field
+    erforderlich     |   # German: required
+    requerido            # Spanish
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
 def _field_appears_required(f: FormInputData) -> bool:
-    """Heuristic: label or placeholder contains '*'."""
+    """
+    Heuristic: label or placeholder text contains a required-field indicator.
+
+    Covers asterisk (*), "(required)", "required" keyword, Japanese 必須/必要,
+    and several other language variants used in practice.
+    """
     label = (f.label_text or "").strip()
     ph = (f.placeholder or "").strip()
-    return "*" in label or "*" in ph
+    return bool(_REQUIRED_PATTERN.search(label) or _REQUIRED_PATTERN.search(ph))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

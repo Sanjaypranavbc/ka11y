@@ -61,6 +61,26 @@ async function run(page) {
       }
     }
 
+    // 3. Inline <script> tags — catch addEventListener-style key handlers that
+    // do not appear as HTML attributes (common in vanilla JS and light frameworks).
+    const KEY_RE_SRC = /(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z!-/:-@[\-`{-~]['"]|keyCode\s*===?\s*(?:6[5-9]|[7-8]\d|90)/;
+    const LISTEN_RE = /addEventListener\s*\(\s*['"]key(?:down|press|up)['"]/;
+    for (const script of document.querySelectorAll('script:not([src])')) {
+      const src = script.textContent || '';
+      if (!LISTEN_RE.test(src)) continue;
+      const keyIdx = src.search(KEY_RE_SRC);
+      if (keyIdx < 0) continue;
+      const modIdx = src.search(/ctrlKey|altKey|metaKey/);
+      const hasModifierGuard = modIdx >= 0 && Math.abs(keyIdx - modIdx) <= 200;
+      if (!hasModifierGuard) {
+        violations.push({
+          type: 'script-listener',
+          html: src.slice(Math.max(0, keyIdx - 40), keyIdx + 100).trim().slice(0, 150),
+        });
+        break; // one finding per page for this category is sufficient
+      }
+    }
+
     const totalAccesskeys = document.querySelectorAll('[accesskey]').length;
     const totalHandlers = document.querySelectorAll('[onkeydown], [onkeypress], [onkeyup]').length;
     return { violations, totalAccesskeys, totalHandlers };
@@ -74,15 +94,16 @@ async function run(page) {
         description: 'Single character key shortcuts must be remappable or disableable',
         impact: null,
         status: 'pass',
-        reason: `${data.totalAccesskeys} accesskey attribute(s) and ${data.totalHandlers} inline key handler(s) checked — none use unguarded single character shortcuts (letters/symbols without Ctrl/Alt/Meta modifier).`,
+        reason: `${data.totalAccesskeys} accesskey attribute(s), ${data.totalHandlers} inline key handler(s), and inline script addEventListener calls checked — none use unguarded single character shortcuts (letters/symbols without Ctrl/Alt/Meta modifier).`,
         helpUrl: HELP_URL,
       }],
     };
   }
 
   const violations = data.violations;
-  const accesskeyCount = violations.filter(d => d.type === 'accesskey').length;
-  const handlerCount   = violations.filter(d => d.type === 'inline-handler').length;
+  const accesskeyCount    = violations.filter(d => d.type === 'accesskey').length;
+  const handlerCount      = violations.filter(d => d.type === 'inline-handler').length;
+  const scriptListenCount = violations.filter(d => d.type === 'script-listener').length;
   const sample = violations.slice(0, 3).map(d => d.html.slice(0, 80)).join('; ');
 
   return {
@@ -92,7 +113,7 @@ async function run(page) {
       description: 'Single character key shortcuts must be remappable or disableable',
       impact: 'moderate',
       status: 'incomplete',
-      reason: `${accesskeyCount} accesskey shortcut(s) and ${handlerCount} inline key handler(s) detected that may activate on a single character key without a modifier. Verify each can be turned off, remapped, or is only active on focus: ${sample}.`,
+      reason: `${accesskeyCount} accesskey shortcut(s), ${handlerCount} inline key handler(s), and ${scriptListenCount} script addEventListener call(s) detected that may activate on a single character key without a modifier. Verify each can be turned off, remapped, or is only active on focus: ${sample}.`,
       helpUrl: HELP_URL,
     }],
   };
