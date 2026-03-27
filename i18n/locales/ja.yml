@@ -1,0 +1,448 @@
+# ============================================================
+# ka11y — Japanese (日本語) locale
+# ============================================================
+# Translate ONLY: name, description, suggested_fix
+# Do NOT include: level, severity (those come from rules.yml)
+#
+# Leave a field blank or omit it to fall back to English.
+# ============================================================
+
+version: "1.0"
+lang: "ja"
+
+rules:
+
+  "1.1.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.7":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.8":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.2.9":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.3.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.3.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.3.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.3.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.3.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.3.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.7":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.8":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.9":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.10":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.11":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.12":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "1.4.13":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.1.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.1.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.1.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.1.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.2.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.2.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.2.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.2.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.2.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.2.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.3.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.3.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.3.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.7":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.8":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.9":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.10":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.11":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.12":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.4.13":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.5.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.5.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.5.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.5.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.5.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.5.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.5.7":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "2.5.8":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.1.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.1.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.1.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.1.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.1.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.1.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.2.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.2.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.2.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.2.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.2.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.2.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.3":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.4":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.5":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.6":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.7":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.8":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "3.3.9":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "4.1.1":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "4.1.2":
+    name: ""
+    description: ""
+    suggested_fix: ""
+
+  "4.1.3":
+    name: ""
+    description: ""
+    suggested_fix: ""

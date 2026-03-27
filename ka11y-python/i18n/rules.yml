@@ -1,0 +1,1039 @@
+# ============================================================
+# ka11y — Universal WCAG Rules Catalogue
+# ============================================================
+# SINGLE SOURCE OF TRUTH — edit only this file, then run:
+#   scripts/sync-i18n.sh
+#
+# Non-translatable fields (do NOT put in locale files):
+#   level    — A | AA | AAA
+#   severity — critical | high | medium | low | null
+#
+# Translatable fields (copy to locales/<lang>.yml to translate):
+#   name, description, suggested_fix
+# ============================================================
+
+version: "1.0"
+
+rules:
+
+  # ── Perceivable ──────────────────────────────────────────────────────────────
+
+  "1.1.1":
+    level: "A"
+    severity: "critical"
+    name: "Non-text Content"
+    description: >-
+      All non-text content presented to the user has a text alternative
+      that serves the equivalent purpose.
+    suggested_fix: >-
+      Add a descriptive alt attribute: <img alt="Description of image">.
+      For purely decorative images use alt="".
+
+  "1.2.1":
+    level: "A"
+    severity: null
+    name: "Audio-only and Video-only (Prerecorded)"
+    description: >-
+      Pre-recorded audio-only and video-only content provides an alternative
+      (transcript for audio, or audio track for silent video).
+    suggested_fix: >-
+      Provide a full text transcript adjacent to every <audio> element,
+      or add <track kind="captions"> / <track kind="descriptions">.
+      Link to the transcript with descriptive link text.
+
+  "1.2.2":
+    level: "A"
+    severity: null
+    name: "Captions (Prerecorded)"
+    description: >-
+      Captions are provided for all pre-recorded audio content
+      in synchronized media.
+    suggested_fix: >-
+      Add a <track kind="captions" src="captions.vtt"> element inside
+      every <video>. Ensure the VTT file accurately reflects all spoken
+      dialogue and relevant sound effects.
+
+  "1.2.3":
+    level: "A"
+    severity: null
+    name: "Audio Description or Media Alternative (Prerecorded)"
+    description: >-
+      An audio description or full text alternative is provided for
+      pre-recorded video content in synchronized media.
+    suggested_fix: >-
+      Add <track kind="descriptions" src="descriptions.vtt"> to the video,
+      or provide a separate audio-described version of the video.
+
+  "1.2.4":
+    level: "AA"
+    severity: null
+    name: "Captions (Live)"
+    description: >-
+      Captions are provided for all live audio content in synchronized media.
+    suggested_fix: >-
+      Implement real-time captioning (CART) for live streams. Expose captions
+      via aria-live regions or a WebVTT feed updated continuously.
+
+  "1.2.5":
+    level: "AA"
+    severity: null
+    name: "Audio Description (Prerecorded)"
+    description: >-
+      An audio description is provided for all pre-recorded video content
+      in synchronized media.
+    suggested_fix: >-
+      Add <track kind="descriptions" src="descriptions.vtt"> to the video,
+      ensuring every visual-only action and on-screen text is described.
+
+  "1.2.6":
+    level: "AAA"
+    severity: null
+    name: "Sign Language (Prerecorded)"
+    description: >-
+      Sign language interpretation is provided for all pre-recorded
+      audio content in synchronized media.
+    suggested_fix: >-
+      Provide a sign-language interpreted video alongside the main video,
+      or embed the signer in a picture-in-picture overlay.
+
+  "1.2.7":
+    level: "AAA"
+    severity: null
+    name: "Extended Audio Description (Prerecorded)"
+    description: >-
+      Where pauses in foreground audio are insufficient for audio descriptions,
+      extended audio description is provided for synchronized media.
+    suggested_fix: >-
+      Pause the video at appropriate points to insert longer audio descriptions,
+      then resume. Provide an extended-description version of the video.
+
+  "1.2.8":
+    level: "AAA"
+    severity: null
+    name: "Media Alternative (Prerecorded)"
+    description: >-
+      A full text alternative is provided for all pre-recorded synchronized media.
+    suggested_fix: >-
+      Provide a complete text transcript that includes all spoken words,
+      descriptions of visuals, and other relevant audio information.
+
+  "1.2.9":
+    level: "AAA"
+    severity: null
+    name: "Audio-only (Live)"
+    description: >-
+      A mechanism is provided that presents equivalent information for
+      live audio-only content.
+    suggested_fix: >-
+      Provide a real-time text feed or transcript alongside any live
+      audio-only broadcast.
+
+  "1.3.1":
+    level: "A"
+    severity: null
+    name: "Info and Relationships"
+    description: >-
+      Information, structure, and relationships conveyed through presentation
+      can be programmatically determined or are available in text.
+    suggested_fix: >-
+      Use semantic HTML elements (headings h1–h6, lists ul/ol, tables with
+      headers, nav, main, aside). Add ARIA landmark roles only where no
+      semantic element exists.
+
+  "1.3.2":
+    level: "A"
+    severity: null
+    name: "Meaningful Sequence"
+    description: >-
+      When the sequence of content affects its meaning, a correct reading
+      order can be programmatically determined.
+    suggested_fix: >-
+      Ensure the DOM order matches the visual reading order. Avoid using
+      CSS to reorder content (e.g. flexbox order, absolute positioning)
+      in ways that diverge from the source order.
+
+  "1.3.3":
+    level: "A"
+    severity: null
+    name: "Sensory Characteristics"
+    description: >-
+      Instructions for understanding and operating content do not rely
+      solely on sensory characteristics such as shape, color, size,
+      visual location, orientation, or sound.
+    suggested_fix: >-
+      Replace references like "click the round button" or "see the red text"
+      with descriptive labels. Always pair sensory cues with text labels.
+
+  "1.3.4":
+    level: "AA"
+    severity: "medium"
+    name: "Orientation"
+    description: >-
+      Content does not restrict its view and operation to a single display
+      orientation, unless a specific orientation is essential.
+    suggested_fix: >-
+      Remove CSS that locks the orientation (e.g. @media (orientation:landscape)
+      { display:none }). Do not use JavaScript to force a rotate-your-device
+      overlay unless the feature is genuinely orientation-dependent.
+
+  "1.3.5":
+    level: "AA"
+    severity: null
+    name: "Identify Input Purpose"
+    description: >-
+      The purpose of each input field that collects personal information
+      can be programmatically determined.
+    suggested_fix: >-
+      Add autocomplete attributes to inputs that collect personal data:
+      <input autocomplete="email">, <input autocomplete="given-name">, etc.
+
+  "1.3.6":
+    level: "AAA"
+    severity: null
+    name: "Identify Purpose"
+    description: >-
+      The purpose of UI components, icons, and regions can be
+      programmatically determined.
+    suggested_fix: >-
+      Use ARIA landmark roles and labels (role="navigation" aria-label="Main"),
+      and icon fonts/SVGs with descriptive aria-label or title elements.
+
+  "1.4.1":
+    level: "A"
+    severity: null
+    name: "Use of Color"
+    description: >-
+      Color is not used as the only visual means of conveying information,
+      indicating an action, prompting a response, or distinguishing a visual element.
+    suggested_fix: >-
+      Do not rely on color alone to convey information. Pair color with a
+      non-color cue such as an underline, icon, pattern, or text label.
+
+  "1.4.2":
+    level: "A"
+    severity: null
+    name: "Audio Control"
+    description: >-
+      If any audio plays automatically for more than 3 seconds, a mechanism
+      is available to pause, stop, or control the volume independently.
+    suggested_fix: >-
+      Add autoplay controls: either stop audio after 3 seconds or provide
+      a clearly visible pause/stop/mute button at the top of the page.
+
+  "1.4.3":
+    level: "AA"
+    severity: "high"
+    name: "Contrast (Minimum)"
+    description: >-
+      Text and images of text have a contrast ratio of at least 4.5:1
+      (3:1 for large text of at least 18pt or bold 14pt).
+    suggested_fix: >-
+      Ensure text meets contrast ratios: 4.5:1 for normal text, 3:1 for
+      large text (18pt / 14pt bold). Use a contrast checker tool to verify.
+      Adjust foreground or background colors until the threshold is met.
+
+  "1.4.4":
+    level: "AA"
+    severity: "high"
+    name: "Resize Text"
+    description: >-
+      Text can be resized up to 200% without assistive technology and without
+      loss of content or functionality.
+    suggested_fix: >-
+      Remove CSS that prevents text scaling (fixed px heights on text
+      containers, overflow:hidden on parent elements). Use relative units
+      (em/rem) for font sizes and container heights. Test at 200% zoom.
+
+  "1.4.5":
+    level: "AA"
+    severity: "medium"
+    name: "Images of Text"
+    description: >-
+      If the same visual presentation can be achieved using text alone,
+      an image of text is not used, except for logos or essential presentation.
+    suggested_fix: >-
+      Replace images of text with real text styled via CSS. Logos and
+      logotypes with text are exempt. Use web fonts for custom typography.
+
+  "1.4.6":
+    level: "AAA"
+    severity: "medium"
+    name: "Contrast (Enhanced)"
+    description: >-
+      Text and images of text have a contrast ratio of at least 7:1
+      (4.5:1 for large text).
+    suggested_fix: >-
+      Ensure text meets enhanced contrast ratios: 7:1 for normal text,
+      4.5:1 for large text (18pt / 14pt bold). This is the AAA enhanced
+      threshold above the AA 4.5:1 minimum.
+
+  "1.4.7":
+    level: "AAA"
+    severity: null
+    name: "Low or No Background Audio"
+    description: >-
+      For pre-recorded audio that contains primarily speech, background sounds
+      are at least 20 dB lower than the foreground speech.
+    suggested_fix: >-
+      Mix audio so that background music/noise is at least 20 dB quieter
+      than the spoken foreground content, or provide an option to turn off
+      background audio.
+
+  "1.4.8":
+    level: "AAA"
+    severity: null
+    name: "Visual Presentation"
+    description: >-
+      For blocks of text, users can select foreground and background colors,
+      width is no more than 80 characters, text is not fully justified,
+      line spacing is at least 1.5, and text can be resized without scrolling.
+    suggested_fix: >-
+      Use CSS that allows user overrides. Limit line width to 80 characters
+      max. Avoid text-align:justify. Set line-height to at least 1.5.
+      Use relative units so text reflows at larger sizes.
+
+  "1.4.9":
+    level: "AAA"
+    severity: null
+    name: "Images of Text (No Exception)"
+    description: >-
+      Images of text are only used for pure decoration or where a particular
+      presentation of text is essential to the information being conveyed.
+    suggested_fix: >-
+      Replace all images of text with real text. Only logos or cases where
+      a specific visual rendering is essential are exempt.
+
+  "1.4.10":
+    level: "AA"
+    severity: "high"
+    name: "Reflow"
+    description: >-
+      Content can be presented without loss of information or functionality,
+      and without requiring scrolling in two dimensions at a viewport width
+      equivalent to 320 CSS pixels.
+    suggested_fix: >-
+      Use responsive CSS layouts (Flexbox/Grid, relative units). Avoid
+      fixed-width containers that cause horizontal overflow at 320 CSS px.
+      Content must reflow to a single column without horizontal scrolling.
+
+  "1.4.11":
+    level: "AA"
+    severity: "high"
+    name: "Non-text Contrast"
+    description: >-
+      The visual presentation of UI components and graphical objects has
+      a contrast ratio of at least 3:1 against adjacent colors.
+    suggested_fix: >-
+      Ensure borders, icons, focus rings, and graphical elements meet 3:1
+      contrast against their adjacent background. Check button borders,
+      input outlines, chart lines, and custom UI controls.
+
+  "1.4.12":
+    level: "AA"
+    severity: "high"
+    name: "Text Spacing"
+    description: >-
+      No loss of content or functionality when letter spacing, word spacing,
+      line height, and paragraph spacing are overridden to specific values.
+    suggested_fix: >-
+      Do not use !important or fixed values for line-height, letter-spacing,
+      or word-spacing. Use relative units (em/rem). Avoid fixed-height
+      containers that clip overflowing text when spacing is increased.
+
+  "1.4.13":
+    level: "AA"
+    severity: "medium"
+    name: "Content on Hover or Focus"
+    description: >-
+      Additional content that appears on hover or keyboard focus can be
+      dismissed, hovered over, and persists until the trigger is removed.
+    suggested_fix: >-
+      Ensure hover/focus-triggered content: (1) can be dismissed via Escape
+      without moving focus, (2) does not disappear when the pointer moves
+      toward it, and (3) remains visible until the user intentionally removes
+      focus or hover.
+
+  # ── Operable ─────────────────────────────────────────────────────────────────
+
+  "2.1.1":
+    level: "A"
+    severity: null
+    name: "Keyboard"
+    description: >-
+      All functionality of the content is operable through a keyboard
+      interface without requiring specific timing for individual keystrokes.
+    suggested_fix: >-
+      Ensure all interactive elements are reachable and operable by keyboard.
+      Avoid onclick-only handlers without corresponding keydown/keypress
+      handlers. Remove positive tabindex values.
+
+  "2.1.2":
+    level: "A"
+    severity: null
+    name: "No Keyboard Trap"
+    description: >-
+      If keyboard focus can be moved to a component using the keyboard interface,
+      focus can also be moved away from that component using only the keyboard.
+    suggested_fix: >-
+      Ensure keyboard users can always move focus away from any component.
+      For modals/dialogs, trap focus within the dialog and restore it on close.
+      Avoid components where Tab gets stuck without an escape key.
+
+  "2.1.3":
+    level: "AAA"
+    severity: null
+    name: "Keyboard (No Exception)"
+    description: >-
+      All functionality of the content is operable through a keyboard
+      interface without exception (including path-dependent input).
+    suggested_fix: >-
+      Provide keyboard alternatives for every gesture-based or path-dependent
+      interaction. For drawing tools, offer a text-input alternative.
+
+  "2.1.4":
+    level: "A"
+    severity: null
+    name: "Character Key Shortcuts"
+    description: >-
+      If a keyboard shortcut is implemented using only letter, punctuation,
+      number, or symbol characters, the user can turn it off, remap it,
+      or it is only active when the component has focus.
+    suggested_fix: >-
+      Allow users to disable or remap single-character keyboard shortcuts.
+      Alternatively, make shortcuts active only when the relevant component
+      has keyboard focus.
+
+  "2.2.1":
+    level: "A"
+    severity: null
+    name: "Timing Adjustable"
+    description: >-
+      For each time limit set by the content, users can turn off, adjust,
+      or extend the time limit.
+    suggested_fix: >-
+      Before a session times out, warn the user with at least 20 seconds
+      notice and provide a way to extend. Allow disabling the time limit
+      altogether where possible.
+
+  "2.2.2":
+    level: "A"
+    severity: "high"
+    name: "Pause, Stop, Hide"
+    description: >-
+      For moving, blinking, scrolling, or auto-updating information that
+      starts automatically and lasts more than 5 seconds, users can pause,
+      stop, or hide it.
+    suggested_fix: >-
+      Add a clearly visible Pause/Stop button for any auto-playing content
+      lasting more than 5 seconds. Remove or replace <marquee> elements.
+      Provide controls for CSS animations and carousels.
+
+  "2.2.3":
+    level: "AAA"
+    severity: null
+    name: "No Timing"
+    description: >-
+      Timing is not an essential part of the event or activity presented
+      by the content, except for non-interactive synchronized media
+      and real-time events.
+    suggested_fix: >-
+      Remove all time limits from content and interactions, unless the
+      timing is genuinely essential (e.g. real-time auctions).
+
+  "2.2.4":
+    level: "AAA"
+    severity: null
+    name: "Interruptions"
+    description: >-
+      Interruptions can be postponed or suppressed by the user, except
+      for interruptions involving an emergency.
+    suggested_fix: >-
+      Provide a preference to disable or delay non-emergency notifications,
+      alerts, and push messages.
+
+  "2.2.5":
+    level: "AAA"
+    severity: null
+    name: "Re-authenticating"
+    description: >-
+      When an authenticated session expires, users can continue the activity
+      without loss of data after re-authenticating.
+    suggested_fix: >-
+      Preserve form data and application state across session re-authentication.
+      Save user input server-side when a session expires.
+
+  "2.2.6":
+    level: "AAA"
+    severity: null
+    name: "Timeouts"
+    description: >-
+      Users are warned of the duration of any user inactivity that could
+      cause data loss, unless the data is preserved for more than 20 hours.
+    suggested_fix: >-
+      Warn users before session timeout (at least 20 seconds notice) and
+      provide a way to extend. Persist form data server-side for at least
+      20 hours of inactivity.
+
+  "2.3.1":
+    level: "A"
+    severity: null
+    name: "Three Flashes or Below Threshold"
+    description: >-
+      Web pages do not contain anything that flashes more than three times
+      in any one second period, or the flash is below the general flash
+      and red flash thresholds.
+    suggested_fix: >-
+      Remove or limit content that flashes more than 3 times per second.
+      If animation is necessary, keep the flashing area small (below
+      the general flash threshold) and avoid red flashes.
+
+  "2.3.2":
+    level: "AAA"
+    severity: null
+    name: "Three Flashes"
+    description: >-
+      Web pages do not contain anything that flashes more than three times
+      in any one second period.
+    suggested_fix: >-
+      Remove all content that flashes more than 3 times per second,
+      without exception (no area-size exemption at this level).
+
+  "2.3.3":
+    level: "AAA"
+    severity: null
+    name: "Animation from Interactions"
+    description: >-
+      Motion animation triggered by interaction can be disabled, unless
+      the animation is essential to the functionality or the information.
+    suggested_fix: >-
+      Respect prefers-reduced-motion media query:
+      @media (prefers-reduced-motion: reduce) { * { animation: none; } }
+
+  "2.4.1":
+    level: "A"
+    severity: null
+    name: "Bypass Blocks"
+    description: >-
+      A mechanism is available to bypass blocks of content that are
+      repeated on multiple web pages.
+    suggested_fix: >-
+      Add a skip link as the first focusable element on every page:
+      <a href="#main" class="skip-link">Skip to main content</a>.
+      Make it visible on focus.
+
+  "2.4.2":
+    level: "A"
+    severity: null
+    name: "Page Titled"
+    description: >-
+      Web pages have titles that describe the topic or purpose.
+    suggested_fix: >-
+      Add a descriptive <title> to every page: <title>Page Name — Site Name</title>.
+      Avoid generic titles like "Home" or "Page 1".
+
+  "2.4.3":
+    level: "A"
+    severity: null
+    name: "Focus Order"
+    description: >-
+      If a web page can be navigated sequentially, focusable components
+      receive focus in an order that preserves meaning and operability.
+    suggested_fix: >-
+      Ensure the DOM order matches the logical reading order. Remove
+      positive tabindex values. Use tabindex="0" only to make non-interactive
+      elements focusable when necessary.
+
+  "2.4.4":
+    level: "A"
+    severity: null
+    name: "Link Purpose (In Context)"
+    description: >-
+      The purpose of each link can be determined from the link text alone
+      or from the link together with its programmatically determined context.
+    suggested_fix: >-
+      Replace generic link text ("Click here", "Read more", "More") with
+      descriptive text that makes sense out of context. Use aria-label
+      if the surrounding visual context must stay brief.
+
+  "2.4.5":
+    level: "AA"
+    severity: null
+    name: "Multiple Ways"
+    description: >-
+      More than one way is available to locate a web page within a set
+      of web pages, except where the page is the result of, or a step in,
+      a process.
+    suggested_fix: >-
+      Provide at least two ways to find pages: e.g. a site search,
+      a site map, a table of contents, or related links navigation.
+
+  "2.4.6":
+    level: "AA"
+    severity: null
+    name: "Headings and Labels"
+    description: >-
+      Headings and labels describe the topic or purpose.
+    suggested_fix: >-
+      Use heading levels (h1–h6) hierarchically to describe page sections.
+      Provide visible, descriptive labels for all form inputs and groups.
+
+  "2.4.7":
+    level: "AA"
+    severity: null
+    name: "Focus Visible"
+    description: >-
+      Any keyboard operable user interface has a mode of operation where
+      the keyboard focus indicator is visible.
+    suggested_fix: >-
+      Ensure all focusable elements have a clearly visible focus indicator.
+      Do not use outline:none without providing an alternative focus style.
+      Example: :focus-visible { outline: 2px solid #005FCC; outline-offset: 2px; }
+
+  "2.4.8":
+    level: "AAA"
+    severity: null
+    name: "Location"
+    description: >-
+      Information about the user's location within a set of web pages
+      is available.
+    suggested_fix: >-
+      Add breadcrumb navigation (<nav aria-label="Breadcrumb">) or mark
+      the current page in navigation with aria-current="page".
+
+  "2.4.9":
+    level: "AAA"
+    severity: null
+    name: "Link Purpose (Link Only)"
+    description: >-
+      A mechanism is available to allow the purpose of each link to be
+      identified from link text alone.
+    suggested_fix: >-
+      Ensure every link's text is descriptive when read in isolation.
+      Use aria-label to override generic text if the surrounding context
+      cannot be changed.
+
+  "2.4.10":
+    level: "AAA"
+    severity: null
+    name: "Section Headings"
+    description: >-
+      Section headings are used to organize the content.
+    suggested_fix: >-
+      Divide long content into sections with descriptive headings (h1–h6).
+      Every major section of a page should begin with a heading.
+
+  "2.4.11":
+    level: "AA"
+    severity: "high"
+    name: "Focus Not Obscured (Minimum)"
+    description: >-
+      When a UI component receives keyboard focus, the component is not
+      entirely hidden due to author-created content.
+    suggested_fix: >-
+      Ensure sticky headers, footers, and cookie banners do not fully cover
+      focused elements. Use scroll-padding-top equal to the sticky header
+      height, or apply scroll-margin-top on focusable elements.
+
+  "2.4.12":
+    level: "AAA"
+    severity: "high"
+    name: "Focus Not Obscured (Enhanced)"
+    description: >-
+      When a UI component receives keyboard focus, no part of the component
+      is hidden by author-created content.
+    suggested_fix: >-
+      Ensure no part of the focused element is covered by any sticky/fixed
+      overlay. Use scroll-padding and scroll-margin so focused elements
+      are fully clear of all fixed content.
+
+  "2.4.13":
+    level: "AA"
+    severity: null
+    name: "Focus Appearance"
+    description: >-
+      The keyboard focus indicator has a minimum area and contrast ratio
+      that meets the WCAG 2.2 enhanced focus appearance requirements.
+    suggested_fix: >-
+      Use a focus indicator with at least 2px outline and a contrast ratio
+      of at least 3:1 between focused and unfocused states.
+      Example: :focus-visible { outline: 2px solid #005FCC; outline-offset: 2px; }
+
+  "2.5.1":
+    level: "A"
+    severity: null
+    name: "Pointer Gestures"
+    description: >-
+      All functionality that uses multipoint or path-based gestures can
+      be operated with a single pointer without a path-based gesture.
+    suggested_fix: >-
+      Provide single-pointer alternatives for all multipoint (e.g. pinch)
+      and path-based (e.g. swipe) gestures. Offer zoom buttons alongside
+      pinch-to-zoom, and navigation buttons alongside swipe gestures.
+
+  "2.5.2":
+    level: "A"
+    severity: null
+    name: "Pointer Cancellation"
+    description: >-
+      For functionality triggered by a single pointer, at least one of the
+      following is true: no down-event trigger, abort/undo mechanism exists,
+      up-event reversal is available, or the down-event trigger is essential.
+    suggested_fix: >-
+      Trigger actions on the up event (mouseup, touchend), not the down
+      event. Provide an undo mechanism for actions triggered on the down
+      event (e.g. drag-and-drop).
+
+  "2.5.3":
+    level: "A"
+    severity: "high"
+    name: "Label in Name"
+    description: >-
+      For UI components with visible labels, the accessible name contains
+      the visible text label.
+    suggested_fix: >-
+      Ensure the aria-label or aria-labelledby value contains the visible
+      text label verbatim. Never replace the visible label entirely in the
+      accessible name — augment it instead.
+
+  "2.5.4":
+    level: "A"
+    severity: null
+    name: "Motion Actuation"
+    description: >-
+      Functionality triggered by device motion or user motion can be operated
+      by UI components and can be disabled to prevent accidental actuation.
+    suggested_fix: >-
+      Provide UI button alternatives for all shake, tilt, or gyroscope
+      interactions. Offer a setting to disable motion-based controls.
+
+  "2.5.5":
+    level: "AAA"
+    severity: null
+    name: "Target Size"
+    description: >-
+      The size of the target for pointer inputs is at least 44×44 CSS pixels.
+    suggested_fix: >-
+      Increase touch/click targets to at least 44×44 CSS pixels. Use
+      padding to expand the clickable area without changing visual size.
+
+  "2.5.6":
+    level: "AAA"
+    severity: null
+    name: "Concurrent Input Mechanisms"
+    description: >-
+      Web content does not restrict use of input modalities available
+      on a platform except where the restriction is essential.
+    suggested_fix: >-
+      Do not lock the interface to a single input type. Ensure the page
+      works with mouse, keyboard, touch, and voice simultaneously.
+
+  "2.5.7":
+    level: "AA"
+    severity: null
+    name: "Dragging Movements"
+    description: >-
+      All functionality that uses a dragging movement can be achieved
+      with a single pointer without dragging, unless dragging is essential.
+    suggested_fix: >-
+      Provide button-based alternatives for all drag-and-drop interactions
+      (e.g. up/down arrow buttons for reordering list items).
+
+  "2.5.8":
+    level: "AA"
+    severity: "medium"
+    name: "Target Size (Minimum)"
+    description: >-
+      The size of the target for pointer inputs is at least 24×24 CSS pixels,
+      or sufficient spacing is provided between targets.
+    suggested_fix: >-
+      Increase click/tap targets to at least 24×24 CSS pixels. Add padding
+      so the interactive area meets the minimum. Prefer 44×44 px for
+      comfortable touch use.
+
+  # ── Understandable ───────────────────────────────────────────────────────────
+
+  "3.1.1":
+    level: "A"
+    severity: null
+    name: "Language of Page"
+    description: >-
+      The default human language of each web page can be
+      programmatically determined.
+    suggested_fix: >-
+      Add a lang attribute to the <html> element:
+      <html lang="en">. Use the correct BCP 47 language subtag.
+
+  "3.1.2":
+    level: "AA"
+    severity: null
+    name: "Language of Parts"
+    description: >-
+      The human language of each passage or phrase in the content that
+      is in a different language from the page default can be determined.
+    suggested_fix: >-
+      Mark inline content in another language with the lang attribute:
+      <span lang="fr">Bonjour</span>. Exclude proper names and technical
+      terms that are language-neutral.
+
+  "3.1.3":
+    level: "AAA"
+    severity: null
+    name: "Unusual Words"
+    description: >-
+      A mechanism is available for identifying specific definitions of
+      words or phrases used in an unusual or restricted way.
+    suggested_fix: >-
+      Provide a glossary or inline definitions for jargon and technical
+      terms. Link words to their definitions or use the <abbr> element.
+
+  "3.1.4":
+    level: "AAA"
+    severity: null
+    name: "Abbreviations"
+    description: >-
+      A mechanism for identifying the expanded form or meaning of
+      abbreviations is available.
+    suggested_fix: >-
+      Use the <abbr title="Expanded Form">ABB</abbr> element, or provide
+      a glossary where abbreviations are expanded on first use.
+
+  "3.1.5":
+    level: "AAA"
+    severity: null
+    name: "Reading Level"
+    description: >-
+      When text requires reading ability more advanced than lower secondary
+      education, supplemental content or a simpler version is available.
+    suggested_fix: >-
+      Provide a plain-language summary alongside technical or complex content.
+      Aim for a reading level accessible to lower secondary school students.
+
+  "3.1.6":
+    level: "AAA"
+    severity: null
+    name: "Pronunciation"
+    description: >-
+      A mechanism is available for identifying specific pronunciation of
+      words where the meaning is ambiguous without knowing the pronunciation.
+    suggested_fix: >-
+      Provide phonetic pronunciation guides or audio pronunciations for
+      ambiguous words. Use ruby annotations for CJK characters.
+
+  "3.2.1":
+    level: "A"
+    severity: null
+    name: "On Focus"
+    description: >-
+      If any UI component receives focus, it does not initiate a change
+      of context.
+    suggested_fix: >-
+      Do not submit forms, open popups, or navigate away automatically
+      when an element receives focus. Reserve context changes for
+      explicit user activation (click, Enter, Space).
+
+  "3.2.2":
+    level: "A"
+    severity: null
+    name: "On Input"
+    description: >-
+      Changing the setting of any UI component does not automatically cause
+      a change of context unless the user has been advised before using the component.
+    suggested_fix: >-
+      Do not trigger navigation or page changes on input events (e.g. a
+      <select> onChange). Require an explicit submit action, or warn users
+      in advance that changing a setting will cause a context change.
+
+  "3.2.3":
+    level: "AA"
+    severity: null
+    name: "Consistent Navigation"
+    description: >-
+      Navigational mechanisms that are repeated on multiple web pages
+      occur in the same relative order each time they are repeated.
+    suggested_fix: >-
+      Keep navigation menus, breadcrumbs, and search bars in the same
+      relative position and order across all pages of the site.
+
+  "3.2.4":
+    level: "AA"
+    severity: null
+    name: "Consistent Identification"
+    description: >-
+      Components that have the same functionality within a set of web pages
+      are identified consistently.
+    suggested_fix: >-
+      Use the same label, icon, and accessible name for components that
+      perform the same function across pages (e.g. always label a search
+      button "Search", not "Go" on some pages and "Search" on others).
+
+  "3.2.5":
+    level: "AAA"
+    severity: null
+    name: "Change on Request"
+    description: >-
+      Changes of context are initiated only by user request, or a mechanism
+      is available to turn off such changes.
+    suggested_fix: >-
+      Never auto-redirect, auto-refresh, or change context without an
+      explicit user action. If automatic updates are needed, provide a
+      setting to disable them.
+
+  "3.2.6":
+    level: "AA"
+    severity: null
+    name: "Consistent Help"
+    description: >-
+      If a help mechanism is available on multiple pages, it appears
+      in the same relative location across pages.
+    suggested_fix: >-
+      Place help links, chatbots, and support contacts in the same
+      position on every page (e.g. always in the footer or always
+      in the top-right of the header).
+
+  "3.3.1":
+    level: "A"
+    severity: "high"
+    name: "Error Identification"
+    description: >-
+      If an input error is automatically detected, the item that is
+      in error is identified and the error is described to the user in text.
+    suggested_fix: >-
+      Associate error messages with inputs using aria-describedby or
+      aria-errormessage. Mark invalid fields with aria-invalid="true".
+      Use role="alert" or aria-live="assertive" for error containers.
+
+  "3.3.2":
+    level: "A"
+    severity: "high"
+    name: "Labels or Instructions"
+    description: >-
+      Labels or instructions are provided when content requires user input.
+    suggested_fix: >-
+      Add a visible <label> or aria-label to every form input. Do not
+      rely on placeholder text alone — it disappears on input. Mark
+      required fields clearly with an accessible indicator.
+
+  "3.3.3":
+    level: "AA"
+    severity: null
+    name: "Error Suggestion"
+    description: >-
+      If an input error is automatically detected and suggestions for
+      correction are known, then the suggestion is provided to the user,
+      unless it would jeopardize the security or purpose of the content.
+    suggested_fix: >-
+      When a field fails validation, provide a specific correction hint
+      (e.g. "Enter a date in DD/MM/YYYY format") not just "Invalid input".
+      Associate the hint with the field via aria-describedby.
+
+  "3.3.4":
+    level: "AA"
+    severity: null
+    name: "Error Prevention (Legal, Financial, Data)"
+    description: >-
+      For pages that cause legal commitments or financial transactions,
+      submissions are reversible, checked, or confirmed before finalizing.
+    suggested_fix: >-
+      Add a confirmation step before any irreversible financial or legal
+      action. Provide a summary page before final submission and an undo
+      or cancel option where possible.
+
+  "3.3.5":
+    level: "AAA"
+    severity: null
+    name: "Help"
+    description: >-
+      Context-sensitive help is available.
+    suggested_fix: >-
+      Provide inline help text or tooltips for complex form fields.
+      Link to a help page or FAQs from within forms.
+
+  "3.3.6":
+    level: "AAA"
+    severity: null
+    name: "Error Prevention (All)"
+    description: >-
+      For web pages that require the user to submit information, submissions
+      are reversible, checked, or confirmed.
+    suggested_fix: >-
+      For all form submissions (not just legal/financial), provide a
+      confirmation step and allow users to review and correct their
+      input before final submission.
+
+  "3.3.7":
+    level: "A"
+    severity: null
+    name: "Redundant Entry"
+    description: >-
+      Information previously entered by or provided to the user that is
+      required to be entered again in the same process is either auto-populated
+      or available for the user to select.
+    suggested_fix: >-
+      Auto-fill previously entered information in multi-step forms.
+      Do not ask users to retype data they have already provided
+      earlier in the same process.
+
+  "3.3.8":
+    level: "AA"
+    severity: null
+    name: "Accessible Authentication (Minimum)"
+    description: >-
+      A cognitive function test (such as remembering a password or solving
+      a puzzle) is not required for any step in an authentication process
+      unless an alternative is provided.
+    suggested_fix: >-
+      Support password managers by using standard input types
+      (type="password", autocomplete="current-password"). Offer
+      email magic links or passkeys as alternatives to passwords.
+
+  "3.3.9":
+    level: "AAA"
+    severity: null
+    name: "Accessible Authentication (Enhanced)"
+    description: >-
+      A cognitive function test is not required for any step in an
+      authentication process.
+    suggested_fix: >-
+      Provide authentication without any cognitive function test.
+      Use passkeys, email magic links, or biometric authentication.
+
+  # ── Robust ───────────────────────────────────────────────────────────────────
+
+  "4.1.1":
+    level: "A"
+    severity: null
+    name: "Parsing"
+    description: >-
+      In content implemented using markup languages, elements have complete
+      opening and closing tags, elements are nested correctly, elements
+      do not contain duplicate attributes, and IDs are unique.
+    suggested_fix: >-
+      Remove duplicate id attributes — each id must be unique within a page.
+      Fix unclosed tags and incorrectly nested elements. Validate HTML
+      using the W3C validator.
+
+  "4.1.2":
+    level: "A"
+    severity: "high"
+    name: "Name, Role, Value"
+    description: >-
+      For all UI components, the name and role can be programmatically
+      determined; states, properties, and values that can be set by
+      the user can be programmatically determined.
+    suggested_fix: >-
+      Give every interactive element an accessible name (via aria-label,
+      aria-labelledby, or visible label), a correct role (native HTML or
+      ARIA role), and expose its state (aria-checked, aria-expanded, etc.).
+
+  "4.1.3":
+    level: "AA"
+    severity: null
+    name: "Status Messages"
+    description: >-
+      Status messages can be programmatically determined through role or
+      properties such that they can be presented to the user by assistive
+      technologies without receiving focus.
+    suggested_fix: >-
+      Wrap status messages in a live region:
+      <div role="status" aria-live="polite">...</div>.
+      Use role="alert" for urgent messages that need immediate attention.

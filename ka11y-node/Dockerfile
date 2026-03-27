@@ -52,6 +52,7 @@ RUN echo "==> [3/4] Copying application source..."
 COPY package*.json ./
 COPY server.js     ./
 COPY src/          ./src/
+COPY i18n/         ./i18n/
 RUN echo "==> [3/4] Source copied"
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

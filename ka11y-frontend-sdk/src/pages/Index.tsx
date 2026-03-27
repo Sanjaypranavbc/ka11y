@@ -8,6 +8,7 @@ import { NeedsReviewTab } from "@/components/audit/NeedsReviewTab";
 import { PassesTab } from "@/components/audit/PassesTab";
 import { ImageVisualisationTab } from "@/components/audit/ImageVisualisationTab";
 import { SettingsTab, ThemePreference } from "@/components/audit/SettingsTab";
+import { WcagRulesTab } from "@/components/audit/WcagRulesTab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabValue, StageInfo } from "@/types/audit";
 import { AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react";
@@ -166,8 +167,10 @@ const Index = () => {
         />
 
         <main className="flex-1 overflow-y-auto grid-bg" aria-busy={isLoading} aria-live="polite">
-          {/* ── Loading ────────────────────────────────────────────── */}
-          {isLoading ? (
+          {/* ── WCAG Rules tab is always available regardless of audit state ── */}
+          {activeTab === "wcag-rules" ? (
+            <WcagRulesTab />
+          ) : isLoading ? (
             <div className="p-3 sm:p-5 space-y-3">
               <StageProgress stages={stages} currentStage={currentStage} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

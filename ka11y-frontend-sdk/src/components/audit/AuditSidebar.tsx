@@ -17,6 +17,7 @@ import {
   XCircle,
   X,
   Images,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ const navItems: { label: string; value: TabValue; icon: React.ElementType }[] = 
   { label: "Needs Review",      value: "needs-review",       icon: HelpCircle      },
   { label: "Passes",            value: "passes",             icon: CheckCircle2    },
   { label: "Image Visualiser",  value: "image-visualisation", icon: Images         },
+  { label: "WCAG Rules",        value: "wcag-rules",         icon: BookOpen        },
   { label: "Settings",          value: "settings",           icon: Settings        },
 ];
 

@@ -7,6 +7,10 @@ const {
   WCAG_LEVEL,
   WCAG_NAMES,
 } = require('./wcagMetadata');
+const { getRules } = require('./rulesLoader');
+
+// English rules loaded once at startup — used for suggested_fix lookups.
+const _enRules = getRules('en');
 
 /**
  * Maps axe-core raw results into the structured response format.
@@ -218,7 +222,10 @@ function _criterionLevel(sc) {
 }
 
 function _suggestedFix(sc, ruleId) {
-  if (sc && sc !== BEST_PRACTICE_ID && SUGGESTED_FIX[sc]) return SUGGESTED_FIX[sc];
+  if (sc && sc !== BEST_PRACTICE_ID) {
+    const yamlFix = _enRules[sc] && _enRules[sc].suggested_fix;
+    if (yamlFix) return yamlFix;
+  }
   const guide = rulesGuide[ruleId];
   return (guide && guide.fixTip) || null;
 }
@@ -441,40 +448,6 @@ function mapCustomResultsFlat(customResults, pageUrl = null) {
   return findings;
 }
 
-const SUGGESTED_FIX = {
-  '1.1.1':  "Add a descriptive alt attribute: <img alt='Description of image'>. For decorative images use alt=''.",
-  '1.2.1':  "Provide a full text transcript adjacent to every <audio> element, or add a <track kind='captions'> / <track kind='descriptions'>. Link to the transcript with descriptive link text (e.g. 'Read transcript').",
-  '2.4.8':  "Add a breadcrumb navigation (e.g. <nav aria-label='Breadcrumb'>) or mark the current page in navigation using aria-current='page'. This helps users understand where they are within the site.",
-  '2.4.9':  "Replace generic link text ('click here', 'read more', 'more') with descriptive text that makes sense when read in isolation. Use aria-label if the surrounding context must remain brief.",
-  '1.3.1':  "Use semantic HTML (headings, lists, tables). Add appropriate ARIA landmark roles where needed.",
-  '1.3.5':  "Add autocomplete attributes: <input autocomplete='email'>.",
-  '1.4.1':  "Do not use colour as the only visual means to convey information. Add a non-colour cue such as underline, border-bottom, font-weight change, or background change to links within text blocks.",
-  '1.4.2':  "Provide a mechanism to pause or stop auto-playing audio, or ensure it stops within 3 seconds.",
-  '1.4.3':  "Ensure text has a contrast ratio of at least 4.5:1 (3:1 for large text ≥ 18pt or bold 14pt).",
-  '1.4.4':  "Remove CSS that blocks zoom. Ensure content reflows at 200% zoom without horizontal scrolling.",
-  '1.4.11': "Ensure UI components (borders, icons, focus rings) have at least 3:1 contrast against adjacent colours.",
-  '1.4.12': "Do not use CSS that prevents line-height, letter-spacing, or word-spacing overrides.",
-  '2.1.1':  "Ensure all functionality is operable via keyboard alone. Avoid onclick-only handlers and positive tabindex.",
-  '2.1.2':  "Ensure keyboard users can move focus away from any component without requiring specific key sequences.",
-  '2.2.2':  "Add a visible Pause/Stop button for any auto-playing content lasting more than 5 seconds.",
-  '2.4.1':  "Add a skip link as the first focusable element: <a href='#main'>Skip to main content</a>.",
-  '2.4.2':  "Add a descriptive <title> element: <title>Page Name — Site Name</title>.",
-  '2.4.3':  "Ensure focus order follows a logical reading order. Remove positive tabindex values.",
-  '2.4.4':  "Replace generic link text ('Click here', 'Read more') with descriptive text that makes sense in isolation.",
-  '2.4.6':  "Use heading levels (h1–h6) hierarchically to describe page sections. Provide visible labels for form groups.",
-  '2.4.7':  "Ensure all focusable elements have a clearly visible focus indicator (outline or border change).",
-  '2.4.13': "Use an outline of at least 2px width with a contrast ratio ≥ 3:1 between the focused and unfocused states. Example: :focus-visible { outline: 2px solid #005FCC; outline-offset: 2px; }",
-  '2.5.3':  "Ensure the accessible name (aria-label / aria-labelledby) contains the visible label text verbatim.",
-  '2.5.8':  "Increase the target size to at least 24×24 CSS pixels, or add padding so the clickable area reaches that size.",
-  '3.1.1':  "Add a lang attribute to <html>: <html lang='en'>.",
-  '3.1.2':  "Add lang attributes to inline content in a different language: <span lang='fr'>Bonjour</span>.",
-  '3.2.3':  "Keep navigation menus in the same order across all pages of the site.",
-  '3.3.1':  "Associate error messages with inputs using aria-describedby or aria-errormessage.",
-  '3.3.2':  "Add a visible <label> or aria-label to every form input. Do not rely on placeholder text alone.",
-  '4.1.1':  "Remove duplicate id attributes — each id must be unique within a page.",
-  '4.1.2':  "Give every interactive element an accessible name, role, and value using native HTML or ARIA attributes.",
-  '4.1.3':  "Wrap status messages in a live region: <div role='status' aria-live='polite'>...</div>.",
-};
 
 module.exports = {
   mapResults,
