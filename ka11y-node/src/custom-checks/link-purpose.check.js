@@ -26,10 +26,16 @@ async function run(page) {
       let accessibleName = (link.getAttribute('aria-label') || '').trim();
 
       if (!accessibleName) {
-        const labelledById = link.getAttribute('aria-labelledby');
-        if (labelledById) {
-          const labelEl = document.getElementById(labelledById);
-          if (labelEl) accessibleName = (labelEl.textContent || '').trim();
+        const labelledBy = (link.getAttribute('aria-labelledby') || '').trim();
+        if (labelledBy) {
+          const ids = labelledBy.split(/\s+/).filter(Boolean);
+          const parts = ids
+            .map(id => {
+              const node = document.getElementById(id);
+              return node ? (node.textContent || '').trim() : '';
+            })
+            .filter(Boolean);
+          if (parts.length > 0) accessibleName = parts.join(' ');
         }
       }
 

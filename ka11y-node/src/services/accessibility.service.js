@@ -243,7 +243,9 @@ class AccessibilityService {
       _installSsrfInterceptor(page);
 
       this._logger.info(`Navigating to ${url}...`);
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      // Use networkidle2 for live URL analysis so SPA and lazy JS content is loaded
+      // before axe/custom checks run.
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
       this._logger.info('Injecting axe-core...');
       await page.addScriptTag({ path: this._axeCorePath });
@@ -322,7 +324,8 @@ class AccessibilityService {
       _installSsrfInterceptor(page);
 
       this._logger.info(`[flat] Navigating to ${url}...`);
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      // Use networkidle2 for parity with audit runner requirements and better JS coverage.
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
       this._logger.info('[flat] Injecting axe-core...');
       await page.addScriptTag({ path: this._axeCorePath });
