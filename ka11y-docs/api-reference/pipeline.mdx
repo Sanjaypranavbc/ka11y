@@ -13,7 +13,9 @@ The pipeline endpoint runs all auditors sequentially and returns the full result
 
 ## POST /api/v1/pipeline/
 
-**Request body** is identical to the [Combined endpoint](/api-reference/combined#submit-an-audit).
+**Request body** is identical to the [Combined endpoint](/api-reference/combined#submit-an-audit), including `lang`.
+
+Use `"lang": "ja"` to localize result text to Japanese.
 
 ### 11-step execution order
 
