@@ -1,8 +1,6 @@
 import { createContext, useCallback, useContext, useState } from "react";
 import { Lang, TranslationKey, translations } from "./translations";
 
-const LANG_STORAGE_KEY = "ka11y_lang";
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LanguageContextValue {
@@ -19,14 +17,10 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(() => {
-    const stored = localStorage.getItem(LANG_STORAGE_KEY);
-    return stored === "ja" ? "ja" : "en";
-  });
+  const [lang, setLangState] = useState<Lang>("en");
 
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
-    localStorage.setItem(LANG_STORAGE_KEY, next);
   }, []);
 
   const t = useCallback(
