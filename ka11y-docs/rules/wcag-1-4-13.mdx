@@ -32,16 +32,21 @@ For each candidate (up to 20):
   1. Capture baseline popup count
   2. Hover the trigger (mouse.move to centre)
   3. Check whether popup count increased
-  4. Press Escape — did the popup close?  → dismissible check
-  5. Re-hover and move pointer toward popup location → hoverable check
+  4. Wait briefly without user interaction → persistence check
+  5. Press Escape — did the popup close?  → dismissible check
+  6. Re-hover and move pointer toward popup location → hoverable check
         ↓
-All results with detected popups → NEEDS_REVIEW (uncertain)
-Results with confirmed failures → FAILED (certain=True)
-No popups detected / all checks pass → PASSED
+Detected popup + any failed check:
+  - `FAILED` when popup evidence is certain (popup node captured)
+  - `NEEDS_REVIEW` when evidence is ambiguous
+Detected popup + all measurable checks pass → PASSED
+Detected popup + some checks unknown (none failed) → NEEDS_REVIEW
+No popups detected → PASSED
 ```
 
 <Warning>
-  Full automation of 1.4.13 is not possible. Results should always be verified manually in a browser with keyboard and mouse.
+  Full automation of 1.4.13 is not possible. `NEEDS_REVIEW` still indicates
+  manual verification is required, but unambiguous passing cases are now reported as `PASS`.
 </Warning>
 
 ---

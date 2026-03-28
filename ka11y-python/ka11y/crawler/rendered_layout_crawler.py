@@ -532,6 +532,15 @@ class RenderedLayoutCrawler:
                 or ""
             )
 
+            # Persistence: once shown, content should remain visible until the user
+            # explicitly removes hover/focus (or dismisses it).
+            await asyncio.sleep(0.35)
+            stable_count = await page.evaluate(
+                '() => document.querySelectorAll(\'[aria-expanded="true"], '
+                ".tooltip.show, .popover.show').length"
+            )
+            persists = int(stable_count) > int(baseline_count)
+
             # Test: dismiss with Escape
             await page.keyboard.press("Escape")
             await asyncio.sleep(0.15)
@@ -557,6 +566,10 @@ class RenderedLayoutCrawler:
             await page.mouse.move(0, 0)
             await asyncio.sleep(0.2)
 
+            # Treat the result as "certain" only when we can capture the popup node.
+            # Count-only signals can be noisy on some component libraries.
+            certain = bool(popup_html.strip())
+
             return HoverInteractionResult(
                 trigger_tag=tag,
                 trigger_id=cand_id,
@@ -566,8 +579,8 @@ class RenderedLayoutCrawler:
                 popup_html=popup_html,
                 dismissible_by_escape=dismissible,
                 pointer_can_move_over=pointer_can_move,
-                persists_until_removed=None,  # too unreliable to automate
-                certain=False,  # all results are heuristic
+                persists_until_removed=persists,
+                certain=certain,
             )
 
         except Exception as exc:

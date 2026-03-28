@@ -19,7 +19,7 @@ description: "Coverage map — which rules are checked by axe-core vs Python aud
 | **1.4.10** | Reflow | AA | — | **Full** | Rendered | 320 px viewport; horizontal-scroll detection |
 | **1.4.11** | Non-text Contrast | AA | — | Partial | Static | Python checks image-based buttons/icons using OCR contrast data; incomplete data becomes needs review |
 | **1.4.12** | Text Spacing | AA | — | **Full** | Rendered | CSS spacing overrides; clipped-text diff |
-| **1.4.13** | Content on Hover or Focus | AA | — | **Full** | Rendered | Hover/focus popup dismissible/hoverable/persistent checks |
+| **1.4.13** | Content on Hover or Focus | AA | — | **Full** | Rendered | Hover/focus popup dismissible/hoverable/persistent checks; unambiguous passes now emitted as PASS |
 | **2.1.1** | Keyboard | A | ✓ | — | Static | axe-core only |
 | **2.2.2** | Pause, Stop, Hide | A | Partial | **Full** | Static | Python detects CSS animations, carousels, GIFs |
 | **2.4.1** | Bypass Blocks | A | ✓ | — | Static | axe-core only |
@@ -30,7 +30,7 @@ description: "Coverage map — which rules are checked by axe-core vs Python aud
 | **2.4.11** | Focus Not Obscured (Min) | AA | — | **Full** | Rendered | Keyboard traversal; full-obscuration detection |
 | **2.4.12** | Focus Not Obscured (Enh) | AAA | — | **Full** | Rendered | Same traversal; stricter partial-obscuration check |
 | **2.5.3** | Label in Name | A | ✓ | **Full** | Static | Python audits all interactive roles |
-| **2.5.8** | Target Size (Minimum) | AA | — | **Full** | Static | axe-core has no 2.5.8 rule |
+| **2.5.8** | Target Size (Minimum) | AA | — | **Full** | Static | Includes inline, UA-controlled, and offset spacing exceptions |
 | **3.1.1** | Language of Page | A | ✓ | — | Static | axe-core only |
 | **3.3.1** | Error Identification | A | Partial | **Full** | Static | Python checks aria-live/role=alert linkage |
 | **3.3.2** | Labels or Instructions | A | Partial | **Full** | Static | Python checks autocomplete, placeholder-only |

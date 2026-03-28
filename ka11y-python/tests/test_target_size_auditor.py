@@ -36,6 +36,11 @@ def make_item(**kwargs) -> TargetSizeData:
         padding_right_px=0.0,
         is_inline_exception=False,
         is_ua_controlled_exception=False,
+        is_offset_exception=False,
+        required_offset_x_px=0.0,
+        required_offset_y_px=0.0,
+        nearest_target_gap_x_px=None,
+        nearest_target_gap_y_px=None,
         passes_size=True,
         html_snippet="<button>Click me</button>",
     )
@@ -64,6 +69,20 @@ class TestCheck258Exceptions:
                          rendered_width_px=10, rendered_height_px=10)
         status, _ = _check_258(item)
         assert status == "N/A"
+
+    def test_offset_exception_returns_na(self):
+        item = make_item(
+            rendered_width_px=14,
+            rendered_height_px=14,
+            is_offset_exception=True,
+            required_offset_x_px=5.0,
+            required_offset_y_px=5.0,
+            nearest_target_gap_x_px=8.0,
+            nearest_target_gap_y_px=6.0,
+        )
+        status, msg = _check_258(item)
+        assert status == "N/A"
+        assert "E5" in msg
 
     def test_no_exception_with_large_size_passes(self):
         item = make_item(rendered_width_px=48.0, rendered_height_px=48.0)
@@ -161,6 +180,21 @@ class TestTargetSizeAuditorReport:
         assert records[0]["wcag_2_5_8_status"] == "N/A"
         assert records[0]["overall_status"] == "N/A"
 
+    def test_offset_exception_status_is_na(self, tmp_output):
+        item = make_item(
+            rendered_width_px=12.0,
+            rendered_height_px=16.0,
+            is_offset_exception=True,
+            required_offset_x_px=6.0,
+            required_offset_y_px=4.0,
+            nearest_target_gap_x_px=10.0,
+            nearest_target_gap_y_px=8.0,
+        )
+        auditor = TargetSizeAuditor(output_dir=tmp_output)
+        records = auditor.generate_audit_report([item])
+        assert records[0]["wcag_2_5_8_status"] == "N/A"
+        assert records[0]["overall_status"] == "N/A"
+
     def test_csv_created(self, tmp_output):
         items = [make_item()]
         TargetSizeAuditor(output_dir=tmp_output).generate_audit_report(items)
@@ -177,8 +211,11 @@ class TestTargetSizeAuditorReport:
             "input_type", "accessible_name", "rendered_width_px",
             "rendered_height_px", "padding_top_px", "padding_bottom_px",
             "padding_left_px", "padding_right_px", "is_inline_exception",
-            "is_ua_controlled_exception", "passes_size", "wcag_2_5_8_status",
-            "wcag_2_5_8_violation", "overall_status", "html_snippet",
+            "is_ua_controlled_exception", "is_offset_exception",
+            "required_offset_x_px", "required_offset_y_px",
+            "nearest_target_gap_x_px", "nearest_target_gap_y_px",
+            "passes_size", "wcag_2_5_8_status", "wcag_2_5_8_violation",
+            "overall_status", "html_snippet",
         ]
         assert cols == expected
 

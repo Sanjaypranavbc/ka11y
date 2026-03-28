@@ -162,6 +162,7 @@ Every interactive element must have a rendered size of at least **24 × 24 CSS p
 |-----------|-----------|--------|
 | Inline | `<a>` with `display: inline` in text block | `N/A` |
 | UA-controlled | `<input type="checkbox/radio">` with `appearance: auto` | `N/A` |
+| Offset | Undersized target has sufficient surrounding spacing | `N/A` |
 
 ### Output record keys
 
@@ -171,6 +172,9 @@ Every interactive element must have a rendered size of at least **24 × 24 CSS p
 | `wcag_2_5_8_violation` | str |
 | `rendered_width_px` | float |
 | `rendered_height_px` | float |
+| `is_offset_exception` | bool |
+| `required_offset_x_px` / `required_offset_y_px` | float |
+| `nearest_target_gap_x_px` / `nearest_target_gap_y_px` | float \| None |
 | `html_snippet` | str |
 | `tag` | str |
 | `element_id` | str \| None |
