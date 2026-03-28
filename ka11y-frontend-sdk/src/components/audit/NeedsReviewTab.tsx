@@ -97,7 +97,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
           placeholder={t("table.searchPlaceholder")}
           value={search}
@@ -105,14 +105,14 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           className="w-full sm:w-64 h-8 text-xs"
         />
 
-        <div role="group" aria-label={t("table.filterSeverity")} className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterSeverity")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allSeverities.map((s) => (
             <button
               key={s}
               onClick={() => toggleFilter(severityFilter, s, setSeverityFilter)}
               aria-pressed={severityFilter.includes(s)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-medium border transition-colors",
+                "px-2 py-1 rounded text-xs font-medium border transition-colors shrink-0",
                 severityFilter.includes(s)
                   ? (severityColors[s] || "bg-primary text-primary-foreground border-primary/50")
                   : "bg-muted text-muted-foreground border-border"
@@ -123,14 +123,14 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label={t("table.filterSource")} className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterSource")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allSources.map((s) => (
             <button
               key={s}
               onClick={() => toggleFilter(sourceFilter, s, setSourceFilter)}
               aria-pressed={sourceFilter.includes(s)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-medium border transition-colors",
+                "px-2 py-1 rounded text-xs font-medium border transition-colors shrink-0",
                 sourceFilter.includes(s)
                   ? (sourceColors[s] || "bg-primary text-primary-foreground border-primary/50")
                   : "bg-muted text-muted-foreground border-border"
@@ -141,14 +141,14 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label={t("table.filterSC")} className="flex gap-1 flex-wrap">
+        <div role="group" aria-label={t("table.filterSC")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allScs.map((sc) => (
             <button
               key={sc}
               onClick={() => toggleFilter(scFilter, sc, setScFilter)}
               aria-pressed={scFilter.includes(sc)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-mono border transition-colors",
+                "px-2 py-1 rounded text-xs font-mono border transition-colors shrink-0",
                 scFilter.includes(sc) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground border-border"
               )}
             >
@@ -158,7 +158,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
         </div>
 
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-7">
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-7 self-start sm:self-auto">
             <X className="h-3 w-3 mr-1" /> {t("table.clear")}
           </Button>
         )}
@@ -166,8 +166,8 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
 
       <p className="text-xs text-muted-foreground">{showingText}</p>
 
-      <div className="rounded-lg border border-border overflow-hidden">
-        <Table className="min-w-[760px]">
+      <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden">
+        <Table className="min-w-[700px] sm:min-w-[760px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="text-xs">{t("table.severity")}</TableHead>

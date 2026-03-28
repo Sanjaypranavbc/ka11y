@@ -29,8 +29,8 @@ export function DashboardHeader({
   }) : null;
 
   return (
-    <header className="h-12 border-b border-border bg-background/95 backdrop-blur-sm px-3 sm:px-4 flex items-center justify-between shrink-0 gap-2 sm:gap-4">
-      <div className="flex items-center gap-3 min-w-0">
+    <header className="min-h-12 border-b border-border bg-background/95 backdrop-blur-sm px-3 sm:px-4 py-2 flex items-center justify-between shrink-0 gap-2 sm:gap-4 flex-wrap">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
         <Button
           variant="ghost"
           size="icon"
@@ -46,12 +46,12 @@ export function DashboardHeader({
           <span className="hidden sm:inline text-[9px] font-semibold tracking-[0.16em] uppercase text-muted-foreground shrink-0">
             {t("header.target")}
           </span>
-          <span className="text-xs font-mono text-foreground truncate max-w-[44vw] sm:max-w-[38vw]">{url}</span>
-          <ExternalLink className="h-2.5 w-2.5 text-muted-foreground/50 shrink-0" aria-hidden="true" />
+          <span className="text-xs font-mono text-foreground truncate max-w-[48vw] sm:max-w-[38vw]">{url}</span>
+          <ExternalLink className="hidden sm:block h-2.5 w-2.5 text-muted-foreground/50 shrink-0" aria-hidden="true" />
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
         {ts && (
           <span className="text-[10px] font-mono text-muted-foreground hidden sm:block">
             {ts}
