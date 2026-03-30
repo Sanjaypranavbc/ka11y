@@ -25,16 +25,17 @@ _EXEMPT_TAGS = {"table", "svg", "canvas", "iframe", "pre", "code"}
 _EXEMPT_ROLES = {"grid", "treegrid", "spreadsheet"}
 
 
-def _is_likely_exempt(el_tag: str, el_html: str) -> bool:
-    """Heuristic: is this element one of the WCAG 1.4.10 exempt categories?"""
-    if el_tag in _EXEMPT_TAGS:
-        return True
-    html_lower = el_html.lower()
-    for marker in ("data-chart", 'role="grid"', "role='grid'", "codemirror", "monaco"):
-        if marker in html_lower:
-            return True
-    return False
+def _is_likely_exempt(tag: str, html: str) -> bool:
+    tag = (tag or "").lower()
+    html = (html or "").lower()
 
+    if tag in {"table", "svg", "canvas", "pre", "code"}:
+        return True
+
+    if any(k in html for k in ["chart", "graph", "map", "datatable"]):
+        return True
+
+    return False
 
 def evaluate(
     snapshot_320: PageSnapshot,
