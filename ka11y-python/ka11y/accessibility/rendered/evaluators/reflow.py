@@ -25,16 +25,17 @@ _EXEMPT_TAGS = {"table", "svg", "canvas", "iframe", "pre", "code"}
 _EXEMPT_ROLES = {"grid", "treegrid", "spreadsheet"}
 
 
-def _is_likely_exempt(el_tag: str, el_html: str) -> bool:
-    """Heuristic: is this element one of the WCAG 1.4.10 exempt categories?"""
-    if el_tag in _EXEMPT_TAGS:
-        return True
-    html_lower = el_html.lower()
-    for marker in ("data-chart", 'role="grid"', "role='grid'", "codemirror", "monaco"):
-        if marker in html_lower:
-            return True
-    return False
+def _is_likely_exempt(tag: str, html: str) -> bool:
+    tag = (tag or "").lower()
+    html = (html or "").lower()
 
+    if tag in {"table", "svg", "canvas", "pre", "code"}:
+        return True
+
+    if any(k in html for k in ["chart", "graph", "map", "datatable"]):
+        return True
+
+    return False
 
 def evaluate(
     snapshot_320: PageSnapshot,
@@ -42,43 +43,55 @@ def evaluate(
     """
     Evaluate WCAG 1.4.10 Reflow using the 320 px viewport snapshot.
 
-    Returns one record per issue found (or a single PASSED record if clean).
+    Returns one record per issue found (plus supporting element records if applicable).
     """
     records: List[RuleAuditRecord] = []
 
     # 1. Page-level horizontal scroll check
     page_scrolls = detect_page_horizontal_scroll(snapshot_320)
 
-    if page_scrolls:
-        # Check if the scroll is only due to exempt elements
-        overflow_els = elements_with_horizontal_overflow(snapshot_320)
-        exempt_only = (
-            all(_is_likely_exempt(el.tag, el.html_snippet) for el in overflow_els)
-            if overflow_els
-            else False
+    # Get all overflowing elements
+    overflow_els = elements_with_horizontal_overflow(snapshot_320)
+
+    # ── Helper: valid overflow (allowed cases) ────────────────────────────────
+    def _is_valid_overflow(el) -> bool:
+        return (
+            _is_likely_exempt(el.tag, el.html_snippet)
+            or getattr(el, "has_overflow_x_scroll", False)
         )
 
-        if exempt_only:
+    # Filter only REAL violations
+    valid_overflows = [
+        el for el in overflow_els if not _is_valid_overflow(el)
+    ]
+
+    # ── Case 1: Page has horizontal scroll ────────────────────────────────────
+    if page_scrolls:
+        if not valid_overflows:
+            # Only exempt content caused scroll
             records.append(
                 RuleAuditRecord(
                     rule_key=_RULE_KEY,
                     status="NEEDS_REVIEW",
                     violation=(
-                        "Page requires horizontal scrolling at 320 px viewport, "
+                        f"Page requires horizontal scrolling at "
+                        f"{snapshot_320.viewport_width} px viewport, "
                         "but the overflowing elements appear to be exempt content "
-                        "(table/SVG/canvas/code). Verify manually."
+                        "(table/SVG/canvas/code or scrollable containers). "
+                        "Verify manually."
                     ),
                     html_snippet="",
                     page_url=snapshot_320.page_url,
                 )
             )
         else:
+            # True WCAG failure
             records.append(
                 RuleAuditRecord(
                     rule_key=_RULE_KEY,
                     status="FAILED",
                     violation=(
-                        f"At 320 px viewport width the page has horizontal scroll "
+                        f"At {snapshot_320.viewport_width} px viewport width the page has horizontal scroll "
                         f"(document scrollWidth={snapshot_320.document_scroll_width:.0f} px > "
                         f"viewport={snapshot_320.viewport_width} px). "
                         "Content requires two-dimensional scrolling — violates WCAG 1.4.10."
@@ -88,31 +101,24 @@ def evaluate(
                 )
             )
 
-        # Report the specific overflowing elements (up to 5)
-        for el in overflow_els[:5]:
-            if _is_likely_exempt(el.tag, el.html_snippet):
-                status = "NEEDS_REVIEW"
-                msg = (
-                    f"<{el.tag}> element extends to {el.rect.right:.0f} px (viewport 320 px). "
-                    "May be exempt (table/SVG/chart). Verify manually."
-                )
-            else:
-                status = "FAILED"
-                msg = (
-                    f"<{el.tag}> element extends to {el.rect.right:.0f} px, "
-                    "overflowing the 320 px viewport width."
-                )
+        # ── Add supporting element findings (NOT failures) ────────────────────
+        for el in valid_overflows[:3]:  # limit noise
             records.append(
                 RuleAuditRecord(
                     rule_key=_RULE_KEY,
-                    status=status,
-                    violation=msg,
+                    status="NEEDS_REVIEW",
+                    violation=(
+                        f"<{el.tag}> element extends to {el.rect.right:.0f} px, "
+                        f"overflowing the {snapshot_320.viewport_width} px viewport width."
+                    ),
                     html_snippet=el.html_snippet[:300],
                     element_id=el.element_id,
                     tag=el.tag,
                     page_url=snapshot_320.page_url,
                 )
             )
+
+    # ── Case 2: No horizontal scroll ──────────────────────────────────────────
     else:
         records.append(
             RuleAuditRecord(

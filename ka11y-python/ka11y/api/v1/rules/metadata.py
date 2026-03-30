@@ -34,7 +34,7 @@ from fastapi.responses import JSONResponse
 
 from ka11y.i18n.loader import load_rules
 
-router = APIRouter(prefix="/rules", tags=["rules"])
+router = APIRouter()
 
 
 def _sc_sort_key(entry: Dict[str, Any]) -> tuple:

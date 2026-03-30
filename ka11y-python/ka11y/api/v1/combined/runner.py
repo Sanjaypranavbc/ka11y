@@ -75,9 +75,12 @@ def _merge_findings(
     return list(merged.values()) + no_key
 
 
-async def _run_job(job_id: str, payload: CombinedRequest) -> None:
+async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None) -> None:
     """
     Background task: run axe-core (Node) and Python stages in parallel.
+
+    If *filter_rule* is provided, the final report will only contain findings
+    for that specific WCAG SC ID (e.g. "1.1.1").
 
     Graceful degradation:
     • Uses asyncio.gather(return_exceptions=True) so neither branch cancels the other.
@@ -170,6 +173,10 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
         ]
 
         all_findings = _merge_findings(node_findings, python_findings)
+
+        if filter_rule:
+            all_findings = [f for f in all_findings if f.get("wcag_sc") == filter_rule]
+
         all_findings.sort(
             key=lambda f: {"fail": 0, "needs_review": 1, "pass": 2}.get(f["status"], 3)
         )

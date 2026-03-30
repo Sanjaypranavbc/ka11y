@@ -67,15 +67,6 @@ _EMPTY_OR_GENERIC: set[str] = {
     "spacer",
     "decoration",
     "decorative",
-    "画像",
-    "写真",
-    "図",
-    "アイコン",
-    "プレースホルダー",
-    "なし",
-    "該当なし",
-    "装飾",
-    "イメージ",
 }
 
 # Social/brand icon names — must be paired with "icon" to be acceptable
@@ -194,41 +185,7 @@ _BUTTON_ACTION_WORDS: set[str] = {
     "go to slide",
     "new window",
     "opens in new tab",
-    "メニュー",
-    "閉じる",
-    "開く",
-    "検索",
-    "戻る",
-    "次へ",
-    "送信",
-    "キャンセル",
-    "確認",
-    "保存",
-    "削除",
-    "編集",
-    "追加",
-    "ダウンロード",
-    "共有",
-    "印刷",
-    "更新",
-    "ホーム",
-    "設定",
-    "ヘルプ",
-    "再生",
-    "一時停止",
-    "停止",
-    "ログイン",
-    "ログアウト",
-    "新規登録",
-    "登録",
-    "カート",
-    "もっと見る",
-    "続きを読む",
-    "すべて見る",
 }
-
-_LOGO_MARKERS: set[str] = {"logo", "home", "ロゴ", "ホーム"}
-_ICON_QUALIFIERS: set[str] = {"icon", "logo", "button", "link", "アイコン", "ロゴ", "ボタン", "リンク"}
 
 # Report CSV columns (order preserved)
 _REPORT_COLUMNS = [
@@ -370,7 +327,7 @@ def _check_1_1_1_logo(alt: str) -> tuple[bool, str]:
         return False, "FAIL [1.1.1] Logo has empty/missing alt text"
 
     norm = _norm(alt)
-    if any(marker in norm for marker in _LOGO_MARKERS):
+    if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
         return True, f"PASS [1.1.1] Logo alt includes 'logo'/'home': '{alt}'"
 
     return (
@@ -398,7 +355,7 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
             f"(e.g. '{alt} icon'). Brand name alone is not sufficient per WCAG 1.1.1.",
         )
 
-    has_qualifier = any(token in norm for token in _ICON_QUALIFIERS)
+    has_qualifier = bool(re.search(r"\b(icon|logo|button|link)\b", norm))
     is_action = norm in _BUTTON_ACTION_WORDS or any(
         w in _BUTTON_ACTION_WORDS for w in norm.split()
     )
@@ -477,7 +434,7 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
     norm = _norm(name)
 
     if sub_type == "logos":
-        if any(marker in norm for marker in _LOGO_MARKERS):
+        if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
             return True, f"PASS [4.1.2] Logo accessible name includes 'logo': '{name}'"
         return (
             False,
@@ -723,17 +680,17 @@ class AltTextAccessibilityAuditor:
             detected_joined = " | ".join(detected_texts)
             ocr_result = _ocr_result_for_file(ocr_results, filename)
 
-            # ---------------- F11 FIX ----------------
+
             classifier_text_flag = getattr(img, "is_text_image", False)
             ocr_text_flag = has_ocr_text and len(detected_texts) > 0
 
-            f11_mismatch = False
-            f11_reason = ""
+            text_flag = False
+            _1_4_5reason = ""
 
             if not classifier_text_flag and ocr_text_flag:
-                f11_mismatch = True
-                f11_reason = (
-                    "F11: OCR detected text but classifier marked as non-text image"
+                text_flag = True
+                _1_4_5reason = (
+                    "OCR detected text but classifier marked as non-text image"
                 )
 
             # ── Determine functional sub_type for WCAG checks ────────────
@@ -807,15 +764,10 @@ class AltTextAccessibilityAuditor:
                 effective_has_text,
             )
 
-            if (
-                f11_mismatch
-                and classification != "complex"
-                and sub_type != "charts"
-                and not is_logo
-            ):
+            if text_flag:
                 wcag_1_4_5_pass = False
                 wcag_1_4_5_reason = (
-                        "FAIL [1.4.5] " + f11_reason +
+                        "FAIL [1.4.5] " + _1_4_5reason +
                         " — OCR found text but classifier missed it"
                 )
 

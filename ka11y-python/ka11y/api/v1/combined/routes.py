@@ -139,7 +139,7 @@ async def _resolve_all_ips(hostname: str) -> list[str]:
     return addrs
 
 
-async def _assert_public_url(url: str) -> None:
+async def assert_public_url(url: str) -> None:
     parsed = urlparse(url)
     host = parsed.hostname or ""
 
@@ -212,7 +212,7 @@ async def submit_combined_audit(payload: CombinedRequest):
     now = datetime.now(timezone.utc).isoformat()
 
     # SSRF guard: reject private / loopback / link-local endpoints.
-    await _assert_public_url(url)
+    await assert_public_url(url)
 
     _jobs[job_id] = {
         "job_id": job_id,
