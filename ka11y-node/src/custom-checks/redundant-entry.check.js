@@ -493,6 +493,38 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
     return EXPLICIT_DISTINCT_PURPOSE_RE.test(txt);
   }
 
+  function inferEntityRole(field) {
+    const txt = mergeTextParts([
+      field.context,
+      field.sectionText,
+      field.formText,
+      field.purposeSignature,
+    ], 1200).toLowerCase();
+
+    if (/\b(billing|invoice)\b|請求/i.test(txt)) return 'billing';
+    if (/\b(shipping|delivery|recipient|consignee)\b|配送|お届け|受取/i.test(txt)) return 'shipping';
+    if (/\b(primary|main)\b|主/i.test(txt)) return 'primary';
+    if (/\b(secondary|alternate|other)\b|副|別/i.test(txt)) return 'secondary';
+    if (/\b(emergency)\b|緊急/i.test(txt)) return 'emergency';
+    if (/\b(guardian|parent)\b|保護者|親/i.test(txt)) return 'guardian';
+    if (/\b(applicant|candidate|employee|job)\b|申請者|応募者/i.test(txt)) return 'applicant';
+    if (/\b(reference|referee|guarantor)\b|紹介|保証人/i.test(txt)) return 'reference';
+
+    return null;
+  }
+
+  function hasDistinctEntityRolePair(roles) {
+    const roleSet = new Set(roles);
+
+    if (roleSet.has('billing') && roleSet.has('shipping')) return true;
+    if (roleSet.has('primary') && roleSet.has('secondary')) return true;
+    if (roleSet.has('emergency') && (roleSet.has('primary') || roleSet.has('applicant'))) return true;
+    if (roleSet.has('guardian') && roleSet.has('applicant')) return true;
+    if (roleSet.has('reference') && roleSet.has('applicant')) return true;
+
+    return false;
+  }
+
   const forms = Array.from(document.querySelectorAll('form'));
   const formStableIdMap = new Map(forms.map((form, idx) => [form, stableFormId(form, idx)]));
 
@@ -633,6 +665,9 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
     const distinctHintCount = fields.filter((f) => f.distinctPurposeHint).length;
     const processTypes = unique(fields.map((f) => f.processType).filter(Boolean));
     const purposeSignatures = unique(fields.map((f) => f.purposeSignature).filter(Boolean));
+    const entityRoles = unique(fields.map((f) => inferEntityRole(f)).filter(Boolean));
+
+    if (hasDistinctEntityRolePair(entityRoles)) return true;
 
     if (distinctHintCount > 0 && distinctHintCount < fields.length && processTypes.length >= 2) {
       return true;
