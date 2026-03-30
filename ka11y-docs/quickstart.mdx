@@ -42,6 +42,8 @@ Open **http://localhost:8080**, enter a URL in the sidebar, and click **Run Audi
 
 The dashboard streams live stage progress as each auditor completes. When the job finishes, violations, needs-review items, and passes are shown across the four tabs.
 
+Dashboard rule/result language defaults to **EN**. To get Japanese localized results, use the **EN / JA** switcher in the top-right header, select **JA**, then start the audit. The request is submitted with `lang: "ja"`.
+
 ---
 
 ## 3 — Open the documentation site
@@ -75,6 +77,21 @@ curl -N http://localhost:8000/api/v1/combined/$JOB/stream
 
 # Or poll for the final result
 curl http://localhost:8000/api/v1/combined/$JOB | jq '.result.summary'
+```
+
+### Japanese results
+
+To get Japanese localized rule names and suggested fixes in results, set `"lang": "ja"` when submitting the job:
+
+```bash
+JOB=$(curl -s -X POST http://localhost:8000/api/v1/combined/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "wcag_level": "AAA",
+    "lang": "ja",
+    "max_depth": 0
+  }' | jq -r '.job_id')
 ```
 
 Expected poll response once complete:

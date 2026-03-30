@@ -107,6 +107,7 @@ export interface AuditConfig {
   url: string;
   max_depth: number;
   wcag_level: "A" | "AA" | "AAA";
+  lang: "en" | "ja";
   run_ocr: boolean;
   run_image_audit: boolean;
   run_form_audit: boolean;
@@ -123,4 +124,4 @@ export interface AuditConfig {
   run_focus_not_obscured_enh_audit: boolean;
 }
 
-export type TabValue = "dashboard" | "violations" | "needs-review" | "passes" | "image-visualisation" | "settings";
+export type TabValue = "dashboard" | "violations" | "needs-review" | "passes" | "image-visualisation" | "wcag-rules" | "settings";

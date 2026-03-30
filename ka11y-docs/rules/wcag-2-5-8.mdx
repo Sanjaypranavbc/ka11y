@@ -24,12 +24,13 @@ The crawler uses `getBoundingClientRect()` via Playwright to get the **actual re
 
 ## Exceptions (N/A cases)
 
-WCAG 2.5.8 provides several exceptions. ka11y automatically detects two:
+WCAG 2.5.8 provides several exceptions. ka11y automatically detects three:
 
 | Exception | Condition | Detection |
 |-----------|-----------|-----------|
 | **Inline** | `<a>` within a sentence of text | `getComputedStyle().display === 'inline'` |
 | **UA-controlled** | Native checkbox / radio without custom styling | `getComputedStyle().appearance` is `auto`, `checkbox`, or `radio` |
+| **Offset** | Target is below 24×24 but has enough surrounding spacing | Inflate target by required offsets `((24-w)/2, (24-h)/2)` and verify no other target intersects that inflated box |
 
 Elements matching an exception are reported as `N/A` and excluded from the violation count.
 
@@ -37,7 +38,7 @@ Elements matching an exception are reported as `N/A` and excluded from the viola
 
 **CSV file:** `audit_target_size_report.csv`
 
-Columns: `page_url`, `element_index`, `tag`, `role`, `element_id`, `input_type`, `accessible_name`, `rendered_width_px`, `rendered_height_px`, `padding_top_px`, `padding_bottom_px`, `padding_left_px`, `padding_right_px`, `is_inline_exception`, `is_ua_controlled_exception`, `passes_size`, `wcag_2_5_8_status`, `wcag_2_5_8_violation`, `overall_status`, `html_snippet`
+Columns: `page_url`, `element_index`, `tag`, `role`, `element_id`, `input_type`, `accessible_name`, `rendered_width_px`, `rendered_height_px`, `padding_top_px`, `padding_bottom_px`, `padding_left_px`, `padding_right_px`, `is_inline_exception`, `is_ua_controlled_exception`, `is_offset_exception`, `required_offset_x_px`, `required_offset_y_px`, `nearest_target_gap_x_px`, `nearest_target_gap_y_px`, `passes_size`, `wcag_2_5_8_status`, `wcag_2_5_8_violation`, `overall_status`, `html_snippet`
 
 A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
 

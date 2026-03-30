@@ -8,8 +8,8 @@ Goal: Supplemental content that appears on hover/focus must be:
   2. Hoverable (pointer can move over the content without it vanishing)
   3. Persistent (stays visible until hover/focus removed, or dismissed)
 
-Full automation is not possible. We use heuristics to detect popup content
-and check what we can; the rest is flagged as NEEDS_REVIEW.
+Full automation is not possible. We use heuristics to detect popup content and
+apply deterministic checks where possible; unknowns are flagged as NEEDS_REVIEW.
 """
 
 from __future__ import annotations
@@ -44,37 +44,69 @@ def evaluate(
         if not result.popup_appeared:
             continue
 
-        issues: List[str] = []
+        failed_issues: List[str] = []
+        unknown_checks: List[str] = []
 
-        # Check dismissibility
         if result.dismissible_by_escape is False:
-            issues.append(
+            failed_issues.append(
                 "Popup cannot be dismissed by pressing Escape without moving focus."
             )
+        elif result.dismissible_by_escape is None:
+            unknown_checks.append("dismissible")
 
-        # Check hoverability
         if result.pointer_can_move_over is False:
-            issues.append(
+            failed_issues.append(
                 "Popup disappears when the pointer moves towards it "
                 "(content is not hoverable)."
             )
+        elif result.pointer_can_move_over is None:
+            unknown_checks.append("hoverable")
 
-        # Persistence is hard to test reliably; flag as needs_review if uncertain
         if result.persists_until_removed is False:
-            issues.append(
+            failed_issues.append(
                 "Popup did not persist until focus/hover was explicitly removed."
             )
+        elif result.persists_until_removed is None:
+            unknown_checks.append("persistent")
 
-        if issues:
+        if failed_issues:
+            status = (
+                "FAILED"
+                if result.certain
+                or (
+                    result.dismissible_by_escape is not None
+                    and result.pointer_can_move_over is not None
+                    and result.persists_until_removed is not None
+                )
+                else "NEEDS_REVIEW"
+            )
             records.append(
                 RuleAuditRecord(
                     rule_key=_RULE_KEY,
-                    status="FAILED" if result.certain else "NEEDS_REVIEW",
+                    status=status,
                     violation=(
                         f"Hover/focus popup on <{result.trigger_tag}> "
                         + (f"#{result.trigger_id} " if result.trigger_id else "")
                         + "may violate WCAG 1.4.13: "
-                        + " | ".join(issues)
+                        + " | ".join(failed_issues)
+                    ),
+                    html_snippet=result.trigger_html[:300],
+                    element_id=result.trigger_id,
+                    tag=result.trigger_tag,
+                    page_url=result.page_url,
+                )
+            )
+        elif unknown_checks:
+            records.append(
+                RuleAuditRecord(
+                    rule_key=_RULE_KEY,
+                    status="NEEDS_REVIEW",
+                    violation=(
+                        f"Hover/focus popup detected on <{result.trigger_tag}> "
+                        + (f"#{result.trigger_id} " if result.trigger_id else "")
+                        + "— partial checks passed but "
+                        + ", ".join(unknown_checks)
+                        + " behaviour could not be verified automatically."
                     ),
                     html_snippet=result.trigger_html[:300],
                     element_id=result.trigger_id,
@@ -83,17 +115,15 @@ def evaluate(
                 )
             )
         else:
-            # Popup appeared but all detectable checks passed → needs_review
-            # because we cannot fully automate the complete set of checks.
+            # All three measurable checks passed.
             records.append(
                 RuleAuditRecord(
                     rule_key=_RULE_KEY,
-                    status="NEEDS_REVIEW",
+                    status="PASSED",
                     violation=(
                         f"Hover/focus popup detected on <{result.trigger_tag}> "
                         + (f"#{result.trigger_id} " if result.trigger_id else "")
-                        + "— automated checks passed but manual verification "
-                        "of dismissible/hoverable/persistent behaviour is required."
+                        + "meets automated dismissible, hoverable, and persistent checks."
                     ),
                     html_snippet=result.trigger_html[:300],
                     element_id=result.trigger_id,

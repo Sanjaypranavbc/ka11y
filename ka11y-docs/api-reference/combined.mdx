@@ -21,6 +21,10 @@ The combined endpoint is the **primary API**. It runs axe-core (Node) and all Py
   Conformance target: `"A"` | `"AA"` | `"AAA"`. Controls which axe-core tags are used and filters Python findings by WCAG level. Use `AAA` if you want `1.4.6 Contrast (Enhanced)` in the final finding arrays; lowering the level hides higher-level findings.
 </ParamField>
 
+<ParamField body="lang" type="string" default="en">
+  Result language for localized WCAG names and suggested fixes. Use `"ja"` for Japanese (`"en"` and `"de"` are also supported). Unsupported values fall back to English.
+</ParamField>
+
 <ParamField body="run_ocr" type="boolean" default="true">
   Run EasyOCR on crawled images to detect embedded text and compute image-text contrast. This powers Python findings for `1.4.3`, `1.4.6`, and the OCR-backed parts of `1.1.1`, `1.4.5`, and `1.4.11`.
 </ParamField>
@@ -80,6 +84,7 @@ curl -X POST http://localhost:8000/api/v1/combined/ \
   -d '{
     "url": "https://example.com",
     "wcag_level": "AAA",
+    "lang": "ja",
     "max_depth": 0,
     "run_ocr": true,
     "run_image_audit": true,
@@ -103,11 +108,27 @@ import httpx
 resp = httpx.post("http://localhost:8000/api/v1/combined/", json={
     "url": "https://example.com",
     "wcag_level": "AAA",
+    "lang": "ja",
     "max_depth": 0,
 })
 job_id = resp.json()["job_id"]
 ```
 </RequestExample>
+
+### Japanese output (`lang = "ja"`)
+
+Set `lang` to `"ja"` in the submit payload:
+
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/combined/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "wcag_level": "AAA",
+    "lang": "ja",
+    "max_depth": 0
+  }'
+```
 
 <ResponseExample>
 ```json HTTP 202

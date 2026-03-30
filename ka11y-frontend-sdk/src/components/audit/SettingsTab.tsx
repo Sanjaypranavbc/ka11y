@@ -3,6 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Settings, Palette } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 export type ThemePreference = "light" | "dark" | "system";
 
@@ -19,20 +20,22 @@ export function SettingsTab({
   themePreference,
   onThemePreferenceChange,
 }: SettingsTabProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="p-4 sm:p-6 max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
         <Settings className="h-5 w-5 text-muted-foreground" />
-        <h2 className="text-lg font-semibold text-foreground">Settings</h2>
+        <h2 className="text-lg font-semibold text-foreground">{t("settings.title")}</h2>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Display</CardTitle>
+          <CardTitle className="text-sm">{t("settings.display")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label className="text-xs text-muted-foreground">Max rows per table</Label>
+            <Label className="text-xs text-muted-foreground">{t("settings.maxRows")}</Label>
             <Input
               type="number"
               value={maxRows}
@@ -53,17 +56,17 @@ export function SettingsTab({
         <CardHeader>
           <CardTitle className="text-sm flex items-center gap-2">
             <Palette className="h-4 w-4 text-muted-foreground" />
-            Theme
+            {t("settings.theme")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Label className="text-xs text-muted-foreground">Color mode</Label>
+          <Label className="text-xs text-muted-foreground">{t("settings.colorMode")}</Label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {([
-              { key: "light", label: "Light" },
-              { key: "dark", label: "Dark" },
-              { key: "system", label: "System" },
-            ] as const).map((mode) => (
+              { key: "light" as const,  labelKey: "settings.light"  as const },
+              { key: "dark"  as const,  labelKey: "settings.dark"   as const },
+              { key: "system" as const, labelKey: "settings.system" as const },
+            ]).map((mode) => (
               <Button
                 key={mode.key}
                 type="button"
@@ -72,12 +75,12 @@ export function SettingsTab({
                 onClick={() => onThemePreferenceChange(mode.key)}
                 aria-pressed={themePreference === mode.key}
               >
-                {mode.label}
+                {t(mode.labelKey)}
               </Button>
             ))}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            System mode follows your device preference.
+            {t("settings.systemNote")}
           </p>
         </CardContent>
       </Card>

@@ -3,7 +3,7 @@
 const SC = '2.1.2';
 const RULE_ID = 'custom-keyboard-trap';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/no-keyboard-trap';
-const MAX_TABS = 60;
+const MAX_TABS = 200;
 // Buffer size for cycle detection: tracks last 4 focused keys.
 // This detects both single-element stuck traps (A,A,A) and two-element cycling
 // traps (A,B,A,B) — the most common real-world pattern (dialog with 2 focusable elements).

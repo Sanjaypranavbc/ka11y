@@ -9,6 +9,7 @@ import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCriterionId, formatCriterionName, formatLevel } from "@/lib/audit-format";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface PassesTabProps {
   passes: AuditPass[];
@@ -16,6 +17,7 @@ interface PassesTabProps {
 }
 
 export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [levelFilter, setLevelFilter] = useState<string[]>([]);
@@ -92,24 +94,28 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
     setVisibleCounts((prev) => ({ ...prev, [source]: (prev[source] ?? pageSize) + pageSize }));
   };
 
+  const showingText = filtered.length !== passes.length
+    ? t("passes.showingFiltered", { n: filtered.length, all: passes.length })
+    : t("passes.showing", { n: filtered.length });
+
   return (
     <div className="p-3 sm:p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
-          placeholder="Search rule, SC, criterion, reason..."
+          placeholder={t("passes.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full sm:w-72 h-8 text-xs"
         />
 
-        <div role="group" aria-label="Filter by source" className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterSource")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allSources.map((s) => (
             <button
               key={s}
               onClick={() => toggleFilter(sourceFilter, s, setSourceFilter)}
               aria-pressed={sourceFilter.includes(s)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-medium border transition-colors",
+                "px-2 py-1 rounded text-xs font-medium border transition-colors shrink-0",
                 sourceFilter.includes(s) ? "bg-primary text-primary-foreground border-primary/50" : "bg-muted text-muted-foreground border-border"
               )}
             >
@@ -118,14 +124,14 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label="Filter by WCAG level" className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterLevel")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allLevels.map((lvl) => (
             <button
               key={lvl}
               onClick={() => toggleFilter(levelFilter, lvl, setLevelFilter)}
               aria-pressed={levelFilter.includes(lvl)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-medium border transition-colors",
+                "px-2 py-1 rounded text-xs font-medium border transition-colors shrink-0",
                 levelFilter.includes(lvl) ? "bg-accent text-accent-foreground border-accent-foreground/30" : "bg-muted text-muted-foreground border-border"
               )}
             >
@@ -134,14 +140,14 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
           ))}
         </div>
 
-        <div role="group" aria-label="Filter by WCAG success criterion" className="flex gap-1 flex-wrap">
+        <div role="group" aria-label={t("table.filterSC")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allScs.map((sc) => (
             <button
               key={sc}
               onClick={() => toggleFilter(scFilter, sc, setScFilter)}
               aria-pressed={scFilter.includes(sc)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-mono border transition-colors",
+                "px-2 py-1 rounded text-xs font-mono border transition-colors shrink-0",
                 scFilter.includes(sc) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground border-border"
               )}
             >
@@ -151,19 +157,16 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
         </div>
 
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-7">
-            <X className="h-3 w-3 mr-1" /> Clear
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-7 self-start sm:self-auto">
+            <X className="h-3 w-3 mr-1" /> {t("table.clear")}
           </Button>
         )}
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Showing {filtered.length} passes
-        {filtered.length !== passes.length && ` (${passes.length} total)`}
-      </p>
+      <p className="text-xs text-muted-foreground">{showingText}</p>
 
       {Object.keys(grouped).length === 0 && (
-        <p className="text-xs text-muted-foreground">No passes match the current filters.</p>
+        <p className="text-xs text-muted-foreground">{t("passes.noMatch")}</p>
       )}
 
       {Object.entries(grouped).map(([source, items]) => {
@@ -171,28 +174,30 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
         const visible = visibleCounts[source] ?? pageSize;
         return (
           <Collapsible key={source} open={isOpen} onOpenChange={() => toggle(source)}>
-            <CollapsibleTrigger className="flex items-center gap-2 w-full p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+            <CollapsibleTrigger className="flex flex-wrap items-center gap-2 w-full p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
               <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
               <span className="text-sm font-medium capitalize">{source}</span>
-              <Badge variant="secondary" className="text-[10px] ml-auto">{items.length} passes</Badge>
+              <Badge variant="secondary" className="text-[10px] ml-auto">
+                {t("passes.badge", { n: items.length })}
+              </Badge>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="rounded-lg border border-border overflow-hidden mt-2">
-                <Table className="min-w-[720px]">
+              <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden mt-2">
+                <Table className="min-w-[680px] sm:min-w-[720px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
                   <TableHeader>
                     <TableRow className="bg-muted/30">
-                      <TableHead className="text-xs">Rule ID</TableHead>
-                      <TableHead className="text-xs">SC</TableHead>
-                      <TableHead className="text-xs">Criterion</TableHead>
-                      <TableHead className="text-xs">Level</TableHead>
-                      <TableHead className="text-xs">Reason</TableHead>
+                      <TableHead className="text-xs">{t("table.ruleId")}</TableHead>
+                      <TableHead className="text-xs">{t("table.sc")}</TableHead>
+                      <TableHead className="text-xs">{t("table.criterion")}</TableHead>
+                      <TableHead className="text-xs">{t("table.level")}</TableHead>
+                      <TableHead className="text-xs">{t("table.reason")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {items.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={5} className="text-xs text-muted-foreground text-center py-8">
-                          No passes are available for this source.
+                          {t("passes.noMatchSource")}
                         </TableCell>
                       </TableRow>
                     )}
@@ -218,7 +223,7 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
               {visible < items.length && (
                 <div className="flex justify-center pt-2">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => showMore(source)}>
-                    Show more ({items.length - visible} remaining)
+                    {t("passes.showMore", { n: items.length - visible })}
                   </Button>
                 </div>
               )}

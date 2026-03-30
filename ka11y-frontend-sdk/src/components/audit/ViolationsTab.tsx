@@ -18,6 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface ViolationsTabProps {
   violations: AuditViolation[];
@@ -39,6 +40,7 @@ const sourceColors: Record<string, string> = {
 };
 
 export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
@@ -93,25 +95,29 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
 
   const hasFilters = search || severityFilter.length || sourceFilter.length || scFilter.length;
 
+  const showingText = filtered.length !== violations.length
+    ? t("violations.showingFiltered", { visible: Math.min(visibleCount, filtered.length), total: filtered.length, all: violations.length })
+    : t("violations.showing", { visible: Math.min(visibleCount, filtered.length), total: filtered.length });
+
   return (
     <div className="p-3 sm:p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
-          placeholder="Search reason or HTML..."
+          placeholder={t("table.searchPlaceholder")}
           value={search}
           onChange={(e) => { setSearch(e.target.value); resetVisibleCount(); }}
           className="w-full sm:w-64 h-8 text-xs"
         />
 
         {/* Severity filters */}
-        <div role="group" aria-label="Filter by severity" className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterSeverity")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allSeverities.map((s) => (
             <button
               key={s}
               onClick={() => toggleFilter(severityFilter, s, setSeverityFilter)}
               aria-pressed={severityFilter.includes(s)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-medium border transition-colors",
+                "px-2 py-1 rounded text-xs font-medium border transition-colors shrink-0",
                 severityFilter.includes(s)
                   ? (severityColors[s] || "bg-primary text-primary-foreground border-primary/50")
                   : "bg-muted text-muted-foreground border-border"
@@ -123,14 +129,14 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
         </div>
 
         {/* Source filters */}
-        <div role="group" aria-label="Filter by source" className="flex flex-wrap gap-1">
+        <div role="group" aria-label={t("table.filterSource")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allSources.map((s) => (
             <button
               key={s}
               onClick={() => toggleFilter(sourceFilter, s, setSourceFilter)}
               aria-pressed={sourceFilter.includes(s)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-medium border transition-colors",
+                "px-2 py-1 rounded text-xs font-medium border transition-colors shrink-0",
                 sourceFilter.includes(s)
                   ? (sourceColors[s] || "bg-primary text-primary-foreground border-primary/50")
                   : "bg-muted text-muted-foreground border-border"
@@ -141,15 +147,15 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
           ))}
         </div>
 
-        {/* WCAG SC filter - show all */}
-        <div role="group" aria-label="Filter by WCAG success criterion" className="flex gap-1 flex-wrap">
+        {/* WCAG SC filter */}
+        <div role="group" aria-label={t("table.filterSC")} className="w-full sm:w-auto flex gap-1 overflow-x-auto pb-1 sm:pb-0 sm:flex-wrap">
           {allScs.map((sc) => (
             <button
               key={sc}
               onClick={() => toggleFilter(scFilter, sc, setScFilter)}
               aria-pressed={scFilter.includes(sc)}
               className={cn(
-                "px-2 py-1 rounded text-xs font-mono border transition-colors",
+                "px-2 py-1 rounded text-xs font-mono border transition-colors shrink-0",
                 scFilter.includes(sc) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground border-border"
               )}
             >
@@ -159,36 +165,33 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
         </div>
 
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-7">
-            <X className="h-3 w-3 mr-1" /> Clear
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-7 self-start sm:self-auto">
+            <X className="h-3 w-3 mr-1" /> {t("table.clear")}
           </Button>
         )}
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Showing {Math.min(visibleCount, filtered.length)} of {filtered.length} violations
-        {filtered.length !== violations.length && ` (${violations.length} total)`}
-      </p>
+      <p className="text-xs text-muted-foreground">{showingText}</p>
 
-      <div className="rounded-lg border border-border overflow-hidden">
-        <Table className="min-w-[960px]">
+      <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden">
+        <Table className="min-w-[840px] sm:min-w-[960px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="text-xs w-20">Severity</TableHead>
-              <TableHead className="text-xs w-16">Source</TableHead>
-              <TableHead className="text-xs w-16">SC</TableHead>
-              <TableHead className="text-xs">Criterion</TableHead>
-              <TableHead className="text-xs w-14">Level</TableHead>
-              <TableHead className="text-xs">Reason</TableHead>
-              <TableHead className="text-xs w-24">Element</TableHead>
-              <TableHead className="text-xs w-16">Fix</TableHead>
+              <TableHead className="text-xs w-20">{t("table.severity")}</TableHead>
+              <TableHead className="text-xs w-16">{t("table.source")}</TableHead>
+              <TableHead className="text-xs w-16">{t("table.sc")}</TableHead>
+              <TableHead className="text-xs">{t("table.criterion")}</TableHead>
+              <TableHead className="text-xs w-14">{t("table.level")}</TableHead>
+              <TableHead className="text-xs">{t("table.reason")}</TableHead>
+              <TableHead className="text-xs w-24">{t("table.element")}</TableHead>
+              <TableHead className="text-xs w-16">{t("table.fix")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={8} className="text-xs text-muted-foreground text-center py-8">
-                  No violations match the current filters.
+                  {t("violations.noMatch")}
                 </TableCell>
               </TableRow>
             )}
@@ -246,7 +249,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       {visibleCount < filtered.length && (
         <div className="flex justify-center pt-2">
           <Button variant="outline" size="sm" className="text-xs" onClick={() => setVisibleCount((n) => n + pageSize)}>
-            Show more ({filtered.length - visibleCount} remaining)
+            {t("violations.showMore", { n: filtered.length - visibleCount })}
           </Button>
         </div>
       )}

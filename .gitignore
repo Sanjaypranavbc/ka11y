@@ -3,8 +3,10 @@
 .idea/
 output
 .ai
-
+output/
+crawled_images/
 # Ignore Claude Files For Good Cause
 .claude
 *.xlsx
 WCAG_Solution_Document.md
+scripts

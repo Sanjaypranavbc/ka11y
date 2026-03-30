@@ -4,10 +4,10 @@ const SC = '3.3.4';
 const RULE_ID = 'custom-error-prevention';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/error-prevention-legal-financial-data';
 
-// Bug fix: expanded financial/legal/destructive patterns for better coverage
-const FINANCIAL_PATTERNS = /\b(payment|checkout|purchase|buy\s+now|credit\s*card|debit\s*card|card\s*number|billing|invoice|subscribe|subscription|order|confirm\s+order|place\s+order|donate|donation|fund|invest|transfer|wire\s+transfer|ach|withdraw|bank\s+account|routing\s+number)\b/i;
-const LEGAL_PATTERNS     = /\b(legal|terms\s*(of\s*(service|use))?|privacy\s*policy|agreement|consent|contract|liability|gdpr|hipaa|sign\s*here|e[- ]?sign|electronic\s*signature)\b/i;
-const DESTRUCTIVE_PATTERNS = /\b(delete\s+(account|data|profile|content)|remove\s+(account|data)|close\s+account|shut\s+down|deactivate|cancel\s+(account|subscription|membership)|unsubscribe|permanently\s+(delete|remove)|irreversible|purge|wipe|terminate)\b/i;
+// Expanded financial/legal/destructive patterns — English + Japanese
+const FINANCIAL_PATTERNS = /\b(payment|checkout|purchase|buy\s+now|credit\s*card|debit\s*card|card\s*number|billing|invoice|subscribe|subscription|order|confirm\s+order|place\s+order|donate|donation|fund|invest|transfer|wire\s+transfer|ach|withdraw|bank\s+account|routing\s+number)\b|購入|決済|お支払い|クレジットカード|デビットカード|カード番号|振込|送金|課金|サブスクリプション|定期購入|寄付|ご注文|注文確認|請求/i;
+const LEGAL_PATTERNS     = /\b(legal|terms\s*(of\s*(service|use))?|privacy\s*policy|agreement|consent|contract|liability|gdpr|hipaa|sign\s*here|e[- ]?sign|electronic\s*signature)\b|利用規約|プライバシーポリシー|個人情報|同意する|契約|署名|規約に同意|電子署名/i;
+const DESTRUCTIVE_PATTERNS = /\b(delete\s+(account|data|profile|content)|remove\s+(account|data)|close\s+account|shut\s+down|deactivate|cancel\s+(account|subscription|membership)|unsubscribe|permanently\s+(delete|remove)|irreversible|purge|wipe|terminate)\b|削除する|退会|アカウント削除|アカウントを削除|解約|キャンセル|データ消去|永久削除|取り消せない|元に戻せない/i;
 
 async function run(page) {
   const data = await page.evaluate((financialSrc, legalSrc, destructiveSrc) => {

@@ -183,9 +183,14 @@ The `axe_would_catch` boolean in each record lets you filter down to novel detec
 | `padding_top/right/bottom/left` | Computed padding from `getComputedStyle` |
 | `is_inline_exception` | `<a>` in inline context (WCAG 2.5.8 exception 1) |
 | `is_ua_controlled_exception` | Native checkbox/radio with `appearance: auto` (exception 4) |
+| `is_offset_exception` | Undersized target has sufficient spacing (exception 5) |
+| `required_offset_x_px` / `required_offset_y_px` | Required clear area around target based on size deficit |
+| `nearest_target_gap_x_px` / `nearest_target_gap_y_px` | Nearest neighboring target gap along each axis |
 
 ### Exception detection
 
 **Exception 1 — Inline**: An `<a>` element is inline when its `display` is `inline` and it is not the sole interactive element on its line. The crawler approximates this by checking `getComputedStyle().display === 'inline'`.
 
 **Exception 4 — UA-controlled**: A `<input type="checkbox">` or `<input type="radio">` where `getComputedStyle().appearance` is `auto` or `checkbox`/`radio` (the browser controls the size).
+
+**Exception 5 — Offset**: For undersized targets, the crawler computes required offset `((24 - width)/2, (24 - height)/2)`, inflates the target bounds by that amount, and marks `is_offset_exception=true` when no neighboring target intersects the inflated box.

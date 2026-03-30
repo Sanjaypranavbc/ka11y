@@ -3,7 +3,7 @@
 const SC = '3.2.2';
 const RULE_ID = 'custom-on-input';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
-const MAX_INPUTS = 15;
+const MAX_INPUTS = 30;
 const SETTLE_MS = 120;
 
 // Safe test values per input type — use syntactically valid values to avoid

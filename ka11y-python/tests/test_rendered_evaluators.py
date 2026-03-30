@@ -280,6 +280,32 @@ class TestHoverFocusContent:
         records = ev_hover.evaluate(interactions)
         assert any(r.status in ("FAILED", "NEEDS_REVIEW") for r in records)
 
+    def test_all_three_checks_true_returns_passed(self):
+        interactions = [HoverInteractionResult(
+            trigger_tag="button", trigger_id="ok",
+            page_url="https://example.com",
+            popup_appeared=True,
+            dismissible_by_escape=True,
+            pointer_can_move_over=True,
+            persists_until_removed=True,
+            certain=True,
+        )]
+        records = ev_hover.evaluate(interactions)
+        assert any(r.status == "PASSED" for r in records)
+
+    def test_unknown_checks_return_needs_review(self):
+        interactions = [HoverInteractionResult(
+            trigger_tag="button", trigger_id="maybe",
+            page_url="https://example.com",
+            popup_appeared=True,
+            dismissible_by_escape=True,
+            pointer_can_move_over=True,
+            persists_until_removed=None,
+            certain=False,
+        )]
+        records = ev_hover.evaluate(interactions)
+        assert any(r.status == "NEEDS_REVIEW" for r in records)
+
 
 # ── WCAG 2.4.11 Focus Not Obscured (Minimum) ─────────────────────────────────
 

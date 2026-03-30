@@ -3,7 +3,7 @@
 const SC = '2.4.7';
 const RULE_ID = 'custom-focus-visible';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-visible';
-const MAX_ELEMENTS = 40;
+const MAX_ELEMENTS = 100;
 // Settle delay: allow CSS transitions and React/Vue re-renders to apply before capturing styles
 const SETTLE_MS = 80;
 

@@ -70,12 +70,22 @@ async function run(page) {
 
     const needsLiveRegions = formCount > 0 || hasSearchResults || hasCartOrCounter || hasNotificationArea;
 
+    // Probe: check whether any live region already has text content at page-load time.
+    // An empty live region (no content) has never been used yet — flag it as a signal
+    // that the live regions may be structural placeholders not wired to actual updates.
+    // Note: live regions that are correctly empty at load and populated on interaction
+    // will appear as "no content", so this is informational, not a definitive fail.
+    const anyLiveRegionHasContent = liveRegions.some(
+      el => (el.textContent || '').trim().length > 0
+    );
+
     return {
       liveRegionCount: liveRegions.length,
       formCount,
       hasAlerts,
       hasPolite,
       needsLiveRegions,
+      anyLiveRegionHasContent,
       dynamicContexts: [
         formCount > 0 && `${formCount} form(s)`,
         hasSearchResults && 'search results',
@@ -85,7 +95,7 @@ async function run(page) {
     };
   });
 
-  const { liveRegionCount, formCount, hasAlerts, hasPolite, needsLiveRegions, dynamicContexts } = data;
+  const { liveRegionCount, formCount, hasAlerts, hasPolite, needsLiveRegions, anyLiveRegionHasContent, dynamicContexts } = data;
 
   // Page has dynamic contexts but no live regions at all → clear fail
   if (needsLiveRegions && liveRegionCount === 0) {
@@ -102,11 +112,16 @@ async function run(page) {
     };
   }
 
-  // Dynamic contexts exist AND live regions exist → needs_review (can't verify coverage statically)
+  // Dynamic contexts exist AND live regions exist → needs_review (can't verify coverage statically).
+  // Add an informational note about whether any live region had text content at page load —
+  // all-empty live regions may be structural placeholders that are never written to.
   if (needsLiveRegions && liveRegionCount > 0) {
+    const contentNote = anyLiveRegionHasContent
+      ? 'At least one live region contains text at page load.'
+      : 'All live regions are empty at page load — confirm they are populated on status updates at runtime.';
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}) alongside dynamic contexts (${dynamicContexts.join(', ')}). Verify live regions are correctly wired to each status update.`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}) alongside dynamic contexts (${dynamicContexts.join(', ')}). ${contentNote} Verify live regions are correctly wired to each status update.`, helpUrl: HELP_URL }],
     };
   }
 

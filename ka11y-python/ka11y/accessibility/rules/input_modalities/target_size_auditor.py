@@ -15,12 +15,11 @@ EXCEPT where:
   4. User agent — the target size is determined by the user agent and not
                   modified by CSS (e.g. native checkbox/radio).
   5. Offset — the target offset (spacing from other targets) is at least
-              (24 − target_width) / 2 or (24 − target_height) / 2 CSS px
-              (not measured here; flagged as needs_manual_offset_check).
+              (24 − target_width) / 2 or (24 − target_height) / 2 CSS px.
 
-This auditor checks exceptions 1 (inline) and 4 (UA-controlled) automatically.
-Elements failing neither exception with rendered size < 24×24 are flagged as
-FAILED.
+This auditor checks exceptions 1 (inline), 4 (UA-controlled), and 5 (offset)
+automatically. Elements failing these exceptions with rendered size < 24×24 are
+flagged as FAILED.
 
 CSV output: audit_target_size_report.csv
 
@@ -29,7 +28,9 @@ CSV columns
   page_url, element_index, tag, role, element_id, input_type, accessible_name,
   rendered_width_px, rendered_height_px,
   padding_top_px, padding_bottom_px, padding_left_px, padding_right_px,
-  is_inline_exception, is_ua_controlled_exception,
+  is_inline_exception, is_ua_controlled_exception, is_offset_exception,
+  required_offset_x_px, required_offset_y_px,
+  nearest_target_gap_x_px, nearest_target_gap_y_px,
   passes_size,
   wcag_2_5_8_status, wcag_2_5_8_violation,
   overall_status,
@@ -47,6 +48,11 @@ from ka11y.crawler.target_size_crawler import TargetSizeData
 # ─────────────────────────────────────────────────────────────────────────────
 
 MIN_PX = 24.0  # WCAG 2.5.8 minimum
+
+
+def _fmt_gap(v: float | None) -> str:
+    """Format nearest-gap values for human-readable violation text."""
+    return "n/a" if v is None else f"{v:.2f}px"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +81,19 @@ def _check_258(item: TargetSizeData) -> Tuple[str, str]:
         return "N/A", (
             "User-agent-controlled exception — native control size not modified "
             "by CSS (WCAG 2.5.8 E4)."
+        )
+
+    if item.is_offset_exception:
+        return (
+            "N/A",
+            (
+                "Offset exception — undersized target has sufficient spacing "
+                f"from nearby targets (required: x≥{item.required_offset_x_px:.2f}px, "
+                f"y≥{item.required_offset_y_px:.2f}px; nearest gaps: "
+                f"x={_fmt_gap(item.nearest_target_gap_x_px)}, "
+                f"y={_fmt_gap(item.nearest_target_gap_y_px)}). "
+                "(WCAG 2.5.8 E5)."
+            ),
         )
 
     # ── Size check ──────────────────────────────────────────────────────────
@@ -129,6 +148,11 @@ class TargetSizeAuditor:
         # Exceptions
         "is_inline_exception",
         "is_ua_controlled_exception",
+        "is_offset_exception",
+        "required_offset_x_px",
+        "required_offset_y_px",
+        "nearest_target_gap_x_px",
+        "nearest_target_gap_y_px",
         # Pre-computed
         "passes_size",
         # WCAG result
@@ -168,6 +192,11 @@ class TargetSizeAuditor:
                 "padding_right_px": item.padding_right_px,
                 "is_inline_exception": item.is_inline_exception,
                 "is_ua_controlled_exception": item.is_ua_controlled_exception,
+                "is_offset_exception": item.is_offset_exception,
+                "required_offset_x_px": item.required_offset_x_px,
+                "required_offset_y_px": item.required_offset_y_px,
+                "nearest_target_gap_x_px": item.nearest_target_gap_x_px,
+                "nearest_target_gap_y_px": item.nearest_target_gap_y_px,
                 "passes_size": item.passes_size,
                 "wcag_2_5_8_status": status,
                 "wcag_2_5_8_violation": violation,

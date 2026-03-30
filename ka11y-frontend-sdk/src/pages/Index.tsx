@@ -8,36 +8,29 @@ import { NeedsReviewTab } from "@/components/audit/NeedsReviewTab";
 import { PassesTab } from "@/components/audit/PassesTab";
 import { ImageVisualisationTab } from "@/components/audit/ImageVisualisationTab";
 import { SettingsTab, ThemePreference } from "@/components/audit/SettingsTab";
+import { WcagRulesTab } from "@/components/audit/WcagRulesTab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabValue, StageInfo } from "@/types/audit";
 import { AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/i18n/LanguageContext";
+import { TranslationKey } from "@/i18n/translations";
 
 const MAX_ROWS_STORAGE_KEY = "ka11y_max_rows";
 const THEME_STORAGE_KEY = "ka11y_theme";
 
-const STAGE_LABELS: Record<string, string> = {
-  axe_core:        "axe-core WCAG scan",
-  image_audit:     "Image alt-text (1.1.1)",
-  form_audit:      "Form fields (3.3.1 / 3.3.2)",
-  label_in_name:   "Label in name (2.5.3)",
-  pause_stop_hide: "Moving content (2.2.2)",
-  target_size:     "Target size (2.5.8)",
-  text_spacing:    "Text spacing (1.4.12)",
-  rendered_layout_audit: "Rendered layout checks",
-};
-
 function StageProgress({ stages, currentStage }: { stages: StageInfo[]; currentStage: string }) {
+  const { t } = useLanguage();
   return (
     <div className="rounded border border-border bg-card p-4 space-y-2.5">
       <p className="text-[9px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
-        Audit Progress
+        {t("progress.title")}
       </p>
       <div className="space-y-1.5">
         {stages.length === 0 ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" aria-hidden="true" />
-            <span>Initialising audit…</span>
+            <span>{t("progress.initialising")}</span>
           </div>
         ) : (
           stages.map((stage) => (
@@ -59,11 +52,11 @@ function StageProgress({ stages, currentStage }: { stages: StageInfo[]; currentS
                   stage.status === "error"     && "text-destructive",
                 )}
               >
-                {STAGE_LABELS[stage.name] ?? stage.name}
+                {t((`stageFull.${stage.name}`) as TranslationKey) || stage.name}
               </span>
               {stage.status === "completed" && stage.findings_count !== undefined && (
                 <span className="text-muted-foreground ml-auto font-mono hidden sm:inline">
-                  {stage.findings_count} findings
+                  {stage.findings_count} {t("progress.findings")}
                 </span>
               )}
               {stage.status === "error" && stage.error && (
@@ -78,7 +71,7 @@ function StageProgress({ stages, currentStage }: { stages: StageInfo[]; currentS
         {currentStage && stages.every((s) => s.status !== "running") && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" aria-hidden="true" />
-            <span className="font-mono">{STAGE_LABELS[currentStage] ?? currentStage}</span>
+            <span className="font-mono">{t((`stageFull.${currentStage}`) as TranslationKey) || currentStage}</span>
           </div>
         )}
       </div>
@@ -87,6 +80,7 @@ function StageProgress({ stages, currentStage }: { stages: StageInfo[]; currentS
 }
 
 const Index = () => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabValue>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [maxRows, setMaxRows] = useState<number>(() => {
@@ -166,8 +160,10 @@ const Index = () => {
         />
 
         <main className="flex-1 overflow-y-auto grid-bg" aria-busy={isLoading} aria-live="polite">
-          {/* ── Loading ────────────────────────────────────────────── */}
-          {isLoading ? (
+          {/* ── WCAG Rules tab is always available regardless of audit state ── */}
+          {activeTab === "wcag-rules" ? (
+            <WcagRulesTab />
+          ) : isLoading ? (
             <div className="p-3 sm:p-5 space-y-3">
               <StageProgress stages={stages} currentStage={currentStage} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -187,9 +183,9 @@ const Index = () => {
             <div className="flex items-center justify-center h-full">
               <div role="alert" className="text-center space-y-3">
                 <AlertTriangle className="h-12 w-12 text-destructive mx-auto" aria-hidden="true" />
-                <h2 className="text-lg font-semibold text-foreground">Audit Failed</h2>
+                <h2 className="text-lg font-semibold text-foreground">{t("state.auditFailed")}</h2>
                 <p className="text-sm text-muted-foreground max-w-md">
-                  {error || "An unknown error occurred."}
+                  {error || t("state.unknownError")}
                 </p>
               </div>
             </div>
@@ -202,7 +198,7 @@ const Index = () => {
                   ka<span className="text-primary">11</span>y
                 </h1>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  Enter a URL in the sidebar and run an audit to see accessibility findings.
+                  {t("state.welcomeHint")}
                 </p>
               </div>
             </div>
@@ -212,7 +208,7 @@ const Index = () => {
             <>
               {warnings && warnings.length > 0 && (
                 <div className="mx-3 sm:mx-5 mt-4 px-3 py-2 rounded border border-serious/30 bg-serious/5 text-xs text-serious font-mono space-y-0.5">
-                  <p className="font-semibold uppercase tracking-wider text-[9px]">Warnings</p>
+                  <p className="font-semibold uppercase tracking-wider text-[9px]">{t("state.warnings")}</p>
                   {warnings.map((w, i) => (
                     <p key={i}>{w}</p>
                   ))}
