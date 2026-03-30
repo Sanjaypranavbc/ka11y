@@ -281,4 +281,50 @@ describe('mapCustomResultsFlat element mapping', () => {
       page_url: 'https://example.com',
     });
   });
+
+  test('needs_review without explicit element infers from reason tag snippet', () => {
+    const findings = mapCustomResultsFlat([
+      {
+        successCriteriaId: '1.2.1',
+        rules: [{
+          ruleId: 'custom-audio-transcript',
+          status: 'incomplete',
+          reason: 'Manual check required for <audio id="podcast-player"> content.',
+        }],
+      },
+    ], 'https://example.com');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].status).toBe('needs_review');
+    expect(findings[0].element).toEqual({
+      html: '<audio id="podcast-player">',
+      element_id: 'podcast-player',
+      tag: 'AUDIO',
+      target: [],
+      page_url: 'https://example.com',
+    });
+  });
+
+  test('needs_review without identifiable tag gets page-level html fallback element', () => {
+    const findings = mapCustomResultsFlat([
+      {
+        successCriteriaId: '2.4.5',
+        rules: [{
+          ruleId: 'custom-multiple-ways',
+          status: 'incomplete',
+          reason: 'Only one navigation mechanism detected; verify multiple ways manually.',
+        }],
+      },
+    ], 'https://example.com');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].status).toBe('needs_review');
+    expect(findings[0].element).toEqual({
+      html: '<html>',
+      element_id: null,
+      tag: 'HTML',
+      target: ['html'],
+      page_url: 'https://example.com',
+    });
+  });
 });

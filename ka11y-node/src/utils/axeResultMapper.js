@@ -544,6 +544,43 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
     };
   }
 
+  function inferElementsFromReason(reason) {
+    if (typeof reason !== 'string' || !reason) return [];
+    const TAG_RE = /<([a-zA-Z][\w:-]*)([^>]*)>/g;
+    const inferred = [];
+    const seen = new Set();
+    let m;
+    while ((m = TAG_RE.exec(reason)) !== null) {
+      const full = m[0].slice(0, 600);
+      const tag = m[1] ? m[1].toUpperCase() : null;
+      const attrs = m[2] || '';
+      const idMatch = attrs.match(/\bid=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+      const elementId = (idMatch && (idMatch[1] || idMatch[2] || idMatch[3])) || null;
+      const key = `${tag || ''}|${elementId || ''}|${full}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      inferred.push({
+        html: full,
+        element_id: elementId,
+        tag,
+        target: [],
+        page_url: pageUrl,
+      });
+      if (inferred.length >= 3) break;
+    }
+    return inferred;
+  }
+
+  function fallbackPageElement() {
+    return {
+      html: '<html>',
+      element_id: null,
+      tag: 'HTML',
+      target: ['html'],
+      page_url: pageUrl,
+    };
+  }
+
   for (const result of (customResults || [])) {
     const sc = _normalizeCriterionId(
       (result && typeof result.successCriteriaId === 'string')
@@ -565,7 +602,16 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
         .map(normalizeElement)
         .filter(e => e !== null);
       const fallbackElement = normalizeElement(rule && rule.element ? rule.element : null);
-      const elementList = normalizedElements.length > 0 ? normalizedElements : [fallbackElement];
+      const inferredFromReason = inferElementsFromReason((rule && rule.reason) || '');
+
+      let elementList = normalizedElements.length > 0
+        ? normalizedElements
+        : (fallbackElement ? [fallbackElement] : inferredFromReason);
+
+      if (elementList.length === 0 && status === 'needs_review') {
+        elementList = [fallbackPageElement()];
+      }
+      if (elementList.length === 0) elementList = [null];
 
       for (const element of elementList) {
         findings.push({

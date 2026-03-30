@@ -550,22 +550,26 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
     return best >= 0.4;
   }
 
-  function areClearlyDifferentPurpose(fields) {
+function areClearlyDifferentPurpose(fields) {
     if (fields.length < 2) return false;
 
-    const explicitDistinct = fields.some((f) => f.distinctPurposeHint);
-    if (!explicitDistinct) return false;
+    const combinedText = fields.map(f =>
+      (f.context + ' ' + f.sectionText + ' ' + f.formText).toLowerCase()
+    );
 
-    const processTypes = unique(fields.map((f) => f.processType).filter(Boolean));
-    const purposeSignatures = unique(fields.map((f) => f.purposeSignature).filter(Boolean));
+    const hasSubscribe = combinedText.some(t =>
+      /newsletter|subscribe|get the fresh news|subscription/i.test(t)
+    );
 
-    if (processTypes.length > 1) return true;
-    if (purposeSignatures.length > 1 && purposeSignatures.some((p) => /subscribe/.test(p)) && purposeSignatures.some((p) => /contact|checkout|account|application|booking/.test(p))) {
-      return true;
-    }
+    const hasContact = combinedText.some(t =>
+      /contact|enquiry|support|get in touch/i.test(t)
+    );
+
+    // 🔥 STRONG override
+    if (hasSubscribe && hasContact) return true;
 
     return false;
-  }
+}
 
   function getStrongestPairwiseEvidence(fields) {
     let samePurposePairs = 0;
