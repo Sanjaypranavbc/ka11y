@@ -3,7 +3,14 @@
 const { run } = require('../../src/custom-checks/redundant-entry.check');
 
 function makePage(data) {
-  return { evaluate: jest.fn().mockResolvedValue(data) };
+  return {
+    evaluate: jest.fn().mockResolvedValue(data),
+    waitForLoadState: jest.fn().mockResolvedValue(undefined),
+    waitForNetworkIdle: jest.fn().mockResolvedValue(undefined),
+    waitForSelector: jest.fn().mockResolvedValue(undefined),
+    mainFrame: jest.fn(() => ({ _mockMain: true })),
+    frames: jest.fn(() => []),
+  };
 }
 
 describe('redundant-entry.check (WCAG 3.3.7)', () => {
@@ -64,6 +71,12 @@ describe('redundant-entry.check (WCAG 3.3.7)', () => {
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].impact).toBe('moderate');
     expect(result.rules[0].reason).toContain('high-confidence redundant-entry issue');
+    expect(Array.isArray(result.rules[0].elements)).toBe(true);
+    expect(result.rules[0].elements[0]).toMatchObject({
+      selector: 'input[name="email"]',
+      tagName: 'INPUT',
+      html: '<input name="email">',
+    });
   });
 
   test('returns incomplete when repeated required fields need manual verification', async () => {
@@ -91,6 +104,19 @@ describe('redundant-entry.check (WCAG 3.3.7)', () => {
     expect(result.rules[0].status).toBe('incomplete');
     expect(result.rules[0].impact).toBe('moderate');
     expect(result.rules[0].reason).toContain('manual verification');
+    expect(Array.isArray(result.rules[0].elements)).toBe(true);
+    expect(result.rules[0].elements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        selector: 'input[name="zip"]',
+        tagName: 'INPUT',
+        html: '<input name="zip">',
+      }),
+      expect.objectContaining({
+        selector: 'input[name="postal_code"]',
+        tagName: 'INPUT',
+        html: '<input name="postal_code">',
+      }),
+    ]));
   });
 
   test('passes when repeated fields have reuse or prefill mechanisms', async () => {

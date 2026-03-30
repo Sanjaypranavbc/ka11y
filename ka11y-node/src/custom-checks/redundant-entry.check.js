@@ -109,6 +109,64 @@ function clampString(s, max = 500) {
   return String(s || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+function _selectorToElement(selector) {
+  const sel = clampString(selector, 200);
+  if (!sel) return null;
+
+  const tagMatch = sel.match(/^([a-z][\w-]*)/i);
+  const tag = tagMatch ? tagMatch[1].toLowerCase() : null;
+
+  const idMatch = sel.match(/#([a-zA-Z][\w:-]*)/);
+  const id = idMatch ? idMatch[1] : null;
+
+  const nameMatch = sel.match(/\[name=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i);
+  const name = nameMatch ? (nameMatch[1] || nameMatch[2] || nameMatch[3]) : null;
+
+  const ariaLabelMatch = sel.match(/\[aria-label=(?:"([^"]+)"|'([^']+)'|([^\]]+))\]/i);
+  const ariaLabel = ariaLabelMatch
+    ? (ariaLabelMatch[1] || ariaLabelMatch[2] || ariaLabelMatch[3])
+    : null;
+
+  const attrs = [];
+  if (id) attrs.push(`id="${id}"`);
+  if (name) attrs.push(`name="${name}"`);
+  if (ariaLabel) attrs.push(`aria-label="${ariaLabel}"`);
+
+  const html = tag
+    ? `<${tag}${attrs.length ? ` ${attrs.join(' ')}` : ''}>`
+    : sel;
+
+  return {
+    selector: sel,
+    tagName: tag ? tag.toUpperCase() : null,
+    id,
+    html: clampString(html, 200),
+  };
+}
+
+function _elementsFromGroups(groups, max = 8) {
+  const out = [];
+  const seen = new Set();
+
+  for (const group of (groups || [])) {
+    const selectors = [
+      ...((group && group.sampleSelectors) || []),
+      ...((group && group.allSelectors) || []),
+    ];
+    for (const selector of selectors) {
+      const element = _selectorToElement(selector);
+      if (!element) continue;
+      const dedupeKey = `${element.selector}|${element.tagName || ''}|${element.id || ''}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      out.push(element);
+      if (out.length >= max) return out;
+    }
+  }
+
+  return out;
+}
+
 function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
   const personalTokenSet = new Set(tokens);
   const confirmRe = new RegExp(confirmSrc, 'i');
@@ -785,7 +843,7 @@ async function run(page) {
 
   const data = mergeFrameData(mainData, frameResults.filter(Boolean));
 
-  function buildResult(status, impact, reason, extraDebug = {}) {
+  function buildResult(status, impact, reason, extraDebug = {}, elements = []) {
     return {
       successCriteriaId: SC,
       rules: [{
@@ -795,6 +853,7 @@ async function run(page) {
         status,
         reason,
         helpUrl: HELP_URL,
+        ...(elements.length > 0 ? { elements } : {}),
       }],
       debug: {
         formCount: data.formCount,
@@ -823,19 +882,25 @@ async function run(page) {
 
   if (data.highConfidenceGroups.length > 0) {
     const sample = summarizeGroups(data.highConfidenceGroups);
+    const elements = _elementsFromGroups(data.highConfidenceGroups);
     return buildResult(
       'fail',
       'moderate',
-      `${data.highConfidenceGroups.length} high-confidence redundant-entry issue(s) detected: required personal data appears to be entered again with no detectable reuse/prefill mechanism. Examples: ${sample}.`
+      `${data.highConfidenceGroups.length} high-confidence redundant-entry issue(s) detected: required personal data appears to be entered again with no detectable reuse/prefill mechanism. Examples: ${sample}.`,
+      {},
+      elements
     );
   }
 
   if (data.reviewGroups.length > 0) {
     const sample = summarizeGroups(data.reviewGroups);
+    const elements = _elementsFromGroups(data.reviewGroups);
     return buildResult(
       'incomplete',
       'moderate',
-      `${data.reviewGroups.length} repeated required personal-data group(s) detected that need manual verification for SC 3.3.7. Confirm whether previously entered values are auto-populated or selectable in the real process flow. Examples: ${sample}.`
+      `${data.reviewGroups.length} repeated required personal-data group(s) detected that need manual verification for SC 3.3.7. Confirm whether previously entered values are auto-populated or selectable in the real process flow. Examples: ${sample}.`,
+      {},
+      elements
     );
   }
 
