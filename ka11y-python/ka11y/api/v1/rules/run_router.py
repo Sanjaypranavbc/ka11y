@@ -46,7 +46,6 @@ def create_rule_handler(rule_id: str):
 
         # Build CombinedRequest with all flags False except the ones for this rule
         # We use a dict comprehension to set all run_* flags to False
-        # CombinedRequest schema might have other fields, we only care about run_* components.
         all_fields = CombinedRequest.model_fields if hasattr(CombinedRequest, "model_fields") else CombinedRequest.__fields__
         flags = {k: False for k in all_fields if k.startswith("run_")}
         flags.update(RULE_FLAGS.get(rule_id, {}))
