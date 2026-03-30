@@ -582,7 +582,7 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
     grouped.get(field.key).push(field);
   }
 
-  function areLikelySamePurpose(fields) {
+function areLikelySamePurpose(fields) {
     if (fields.length < 2) return false;
 
     const signatures = fields.map((f) => f.purposeSignature).filter(Boolean);
@@ -605,8 +605,10 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
       }
     }
 
-    return best >= 0.4;
-  }
+    // Raise similarity floor to reduce false positives between adjacent but
+    // distinct form intents (e.g., subscribe vs contact, quote vs support).
+    return best >= 0.5;
+}
 
 function areClearlyDifferentPurpose(fields) {
     if (fields.length < 2) return false;
@@ -629,6 +631,28 @@ function areClearlyDifferentPurpose(fields) {
     return false;
 }
 
+function hasStrongSamePurposeEvidence(fields, pairwiseEvidence) {
+    if (fields.length < 2) return false;
+
+    const signatures = fields.map((f) => f.purposeSignature).filter(Boolean);
+    const sigCounts = new Map();
+    for (const sig of signatures) {
+      sigCounts.set(sig, (sigCounts.get(sig) || 0) + 1);
+    }
+    const repeatedSignature = Math.max(0, ...Array.from(sigCounts.values())) >= 2;
+    if (repeatedSignature) return true;
+
+    // No repeated signature found — require stronger pairwise support.
+    // This reduces manual-review noise when fields share generic words but
+    // differ in concrete process intent.
+    const samePairs = pairwiseEvidence.samePurposePairs || 0;
+    const distinctPairs = pairwiseEvidence.distinctPurposePairs || 0;
+    const pairCount = pairwiseEvidence.pairCount || 0;
+    if (pairCount === 0) return false;
+
+    return samePairs >= 2 && samePairs >= distinctPairs + 1;
+}
+
   function getStrongestPairwiseEvidence(fields) {
     let samePurposePairs = 0;
     let distinctPurposePairs = 0;
@@ -648,7 +672,9 @@ function areClearlyDifferentPurpose(fields) {
         const sameProcess = a.processType && b.processType && a.processType === b.processType;
         const differentProcess = a.processType && b.processType && a.processType !== b.processType;
 
-        if (sameSignature || (sameProcess && similarity >= 0.35) || similarity >= 0.5) {
+        // Tightened thresholds to cut false positives from loosely similar
+        // field labels that are actually distinct intents.
+        if (sameSignature || (sameProcess && similarity >= 0.45) || similarity >= 0.6) {
           samePurposePairs++;
         } else if (differentProcess && similarity < 0.25) {
           distinctPurposePairs++;
@@ -691,10 +717,13 @@ function areClearlyDifferentPurpose(fields) {
     const sameProcessLike = unique(actionable.map((f) => f.processType).filter(Boolean)).length <= 1
       || pairwiseEvidence.samePurposePairs > pairwiseEvidence.distinctPurposePairs;
 
+    const strongSamePurpose = hasStrongSamePurposeEvidence(actionable, pairwiseEvidence);
+
     const highConfidence = (
       actionable.length >= 2 &&
       requiredCount >= 2 &&
       samePurpose &&
+      strongSamePurpose &&
       sameProcessLike &&
       !clearlyDifferentPurpose &&
       !hasPrefilledRepeat &&
@@ -711,6 +740,7 @@ function areClearlyDifferentPurpose(fields) {
       !highConfidence &&
       !clearlyMitigated &&
       samePurpose &&
+      strongSamePurpose &&
       !clearlyDifferentPurpose;
 
     repeatedGroups.push({
@@ -724,6 +754,7 @@ function areClearlyDifferentPurpose(fields) {
       highConfidence,
       needsReview,
       samePurpose,
+      strongSamePurpose,
       clearlyDifferentPurpose,
       samePurposePairs: pairwiseEvidence.samePurposePairs,
       distinctPurposePairs: pairwiseEvidence.distinctPurposePairs,
@@ -787,6 +818,7 @@ function mergeFrameData(main, frameDataList) {
         existing.highConfidence =
           existing.requiredCount >= 2 &&
           existing.samePurpose &&
+          existing.strongSamePurpose &&
           sameProcessLike &&
           !existing.clearlyDifferentPurpose &&
           !existing.hasPrefilledRepeat &&
@@ -802,6 +834,7 @@ function mergeFrameData(main, frameDataList) {
           !existing.highConfidence &&
           !clearlyMitigated &&
           existing.samePurpose &&
+          existing.strongSamePurpose &&
           !existing.clearlyDifferentPurpose;
       } else {
         merged.repeatedGroups.push({ ...fg });
