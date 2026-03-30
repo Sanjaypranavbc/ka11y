@@ -7,7 +7,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatCriterionId, formatCriterionName, formatLevel } from "@/lib/audit-format";
+import {
+  formatCriterionId,
+  formatCriterionName,
+  formatElementSnippet,
+  formatElementTag,
+  formatLevel,
+} from "@/lib/audit-format";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLanguage } from "@/i18n/LanguageContext";
 
@@ -56,7 +62,10 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
         p.rule_id.toLowerCase().includes(q) ||
         (p.wcag_sc || "").toLowerCase().includes(q) ||
         (p.criterion_name || "").toLowerCase().includes(q) ||
-        p.reason.toLowerCase().includes(q)
+        p.reason.toLowerCase().includes(q) ||
+        (p.element_html || "").toLowerCase().includes(q) ||
+        (p.element_tag || "").toLowerCase().includes(q) ||
+        (p.element_id || "").toLowerCase().includes(q)
       );
     });
   }, [passes, search, sourceFilter, levelFilter, scFilter]);
@@ -183,20 +192,22 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden mt-2">
-                <Table className="min-w-[680px] sm:min-w-[720px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
+                <Table className="min-w-[980px] sm:min-w-[1120px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
                   <TableHeader>
                     <TableRow className="bg-muted/30">
                       <TableHead className="text-xs">{t("table.ruleId")}</TableHead>
                       <TableHead className="text-xs">{t("table.sc")}</TableHead>
                       <TableHead className="text-xs">{t("table.criterion")}</TableHead>
                       <TableHead className="text-xs">{t("table.level")}</TableHead>
+                      <TableHead className="text-xs">{t("table.tag")}</TableHead>
+                      <TableHead className="text-xs">{t("table.element")}</TableHead>
                       <TableHead className="text-xs">{t("table.reason")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {items.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-xs text-muted-foreground text-center py-8">
+                        <TableCell colSpan={7} className="text-xs text-muted-foreground text-center py-8">
                           {t("passes.noMatchSource")}
                         </TableCell>
                       </TableRow>
@@ -207,6 +218,12 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                         <TableCell className="font-mono text-xs">{formatCriterionId(p.wcag_sc)}</TableCell>
                         <TableCell className="text-xs">{formatCriterionName(p.criterion_name, p.wcag_sc)}</TableCell>
                         <TableCell><Badge variant="outline" className="text-[10px]">{formatLevel(p.level)}</Badge></TableCell>
+                        <TableCell className="font-mono text-xs">{formatElementTag(p.element_tag)}</TableCell>
+                        <TableCell>
+                          <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block max-w-[220px]">
+                            {formatElementSnippet(p.element_html)}
+                          </code>
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-xs">
                           <Tooltip>
                             <TooltipTrigger asChild>

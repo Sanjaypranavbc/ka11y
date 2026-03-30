@@ -49,6 +49,26 @@ def _make_finding(
     _lang = _lang_ctx.get()
     wcag_names = get_wcag_names(_lang)
     suggested_fixes = get_suggested_fixes(_lang)
+    has_element_data = bool((element_html or "").strip() or element_id or element_tag)
+    if is_pass:
+        element = (
+            {
+                "html": element_html[:600],
+                "element_id": element_id,
+                "tag": element_tag,
+                "page_url": page_url,
+            }
+            if has_element_data
+            else None
+        )
+    else:
+        element = {
+            "html": element_html[:600],
+            "element_id": element_id,
+            "tag": element_tag,
+            "page_url": page_url,
+        }
+
     return {
         "source": source,
         "rule_id": rule_id,
@@ -60,16 +80,7 @@ def _make_finding(
         "reason": reason,
         "suggested_fix": None if is_pass else suggested_fixes.get(wcag_sc),
         "help_url": None,
-        "element": (
-            None
-            if is_pass
-            else {
-                "html": element_html[:600],
-                "element_id": element_id,
-                "tag": element_tag,
-                "page_url": page_url,
-            }
-        ),
+        "element": element,
     }
 
 
@@ -276,6 +287,9 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason=reason or "Image has adequate alt text.",
                     severity=None,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -323,6 +337,9 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     reason=reason
                     or "Functional image has a meaningful accessible name.",
                     severity=None,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -437,6 +454,9 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                             f"Ratio {ratio_str} (fg {fg_hex} on bg {bg_hex})."
                         ),
                         severity=None,
+                        element_html=element_html,
+                        element_id=result.filename,
+                        element_tag="img",
                         page_url=page_url,
                     )
                 )
@@ -548,6 +568,9 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
                             f"Ratio {ratio_str} (fg {fg_hex} on bg {bg_hex})."
                         ),
                         severity=None,
+                        element_html=element_html,
+                        element_id=result.filename,
+                        element_tag="img",
                         page_url=page_url,
                     )
                 )
@@ -596,6 +619,9 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     reason=reason
                     or "Image does not contain text (or logo exception applies).",
                     severity=None,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -661,6 +687,9 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     status="pass",
                     reason=reason or "UI component meets 3:1 contrast ratio.",
                     severity=None,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -712,6 +741,9 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                         status="pass",
                         reason=f"Form field meets WCAG {sc}.",
                         severity=None,
+                        element_html=html,
+                        element_id=eid,
+                        element_tag=tag,
                         page_url=page_url,
                     )
                 )
@@ -749,6 +781,9 @@ def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason="Accessible name contains the visible label.",
                     severity=None,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
                     page_url=page_url,
                 )
             )
@@ -784,6 +819,9 @@ def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason="Moving content has a pause/stop mechanism or exception applies.",
                     severity=None,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
                     page_url=page_url,
                 )
             )
@@ -823,6 +861,9 @@ def _ts_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason=f"Target size {w:.0f}×{h:.0f} px meets the 24×24 px minimum.",
                     severity=None,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
                     page_url=page_url,
                 )
             )
@@ -888,6 +929,9 @@ def _rendered_rule_to_findings(
                     status="pass",
                     reason=pass_reason,
                     severity=None,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
                     page_url=r.get("page_url") or page_url,
                 )
             )
@@ -981,6 +1025,9 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     status="pass",
                     reason="No fixed-height/overflow-hidden clipping risk detected.",
                     severity=None,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
                     page_url=r.get("page_url") or page_url,
                 )
             )

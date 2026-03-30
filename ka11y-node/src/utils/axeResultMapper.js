@@ -367,12 +367,27 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
     return fallback || '';
   }
 
+  function buildElement(node) {
+    const html = (node && node.html ? node.html : '').slice(0, 600);
+    const target = Array.isArray(node && node.target) ? node.target : [];
+    const elementId = (node && node.element_id) || extractIdFromTarget(target) || null;
+    const tag = extractTag(html);
+
+    if (!html && !elementId && target.length === 0 && !tag) return null;
+    return {
+      html,
+      element_id: elementId,
+      tag,
+      target,
+      page_url: pageUrl,
+    };
+  }
+
   // ── violations → one finding per node ────────────────────────────────────
   for (const rule of axeResults.violations) {
     const sc  = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
     const sev = IMPACT_TO_SEVERITY[rule.impact] || null;
     for (const node of (rule.nodes || [])) {
-      const html = (node.html || '').slice(0, 600);
       findings.push({
         source:         'axe',
         rule_id:        rule.id,
@@ -384,13 +399,7 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
         reason:         cleanReason(node.failureSummary, rule.help),
         suggested_fix:  _suggestedFix(sc, rule.id, lang),
         help_url:       rule.helpUrl,
-        element: {
-          html:       html,
-          element_id: node.element_id || extractIdFromTarget(node.target) || null,
-          tag:        extractTag(html),
-          target:     node.target || [],
-          page_url:   pageUrl,
-        },
+        element:        buildElement(node),
       });
     }
   }
@@ -400,7 +409,6 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
     const sc  = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
     const sev = IMPACT_TO_SEVERITY[rule.impact] || null;
     for (const node of (rule.nodes || [])) {
-      const html = (node.html || '').slice(0, 600);
       findings.push({
         source:         'axe',
         rule_id:        rule.id,
@@ -412,33 +420,47 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
         reason:         cleanReason(node.failureSummary, rule.help),
         suggested_fix:  _suggestedFix(sc, rule.id, lang),
         help_url:       rule.helpUrl,
-        element: {
-          html:       html,
-          element_id: node.element_id || extractIdFromTarget(node.target) || null,
-          tag:        extractTag(html),
-          target:     node.target || [],
-          page_url:   pageUrl,
-        },
+        element:        buildElement(node),
       });
     }
   }
 
-  // ── passes → one finding per rule (not per element — too verbose) ─────────
+  // ── passes → one finding per passing node (or one rule-level fallback) ─────
   for (const rule of axeResults.passes) {
     const sc = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
-    findings.push({
-      source:         'axe',
-      rule_id:        rule.id,
-      wcag_sc:        sc,
-      criterion_name: _criterionName(sc, rule.id, rule.description || null),
-      level:          _criterionLevel(sc),
-      severity:       null,
-      status:         'pass',
-      reason:         rule.help,
-      suggested_fix:  null,
-      help_url:       rule.helpUrl,
-      element:        null,
-    });
+    const nodes = Array.isArray(rule.nodes) ? rule.nodes : [];
+    if (nodes.length === 0) {
+      findings.push({
+        source:         'axe',
+        rule_id:        rule.id,
+        wcag_sc:        sc,
+        criterion_name: _criterionName(sc, rule.id, rule.description || null),
+        level:          _criterionLevel(sc),
+        severity:       null,
+        status:         'pass',
+        reason:         rule.help,
+        suggested_fix:  null,
+        help_url:       rule.helpUrl,
+        element:        null,
+      });
+      continue;
+    }
+
+    for (const node of nodes) {
+      findings.push({
+        source:         'axe',
+        rule_id:        rule.id,
+        wcag_sc:        sc,
+        criterion_name: _criterionName(sc, rule.id, rule.description || null),
+        level:          _criterionLevel(sc),
+        severity:       null,
+        status:         'pass',
+        reason:         rule.help,
+        suggested_fix:  null,
+        help_url:       rule.helpUrl,
+        element:        buildElement(node),
+      });
+    }
   }
 
   // Sort: fail → needs_review → pass
@@ -487,6 +509,41 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
     manual_review: 'needs_review',
   };
 
+  function extractIdFromTarget(target) {
+    if (!Array.isArray(target) || target.length === 0) return null;
+    const sel = target[0];
+    if (typeof sel !== 'string') return null;
+    const m = sel.match(/#([\w-]+)/);
+    return m ? m[1] : null;
+  }
+
+  function extractTag(html) {
+    if (!html) return null;
+    const m = html.match(/^<(\w+)/);
+    return m ? m[1].toUpperCase() : null;
+  }
+
+  function normalizeElement(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const html = typeof raw.html === 'string'
+      ? raw.html.slice(0, 600)
+      : (typeof raw.outerHTML === 'string' ? raw.outerHTML.slice(0, 600) : '');
+    const target = Array.isArray(raw.target)
+      ? raw.target
+      : (typeof raw.selector === 'string' ? [raw.selector] : []);
+    const elementId = raw.element_id || raw.id || extractIdFromTarget(target) || null;
+    const tag = raw.tag || raw.tagName || extractTag(html);
+
+    if (!html && !elementId && target.length === 0 && !tag) return null;
+    return {
+      html,
+      element_id: elementId,
+      tag: typeof tag === 'string' ? tag : null,
+      target,
+      page_url: pageUrl,
+    };
+  }
+
   for (const result of (customResults || [])) {
     const sc = _normalizeCriterionId(
       (result && typeof result.successCriteriaId === 'string')
@@ -503,20 +560,28 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
         : 'incomplete';
       const status = STATUS_MAP[rawStatus] || 'needs_review';
       const impact = rule && rule.impact ? rule.impact : null;
+      const explicitElements = Array.isArray(rule && rule.elements) ? rule.elements : [];
+      const normalizedElements = explicitElements
+        .map(normalizeElement)
+        .filter(e => e !== null);
+      const fallbackElement = normalizeElement(rule && rule.element ? rule.element : null);
+      const elementList = normalizedElements.length > 0 ? normalizedElements : [fallbackElement];
 
-      findings.push({
-        source:         'custom',
-        rule_id:        (rule && rule.ruleId) || 'custom-unknown-rule',
-        wcag_sc:        sc,
-        criterion_name: _criterionName(sc, null, (rule && rule.description) || null),
-        level:          _criterionLevel(sc),
-        severity:       status === 'pass' ? null : (impact ? (IMPACT_TO_SEVERITY[impact] || null) : null),
-        status:         status,
-        reason:         (rule && rule.reason) || (rule && rule.description) || '',
-        suggested_fix:  status === 'pass' ? null : _suggestedFix(sc, null, lang),
-        help_url:       (rule && rule.helpUrl) || null,
-        element:        null,
-      });
+      for (const element of elementList) {
+        findings.push({
+          source:         'custom',
+          rule_id:        (rule && rule.ruleId) || 'custom-unknown-rule',
+          wcag_sc:        sc,
+          criterion_name: _criterionName(sc, null, (rule && rule.description) || null),
+          level:          _criterionLevel(sc),
+          severity:       status === 'pass' ? null : (impact ? (IMPACT_TO_SEVERITY[impact] || null) : null),
+          status:         status,
+          reason:         (rule && rule.reason) || (rule && rule.description) || '',
+          suggested_fix:  status === 'pass' ? null : _suggestedFix(sc, null, lang),
+          help_url:       (rule && rule.helpUrl) || null,
+          element:        element || null,
+        });
+      }
     }
   }
 

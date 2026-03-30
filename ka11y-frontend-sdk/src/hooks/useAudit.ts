@@ -5,7 +5,12 @@ import { emptyAuditResult } from "@/data/sampleData";
 // Backend returns element HTML nested as `element.html`; flatten it to `element_html` for the UI.
 function flattenFinding(f: Record<string, unknown>) {
   const element = f.element as Record<string, unknown> | null | undefined;
-  return { ...f, element_html: (element?.html as string) || "" };
+  return {
+    ...f,
+    element_html: (element?.html as string) || "",
+    element_tag: typeof element?.tag === "string" ? (element.tag as string) : null,
+    element_id: typeof element?.element_id === "string" ? (element.element_id as string) : null,
+  };
 }
 
 function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): AuditResult {
@@ -25,7 +30,7 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
     passes_count: (report.passes as unknown[])?.length || 0,
     violations: rawViolations.map(flattenFinding) as AuditResult["violations"],
     needs_review: rawNeedsReview.map(flattenFinding) as AuditResult["needs_review"],
-    passes: (report.passes as AuditResult["passes"]) || [],
+    passes: (((report.passes as Record<string, unknown>[]) || []).map(flattenFinding) as AuditResult["passes"]) || [],
     warnings: (report.warnings as string[]) || (pollData.warnings as string[]) || [],
     contrast_report: (report.contrast_report as ContrastReport) ?? null,
   };

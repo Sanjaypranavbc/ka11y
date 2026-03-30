@@ -22,3 +22,7 @@ export function formatLevel(value: string | null | undefined): string {
 export function formatElementSnippet(value: string | null | undefined): string {
   return value && value.trim() ? value : "No element snippet available";
 }
+
+export function formatElementTag(value: string | null | undefined): string {
+  return value && value.trim() ? value.toLowerCase() : "—";
+}

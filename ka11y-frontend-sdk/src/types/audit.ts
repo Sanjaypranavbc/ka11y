@@ -1,6 +1,12 @@
 export type AuditSource = "axe" | "python" | "custom" | "unknown" | (string & {});
 
-export interface AuditViolation {
+interface AuditElementInfo {
+  element_html: string;
+  element_tag?: string | null;
+  element_id?: string | null;
+}
+
+export interface AuditViolation extends AuditElementInfo {
   rule_id: string;
   wcag_sc: string | null;
   criterion_name: string | null;
@@ -8,12 +14,11 @@ export interface AuditViolation {
   severity: "critical" | "high" | "medium" | "low" | null;
   source: AuditSource;
   reason: string;
-  element_html: string;
   suggested_fix: string | null;
   help_url?: string | null;
 }
 
-export interface AuditNeedsReview {
+export interface AuditNeedsReview extends AuditElementInfo {
   rule_id: string;
   wcag_sc: string | null;
   criterion_name: string | null;
@@ -21,7 +26,6 @@ export interface AuditNeedsReview {
   severity: "critical" | "high" | "medium" | "low" | null;
   source: AuditSource;
   reason: string;
-  element_html: string;
   suggested_fix: string | null;
   help_url?: string | null;
 }
@@ -66,13 +70,14 @@ export interface ContrastReport {
   images: ContrastImageDetail[];
 }
 
-export interface AuditPass {
+export interface AuditPass extends AuditElementInfo {
   rule_id: string;
   wcag_sc: string | null;
   criterion_name: string | null;
   level: "A" | "AA" | "AAA" | null;
   source: AuditSource;
   reason: string;
+  help_url?: string | null;
 }
 
 export interface StageInfo {

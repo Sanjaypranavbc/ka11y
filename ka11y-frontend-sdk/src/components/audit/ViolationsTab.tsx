@@ -11,6 +11,7 @@ import {
   formatCriterionId,
   formatCriterionName,
   formatElementSnippet,
+  formatElementTag,
   formatLevel,
 } from "@/lib/audit-format";
 import {
@@ -68,7 +69,12 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       if (scFilter.length && !scFilter.includes(v.wcag_sc)) return false;
       if (search) {
         const q = search.toLowerCase();
-        return v.reason.toLowerCase().includes(q) || (v.element_html || '').toLowerCase().includes(q);
+        return (
+          v.reason.toLowerCase().includes(q) ||
+          (v.element_html || "").toLowerCase().includes(q) ||
+          (v.rule_id || "").toLowerCase().includes(q) ||
+          (v.element_tag || "").toLowerCase().includes(q)
+        );
       }
       return true;
     });
@@ -174,14 +180,16 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       <p className="text-xs text-muted-foreground">{showingText}</p>
 
       <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden">
-        <Table className="min-w-[840px] sm:min-w-[960px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
+        <Table className="min-w-[980px] sm:min-w-[1120px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="text-xs w-20">{t("table.severity")}</TableHead>
               <TableHead className="text-xs w-16">{t("table.source")}</TableHead>
+              <TableHead className="text-xs w-24">{t("table.ruleId")}</TableHead>
               <TableHead className="text-xs w-16">{t("table.sc")}</TableHead>
               <TableHead className="text-xs">{t("table.criterion")}</TableHead>
               <TableHead className="text-xs w-14">{t("table.level")}</TableHead>
+              <TableHead className="text-xs w-14">{t("table.tag")}</TableHead>
               <TableHead className="text-xs">{t("table.reason")}</TableHead>
               <TableHead className="text-xs w-24">{t("table.element")}</TableHead>
               <TableHead className="text-xs w-16">{t("table.fix")}</TableHead>
@@ -190,7 +198,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-xs text-muted-foreground text-center py-8">
+                <TableCell colSpan={10} className="text-xs text-muted-foreground text-center py-8">
                   {t("violations.noMatch")}
                 </TableCell>
               </TableRow>
@@ -215,11 +223,13 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                     {v.source}
                   </Badge>
                 </TableCell>
+                <TableCell className="font-mono text-xs">{v.rule_id}</TableCell>
                 <TableCell className="font-mono text-xs">{formatCriterionId(v.wcag_sc)}</TableCell>
                 <TableCell className="text-xs">{formatCriterionName(v.criterion_name, v.wcag_sc)}</TableCell>
                 <TableCell>
                   <Badge variant={v.level === "A" ? "default" : "outline"} className="text-[10px]">{formatLevel(v.level)}</Badge>
                 </TableCell>
+                <TableCell className="font-mono text-xs">{formatElementTag(v.element_tag)}</TableCell>
                 <TableCell>
                   <Tooltip>
                     <TooltipTrigger asChild>

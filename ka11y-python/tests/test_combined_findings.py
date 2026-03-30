@@ -8,6 +8,7 @@ from ka11y.api.v1.combined import (
     _contrast_enhanced_to_findings,
     _contrast_to_findings,
     _crawler_text_spacing_to_findings,
+    _make_finding,
     _name_role_value_to_findings,
     _non_text_contrast_to_findings,
 )
@@ -171,3 +172,51 @@ def test_combined_request_defaults_to_aaa():
     request = CombinedRequest(url="https://example.com")
 
     assert request.wcag_level == "AAA"
+
+
+def test_make_finding_keeps_element_for_pass_when_provided():
+    finding = _make_finding(
+        source="python",
+        rule_id="python_1_1_1_alt",
+        wcag_sc="1.1.1",
+        status="pass",
+        reason="Image has adequate alt text.",
+        severity=None,
+        element_html='<img id="logo" alt="Logo" src="/logo.png">',
+        element_id="logo",
+        element_tag="img",
+        page_url=PAGE_URL,
+    )
+
+    assert finding["status"] == "pass"
+    assert finding["element"] == {
+        "html": '<img id="logo" alt="Logo" src="/logo.png">',
+        "element_id": "logo",
+        "tag": "img",
+        "page_url": PAGE_URL,
+    }
+
+
+def test_pass_converters_include_element_metadata_when_available():
+    findings = _name_role_value_to_findings(
+        [
+            {
+                "filename": "logo.png",
+                "src": "/img/logo.png",
+                "alt_text": "Brand Name logo",
+                "wcag_4_1_2_status": "PASSED",
+                "wcag_4_1_2_reason": "Accessible name is descriptive.",
+                "url": PAGE_URL,
+            }
+        ],
+        PAGE_URL,
+    )
+
+    assert len(findings) == 1
+    assert findings[0]["status"] == "pass"
+    assert findings[0]["element"] == {
+        "html": '<img src="/img/logo.png" alt="Brand Name logo">',
+        "element_id": "/img/logo.png",
+        "tag": "img",
+        "page_url": PAGE_URL,
+    }
