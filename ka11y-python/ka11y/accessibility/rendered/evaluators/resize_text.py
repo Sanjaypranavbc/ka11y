@@ -49,6 +49,20 @@ def _selector_key(el: ElementSnapshot) -> str:
     return f"{el.tag}:{el.text[:40]}"
 
 
+def _is_perceivable(el: ElementSnapshot) -> bool:
+    """
+    True if the element is likely visible to a sighted user.
+    Excludes screen-reader-only text (often 1x1 or off-screen).
+    """
+    return (
+        el.visible
+        and el.rect.width > 2
+        and el.rect.height > 2
+        and el.rect.bottom > 0
+        and el.rect.right > 0
+    )
+
+
 def evaluate(
     baseline: PageSnapshot,
     resized: PageSnapshot,
@@ -58,11 +72,11 @@ def evaluate(
     """
     records: List[RuleAuditRecord] = []
 
-    # Baseline: elements that were not clipped
+    # Baseline: elements that were not clipped and were perceivable
     baseline_ok = {
         _selector_key(el)
         for el in baseline.elements
-        if not el.text_clipped and el.tag in _TEXT_TAGS and el.visible
+        if not el.text_clipped and el.tag in _TEXT_TAGS and _is_perceivable(el)
     }
 
     newly_clipped: List[ElementSnapshot] = []
@@ -70,6 +84,8 @@ def evaluate(
         if el.tag not in _TEXT_TAGS:
             continue
         if not el.text or len(el.text.strip()) < 3:
+            continue
+        if not _is_perceivable(el):
             continue
         if el.text_clipped and _selector_key(el) in baseline_ok:
             newly_clipped.append(el)
