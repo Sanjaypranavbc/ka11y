@@ -2,14 +2,20 @@
 
 const { run } = require('../../src/custom-checks/redundant-entry.check');
 
-function makePage(data) {
+function makePage(data, frameDataList = []) {
+  const mainFrame = { _mockMain: true };
+  const extraFrames = frameDataList.map((frameData, index) => ({
+    _mockFrame: index + 1,
+    evaluate: jest.fn().mockResolvedValue(frameData),
+  }));
+
   return {
     evaluate: jest.fn().mockResolvedValue(data),
     waitForLoadState: jest.fn().mockResolvedValue(undefined),
     waitForNetworkIdle: jest.fn().mockResolvedValue(undefined),
     waitForSelector: jest.fn().mockResolvedValue(undefined),
-    mainFrame: jest.fn(() => ({ _mockMain: true })),
-    frames: jest.fn(() => []),
+    mainFrame: jest.fn(() => mainFrame),
+    frames: jest.fn(() => [mainFrame, ...extraFrames]),
   };
 }
 
@@ -140,5 +146,85 @@ describe('redundant-entry.check (WCAG 3.3.7)', () => {
     const result = await run(page);
     expect(result.rules[0].status).toBe('pass');
     expect(result.rules[0].reason).toContain('reuse or prefill mechanisms');
+  });
+
+  test('merges legacy frame groups without strongSamePurpose and still classifies correctly', async () => {
+    const mainData = {
+      formCount: 1,
+      candidateCount: 4,
+      globalReuseControlCount: 0,
+      repeatedGroups: [{
+        key: 'email',
+        fieldCount: 2,
+        requiredCount: 2,
+        uniqueForms: 1,
+        hasPrefilledRepeat: false,
+        hasAutocompleteSupport: false,
+        hasReuseMechanism: false,
+        highConfidence: false,
+        needsReview: true,
+        samePurpose: true,
+        clearlyDifferentPurpose: false,
+        samePurposePairs: 1,
+        distinctPurposePairs: 0,
+        purposeSignatures: ['email|contact'],
+        processTypes: ['contact'],
+        sampleSelectors: ['input[name="email"]'],
+        allSelectors: ['input[name="email"]'],
+      }],
+      highConfidenceGroups: [],
+      reviewGroups: [{
+        key: 'email',
+        requiredCount: 2,
+        sampleSelectors: ['input[name="email"]'],
+      }],
+    };
+
+    const frameData = {
+      formCount: 1,
+      candidateCount: 4,
+      globalReuseControlCount: 0,
+      repeatedGroups: [{
+        key: 'email',
+        fieldCount: 2,
+        requiredCount: 2,
+        uniqueForms: 1,
+        hasPrefilledRepeat: false,
+        hasAutocompleteSupport: false,
+        hasReuseMechanism: false,
+        highConfidence: true,
+        needsReview: false,
+        samePurpose: true,
+        strongSamePurpose: true,
+        clearlyDifferentPurpose: false,
+        samePurposePairs: 2,
+        distinctPurposePairs: 0,
+        purposeSignatures: ['email|contact'],
+        processTypes: ['contact'],
+        sampleSelectors: ['input[name="contact_email"]'],
+        allSelectors: ['input[name="contact_email"]'],
+      }],
+      highConfidenceGroups: [{
+        key: 'email',
+        requiredCount: 2,
+        sampleSelectors: ['input[name="contact_email"]'],
+      }],
+      reviewGroups: [],
+    };
+
+    const page = makePage(mainData, [frameData]);
+    const result = await run(page);
+
+    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].elements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        selector: 'input[name="email"]',
+        tagName: 'INPUT',
+      }),
+      expect.objectContaining({
+        selector: 'input[name="contact_email"]',
+        tagName: 'INPUT',
+      }),
+    ]));
   });
 });

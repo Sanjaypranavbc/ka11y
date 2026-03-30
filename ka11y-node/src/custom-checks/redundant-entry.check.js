@@ -582,7 +582,7 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
     grouped.get(field.key).push(field);
   }
 
-function areLikelySamePurpose(fields) {
+  function areLikelySamePurpose(fields) {
     if (fields.length < 2) return false;
 
     const signatures = fields.map((f) => f.purposeSignature).filter(Boolean);
@@ -608,9 +608,9 @@ function areLikelySamePurpose(fields) {
     // Raise similarity floor to reduce false positives between adjacent but
     // distinct form intents (e.g., subscribe vs contact, quote vs support).
     return best >= 0.5;
-}
+  }
 
-function areClearlyDifferentPurpose(fields) {
+  function areClearlyDifferentPurpose(fields) {
     if (fields.length < 2) return false;
 
     const combinedText = fields.map(f =>
@@ -625,13 +625,27 @@ function areClearlyDifferentPurpose(fields) {
       /contact|enquiry|support|get in touch/i.test(t)
     );
 
-    // 🔥 STRONG override
+    // Strong override: explicit subscribe + contact intent in the same key set.
     if (hasSubscribe && hasContact) return true;
 
-    return false;
-}
+    // Additional disambiguation to avoid false positives where repeated personal
+    // fields are actually serving clearly distinct flows (e.g. support vs signup).
+    const distinctHintCount = fields.filter((f) => f.distinctPurposeHint).length;
+    const processTypes = unique(fields.map((f) => f.processType).filter(Boolean));
+    const purposeSignatures = unique(fields.map((f) => f.purposeSignature).filter(Boolean));
 
-function hasStrongSamePurposeEvidence(fields, pairwiseEvidence) {
+    if (distinctHintCount > 0 && distinctHintCount < fields.length && processTypes.length >= 2) {
+      return true;
+    }
+
+    if (distinctHintCount > 0 && purposeSignatures.length >= 2 && processTypes.length >= 2) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function hasStrongSamePurposeEvidence(fields, pairwiseEvidence) {
     if (fields.length < 2) return false;
 
     const signatures = fields.map((f) => f.purposeSignature).filter(Boolean);
@@ -651,7 +665,7 @@ function hasStrongSamePurposeEvidence(fields, pairwiseEvidence) {
     if (pairCount === 0) return false;
 
     return samePairs >= 2 && samePairs >= distinctPairs + 1;
-}
+  }
 
   function getStrongestPairwiseEvidence(fields) {
     let samePurposePairs = 0;
@@ -776,6 +790,18 @@ function hasStrongSamePurposeEvidence(fields, pairwiseEvidence) {
 }
 
 function mergeFrameData(main, frameDataList) {
+  function deriveStrongSamePurpose(group) {
+    if (!group || typeof group !== 'object') return false;
+    if (typeof group.strongSamePurpose === 'boolean') return group.strongSamePurpose;
+
+    const samePairs = Number.isFinite(group.samePurposePairs) ? group.samePurposePairs : 0;
+    const distinctPairs = Number.isFinite(group.distinctPurposePairs) ? group.distinctPurposePairs : 0;
+
+    // Legacy fallback for groups built before strongSamePurpose existed.
+    if (samePairs >= 2 && samePairs >= distinctPairs + 1) return true;
+    return !!group.samePurpose && samePairs > distinctPairs;
+  }
+
   const merged = {
     formCount: main.formCount || 0,
     candidateCount: main.candidateCount || 0,
@@ -811,6 +837,7 @@ function mergeFrameData(main, frameDataList) {
         existing.purposeSignatures = unique([...(existing.purposeSignatures || []), ...(fg.purposeSignatures || [])]);
         existing.allSelectors = [...(existing.allSelectors || []), ...(fg.allSelectors || [])];
         existing.sampleSelectors = existing.allSelectors.slice(0, 3);
+        existing.strongSamePurpose = deriveStrongSamePurpose(existing) || deriveStrongSamePurpose(fg);
 
         const sameProcessLike = (existing.processTypes || []).length <= 1
           || (existing.samePurposePairs || 0) > (existing.distinctPurposePairs || 0);
@@ -837,7 +864,10 @@ function mergeFrameData(main, frameDataList) {
           existing.strongSamePurpose &&
           !existing.clearlyDifferentPurpose;
       } else {
-        merged.repeatedGroups.push({ ...fg });
+        merged.repeatedGroups.push({
+          ...fg,
+          strongSamePurpose: deriveStrongSamePurpose(fg),
+        });
       }
     }
   }

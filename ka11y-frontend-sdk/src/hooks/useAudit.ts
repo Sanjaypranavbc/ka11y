@@ -4,12 +4,26 @@ import { emptyAuditResult } from "@/data/sampleData";
 
 // Backend returns element HTML nested as `element.html`; flatten it to `element_html` for the UI.
 function flattenFinding(f: Record<string, unknown>) {
-  const element = f.element as Record<string, unknown> | null | undefined;
+  const directElement = f.element as Record<string, unknown> | null | undefined;
+  const firstListElement = Array.isArray(f.elements)
+    ? (f.elements.find((e) => !!e && typeof e === "object") as Record<string, unknown> | undefined)
+    : undefined;
+  const element = (directElement && typeof directElement === "object")
+    ? directElement
+    : firstListElement;
+
+  const explicitHtml = typeof f.element_html === "string"
+    ? (f.element_html as string)
+    : (typeof f.html_snippet === "string" ? (f.html_snippet as string) : "");
+  const htmlFromElement = typeof element?.html === "string" ? (element.html as string) : "";
+  const tagFromElement = element?.tag ?? element?.tagName;
+  const idFromElement = element?.element_id ?? element?.id;
+
   return {
     ...f,
-    element_html: (element?.html as string) || "",
-    element_tag: typeof element?.tag === "string" ? (element.tag as string) : null,
-    element_id: typeof element?.element_id === "string" ? (element.element_id as string) : null,
+    element_html: explicitHtml || htmlFromElement || "",
+    element_tag: typeof tagFromElement === "string" ? (tagFromElement as string) : null,
+    element_id: typeof idFromElement === "string" ? (idFromElement as string) : null,
   };
 }
 
