@@ -9,6 +9,7 @@ This report combines direct source inspection of `ka11y-node` and `ka11y-python`
 - The combined project emits **53 / 87** WCAG 2.2 success criteria, which is **60.9%** overall coverage.
 - Coverage is strong in Level A (**80.6%**) and AA (**84.6%**); Level AAA remains narrow: **6 / 30** criteria (**20.0%**).
 - **6 bugs fixed** in this release: icon/button alt-text false positives, form 3.3.2 required-field false negative, focus-visible transparent-outline regex gaps, error-prevention false positives, and two pre-existing test mock mismatches.
+- Separate Japanese-site coverage output is now supported via `scripts/wcag_audit_runner.py --include-japanese`, with report text kept in English for cross-team readability.
 
 ## Validation Basis
 

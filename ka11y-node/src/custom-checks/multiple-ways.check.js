@@ -10,16 +10,18 @@ async function run(page) {
       document.querySelector('input[type="search"]') ||
       document.querySelector('[role="search"]') ||
       document.querySelector('[aria-label*="search" i]') ||
+      document.querySelector('[aria-label*="検索" i]') ||
       document.querySelector('[placeholder*="search" i]') ||
+      document.querySelector('[placeholder*="検索" i]') ||
       Array.from(document.querySelectorAll('form')).some(f =>
-        /search/i.test(f.action || '') || /search/i.test(f.getAttribute('aria-label') || '')
+        /search|検索/i.test(f.action || '') || /search|検索/i.test(f.getAttribute('aria-label') || '')
       )
     );
 
     const hasSitemap = !!(
-      document.querySelector('a[href*="sitemap"]') ||
+      document.querySelector('a[href*="sitemap"], a[href*="site-map"], a[href*="サイトマップ"]') ||
       Array.from(document.querySelectorAll('a')).some(a =>
-        /site.?map/i.test(a.textContent || '') || /site.?map/i.test(a.href || '')
+        /site.?map|サイトマップ/i.test(a.textContent || '') || /site.?map|サイトマップ/i.test(a.href || '')
       )
     );
 
@@ -28,16 +30,16 @@ async function run(page) {
 
     // Additional navigation mechanisms per WCAG 2.4.5 technique list
     const hasBreadcrumb = !!(
-      document.querySelector('[aria-label*="breadcrumb" i], [class*="breadcrumb" i], [id*="breadcrumb" i]') ||
+      document.querySelector('[aria-label*="breadcrumb" i], [aria-label*="パンくず" i], [class*="breadcrumb" i], [id*="breadcrumb" i], [class*="パンくず" i], [id*="パンくず" i]') ||
       document.querySelector('nav[aria-label*="breadcrumb" i]') ||
       // Schema.org breadcrumb structured data
       document.querySelector('[itemtype*="BreadcrumbList"]')
     );
 
     const hasTableOfContents = !!(
-      document.querySelector('[aria-label*="table of contents" i], [id*="toc" i], [class*="toc" i]') ||
+      document.querySelector('[aria-label*="table of contents" i], [aria-label*="目次" i], [id*="toc" i], [class*="toc" i], [id*="目次" i], [class*="目次" i]') ||
       Array.from(document.querySelectorAll('a')).some(a =>
-        /table\s+of\s+content/i.test(a.textContent || '')
+        /table\s+of\s+content|目次/i.test(a.textContent || '')
       )
     );
 

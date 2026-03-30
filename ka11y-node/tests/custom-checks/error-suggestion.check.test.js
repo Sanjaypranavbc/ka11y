@@ -116,4 +116,14 @@ describe('error-suggestion.check (WCAG 3.3.3)', () => {
       expect(src).toMatch(/\[aria-invalid="true"\]\s*~\s*/);
     });
   });
+
+  test('includes Japanese correction/error keywords in source heuristics', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/error-suggestion.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('入力してください');
+    expect(src).toContain('有効な');
+    expect(src).toContain('必須');
+  });
 });

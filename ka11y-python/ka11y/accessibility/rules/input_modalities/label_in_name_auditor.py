@@ -77,6 +77,11 @@ def _strip_punctuation(text: str) -> str:
     return re.sub(r"[^\w\s]", "", text).strip()
 
 
+def _contains_cjk(text: str) -> bool:
+    """True when text includes Hiragana, Katakana, or Han characters."""
+    return bool(re.search(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]", text))
+
+
 def _label_in_name(visible: str, acc_name: str) -> bool:
     """Return True if *visible* appears as a whole word within *acc_name*.
 
@@ -93,6 +98,9 @@ def _label_in_name(visible: str, acc_name: str) -> bool:
     # Fall back to plain substring match if stripping removes everything.
     if not stripped:
         return visible in acc_name
+    # CJK labels are not reliably tokenized by \b boundaries.
+    if _contains_cjk(stripped):
+        return stripped in acc_name
     pattern = r"\b" + re.escape(stripped) + r"\b"
     return bool(re.search(pattern, acc_name))
 

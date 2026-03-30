@@ -9,7 +9,9 @@ async function run(page) {
     // 1. Breadcrumb navigation — explicit aria-label or class patterns
     const hasBreadcrumb = !!(
       document.querySelector('[aria-label*="breadcrumb" i]') ||
+      document.querySelector('[aria-label*="パンくず" i]') ||
       document.querySelector('[class*="breadcrumb" i]') ||
+      document.querySelector('[class*="パンくず" i], [id*="パンくず" i]') ||
       document.querySelector('[itemtype*="BreadcrumbList"]') ||
       document.querySelector('nav [aria-current="page"]') // current page in nav = location indicator
     );
@@ -27,8 +29,8 @@ async function run(page) {
 
     // 4. Sitemap or location landmark (rare but valid)
     const hasSiteMap = !!(
-      document.querySelector('a[href*="sitemap" i]') ||
-      document.querySelector('[aria-label*="site map" i], [aria-label*="sitemap" i]')
+      document.querySelector('a[href*="sitemap" i], a[href*="site-map" i], a[href*="サイトマップ" i]') ||
+      document.querySelector('[aria-label*="site map" i], [aria-label*="sitemap" i], [aria-label*="サイトマップ" i]')
     );
 
     const hasLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasSiteMap;

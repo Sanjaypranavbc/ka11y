@@ -89,6 +89,7 @@ async def _stage_image_audit(
     max_depth: int,
     run_ocr: bool,
     run_image_audit: bool,
+    lang: str,
     job_id: str,
 ) -> Tuple[List[Dict], Optional[Dict[str, Any]]]:
     """Crawl images → OCR → 1.1.1 alt-text + 1.4.3 contrast."""
@@ -126,7 +127,10 @@ async def _stage_image_audit(
         findings: List[Dict] = []
 
         if run_ocr:
-            detector = OCRPreprocessing(source_directory=image_crawler.output_dir)
+            detector = OCRPreprocessing(
+                source_directory=image_crawler.output_dir,
+                lang=lang,
+            )
             await asyncio.to_thread(detector.scan_directory)
 
             saver = TextClassification(source_directory=image_crawler.output_dir)
@@ -473,6 +477,7 @@ async def _run_python_stages(
     run_hover_focus_content_audit: bool,
     run_focus_not_obscured_min_audit: bool,
     run_focus_not_obscured_enh_audit: bool,
+    lang: str = "en",
     job_id: str,
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
@@ -489,7 +494,7 @@ async def _run_python_stages(
     results = await asyncio.gather(
         _timed(
             _stage_image_audit(
-                url, output_dir, max_depth, run_ocr, run_image_audit, job_id
+                url, output_dir, max_depth, run_ocr, run_image_audit, lang, job_id
             )
         ),
         _timed(_stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id)),

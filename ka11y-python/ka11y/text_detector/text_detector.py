@@ -35,8 +35,14 @@ logger.info("Logger initialized")
 
 class OCRPreprocessing:
 
-    def __init__(self, source_directory: str, output_directory: Optional[str] = None):
+    def __init__(
+        self,
+        source_directory: str,
+        output_directory: Optional[str] = None,
+        lang: str = "en",
+    ):
         self.source_directory = source_directory
+        self.lang = (lang or "en").lower()
 
         if output_directory is None:
             self.base_output_dir = source_directory
@@ -66,10 +72,16 @@ class OCRPreprocessing:
         Path(self.contrast_dir).mkdir(parents=True, exist_ok=True)
 
         logger.info("Initializing EasyOCR Reader (loading models)...")
-        self.reader = OCRReader(source_directory)
+        self.reader = OCRReader(source_directory, langs=self._ocr_langs())
         logger.info("EasyOCR Reader initialized")
 
         self.results: List[TextDetectionResult] = []
+
+    def _ocr_langs(self) -> list[str]:
+        # Include English fallback so mixed-script pages remain readable.
+        if self.lang.startswith("ja"):
+            return ["ja", "en"]
+        return ["en"]
 
     def _determine_category(self, original_path: str) -> str:
         """Heuristic to determine category based on source path."""

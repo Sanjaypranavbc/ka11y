@@ -67,6 +67,15 @@ _EMPTY_OR_GENERIC: set[str] = {
     "spacer",
     "decoration",
     "decorative",
+    "画像",
+    "写真",
+    "図",
+    "アイコン",
+    "プレースホルダー",
+    "なし",
+    "該当なし",
+    "装飾",
+    "イメージ",
 }
 
 # Social/brand icon names — must be paired with "icon" to be acceptable
@@ -185,7 +194,41 @@ _BUTTON_ACTION_WORDS: set[str] = {
     "go to slide",
     "new window",
     "opens in new tab",
+    "メニュー",
+    "閉じる",
+    "開く",
+    "検索",
+    "戻る",
+    "次へ",
+    "送信",
+    "キャンセル",
+    "確認",
+    "保存",
+    "削除",
+    "編集",
+    "追加",
+    "ダウンロード",
+    "共有",
+    "印刷",
+    "更新",
+    "ホーム",
+    "設定",
+    "ヘルプ",
+    "再生",
+    "一時停止",
+    "停止",
+    "ログイン",
+    "ログアウト",
+    "新規登録",
+    "登録",
+    "カート",
+    "もっと見る",
+    "続きを読む",
+    "すべて見る",
 }
+
+_LOGO_MARKERS: set[str] = {"logo", "home", "ロゴ", "ホーム"}
+_ICON_QUALIFIERS: set[str] = {"icon", "logo", "button", "link", "アイコン", "ロゴ", "ボタン", "リンク"}
 
 # Report CSV columns (order preserved)
 _REPORT_COLUMNS = [
@@ -327,7 +370,7 @@ def _check_1_1_1_logo(alt: str) -> tuple[bool, str]:
         return False, "FAIL [1.1.1] Logo has empty/missing alt text"
 
     norm = _norm(alt)
-    if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
+    if any(marker in norm for marker in _LOGO_MARKERS):
         return True, f"PASS [1.1.1] Logo alt includes 'logo'/'home': '{alt}'"
 
     return (
@@ -355,7 +398,7 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
             f"(e.g. '{alt} icon'). Brand name alone is not sufficient per WCAG 1.1.1.",
         )
 
-    has_qualifier = bool(re.search(r"\b(icon|logo|button|link)\b", norm))
+    has_qualifier = any(token in norm for token in _ICON_QUALIFIERS)
     is_action = norm in _BUTTON_ACTION_WORDS or any(
         w in _BUTTON_ACTION_WORDS for w in norm.split()
     )
@@ -434,7 +477,7 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
     norm = _norm(name)
 
     if sub_type == "logos":
-        if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
+        if any(marker in norm for marker in _LOGO_MARKERS):
             return True, f"PASS [4.1.2] Logo accessible name includes 'logo': '{name}'"
         return (
             False,
@@ -764,7 +807,12 @@ class AltTextAccessibilityAuditor:
                 effective_has_text,
             )
 
-            if f11_mismatch:
+            if (
+                f11_mismatch
+                and classification != "complex"
+                and sub_type != "charts"
+                and not is_logo
+            ):
                 wcag_1_4_5_pass = False
                 wcag_1_4_5_reason = (
                         "FAIL [1.4.5] " + f11_reason +

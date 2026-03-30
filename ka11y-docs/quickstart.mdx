@@ -42,7 +42,7 @@ Open **http://localhost:8080**, enter a URL in the sidebar, and click **Run Audi
 
 The dashboard streams live stage progress as each auditor completes. When the job finishes, violations, needs-review items, and passes are shown across the four tabs.
 
-Dashboard rule/result language defaults to **EN**. To get Japanese localized results, use the **EN / JA** switcher in the top-right header, select **JA**, then start the audit. The request is submitted with `lang: "ja"`.
+Dashboard rule/result language defaults to **EN** (including Japanese websites). To get Japanese localized results, use the **EN / JA** switcher in the top-right header, select **JA**, then start the audit. The request is submitted with `lang: "ja"`.
 
 ---
 
@@ -81,7 +81,7 @@ curl http://localhost:8000/api/v1/combined/$JOB | jq '.result.summary'
 
 ### Japanese results
 
-To get Japanese localized rule names and suggested fixes in results, set `"lang": "ja"` when submitting the job:
+To get Japanese localized rule names and suggested fixes in results, set `"lang": "ja"` when submitting the job. If you omit `lang`, results stay in English by default:
 
 ```bash
 JOB=$(curl -s -X POST http://localhost:8000/api/v1/combined/ \
@@ -93,6 +93,24 @@ JOB=$(curl -s -X POST http://localhost:8000/api/v1/combined/ \
     "max_depth": 0
   }' | jq -r '.job_id')
 ```
+
+### Japanese-site coverage report (English output)
+
+To generate a separate Japanese-sites coverage campaign while keeping report text readable in English:
+
+```bash
+python scripts/wcag_audit_runner.py --lang en --site-set global --include-japanese
+```
+
+Outputs:
+
+- Global campaign XLSX reports under `./wcag_reports/global_en/`
+- Japanese campaign XLSX reports under `./wcag_reports/jp_ja/`
+- Separate Japanese coverage markdown summary in English: `./COVERAGE_JA.md`
+
+<Warning>
+Japanese heuristic checks are language-augmented (JP keywords + JP OCR) but still heuristic. Treat `WARN` and checker discrepancies as manual-review priority.
+</Warning>
 
 Expected poll response once complete:
 
