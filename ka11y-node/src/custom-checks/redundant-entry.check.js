@@ -167,6 +167,52 @@ function _elementsFromGroups(groups, max = 8) {
   return out;
 }
 
+function processTypeMatches(text) {
+  const value = String(text || '').toLowerCase();
+  const matches = [];
+
+  if (/\b(newsletter|subscribe)\b|ニュースレター|購読/i.test(value)) matches.push('subscribe');
+  if (/\b(contact|enquiry|inquiry|quote|support|feedback)\b|問い合わせ|見積|サポート|フィードバック/i.test(value)) matches.push('contact');
+  if (/\b(checkout|payment|billing|shipping|delivery|order|purchase)\b|購入|注文|配送|請求|支払い/i.test(value)) matches.push('checkout');
+  if (/\b(register|registration|signup|sign[\s-]?up|account|profile)\b|登録|アカウント|プロフィール/i.test(value)) matches.push('account');
+  if (/\b(application|apply|careers?|job)\b|応募/i.test(value)) matches.push('application');
+  if (/\b(booking|reservation)\b|予約/i.test(value)) matches.push('booking');
+
+  return unique(matches);
+}
+
+function inferProcessTypeFromTexts(formText, fieldText) {
+  const formMatches = processTypeMatches(formText);
+  const fieldMatches = processTypeMatches(fieldText);
+
+  // Prefer a single clear form-level signal over noisier field-adjacent text.
+  if (formMatches.length === 1) return formMatches[0];
+  if (fieldMatches.length === 1) return fieldMatches[0];
+
+  const merged = mergeTextParts([formText || '', fieldText || ''], 1200).toLowerCase();
+  const mergedMatches = processTypeMatches(merged);
+  return mergedMatches[0] || (PROCESS_HINT_RE.test(merged) ? 'generic-process' : 'unknown');
+}
+
+function areLikelySameProcessAcrossForms(fields, pairwiseEvidence = {}) {
+  const distinctForms = unique((fields || []).map((f) => f.formRef).filter((f) => f && f !== 'form:none'));
+  if (distinctForms.length <= 1) return true;
+
+  const processTypes = unique((fields || []).map((f) => f.formProcessType || f.processType).filter(Boolean));
+  const concreteTypes = processTypes.filter((t) => t !== 'unknown' && t !== 'generic-process');
+
+  if (concreteTypes.length >= 2) return false;
+
+  if (concreteTypes.length === 1) {
+    return ['checkout', 'account', 'application', 'booking'].includes(concreteTypes[0]);
+  }
+
+  const purposeSignatures = unique((fields || []).map((f) => f.purposeSignature).filter(Boolean));
+  if (purposeSignatures.length >= 2) return false;
+
+  return (pairwiseEvidence.samePurposePairs || 0) > (pairwiseEvidence.distinctPurposePairs || 0);
+}
+
 function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
   const personalTokenSet = new Set(tokens);
   const confirmRe = new RegExp(confirmSrc, 'i');
@@ -274,6 +320,38 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
       clampString(form.textContent || '', 600),
     ];
     return mergeTextParts(parts, 800).toLowerCase();
+  }
+
+  function getFormSubmitText(form) {
+    if (!form) return '';
+    const submitControls = Array.from(form.querySelectorAll(
+      'button, input[type="submit"], input[type="button"]'
+    ));
+    return mergeTextParts(
+      submitControls.slice(0, 4).map((el) => mergeTextParts([
+        el.textContent || '',
+        el.getAttribute('value') || '',
+        el.getAttribute('aria-label') || '',
+        el.getAttribute('title') || '',
+      ], 120)),
+      300
+    ).toLowerCase();
+  }
+
+  function getFormSemanticText(form) {
+    if (!form) return '';
+    const parts = [
+      form.getAttribute('id') || '',
+      form.getAttribute('name') || '',
+      form.getAttribute('action') || '',
+      form.getAttribute('aria-label') || '',
+      form.getAttribute('aria-labelledby') || '',
+      form.getAttribute('class') || '',
+      getFormSubmitText(form),
+      nearestText(form, 2),
+      clampString(form.textContent || '', 600),
+    ];
+    return mergeTextParts(parts, 1000).toLowerCase();
   }
 
   function getSectionScopeText(el) {
@@ -436,28 +514,19 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
   }
 
   function inferProcessType(form, sectionText, context) {
-    const merged = mergeTextParts([
-      form ? getFormScopeText(form) : '',
+    const formText = form ? getFormSemanticText(form) : '';
+    const fieldText = mergeTextParts([
       sectionText || '',
       context || '',
     ], 1200).toLowerCase();
-
-    const matches = [];
-    if (/\b(newsletter|subscribe)\b|ニュースレター|購読/i.test(merged)) matches.push('subscribe');
-    if (/\b(contact|enquiry|inquiry|quote|support|feedback)\b|問い合わせ|見積|サポート|フィードバック/i.test(merged)) matches.push('contact');
-    if (/\b(checkout|payment|billing|shipping|delivery|order|purchase)\b|購入|注文|配送|請求|支払い/i.test(merged)) matches.push('checkout');
-    if (/\b(register|registration|signup|sign[\s-]?up|account|profile)\b|登録|アカウント|プロフィール/i.test(merged)) matches.push('account');
-    if (/\b(application|apply|careers?|job)\b|応募/i.test(merged)) matches.push('application');
-    if (/\b(booking|reservation)\b|予約/i.test(merged)) matches.push('booking');
-
-    return matches[0] || (PROCESS_HINT_RE.test(merged) ? 'generic-process' : 'unknown');
+    return inferProcessTypeFromTexts(formText, fieldText);
   }
 
   function inferPurposeSignature(key, context, form, sectionText, autocompleteMeta) {
     const merged = mergeTextParts([
       key,
       context,
-      form ? getFormScopeText(form) : '',
+      form ? getFormSemanticText(form) : '',
       sectionText,
       autocompleteMeta.section || '',
       autocompleteMeta.mode || '',
@@ -568,6 +637,7 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
 
     const reuseState = getReuseStateNearField(el, form);
     const processType = inferProcessType(form, sectionText, context);
+    const formProcessType = inferProcessType(form, '', '');
     const purposeSignature = inferPurposeSignature(key, context, form, sectionText, autocompleteMeta);
 
     const required = !!(
@@ -600,6 +670,7 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
       context,
       sectionText,
       processType,
+      formProcessType,
       purposeSignature,
       distinctPurposeHint: false,
     };
@@ -762,11 +833,16 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
     const samePurpose = areLikelySamePurpose(actionable);
     const clearlyDifferentPurpose = areClearlyDifferentPurpose(actionable);
     const pairwiseEvidence = getStrongestPairwiseEvidence(actionable);
+    const sameProcessLikely = areLikelySameProcessAcrossForms(actionable, pairwiseEvidence);
 
     const sameProcessLike = unique(actionable.map((f) => f.processType).filter(Boolean)).length <= 1
       || pairwiseEvidence.samePurposePairs > pairwiseEvidence.distinctPurposePairs;
 
     const strongSamePurpose = hasStrongSamePurposeEvidence(actionable, pairwiseEvidence);
+
+    if (!sameProcessLikely || clearlyDifferentPurpose) {
+      continue;
+    }
 
     const highConfidence = (
       actionable.length >= 2 &&
@@ -790,6 +866,7 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
       !clearlyMitigated &&
       samePurpose &&
       strongSamePurpose &&
+      sameProcessLikely &&
       !clearlyDifferentPurpose;
 
     repeatedGroups.push({
@@ -804,6 +881,7 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
       needsReview,
       samePurpose,
       strongSamePurpose,
+      sameProcessLikely,
       clearlyDifferentPurpose,
       samePurposePairs: pairwiseEvidence.samePurposePairs,
       distinctPurposePairs: pairwiseEvidence.distinctPurposePairs,
@@ -1009,4 +1087,14 @@ async function run(page) {
   );
 }
 
-module.exports = { run, SC, RULE_ID, HELP_URL };
+module.exports = {
+  run,
+  SC,
+  RULE_ID,
+  HELP_URL,
+  __test__: {
+    processTypeMatches,
+    inferProcessTypeFromTexts,
+    areLikelySameProcessAcrossForms,
+  },
+};

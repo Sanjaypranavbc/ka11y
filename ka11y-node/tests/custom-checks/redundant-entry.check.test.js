@@ -1,6 +1,6 @@
 'use strict';
 
-const { run } = require('../../src/custom-checks/redundant-entry.check');
+const { run, __test__ } = require('../../src/custom-checks/redundant-entry.check');
 
 function makePage(data, frameDataList = []) {
   const mainFrame = { _mockMain: true };
@@ -146,6 +146,56 @@ describe('redundant-entry.check (WCAG 3.3.7)', () => {
     const result = await run(page);
     expect(result.rules[0].status).toBe('pass');
     expect(result.rules[0].reason).toContain('reuse or prefill mechanisms');
+  });
+
+  test('treats contact and subscribe forms as different processes', () => {
+    expect(__test__.inferProcessTypeFromTexts(
+      'contact form submit contact us',
+      'email address full name phone'
+    )).toBe('contact');
+
+    expect(__test__.inferProcessTypeFromTexts(
+      'subscribe form get the fresh news subscribe',
+      'your email here'
+    )).toBe('subscribe');
+
+    expect(__test__.areLikelySameProcessAcrossForms([
+      {
+        formRef: 'form:contact',
+        formProcessType: 'contact',
+        processType: 'contact',
+        purposeSignature: 'email|contact',
+      },
+      {
+        formRef: 'form:subscribe',
+        formProcessType: 'subscribe',
+        processType: 'subscribe',
+        purposeSignature: 'email|subscribe',
+      },
+    ], {
+      samePurposePairs: 0,
+      distinctPurposePairs: 0,
+    })).toBe(false);
+  });
+
+  test('still treats checkout forms as the same process across forms', () => {
+    expect(__test__.areLikelySameProcessAcrossForms([
+      {
+        formRef: 'form:shipping',
+        formProcessType: 'checkout',
+        processType: 'checkout',
+        purposeSignature: 'email|checkout|shipping',
+      },
+      {
+        formRef: 'form:billing',
+        formProcessType: 'checkout',
+        processType: 'checkout',
+        purposeSignature: 'email|checkout|billing',
+      },
+    ], {
+      samePurposePairs: 1,
+      distinctPurposePairs: 0,
+    })).toBe(true);
   });
 
   test('merges legacy frame groups without strongSamePurpose and still classifies correctly', async () => {
