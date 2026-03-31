@@ -117,6 +117,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 run_image_audit=payload.run_image_audit,
                 run_form_audit=payload.run_form_audit,
                 run_label_in_name_audit=payload.run_label_in_name_audit,
+                run_media_audit=payload.run_media_audit,
                 run_pause_stop_hide_audit=payload.run_pause_stop_hide_audit,
                 run_target_size_audit=payload.run_target_size_audit,
                 run_resize_text_audit=payload.run_resize_text_audit,

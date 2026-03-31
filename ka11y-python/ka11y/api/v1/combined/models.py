@@ -20,6 +20,7 @@ class CombinedRequest(BaseModel):
     run_image_audit: bool = True
     run_form_audit: bool = True
     run_label_in_name_audit: bool = True
+    run_media_audit: bool = True
     run_pause_stop_hide_audit: bool = True
     run_target_size_audit: bool = True
     # ── Rendered-layout WCAG checks ──────────────────────────────────────────

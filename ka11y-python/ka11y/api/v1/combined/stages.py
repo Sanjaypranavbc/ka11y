@@ -42,6 +42,7 @@ from .findings import (
     _form_to_findings,
     _hover_focus_content_to_findings,
     _lin_to_findings,
+    _media_to_findings,
     _orientation_to_findings,
     _psh_to_findings,
     _reflow_to_findings,
@@ -456,6 +457,45 @@ async def _stage_rendered_layout_audit(
         return []
 
 
+async def _stage_media_audit(
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_media_audit: bool,
+    job_id: str,
+) -> List[Dict]:
+    """Crawl media elements → 1.2.1 audio-only / video-only check."""
+    _stage_start(job_id, "media_audit")
+    if not run_media_audit:
+        _stage_complete(job_id, "media_audit", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.media.media_auditor import MediaAuditor
+        from ka11y.crawler.media_crawler import AsyncMediaCrawler
+
+        media_crawler = AsyncMediaCrawler(
+            base_url=url, output_dir=str(output_dir), max_depth=max_depth
+        )
+        media_items = await media_crawler.crawl()
+        await asyncio.to_thread(media_crawler.save_raw_json)
+
+        findings: List[Dict] = []
+        if run_media_audit:
+            media_auditor = MediaAuditor(output_dir=str(output_dir))
+            records = await asyncio.to_thread(
+                media_auditor.generate_audit_report,
+                [item.model_dump() for item in media_items],
+            )
+            findings = _media_to_findings(records, url)
+
+        _stage_complete(job_id, "media_audit", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "media_audit", _exc)
+        return []
+
+
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
 
@@ -468,6 +508,7 @@ async def _run_python_stages(
     run_image_audit: bool,
     run_form_audit: bool,
     run_label_in_name_audit: bool,
+    run_media_audit: bool,
     run_pause_stop_hide_audit: bool,
     run_target_size_audit: bool,
     run_resize_text_audit: bool,
@@ -530,6 +571,11 @@ async def _run_python_stages(
                 run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit,
                 job_id,
+            )
+        ),
+        _timed(
+            _stage_media_audit(
+                url, output_dir, max_depth, run_media_audit, job_id
             )
         ),
         return_exceptions=True,
