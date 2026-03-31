@@ -23,7 +23,6 @@ from ka11y.utils.text_detector_helper import (
     bbox_height_rotated,
     load_image_with_alpha
 )
-from ka11y.text_detector.ocrbase import OCRReader
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
 
@@ -32,10 +31,21 @@ config = load_config()
 logger = setup_logger(name="KAC", tag="text_detector")
 logger.info("Logger initialized")
 
+try:
+    from ka11y.text_detector.paddleocrbase import OCRReader
+    # Verify it can actually be initialized (detects missing paddleocr lib)
+    _test_reader = OCRReader(source_directory="")
+    _ = _test_reader.reader
+    if _test_reader.reader is None:
+         raise ImportError("PaddleOCR not functional")
+except (ImportError, RuntimeError):
+    logger.info("PaddleOCR not available, falling back to EasyOCR")
+    from ka11y.text_detector.ocrbase import OCRReader
+
+
 
 class OCRPreprocessing:
-
-    def __init__(self, source_directory: str, output_directory: Optional[str] = None):
+    def __init__(self, source_directory: str, output_directory: Optional[str] = None, lang: str = "en"):
         self.source_directory = source_directory
 
         if output_directory is None:
@@ -65,9 +75,11 @@ class OCRPreprocessing:
 
         Path(self.contrast_dir).mkdir(parents=True, exist_ok=True)
 
-        logger.info("Initializing EasyOCR Reader (loading models)...")
-        self.reader = OCRReader(source_directory)
-        logger.info("EasyOCR Reader initialized")
+        # logger.info("Initializing EasyOCR Reader (loading models)...")
+        logger.info(f"Initializing OCR Reader for lang={lang}...")
+        self.reader = OCRReader(source_directory, lang=lang)
+        # logger.info("EasyOCR Reader initialized")
+        logger.info("OCR Reader initialized")
 
         self.results: List[TextDetectionResult] = []
 
