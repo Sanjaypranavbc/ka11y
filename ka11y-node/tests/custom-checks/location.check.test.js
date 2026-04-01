@@ -73,4 +73,13 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
     const result = await run(page);
     expect(result.rules[0].impact).toBeNull();
   });
+
+  test('includes Japanese location keywords in source heuristics', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/location.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('パンくず');
+    expect(src).toContain('サイトマップ');
+  });
 });

@@ -206,10 +206,125 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
     expect(findings[0].criterion_name).toBe('Contrast (Enhanced)');
     expect(findings[0].level).toBe('AAA');
   });
+
+  test('passes include element metadata for each passing node', () => {
+    const axeResults = makeAxeResults({
+      passes: [{
+        id: 'image-alt',
+        tags: ['wcag111', 'wcag2a'],
+        help: 'Images should have alt text.',
+        helpUrl: 'https://example.com/image-alt',
+        description: 'Ensure <img> has alt text',
+        nodes: [
+          { html: '<img id="hero" alt="Hero" src="/hero.png">', target: ['#hero'] },
+          { html: '<img alt="Logo" src="/logo.png">', target: ['header img.logo'] },
+        ],
+      }],
+    });
+
+    const findings = mapResultsFlat(axeResults, 'https://example.com');
+    expect(findings).toHaveLength(2);
+    expect(findings.every(f => f.status === 'pass')).toBe(true);
+    expect(findings[0].element).toEqual({
+      html: '<img id="hero" alt="Hero" src="/hero.png">',
+      element_id: 'hero',
+      tag: 'IMG',
+      target: ['#hero'],
+      page_url: 'https://example.com',
+    });
+    expect(findings[1].element).toEqual({
+      html: '<img alt="Logo" src="/logo.png">',
+      element_id: null,
+      tag: 'IMG',
+      target: ['header img.logo'],
+      page_url: 'https://example.com',
+    });
+  });
 });
 
 describe('formatSuccessCriterion', () => {
   test('formats best-practice rules without returning null', () => {
     expect(formatSuccessCriterion(['best-practice'])).toBe('Best Practice');
+  });
+});
+
+describe('mapCustomResultsFlat element mapping', () => {
+  test('expands explicit custom elements and normalizes their metadata', () => {
+    const findings = mapCustomResultsFlat([
+      {
+        successCriteriaId: '2.4.7',
+        rules: [{
+          ruleId: 'custom-focus-visible',
+          status: 'fail',
+          reason: 'Focus is not visible.',
+          elements: [
+            { html: '<button id="save">Save</button>', target: ['#save'] },
+            { outerHTML: '<a class="cta">Continue</a>', selector: '.cta', tagName: 'a' },
+          ],
+        }],
+      },
+    ], 'https://example.com');
+
+    expect(findings).toHaveLength(2);
+    expect(findings[0].element).toEqual({
+      html: '<button id="save">Save</button>',
+      element_id: 'save',
+      tag: 'BUTTON',
+      target: ['#save'],
+      page_url: 'https://example.com',
+    });
+    expect(findings[1].element).toEqual({
+      html: '<a class="cta">Continue</a>',
+      element_id: null,
+      tag: 'a',
+      target: ['.cta'],
+      page_url: 'https://example.com',
+    });
+  });
+
+  test('needs_review without explicit element infers from reason tag snippet', () => {
+    const findings = mapCustomResultsFlat([
+      {
+        successCriteriaId: '1.2.1',
+        rules: [{
+          ruleId: 'custom-audio-transcript',
+          status: 'incomplete',
+          reason: 'Manual check required for <audio id="podcast-player"> content.',
+        }],
+      },
+    ], 'https://example.com');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].status).toBe('needs_review');
+    expect(findings[0].element).toEqual({
+      html: '<audio id="podcast-player">',
+      element_id: 'podcast-player',
+      tag: 'AUDIO',
+      target: [],
+      page_url: 'https://example.com',
+    });
+  });
+
+  test('needs_review without identifiable tag gets page-level html fallback element', () => {
+    const findings = mapCustomResultsFlat([
+      {
+        successCriteriaId: '2.4.5',
+        rules: [{
+          ruleId: 'custom-multiple-ways',
+          status: 'incomplete',
+          reason: 'Only one navigation mechanism detected; verify multiple ways manually.',
+        }],
+      },
+    ], 'https://example.com');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].status).toBe('needs_review');
+    expect(findings[0].element).toEqual({
+      html: '<html>',
+      element_id: null,
+      tag: 'HTML',
+      target: ['html'],
+      page_url: 'https://example.com',
+    });
   });
 });

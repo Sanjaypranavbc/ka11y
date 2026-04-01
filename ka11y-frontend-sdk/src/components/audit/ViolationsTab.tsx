@@ -11,6 +11,7 @@ import {
   formatCriterionId,
   formatCriterionName,
   formatElementSnippet,
+  formatElementTag,
   formatLevel,
 } from "@/lib/audit-format";
 import {
@@ -68,7 +69,13 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       if (scFilter.length && !scFilter.includes(v.wcag_sc)) return false;
       if (search) {
         const q = search.toLowerCase();
-        return v.reason.toLowerCase().includes(q) || (v.element_html || '').toLowerCase().includes(q);
+        return (
+          v.reason.toLowerCase().includes(q) ||
+          (v.element_html || "").toLowerCase().includes(q) ||
+          (v.element_selector || "").toLowerCase().includes(q) ||
+          (v.rule_id || "").toLowerCase().includes(q) ||
+          (v.element_tag || "").toLowerCase().includes(q)
+        );
       }
       return true;
     });
@@ -174,14 +181,16 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       <p className="text-xs text-muted-foreground">{showingText}</p>
 
       <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden">
-        <Table className="min-w-[840px] sm:min-w-[960px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
+        <Table className="min-w-[980px] sm:min-w-[1120px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="text-xs w-20">{t("table.severity")}</TableHead>
               <TableHead className="text-xs w-16">{t("table.source")}</TableHead>
+              <TableHead className="text-xs w-24">{t("table.ruleId")}</TableHead>
               <TableHead className="text-xs w-16">{t("table.sc")}</TableHead>
               <TableHead className="text-xs">{t("table.criterion")}</TableHead>
               <TableHead className="text-xs w-14">{t("table.level")}</TableHead>
+              <TableHead className="text-xs w-14">{t("table.tag")}</TableHead>
               <TableHead className="text-xs">{t("table.reason")}</TableHead>
               <TableHead className="text-xs w-24">{t("table.element")}</TableHead>
               <TableHead className="text-xs w-16">{t("table.fix")}</TableHead>
@@ -190,7 +199,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-xs text-muted-foreground text-center py-8">
+                <TableCell colSpan={10} className="text-xs text-muted-foreground text-center py-8">
                   {t("violations.noMatch")}
                 </TableCell>
               </TableRow>
@@ -215,11 +224,13 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                     {v.source}
                   </Badge>
                 </TableCell>
+                <TableCell className="font-mono text-xs">{v.rule_id}</TableCell>
                 <TableCell className="font-mono text-xs">{formatCriterionId(v.wcag_sc)}</TableCell>
                 <TableCell className="text-xs">{formatCriterionName(v.criterion_name, v.wcag_sc)}</TableCell>
                 <TableCell>
                   <Badge variant={v.level === "A" ? "default" : "outline"} className="text-[10px]">{formatLevel(v.level)}</Badge>
                 </TableCell>
+                <TableCell className="font-mono text-xs">{formatElementTag(v.element_tag)}</TableCell>
                 <TableCell>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -231,9 +242,16 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                   </Tooltip>
                 </TableCell>
                 <TableCell>
-                  <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block max-w-[120px]">
-                    {formatElementSnippet(v.element_html)}
-                  </code>
+                  <div className="space-y-1 max-w-[220px]">
+                    <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block">
+                      {formatElementSnippet(v.element_html)}
+                    </code>
+                    {v.element_selector && (
+                      <code className="text-[10px] text-muted-foreground/80 bg-muted/60 px-1 py-0.5 rounded truncate block">
+                        {v.element_selector}
+                      </code>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>
@@ -262,6 +280,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
           criterionName={modalData.criterion_name}
           suggestedFix={modalData.suggested_fix}
           elementHtml={modalData.element_html}
+          elementSelector={modalData.element_selector}
           helpUrl={modalData.help_url}
         />
       )}

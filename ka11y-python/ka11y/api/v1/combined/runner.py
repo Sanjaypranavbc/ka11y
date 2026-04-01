@@ -39,7 +39,8 @@ def _merge_findings(
     Merge axe-core and Python findings with deduplication.
 
     Dedup key: (wcag_sc, status, element_signature)
-      - element_signature is the first 120 chars of element.html (or element_id)
+      - element_signature prefers a stable selector/target, then element_id,
+        then the first 120 chars of element.html
         normalised to lower-case so minor HTML differences don't create dupes.
       - Findings with no element info are never deduplicated (always kept).
 
@@ -53,9 +54,15 @@ def _merge_findings(
 
     def _sig(f: Dict) -> tuple:
         el = f.get("element") or {}
+        target = el.get("target") or []
+        target_sig = ""
+        if isinstance(target, list) and target:
+            first = target[0]
+            if isinstance(first, str):
+                target_sig = first.strip().lower()
         el_id = (el.get("element_id") or "").strip()
         el_html = (el.get("html") or "").strip()[:120].lower()
-        ident = el_id or el_html
+        ident = target_sig or el_id or el_html
         return (f.get("wcag_sc", ""), f.get("status", ""), ident)
 
     for f in python_findings:
@@ -75,9 +82,12 @@ def _merge_findings(
     return list(merged.values()) + no_key
 
 
-async def _run_job(job_id: str, payload: CombinedRequest) -> None:
+async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None) -> None:
     """
     Background task: run axe-core (Node) and Python stages in parallel.
+
+    If *filter_rule* is provided, the final report will only contain findings
+    for that specific WCAG SC ID (e.g. "1.1.1").
 
     Graceful degradation:
     • Uses asyncio.gather(return_exceptions=True) so neither branch cancels the other.
@@ -123,7 +133,9 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
                 run_hover_focus_content_audit=payload.run_hover_focus_content_audit,
                 run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
+                lang=payload.lang,
                 job_id=job_id,
+                lang=payload.lang,
             )
         )
 
@@ -169,6 +181,10 @@ async def _run_job(job_id: str, payload: CombinedRequest) -> None:
         ]
 
         all_findings = _merge_findings(node_findings, python_findings)
+
+        if filter_rule:
+            all_findings = [f for f in all_findings if f.get("wcag_sc") == filter_rule]
+
         all_findings.sort(
             key=lambda f: {"fail": 0, "needs_review": 1, "pass": 2}.get(f["status"], 3)
         )

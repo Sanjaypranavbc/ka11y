@@ -7,7 +7,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SuggestedFixModal } from "./SuggestedFixModal";
 import { AlertTriangle, Wrench, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatCriterionId, formatCriterionName } from "@/lib/audit-format";
+import {
+  formatCriterionId,
+  formatCriterionName,
+  formatElementSnippet,
+  formatElementTag,
+} from "@/lib/audit-format";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLanguage } from "@/i18n/LanguageContext";
 
@@ -62,7 +67,13 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
       if (scFilter.length && !scFilter.includes(v.wcag_sc)) return false;
       if (!search) return true;
       const q = search.toLowerCase();
-      return v.reason.toLowerCase().includes(q) || (v.element_html || '').toLowerCase().includes(q);
+        return (
+          v.reason.toLowerCase().includes(q) ||
+          (v.element_html || "").toLowerCase().includes(q) ||
+          (v.element_selector || "").toLowerCase().includes(q) ||
+          (v.rule_id || "").toLowerCase().includes(q) ||
+          (v.element_tag || "").toLowerCase().includes(q)
+        );
     });
   }, [items, search, severityFilter, sourceFilter, scFilter]);
 
@@ -167,21 +178,24 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
       <p className="text-xs text-muted-foreground">{showingText}</p>
 
       <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden">
-        <Table className="min-w-[700px] sm:min-w-[760px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
+        <Table className="min-w-[960px] sm:min-w-[1080px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="text-xs">{t("table.severity")}</TableHead>
               <TableHead className="text-xs">{t("table.source")}</TableHead>
+              <TableHead className="text-xs">{t("table.ruleId")}</TableHead>
               <TableHead className="text-xs">{t("table.sc")}</TableHead>
               <TableHead className="text-xs">{t("table.criterion")}</TableHead>
+              <TableHead className="text-xs">{t("table.tag")}</TableHead>
               <TableHead className="text-xs">{t("table.reason")}</TableHead>
+              <TableHead className="text-xs">{t("table.element")}</TableHead>
               <TableHead className="text-xs">{t("table.fix")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-xs text-muted-foreground text-center py-8">
+                <TableCell colSpan={9} className="text-xs text-muted-foreground text-center py-8">
                   {t("needsReview.noMatch")}
                 </TableCell>
               </TableRow>
@@ -206,8 +220,10 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
                     {v.source}
                   </Badge>
                 </TableCell>
+                <TableCell className="font-mono text-xs">{v.rule_id}</TableCell>
                 <TableCell className="font-mono text-xs">{formatCriterionId(v.wcag_sc)}</TableCell>
                 <TableCell className="text-xs">{formatCriterionName(v.criterion_name, v.wcag_sc)}</TableCell>
+                <TableCell className="font-mono text-xs">{formatElementTag(v.element_tag)}</TableCell>
                 <TableCell className="text-xs text-muted-foreground max-w-xs">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -215,6 +231,18 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
                     </TooltipTrigger>
                     <TooltipContent className="max-w-sm text-xs">{v.reason}</TooltipContent>
                   </Tooltip>
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1 max-w-[220px]">
+                    <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block">
+                      {formatElementSnippet(v.element_html)}
+                    </code>
+                    {v.element_selector && (
+                      <code className="text-[10px] text-muted-foreground/80 bg-muted/60 px-1 py-0.5 rounded truncate block">
+                        {v.element_selector}
+                      </code>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>
@@ -243,6 +271,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           criterionName={modalData.criterion_name}
           suggestedFix={modalData.suggested_fix}
           elementHtml={modalData.element_html}
+          elementSelector={modalData.element_selector}
           helpUrl={modalData.help_url}
         />
       )}

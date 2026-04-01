@@ -107,8 +107,8 @@ class MovingContentCrawler:
                         btn.getAttribute('aria-label') ||
                         btn.getAttribute('title') || ''
                     ).toLowerCase();
-                    // Only "pause" or "stop" — a plain "play" link is not a pause mechanism
-                    if (/pause|stop/.test(txt)) return true;
+                    // Only pause/stop controls (EN/JP) — a plain "play" link is not a pause mechanism
+                    if (/pause|stop|一時停止|停止|止める/.test(txt)) return true;
                 }
             }
             return false;
@@ -331,11 +331,11 @@ class MovingContentCrawler:
                     btn.getAttribute('aria-label') ||
                     btn.getAttribute('title') || ''
                 ).toLowerCase();
-                if (/pause|stop/.test(txt)) return true;
+                if (/pause|stop|一時停止|停止|止める/.test(txt)) return true;
             }
             // Also check aria-label on any child element
             if (el.querySelector) {
-                if (el.querySelector('[aria-label*="pause" i],[aria-label*="stop" i]')) return true;
+                if (el.querySelector('[aria-label*="pause" i],[aria-label*="stop" i],[aria-label*="一時停止" i],[aria-label*="停止" i]')) return true;
             }
             return false;
         }

@@ -61,6 +61,7 @@ _COLLECT_JS = """
 
         const overflowX = cs.overflowX || 'visible';
         const overflowY = cs.overflowY || 'visible';
+        const hasOverflowXScroll = overflowX === 'auto' || overflowX === 'scroll';
         const position = cs.position || 'static';
         const display = cs.display || '';
         const visibility = cs.visibility || 'visible';
@@ -113,6 +114,7 @@ _COLLECT_JS = """
             scroll_height: el.scrollHeight,
             overflow_x: overflowX,
             overflow_y: overflowY,
+            has_overflow_x_scroll: hasOverflowXScroll,
             position: position,
             display: display,
             visibility: visibility,
@@ -180,6 +182,7 @@ async def collect_snapshot(
                 scroll_height=float(item.get("scroll_height", 0)),
                 overflow_x=item.get("overflow_x", "visible"),
                 overflow_y=item.get("overflow_y", "visible"),
+                has_overflow_x_scroll=bool(item.get("has_overflow_x_scroll", False)),
                 position=item.get("position", "static"),
                 display=item.get("display", ""),
                 visibility=item.get("visibility", "visible"),

@@ -47,9 +47,25 @@ _LOGO_KEYWORDS = [
     "nav-logo",
     "masthead",
     "identity",
+    "ロゴ",
+    "ブランド",
+    "サイトロゴ",
+    "企業ロゴ",
 ]
 
-_ICON_KEYWORDS = ["icon", "ico", "symbol", "glyph", "sprite", "badge", "avatar"]
+_ICON_KEYWORDS = [
+    "icon",
+    "ico",
+    "symbol",
+    "glyph",
+    "sprite",
+    "badge",
+    "avatar",
+    "アイコン",
+    "シンボル",
+    "バッジ",
+    "アバター",
+]
 
 _FONT_ICON_PREFIXES = [
     "fa ",
@@ -104,6 +120,13 @@ _CHART_KEYWORDS = [
     "report",
     "data-viz",
     "visualization",
+    "グラフ",
+    "チャート",
+    "図表",
+    "統計",
+    "インフォグラフィック",
+    "ダッシュボード",
+    "分析",
 ]
 
 _CHART_LIBS = [
@@ -143,6 +166,9 @@ _CHART_PARENT_CLASSES = [
     "analytics",
     "data-chart",
     "chart-wrap",
+    "グラフ",
+    "チャート",
+    "図表",
 ]
 
 
@@ -446,7 +472,7 @@ class ClassifyAssets:
                 const isHome = href === "/" || href === "" || href === window.location.origin;
                 const inHeader = el.closest("header, nav, [role='banner']") !== null;
                 const aLabel  = (a.getAttribute("aria-label") || "").toLowerCase();
-                const hasLogo = /logo|brand|home/.test(aLabel);
+                const hasLogo = /logo|brand|home|ロゴ|ブランド|ホーム/.test(aLabel);
                 return isHome && inHeader && hasLogo;
             }""")
         except Exception:

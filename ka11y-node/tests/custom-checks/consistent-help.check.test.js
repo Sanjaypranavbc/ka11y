@@ -43,4 +43,14 @@ describe('consistent-help.check (WCAG 3.2.6)', () => {
     const result = await run(page);
     expect(result.rules[0].reason).toContain('header');
   });
+
+  test('includes Japanese help keywords in source heuristics', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/consistent-help.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('お問い合わせ');
+    expect(src).toContain('ヘルプセンター');
+    expect(src).toContain('チャット');
+  });
 });

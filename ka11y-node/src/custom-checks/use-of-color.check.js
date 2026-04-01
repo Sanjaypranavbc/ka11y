@@ -90,9 +90,13 @@ async function run(page) {
 
       // 4. Background colour change vs ancestor
       const ancestor = getAncestorTextStyle(link);
+      // When there is no non-<a> ancestor available, compare against the
+      // transparent sentinel via colorsDiffer so all browser-normalised
+      // transparent string variants (rgba(0,0,0,0), rgba(0, 0, 0, 0),
+      // transparent) are handled uniformly by the digit-extraction parser.
       const hasBgChange = ancestor
         ? colorsDiffer(ls.backgroundColor, ancestor.background)
-        : ls.backgroundColor !== 'rgba(0, 0, 0, 0)' && ls.backgroundColor !== 'transparent';
+        : colorsDiffer(ls.backgroundColor, 'rgba(0, 0, 0, 0)');
 
       // 5. Font-weight substantially heavier than ancestor
       // Use ancestor.fontWeight (from getAncestorTextStyle) — NOT link.parentElement

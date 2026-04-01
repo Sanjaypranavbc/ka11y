@@ -13,6 +13,7 @@ from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
     _normalize,
     _has_word_chars,
     _label_in_name,
+    _contains_cjk,
     _strip_punctuation,
     _check_253,
 )
@@ -187,6 +188,30 @@ class TestCheck253Passed:
         )
         status, _ = _check_253(el)
         assert status == "PASSED"
+
+    def test_cjk_visible_label_substring_match_passes(self):
+        el = make_element(
+            visible_label="検索",
+            accessible_name="サイト内検索を開く",
+        )
+        status, _ = _check_253(el)
+        assert status == "PASSED"
+
+    def test_cjk_visible_label_missing_fails(self):
+        el = make_element(
+            visible_label="検索",
+            accessible_name="メニューを開く",
+        )
+        status, _ = _check_253(el)
+        assert status == "FAILED"
+
+
+class TestCJKHelpers:
+    def test_contains_cjk_true_for_hiragana(self):
+        assert _contains_cjk("お知らせ")
+
+    def test_contains_cjk_false_for_ascii(self):
+        assert not _contains_cjk("search")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

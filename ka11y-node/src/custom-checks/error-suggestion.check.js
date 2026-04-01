@@ -5,10 +5,10 @@ const RULE_ID = 'custom-error-suggestion';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/error-suggestion';
 
 // Patterns that indicate a message provides actual correction guidance
-const SUGGESTION_RE = /please\s+(enter|provide|use|select|check|make sure|ensure|type|choose|pick)|must\s+(be|contain|have|include|start|end|match|not|be\s+at\s+least|be\s+between)|should\s+(be|contain|include|not)|at\s+least\s+\d|at\s+most\s+\d|between\s+\d+\s+and\s+\d+|characters?\s+(long|minimum|maximum|required)|valid\s+(email|phone|date|format|url|number|value)|try\s+again|example:/i;
+const SUGGESTION_RE = /please\s+(enter|provide|use|select|check|make sure|ensure|type|choose|pick)|must\s+(be|contain|have|include|start|end|match|not|be\s+at\s+least|be\s+between)|should\s+(be|contain|include|not)|at\s+least\s+\d|at\s+most\s+\d|between\s+\d+\s+and\s+\d+|characters?\s+(long|minimum|maximum|required)|valid\s+(email|phone|date|format|url|number|value)|try\s+again|example:|入力してください|選択してください|確認してください|必要があります|以上|以下|文字以上|文字以下|文字以内|有効な(メール|電話|日付|形式|url|数値)|例[:：]/i;
 
 // Patterns that indicate a terse/uninformative error message
-const TERSE_RE = /^(invalid|error|required|failed|wrong|incorrect|bad\s+input|not\s+valid|this\s+field\s+is\s+required)\.?$/i;
+const TERSE_RE = /^(invalid|error|required|failed|wrong|incorrect|bad\s+input|not\s+valid|this\s+field\s+is\s+required|無効|エラー|必須|失敗|不正|入力エラー)\.?$/i;
 
 async function run(page) {
   const data = await page.evaluate(() => {
@@ -104,8 +104,16 @@ async function run(page) {
     };
   }
 
+  // A message is considered terse/uninformative only when:
+  //   - it matches the known terse pattern (just "Invalid", "Error", etc.), OR
+  //   - it is short (< 25 chars) AND provides no recognisable correction signal.
+  // Exception: short messages that contain a digit (e.g. "Enter 8+ characters"),
+  // a format indicator (@, A–Z, 0–9), or specific correction words (only, format,
+  // characters) are still useful guidance and must not be flagged.
+  const SHORT_BUT_INFORMATIVE_RE = /\d|[@A-Za-z][-–—][A-Za-z0-9]|\b(only|format|characters?|digits?|letters?|symbols?|uppercase|lowercase|special)\b/i;
   const errorsWithoutSuggestion = allErrors.filter(text =>
-    TERSE_RE.test(text) || (!SUGGESTION_RE.test(text) && text.length < 25)
+    TERSE_RE.test(text) ||
+    (!SUGGESTION_RE.test(text) && text.length < 25 && !SHORT_BUT_INFORMATIVE_RE.test(text))
   );
 
   if (errorsWithoutSuggestion.length > 0) {

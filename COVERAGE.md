@@ -4,11 +4,12 @@
 
 This report combines direct source inspection of `ka11y-node` and `ka11y-python` with **empirical validation against 7 real production websites** (W3Schools, IRS.gov, BBC, Amazon, Stack Overflow, Wikipedia, NHS UK) run on 2026-03-26. Coverage is counted only from criteria actually emitted by the current pipelines, not from metadata catalogs alone.
 
-- `ka11y-node` emits **46** unique WCAG 2.2 success criteria at maximum (`AAA`) scope (added `1.4.5` via `custom-images-of-text` check).
-- `ka11y-python` emits **16** unique WCAG 2.2 success criteria through `combined/findings.py` and `combined/stages.py`.
+- `ka11y-node` emits **47** unique WCAG 2.2 success criteria at maximum (`AAA`) scope.
+- `ka11y-python` emits **18** unique WCAG 2.2 success criteria through `combined/findings.py` and `combined/stages.py`.
 - The combined project emits **53 / 87** WCAG 2.2 success criteria, which is **60.9%** overall coverage.
-- Coverage is strong in Level A (**81.3%**) and AA (**88.5%**); Level AAA remains narrow: **5 / 30** criteria (**16.7%**).
+- Coverage is strong in Level A (**80.6%**) and AA (**84.6%**); Level AAA remains narrow: **6 / 30** criteria (**20.0%**).
 - **6 bugs fixed** in this release: icon/button alt-text false positives, form 3.3.2 required-field false negative, focus-visible transparent-outline regex gaps, error-prevention false positives, and two pre-existing test mock mismatches.
+- Separate Japanese-site coverage output is now supported via `scripts/wcag_audit_runner.py --include-japanese`, with report text kept in English for cross-team readability.
 
 ## Validation Basis
 
@@ -36,28 +37,28 @@ This report combines direct source inspection of `ka11y-node` and `ka11y-python`
 
 | Level | Total SC | Node | Python | Overlap | Combined covered | Missing | Combined coverage |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| A | 31 | 24 | 5 | 4 | 25 | 6 | **80.6%** |
+| A | 31 | 24 | 6 | 5 | 25 | 6 | **80.6%** |
 | AA | 26 | 18 | 10 | 6 | 22 | 4 | **84.6%** |
-| AAA | 30 | 4 | 1 | 0 | 5 | 25 | **16.7%** |
-| **Total** | **87** | **46** | **16** | **10** | **53** | **34** | **60.9%** |
+| AAA | 30 | 5 | 2 | 1 | 6 | 24 | **20.0%** |
+| **Total** | **87** | **47** | **18** | **12** | **53** | **34** | **60.9%** |
 
-_Note: 1.4.5 moved from Python-only to overlap (Node heuristic + Python OCR), adding it to both Node and overlap counts._
+_Note: overlap now includes `1.4.6` and `4.1.2` in addition to `1.4.5`, and Node coverage now includes `3.1.6`._
 
 ## Coverage by Principle
 
 | Principle | Total SC | Node | Python | Combined | Combined coverage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Perceivable | 29 | 14 | 9 | 18 | **62.1%** |
+| Perceivable | 29 | 14 | 10 | 17 | **58.6%** |
 | Operable | 34 | 20 | 5 | 22 | **64.7%** |
-| Understandable | 21 | 9 | 2 | 10 | **47.6%** |
-| Robust | 3 | 3 | 0 | 3 | **100.0%** |
+| Understandable | 21 | 10 | 2 | 11 | **52.4%** |
+| Robust | 3 | 3 | 1 | 3 | **100.0%** |
 
 ## Stack Contribution Breakdown
 
 | Category | Count | Criteria |
 | --- | ---: | --- |
-| Overlap between Node and Python | 10 | `1.1.1`, `1.3.4`, `1.4.3`, `1.4.4`, `1.4.5`, `1.4.12`, `2.2.2`, `2.5.3`, `2.5.8`, `3.3.2` |
-| Node-only coverage | 36 | `1.2.1`, `1.2.2`, `1.3.1`, `1.3.2`, `1.3.5`, `1.4.1`, `1.4.2`, `1.4.6`, `2.1.1`, `2.1.2`, `2.1.4`, `2.2.1`, `2.2.4`, `2.4.1`, `2.4.2`, `2.4.3`, `2.4.4`, `2.4.5`, `2.4.6`, `2.4.7`, `2.4.8`, `2.4.9`, `2.4.13`, `2.5.2`, `2.5.7`, `3.1.1`, `3.1.2`, `3.2.1`, `3.2.2`, `3.2.6`, `3.3.3`, `3.3.4`, `3.3.8`, `4.1.1`, `4.1.2`, `4.1.3` |
+| Overlap between Node and Python | 12 | `1.1.1`, `1.3.4`, `1.4.3`, `1.4.4`, `1.4.5`, `1.4.6`, `1.4.12`, `2.2.2`, `2.5.3`, `2.5.8`, `3.3.2`, `4.1.2` |
+| Node-only coverage | 35 | `1.2.1`, `1.2.2`, `1.3.1`, `1.3.2`, `1.3.5`, `1.4.1`, `1.4.2`, `2.1.1`, `2.1.2`, `2.1.4`, `2.2.1`, `2.2.4`, `2.4.1`, `2.4.2`, `2.4.3`, `2.4.4`, `2.4.5`, `2.4.6`, `2.4.7`, `2.4.8`, `2.4.9`, `2.4.13`, `2.5.2`, `2.5.7`, `3.1.1`, `3.1.2`, `3.1.6`, `3.2.1`, `3.2.2`, `3.2.6`, `3.3.3`, `3.3.4`, `3.3.8`, `4.1.1`, `4.1.3` |
 | Python-only coverage | 6 | `1.4.10`, `1.4.11`, `1.4.13`, `2.4.11`, `2.4.12`, `3.3.1` |
 
 ## Empirical Validation — 7 Real Production Websites (2026-03-26)
@@ -117,7 +118,7 @@ Tests ran via `POST /api/v1/analyse-url-flat` (Node service, axe-core + 22 custo
 | 4.1.2 | 1 | 6 | 2 |
 | 4.1.3 | 1 | 1 | 5 |
 
-_15 Python-only SCs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-side coverage of 1.1.1, 1.3.4, 1.4.3, 1.4.4, 1.4.5, 1.4.12, 2.2.2, 2.5.3, 2.5.8) require the Python combined pipeline and were not part of this Node-only test run._
+_18 Python-pipeline SC outputs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-side coverage of 1.1.1, 1.3.4, 1.4.3, 1.4.4, 1.4.5, 1.4.6, 1.4.12, 2.2.2, 2.5.3, 2.5.8, 3.3.2, 4.1.2) require the Python combined pipeline and were not part of this Node-only test run._
 
 ## Confidence Summary
 
@@ -131,9 +132,9 @@ _15 Python-only SCs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-s
 | Level | High | Medium | Low | Covered |
 | --- | ---: | ---: | ---: | ---: |
 | A | 13 | 9 | 3 | 25 |
-| AA | 11 | 10 | 1 | 22 |
-| AAA | 2 | 2 | 1 | 5 |
-| Total | 26 | 21 | 5 | 52 |
+| AA | 10 | 11 | 1 | 22 |
+| AAA | 2 | 2 | 2 | 6 |
+| Total | 25 | 22 | 6 | 53 |
 
 ## Bug Fixes Applied (2026-03-26)
 
@@ -153,14 +154,14 @@ _15 Python-only SCs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-s
 | --- | ---: | --- |
 | Direct axe WCAG-tagged rules | 26 | Backed by numeric `wcag***` tags in local `axe-core 4.11.1` |
 | Fallback-mapped best-practice rules | 8 | `2.4.3` and `2.4.6` are fallback-only; rest overlap direct coverage |
-| Custom Node checks | 20 | 22 files in `src/custom-checks/*.check.js` (added `images-of-text`) |
+| Custom Node checks | 23 | 23 files in `src/custom-checks/*.check.js` |
 | Pure best-practice rules not counted | 8 | `aria-text`, `empty-table-header`, `frame-tested`, `hidden-content`, `label-title-only`, `landmark-complementary-is-top-level`, `landmark-main-is-top-level`, `scope-attr-valid` |
 
 ## Python Coverage Composition
 
 | Source family | Unique SC touched | Criteria | Why it matters |
 | --- | ---: | --- | --- |
-| Image/OCR emitters | 4 | `1.1.1`, `1.4.3`, `1.4.5`, `1.4.11` | alt text, text contrast, images of text (OCR), non-text contrast |
+| Image/OCR emitters | 6 | `1.1.1`, `1.4.3`, `1.4.5`, `1.4.6`, `1.4.11`, `4.1.2` | alt text, text contrast (AA/AAA), images of text (OCR), non-text contrast, functional-image naming |
 | Rendered layout evaluators | 7 | `1.3.4`, `1.4.4`, `1.4.10`, `1.4.12`, `1.4.13`, `2.4.11`, `2.4.12` | Playwright-driven layout, zoom, hover, focus, and obscuration checks |
 | Form emitters | 2 | `3.3.1`, `3.3.2` | error identification and labels/instructions |
 | Input/timing emitters | 3 | `2.2.2`, `2.5.3`, `2.5.8` | pause/stop/hide, label in name, target size |
@@ -169,9 +170,9 @@ _15 Python-only SCs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-s
 
 | Requested level | Node reachable SC | Combined reachable SC | Reachable level mix | Caveat |
 | --- | ---: | ---: | --- | --- |
-| A | 27 | 28 | Node `24 A / 3 AA / 0 AAA`, Combined `25 A / 3 AA / 0 AAA` | Node A still surfaces `1.4.4`, `1.4.5`, and `2.4.6` through best-practice fallback mappings. |
-| AA | 42 | 48 | Node `24 A / 18 AA / 0 AAA`, Combined `25 A / 23 AA / 0 AAA` | AA behaves as expected; no AAA criteria emitted. |
-| AAA | 46 | 53 | Node `24 A / 18 AA / 4 AAA`, Combined `25 A / 23 AA / 5 AAA` | AAA adds `1.4.6`, `2.2.4`, `2.4.8`, `2.4.9`, and `2.4.12` to combined footprint. |
+| A | 26 | 27 | Node `24 A / 2 AA / 0 AAA`, Combined `25 A / 2 AA / 0 AAA` | Node A still surfaces `1.4.4` and `2.4.6` through best-practice fallback mappings. |
+| AA | 42 | 47 | Node `24 A / 18 AA / 0 AAA`, Combined `25 A / 22 AA / 0 AAA` | AA behaves as expected; no AAA criteria emitted. |
+| AAA | 47 | 53 | Node `24 A / 18 AA / 5 AAA`, Combined `25 A / 22 AA / 6 AAA` | AAA adds `1.4.6`, `2.2.4`, `2.4.8`, `2.4.9`, `2.4.12`, and `3.1.6` to combined footprint. |
 
 ## High-Value Observations from Empirical Testing
 
@@ -190,14 +191,14 @@ _15 Python-only SCs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-s
 | --- | ---: | --- |
 | A | 6 | `1.2.3` Audio Description or Media Alternative (Prerecorded), `1.3.3` Sensory Characteristics, `2.3.1` Three Flashes or Below Threshold, `2.5.1` Pointer Gestures, `2.5.4` Motion Actuation, `3.3.7` Redundant Entry |
 | AA | 4 | `1.2.4` Captions (Live), `1.2.5` Audio Description (Prerecorded), `3.2.3` Consistent Navigation, `3.2.4` Consistent Identification |
-| AAA | 25 | `1.2.6` Sign Language (Prerecorded), `1.2.7` Extended Audio Description (Prerecorded), `1.2.8` Media Alternative (Prerecorded), `1.2.9` Audio-only (Live), `1.3.6` Identify Purpose, `1.4.7` Low or No Background Audio, `1.4.8` Visual Presentation, `1.4.9` Images of Text (No Exception), `2.1.3` Keyboard (No Exception), `2.2.3` No Timing, `2.2.5` Re-authenticating, `2.2.6` Timeouts, `2.3.2` Three Flashes, `2.3.3` Animation from Interactions, `2.4.10` Section Headings, `2.5.5` Target Size`, `2.5.6` Concurrent Input Mechanisms, `3.1.3` Unusual Words, `3.1.4` Abbreviations, `3.1.5` Reading Level, `3.1.6` Pronunciation, `3.2.5` Change on Request, `3.3.5` Help, `3.3.6` Error Prevention (All), `3.3.9` Accessible Authentication (Enhanced) |
+| AAA | 24 | `1.2.6` Sign Language (Prerecorded), `1.2.7` Extended Audio Description (Prerecorded), `1.2.8` Media Alternative (Prerecorded), `1.2.9` Audio-only (Live), `1.3.6` Identify Purpose, `1.4.7` Low or No Background Audio, `1.4.8` Visual Presentation, `1.4.9` Images of Text (No Exception), `2.1.3` Keyboard (No Exception), `2.2.3` No Timing, `2.2.5` Re-authenticating, `2.2.6` Timeouts, `2.3.2` Three Flashes, `2.3.3` Animation from Interactions, `2.4.10` Section Headings, `2.5.5` Target Size, `2.5.6` Concurrent Input Mechanisms, `3.1.3` Unusual Words, `3.1.4` Abbreviations, `3.1.5` Reading Level, `3.2.5` Change on Request, `3.3.5` Help, `3.3.6` Error Prevention (All), `3.3.9` Accessible Authentication (Enhanced) |
 
 ## Coverage Growth Opportunities
 
 | Technique family | Missing SC unlocked | Why this is efficient |
 | --- | ---: | --- |
 | `NEXT-MEDIA` | 10 | One media analysis pipeline can cover prerecorded alternatives, live captions, flash checks, and background-audio rules. |
-| `NEXT-NLP` | 6 | Language, sensory-instruction, and readability checks cluster naturally around text parsing. |
+| `NEXT-NLP` | 5 | Language, sensory-instruction, and readability checks cluster naturally around text parsing. |
 | `NEXT-FLOW` | 4 | Stateful workflow replay would unlock redundant-entry, help, error-prevention, and enhanced authentication checks. |
 | `NEXT-MOTION` | 3 | Gesture, motion, and interaction-animation gaps are all runtime instrumentation problems. |
 | `NEXT-TIME` | 3 | Timeout and interruption handling can be addressed by a dedicated session-state monitor. |
@@ -232,7 +233,7 @@ _15 Python-only SCs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-s
 | 1.4.3 | Contrast (Minimum) | AA | Yes | Yes | Covered | High | N-AXE; P-OCR contrast extraction; 2/7 sites failed | Text contrast must reach the minimum readability ratio. |
 | 1.4.4 | Resize Text | AA | Yes | Yes | Covered | High | N-AXE + fallback; P-RENDER resize-text evaluator | Text should stay usable when enlarged to 200 percent. |
 | 1.4.5 | Images of Text | AA | **Yes** | Yes | Covered | Medium | **N-CUSTOM** (heuristic src/alt signals) + P-OCR audit; 4/7 sites needs_review | Use real text instead of text baked into images where possible. |
-| 1.4.6 | Contrast (Enhanced) | AAA | Yes | No | Covered | High | N-AXE | Text needs higher-than-AA contrast. |
+| 1.4.6 | Contrast (Enhanced) | AAA | Yes | Yes | Covered | High | N-AXE; P-OCR contrast extraction | Text needs higher-than-AA contrast. |
 | 1.4.7 | Low or No Background Audio | AAA | No | No | Missing | Not covered | NEXT-MEDIA | Background audio should be absent or very low behind speech. |
 | 1.4.8 | Visual Presentation | AAA | No | No | Missing | Not covered | NEXT-LAYOUT | Users should have strong control over text presentation. |
 | 1.4.9 | Images of Text (No Exception) | AAA | No | No | Missing | Not covered | P-OCR upgrade | Avoid images of text except where truly essential. |
@@ -279,7 +280,7 @@ _15 Python-only SCs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-s
 | 3.1.3 | Unusual Words | AAA | No | No | Missing | Not covered | NEXT-NLP | Uncommon words should be explained. |
 | 3.1.4 | Abbreviations | AAA | No | No | Missing | Not covered | NEXT-NLP | Abbreviations should be explained. |
 | 3.1.5 | Reading Level | AAA | No | No | Missing | Not covered | NEXT-NLP | Content should be readable at lower complexity or have support. |
-| 3.1.6 | Pronunciation | AAA | No | No | Missing | Not covered | NEXT-NLP | When pronunciation affects meaning, it should be provided. |
+| 3.1.6 | Pronunciation | AAA | Yes | No | Covered | Low | N-CUSTOM pronunciation heuristic (CJK/ruby detection) | When pronunciation affects meaning, it should be provided. |
 | 3.2.1 | On Focus | A | Yes | No | Covered | Medium | N-CUSTOM; 1/7 sites failed | Focusing an element should not unexpectedly change context. |
 | 3.2.2 | On Input | A | Yes | No | Covered | Medium | N-CUSTOM | Changing a field should not unexpectedly submit or navigate. |
 | 3.2.3 | Consistent Navigation | AA | No | No | Missing | Not covered | NEXT-CROSS | Repeated navigation should stay in a consistent order. |
@@ -296,5 +297,5 @@ _15 Python-only SCs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, and Python-s
 | 3.3.8 | Accessible Authentication (Minimum) | AA | Yes | No | Covered | Medium | N-CUSTOM | Login should not depend only on hard memory or cognitive tests. |
 | 3.3.9 | Accessible Authentication (Enhanced) | AAA | No | No | Missing | Not covered | NEXT-FLOW | Authentication should avoid cognitive barriers more strongly. |
 | 4.1.1 | Parsing | A | Yes | No | Covered | Medium | N-CUSTOM; 2/7 sites failed (dup IDs) | Markup should not break because of duplicate IDs or invalid structure. |
-| 4.1.2 | Name, Role, Value | A | Yes | No | Covered | High | N-AXE + fallback | Custom controls need correct name, role, state, and value. |
+| 4.1.2 | Name, Role, Value | A | Yes | Yes | Covered | High | N-AXE + fallback; P-image name-role-value auditor | Custom controls need correct name, role, state, and value. |
 | 4.1.3 | Status Messages | AA | Yes | No | Covered | Medium | N-CUSTOM | Important status updates must reach assistive tech without stealing focus. |

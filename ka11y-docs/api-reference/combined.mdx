@@ -22,7 +22,7 @@ The combined endpoint is the **primary API**. It runs axe-core (Node) and all Py
 </ParamField>
 
 <ParamField body="lang" type="string" default="en">
-  Result language for localized WCAG names and suggested fixes. Use `"ja"` for Japanese (`"en"` and `"de"` are also supported). Unsupported values fall back to English.
+  Result language for localized WCAG names and suggested fixes. Use `"ja"` for Japanese (`"en"` and `"de"` are also supported). Unsupported values fall back to English. Default result language is English.
 </ParamField>
 
 <ParamField body="run_ocr" type="boolean" default="true">
@@ -129,6 +129,8 @@ curl -X POST http://localhost:8000/api/v1/combined/ \
     "max_depth": 0
   }'
 ```
+
+For Japanese pages, OCR runs with Japanese + English recognition to improve mixed-script detection while keeping API field names and endpoint contracts unchanged.
 
 <ResponseExample>
 ```json HTTP 202

@@ -254,6 +254,10 @@ class TestCheck111Logo:
         passed, _ = _check_1_1_1_logo("Home")
         assert passed is True
 
+    def test_alt_with_japanese_logo_word_passes(self):
+        passed, _ = _check_1_1_1_logo("企業ロゴ")
+        assert passed is True
+
     def test_brand_name_without_logo_fails(self):
         passed, msg = _check_1_1_1_logo("Brand Name")
         assert passed is False
@@ -292,6 +296,10 @@ class TestCheck111Icon:
 
     def test_icon_word_in_alt_passes(self):
         passed, _ = _check_1_1_1_icon("settings icon")
+        assert passed is True
+
+    def test_japanese_icon_qualifier_passes(self):
+        passed, _ = _check_1_1_1_icon("設定アイコン")
         assert passed is True
 
     def test_non_empty_non_brand_passes_with_note(self):
@@ -360,6 +368,10 @@ class TestCheck111Button:
         passed, _ = _check_1_1_1_button("menu")
         assert passed is True
 
+    def test_japanese_action_word_passes(self):
+        passed, _ = _check_1_1_1_button("検索")
+        assert passed is True
+
 
 # ── _check_4_1_2 ─────────────────────────────────────────────────────────────
 
@@ -385,6 +397,10 @@ class TestCheck412:
 
     def test_logo_subtype_with_home_word_passes(self):
         passed, _ = _check_4_1_2("Home", "logos")
+        assert passed is True
+
+    def test_logo_subtype_with_japanese_logo_word_passes(self):
+        passed, _ = _check_4_1_2("サービスロゴ", "logos")
         assert passed is True
 
     def test_logo_subtype_without_logo_fails(self):

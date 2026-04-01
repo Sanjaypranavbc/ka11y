@@ -99,6 +99,64 @@ async def test_python_result_non_tuple_does_not_raise():
     store._jobs.pop(job_id, None)
 
 
+def test_merge_findings_keeps_distinct_targets_with_same_html():
+    from ka11y.api.v1.combined.runner import _merge_findings
+
+    node_findings = [
+        {
+            "wcag_sc": "3.3.7",
+            "status": "needs_review",
+            "element": {
+                "html": '<input name="email">',
+                "element_id": None,
+                "target": ['input#email'],
+            },
+        },
+        {
+            "wcag_sc": "3.3.7",
+            "status": "needs_review",
+            "element": {
+                "html": '<input name="email">',
+                "element_id": None,
+                "target": ['input#emailsub'],
+            },
+        },
+    ]
+
+    merged = _merge_findings(node_findings, [])
+    assert len(merged) == 2
+
+
+def test_merge_findings_still_dedupes_same_target():
+    from ka11y.api.v1.combined.runner import _merge_findings
+
+    node_findings = [
+        {
+            "wcag_sc": "3.3.7",
+            "status": "needs_review",
+            "element": {
+                "html": '<input name="email">',
+                "element_id": None,
+                "target": ['input#email'],
+            },
+        },
+    ]
+    python_findings = [
+        {
+            "wcag_sc": "3.3.7",
+            "status": "needs_review",
+            "element": {
+                "html": '<input name="email">',
+                "element_id": None,
+                "target": ['input#email'],
+            },
+        },
+    ]
+
+    merged = _merge_findings(node_findings, python_findings)
+    assert len(merged) == 1
+
+
 @pytest.mark.asyncio
 async def test_python_result_valid_tuple_works_correctly():
     """

@@ -13,11 +13,12 @@ interface SuggestedFixModalProps {
   criterionName: string | null;
   suggestedFix: string | null;
   elementHtml: string;
+  elementSelector?: string | null;
   helpUrl?: string | null;
 }
 
 export function SuggestedFixModal({
-  open, onOpenChange, wcagSc, criterionName, suggestedFix, elementHtml, helpUrl,
+  open, onOpenChange, wcagSc, criterionName, suggestedFix, elementHtml, elementSelector, helpUrl,
 }: SuggestedFixModalProps) {
   const { t } = useLanguage();
 
@@ -39,12 +40,13 @@ export function SuggestedFixModal({
   }
 
   const copyHtml = () => {
+    const textToCopy = elementHtml || elementSelector || "";
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(elementHtml)
+      navigator.clipboard.writeText(textToCopy)
         .then(() => toast.success(t("modal.copied")))
-        .catch(() => _fallbackCopy(elementHtml));
+        .catch(() => _fallbackCopy(textToCopy));
     } else {
-      _fallbackCopy(elementHtml);
+      _fallbackCopy(textToCopy);
     }
   };
 
@@ -68,7 +70,7 @@ export function SuggestedFixModal({
             </div>
           )}
 
-          {elementHtml && (
+          {(elementHtml || elementSelector) && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-sm font-medium text-foreground">{t("modal.elementHtml")}</h4>
@@ -78,9 +80,16 @@ export function SuggestedFixModal({
               </div>
               <div className="bg-muted rounded-md p-3 overflow-x-auto">
                 <pre className="text-xs whitespace-pre-wrap break-all leading-relaxed">
-                  <code>{formatElementSnippet(elementHtml)}</code>
+                  <code>{formatElementSnippet(elementHtml || elementSelector || "")}</code>
                 </pre>
               </div>
+              {elementSelector && elementSelector !== elementHtml && (
+                <div className="mt-2 bg-muted/60 rounded-md p-3 overflow-x-auto">
+                  <pre className="text-xs whitespace-pre-wrap break-all leading-relaxed">
+                    <code>{elementSelector}</code>
+                  </pre>
+                </div>
+              )}
             </div>
           )}
 

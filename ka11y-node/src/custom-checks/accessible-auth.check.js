@@ -10,7 +10,8 @@ async function run(page) {
     const authForms = forms.filter(form => {
       const hasPassword = !!form.querySelector('input[type="password"]');
       const text = (form.textContent || '').toLowerCase();
-      const isLoginLike = /\b(log\s*in|sign\s*in|login|signin|authenticate|username|email\s+address|create\s+account|register|forgot\s+password)\b/.test(text);
+      const isLoginLike =
+        /\b(log\s*in|sign\s*in|login|signin|authenticate|username|email\s+address|create\s+account|register|forgot\s+password)\b|ログイン|サインイン|認証|ユーザー名|メールアドレス|アカウント作成|新規登録|会員登録|パスワード|パスワードを忘れ|パスワード再設定/.test(text);
       return hasPassword || isLoginLike;
     });
 
@@ -41,14 +42,14 @@ async function run(page) {
       const hasCaptchaAlt = !!(
         // Standard audio CAPTCHA button/link
         document.querySelector('[class*="captcha-audio" i], [id*="audio-captcha" i]') ||
-        document.querySelector('button[aria-label*="audio" i], a[aria-label*="audio" i]') ||
+        document.querySelector('button[aria-label*="audio" i], a[aria-label*="audio" i], button[aria-label*="音声" i], a[aria-label*="音声" i]') ||
         // reCAPTCHA's built-in audio button (class is obfuscated but aria-label is stable)
-        document.querySelector('[title*="audio" i][title*="captcha" i]') ||
+        document.querySelector('[title*="audio" i][title*="captcha" i], [title*="音声" i]') ||
         // Links offering alternative text/audio
         Array.from(document.querySelectorAll('a, button')).some(el => {
           const text = (el.textContent || '').trim().toLowerCase();
           const label = (el.getAttribute('aria-label') || '').toLowerCase();
-          return /audio|can.?t\s+read|different\s+image|refresh\s+captcha|alternative|try\s+another/i.test(text + label);
+          return /audio|音声|can.?t\s+read|読み取れない|different\s+image|別の画像|refresh\s+captcha|画像を更新|alternative|別の方法|try\s+another|別の認証/i.test(text + label);
         })
       );
 
@@ -71,7 +72,8 @@ async function run(page) {
 
       // 3. Cognitive function tests (expanded patterns)
       const formText = (form.textContent || '').toLowerCase();
-      const hasCognitiveTest = /what\s+is\s+\d+\s*[\+\-\*×÷]\s*\d+|solve\s+the\s+(puzzle|equation|problem)|enter\s+the\s+(word|text|code|letters?|numbers?)\s+(you\s+see|shown|above|below|in\s+the\s+(image|picture))|answer\s+the\s+(question|challenge)|what\s+(color|colour|shape)\s+is/i.test(formText);
+      const hasCognitiveTest =
+        /what\s+is\s+\d+\s*[\+\-\*×÷]\s*\d+|solve\s+the\s+(puzzle|equation|problem)|enter\s+the\s+(word|text|code|letters?|numbers?)\s+(you\s+see|shown|above|below|in\s+the\s+(image|picture))|answer\s+the\s+(question|challenge)|what\s+(color|colour|shape)\s+is|\d+\s*[\+\-\*×÷]\s*\d+|計算|問題を解|パズル|クイズ|画像に表示|表示された文字|見える文字|質問に答|何色|どの色|どの形/i.test(formText);
 
       if (hasAnyCaptcha && !hasCaptchaAlt) {
         issues.push({

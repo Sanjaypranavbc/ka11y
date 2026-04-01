@@ -26,8 +26,9 @@ async function run(page) {
     // that would need status messages (search results, cart, notifications)
     const hasSearchResults = !!(
       document.querySelector('[role="region"][aria-label*="result" i]') ||
+      document.querySelector('[role="region"][aria-label*="結果" i]') ||
       document.querySelector('[aria-live][id*="result" i]') ||
-      document.querySelector('[id*="search-result" i], [class*="search-result" i]')
+      document.querySelector('[id*="search-result" i], [class*="search-result" i], [id*="検索結果" i], [class*="検索結果" i]')
     );
     // B14: '[class*="badge" i]' was too broad — it matched Bootstrap decorative labels
     // ("New", "Pro", "Beta") and other non-counter badge components, causing false
@@ -38,10 +39,10 @@ async function run(page) {
       const text = (el.textContent || '').trim();
       const label = (el.getAttribute('aria-label') || '').toLowerCase();
       return /^\d+\+?$/.test(text) ||
-             /count|counter|notification|unread|\bnew\b/i.test(label);
+             /\b(count|counter|notification|unread|新着|件|通知|未読)\b/i.test(label);
     });
     const hasCartOrCounter = !!(
-      document.querySelector('[aria-label*="cart" i], [aria-label*="basket" i]') ||
+      document.querySelector('[aria-label*="cart" i], [aria-label*="basket" i], [aria-label*="カート" i], [aria-label*="買い物かご" i]') ||
       document.querySelector('[class*="cart-count" i]') ||
       hasCounterBadge
     );

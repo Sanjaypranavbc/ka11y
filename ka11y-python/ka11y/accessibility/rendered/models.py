@@ -57,6 +57,8 @@ class ElementSnapshot(BaseModel):
     overflow_y: str = "visible"
     position: str = "static"
 
+    has_overflow_x_scroll: bool = False
+
     visible: bool = True
     focusable: bool = False
     fixed_or_sticky: bool = False

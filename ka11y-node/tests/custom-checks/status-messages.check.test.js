@@ -109,4 +109,14 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
       expect(src).toMatch(/role.*status|aria-live/);
     });
   });
+
+  test('includes Japanese dynamic-context keywords in source heuristics', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/status-messages.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('検索結果');
+    expect(src).toContain('未読');
+    expect(src).toContain('カート');
+  });
 });

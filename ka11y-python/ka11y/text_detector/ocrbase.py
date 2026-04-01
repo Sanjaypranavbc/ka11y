@@ -12,26 +12,33 @@ _reader: Optional[easyocr.Reader] = None
 _reader_lock = threading.Lock()
 
 
-def get_ocr_reader(langs: Optional[list] = None) -> easyocr.Reader:
+def get_ocr_reader(lang: str = "en") -> easyocr.Reader:
     """Return the shared EasyOCR Reader, initialising it on first call."""
     global _reader
+    # Map supported languages to EasyOCR codes.
+    # For Japanese, we need both 'en' and 'ja' to handle mixed text.
+    langs = ["en"]
+    if lang in ("ja", "jp"):
+        langs.append("ja")
+
     if _reader is None:
         with _reader_lock:
             if _reader is None:
-                _reader = easyocr.Reader(langs or ["en"], gpu=False, verbose=False)
+                _reader = easyocr.Reader(langs, gpu=False, verbose=False)
     return _reader
 
 
 class OCRReader:
 
-    def __init__(self, source_directory: str, output_directory: Optional[str] = None):
+    def __init__(self, source_directory: str, output_directory: Optional[str] = None, lang: str = "en"):
         self.source_directory = source_directory
         self.output_directory = output_directory
+        self.lang = lang
 
     @property
     def reader(self) -> easyocr.Reader:
         """Lazily return the singleton reader."""
-        return get_ocr_reader()
+        return get_ocr_reader(self.lang)
 
     def readtext(self, image_path: str):
         return self.reader.readtext(image_path)

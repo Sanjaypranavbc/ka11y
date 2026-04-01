@@ -38,4 +38,14 @@ describe('multiple-ways.check (WCAG 2.4.5)', () => {
     const result = await run(page);
     expect(result.rules[0].ruleId).toBe('custom-multiple-ways');
   });
+
+  test('includes Japanese navigation keywords in source heuristics', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/multiple-ways.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('検索');
+    expect(src).toContain('サイトマップ');
+    expect(src).toContain('目次');
+  });
 });

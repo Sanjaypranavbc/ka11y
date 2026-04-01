@@ -24,20 +24,31 @@ async function run(page) {
       const transcriptLinks = container
         ? Array.from(container.querySelectorAll('a[href]')).filter(a => {
             const combined = ((a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '')).toLowerCase();
-            return /transcript|caption|text\s+version|read|description|audio\s+text/i.test(combined);
+            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト|説明文/i.test(combined);
           })
         : [];
 
       // 3. <figcaption> inside a parent <figure>
       const hasFigCaption = !!(audio.closest('figure') && audio.closest('figure').querySelector('figcaption'));
 
-      // 4. aria-describedby pointing to an existing element with text
-      const describedById = audio.getAttribute('aria-describedby');
-      const hasAriaDescription = describedById
-        ? !!document.getElementById(describedById)
+      // 3b. <details> element in container whose summary/text mentions transcript
+      const hasDetailsTranscript = container
+        ? Array.from(container.querySelectorAll('details')).some(det => {
+            const text = (det.textContent || '').toLowerCase();
+            const summary = (det.querySelector('summary') || {}).textContent || '';
+            const combined = text + ' ' + summary.toLowerCase();
+            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト/i.test(combined);
+          })
         : false;
 
-      if (!hasTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasAriaDescription) {
+      // 4. aria-describedby pointing to an existing element with text
+      const describedByIds = (audio.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+      const hasAriaDescription = describedByIds.some(id => {
+        const target = document.getElementById(id);
+        return !!target && (target.textContent || '').trim().length > 0;
+      });
+
+      if (!hasTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription) {
         issues.push({
           html: audio.outerHTML.slice(0, 150),
           id: audio.id || null,

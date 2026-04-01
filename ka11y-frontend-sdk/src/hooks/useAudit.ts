@@ -4,8 +4,34 @@ import { emptyAuditResult } from "@/data/sampleData";
 
 // Backend returns element HTML nested as `element.html`; flatten it to `element_html` for the UI.
 function flattenFinding(f: Record<string, unknown>) {
-  const element = f.element as Record<string, unknown> | null | undefined;
-  return { ...f, element_html: (element?.html as string) || "" };
+  const directElement = f.element as Record<string, unknown> | null | undefined;
+  const firstListElement = Array.isArray(f.elements)
+    ? (f.elements.find((e) => !!e && typeof e === "object") as Record<string, unknown> | undefined)
+    : undefined;
+  const element = (directElement && typeof directElement === "object")
+    ? directElement
+    : firstListElement;
+
+  const explicitHtml = typeof f.element_html === "string"
+    ? (f.element_html as string)
+    : (typeof f.html_snippet === "string" ? (f.html_snippet as string) : "");
+  const htmlFromElement = typeof element?.html === "string" ? (element.html as string) : "";
+  const tagFromElement = element?.tag ?? element?.tagName;
+  const idFromElement = element?.element_id ?? element?.id;
+  const targetFromElement = Array.isArray(element?.target) ? element?.target : [];
+  const selectorFromElement =
+    (typeof element?.selector === "string" ? (element.selector as string) : null) ||
+    (typeof f.element_selector === "string" ? (f.element_selector as string) : null) ||
+    (typeof f.selector === "string" ? (f.selector as string) : null) ||
+    (typeof targetFromElement?.[0] === "string" ? (targetFromElement[0] as string) : null);
+
+  return {
+    ...f,
+    element_html: explicitHtml || htmlFromElement || "",
+    element_tag: typeof tagFromElement === "string" ? (tagFromElement as string) : null,
+    element_id: typeof idFromElement === "string" ? (idFromElement as string) : null,
+    element_selector: selectorFromElement,
+  };
 }
 
 function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): AuditResult {
@@ -25,7 +51,7 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
     passes_count: (report.passes as unknown[])?.length || 0,
     violations: rawViolations.map(flattenFinding) as AuditResult["violations"],
     needs_review: rawNeedsReview.map(flattenFinding) as AuditResult["needs_review"],
-    passes: (report.passes as AuditResult["passes"]) || [],
+    passes: (((report.passes as Record<string, unknown>[]) || []).map(flattenFinding) as AuditResult["passes"]) || [],
     warnings: (report.warnings as string[]) || (pollData.warnings as string[]) || [],
     contrast_report: (report.contrast_report as ContrastReport) ?? null,
   };

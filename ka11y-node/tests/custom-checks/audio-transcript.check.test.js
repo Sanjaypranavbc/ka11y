@@ -53,4 +53,14 @@ describe('audio-transcript.check (WCAG 1.2.1)', () => {
     const result = await run(page);
     expect(result.rules[0].impact).toBeNull();
   });
+
+  test('includes Japanese transcript keywords in source heuristics', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/audio-transcript.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('文字起こし');
+    expect(src).toContain('トランスクリプト');
+    expect(src).toContain('字幕');
+  });
 });

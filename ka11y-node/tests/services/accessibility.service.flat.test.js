@@ -19,6 +19,7 @@ function makePage(axeResults) {
   return {
     setDefaultTimeout: jest.fn(),
     setDefaultNavigationTimeout: jest.fn(),
+    setRequestInterception: jest.fn().mockResolvedValue(undefined),
     on: jest.fn(),
     goto: jest.fn().mockResolvedValue(undefined),
     addScriptTag: jest.fn().mockResolvedValue(undefined),
