@@ -240,6 +240,44 @@ class TestOrientation:
         ]
         assert len(ratio_violations) == 0
 
+    def test_landscape_introduces_horizontal_scroll(self):
+        """Layout breaks on rotation — horizontal overflow appears only in landscape."""
+        portrait = _snap(scenario="orientation_portrait", vw=390, vh=844, doc_scroll_w=390)
+        landscape = _snap(scenario="orientation_landscape", vw=844, vh=390, doc_scroll_w=1200)
+        records = ev_orientation.evaluate(portrait, landscape)
+        assert any(r.status == "NEEDS_REVIEW" and "horizontal scrolling" in (r.violation or "") for r in records)
+
+    def test_dramatic_ratio_flags_needs_review(self):
+        """Portrait has 10 interactive elements, landscape has only 2 → ratio 0.2 < 0.5."""
+        portrait_els = [self._focusable_el(i) for i in range(10)]
+        landscape_els = [self._focusable_el(i) for i in range(2)]
+        portrait = _snap(scenario="orientation_portrait", vw=390, vh=844, elements=portrait_els)
+        landscape = _snap(scenario="orientation_landscape", vw=844, vh=390, elements=landscape_els)
+        records = ev_orientation.evaluate(portrait, landscape)
+        assert any("Dramatic difference" in (r.violation or "") for r in records)
+
+    def test_css_transform_lock_detected(self):
+        """Element with rotate transform on body → NEEDS_REVIEW."""
+        portrait = _snap(scenario="orientation_portrait", vw=390, vh=844, elements=[], body_transform="matrix(0, 1, -1, 0, 0, 0)")
+        landscape = _snap(scenario="orientation_landscape", vw=844, vh=390, elements=[])
+        records = ev_orientation.evaluate(portrait, landscape)
+        assert any(r.status == "NEEDS_REVIEW" and "CSS rotation transform" in (r.violation or "") for r in records)
+
+    def test_portrait_only_overlay_in_landscape(self):
+        """'Portrait only' overlay appears in landscape → NEEDS_REVIEW."""
+        overlay = _el(tag="div", text="Portrait only. Turn your phone.")
+        portrait = _snap(scenario="orientation_portrait", vw=390, vh=844, elements=[])
+        landscape = _snap(scenario="orientation_landscape", vw=844, vh=390, elements=[overlay])
+        records = ev_orientation.evaluate(portrait, landscape)
+        assert any(r.status == "NEEDS_REVIEW" and "rotate-device overlay" in (r.violation or "") for r in records)
+
+    def test_body_overflow_hidden_detected(self):
+        """Body has overflow hidden → NEEDS_REVIEW."""
+        portrait = _snap(scenario="orientation_portrait", vw=390, vh=844, elements=[], body_overflow_x="hidden")
+        landscape = _snap(scenario="orientation_landscape", vw=844, vh=390, elements=[])
+        records = ev_orientation.evaluate(portrait, landscape)
+        assert any(r.status == "NEEDS_REVIEW" and "overflow: hidden or clip" in (r.violation or "") for r in records)
+
 
 # ── WCAG 1.4.13 Content on Hover or Focus ─────────────────────────────────────
 

@@ -4,3 +4,6 @@
 output
 .claude
 *.xlsx
+ka11y-docs/node_modules/
+ka11y-docs/package-lock.json
+ka11y-docs/package.json

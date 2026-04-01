@@ -88,6 +88,32 @@ def detect_missing_main_content(snapshot: PageSnapshot) -> bool:
     return len(visible_text) < 3
 
 
+def detect_css_transform_lock(snapshot: PageSnapshot) -> bool:
+    """
+    True if the body has a CSS rotation transform, often used to 
+    force orientation via a CSS/JS hack instead of native capabilities.
+    """
+    transform = snapshot.body_transform.strip().lower()
+    return "matrix(" in transform or "rotate(" in transform
+
+
+def detect_body_overflow_hidden(snapshot: PageSnapshot) -> bool:
+    """
+    True if document body has overflow:hidden or overflow-x:hidden,
+    which could clip content when rotated if the layout isn't fluid.
+    """
+    ox = snapshot.body_overflow_x.strip().lower()
+    return ox in ("hidden", "clip")
+
+
+def detect_landscape_horizontal_overflow(portrait: PageSnapshot, landscape: PageSnapshot) -> bool:
+    """
+    True if landscape snapshot has a horizontal scroll but portrait doesn't.
+    This often indicates the layout broke when rotated sideways.
+    """
+    return landscape.has_horizontal_scroll and not portrait.has_horizontal_scroll
+
+
 def elements_with_horizontal_overflow(
     snapshot: PageSnapshot,
 ) -> List[ElementSnapshot]:
