@@ -135,6 +135,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
                 lang=payload.lang,
                 job_id=job_id,
+                lang=payload.lang,
             )
         )
 

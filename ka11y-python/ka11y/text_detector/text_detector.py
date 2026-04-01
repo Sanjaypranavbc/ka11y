@@ -23,7 +23,6 @@ from ka11y.utils.text_detector_helper import (
     bbox_height_rotated,
     load_image_with_alpha
 )
-from ka11y.text_detector.ocrbase import OCRReader
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
 
@@ -32,17 +31,22 @@ config = load_config()
 logger = setup_logger(name="KAC", tag="text_detector")
 logger.info("Logger initialized")
 
+try:
+    from ka11y.text_detector.paddleocrbase import OCRReader
+    # Verify it can actually be initialized (detects missing paddleocr lib)
+    _test_reader = OCRReader(source_directory="")
+    _ = _test_reader.reader
+    if _test_reader.reader is None:
+         raise ImportError("PaddleOCR not functional")
+except (ImportError, RuntimeError):
+    logger.info("PaddleOCR not available, falling back to EasyOCR")
+    from ka11y.text_detector.ocrbase import OCRReader
+
+
 
 class OCRPreprocessing:
-
-    def __init__(
-        self,
-        source_directory: str,
-        output_directory: Optional[str] = None,
-        lang: str = "en",
-    ):
+    def __init__(self, source_directory: str, output_directory: Optional[str] = None, lang: str = "en"):
         self.source_directory = source_directory
-        self.lang = (lang or "en").lower()
 
         if output_directory is None:
             self.base_output_dir = source_directory
@@ -71,17 +75,13 @@ class OCRPreprocessing:
 
         Path(self.contrast_dir).mkdir(parents=True, exist_ok=True)
 
-        logger.info("Initializing EasyOCR Reader (loading models)...")
-        self.reader = OCRReader(source_directory, langs=self._ocr_langs())
-        logger.info("EasyOCR Reader initialized")
+        # logger.info("Initializing EasyOCR Reader (loading models)...")
+        logger.info(f"Initializing OCR Reader for lang={lang}...")
+        self.reader = OCRReader(source_directory, lang=lang)
+        # logger.info("EasyOCR Reader initialized")
+        logger.info("OCR Reader initialized")
 
         self.results: List[TextDetectionResult] = []
-
-    def _ocr_langs(self) -> list[str]:
-        # Include English fallback so mixed-script pages remain readable.
-        if self.lang.startswith("ja"):
-            return ["ja", "en"]
-        return ["en"]
 
     def _determine_category(self, original_path: str) -> str:
         """Heuristic to determine category based on source path."""
