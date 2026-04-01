@@ -18,6 +18,7 @@ router = APIRouter(tags=["individual-rules"])
 # Mapping from Rule ID to flags in CombinedRequest
 RULE_FLAGS = {
     "1.1.1": {"run_image_audit": True},
+    "1.2.1": {"run_media_audit": True},
     "1.4.3": {"run_ocr": True},
     "1.4.6": {"run_ocr": True},
     "1.4.11": {"run_image_audit": True},
