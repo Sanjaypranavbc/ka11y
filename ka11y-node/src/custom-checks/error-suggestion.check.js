@@ -104,8 +104,16 @@ async function run(page) {
     };
   }
 
+  // A message is considered terse/uninformative only when:
+  //   - it matches the known terse pattern (just "Invalid", "Error", etc.), OR
+  //   - it is short (< 25 chars) AND provides no recognisable correction signal.
+  // Exception: short messages that contain a digit (e.g. "Enter 8+ characters"),
+  // a format indicator (@, A–Z, 0–9), or specific correction words (only, format,
+  // characters) are still useful guidance and must not be flagged.
+  const SHORT_BUT_INFORMATIVE_RE = /\d|[@A-Za-z][-–—][A-Za-z0-9]|\b(only|format|characters?|digits?|letters?|symbols?|uppercase|lowercase|special)\b/i;
   const errorsWithoutSuggestion = allErrors.filter(text =>
-    TERSE_RE.test(text) || (!SUGGESTION_RE.test(text) && text.length < 25)
+    TERSE_RE.test(text) ||
+    (!SUGGESTION_RE.test(text) && text.length < 25 && !SHORT_BUT_INFORMATIVE_RE.test(text))
   );
 
   if (errorsWithoutSuggestion.length > 0) {

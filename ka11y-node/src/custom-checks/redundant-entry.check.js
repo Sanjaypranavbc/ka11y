@@ -10,7 +10,6 @@ const PERSONAL_AUTOCOMPLETE_TOKENS = [
   'given-name',
   'additional-name',
   'family-name',
-  'honific-suffix',
   'honorific-suffix',
   'nickname',
   'username',

@@ -31,6 +31,16 @@ async function run(page) {
       // 3. <figcaption> inside a parent <figure>
       const hasFigCaption = !!(audio.closest('figure') && audio.closest('figure').querySelector('figcaption'));
 
+      // 3b. <details> element in container whose summary/text mentions transcript
+      const hasDetailsTranscript = container
+        ? Array.from(container.querySelectorAll('details')).some(det => {
+            const text = (det.textContent || '').toLowerCase();
+            const summary = (det.querySelector('summary') || {}).textContent || '';
+            const combined = text + ' ' + summary.toLowerCase();
+            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト/i.test(combined);
+          })
+        : false;
+
       // 4. aria-describedby pointing to an existing element with text
       const describedByIds = (audio.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
       const hasAriaDescription = describedByIds.some(id => {
@@ -38,7 +48,7 @@ async function run(page) {
         return !!target && (target.textContent || '').trim().length > 0;
       });
 
-      if (!hasTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasAriaDescription) {
+      if (!hasTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription) {
         issues.push({
           html: audio.outerHTML.slice(0, 150),
           id: audio.id || null,

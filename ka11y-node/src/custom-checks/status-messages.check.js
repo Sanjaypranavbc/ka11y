@@ -39,7 +39,7 @@ async function run(page) {
       const text = (el.textContent || '').trim();
       const label = (el.getAttribute('aria-label') || '').toLowerCase();
       return /^\d+\+?$/.test(text) ||
-             /count|counter|notification|unread|\bnew\b|件|通知|未読/i.test(label);
+             /\b(count|counter|notification|unread|新着|件|通知|未読)\b/i.test(label);
     });
     const hasCartOrCounter = !!(
       document.querySelector('[aria-label*="cart" i], [aria-label*="basket" i], [aria-label*="カート" i], [aria-label*="買い物かご" i]') ||

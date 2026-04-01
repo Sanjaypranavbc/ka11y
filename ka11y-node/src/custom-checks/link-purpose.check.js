@@ -44,7 +44,24 @@ async function run(page) {
         if (img && !(link.textContent || '').trim()) {
           accessibleName = (img.getAttribute('alt') || '').trim();
         } else {
-          accessibleName = (link.textContent || '').trim().replace(/\s+/g, ' ');
+          // Collect only visible text — textContent includes display:none descendants
+          // which can make a generic link appear descriptive (false negative).
+          const visibleText = [];
+          const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT, {
+            acceptNode(node) {
+              const parent = node.parentElement;
+              if (!parent) return NodeFilter.FILTER_REJECT;
+              const cs = window.getComputedStyle(parent);
+              if (cs.display === 'none' || cs.visibility === 'hidden') return NodeFilter.FILTER_REJECT;
+              return NodeFilter.FILTER_ACCEPT;
+            },
+          });
+          let n;
+          while ((n = walker.nextNode())) {
+            const t = (n.nodeValue || '').trim();
+            if (t) visibleText.push(t);
+          }
+          accessibleName = visibleText.join(' ').replace(/\s+/g, ' ').trim();
         }
       }
 
