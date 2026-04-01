@@ -72,6 +72,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
         return (
           v.reason.toLowerCase().includes(q) ||
           (v.element_html || "").toLowerCase().includes(q) ||
+          (v.element_selector || "").toLowerCase().includes(q) ||
           (v.rule_id || "").toLowerCase().includes(q) ||
           (v.element_tag || "").toLowerCase().includes(q)
         );
@@ -241,9 +242,16 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                   </Tooltip>
                 </TableCell>
                 <TableCell>
-                  <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block max-w-[120px]">
-                    {formatElementSnippet(v.element_html)}
-                  </code>
+                  <div className="space-y-1 max-w-[220px]">
+                    <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block">
+                      {formatElementSnippet(v.element_html)}
+                    </code>
+                    {v.element_selector && (
+                      <code className="text-[10px] text-muted-foreground/80 bg-muted/60 px-1 py-0.5 rounded truncate block">
+                        {v.element_selector}
+                      </code>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>
@@ -272,6 +280,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
           criterionName={modalData.criterion_name}
           suggestedFix={modalData.suggested_fix}
           elementHtml={modalData.element_html}
+          elementSelector={modalData.element_selector}
           helpUrl={modalData.help_url}
         />
       )}

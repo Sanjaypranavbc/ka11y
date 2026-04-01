@@ -39,7 +39,8 @@ def _merge_findings(
     Merge axe-core and Python findings with deduplication.
 
     Dedup key: (wcag_sc, status, element_signature)
-      - element_signature is the first 120 chars of element.html (or element_id)
+      - element_signature prefers a stable selector/target, then element_id,
+        then the first 120 chars of element.html
         normalised to lower-case so minor HTML differences don't create dupes.
       - Findings with no element info are never deduplicated (always kept).
 
@@ -53,9 +54,15 @@ def _merge_findings(
 
     def _sig(f: Dict) -> tuple:
         el = f.get("element") or {}
+        target = el.get("target") or []
+        target_sig = ""
+        if isinstance(target, list) and target:
+            first = target[0]
+            if isinstance(first, str):
+                target_sig = first.strip().lower()
         el_id = (el.get("element_id") or "").strip()
         el_html = (el.get("html") or "").strip()[:120].lower()
-        ident = el_id or el_html
+        ident = target_sig or el_id or el_html
         return (f.get("wcag_sc", ""), f.get("status", ""), ident)
 
     for f in python_findings:

@@ -18,12 +18,19 @@ function flattenFinding(f: Record<string, unknown>) {
   const htmlFromElement = typeof element?.html === "string" ? (element.html as string) : "";
   const tagFromElement = element?.tag ?? element?.tagName;
   const idFromElement = element?.element_id ?? element?.id;
+  const targetFromElement = Array.isArray(element?.target) ? element?.target : [];
+  const selectorFromElement =
+    (typeof element?.selector === "string" ? (element.selector as string) : null) ||
+    (typeof f.element_selector === "string" ? (f.element_selector as string) : null) ||
+    (typeof f.selector === "string" ? (f.selector as string) : null) ||
+    (typeof targetFromElement?.[0] === "string" ? (targetFromElement[0] as string) : null);
 
   return {
     ...f,
     element_html: explicitHtml || htmlFromElement || "",
     element_tag: typeof tagFromElement === "string" ? (tagFromElement as string) : null,
     element_id: typeof idFromElement === "string" ? (idFromElement as string) : null,
+    element_selector: selectorFromElement,
   };
 }
 

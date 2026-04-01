@@ -4,6 +4,7 @@ interface AuditElementInfo {
   element_html: string;
   element_tag?: string | null;
   element_id?: string | null;
+  element_selector?: string | null;
 }
 
 export interface AuditViolation extends AuditElementInfo {

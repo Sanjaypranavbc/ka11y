@@ -67,12 +67,13 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
       if (scFilter.length && !scFilter.includes(v.wcag_sc)) return false;
       if (!search) return true;
       const q = search.toLowerCase();
-      return (
-        v.reason.toLowerCase().includes(q) ||
-        (v.element_html || "").toLowerCase().includes(q) ||
-        (v.rule_id || "").toLowerCase().includes(q) ||
-        (v.element_tag || "").toLowerCase().includes(q)
-      );
+        return (
+          v.reason.toLowerCase().includes(q) ||
+          (v.element_html || "").toLowerCase().includes(q) ||
+          (v.element_selector || "").toLowerCase().includes(q) ||
+          (v.rule_id || "").toLowerCase().includes(q) ||
+          (v.element_tag || "").toLowerCase().includes(q)
+        );
     });
   }, [items, search, severityFilter, sourceFilter, scFilter]);
 
@@ -232,9 +233,16 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
                   </Tooltip>
                 </TableCell>
                 <TableCell>
-                  <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block max-w-[180px]">
-                    {formatElementSnippet(v.element_html)}
-                  </code>
+                  <div className="space-y-1 max-w-[220px]">
+                    <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block">
+                      {formatElementSnippet(v.element_html)}
+                    </code>
+                    {v.element_selector && (
+                      <code className="text-[10px] text-muted-foreground/80 bg-muted/60 px-1 py-0.5 rounded truncate block">
+                        {v.element_selector}
+                      </code>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>
@@ -263,6 +271,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           criterionName={modalData.criterion_name}
           suggestedFix={modalData.suggested_fix}
           elementHtml={modalData.element_html}
+          elementSelector={modalData.element_selector}
           helpUrl={modalData.help_url}
         />
       )}

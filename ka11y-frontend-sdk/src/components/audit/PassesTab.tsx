@@ -58,15 +58,16 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
       if (scFilter.length && (!p.wcag_sc || !scFilter.includes(p.wcag_sc))) return false;
       if (!search) return true;
       const q = search.toLowerCase();
-      return (
-        p.rule_id.toLowerCase().includes(q) ||
-        (p.wcag_sc || "").toLowerCase().includes(q) ||
-        (p.criterion_name || "").toLowerCase().includes(q) ||
-        p.reason.toLowerCase().includes(q) ||
-        (p.element_html || "").toLowerCase().includes(q) ||
-        (p.element_tag || "").toLowerCase().includes(q) ||
-        (p.element_id || "").toLowerCase().includes(q)
-      );
+        return (
+          p.rule_id.toLowerCase().includes(q) ||
+          (p.wcag_sc || "").toLowerCase().includes(q) ||
+          (p.criterion_name || "").toLowerCase().includes(q) ||
+          p.reason.toLowerCase().includes(q) ||
+          (p.element_html || "").toLowerCase().includes(q) ||
+          (p.element_selector || "").toLowerCase().includes(q) ||
+          (p.element_tag || "").toLowerCase().includes(q) ||
+          (p.element_id || "").toLowerCase().includes(q)
+        );
     });
   }, [passes, search, sourceFilter, levelFilter, scFilter]);
 
@@ -220,9 +221,16 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                         <TableCell><Badge variant="outline" className="text-[10px]">{formatLevel(p.level)}</Badge></TableCell>
                         <TableCell className="font-mono text-xs">{formatElementTag(p.element_tag)}</TableCell>
                         <TableCell>
-                          <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block max-w-[220px]">
-                            {formatElementSnippet(p.element_html)}
-                          </code>
+                          <div className="space-y-1 max-w-[220px]">
+                            <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block">
+                              {formatElementSnippet(p.element_html)}
+                            </code>
+                            {p.element_selector && (
+                              <code className="text-[10px] text-muted-foreground/80 bg-muted/60 px-1 py-0.5 rounded truncate block">
+                                {p.element_selector}
+                              </code>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-xs">
                           <Tooltip>
