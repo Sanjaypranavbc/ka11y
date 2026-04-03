@@ -48,7 +48,7 @@ async function run(page) {
     };
   });
 
-  const { duplicateIds, totalIdCount } = data;
+  const { duplicateIds, totalIdCount, brokenRefs, orphanedLabels } = data;
   const issues = [];
 
   if (duplicateIds.length > 0) {
@@ -57,10 +57,24 @@ async function run(page) {
     );
   }
 
+  if (brokenRefs && brokenRefs.length > 0) {
+    const sample = brokenRefs.slice(0, 3).map(r => `${r.attr}="${r.id}"`).join(', ');
+    issues.push(
+      `${brokenRefs.length} broken ARIA reference(s) — referenced id(s) not found in DOM: ${sample}`
+    );
+  }
+
+  if (orphanedLabels && orphanedLabels.length > 0) {
+    const sample = orphanedLabels.slice(0, 3).map(l => `for="${l.for}"`).join(', ');
+    issues.push(
+      `${orphanedLabels.length} <label for="..."> element(s) reference a non-existent id: ${sample}`
+    );
+  }
+
   if (issues.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'HTML must have no parsing errors that affect AT', impact: null, status: 'pass', reason: `${totalIdCount} element(s) with id attributes checked — all id values are unique.`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'HTML must have no parsing errors that affect AT', impact: null, status: 'pass', reason: `${totalIdCount} element(s) with id attributes checked — all id values are unique, no broken ARIA references, and no orphaned label[for] elements detected.`, helpUrl: HELP_URL }],
     };
   }
 

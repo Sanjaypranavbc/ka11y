@@ -80,6 +80,23 @@ async function run(page) {
       el => (el.textContent || '').trim().length > 0
     );
 
+    // aria-atomic check: [role="alert"] or [aria-live="assertive"] missing aria-atomic="true"
+    const alertsWithoutAtomic = Array.from(document.querySelectorAll(
+      '[role="alert"], [aria-live="assertive"]'
+    )).filter(el => el.getAttribute('aria-atomic') !== 'true');
+
+    // Inline validation without live region ancestor
+    const invalidWithoutLiveRegion = Array.from(document.querySelectorAll('[aria-invalid]')).filter(el => {
+      let node = el.parentElement;
+      while (node && node !== document.body) {
+        const role = node.getAttribute('role');
+        const ariaLive = node.getAttribute('aria-live');
+        if (ariaLive || role === 'status' || role === 'alert' || role === 'log') return false;
+        node = node.parentElement;
+      }
+      return true;
+    });
+
     return {
       liveRegionCount: liveRegions.length,
       formCount,
@@ -93,10 +110,35 @@ async function run(page) {
         hasCartOrCounter && 'cart/counter',
         hasNotificationArea && 'notification area',
       ].filter(Boolean),
+      alertsWithoutAtomicCount: alertsWithoutAtomic.length,
+      invalidWithoutLiveRegionCount: invalidWithoutLiveRegion.length,
     };
   });
 
-  const { liveRegionCount, formCount, hasAlerts, hasPolite, needsLiveRegions, anyLiveRegionHasContent, dynamicContexts } = data;
+  const { liveRegionCount, formCount, hasAlerts, hasPolite, needsLiveRegions, anyLiveRegionHasContent, dynamicContexts, alertsWithoutAtomicCount, invalidWithoutLiveRegionCount } = data;
+
+  // Build extra INCOMPLETE rules for aria-atomic and inline validation issues
+  const extraRules = [];
+  if (alertsWithoutAtomicCount > 0) {
+    extraRules.push({
+      ruleId: `${RULE_ID}-atomic`,
+      description: 'Status messages must be programmatically determinable',
+      impact: null,
+      status: 'incomplete',
+      reason: `${alertsWithoutAtomicCount} [role="alert"] or [aria-live="assertive"] element(s) are missing aria-atomic="true". Without aria-atomic, only changed portions may be announced rather than the full message.`,
+      helpUrl: HELP_URL,
+    });
+  }
+  if (invalidWithoutLiveRegionCount > 0) {
+    extraRules.push({
+      ruleId: `${RULE_ID}-inline-validation`,
+      description: 'Status messages must be programmatically determinable',
+      impact: null,
+      status: 'incomplete',
+      reason: `${invalidWithoutLiveRegionCount} [aria-invalid] element(s) have no live region ancestor (aria-live, role="status/alert/log"). Inline validation errors may not be announced to screen reader users.`,
+      helpUrl: HELP_URL,
+    });
+  }
 
   // Page has dynamic contexts but no live regions at all → clear fail
   if (needsLiveRegions && liveRegionCount === 0) {
@@ -109,7 +151,7 @@ async function run(page) {
         status: 'fail',
         reason: `Dynamic content contexts detected (${dynamicContexts.join(', ')}) but no ARIA live regions found. Validation errors and status updates will not be announced to screen readers.`,
         helpUrl: HELP_URL,
-      }],
+      }, ...extraRules],
     };
   }
 
@@ -122,7 +164,7 @@ async function run(page) {
       : 'All live regions are empty at page load — confirm they are populated on status updates at runtime.';
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}) alongside dynamic contexts (${dynamicContexts.join(', ')}). ${contentNote} Verify live regions are correctly wired to each status update.`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}) alongside dynamic contexts (${dynamicContexts.join(', ')}). ${contentNote} Verify live regions are correctly wired to each status update.`, helpUrl: HELP_URL }, ...extraRules],
     };
   }
 
@@ -130,14 +172,14 @@ async function run(page) {
   if (liveRegionCount > 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'pass', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}).`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'pass', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}).`, helpUrl: HELP_URL }, ...extraRules],
     };
   }
 
   // No dynamic contexts and no live regions — not enough info, mark incomplete
   return {
     successCriteriaId: SC,
-    rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: 'moderate', status: 'incomplete', reason: 'No ARIA live regions detected. If this page displays status updates (alerts, notifications, form feedback), verify they use role="status", role="alert", or aria-live.', helpUrl: HELP_URL }],
+    rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: 'moderate', status: 'incomplete', reason: 'No ARIA live regions detected. If this page displays status updates (alerts, notifications, form feedback), verify they use role="status", role="alert", or aria-live.', helpUrl: HELP_URL }, ...extraRules],
   };
 }
 
