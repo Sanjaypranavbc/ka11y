@@ -22,8 +22,7 @@ from .models import ElementSnapshot, PageSnapshot, Rect
 # Regex for rotate-device gatekeeper overlay text
 _ROTATE_RE = re.compile(
     r"rotate\s+(your\s+)?device|landscape\s+only|portrait\s+only|"
-    r"please\s+rotate|turn\s+your\s+phone|works\s+best\s+in\s+(landscape|portrait)|"
-    r"端末を回転|デバイスを回転|横向きのみ|縦向きのみ|横向きでご利用|縦向きでご利用",
+    r"please\s+rotate|turn\s+your\s+phone|works\s+best\s+in\s+(landscape|portrait)",
     re.IGNORECASE,
 )
 
@@ -89,21 +88,43 @@ def detect_missing_main_content(snapshot: PageSnapshot) -> bool:
     return len(visible_text) < 3
 
 
-def elements_with_horizontal_overflow(snapshot):
-    els = []
+def detect_css_transform_lock(snapshot: PageSnapshot) -> bool:
+    """
+    True if the body has a CSS rotation transform, often used to
+    force orientation via a CSS/JS hack instead of native capabilities.
+    """
+    transform = snapshot.body_transform.strip().lower()
+    return "matrix(" in transform or "rotate(" in transform
 
+
+def detect_body_overflow_hidden(snapshot: PageSnapshot) -> bool:
+    """
+    True if document body has overflow:hidden or overflow-x:hidden,
+    which could clip content when rotated if the layout isn't fluid.
+    """
+    ox = snapshot.body_overflow_x.strip().lower()
+    return ox in ("hidden", "clip")
+
+
+def detect_landscape_horizontal_overflow(portrait: PageSnapshot, landscape: PageSnapshot) -> bool:
+    """
+    True if landscape snapshot has a horizontal scroll but portrait doesn't.
+    This often indicates the layout broke when rotated sideways.
+    """
+    return landscape.has_horizontal_scroll and not portrait.has_horizontal_scroll
+
+
+def elements_with_horizontal_overflow(
+    snapshot: PageSnapshot,
+) -> List[ElementSnapshot]:
+    """Return elements that overflow horizontally beyond the viewport."""
+    result = []
     for el in snapshot.elements:
-        if not getattr(el, "is_visible", True):
+        if not el.visible:
             continue
-
-        # skip scroll containers themselves
-        if getattr(el, "has_overflow_x_scroll", False):
-            continue
-
-        if el.rect.right > snapshot.viewport_width:
-            els.append(el)
-
-    return els
+        if el.rect.right > snapshot.viewport_width + 10:
+            result.append(el)
+    return result
 
 
 def compute_obscuration(

@@ -25,17 +25,6 @@ This document provides a deep technical breakdown of every accessibility rule im
     3.  **Overlay Detection**: Execute a DOM-wide string search for "orientation-lock" patterns (e.g., "Rotate your device") using a localized regex `_ROTATE_RE`.
     4.  **Content Loss Detection**: Compare the number of visible `main` content elements. If >50% of content becomes hidden or obscured by a "Portrait Only" modal, the rule fails.
 
-### **Rule ID**: WCAG 1.4.3 — Contrast (Minimum) (Level AA)
-*   **Goal**: The visual presentation of text and images of text has a contrast ratio of at least 4.5:1, except for large text which requires at least 3:1.
-*   **Solution Approach**: **Computer Vision Text-Region Contrast Segmentation**. Analyzes the relative luminance of OCR-detected text regions within images.
-*   **Logic**:
-    1.  **Luminance Mapping**: Converts sRGB pixels to linear space and calculates relative luminance ($L = 0.2126R + 0.7152G + 0.0722B$).
-    2.  **DPR Normalization**: Adjusts the detected bounding box height by the `device_pixel_ratio` to accurately determine the effective CSS font size.
-    3.  **Large Text Determination**: Classifies text as "Large" if font size ≥ 24px (regular) or ≥ 18.5px (bold). Boldness is estimated via pixel density analysis (`estimate_boldness`).
-    4.  **Threshold Enforcement**: 
-        *   **Normal Text**: Fails if ratio < 4.5:1.
-        *   **Large Text**: Fails if ratio < 3.0:1.
-
 ### **Rule ID**: WCAG 1.4.4 — Resize Text (Level AA)
 *   **Goal**: Text can be resized up to 200% without loss of content or functionality (e.g., no clipping, no overlapping).
 *   **Solution Approach**: **CSS-Text-Zoom Simulation & Geometric Diffing**. Captures precise element bounding boxes before and after a coordinated CSS text-scaling injection.
@@ -52,15 +41,6 @@ This document provides a deep technical breakdown of every accessibility rule im
     1.  **Exemption Gate**: Skips images classified as `logo` (via `is_logo` flag) or `complex`.
     2.  **OCR Sweep**: Runs PaddleOCR on the remaining informative images.
     3.  **Violation Trigger**: If OCR detects any coherent text blocks (verified by English/Japanese character counts), the rule fails, recommending that the text be moved to HTML/CSS for better accessibility and SEO.
-
-### **Rule ID**: WCAG 1.4.6 — Contrast (Enhanced) (Level AAA)
-*   **Goal**: The visual presentation of text and images of text has a contrast ratio of at least 7:1, except for large text which requires at least 4.5:1.
-*   **Solution Approach**: **Computer Vision Text-Region Contrast Segmentation (Enhanced)**. Same analysis pipeline as 1.4.3 but with stricter Level AAA thresholds.
-*   **Logic**:
-    1.  Uses the same DPR-aware font size and boldness estimation as WCAG 1.4.3.
-    2.  **Threshold Enforcement**: 
-        *   **Normal Text**: Fails if ratio < 7.0:1.
-        *   **Large Text**: Fails if ratio < 4.5:1.
 
 ### **Rule ID**: WCAG 1.4.10 — Reflow (Level AA)
 *   **Goal**: Ensure no loss of information or functionality when content is resized to a width of 320 CSS pixels (400% zoom on 1280px).
