@@ -624,6 +624,7 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
 
     if (type === 'password') continue;
     if (el.closest('[hidden], [aria-hidden="true"], [inert]')) continue;
+    if (el.hasAttribute('readonly') || el.getAttribute('aria-readonly') === 'true') continue;
 
     const context = contextText(el);
     const sectionText = getSectionScopeText(el);

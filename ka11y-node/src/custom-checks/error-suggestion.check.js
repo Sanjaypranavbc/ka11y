@@ -58,17 +58,19 @@ async function run(page) {
       }
     }
 
-    // Also collect errors from aria-invalid elements with a title attribute
-    for (const el of document.querySelectorAll('[aria-invalid="true"][title]')) {
-      const text = (el.getAttribute('title') || '').trim();
-      if (text.length > 3 && !errorEls.includes(el)) {
-        errorEls.push(el);
-      }
-    }
-
     // Deduplicate
     const seen = new Set();
     const allErrors = [];
+
+    // Before main collection loop: aria-invalid elements with title attribute
+    for (const el of document.querySelectorAll('[aria-invalid="true"][title]')) {
+      const text = (el.getAttribute('title') || '').trim();
+      if (text.length > 3 && !seen.has(el)) {
+        allErrors.push(text.slice(0, 120));
+        seen.add(el);
+      }
+    }
+
     for (const el of errorEls) {
       if (seen.has(el)) continue;
       seen.add(el);

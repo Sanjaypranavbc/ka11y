@@ -5,7 +5,7 @@ const RULE_ID = 'custom-error-prevention';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/error-prevention-legal-financial-data';
 
 // Expanded financial/legal/destructive patterns — English + Japanese
-const FINANCIAL_PATTERNS = /\b(payment|checkout|purchase|buy\s+now|credit\s*card|debit\s*card|card\s*number|billing|invoice|subscribe|subscription|order|confirm\s+order|place\s+order|donate|donation|fund|invest|transfer|wire\s+transfer|ach|withdraw|bank\s+account|routing\s+number)\b|購入|決済|お支払い|クレジットカード|デビットカード|カード番号|振込|送金|課金|サブスクリプション|定期購入|寄付|ご注文|注文確認|請求/i;
+const FINANCIAL_PATTERNS = /\b(payment|checkout|purchase|buy\s+now|credit\s*card|debit\s*card|card\s*number|billing|invoice|subscribe|subscription|order|confirm\s+order|place\s+order|donate|donation|donat|fund|invest|transfer|wire\s+transfer|ach|withdraw|bank\s+account|routing\s+number)\b|購入|決済|お支払い|クレジットカード|デビットカード|カード番号|振込|送金|課金|サブスクリプション|定期購入|寄付|ご注文|注文確認|請求/i;
 const LEGAL_PATTERNS     = /\b(legal|terms\s*(of\s*(service|use))?|privacy\s*policy|agreement|consent|contract|liability|gdpr|hipaa|sign\s*here|e[- ]?sign|electronic\s*signature)\b|利用規約|プライバシーポリシー|個人情報|同意する|契約|署名|規約に同意|電子署名/i;
 const DESTRUCTIVE_PATTERNS = /\b(delete\s+(account|data|profile|content)|remove\s+(account|data)|close\s+account|shut\s+down|deactivate|cancel\s+(account|subscription|membership)|unsubscribe|permanently\s+(delete|remove)|irreversible|purge|wipe|terminate)\b|削除する|退会|アカウント削除|アカウントを削除|解約|キャンセル|データ消去|永久削除|取り消せない|元に戻せない/i;
 
@@ -14,6 +14,11 @@ async function run(page) {
     const financialRe   = new RegExp(financialSrc, 'i');
     const legalRe       = new RegExp(legalSrc, 'i');
     const destructiveRe = new RegExp(destructiveSrc, 'i');
+
+    function isVisible(el) {
+      const cs = window.getComputedStyle(el);
+      return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0';
+    }
 
     const forms = Array.from(document.querySelectorAll('form'));
     const riskForms = [];
@@ -41,16 +46,16 @@ async function run(page) {
       // Safeguard 1: Review/confirm step text present
       const hasReviewText = /\b(review|confirm|verify|check\s+your|summary|order\s+summary|please\s+review|are\s+you\s+sure)\b/i.test(focusedText);
 
-      // Safeguard 2: Required confirmation checkbox
-      const hasConfirmCheckbox = !!(
-        form.querySelector('input[type="checkbox"][required]') ||
-        form.querySelector('input[type="checkbox"][aria-required="true"]') ||
-        // Bug fix: also detect JS-required checkboxes via data attributes
-        form.querySelector('input[type="checkbox"][data-required]')
-      );
+      // Safeguard 2: Required confirmation checkbox (must be visible)
+      const confirmCheckboxCandidates = [
+        form.querySelector('input[type="checkbox"][required]'),
+        form.querySelector('input[type="checkbox"][aria-required="true"]'),
+        form.querySelector('input[type="checkbox"][data-required]'),
+      ].filter(Boolean);
+      const hasConfirmCheckbox = confirmCheckboxCandidates.some(el => isVisible(el));
 
-      // Safeguard 3: Review/preview button before final submit
-      const buttons = Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]'));
+      // Safeguard 3: Review/preview button before final submit (must be visible)
+      const buttons = Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]')).filter(isVisible);
       const hasReviewButton = buttons.some(b => {
         const label = ((b.textContent || '') + (b.getAttribute('value') || '')).trim();
         return /\b(review|preview|continue|next|proceed|back|edit)\b/i.test(label);
