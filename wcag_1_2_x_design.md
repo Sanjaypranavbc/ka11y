@@ -397,6 +397,48 @@ The quality engine (Gate 5) is **optional**. If WhisperX, jiwer, or NLTK are not
 | Raw JSON | `{stage}_raw.json` | `media_raw.json` |
 | CSV report | `audit_{stage}_report.csv` | `audit_media_report.csv` |
 
+### 5.5 Comprehensive Test Suite (39 Scenarios)
+
+The test suite in `tests/test_media_auditor.py` contains 39 rigorous deterministic tests that thoroughly prove the 5-Gate pipeline and Quality Engine logic.
+
+**Gate 1: Prerecorded vs. Live Verification**
+- `test_hls_stream_is_live` / `test_dash_manifest_is_live`: Correctly identifies and aborts on Apple HLS (`.m3u8`) and DASH (`.mpd`) live streams.
+- `test_live_keyword_in_aria_label` / `test_live_keyword_in_nearby_text`: Correctly parses HTML attributes and surrounding DOM text to flag "Live" indicators.
+- `test_prerecorded_mp3_passes` / `test_prerecorded_no_live_keywords`: Confirms standard offline media properly flows into Gate 2.
+
+**Gate 2: Media Classification**
+- `test_audio_tag_is_audio_only`: Evaluates standard `<audio>` elements.
+- `test_video_tag_default_is_synchronized`: Confirms standard `<video>` tags are classified as Synchronized (triggering a skip to WCAG 1.2.2).
+- `test_video_muted_loop_autoplay_is_video_only`: Correctly handles the modern edge-case of silent, auto-playing background videos as `video_only`.
+
+**Gate 3: Labeled Alternatives Exemption**
+- `test_audio_version_keyword_in_label` / `test_audio_alternative_in_nearby_text`: Detects when audio is explicitly labeled as a spoken version of a text article, granting a PASS.
+- `test_no_alternative_labels`: Confirms normal files proceed to Gate 4.
+
+**Gate 4: Transcript Sourcing**
+- `test_track_captions_found` / `test_track_descriptions_found`: Scrapes for standard `<track>` HTML5 nodes.
+- `test_nearby_link_transcript`: Locates standalone transcript `<a>` download links.
+- `test_details_block_transcript`: Accurately parses text hidden within `<details><summary>` collapsibles.
+- `test_aria_describedby_transcript`: Follows `aria-describedby` reference links to grab DOM text blocks.
+- `test_no_transcript_fails`: Confirms a hard FAIL is triggered when developers provide zero alternative text.
+- `test_metadata_track_not_counted`: Ignores machine-level `<track kind="metadata">` blocks.
+
+**Full Pipeline Integration**
+- `test_live_media_skipped`, `test_synchronized_media_skipped`, `test_labeled_alternative_exempt`, `test_decorative_media_exempt`: Proves standard pipeline flow logic aborts at appropriate gates.
+- `test_no_transcript_fails`, `test_transcript_found_needs_review`: Confirms that `MediaAuditor` outputs the correct `wcag_1_2_1_violation` status dictionary.
+- `test_csv_written`, `test_summarize`: Verifies local persistence of the detailed `audit_media_report.csv` matrix.
+
+**Quality Engine NLP & Regex Verification (Gate 5)**
+- `test_speaker_ids_found` ... `_missing_fails`: Validates the NLTK regex captures expected speaker syntax (e.g. `Host:`, `Dr. Name:`) and punishes unlabelled multiparty conversations.
+- `test_speaker_ids_short_audio_review`: Prevents false-negatives on ultra-short <15s clips.
+- `test_non_speech_events_found` / `_parenthesized` / `_missing_fails`: Confirms bracketed descriptive sound events (e.g. `[applause]`, `(music)`) are accurately parsed.
+- `test_transcript_preparation_vtt` / `_html`: Proves that the HTML/VTT scrubbers perfectly strip `00:01:25.000` timestamps and HTML tags prior to Whisper evaluation.
+
+**Word Error Rate Mathematical Checks (Gate 5)**
+- `test_identical_texts_pass`: Verifies 0% mismatch baseline.
+- `test_slightly_different_texts`: Confirms that minor verbal tics missing from transcripts safely PASS under the strictly configured 15% WER threshold.
+- `test_very_different_texts_fail`: Confirms that developers illegally substituting "summaries" for "verbatim transcripts" trigger a WER spike and fail.
+
 ---
 
 ## 6. WCAG 1.2.2 — Captions (Prerecorded)
