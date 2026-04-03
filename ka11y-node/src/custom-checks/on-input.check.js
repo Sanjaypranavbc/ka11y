@@ -56,7 +56,7 @@ async function run(page) {
       }));
     }, SELECTOR, MAX_INPUTS);
 
-    for (const inputInfo of inputs) {
+    for (const inputInfo of (inputs || [])) {
       navigationDetected = false;
       const urlBefore = page.url();
 

@@ -160,7 +160,7 @@ async function run(page) {
         }));
       }, role);
 
-      for (const widget of widgets) {
+      for (const widget of (widgets || [])) {
         // Focus the widget
         await page.evaluate((sel, r) => {
           const el = sel

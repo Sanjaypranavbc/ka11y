@@ -57,7 +57,7 @@ async function run(page) {
       return results;
     }, SELECTOR, MAX_ELEMENTS);
 
-    for (let i = 0; i < focusable.length; i++) {
+    for (let i = 0; i < (focusable || []).length; i++) {
       navigationDetected = false;
       const urlBefore = page.url();
 
