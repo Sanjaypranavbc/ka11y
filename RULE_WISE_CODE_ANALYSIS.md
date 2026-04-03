@@ -327,29 +327,15 @@ any trap ──► FAIL    none ──► PASS
 - Forward and backward Tab trap detection
 - Single-element and two-element cycles
 - Escape key verification
+- Arrow key traps in ARIA widgets (`tree`, `grid`, `listbox`, `menu`, `tablist`, `radiogroup`)
+- Same-origin iframe Tab trap detection
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| Arrow key traps in custom widgets (tree, grid, listbox) | ✅ Solvable — add Arrow key navigation test after Tab |
+| ~~Arrow key traps in custom widgets (tree, grid, listbox)~~ | ✅ **Fixed** — presses ArrowDown twice in each ARIA widget role; flags if focus doesn't move |
 | Traps requiring Enter to trigger (e.g. open modal) | Partial |
-| Traps in same-origin iframes | ✅ Solvable — switch to iframe context with `page.frames()` |
-
-#### Possibility: Arrow key trap in widgets
-```js
-const WIDGET_ROLES = ['tree', 'grid', 'listbox', 'menu', 'tablist', 'radiogroup'];
-for (const role of WIDGET_ROLES) {
-  const widget = await page.$(`[role="${role}"]`);
-  if (widget) {
-    await widget.focus();
-    const before = await page.evaluate(() => document.activeElement?.id);
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('ArrowDown');
-    const after = await page.evaluate(() => document.activeElement?.id);
-    // if before === after and focus didn't move out → possible trap
-  }
-}
-```
+| ~~Traps in same-origin iframes~~ | ✅ **Fixed** — iterates `page.frames()` for same-origin frames |
 
 ---
 
@@ -384,23 +370,15 @@ any issue ──► FAIL    none ──► PASS
 - `accesskey` single-char letters and symbols
 - Inline `onkeydown/onkeypress/onkeyup` with modifier check
 - Inline `<script>` `addEventListener` with modifier check
+- `document.addEventListener('keydown|keypress|keyup', ...)` in inline scripts
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
 | External script files | No (cross-origin restriction) |
-| Delegated handlers on `document`/`window` | ✅ Solvable — scan inline scripts for `document.addEventListener` |
+| ~~Delegated handlers on `document`/`window`~~ | ✅ **Fixed** — added `docListenerRe` scan in Pass 3 for `document.addEventListener` key listeners |
 | Framework event bindings (React `onKeyDown`, Vue `v-on`) | No (runtime, not in DOM) |
 | Arrow key shortcuts without modifiers | ✅ Solvable — extend key pattern to include Arrow keys |
-
-#### Possibility: Detect `document.addEventListener` shortcuts in inline scripts
-```js
-// In Pass 3, extend to also match document-level listeners:
-const docListenerRe = /document\s*\.\s*addEventListener\s*\(\s*['"]key(down|press|up)['"]/;
-if (docListenerRe.test(scriptText)) {
-  // same single-char + modifier guard check
-}
-```
 
 ---
 
@@ -435,13 +413,8 @@ count < 2 ──► FAIL
 | Case | Solvable? |
 |------|-----------|
 | Alphabetical keyword index | ✅ Solvable — detect `[id*="index"][role="navigation"]` or list of single-letter links |
-| French/German/Spanish search terms | ✅ Solvable — extend keyword list |
+| ~~French/German/Spanish search terms~~ | ✅ **Fixed** — extended search regex to include FR/ES/DE/IT/NL/SV/ZH/JA/KO equivalents |
 | Skip-nav link counting as a mechanism | Partial |
-
-#### Possibility: Multi-language search keywords
-```js
-const searchKeywords = /search|recherche|suche|buscar|cerca|zoeken|sök|検索|搜索|검색/i;
-```
 
 ---
 
@@ -479,22 +452,14 @@ any issue ──► FAIL    none ──► PASS
 - Transparent outline guard
 - CSS transition settle delay (80ms)
 - Stable element selectors
+- `transform` property change as a focus indicator
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
 | `:focus-visible`-only styles | ✅ Partial — could inject `Tab` key press instead of `.focus()` |
 | Pseudo-element indicators (`::before`/`::after`) | No — `getComputedStyle` on pseudo needs `:focus` context |
-| Scale/transform-based focus indicator | ✅ Solvable — add `transform` to compared properties |
-
-#### Possibility: Add `transform` to focus style comparison
-```js
-// In unfocused/focused capture:
-transform: cs.transform,
-// In comparison:
-const transformChanged = focused.transform !== unfocused.transform;
-const isVisible = ... || transformChanged;
-```
+| ~~Scale/transform-based focus indicator~~ | ✅ **Fixed** — added `transform` to captured and compared style properties |
 
 ---
 
@@ -525,24 +490,14 @@ none ──► INCOMPLETE
 - `aria-current="page"` in nav
 - Active nav item classes
 - Sitemap link
+- `aria-current="step"` (multi-step wizard)
+- JSON-LD `BreadcrumbList` in `<script type="application/ld+json">`
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `aria-current="step"` (multi-step wizard) | ✅ Solvable — add `aria-current="step"` check |
-| JSON-LD breadcrumb (not in DOM) | ✅ Solvable — parse `<script type="application/ld+json">` for BreadcrumbList |
-
-#### Possibility: Add `aria-current="step"` and JSON-LD
-```js
-// aria-current="step"
-const hasAriaCurrentStep = !!document.querySelector('[aria-current="step"]');
-
-// JSON-LD breadcrumb
-const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
-const hasLdBreadcrumb = Array.from(ldScripts).some(s => {
-  try { return /"BreadcrumbList"/.test(s.textContent); } catch { return false; }
-});
-```
+| ~~`aria-current="step"` (multi-step wizard)~~ | ✅ **Fixed** — added `[aria-current="step"]` check |
+| ~~JSON-LD breadcrumb (not in DOM)~~ | ✅ **Fixed** — parses `<script type="application/ld+json">` for BreadcrumbList |
 
 ---
 
@@ -576,6 +531,7 @@ any issue ──► FAIL    none ──► PASS
 
 #### Covered
 - Full accessible name computation (ARIA precedence)
+- `title` attribute as 5th accessible name fallback
 - 30+ generic English patterns
 - Japanese generic patterns
 - Visible-only text (fixed: excludes `display:none` descendants)
@@ -583,16 +539,9 @@ any issue ──► FAIL    none ──► PASS
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `title` attribute as accessible name fallback | ✅ Solvable — add `link.getAttribute('title')` as 5th fallback |
+| ~~`title` attribute as accessible name fallback~~ | ✅ **Fixed** — added `link.getAttribute('title')` as 5th fallback |
 | Context-based purpose (table column header gives meaning) | Not at link-only level (2.4.4 SC) |
 | Short but specific links matching "go" pattern | Partial — "go" is in regex; could narrow |
-
-#### Possibility: Add `title` attribute fallback
-```js
-if (!accessibleName) {
-  accessibleName = (link.getAttribute('title') || '').trim();
-}
-```
 
 ---
 
@@ -624,7 +573,7 @@ any issue ──► FAIL    none ──► PASS
 ```
 
 #### Covered
-- 2px minimum area (outline-width or box-shadow spread)
+- 2px minimum area (outline-width, box-shadow spread, or border-width)
 - 3:1 contrast ratio (WCAG luminance formula)
 - Transparent background fallback to `<body>` background
 - CSS variable resolution (browser resolves via `getComputedStyle`)
@@ -632,15 +581,8 @@ any issue ──► FAIL    none ──► PASS
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| Border-based focus indicator area | ✅ Solvable — add `borderWidth` to area check |
+| ~~Border-based focus indicator area~~ | ✅ **Fixed** — `areaMet` now includes `borderChanged && borderWidth >= 2` |
 | Focus indicator on child not the target element | Hard — would need to check all descendants |
-
-#### Possibility: Include border-width in area check
-```js
-const borderWidth = parseFloat(focused.borderWidth) || 0;
-const borderChanged = focused.borderWidth !== unfocused.borderWidth;
-const areaMet = outlineWidth >= 2 || spreadRadius >= 2 || (borderChanged && borderWidth >= 2);
-```
 
 ---
 
@@ -667,24 +609,17 @@ any issue ──► FAIL    none ──► PASS
 ```
 
 #### Covered
-- `mousedown` / `pointerdown` / `pointermove` attribute handlers
+- `mousedown` / `pointerdown` / `pointermove` / `touchstart` attribute handlers
 - Action keyword detection
 - Visual-only handler exclusion
-- Cancellation via `mouseup` / `pointerup` / `click`
+- Cancellation via `mouseup` / `pointerup` / `click` / `touchend`
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `ontouchstart` handlers | ✅ Solvable — add `[ontouchstart]` to selector |
+| ~~`ontouchstart` handlers~~ | ✅ **Fixed** — added `[ontouchstart]` to selector; `ontouchend` as cancellation path |
 | `oncontextmenu="return false"` suppression | ✅ Solvable — detect and flag separately |
 | `addEventListener` handlers | No (not in DOM attributes) |
-
-#### Possibility: Add touch event detection
-```js
-// Extend selector:
-const SELECTOR = '[onmousedown], [onpointerdown], [onpointermove], [ontouchstart]';
-// Add touchstart check analogous to mousedown check
-```
 
 ---
 
@@ -715,7 +650,8 @@ any issue ──► FAIL    none (or no draggables) ──► PASS
 
 #### Covered
 - Native HTML5 drag API
-- 4 major D&D libraries
+- 4 major D&D libraries (react-beautiful-dnd, dnd-kit, Sortable.js, jQuery UI)
+- Interact.js (`[data-interact]`), Dragula (`.gu-transit`), generic drag handles (`[data-drag-handle]`)
 - Single-pointer alternative detection
 - Deduplication
 
@@ -724,15 +660,7 @@ any issue ──► FAIL    none (or no draggables) ──► PASS
 |------|-----------|
 | `onpointerdown` + move custom drag (no `draggable` attr) | ✅ Solvable — add `[onpointermove]` with drag pattern check |
 | `ontouchstart` drag implementations | ✅ Solvable — add `[ontouchstart]` with data-* context |
-| Interact.js / Dragula / other libs | ✅ Solvable — add library class signatures |
-
-#### Possibility: Add Interact.js and Dragula detection
-```js
-// In library markers:
-{ sel: '[data-interact]',        name: 'Interact.js' },
-{ sel: '.gu-transit',            name: 'Dragula' },
-{ sel: '[data-drag-handle]',     name: 'generic drag handle' },
-```
+| ~~Interact.js / Dragula / other libs~~ | ✅ **Fixed** — added `[data-interact]`, `.gu-transit`, `[data-drag-handle]` |
 
 ---
 
@@ -767,20 +695,14 @@ coverage = 0  ──► FAIL
 - `<ruby>` / `<rt>` presence and coverage ratio
 - CJK density heuristic for un-labelled pages
 - 30% coverage threshold
+- Section-level CJK scan for `[lang^="ja/zh/ko"]` sub-elements on non-CJK pages
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| Section-level CJK in an English page | ✅ Solvable — scan `[lang="ja"]` sub-elements regardless of page lang |
+| ~~Section-level CJK in an English page~~ | ✅ **Fixed** — scans `[lang^="ja/zh/ko"]` sub-elements regardless of page lang |
 | Kanji in `<img alt>` | No (alt text, not text node) |
 | Ruby position correctness | Hard (requires linguistic knowledge) |
-
-#### Possibility: Section-level CJK scan
-```js
-// Also check any element with an explicit CJK lang attribute:
-const cjkSections = document.querySelectorAll('[lang^="ja"], [lang^="zh"], [lang^="ko"]');
-// Re-run ruby coverage check on each section
-```
 
 ---
 
@@ -808,24 +730,14 @@ any issue ──► FAIL    none ──► PASS
 #### Covered
 - Full-page navigation on focus
 - Hash-only change exclusion
+- SPA `pushState`/`replaceState` navigation detection
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| SPA client-side routing (React Router, Next.js) | ✅ Solvable — intercept `pushState`/`replaceState` |
+| ~~SPA client-side routing (React Router, Next.js)~~ | ✅ **Fixed** — intercepts `pushState`/`replaceState`; checks `__navChanges` after each focus |
 | Content replacement via AJAX (no URL change) | Hard — no navigation event |
 | Modal/overlay on focus (content change, not navigation) | ✅ Solvable — detect large DOM mutations after focus |
-
-#### Possibility: Detect SPA navigation via `pushState` interception
-```js
-// Before test, inject pushState monitor:
-await page.evaluate(() => {
-  window.__navChanges = 0;
-  const orig = history.pushState.bind(history);
-  history.pushState = function(...args) { window.__navChanges++; return orig(...args); };
-});
-// After each focus, check window.__navChanges
-```
 
 ---
 
@@ -859,13 +771,16 @@ any issue ──► FAIL    none ──► PASS
 - All standard input types with valid test values
 - Select, checkbox, radio simulation
 - URL change detection with cleanup
+- `contenteditable` element interaction
+- SPA `pushState`/`replaceState` navigation detection
+- Select with `options.length < 2` guard (skip to avoid no-change fire)
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `contenteditable` elements | ✅ Solvable — add `[contenteditable]` to selector, type 'a' |
-| SPA routing on input change | ✅ Solvable — same `pushState` interception as 3.2.1 |
-| Select with 0 options (no change fires) | ✅ Solvable — skip if `options.length < 2` |
+| ~~`contenteditable` elements~~ | ✅ **Fixed** — added `[contenteditable="true"]` and `[contenteditable=""]` to selector |
+| ~~SPA routing on input change~~ | ✅ **Fixed** — same `pushState`/`replaceState` interception as 3.2.1 |
+| ~~Select with 0 options (no change fires)~~ | ✅ **Fixed** — guard: `if (options.length < 2) continue` |
 | Checkbox that is already checked (no toggle on click) | ✅ Solvable — set `checked = !checked` directly |
 
 ---
@@ -895,27 +810,17 @@ mechanisms = 0 ──► INCOMPLETE
 ```
 
 #### Covered
-- Help/support/FAQ/contact links
+- Help/support/FAQ/contact/accessibility links
 - Phone, email, chat mechanisms
 - Location tracking (header/footer/nav/body)
+- Known chatbot platforms: Intercom, Drift, Zendesk, HelpScout, Crisp, Tawk, HubSpot Chat
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
 | Consistency across pages | No (single-page scan only) |
-| Accessibility statement link | ✅ Solvable — add pattern for "accessibility" in link text |
-| AI chatbot without "chat" in class/id | ✅ Solvable — add common chatbot div IDs (Intercom, Drift, Zendesk) |
-
-#### Possibility: Add common chatbot platform detection
-```js
-// Known chatbot widget signatures:
-const chatbotSelectors = [
-  '#intercom-container', '#drift-widget',
-  '#zendesk-widget', '[id*="helpscout"]',
-  '.crisp-client', '[id*="tawk"]',
-];
-const hasChatbot = chatbotSelectors.some(s => !!document.querySelector(s));
-```
+| ~~Accessibility statement link~~ | ✅ **Fixed** — added `accessibility` to `HELP_PATTERNS` regex |
+| ~~AI chatbot without "chat" in class/id~~ | ✅ **Fixed** — added 7 known chatbot platform selector signatures |
 
 ---
 
@@ -954,24 +859,14 @@ any bad ──► FAIL    all good ──► PASS
 - Class-based form error selectors
 - Suggestion keyword matching (30+ patterns)
 - Terse error detection with short-message exemption (fixed)
+- `title` attribute on `[aria-invalid]` inputs as error source
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `<input title="…">` error guidance | ✅ Solvable — collect `[title]` on `[aria-invalid]` inputs |
+| ~~`<input title="…">` error guidance~~ | ✅ **Fixed** — collects `[aria-invalid="true"][title]` text before main loop |
 | Dynamic errors (shown post-submit in JS) | No (static load only) |
 | Error in collapsed `<details>` | Partial |
-
-#### Possibility: Collect `title` attribute error messages
-```js
-for (const el of document.querySelectorAll('[aria-invalid="true"][title]')) {
-  const text = (el.getAttribute('title') || '').trim();
-  if (text.length > 3 && !seen.has(el)) {
-    allErrors.push(text.slice(0, 120));
-    seen.add(el);
-  }
-}
-```
 
 ---
 
@@ -1006,25 +901,16 @@ none ──► FAIL
 ```
 
 #### Covered
-- Financial, legal, destructive context keywords
-- 4 safeguard types
+- Financial (`payment`, `purchase`, `checkout`, `billing`, `donat`), legal, destructive context keywords
+- 4 safeguard types with `isVisible()` filter (excludes `display:none`, `visibility:hidden`, `opacity:0`)
 - Multi-language keywords (English + Japanese)
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| "Donate Now" high-risk without standard keywords | ✅ Solvable — add "donat" to financial keywords |
-| Safeguards hidden in collapsed sections (`display:none`) | ✅ Solvable — filter elements with `display:none` |
+| ~~"Donate Now" high-risk without standard keywords~~ | ✅ **Fixed** — added `donat` to financial keyword pattern |
+| ~~Safeguards hidden in collapsed sections (`display:none`)~~ | ✅ **Fixed** — `isVisible()` filter applied to safeguard elements |
 | Undo functionality as a safeguard | Hard — requires runtime testing |
-
-#### Possibility: Filter hidden safeguards
-```js
-function isVisible(el) {
-  const cs = window.getComputedStyle(el);
-  return cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0';
-}
-// Apply isVisible() filter when checking for safeguards
-```
 
 ---
 
@@ -1061,18 +947,13 @@ any issue ──► FAIL    none ──► PASS
 - Confirmation field detection
 - Reuse control detection ("same as", "copy from", "use shipping")
 - Process grouping and Jaccard similarity
+- `[readonly]` / `[aria-readonly="true"]` fields skipped (re-display, not re-entry)
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `readonly` re-display in review step (should be OK) | ✅ Solvable — skip `[readonly]` inputs |
+| ~~`readonly` re-display in review step (should be OK)~~ | ✅ **Fixed** — skips `[readonly]` and `[aria-readonly="true"]` fields |
 | Implicit semantic equivalence ("Shipping Address" ≡ "Address") | ✅ Partial — improve token normalization |
-
-#### Possibility: Skip `readonly` fields (they are re-display, not re-entry)
-```js
-// When extracting fields, skip readonly:
-if (field.hasAttribute('readonly') || field.getAttribute('aria-readonly') === 'true') continue;
-```
 
 ---
 
@@ -1114,28 +995,18 @@ any issue ──► FAIL    none ──► PASS
 ```
 
 #### Covered
-- Image, reCAPTCHA, hCaptcha detection (multi-signal)
+- Image, reCAPTCHA, hCaptcha, Cloudflare Turnstile detection (multi-signal)
 - CAPTCHA audio alternative detection
 - Math/riddle cognitive tests
 - Password paste blocking (event + attribute)
+- WebAuthn/passkey login option detection (skips CAPTCHA/cognitive-test/paste checks when passkey present)
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| WebAuthn / passkey login option | ✅ Solvable — detect `[type=button]` with webauthn/passkey text |
-| Turnstile (Cloudflare) CAPTCHA | ✅ Solvable — detect `[class*="cf-turnstile"]` |
+| ~~WebAuthn / passkey login option~~ | ✅ **Fixed** — detects `passkey|webauthn|biometric|fingerprint|face id` text on buttons/links |
+| ~~Turnstile (Cloudflare) CAPTCHA~~ | ✅ **Fixed** — detects `.cf-turnstile` / `[data-cf-turnstile]` |
 | Paste blocking via Shadow DOM | No (synthetic event can't pierce shadow boundary) |
-
-#### Possibility: Detect Cloudflare Turnstile and WebAuthn
-```js
-// Turnstile:
-const hasTurnstile = !!document.querySelector('.cf-turnstile, [data-cf-turnstile]');
-
-// WebAuthn alternative:
-const hasPasskeyOption = Array.from(document.querySelectorAll('button, a')).some(el =>
-  /passkey|webauthn|biometric|fingerprint|face id/i.test(el.textContent + el.getAttribute('aria-label'))
-);
-```
 
 ---
 
@@ -1158,28 +1029,15 @@ none ──► PASS (reports total count)
 
 #### Covered
 - Duplicate `id` values (breaks ARIA label/describedby references)
+- Broken `aria-labelledby` / `aria-describedby` / `aria-controls` / `aria-owns` references (ID not in DOM)
+- Orphaned `<label for="…">` with no matching input
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| Broken `aria-labelledby` / `aria-describedby` references | ✅ Solvable — resolve all referenced IDs and check existence |
-| Orphaned `<label for="…">` (no matching input) | ✅ Solvable — verify label `for` → `id` chain |
+| ~~Broken `aria-labelledby` / `aria-describedby` references~~ | ✅ **Fixed** — resolves all ARIA ID references; flags missing targets |
+| ~~Orphaned `<label for="…">` (no matching input)~~ | ✅ **Fixed** — verifies `label[for]` → matching `getElementById` |
 | Duplicate IDs in Shadow DOM | No (shadow DOM not traversed) |
-
-#### Possibility: Add broken ARIA reference check
-```js
-// After duplicate ID check:
-const brokenRefs = [];
-for (const el of document.querySelectorAll('[aria-labelledby], [aria-describedby], [aria-controls], [aria-owns]')) {
-  for (const attr of ['aria-labelledby','aria-describedby','aria-controls','aria-owns']) {
-    const val = el.getAttribute(attr);
-    if (!val) continue;
-    for (const id of val.split(/\s+/).filter(Boolean)) {
-      if (!document.getElementById(id)) brokenRefs.push({ attr, id, el: el.outerHTML.slice(0,100) });
-    }
-  }
-}
-```
 
 ---
 
@@ -1216,21 +1074,15 @@ neither ──► INCOMPLETE
 - Counter badge: numeric text only (avoids "New", "Beta" FPs — fixed)
 - Live-region ancestor walk for notification elements
 - Empty live region detection at page load
+- `aria-atomic` presence check on `[role="alert"]` / `[aria-live="assertive"]` regions
+- Inline `[aria-invalid]` elements without a live region ancestor
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `aria-atomic` requirement | ✅ Solvable — check `aria-atomic="true"` on alerting live regions |
+| ~~`aria-atomic` requirement~~ | ✅ **Fixed** — flags `[role="alert"]`/`[aria-live="assertive"]` missing `aria-atomic="true"` as INCOMPLETE |
 | AJAX-loaded result areas without `aria-live` | Hard (static) |
-| Inline validation feedback (not in live region) | ✅ Solvable — check `[aria-invalid] + *` for live region ancestor |
-
-#### Possibility: Check `aria-atomic` on assertive live regions
-```js
-const missingAtomic = liveRegions.filter(el =>
-  (el.getAttribute('role') === 'alert' || el.getAttribute('aria-live') === 'assertive') &&
-  !el.hasAttribute('aria-atomic')
-);
-```
+| ~~Inline validation feedback (not in live region)~~ | ✅ **Fixed** — walks ancestors of `[aria-invalid]` to find live region; flags INCOMPLETE if absent |
 
 ---
 
@@ -1244,6 +1096,46 @@ const missingAtomic = liveRegions.filter(el =>
 | 4 | `audio-transcript.check.js` | `<details><summary>Transcript</summary>…</details>` pattern not detected — common valid transcript pattern | Added `details` element scan in container with transcript keyword match |
 | 5 | `error-suggestion.check.js` | Short valid messages like "Enter 8+ characters" (21 chars) wrongly flagged as terse by `text.length < 25` guard | Added `SHORT_BUT_INFORMATIVE_RE` exemption for digits, format chars, correction keywords |
 | 6 | `use-of-color.check.js` | Fallback transparent check used fragile string compare instead of `colorsDiffer()` — could miss variant formats | Replaced with `colorsDiffer(ls.backgroundColor, 'rgba(0, 0, 0, 0)')` |
+
+## Solvable Possibilities Implemented (2026-04-03)
+
+| # | File | Gap Addressed | Implementation |
+|---|------|---------------|----------------|
+| 7 | `meaningful-sequence.check.js` | Grid explicit placement reordering | Checks `gridColumnStart`/`gridRowStart !== 'auto'` on grid children |
+| 8 | `meaningful-sequence.check.js` | Float sibling reordering | Flags containers with mixed floated/non-floated siblings |
+| 9 | `orientation.check.js` | `writing-mode: vertical-rl/lr` body lock | Signal 6: `getComputedStyle(body).writingMode` → FAIL |
+| 10 | `orientation.check.js` | `maximum-scale=1` viewport meta | Signal 7: parses viewport `content` string → INCOMPLETE |
+| 11 | `use-of-color.check.js` | `section > p a` links | Added to SELECTORS |
+| 12 | `use-of-color.check.js` | SVG `<a>` elements | Added `svg a[href]` to SELECTORS |
+| 13 | `images-of-text.check.js` | SVG `<text>` used as images | Scans `svg text` inside `a/button/[role="img"]/figure` |
+| 14 | `keyboard-trap.check.js` | Arrow key traps in ARIA widgets | Presses ArrowDown×2 in `tree/grid/listbox/menu/tablist/radiogroup` |
+| 15 | `keyboard-trap.check.js` | Same-origin iframe traps | Iterates `page.frames()` for same-origin frames |
+| 16 | `character-key-shortcuts.check.js` | `document.addEventListener` shortcuts | Added `docListenerRe` in Pass 3 |
+| 17 | `multiple-ways.check.js` | Multi-language search keywords | Added FR/ES/DE/IT/NL/SV/ZH/JA/KO to search regex |
+| 18 | `focus-visible.check.js` | Transform-based focus indicator | Added `transform` to captured/compared style properties |
+| 19 | `location.check.js` | `aria-current="step"` wizard | Added `[aria-current="step"]` check |
+| 20 | `location.check.js` | JSON-LD breadcrumb | Parses `<script type="application/ld+json">` for BreadcrumbList |
+| 21 | `link-purpose.check.js` | `title` attribute accessible name | Added as 5th fallback in name computation |
+| 22 | `focus-appearance.check.js` | Border-width area requirement | `areaMet` now includes `borderChanged && borderWidth >= 2` |
+| 23 | `pointer-cancellation.check.js` | `ontouchstart` handlers | Added to selector; `ontouchend` as cancellation path |
+| 24 | `dragging-movements.check.js` | Interact.js / Dragula / generic | Added `[data-interact]`, `.gu-transit`, `[data-drag-handle]` markers |
+| 25 | `pronunciation.check.js` | Section-level CJK on English pages | Scans `[lang^="ja/zh/ko"]` sub-elements |
+| 26 | `on-focus.check.js` | SPA pushState navigation | Intercepts `pushState`/`replaceState`; checks `__navChanges` after focus |
+| 27 | `on-input.check.js` | `contenteditable` interaction | Added `[contenteditable="true/"]` to selector |
+| 28 | `on-input.check.js` | SPA routing on input change | Same `pushState`/`replaceState` interception as 3.2.1 |
+| 29 | `on-input.check.js` | Select with 0 options | Guard: `if (options.length < 2) continue` |
+| 30 | `consistent-help.check.js` | Accessibility statement link | Added `accessibility` to `HELP_PATTERNS` |
+| 31 | `consistent-help.check.js` | Chatbot platform detection | Added 7 known widget selectors (Intercom, Drift, Zendesk, HelpScout, Crisp, Tawk, HubSpot) |
+| 32 | `error-suggestion.check.js` | `title` attribute error messages | Collects `[aria-invalid="true"][title]` before main loop |
+| 33 | `error-prevention.check.js` | "Donate" financial keyword | Added `donat` to keyword pattern |
+| 34 | `error-prevention.check.js` | Hidden safeguards (`display:none`) | `isVisible()` filter applied to safeguard elements |
+| 35 | `redundant-entry.check.js` | `readonly` re-display fields | Skips `[readonly]` / `[aria-readonly="true"]` in field extraction |
+| 36 | `accessible-auth.check.js` | Cloudflare Turnstile CAPTCHA | Detects `.cf-turnstile` / `[data-cf-turnstile]` |
+| 37 | `accessible-auth.check.js` | WebAuthn/passkey alternative | Detects passkey/biometric button text; skips CAPTCHA checks |
+| 38 | `html-parsing.check.js` | Broken ARIA ID references | Resolves `aria-labelledby/describedby/controls/owns` → `getElementById` |
+| 39 | `html-parsing.check.js` | Orphaned `<label for>` | Verifies `label[for]` → matching element exists |
+| 40 | `status-messages.check.js` | `aria-atomic` on assertive regions | Flags `[role="alert"]`/`[aria-live="assertive"]` missing `aria-atomic` |
+| 41 | `status-messages.check.js` | Inline validation without live region | Walks ancestors of `[aria-invalid]`; flags if no live region found |
 
 ---
 
