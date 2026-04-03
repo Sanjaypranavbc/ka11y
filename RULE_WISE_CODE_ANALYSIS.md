@@ -1141,45 +1141,37 @@ neither ──► INCOMPLETE
 
 ## Solvable Possibilities Summary
 
-These are missing cases that can be added with moderate effort without requiring OCR, external APIs, or browser engine internals.
+All previously identified solvable gaps have been implemented (2026-04-03). See "Solvable Possibilities Implemented" table above for details.
 
-| SC | Gap | Approach |
-|----|-----|----------|
-| 1.2.1 | `<details>` transcript | ✅ Done (Bug 4) |
-| 1.3.2 | Grid placement reordering | Check `gridColumnStart`/`gridRowStart` vs DOM index |
-| 1.3.2 | Float reordering | Detect `float` on sibling elements |
-| 1.3.4 | `writing-mode: vertical-rl` body lock | Check `getComputedStyle(body).writingMode` |
-| 1.3.4 | `maximum-scale=1` in viewport meta | Parse viewport `content` string |
-| 1.4.1 | `section > p a` links | Add to SELECTORS list |
-| 1.4.1 | SVG `<a>` elements | Add `svg a[href]` to SELECTORS |
-| 1.4.5 | SVG `<text>` elements used as images | Scan `svg text` in `[role="img"]` context |
-| 2.1.2 | Arrow key traps in ARIA widgets | Press ArrowDown inside `[role=tree|grid|listbox]` |
-| 2.1.2 | Same-origin iframe traps | Switch to iframe context with `page.frames()` |
-| 2.1.4 | `document.addEventListener` shortcuts | Extend inline script scan to match `document.add…` calls |
-| 2.4.5 | Multi-language search keywords | Add FR/DE/ES/ZH/KO equivalents to search regex |
-| 2.4.7 | Transform-based focus indicator | Add `transform` to style comparison properties |
-| 2.4.8 | `aria-current="step"` (wizard location) | Add `[aria-current="step"]` to location checks |
-| 2.4.8 | JSON-LD breadcrumb | Parse `<script type="application/ld+json">` for BreadcrumbList |
-| 2.4.9 | `title` attribute link name | Add `link.getAttribute('title')` as 5th accessible name fallback |
-| 2.4.13 | Border-width in area requirement | Add `borderWidth ≥ 2` to area check alongside outline/shadow |
-| 2.5.2 | `ontouchstart` pointer cancellation | Add `[ontouchstart]` to selector |
-| 2.5.7 | Interact.js / Dragula detection | Add class signatures `.gu-transit`, `[data-interact]` |
-| 3.1.6 | Section-level CJK in English page | Scan `[lang^="ja|zh|ko"]` sub-elements |
-| 3.2.1 | SPA `pushState` navigation detection | Intercept `history.pushState` before test |
-| 3.2.2 | `contenteditable` input change | Add `[contenteditable]` to input selector |
-| 3.2.2 | Select with 0 options (skip) | Guard: `if (el.options.length < 2) continue` |
-| 3.2.6 | Chatbot platform detection | Add Intercom/Drift/Zendesk/Crisp selector signatures |
-| 3.2.6 | Accessibility statement link | Add "accessibility" to help link keyword list |
-| 3.3.3 | `title` attribute error messages | Collect `[aria-invalid][title]` as error source |
-| 3.3.4 | "Donate" as financial keyword | Add `donat` to financial keyword pattern |
-| 3.3.4 | Hidden safeguards (`display:none`) | Filter safeguards through `isVisible()` check |
-| 3.3.7 | `readonly` re-display in review step | Skip `[readonly]` / `[aria-readonly="true"]` fields |
-| 3.3.8 | Cloudflare Turnstile CAPTCHA | Detect `.cf-turnstile` / `[data-cf-turnstile]` |
-| 3.3.8 | WebAuthn/passkey alternative | Detect button text "passkey"/"biometric"/"fingerprint" |
-| 4.1.1 | Broken ARIA reference IDs | Resolve all `aria-labelledby/describedby/controls/owns` → check getElementById |
-| 4.1.1 | Orphaned `<label for>` | Verify `label[for]` → matching input exists |
-| 4.1.3 | Missing `aria-atomic` on assertive regions | Check `aria-atomic="true"` presence |
-| 4.1.3 | Inline validation without live region ancestor | Check `[aria-invalid] + *` for live region ancestor |
+Remaining gaps that are **not solvable** without OCR, runtime state, or cross-origin access:
+
+| SC | Gap | Reason |
+|----|-----|--------|
+| 1.2.1 | Third-party audio embeds (Spotify, SoundCloud) | Not `<audio>` in DOM |
+| 1.2.1 | AJAX-loaded transcripts | Not in DOM at load time |
+| 1.3.2 | `grid-auto-flow: dense` reorder | Requires layout engine |
+| 1.3.2 | CSS multicolumn reading order | Hard to determine without render |
+| 1.4.5 | `<canvas>` rendering text | Requires OCR or pixel read |
+| 2.1.2 | Traps requiring Enter to trigger | Partial — requires interaction chain |
+| 2.1.4 | External script files | Cross-origin restriction |
+| 2.1.4 | Framework bindings (React/Vue) | Runtime only, not in DOM |
+| 2.4.5 | Alphabetical keyword index | Complex pattern, partial heuristic |
+| 2.4.7 | `:focus-visible`-only styles | `.focus()` doesn't trigger `:focus-visible` |
+| 2.4.7 | Pseudo-element focus indicators | `getComputedStyle(el, '::before')` lacks `:focus` context |
+| 2.4.13 | Focus indicator on child element | Would need descendant enumeration |
+| 2.5.2 | `addEventListener` cancellation handlers | Not in DOM attributes |
+| 2.5.2 | `oncontextmenu` suppression | Could add, minor edge case |
+| 2.5.7 | `onpointermove` custom drag | Would need gesture heuristic |
+| 3.1.6 | Kanji in `<img alt>` | Alt text, not a text node |
+| 3.1.6 | Ruby position correctness | Requires linguistic knowledge |
+| 3.2.1 | AJAX content replacement on focus | No navigation event |
+| 3.2.2 | Checkbox already-checked toggle | Edge case, minor |
+| 3.2.6 | Cross-page consistency | Single-page scan only |
+| 3.3.3 | Dynamic errors (JS post-submit) | Static load only |
+| 3.3.4 | Undo as a safeguard | Requires runtime testing |
+| 3.3.8 | Paste blocking via Shadow DOM | Synthetic event can't pierce shadow |
+| 4.1.1 | Duplicate IDs in Shadow DOM | Shadow DOM not traversed |
+| 4.1.3 | AJAX-loaded result areas | Static scan cannot detect |
 
 ---
 
@@ -1193,29 +1185,31 @@ These SCs are handled exclusively by axe-core's built-in rule engine:
 
 ## Coverage Confidence Summary
 
-| SC | Check | Confidence | Primary Gap |
-|----|-------|-----------|-------------|
-| 1.2.1 | audio-transcript | Medium | External audio embeds, AJAX transcripts |
-| 1.3.2 | meaningful-sequence | Medium | Grid placement, float layouts |
-| 1.3.4 | orientation | High | `writing-mode` body lock |
-| 1.4.1 | use-of-color | Medium | SVG links, section-level links |
-| 1.4.5 | images-of-text | Low | SVG text, canvas text, short text images |
-| 2.1.2 | keyboard-trap | High | Arrow-key widget traps, iframes |
-| 2.1.4 | character-key-shortcuts | Medium | External scripts, delegated listeners |
-| 2.4.5 | multiple-ways | Medium | Multi-language terms, keyword index |
-| 2.4.7 | focus-visible | High | `:focus-visible`-only styles |
-| 2.4.8 | location | Medium | `aria-current="step"`, JSON-LD |
-| 2.4.9 | link-purpose | High | `title`-only names, table context links |
-| 2.4.13 | focus-appearance | Medium | Border-based area, child indicators |
-| 2.5.2 | pointer-cancellation | Low | Touch events, addEventListener |
-| 2.5.7 | dragging-movements | Medium | Touch drag, unlisted libraries |
-| 3.1.6 | pronunciation | Medium | Section-level CJK, proper nouns |
-| 3.2.1 | on-focus | High | SPA client-side routing |
-| 3.2.2 | on-input | High | `contenteditable`, custom controls |
-| 3.2.6 | consistent-help | Low | Cross-page consistency, chatbots |
-| 3.3.3 | error-suggestion | Medium | Dynamic errors, `title` attribute |
-| 3.3.4 | error-prevention | Medium | "Donate" gap, hidden safeguards |
-| 3.3.7 | redundant-entry | Medium | `readonly` re-display, prefill |
-| 3.3.8 | accessible-auth | Medium | Turnstile, WebAuthn, Shadow DOM |
-| 4.1.1 | html-parsing | High | Broken ARIA refs, Shadow DOM |
-| 4.1.3 | status-messages | Medium | `aria-atomic`, inline validation |
+Confidence levels updated after 2026-04-03 improvements. "Primary Gap" now reflects only unsolvable remaining cases.
+
+| SC | Check | Confidence (before → after) | Primary Remaining Gap |
+|----|-------|-----------------------------|-----------------------|
+| 1.2.1 | audio-transcript | Medium → Medium | External embeds (iframes), AJAX transcripts |
+| 1.3.2 | meaningful-sequence | Medium → **High** | `grid-auto-flow: dense`, CSS multicolumn |
+| 1.3.4 | orientation | High → **High** | `aspect-ratio` media query locking |
+| 1.4.1 | use-of-color | Medium → **High** | Icon-only link with color-only bg change |
+| 1.4.5 | images-of-text | Low → **Medium** | `<canvas>` text, very short text images |
+| 2.1.2 | keyboard-trap | High → **High** | Enter-triggered traps (modal open) |
+| 2.1.4 | character-key-shortcuts | Medium → **Medium** | External scripts, framework bindings |
+| 2.4.5 | multiple-ways | Medium → **High** | Alphabetical index pattern |
+| 2.4.7 | focus-visible | High → High | `:focus-visible`-only styles, pseudo-elements |
+| 2.4.8 | location | Medium → **High** | Obscure location patterns |
+| 2.4.9 | link-purpose | High → High | Table-context links (2.4.4 territory) |
+| 2.4.13 | focus-appearance | Medium → **High** | Focus indicator on child element |
+| 2.5.2 | pointer-cancellation | Low → **Medium** | `addEventListener` handlers, `oncontextmenu` |
+| 2.5.7 | dragging-movements | Medium → **High** | `onpointermove` custom drag, touch drag |
+| 3.1.6 | pronunciation | Medium → **High** | Kanji in img alt, ruby position correctness |
+| 3.2.1 | on-focus | High → **High** | AJAX content replacement (no URL change) |
+| 3.2.2 | on-input | High → **High** | Checkbox already-checked toggle edge case |
+| 3.2.6 | consistent-help | Low → **Medium** | Cross-page consistency (single-page limit) |
+| 3.3.3 | error-suggestion | Medium → **Medium** | Dynamic post-submit errors |
+| 3.3.4 | error-prevention | Medium → **High** | Undo-as-safeguard (runtime) |
+| 3.3.7 | redundant-entry | Medium → **High** | Semantic token normalization ("Address" ≡ "Shipping Address") |
+| 3.3.8 | accessible-auth | Medium → **High** | Paste blocking via Shadow DOM |
+| 4.1.1 | html-parsing | High → **High** | Duplicate IDs in Shadow DOM |
+| 4.1.3 | status-messages | Medium → **High** | AJAX-loaded result areas (static scan limit) |
