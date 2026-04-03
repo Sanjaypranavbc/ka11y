@@ -35,7 +35,7 @@ describe('character-key-shortcuts.check (WCAG 2.1.4)', () => {
     ]);
     const result = await run(page);
     expect(result.rules[0].status).toBe('incomplete');
-    expect(result.rules[0].reason).toContain('0 accesskey shortcut(s) and 1 inline key handler');
+    expect(result.rules[0].reason).toContain('0 accesskey shortcut(s), 1 inline key handler(s)');
   });
 
   test('reports combined accesskey and inline handler count', async () => {
@@ -45,7 +45,7 @@ describe('character-key-shortcuts.check (WCAG 2.1.4)', () => {
       { type: 'inline-handler', html: '<div onkeydown="go()">x</div>' },
     ]);
     const result = await run(page);
-    expect(result.rules[0].reason).toContain('2 accesskey shortcut(s) and 1 inline key handler');
+    expect(result.rules[0].reason).toContain('2 accesskey shortcut(s), 1 inline key handler(s)');
   });
 
   // N12: digit key fix tests
