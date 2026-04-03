@@ -218,6 +218,68 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
   const reuseRe = new RegExp(reuseSrc, 'i');
   const keywordMap = keywordPairs.map(([src, key]) => [new RegExp(src, 'i'), key]);
 
+  // ---- helpers redefined here so they survive page.evaluate serialization ----
+  const PROCESS_HINT_RE_LOCAL = /\b(checkout|payment|billing|shipping|delivery|register|registration|signup|sign[\s-]?up|create\s+account|profile|account|application|apply|booking|reservation|purchase|order|quote|enquiry|inquiry|contact|subscribe|newsletter|support|feedback|survey)\b|申込|申し込み|登録|購入|注文|配送|請求|支払い|予約|問い合わせ/i;
+  const EXPLICIT_DISTINCT_PURPOSE_RE_LOCAL = /\b(newsletter|subscribe|marketing|promotions?|quote|support|feedback|survey|job\s+application|careers?)\b|ニュースレター|購読|見積|サポート|フィードバック|応募/i;
+
+  function _unique(arr) { return Array.from(new Set(arr)); }
+  function _intersectCount(a, b) {
+    const setB = new Set(b);
+    let count = 0;
+    for (const v of a) { if (setB.has(v)) count++; }
+    return count;
+  }
+  function _jaccardSimilarity(a, b) {
+    const ua = _unique(a);
+    const ub = _unique(b);
+    if (!ua.length && !ub.length) return 1;
+    const intersection = _intersectCount(ua, ub);
+    const union = new Set([...ua, ...ub]).size || 1;
+    return intersection / union;
+  }
+  function _tokenizeText(text) {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s_-]+/gu, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+  function _mergeTextParts(parts, max = 1200) {
+    return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+  function _clampString(s, max = 500) {
+    return String(s || '').replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+  function _processTypeMatches(text) {
+    const value = String(text || '').toLowerCase();
+    const matches = [];
+    if (/\b(newsletter|subscribe)\b|ニュースレター|購読/i.test(value)) matches.push('subscribe');
+    if (/\b(contact|enquiry|inquiry|quote|support|feedback)\b|問い合わせ|見積|サポート|フィードバック/i.test(value)) matches.push('contact');
+    if (/\b(checkout|payment|billing|shipping|delivery|order|purchase)\b|購入|注文|配送|請求|支払い/i.test(value)) matches.push('checkout');
+    if (/\b(register|registration|signup|sign[\s-]?up|account|profile)\b|登録|アカウント|プロフィール/i.test(value)) matches.push('account');
+    if (/\b(application|apply|careers?|job)\b|応募/i.test(value)) matches.push('application');
+    if (/\b(booking|reservation)\b|予約/i.test(value)) matches.push('booking');
+    return _unique(matches);
+  }
+  function _inferProcessTypeFromTexts(formText, fieldText) {
+    const formMatches = _processTypeMatches(formText);
+    const fieldMatches = _processTypeMatches(fieldText);
+    if (formMatches.length === 1) return formMatches[0];
+    if (fieldMatches.length === 1) return fieldMatches[0];
+    const merged = _mergeTextParts([formText || '', fieldText || ''], 1200).toLowerCase();
+    const mergedMatches = _processTypeMatches(merged);
+    return mergedMatches[0] || (PROCESS_HINT_RE_LOCAL.test(merged) ? 'generic-process' : 'unknown');
+  }
+  // Aliases so all existing call sites inside this function resolve to local defs
+  const mergeTextParts = _mergeTextParts;
+  const clampString = _clampString;
+  const unique = _unique;
+  const tokenizeText = _tokenizeText;
+  const jaccardSimilarity = _jaccardSimilarity;
+  const inferProcessTypeFromTexts = _inferProcessTypeFromTexts;
+  const EXPLICIT_DISTINCT_PURPOSE_RE = EXPLICIT_DISTINCT_PURPOSE_RE_LOCAL;
+  // ---- end helpers ----
+
   function isActuallyVisible(el) {
     try {
       if (!el || !el.isConnected) return false;
