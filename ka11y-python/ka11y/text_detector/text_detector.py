@@ -192,6 +192,25 @@ class OCRPreprocessing:
     #         traceback.print_exc()
     #
     #     return result
+
+    def is_valid_text(self, bbox, text, conf):
+        if conf < 0.6:
+            return False
+        if len(text.strip()) <= 1:
+            return False
+        if not any(c.isalnum() for c in text):
+            return False
+
+        (tl, tr, br, bl) = bbox
+        width = tr[0] - tl[0]
+        height = bl[1] - tl[1]
+
+        if width * height < 500:
+            return False
+
+        return True
+
+
     def detect_text_in_image(self, image_path: str) -> TextDetectionResult:
         """Use EasyOCR to detect text and run contrast analysis"""
         logger.info(f"Processing: {image_path}")
@@ -219,6 +238,9 @@ class OCRPreprocessing:
                 device_pixel_ratio = config.get("device_pixel_ratio", 1.0)
 
                 for bbox, text, conf in detections:
+                    if not self.is_valid_text(bbox, text, conf):
+                        continue
+
                     clean_bbox = [(int(p[0]), int(p[1])) for p in bbox]
 
                     # ✅ NEW: clamp bbox to image bounds
@@ -345,9 +367,7 @@ class OCRPreprocessing:
                         and not contrast_info.get("needs_review")
                     ):
                         ratio_fb = contrast_info.get("contrast_ratio", 0)
-                        # ✅ F15: pass is_ui_component so check_wcag_compliance
-                        # applies the 3:1 threshold instead of 4.5:1 for
-                        # button/icon images.
+
                         compliance_fb = contrast_analyser.check_wcag_compliance(
                             ratio_fb,
                             font_size_px=font_size_px,

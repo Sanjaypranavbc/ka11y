@@ -398,13 +398,8 @@ class AsyncImageCrawler:
                                 skipped_no_src += 1
                                 continue
 
-                            # F18 fix: preserve None (absent) vs "" (explicit empty).
-                            # None  → alt attribute missing → 1.1.1 fail candidate.
-                            # ""    → alt="" present → intentionally decorative.
                             alt = await img.get_attribute("alt")
 
-                            # F17 fix: resolve aria-labelledby for <img>.
-                            # acc-name spec: aria-labelledby > aria-label > alt.
                             resolved_label = await img.evaluate("""el => {
                                 const labelledby = el.getAttribute("aria-labelledby");
                                 if (labelledby) {

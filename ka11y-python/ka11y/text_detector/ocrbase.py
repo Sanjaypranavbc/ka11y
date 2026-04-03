@@ -40,5 +40,15 @@ class OCRReader:
         """Lazily return the singleton reader."""
         return get_ocr_reader(self.lang)
 
+    # def readtext(self, image_path: str):
+    #     return self.reader.readtext(image_path)
+
     def readtext(self, image_path: str):
-        return self.reader.readtext(image_path)
+        return self.reader.readtext(
+            image_path,
+            detail=1,
+            paragraph=False,
+            text_threshold=0.75,
+            low_text=0.5,
+            link_threshold=0.4
+        )
