@@ -1,6 +1,7 @@
 # Rule-wise Code Analysis
 
 - Generated at (UTC): `2026-04-01 00:00:00Z`
+- Updated at (UTC): `2026-04-03 00:00:00Z`
 - Scope: `ka11y-node` custom checks (24 checks) + axe-core integration
 - Method: deep static + runtime analysis; flowcharts, coverage gaps, bugs, and solvable possibilities
 
@@ -153,24 +154,10 @@ none ──► PASS    any ──► FAIL
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `grid-column` / `grid-row` explicit placement reordering | ✅ Solvable — check `gridColumnStart` vs DOM index |
-| `float: left/right` reordering | ✅ Solvable — detect `float` on siblings |
+| ~~`grid-column` / `grid-row` explicit placement reordering~~ | ✅ **Fixed** — checks `gridColumnStart`/`gridRowStart !== 'auto'` on grid children |
+| ~~`float: left/right` reordering~~ | ✅ **Fixed** — detects mixed floated/non-floated siblings |
 | CSS `multicolumn` (`column-count`) visual reorder | Partial — hard to determine reading order |
 | `grid-auto-flow: dense` | Hard — requires layout engine |
-
-#### Possibility: Add Grid Placement Check
-```js
-// In the container loop, after flex checks:
-const display = cs.display;
-if (display === 'grid' || display === 'inline-grid') {
-  const children = Array.from(el.children);
-  const hasExplicitPlacement = children.some(ch => {
-    const ccs = window.getComputedStyle(ch);
-    return ccs.gridColumnStart !== 'auto' || ccs.gridRowStart !== 'auto';
-  });
-  if (hasExplicitPlacement) issues.push({ type: 'grid-placement', ... });
-}
-```
 
 ---
 
@@ -209,21 +196,15 @@ none ──► PASS
 - `<meta viewport>` orientation attribute
 - Web App Manifest orientation field
 - Cross-origin stylesheets → `incomplete` (manual review)
+- `writing-mode: vertical-rl/vertical-lr` on `<body>` → FAIL (Signal 6)
+- `maximum-scale=1` in `<meta name="viewport">` → INCOMPLETE (Signal 7)
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| `writing-mode: vertical-rl` locking visual layout | ✅ Solvable — check on `<body>` or `<html>` |
+| ~~`writing-mode: vertical-rl` locking visual layout~~ | ✅ **Fixed** — checks `getComputedStyle(body).writingMode` |
 | `aspect-ratio` media query effectively locking | Partial |
-| `maximum-scale=1` in viewport meta (resize prevention) | ✅ Solvable — parse viewport content string |
-
-#### Possibility: Detect `writing-mode` orientation lock
-```js
-const bodyWM = window.getComputedStyle(document.body).writingMode;
-if (bodyWM === 'vertical-rl' || bodyWM === 'vertical-lr') {
-  issues.push({ type: 'writing-mode', detail: bodyWM });
-}
-```
+| ~~`maximum-scale=1` in viewport meta (resize prevention)~~ | ✅ **Fixed** — parses viewport `content` string |
 
 ---
 
@@ -262,23 +243,15 @@ for each link:
 - RGB channel comparison (15-unit tolerance)
 - Ancestor text style walking (skips nested `<a>` elements)
 - 150-link performance cap
+- `section > p a[href]` links
+- `svg a[href]` elements
 
 #### Missed
 | Case | Solvable? |
 |------|-----------|
-| Links in `<section>` without `<p>` wrapper | ✅ Solvable — add `section > p a` or `main a` with context guard |
-| SVG `<a>` elements with color-only cue | ✅ Solvable — add `svg a[href]` to selectors |
+| ~~Links in `<section>` without `<p>` wrapper~~ | ✅ **Fixed** — added `section > p a[href]` to SELECTORS |
+| ~~SVG `<a>` elements with color-only cue~~ | ✅ **Fixed** — added `svg a[href]` to SELECTORS |
 | Icon-only link with color as the only visual distinction | ✅ Solvable — check for icon-bg color change |
-
-#### Possibility: Add `section > p a` and SVG links
-```js
-const SELECTORS = [
-  'p a[href]', 'li a[href]', 'td a[href]', 'th a[href]',
-  'blockquote a[href]', 'article > p a[href]', 'dd a[href]',
-  'section > p a[href]',   // ← add
-  'svg a[href]',           // ← add
-].join(', ');
-```
 
 ---
 
@@ -320,21 +293,9 @@ Also: CSS background-image on text-containing elements
 | Case | Solvable? |
 |------|-----------|
 | `<canvas>` rendering text | No (requires OCR or canvas pixel read) |
-| `<svg>` with embedded `<text>` elements | ✅ Solvable — scan `svg text` elements |
+| ~~`<svg>` with embedded `<text>` elements~~ | ✅ **Fixed** — scans `svg text` inside `a, button, [role="img"], figure` |
 | Very short text images (1-2 words in alt) | Partial — score will be < 2 |
 | `<picture>` with `<source>` + `<img>` fallback | ✅ Solvable — `<picture> img` already covered by `img[src]` |
-
-#### Possibility: Add SVG text detection
-```js
-// After img loop:
-for (const svg of document.querySelectorAll('svg')) {
-  const textEls = svg.querySelectorAll('text');
-  if (textEls.length > 0 && svg.closest('a, button, [role="img"]')) {
-    // SVG with visible text used as an image
-    svgTextViolations.push({ html: svg.outerHTML.slice(0, 200) });
-  }
-}
-```
 
 ---
 
