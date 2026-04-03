@@ -20,7 +20,13 @@ from __future__ import annotations
 from typing import List
 
 from ..models import PageSnapshot, RuleAuditRecord
-from ..heuristics import detect_missing_main_content, detect_rotate_overlay
+from ..heuristics import (
+    detect_missing_main_content,
+    detect_rotate_overlay,
+    detect_css_transform_lock,
+    detect_body_overflow_hidden,
+    detect_landscape_horizontal_overflow,
+)
 
 _RULE_KEY = "wcag_1_3_4"
 
@@ -67,6 +73,46 @@ def evaluate(
                     page_url=snap.page_url,
                 )
             )
+
+        if detect_css_transform_lock(snap):
+            records.append(
+                RuleAuditRecord(
+                    rule_key=_RULE_KEY,
+                    status="NEEDS_REVIEW",
+                    violation=(
+                        f"A CSS rotation transform was detected on the body in {label} orientation. "
+                        "This is often used to force an orientation lock and may block native capabilities. "
+                        "Verify manually if this violates WCAG 1.3.4."
+                    ),
+                    page_url=snap.page_url,
+                )
+            )
+
+        if detect_body_overflow_hidden(snap):
+            records.append(
+                RuleAuditRecord(
+                    rule_key=_RULE_KEY,
+                    status="NEEDS_REVIEW",
+                    violation=(
+                        f"The document body uses overflow: hidden or clip in {label} orientation. "
+                        "This could clip content if the layout isn't fluid when rotated. Verify manually."
+                    ),
+                    page_url=snap.page_url,
+                )
+            )
+
+    if detect_landscape_horizontal_overflow(portrait, landscape):
+        records.append(
+            RuleAuditRecord(
+                rule_key=_RULE_KEY,
+                status="NEEDS_REVIEW",
+                violation=(
+                    "The landscape orientation introduced horizontal scrolling that was not present "
+                    "in the portrait view. This often indicates the layout broke when rotated. Verify manually."
+                ),
+                page_url=landscape.page_url,
+            )
+        )
 
     # Compare interactive element counts between orientations
     portrait_interactive = [e for e in portrait.elements if e.focusable and e.visible]
