@@ -1095,6 +1095,63 @@ def _focus_not_obscured_enh_to_findings(
     )
 
 
+def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    """Convert MediaAuditor records to standard findings for WCAG 1.2.1."""
+    findings = []
+    for r in records:
+        status_raw = r.get("wcag_1_2_1_status", "")
+        if status_raw == "N/A":
+            continue
+        if status_raw == "FAILED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_2_1_media",
+                    wcag_sc="1.2.1",
+                    status="fail",
+                    reason=r.get("wcag_1_2_1_violation")
+                    or "No text alternative for prerecorded media.",
+                    severity=_PYTHON_SEVERITY.get("1.2.1", "critical"),
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=page_url,
+                )
+            )
+        elif status_raw == "NEEDS_REVIEW":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_2_1_media",
+                    wcag_sc="1.2.1",
+                    status="needs_review",
+                    reason=r.get("wcag_1_2_1_violation")
+                    or "Manual review required for transcript quality.",
+                    severity=_PYTHON_SEVERITY.get("1.2.1", "critical"),
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=page_url,
+                )
+            )
+        elif status_raw == "PASSED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_2_1_media",
+                    wcag_sc="1.2.1",
+                    status="pass",
+                    reason="Prerecorded media has an equivalent text alternative.",
+                    severity=None,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id"),
+                    element_tag=r.get("tag", ""),
+                    page_url=page_url,
+                )
+            )
+    return findings
+
+
 # ── Converter registries ─────────────────────────────────────────────────────
 
 # Register image-audit rules here so new raw status keys are wired to the

@@ -93,6 +93,7 @@ services:
     volumes:
       - ./output/crawled_images:/app/crawled_images
       - ./output/logs:/app/logs
+      - huggingface_cache:/root/.cache/huggingface
 
     healthcheck:
       test:         ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
@@ -177,3 +178,6 @@ services:
 networks:
   ka11y-net:
     driver: bridge
+
+volumes:
+  huggingface_cache:
