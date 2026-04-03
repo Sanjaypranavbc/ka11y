@@ -19,9 +19,32 @@ async function run(page) {
       else seenIds[id] = true;
     });
 
+    // Broken ARIA reference check
+    const brokenRefs = [];
+    for (const el of document.querySelectorAll('[aria-labelledby], [aria-describedby], [aria-controls], [aria-owns]')) {
+      for (const attr of ['aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns']) {
+        const val = el.getAttribute(attr);
+        if (!val) continue;
+        for (const id of val.split(/\s+/).filter(Boolean)) {
+          if (!document.getElementById(id)) brokenRefs.push({ attr, id, html: el.outerHTML.slice(0, 100) });
+        }
+      }
+    }
+
+    // Orphaned label[for] check
+    const orphanedLabels = [];
+    for (const label of document.querySelectorAll('label[for]')) {
+      const forId = label.getAttribute('for');
+      if (forId && !document.getElementById(forId)) {
+        orphanedLabels.push({ for: forId, html: label.outerHTML.slice(0, 100) });
+      }
+    }
+
     return {
       duplicateIds:  [...new Set(dupeIds)],
       totalIdCount,
+      brokenRefs,
+      orphanedLabels,
     };
   });
 

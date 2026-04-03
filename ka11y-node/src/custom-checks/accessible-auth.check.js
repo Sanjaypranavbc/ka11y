@@ -36,7 +36,9 @@ async function run(page) {
         document.querySelector('[class*="h-captcha" i], [data-hcaptcha-widget-id]') ||
         document.querySelector('[data-sitekey][class*="hcaptcha" i]')
       );
-      const hasAnyCaptcha = hasCaptchaImg || hasReCaptcha;
+      // Cloudflare Turnstile
+      const hasTurnstile = !!document.querySelector('.cf-turnstile, [data-cf-turnstile]');
+      const hasAnyCaptcha = hasCaptchaImg || hasReCaptcha || hasTurnstile;
 
       // Bug fix: Expanded audio alternative detection
       const hasCaptchaAlt = !!(
@@ -75,23 +77,32 @@ async function run(page) {
       const hasCognitiveTest =
         /what\s+is\s+\d+\s*[\+\-\*×÷]\s*\d+|solve\s+the\s+(puzzle|equation|problem)|enter\s+the\s+(word|text|code|letters?|numbers?)\s+(you\s+see|shown|above|below|in\s+the\s+(image|picture))|answer\s+the\s+(question|challenge)|what\s+(color|colour|shape)\s+is|\d+\s*[\+\-\*×÷]\s*\d+|計算|問題を解|パズル|クイズ|画像に表示|表示された文字|見える文字|質問に答|何色|どの色|どの形/i.test(formText);
 
-      if (hasAnyCaptcha && !hasCaptchaAlt) {
+      // Passkey/WebAuthn alternative detection
+      const hasPasskeyOption = Array.from(document.querySelectorAll('button, a')).some(el =>
+        /passkey|webauthn|biometric|fingerprint|face\s*id/i.test(el.textContent + (el.getAttribute('aria-label') || ''))
+      );
+
+      if (hasAnyCaptcha && !hasCaptchaAlt && !hasPasskeyOption) {
         issues.push({
           type: 'captcha-no-alternative',
-          detail: `CAPTCHA detected (${hasReCaptcha ? 'reCAPTCHA/hCaptcha' : 'image CAPTCHA'}) without a detectable audio or accessible alternative.`,
+          detail: `CAPTCHA detected (${hasTurnstile ? 'Cloudflare Turnstile' : hasReCaptcha ? 'reCAPTCHA/hCaptcha' : 'image CAPTCHA'}) without a detectable audio or accessible alternative.`,
         });
       }
-      if (blocksCopyPaste) {
-        issues.push({
-          type: 'paste-blocked',
-          detail: 'Password field has inline onpaste/oncopy handler that blocks pasting, preventing use of password managers.',
-        });
-      }
-      if (hasCognitiveTest) {
-        issues.push({
-          type: 'cognitive-test',
-          detail: 'Authentication appears to require solving a cognitive puzzle (math, riddle, or visual challenge) without a detectable accessible alternative.',
-        });
+      // If a passkey/WebAuthn option is available it provides an accessible authentication
+      // alternative — skip paste-blocking and cognitive-test issues for this form.
+      if (!hasPasskeyOption) {
+        if (blocksCopyPaste) {
+          issues.push({
+            type: 'paste-blocked',
+            detail: 'Password field has inline onpaste/oncopy handler that blocks pasting, preventing use of password managers.',
+          });
+        }
+        if (hasCognitiveTest) {
+          issues.push({
+            type: 'cognitive-test',
+            detail: 'Authentication appears to require solving a cognitive puzzle (math, riddle, or visual challenge) without a detectable accessible alternative.',
+          });
+        }
       }
     }
 
