@@ -6,15 +6,17 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/multiple-ways';
 
 async function run(page) {
   const data = await page.evaluate(() => {
+    // Multi-language search terms: French: recherche, Spanish: buscar, German: suche,
+    // Italian: cerca, Dutch: zoeken, Swedish: sök, Chinese: 搜索/搜尋, Japanese: 検索, Korean: 검색
+    const SEARCH_RE = /search|検索|recherche|buscar|suche|cerca|zoeken|sök|搜索|搜尋|검색/i;
+
     const hasSearch = !!(
       document.querySelector('input[type="search"]') ||
       document.querySelector('[role="search"]') ||
-      document.querySelector('[aria-label*="search" i]') ||
-      document.querySelector('[aria-label*="検索" i]') ||
-      document.querySelector('[placeholder*="search" i]') ||
-      document.querySelector('[placeholder*="検索" i]') ||
+      Array.from(document.querySelectorAll('[aria-label]')).some(el => SEARCH_RE.test(el.getAttribute('aria-label') || '')) ||
+      Array.from(document.querySelectorAll('[placeholder]')).some(el => SEARCH_RE.test(el.getAttribute('placeholder') || '')) ||
       Array.from(document.querySelectorAll('form')).some(f =>
-        /search|検索/i.test(f.action || '') || /search|検索/i.test(f.getAttribute('aria-label') || '')
+        SEARCH_RE.test(f.action || '') || SEARCH_RE.test(f.getAttribute('aria-label') || '')
       )
     );
 

@@ -95,7 +95,16 @@ async function run(page) {
       });
     }
 
-    return { violations, needsReview, bgTextViolations, checkedCount };
+    // SVG <text> elements used as images
+    const svgTextViolations = [];
+    for (const svg of document.querySelectorAll('svg')) {
+      const textEls = svg.querySelectorAll('text');
+      if (textEls.length > 0 && svg.closest('a, button, [role="img"], figure')) {
+        svgTextViolations.push({ type: 'svg-text-image', html: svg.outerHTML.slice(0, 200) });
+      }
+    }
+
+    return { violations, needsReview, bgTextViolations, svgTextViolations, checkedCount };
   }, {
     logoPattern:  LOGO_PATTERN.source,
     srcPattern:   TEXT_IMG_SRC_PATTERN.source,
@@ -106,6 +115,7 @@ async function run(page) {
   const allViolations = [
     ...(data.violations      || []),
     ...(data.bgTextViolations|| []),
+    ...(data.svgTextViolations|| []),
   ];
   const reviews = data.needsReview || [];
 
@@ -127,7 +137,9 @@ async function run(page) {
 
   if (allViolations.length > 0) {
     const sample = allViolations.slice(0, 3)
-      .map(v => `<img src="…${v.src}" alt="${v.alt}">`)
+      .map(v => v.type === 'svg-text-image'
+        ? `<svg with text> ${v.html.slice(0, 60)}`
+        : `<img src="…${v.src}" alt="${v.alt}">`)
       .join('; ');
     return {
       successCriteriaId: SC,

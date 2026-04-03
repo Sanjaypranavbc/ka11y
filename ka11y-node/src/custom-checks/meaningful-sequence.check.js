@@ -64,6 +64,45 @@ async function run(page) {
         orderReorders = visualOrder.some((vi, di) => vi !== domIndices[di]);
       }
 
+      // Grid placement reordering: explicit grid-column/row-start on children
+      if (isGrid) {
+        const hasGridPlacement = children.some(ch => {
+          const ccs = window.getComputedStyle(ch);
+          return ccs.gridColumnStart !== 'auto' || ccs.gridRowStart !== 'auto';
+        });
+        if (hasGridPlacement) {
+          results.push({
+            tagName: el.tagName.toLowerCase(),
+            id: el.id || null,
+            display,
+            flexDir: null,
+            orders: null,
+            reason: 'Grid container has children with explicit grid-column-start or grid-row-start, potentially reordering visual presentation from DOM order',
+            html: el.outerHTML.slice(0, 200),
+          });
+          continue;
+        }
+      }
+
+      // Float reordering: mixed floated/non-floated siblings
+      if (children.length >= 2) {
+        const floats = children.map(ch => window.getComputedStyle(ch).float);
+        const hasFloated = floats.some(f => f === 'left' || f === 'right');
+        const hasNonFloated = floats.some(f => f === 'none');
+        if (hasFloated && hasNonFloated) {
+          results.push({
+            tagName: el.tagName.toLowerCase(),
+            id: el.id || null,
+            display,
+            flexDir: null,
+            orders: null,
+            reason: 'Container has mixed floated (left/right) and non-floated siblings, which may reorder visual presentation from DOM order',
+            html: el.outerHTML.slice(0, 200),
+          });
+          continue;
+        }
+      }
+
       if (!isReversed && !orderReorders) continue;
 
       results.push({

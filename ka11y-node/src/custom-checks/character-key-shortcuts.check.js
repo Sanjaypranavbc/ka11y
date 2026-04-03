@@ -65,9 +65,10 @@ async function run(page) {
     // do not appear as HTML attributes (common in vanilla JS and light frameworks).
     const KEY_RE_SRC = /(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z!-/:-@[\-`{-~]['"]|keyCode\s*===?\s*(?:6[5-9]|[7-8]\d|90)/;
     const LISTEN_RE = /addEventListener\s*\(\s*['"]key(?:down|press|up)['"]/;
+    const docListenerRe = /document\s*\.\s*addEventListener\s*\(\s*['"]key(?:down|press|up)['"]/;
     for (const script of document.querySelectorAll('script:not([src])')) {
       const src = script.textContent || '';
-      if (!LISTEN_RE.test(src)) continue;
+      if (!LISTEN_RE.test(src) && !docListenerRe.test(src)) continue;
       const keyIdx = src.search(KEY_RE_SRC);
       if (keyIdx < 0) continue;
       const modIdx = src.search(/ctrlKey|altKey|metaKey/);

@@ -4,7 +4,7 @@ const SC = '3.2.6';
 const RULE_ID = 'custom-consistent-help';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/consistent-help';
 
-const HELP_PATTERNS = /\b(help|contact\s*us|support|faq|frequently\s*asked|live\s*chat|customer\s*service|get\s*help|need\s*help|assistance|helpdesk|help\s*centre|help\s*center)\b|ヘルプ|お問い合わせ|問い合わせ|サポート|よくある質問|チャット|カスタマーサービス|サポートセンター|ヘルプセンター|ご相談/i;
+const HELP_PATTERNS = /\b(help|contact\s*us|support|faq|frequently\s*asked|live\s*chat|customer\s*service|get\s*help|need\s*help|assistance|helpdesk|help\s*centre|help\s*center|accessibility)\b|ヘルプ|お問い合わせ|問い合わせ|サポート|よくある質問|チャット|カスタマーサービス|サポートセンター|ヘルプセンター|ご相談/i;
 
 async function run(page) {
   const data = await page.evaluate((helpPattern) => {
@@ -41,6 +41,18 @@ async function run(page) {
       document.querySelector('[data-testid*="chat" i], [aria-label*="live chat" i], [aria-label*="チャット" i]')
     );
 
+    // Known chatbot platform selectors
+    const chatbotSelectors = [
+      '#intercom-container',
+      '#drift-widget',
+      '#zendesk-widget',
+      '[id*="helpscout"]',
+      '.crisp-client',
+      '[id*="tawk"]',
+      '[class*="hubspot-chat"]',
+    ];
+    const hasChatbot = chatbotSelectors.some(s => !!document.querySelector(s));
+
     // Phone / email contact mechanisms count as human contact mechanisms
     const hasPhoneLink = !!(
       document.querySelector('a[href^="tel:"]') ||
@@ -52,11 +64,11 @@ async function run(page) {
       document.querySelector('a[href^="mailto:"]')
     );
 
-    return { helpLinks, chatWidget, hasPhoneLink, hasEmailLink };
+    return { helpLinks, chatWidget, hasChatbot, hasPhoneLink, hasEmailLink };
   }, HELP_PATTERNS.source);
 
-  const { helpLinks, chatWidget, hasPhoneLink, hasEmailLink } = data;
-  const hasAnyHelpMechanism = helpLinks.length > 0 || chatWidget || hasPhoneLink || hasEmailLink;
+  const { helpLinks, chatWidget, hasChatbot, hasPhoneLink, hasEmailLink } = data;
+  const hasAnyHelpMechanism = helpLinks.length > 0 || chatWidget || hasChatbot || hasPhoneLink || hasEmailLink;
 
   if (!hasAnyHelpMechanism) {
     return {
@@ -82,6 +94,7 @@ async function run(page) {
   const locationStr = uniqueLocations.length > 0 ? ` in: ${uniqueLocations.join(', ')}` : '';
   const extras = [
     chatWidget && 'chat widget',
+    hasChatbot && 'chatbot platform',
     hasPhoneLink && 'phone link',
     hasEmailLink && 'email link',
   ].filter(Boolean);

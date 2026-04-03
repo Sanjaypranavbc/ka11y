@@ -17,10 +17,13 @@ const TYPE_CHAR = {
 
 // Selector now includes checkbox and radio — toggling these is a common source of
 // on-input context changes (B8: they were previously excluded from testing).
+// Also includes contenteditable elements which can receive user input.
 const SELECTOR = [
   'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled])',
   'textarea:not([disabled])',
   'select:not([disabled])',
+  '[contenteditable="true"]',
+  '[contenteditable=""]',
 ].join(', ');
 
 async function run(page) {
@@ -32,6 +35,15 @@ async function run(page) {
   page.on('framenavigated', onNavigated);
 
   try {
+    // Inject SPA navigation detection via pushState/replaceState interception
+    await page.evaluate(() => {
+      window.__navChanges = 0;
+      const orig = history.pushState.bind(history);
+      history.pushState = function(...args) { window.__navChanges++; return orig(...args); };
+      const origReplace = history.replaceState.bind(history);
+      history.replaceState = function(...args) { window.__navChanges++; return origReplace(...args); };
+    });
+
     const inputs = await page.evaluate((sel, max) => {
       return Array.from(document.querySelectorAll(sel)).slice(0, max).map((el, i) => ({
         index: i,
@@ -75,10 +87,17 @@ async function run(page) {
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      if (navigationDetected || currentUrl !== urlBefore) {
+      const spaNavChanged = await page.evaluate(() => window.__navChanges > 0).catch(() => false);
+      if (spaNavChanged) {
+        await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
+      }
+
+      if (navigationDetected || spaNavChanged || currentUrl !== urlBefore) {
         violations.push(inputInfo);
         break; // page may have navigated; can't continue safely
       }
+      // Reset SPA counter for next element
+      await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
 
       // Clean up: restore original state
       if (!inputInfo.isSelect && !inputInfo.isCheckboxOrRadio) {

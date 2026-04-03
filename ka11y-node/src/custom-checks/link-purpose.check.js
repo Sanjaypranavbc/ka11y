@@ -65,6 +65,10 @@ async function run(page) {
         }
       }
 
+      if (!accessibleName) {
+        accessibleName = (link.getAttribute('title') || '').trim();
+      }
+
       // Skip icon-only links with no text (axe `link-name` rule covers these)
       if (!accessibleName) continue;
 

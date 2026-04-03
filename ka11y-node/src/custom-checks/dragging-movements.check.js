@@ -10,6 +10,9 @@ const DND_LIBRARY_MARKERS = [
   '.sortable-item',             // Sortable.js
   '.ui-draggable',              // jQuery UI
   '[data-sortable]',            // generic sortable
+  '[data-interact]',            // Interact.js
+  '.gu-transit',                // Dragula
+  '[data-drag-handle]',         // generic drag handle
 ];
 
 // Selectors that indicate a single-pointer alternative to drag

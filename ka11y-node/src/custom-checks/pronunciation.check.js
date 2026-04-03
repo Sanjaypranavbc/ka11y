@@ -84,6 +84,36 @@ async function run(page) {
       }
     }
 
+    // ── 5. Section-level CJK scan (even on non-CJK pages) ────────────────────
+    // Find sub-elements with explicit CJK lang attributes, check ruby coverage
+    const cjkSectionIssues = [];
+    if (!isCjkPage) {
+      const cjkSections = document.querySelectorAll('[lang^="ja"], [lang^="zh"], [lang^="ko"]');
+      for (const section of cjkSections) {
+        const secRubyEls = Array.from(section.querySelectorAll('ruby'));
+        const secText = (section.innerText || section.textContent || '').trim();
+        const secKanji = (secText.match(/[\u4E00-\u9FFF\u3400-\u4DBF]/g) || []).length;
+        if (secKanji === 0) continue;
+
+        let secKanjiWithRuby = 0;
+        for (const rubyEl of secRubyEls) {
+          const rt = rubyEl.textContent || '';
+          const rubyKanji = (rt.match(/[\u4E00-\u9FFF\u3400-\u4DBF]/g) || []).length;
+          secKanjiWithRuby += rubyKanji;
+        }
+
+        const secRubyPct = Math.round((secKanjiWithRuby / secKanji) * 100);
+        if (secRubyPct < 30) {
+          cjkSectionIssues.push({
+            lang: section.getAttribute('lang'),
+            kanjiCount: secKanji,
+            rubyPct: secRubyPct,
+            html: section.outerHTML.slice(0, 100),
+          });
+        }
+      }
+    }
+
     return {
       applicable: true,
       rubyCount,
@@ -92,11 +122,29 @@ async function run(page) {
       sampleKanji: unrubyedSamples,
       htmlLang,
       cjkDensityPct: Math.round(cjkDensity * 100),
+      cjkSectionIssues,
     };
   }, CJK_RATIO_THRESHOLD, KANJI_RE.source);
 
-  // Not a CJK page — criterion not applicable
+  // Not a CJK page — criterion not applicable at page level
+  // but check section-level CJK elements
   if (!data.applicable) {
+    if (data.cjkSectionIssues && data.cjkSectionIssues.length > 0) {
+      const sampleSections = data.cjkSectionIssues.slice(0, 3)
+        .map(s => `[lang="${s.lang}"] (${s.kanjiCount} kanji, ${s.rubyPct}% ruby coverage)`)
+        .join('; ');
+      return {
+        successCriteriaId: SC,
+        rules: [{
+          ruleId: RULE_ID,
+          description: 'Pronunciation of words must be determinable where meaning is ambiguous',
+          impact: 'moderate',
+          status: 'incomplete',
+          reason: `Page language is "${data.htmlLang}" but ${data.cjkSectionIssues.length} section(s) with explicit CJK lang attributes have low ruby coverage (< 30%): ${sampleSections}. Add <ruby> annotations for kanji within these sections.`,
+          helpUrl: HELP_URL,
+        }],
+      };
+    }
     return {
       successCriteriaId: SC,
       rules: [{

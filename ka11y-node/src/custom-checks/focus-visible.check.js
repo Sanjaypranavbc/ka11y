@@ -58,6 +58,7 @@ async function run(page) {
         borderWidth:     cs.borderWidth,
         backgroundColor: cs.backgroundColor,
         color:           cs.color,
+        transform:       cs.transform,
       };
     }, SELECTOR, el.idx, el.stableSel);
 
@@ -89,6 +90,7 @@ async function run(page) {
         borderWidth:     cs.borderWidth,
         backgroundColor: cs.backgroundColor,
         color:           cs.color,
+        transform:       cs.transform,
       };
     }, SELECTOR, el.idx, el.stableSel);
 
@@ -127,11 +129,12 @@ async function run(page) {
                                focused.borderWidth     !== unfocused.borderWidth;
     const bgChanged          = focused.backgroundColor !== unfocused.backgroundColor;
     const colorChanged       = focused.color           !== unfocused.color;
+    const transformChanged   = focused.transform       !== unfocused.transform;
     // B16: opacity change alone is NOT a visible focus indicator — it reflects CSS animations
     // or transitions on child elements and produces false passes (e.g. a loading spinner
     // child transitioning 0→1 while the button itself has no focus style).
     const isVisible = hasVisibleOutline || outlineChanged || boxShadowChanged ||
-                      borderChanged || bgChanged || colorChanged;
+                      borderChanged || bgChanged || colorChanged || transformChanged;
 
     if (!isVisible) {
       violations.push({ tagName: el.tagName, id: el.id, html: el.html });

@@ -158,18 +158,29 @@ async function run(page) {
     // ── Check 2: Area requirement proxy ──────────────────────────────────────
     // For outline: width ≥ MIN_OUTLINE_WIDTH_PX.
     // For box-shadow: spread radius ≥ MIN_OUTLINE_WIDTH_PX (B4: was always true when no outline).
+    // For border change: border-width ≥ MIN_OUTLINE_WIDTH_PX counts as area met.
     let meetsAreaReq;
     if (hasVisibleOutline) {
-      meetsAreaReq = outlineWidthPx >= MIN_OUTLINE_WIDTH_PX;
+      const outlineWidth = outlineWidthPx;
+      const spreadRadius = 0; // not relevant here
+      const borderWidth = parseFloat(focused.borderWidth) || 0;
+      const borderChangedForArea = focused.borderWidth !== unfocused.borderWidth;
+      const areaMet = outlineWidth >= MIN_OUTLINE_WIDTH_PX || spreadRadius >= MIN_OUTLINE_WIDTH_PX || (borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX);
+      meetsAreaReq = areaMet;
     } else if (boxShadowAdded) {
       // Extract spread radius (4th px-length) from box-shadow first layer
       const firstLayer = (focused.boxShadow || '').split(',')[0];
       const pxVals = (firstLayer.match(/-?[\d.]+px/g) || []).map(parseFloat);
-      const spreadPx = pxVals.length >= 4 ? Math.abs(pxVals[3]) : 0;
-      meetsAreaReq = spreadPx >= MIN_OUTLINE_WIDTH_PX;
+      const spreadRadius = pxVals.length >= 4 ? Math.abs(pxVals[3]) : 0;
+      const borderWidth = parseFloat(focused.borderWidth) || 0;
+      const borderChangedForArea = focused.borderWidth !== unfocused.borderWidth;
+      const areaMet = outlineWidthPx >= MIN_OUTLINE_WIDTH_PX || spreadRadius >= MIN_OUTLINE_WIDTH_PX || (borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX);
+      meetsAreaReq = areaMet;
     } else {
-      // border-based indicators assumed to meet area requirement
-      meetsAreaReq = true;
+      // border-based indicators: check if border width meets the minimum
+      const borderWidth = parseFloat(focused.borderWidth) || 0;
+      const borderChangedForArea = focused.borderWidth !== unfocused.borderWidth;
+      meetsAreaReq = borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX;
     }
 
     // ── Check 3: Contrast ≥ 3:1 between focused indicator and adjacent area ──

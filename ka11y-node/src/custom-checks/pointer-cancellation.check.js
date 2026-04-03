@@ -14,14 +14,16 @@ async function run(page) {
 
     // Bug fix: also include onpointermove — some implementations define the action
     // in the move phase and use pointerup for cancellation.
-    const SELECTOR = '[onmousedown], [onpointerdown], [onpointermove]';
+    // Also include ontouchstart — touch-based down events that may trigger actions without cancellation.
+    const SELECTOR = '[onmousedown], [onpointerdown], [onpointermove], [ontouchstart]';
     const elements = Array.from(document.querySelectorAll(SELECTOR));
 
     for (const el of elements) {
       const mousedown    = el.getAttribute('onmousedown') || '';
       const pointerdown  = el.getAttribute('onpointerdown') || '';
       const pointermove  = el.getAttribute('onpointermove') || '';
-      const downHandler  = (mousedown + ' ' + pointerdown + ' ' + pointermove).trim();
+      const touchstart   = el.getAttribute('ontouchstart') || '';
+      const downHandler  = (mousedown + ' ' + pointerdown + ' ' + pointermove + ' ' + touchstart).trim();
 
       if (!downHandler) continue;
 
@@ -38,10 +40,12 @@ async function run(page) {
       const isAction = actionRe.test(downHandler);
 
       // Bug fix: check for BOTH onmouseup/onpointerup (cancellation paths)
+      // Also check ontouchend as cancellation path for touch events
       const hasCancellationPath =
         el.hasAttribute('onmouseup') ||
         el.hasAttribute('onpointerup') ||
-        el.hasAttribute('onclick');
+        el.hasAttribute('onclick') ||
+        el.hasAttribute('ontouchend');
 
       if (isAction && !hasCancellationPath) {
         results.push({

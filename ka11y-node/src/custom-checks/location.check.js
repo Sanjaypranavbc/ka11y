@@ -33,13 +33,27 @@ async function run(page) {
       document.querySelector('[aria-label*="site map" i], [aria-label*="sitemap" i], [aria-label*="サイトマップ" i]')
     );
 
-    const hasLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasSiteMap;
+    // 5. aria-current="step" — indicates current step in a multi-step process
+    const hasAriaCurrentStep = !!document.querySelector('[aria-current="step"]');
+
+    // 6. JSON-LD BreadcrumbList structured data
+    let hasJsonLdBreadcrumb = false;
+    for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
+      if (/"BreadcrumbList"/.test(script.textContent || '')) {
+        hasJsonLdBreadcrumb = true;
+        break;
+      }
+    }
+
+    const hasLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasSiteMap || hasAriaCurrentStep || hasJsonLdBreadcrumb;
 
     return {
       hasBreadcrumb,
       hasAriaCurrent,
       hasActiveNavItem,
       hasSiteMap,
+      hasAriaCurrentStep,
+      hasJsonLdBreadcrumb,
       hasLocationIndicator,
     };
   });
@@ -50,6 +64,8 @@ async function run(page) {
       data.hasAriaCurrent && 'aria-current="page"',
       data.hasActiveNavItem && 'active navigation item',
       data.hasSiteMap && 'sitemap link',
+      data.hasAriaCurrentStep && 'aria-current="step"',
+      data.hasJsonLdBreadcrumb && 'JSON-LD BreadcrumbList',
     ].filter(Boolean).join(', ');
 
     return {

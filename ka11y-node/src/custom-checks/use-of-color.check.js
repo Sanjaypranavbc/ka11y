@@ -61,6 +61,8 @@ async function run(page) {
       'blockquote a[href]',
       'article > p a[href]',
       'dd a[href]',
+      'section > p a[href]',
+      'svg a[href]',
     ].join(', ');
 
     const seen = new Set();

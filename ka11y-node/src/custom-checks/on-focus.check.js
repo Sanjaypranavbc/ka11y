@@ -31,6 +31,15 @@ async function run(page) {
   page.on('framenavigated', onNavigated);
 
   try {
+    // Inject SPA navigation detection via pushState/replaceState interception
+    await page.evaluate(() => {
+      window.__navChanges = 0;
+      const orig = history.pushState.bind(history);
+      history.pushState = function(...args) { window.__navChanges++; return orig(...args); };
+      const origReplace = history.replaceState.bind(history);
+      history.replaceState = function(...args) { window.__navChanges++; return origReplace(...args); };
+    });
+
     const focusable = await page.evaluate((sel, max) => {
       // Deduplicate: [tabindex] may overlap with a, button, etc.
       const seen = new Set();
@@ -66,12 +75,20 @@ async function run(page) {
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
+      const spaNavChanged = await page.evaluate(() => window.__navChanges > 0).catch(() => false);
+      if (spaNavChanged) {
+        // Reset counter for next iteration
+        await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
+      }
+
       // Only flag pathname/search changes — hash-only changes (skip-links, anchor navigation)
       // are not a WCAG 3.2.1 context change.
-      if (navigationDetected || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
+      if (navigationDetected || spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
         violations.push(focusable[i]);
         break; // page may have navigated; unsafe to continue testing other elements
       }
+      // Reset SPA counter for next element
+      await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
     }
   } finally {
     page.off('framenavigated', onNavigated);
