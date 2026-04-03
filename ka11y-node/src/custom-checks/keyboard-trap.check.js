@@ -201,7 +201,7 @@ async function run(page) {
   const iframeTrapFindings = [];
 
   if (!trapHtml) {
-    const frames = page.frames().filter(f => f !== page.mainFrame());
+    const frames = (typeof page.frames === 'function' ? page.frames() : []).filter(f => typeof page.mainFrame === 'function' ? f !== page.mainFrame() : true);
     for (const frame of frames) {
       try {
         // Try a basic Tab-trap detection in the frame (forward only, 30 iterations)
