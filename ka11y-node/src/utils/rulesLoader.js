@@ -17,9 +17,13 @@ const fs   = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 
-// Allow Docker override via env var; default resolves to ka11y-node/i18n/
+// Allow Docker override via env var. In the monorepo prefer the shared
+// repo-level i18n/ directory; when the service is deployed standalone,
+// fall back to ka11y-node/i18n/.
+const LOCAL_I18N_DIR = path.resolve(__dirname, '../../i18n');
+const SHARED_I18N_DIR = path.resolve(__dirname, '../../../i18n');
 const I18N_DIR = process.env.KA11Y_I18N_DIR
-  || path.resolve(__dirname, '../../i18n');
+  || (fs.existsSync(path.join(SHARED_I18N_DIR, 'rules.yml')) ? SHARED_I18N_DIR : LOCAL_I18N_DIR);
 
 /** @type {Map<string, Record<string, object>>} */
 const _cache = new Map();
