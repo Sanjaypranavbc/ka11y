@@ -1,7 +1,7 @@
 # ka11y-python — Rule-by-Rule Analysis
 
-> Generated: 2026-04-02
-> Scope: `ka11y/accessibility/rules/` + `ka11y/accessibility/rendered/evaluators/` (17 rules)
+> Generated: 2026-04-06
+> Scope: `ka11y-python/ka11y/accessibility/rules/` + `ka11y-python/ka11y/accessibility/rendered/evaluators/` (18 WCAG criteria)
 > Stack: Python 3.10+ + Playwright + PaddleOCR + ML Classifier
 
 ---
@@ -9,7 +9,7 @@
 ## Architecture & Request Flow
 
 ```mermaid
-graph TD
+flowchart TD
     A[HTTP POST /api/v1/audit] --> B["Crawler: Playwright"]
     B --> C["Page Snapshot / DOM Data"]
     B --> D["Image Harvest"]
@@ -24,8 +24,8 @@ graph TD
     C --> F
     D --> G
     
-    E --> H["Orientation / Reflow / Resize Text / Focus Obscured"]
-    F --> I["Forms / Label-in-Name / Target-Size / Text-Spacing"]
+    E --> H["Orientation / Reflow / Resize Text / Text Spacing / Hover / Focus Obscured"]
+    F --> I["Forms / Label-in-Name / Target-Size / Static Text-Spacing"]
     G --> J["Classification + OCR + Contrast"]
     
     H & I & J --> K["Findings Aggregator"]
@@ -35,7 +35,7 @@ graph TD
 ### Custom Check Execution Model
 
 ```mermaid
-graph TD
+flowchart TD
     Index["Rules Index"] --> Static["Static / DOM Auditors"]
     Index --> Rendered["Rendered / Stateful Evaluators"]
     Index --> Multi["Multimodal / CV Auditors"]
@@ -70,7 +70,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     START["Image Metadata + OCR"] --> CLASS{"Classification?"}
     CLASS -- Decorative --o DEC["alt = empty?"]
     CLASS -- Informative --o INF["Alt matches OCR?"]
@@ -117,7 +117,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     SNAP["Portrait + Landscape Snapshots"] --> ORE{"Overlay Detected?"}
     ORE -- Yes --> REV1["NEEDS_REVIEW: Rotate device overlay"]
     ORE -- No --> CCO{"Missing Content?"}
@@ -157,7 +157,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     IMG["Image of Text / Element Crop"] --> SEG["Segmentation (Otsu)"]
     SEG --> L["Calculate Relative Luminance (L1, L2)"]
     L --> SIZE{"Large Text?"}
@@ -192,7 +192,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     BASE["Baseline + 200% Zoom"] --> FILT["Perceivable Text Elements"]
     FILT --> SCR{"Page Scroll?"}
     SCR -- New Horizontal --> FAIL1["FAIL: 1.4.4 Page-level reflow break"]
@@ -222,7 +222,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     IMG["Non-decorative Image"] --> EXEMPT{"Logo/Complex?"}
     EXEMPT -- Yes --> PASS["PASS"]
     EXEMPT -- No --> OCR{"Text Detected?"}
@@ -246,7 +246,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     IMG["Image of Text / Element Crop"] --> SEG["Segmentation (Otsu)"]
     SEG --> L["Calculate Relative Luminance (L1, L2)"]
     L --> SIZE{"Large Text?"}
@@ -279,7 +279,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     W320["320px Viewport Snapshot"] --> PSCR{"Page H-Scroll?"}
     PSCR -- No --> PASS["PASS"]
     PSCR -- Yes --> EX{"Exempt Content?"}
@@ -301,7 +301,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     UI["Functional Button/Icon"] --> CONTEXT{"Full Page Context?"}
     CONTEXT -- Yes --> BOUND["Boundary Contrast Analysis"]
     CONTEXT -- No --> PROXY["OCR Text-Proxy Contrast"]
@@ -329,7 +329,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     BASE["Baseline + Overrides"] --> CLIP{"New Clipping?"}
     CLIP -- Yes --> FAIL1["FAIL: 1.4.12 Text spacing loss"]
     CLIP -- No --> SCR{"Page Scroll?"}
@@ -351,7 +351,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     TRIG["Trigger mouseover/focus"] --> POP{"Popup Appeared?"}
     POP -- No --> PASS["PASS"]
     POP -- Yes --> ESC{"Dismissible by ESC?"}
@@ -378,7 +378,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     MOV["Moving/Animated Content"] --> AUTO{"Starts Auto?"}
     AUTO -- No --> PASS["PASS"]
     AUTO -- Yes --> DUR{"Lasts > 5s?"}
@@ -404,7 +404,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     TAB["Tab Traversal Loop"] --> RATIO{"Obscuration Ratio?"}
     RATIO -- ">= 95%" --> FAIL["FAIL: 2.4.11 Fully hidden"]
     RATIO -- "10% to 95%" --> REV["NEEDS_REVIEW: Partially hidden"]
@@ -420,12 +420,33 @@ graph TD
 
 ---
 
+### 2.4.12 — Focus Not Obscured (Enhanced) (Level AAA)
+**Check:** `focus_not_obscured_enhanced.py`
+
+#### Flowchart
+```mermaid
+flowchart TD
+    TAB["Tab Traversal Loop"] --> RATIO{"Obscuration Ratio?"}
+    RATIO -- ">= 10%" --> FAIL["FAIL: 2.4.12 Any meaningful overlap"]
+    RATIO -- "2% to 10%" --> REV["NEEDS_REVIEW: Minor overlap"]
+    RATIO -- "< 2%" --> PASS["PASS"]
+```
+
+#### Cases Covered
+- Stricter enhanced threshold for author-created overlays.
+- Reuses the same keyboard traversal and covering-element identification as 2.4.11.
+
+#### Cases Missed
+- Sub-2% overlap can still matter for very small focused controls.
+
+---
+
 ### 2.5.3 — Label in Name (Level A)
 **Check:** `label_in_name_auditor.py`
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     VIS["Visible Label Text"] --> ACC["Accessible Name"]
     ACC --> MATCH{"Name contains Label?"}
     MATCH -- Yes --> PASS["PASS"]
@@ -447,7 +468,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     RECT["Interactive BBox"] --> SIZE{">= 24x24 px?"}
     SIZE -- Yes --> PASS["PASS"]
     SIZE -- No --> EX{"Exemptions?"}
@@ -469,7 +490,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     INV["aria-invalid='true'"] --> DESC{"aria-describedby set?"}
     DESC -- No --> FAIL1["FAIL: 3.3.1 No programmatic link"]
     DESC -- Yes --> LIV{"Alert/Live region?"}
@@ -491,7 +512,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     INP["Form Input"] --> NAME{"Accessible Name?"}
     NAME -- None --> FAIL1["FAIL: 3.3.2 Missing label"]
     NAME -- Yes --> REQ{"Required Marker?"}
@@ -517,7 +538,7 @@ graph TD
 
 #### Flowchart
 ```mermaid
-graph TD
+flowchart TD
     COMP["UI Component"] --> ROLE{"Role defined?"}
     ROLE -- No --> FAIL1["FAIL: 4.1.2 Missing identity"]
     ROLE -- Yes --> NAME{"Name defined?"}
@@ -547,11 +568,12 @@ graph TD
 | 1.4.10 | Reflow | reflow.py | Rendered | High |
 | 1.4.11 | Non-text Contrast | alttext.py | CV (Pixel) | High |
 | 1.4.12 | Text Spacing | text_spacing.py | Rendered | High |
-| 1.4.13 | Content on Hover/Focus| hover_focus_content.py | Rendered | Medium |
+| 1.4.13 | Content on Hover/Focus | hover_focus_content.py | Rendered | Medium |
 | 2.2.2 | Pause, Stop, Hide | pause_stop_hide_auditor.py | Hybrid | High |
-| 2.4.11 | Focus Not Obscured | focus_not_obscured_minimum.py| Rendered | High |
+| 2.4.11 | Focus Not Obscured (Minimum) | focus_not_obscured_minimum.py | Rendered | High |
+| 2.4.12 | Focus Not Obscured (Enhanced) | focus_not_obscured_enhanced.py | Rendered | High |
 | 2.5.3 | Label in Name | label_in_name_auditor.py | Static | High |
 | 2.5.8 | Target Size | target_size_auditor.py | Static | High |
 | 3.3.1 | Error Identification | form_auditor.py | Static | High |
-| 3.3.2 | Labels or Instructions| form_auditor.py | Static | High |
+| 3.3.2 | Labels or Instructions | form_auditor.py | Static | High |
 | 4.1.2 | Name, Role, Value | alttext.py / form_auditor.py | Hybrid | High |
