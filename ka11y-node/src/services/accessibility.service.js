@@ -133,6 +133,32 @@ class AccessibilityService {
     }
   }
 
+  async _injectAxe(page, logPrefix = '') {
+    const prefix = logPrefix ? `${logPrefix} ` : '';
+    const waitForAxe = () => page.waitForFunction(
+      () => Boolean(globalThis.axe && typeof globalThis.axe.run === 'function'),
+      { timeout: 2_000 }
+    );
+
+    const tryInject = async () => {
+      await page.addScriptTag({ path: this._axeCorePath });
+      await waitForAxe();
+    };
+
+    try {
+      await tryInject();
+    } catch (err) {
+      this._logger.warn(`${prefix}axe-core was not available after injection, retrying once: ${err.message}`);
+      try {
+        await tryInject();
+      } catch {
+        throw new Error(
+          'axe-core injection failed: globalThis.axe.run was unavailable after script injection'
+        );
+      }
+    }
+  }
+
   /**
    * Analyzes HTML for accessibility issues.
    *
@@ -167,7 +193,7 @@ class AccessibilityService {
       await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
       this._logger.info('Injecting axe-core...');
-      await page.addScriptTag({ path: this._axeCorePath });
+      await this._injectAxe(page);
 
       this._logger.info('Running axe.run() analysis...');
       const axeResults = await page.evaluate((runOptions) => {
@@ -231,6 +257,7 @@ class AccessibilityService {
       const page = await browser.newPage();
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
+      await page.setBypassCSP(true);
 
       page.on('console', (msg) => {
         if (msg.type() === 'error') {
@@ -248,7 +275,7 @@ class AccessibilityService {
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
       this._logger.info('Injecting axe-core...');
-      await page.addScriptTag({ path: this._axeCorePath });
+      await this._injectAxe(page);
 
       this._logger.info('Running axe.run() analysis...');
       const axeResults = await page.evaluate((runOptions) => {
@@ -312,6 +339,7 @@ class AccessibilityService {
       const page = await browser.newPage();
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
+      await page.setBypassCSP(true);
 
       page.on('console', (msg) => {
         if (msg.type() === 'error') {
@@ -328,7 +356,7 @@ class AccessibilityService {
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
       this._logger.info('[flat] Injecting axe-core...');
-      await page.addScriptTag({ path: this._axeCorePath });
+      await this._injectAxe(page, '[flat]');
 
       this._logger.info('[flat] Running axe.run()...');
       const axeResults = await page.evaluate((runOptions) => {

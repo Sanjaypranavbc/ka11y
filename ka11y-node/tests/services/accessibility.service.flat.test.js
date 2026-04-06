@@ -19,10 +19,12 @@ function makePage(axeResults) {
   return {
     setDefaultTimeout: jest.fn(),
     setDefaultNavigationTimeout: jest.fn(),
+    setBypassCSP: jest.fn().mockResolvedValue(undefined),
     setRequestInterception: jest.fn().mockResolvedValue(undefined),
     on: jest.fn(),
     goto: jest.fn().mockResolvedValue(undefined),
     addScriptTag: jest.fn().mockResolvedValue(undefined),
+    waitForFunction: jest.fn().mockResolvedValue(undefined),
     evaluate: jest.fn().mockResolvedValue(axeResults),
   };
 }
@@ -39,6 +41,7 @@ function makeService(page) {
 
   const logger = {
     info: jest.fn(),
+    warn: jest.fn(),
     debug: jest.fn(),
     error: jest.fn(),
   };
@@ -109,6 +112,23 @@ describe('AccessibilityService.analyseUrlFlat', () => {
     const findings = await service.analyseUrlFlat('https://example.com', 'A');
 
     expect(runAll).toHaveBeenCalledTimes(1);
+    expect(findings).toEqual([]);
+  });
+
+  test('bypasses CSP and retries axe injection when axe is initially unavailable', async () => {
+    const page = makePage({ violations: [], passes: [], incomplete: [] });
+    page.waitForFunction
+      .mockRejectedValueOnce(new Error('axe is not defined'))
+      .mockResolvedValueOnce(undefined);
+
+    const service = makeService(page);
+    runAll.mockResolvedValue([]);
+
+    const findings = await service.analyseUrlFlat('https://example.com', 'AA');
+
+    expect(page.setBypassCSP).toHaveBeenCalledWith(true);
+    expect(page.addScriptTag).toHaveBeenCalledTimes(2);
+    expect(page.waitForFunction).toHaveBeenCalledTimes(2);
     expect(findings).toEqual([]);
   });
 });
