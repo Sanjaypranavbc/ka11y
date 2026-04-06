@@ -9,6 +9,7 @@ By the end you will have:
 - A new **Crawler** that extracts the raw element data
 - A new **Auditor** that applies the WCAG logic
 - A new **finding converter** wired into `ka11y/api/v1/combined/findings.py`
+- A localized **rule catalogue entry** in `i18n/rules.yml` (and locale files when needed)
 - A new **stage** that appears in the SSE stream and the job status
 
 <Note>
@@ -25,10 +26,11 @@ By the end you will have:
 | 2 | `ka11y/accessibility/rules/<category>/<name>_auditor.py` | **New file** — WCAG logic |
 | 3 | `ka11y/api/v1/combined/findings.py` | Finding converter + registry entry |
 | 4 | `ka11y/api/v1/combined/constants.py` | Severity / suggested fix / WCAG metadata |
-| 5 | `ka11y/api/v1/combined/stages.py` | Stage coroutine + `_run_python_stages()` wiring |
-| 6 | `ka11y/api/v1/combined/models.py` | Request toggle in `CombinedRequest` |
-| 7 | *(optional)* `ka11y/api/v1/dependencies.py` | FastAPI `Depends()` provider |
-| 8 | *(optional)* `ka11y/api/v1/pipeline.py` | Wire into sequential pipeline |
+| 5 | `i18n/rules.yml` (+ locale files if needed) | Localized rule name / description used for fallback reasons |
+| 6 | `ka11y/api/v1/combined/stages.py` | Stage coroutine + `_run_python_stages()` wiring |
+| 7 | `ka11y/api/v1/combined/models.py` | Request toggle in `CombinedRequest` |
+| 8 | *(optional)* `ka11y/api/v1/dependencies.py` | FastAPI `Depends()` provider |
+| 9 | *(optional)* `ka11y/api/v1/pipeline.py` | Wire into sequential pipeline |
 
 ---
 
@@ -287,7 +289,9 @@ def _lang_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                 rule_id="python_3_1_1_lang",
                 wcag_sc="3.1.1",
                 status="fail",
-                reason=r.get("wcag_3_1_1_violation") or "Page is missing a valid lang attribute.",
+                reason=r.get("wcag_3_1_1_violation") or _catalog_reason(
+                    "3.1.1", "Page is missing a valid lang attribute."
+                ),
                 severity=_PYTHON_SEVERITY["3.1.1"],
                 element_html=r.get("html_snippet", ""),
                 element_id=r.get("element_id"),
@@ -300,12 +304,14 @@ def _lang_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                 rule_id="python_3_1_1_lang",
                 wcag_sc="3.1.1",
                 status="pass",
-                reason="Page has a valid lang attribute.",
+                reason=_catalog_reason("3.1.1", "Page has a valid lang attribute."),
                 severity=None,
                 page_url=page_url,
             ))
     return findings
 ```
+
+Add a matching `3.1.1` entry in `i18n/rules.yml` so `_catalog_reason()` has a localized fallback description to use when the auditor does not emit its own violation text.
 
 Register it in the appropriate converter registry near the bottom of `findings.py` so the combined stage picks it up automatically. Today those registries are `IMAGE_AUDIT_RECORD_CONVERTERS` and `OCR_RESULT_CONVERTERS`; rendered-layout rules are wired through their explicit `_..._to_findings()` calls in `stages.py`.
 
