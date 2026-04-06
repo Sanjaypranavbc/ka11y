@@ -96,6 +96,7 @@
       "group": "Internals",
       "pages": [
         "internals/combined-package",
+        "internals/python-rules-flow-analysis",
         "internals/data-models",
         "internals/sse-events",
         "internals/output-format",
