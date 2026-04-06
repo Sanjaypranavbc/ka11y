@@ -2,6 +2,51 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { AuditConfig, AuditResult, ContrastReport, StageInfo } from "@/types/audit";
 import { emptyAuditResult } from "@/data/sampleData";
 
+const IMG_TEXT_RE = /<img-text\b[^>]*>([\s\S]*?)<\/img-text>/i;
+const IMG_SRC_RE = /<img\b[^>]*\bsrc=(["'])(.*?)\1/i;
+const IMAGE_REASON_RE = /\bimage "([^"]+)"/i;
+const IMAGE_FILE_RE = /([A-Za-z0-9._-]+\.(?:png|jpe?g|gif|webp|svg|avif))/i;
+
+function normalizeImageReference(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const withoutQuery = trimmed.split("?")[0].split("#")[0];
+  const parts = withoutQuery.split("/").filter(Boolean);
+  return parts[parts.length - 1] || withoutQuery;
+}
+
+function extractImageText(html: string): string | null {
+  const match = html.match(IMG_TEXT_RE);
+  if (!match) return null;
+  const text = match[1].replace(/\s+/g, " ").trim();
+  return text || null;
+}
+
+function extractImageSrc(html: string): string | null {
+  const match = html.match(IMG_SRC_RE);
+  return match?.[2]?.trim() || null;
+}
+
+function inferImageReference(
+  reason: string,
+  imageSrc: string | null,
+  elementId: unknown,
+): string | null {
+  const quoted = reason.match(IMAGE_REASON_RE)?.[1];
+  if (quoted) return normalizeImageReference(quoted);
+
+  if (typeof elementId === "string" && IMAGE_FILE_RE.test(elementId)) {
+    return normalizeImageReference(elementId);
+  }
+
+  if (imageSrc) {
+    return normalizeImageReference(imageSrc);
+  }
+
+  const fileLike = reason.match(IMAGE_FILE_RE)?.[1];
+  return fileLike ? normalizeImageReference(fileLike) : null;
+}
+
 // Backend returns element HTML nested as `element.html`; flatten it to `element_html` for the UI.
 function flattenFinding(f: Record<string, unknown>) {
   const directElement = f.element as Record<string, unknown> | null | undefined;
@@ -19,18 +64,26 @@ function flattenFinding(f: Record<string, unknown>) {
   const tagFromElement = element?.tag ?? element?.tagName;
   const idFromElement = element?.element_id ?? element?.id;
   const targetFromElement = Array.isArray(element?.target) ? element?.target : [];
+  const reason = typeof f.reason === "string" ? (f.reason as string) : "";
   const selectorFromElement =
     (typeof element?.selector === "string" ? (element.selector as string) : null) ||
     (typeof f.element_selector === "string" ? (f.element_selector as string) : null) ||
     (typeof f.selector === "string" ? (f.selector as string) : null) ||
     (typeof targetFromElement?.[0] === "string" ? (targetFromElement[0] as string) : null);
+  const elementHtml = explicitHtml || htmlFromElement || "";
+  const imageText = extractImageText(elementHtml);
+  const imageSrc = extractImageSrc(elementHtml);
+  const imageReference = inferImageReference(reason, imageSrc, idFromElement);
 
   return {
     ...f,
-    element_html: explicitHtml || htmlFromElement || "",
+    element_html: elementHtml,
     element_tag: typeof tagFromElement === "string" ? (tagFromElement as string) : null,
     element_id: typeof idFromElement === "string" ? (idFromElement as string) : null,
     element_selector: selectorFromElement,
+    image_reference: imageReference,
+    image_src: imageSrc,
+    image_text: imageText,
   };
 }
 

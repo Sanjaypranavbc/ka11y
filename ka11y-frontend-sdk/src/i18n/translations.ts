@@ -122,6 +122,9 @@ export const translations = {
     "table.filterSource":     "Filter by source",
     "table.filterSC":         "Filter by WCAG success criterion",
     "table.filterLevel":      "Filter by WCAG level",
+    "table.imageRef":         "Image",
+    "table.imageSrc":         "Source",
+    "table.imageText":        "OCR Text",
 
     // ── Needs Review tab manual note ────────────────────────────────────────
     "needsReview.manualNote": "These items require manual verification — automated tools could not determine pass/fail.",
@@ -172,7 +175,7 @@ export const translations = {
     "wcagRules.suggestedFix": "Suggested Fix",
 
     // ── Contrast report ──────────────────────────────────────────────────────
-    "contrast.title":         "Contrast Analysis — WCAG 1.4.3",
+    "contrast.title":         "Contrast Analysis — WCAG 1.4.3 / 1.4.6",
     "contrast.regionsAnalysed":   "Regions Analysed",
     "contrast.violations":    "Contrast Violations",
     "contrast.imagesAffected": "Images Affected",
@@ -181,6 +184,8 @@ export const translations = {
     "contrast.passingImages": "{n} image passed contrast check",
     "contrast.passingImagesPlural": "{n} images passed contrast check",
     "contrast.noImages":      "No images were analysed for contrast.",
+    "contrast.failsAA":       "Fails AA",
+    "contrast.failsAAA":      "Fails AAA",
 
     // ── Fix modal ────────────────────────────────────────────────────────────
     "modal.suggestedFix":     "Suggested Fix",
@@ -304,6 +309,9 @@ export const translations = {
     "table.filterSource":     "ソースでフィルタ",
     "table.filterSC":         "WCAGクライテリアでフィルタ",
     "table.filterLevel":      "WCAGレベルでフィルタ",
+    "table.imageRef":         "画像",
+    "table.imageSrc":         "ソース",
+    "table.imageText":        "OCRテキスト",
 
     // ── Needs Review tab manual note ────────────────────────────────────────
     "needsReview.manualNote": "これらの項目は手動での確認が必要です — 自動ツールでは合否を判定できませんでした。",
@@ -354,7 +362,7 @@ export const translations = {
     "wcagRules.suggestedFix": "推奨修正",
 
     // ── Contrast report ──────────────────────────────────────────────────────
-    "contrast.title":         "コントラスト分析 — WCAG 1.4.3",
+    "contrast.title":         "コントラスト分析 — WCAG 1.4.3 / 1.4.6",
     "contrast.regionsAnalysed":   "分析領域",
     "contrast.violations":    "コントラスト違反",
     "contrast.imagesAffected": "影響画像",
@@ -363,6 +371,8 @@ export const translations = {
     "contrast.passingImages": "{n}件の画像がコントラストチェックを合格",
     "contrast.passingImagesPlural": "{n}件の画像がコントラストチェックを合格",
     "contrast.noImages":      "コントラスト分析に使用された画像がありません。",
+    "contrast.failsAA":       "AA失敗",
+    "contrast.failsAAA":      "AAA失敗",
 
     // ── Fix modal ────────────────────────────────────────────────────────────
     "modal.suggestedFix":     "推奨修正",

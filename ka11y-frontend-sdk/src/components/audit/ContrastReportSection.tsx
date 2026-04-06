@@ -6,6 +6,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown, AlertTriangle, CheckCircle2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/i18n/LanguageContext";
+import {
+  getDetectionFailureLevels,
+  getFailingDetections,
+  getImageViolationCount,
+  getPassingDetections,
+  hasImageViolations,
+  summariseContrastReport,
+} from "@/lib/contrast-report";
 
 interface ContrastReportSectionProps {
   report: ContrastReport;
@@ -13,15 +21,12 @@ interface ContrastReportSectionProps {
 
 export function ContrastReportSection({ report }: ContrastReportSectionProps) {
   const { t } = useLanguage();
-  const { summary, images } = report;
+  const images = report.images;
+  const summary = summariseContrastReport(report);
   const [passingOpen, setPassingOpen] = useState(false);
 
-  // Defensive: also check detections directly in case contrast_violations_count is stale.
-  const hasViol = (img: ContrastImageDetail) =>
-    img.contrast_violations_count > 0 ||
-    img.detections.some((d) => d.wcag_violations.length > 0);
-  const violating = images.filter(hasViol);
-  const passing   = images.filter((img) => !hasViol(img));
+  const violating = images.filter(hasImageViolations);
+  const passing = images.filter((img) => !hasImageViolations(img));
 
   const passingLabel = passing.length === 1
     ? t("contrast.passingImages", { n: passing.length })
@@ -112,7 +117,8 @@ export function SummaryTile({
 
 export function ContrastImageCard({ image }: { image: ContrastImageDetail }) {
   const [imgError, setImgError] = useState(false);
-  const failingDetections = image.detections.filter((d) => d.wcag_violations.length > 0);
+  const failingDetections = getFailingDetections(image);
+  const violationCount = getImageViolationCount(image);
 
   return (
     <article className="rounded-lg border border-destructive/30 overflow-hidden bg-card"
@@ -126,7 +132,7 @@ export function ContrastImageCard({ image }: { image: ContrastImageDetail }) {
             onError={() => setImgError(true)} />
         )}
         <Badge className="absolute top-1.5 right-1.5 text-[9px] bg-destructive/90">
-          {image.contrast_violations_count} violation{image.contrast_violations_count !== 1 ? "s" : ""}
+          {violationCount} violation{violationCount !== 1 ? "s" : ""}
         </Badge>
       </div>
       <div className="p-3 space-y-2">
@@ -147,6 +153,9 @@ export function ContrastImageCard({ image }: { image: ContrastImageDetail }) {
 }
 
 export function DetectionRow({ detection }: { detection: ContrastImageDetail["detections"][number] }) {
+  const { t } = useLanguage();
+  const failureLevels = getDetectionFailureLevels(detection);
+
   return (
     <div role="listitem" className="rounded bg-destructive/5 border border-destructive/20 px-2 py-1.5 space-y-1">
       <p className="text-[10px] font-medium text-foreground break-words leading-snug">
@@ -156,10 +165,25 @@ export function DetectionRow({ detection }: { detection: ContrastImageDetail["de
         {detection.ratio !== null && (
           <span className="text-[10px] font-mono text-destructive">{detection.ratio.toFixed(2)}:1</span>
         )}
-        {detection.wcag_violations.map((v, i) => (
-          <Badge key={i} variant="destructive" className="text-[9px] px-1 py-0 h-4">{v}</Badge>
+        {failureLevels.map((level) => (
+          <Badge
+            key={level}
+            className={cn(
+              "text-[9px] px-1 py-0 h-4",
+              level === "AA"
+                ? "bg-destructive text-destructive-foreground"
+                : "bg-moderate text-moderate-foreground",
+            )}
+          >
+            {level === "AA" ? t("contrast.failsAA") : t("contrast.failsAAA")}
+          </Badge>
         ))}
       </div>
+      {detection.wcag_violations.length > 0 && (
+        <p className="text-[9px] text-muted-foreground break-words leading-snug">
+          {detection.wcag_violations.join(" • ")}
+        </p>
+      )}
     </div>
   );
 }

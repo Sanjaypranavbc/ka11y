@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SuggestedFixModal } from "./SuggestedFixModal";
+import { FindingElementCell } from "./FindingElementCell";
 import { Wrench, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   formatCriterionId,
   formatCriterionName,
-  formatElementSnippet,
   formatElementTag,
   formatLevel,
 } from "@/lib/audit-format";
@@ -73,6 +73,9 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
           v.reason.toLowerCase().includes(q) ||
           (v.element_html || "").toLowerCase().includes(q) ||
           (v.element_selector || "").toLowerCase().includes(q) ||
+          (v.image_reference || "").toLowerCase().includes(q) ||
+          (v.image_text || "").toLowerCase().includes(q) ||
+          (v.image_src || "").toLowerCase().includes(q) ||
           (v.rule_id || "").toLowerCase().includes(q) ||
           (v.element_tag || "").toLowerCase().includes(q)
         );
@@ -192,7 +195,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
               <TableHead className="text-xs w-14">{t("table.level")}</TableHead>
               <TableHead className="text-xs w-14">{t("table.tag")}</TableHead>
               <TableHead className="text-xs">{t("table.reason")}</TableHead>
-              <TableHead className="text-xs w-24">{t("table.element")}</TableHead>
+              <TableHead className="text-xs min-w-[18rem]">{t("table.element")}</TableHead>
               <TableHead className="text-xs w-16">{t("table.fix")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -242,16 +245,13 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                   </Tooltip>
                 </TableCell>
                 <TableCell>
-                  <div className="space-y-1 max-w-[220px]">
-                    <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block">
-                      {formatElementSnippet(v.element_html)}
-                    </code>
-                    {v.element_selector && (
-                      <code className="text-[10px] text-muted-foreground/80 bg-muted/60 px-1 py-0.5 rounded truncate block">
-                        {v.element_selector}
-                      </code>
-                    )}
-                  </div>
+                  <FindingElementCell
+                    elementHtml={v.element_html}
+                    elementSelector={v.element_selector}
+                    imageReference={v.image_reference}
+                    imageSrc={v.image_src}
+                    imageText={v.image_text}
+                  />
                 </TableCell>
                 <TableCell>
                   <Button variant="ghost" size="sm" onClick={() => setModalData(v)} className="h-6 text-[10px]" aria-label={`View suggested fix for WCAG ${v.wcag_sc}`}>

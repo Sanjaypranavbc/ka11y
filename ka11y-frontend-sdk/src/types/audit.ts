@@ -5,6 +5,9 @@ interface AuditElementInfo {
   element_tag?: string | null;
   element_id?: string | null;
   element_selector?: string | null;
+  image_reference?: string | null;
+  image_src?: string | null;
+  image_text?: string | null;
 }
 
 export interface AuditViolation extends AuditElementInfo {

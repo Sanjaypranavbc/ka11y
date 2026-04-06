@@ -3,10 +3,8 @@ import { ContrastImageDetail, ContrastReport, ImageClassification } from "@/type
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  ContrastImageCard,
   DetectionRow,
   ImageErrorPlaceholder,
-  PassingThumb,
   SummaryTile,
 } from "./ContrastReportSection";
 import {
@@ -23,6 +21,13 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getFailingDetections,
+  getImageViolationCount,
+  getPassingDetections,
+  hasImageViolations,
+  summariseContrastReport,
+} from "@/lib/contrast-report";
 
 // ── Classification metadata ───────────────────────────────────────────────────
 
@@ -81,22 +86,17 @@ export function ImageVisualisationTab({ contrastReport }: ImageVisualisationTabP
     );
   }
 
-  const { summary, images } = contrastReport;
+  const summary = summariseContrastReport(contrastReport);
+  const { images } = contrastReport;
 
   const filtered = search
     ? images.filter((img) => img.filename.toLowerCase().includes(search.toLowerCase()))
     : images;
 
-  // Use contrast_violations_count as primary signal; fall back to inspecting
-  // detections directly in case the backend count is stale (backend bug guard).
-  const hasViolations = (img: ContrastImageDetail) =>
-    img.contrast_violations_count > 0 ||
-    img.detections.some((d) => d.wcag_violations.length > 0);
-
-  const failedFiltered  = filtered.filter(hasViolations);
-  const passedFiltered  = filtered.filter((img) => !hasViolations(img));
-  const failedByClass   = groupByClassification(failedFiltered);
-  const passedByClass   = groupByClassification(passedFiltered);
+  const failedFiltered = filtered.filter(hasImageViolations);
+  const passedFiltered = filtered.filter((img) => !hasImageViolations(img));
+  const failedByClass = groupByClassification(failedFiltered);
+  const passedByClass = groupByClassification(passedFiltered);
 
   return (
     <div className="p-3 sm:p-5 space-y-6 grid-bg min-h-full animate-fade-up">
@@ -225,7 +225,8 @@ function ClassificationGroup({
 function FailedImageCard({ image }: { image: ContrastImageDetail }) {
   const [imgError, setImgError] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const failingDetections = image.detections.filter((d) => d.wcag_violations.length > 0);
+  const failingDetections = getFailingDetections(image);
+  const violationCount = getImageViolationCount(image);
   const showCount = expanded ? failingDetections.length : 3;
 
   return (
@@ -250,7 +251,7 @@ function FailedImageCard({ image }: { image: ContrastImageDetail }) {
           <p className="text-white text-[10px] font-medium truncate">{image.filename}</p>
         </div>
         <Badge className="absolute top-2 right-2 text-[9px] bg-destructive shadow">
-          {image.contrast_violations_count} violation{image.contrast_violations_count !== 1 ? "s" : ""}
+          {violationCount} violation{violationCount !== 1 ? "s" : ""}
         </Badge>
       </div>
 
@@ -283,7 +284,7 @@ function FailedImageCard({ image }: { image: ContrastImageDetail }) {
 
 function PassedImageCard({ image }: { image: ContrastImageDetail }) {
   const [imgError, setImgError] = useState(false);
-  const passingCount = image.detections.filter((d) => d.wcag_violations.length === 0).length;
+  const passingCount = getPassingDetections(image).length;
 
   return (
     <article
