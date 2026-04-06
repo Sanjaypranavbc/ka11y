@@ -17,6 +17,7 @@ from ka11y.api.v1.combined import (
     _psh_to_findings,
     _ts_to_findings,
 )
+from ka11y.api.v1.combined.findings import _lang_ctx
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -269,6 +270,16 @@ class TestConverterHelpers:
         records = [{"wcag_1_1_1_status": "SKIPPED"}]
         findings = _alt_text_to_findings(records, self.PAGE)
         assert findings == []
+
+    def test_alt_text_fallback_reason_uses_localised_rule_description(self):
+        token = _lang_ctx.set("ja")
+        try:
+            records = [{"wcag_1_1_1_status": "FAILED", "src": "x.png"}]
+            findings = _alt_text_to_findings(records, self.PAGE)
+            assert len(findings) == 1
+            assert findings[0]["reason"].startswith("利用者に提示されるすべての非テキストコンテンツ")
+        finally:
+            _lang_ctx.reset(token)
 
     # ── _form_to_findings ─────────────────────────────────────────────────
 

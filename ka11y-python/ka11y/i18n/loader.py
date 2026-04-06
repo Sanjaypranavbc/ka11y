@@ -132,6 +132,11 @@ def get_wcag_names(lang: str = "en") -> Dict[str, str]:
     return {sc_id: r.name for sc_id, r in load_rules(lang).items()}
 
 
+def get_wcag_descriptions(lang: str = "en") -> Dict[str, str]:
+    """Return {sc_id: description} for the given language."""
+    return {sc_id: r.description for sc_id, r in load_rules(lang).items()}
+
+
 def get_wcag_levels() -> Dict[str, str]:
     """Return {sc_id: level}.  Level is not localised, so no lang param."""
     return {sc_id: r.level for sc_id, r in load_rules("en").items()}

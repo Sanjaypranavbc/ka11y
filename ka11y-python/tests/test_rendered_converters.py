@@ -19,6 +19,7 @@ from ka11y.api.v1.combined import (
     _focus_not_obscured_min_to_findings,
     _focus_not_obscured_enh_to_findings,
 )
+from ka11y.api.v1.combined.findings import _lang_ctx
 
 PAGE_URL = "https://example.com"
 
@@ -224,3 +225,22 @@ def test_crawler_vs_rendered_have_distinct_rule_ids():
     rendered_f = _rendered_text_spacing_to_findings(rendered_rec, PAGE_URL)
     assert static_f[0]["rule_id"] != rendered_f[0]["rule_id"]
     assert static_f[0]["wcag_sc"] == rendered_f[0]["wcag_sc"] == "1.4.12"
+
+
+def test_rendered_pass_reason_uses_catalogue_description():
+    token = _lang_ctx.set("ja")
+    try:
+        records = [{
+            "wcag_1_4_10_status": "PASSED",
+            "wcag_1_4_10_violation": "",
+            "html_snippet": "",
+            "element_id": None,
+            "tag": "",
+            "page_url": PAGE_URL,
+        }]
+        findings = _reflow_to_findings(records, PAGE_URL)
+        assert len(findings) == 1
+        assert findings[0]["status"] == "pass"
+        assert findings[0]["reason"].startswith("コンテンツは情報または機能を損なうことなく")
+    finally:
+        _lang_ctx.reset(token)
