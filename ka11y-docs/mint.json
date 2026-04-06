@@ -100,6 +100,7 @@
         "internals/data-models",
         "internals/sse-events",
         "internals/output-format",
+        "internals/live-ten-site-analysis",
         "internals/config"
       ]
     },

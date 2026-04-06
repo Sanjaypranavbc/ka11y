@@ -286,6 +286,19 @@ class InteractiveElementCrawler:
         finally:
             await page.close()
 
+    @classmethod
+    def from_snapshot(cls, snapshot_interactive: list, page_url: str, output_dir: str) -> "InteractiveElementCrawler":
+        """Populate from a pre-crawled PageSnapshot instead of launching a browser."""
+        instance = cls.__new__(cls)
+        instance.base_url = page_url
+        instance.output_dir = Path(output_dir)
+        instance.max_depth = 0
+        instance.visited = {page_url}
+        instance.output_dir.mkdir(parents=True, exist_ok=True)
+        from ka11y.crawler.interactive_crawler import InteractiveElementData
+        instance.results = [InteractiveElementData(page_url=page_url, **item) for item in snapshot_interactive]
+        return instance
+
     def save_raw_json(self) -> str:
         path = self.output_dir / "interactive_elements_raw.json"
         with open(path, "w", encoding="utf-8") as f:

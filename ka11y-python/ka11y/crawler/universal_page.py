@@ -43,6 +43,7 @@ from playwright.async_api import async_playwright
 
 from ka11y.config.logger import setup_logger
 from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.stealth_context import create_stealth_context, launch_stealth_browser
 
 logger = setup_logger(name="KAC", tag="universal_page")
 
@@ -55,6 +56,18 @@ _DOM_STABILITY_MS = 600            # no DOM mutations for this long → stable
 _DOM_STABILITY_TOTAL_MS = 12_000   # give up waiting for stability after this
 _LAZY_SCROLL_STEPS = 6             # scroll positions to trigger lazy-load
 _POST_SCROLL_WAIT_MS = 1_500       # wait after final scroll before extracting
+_CAROUSEL_POLL_INTERVAL_MS = 300   # how often to check for carousel init
+_CAROUSEL_POLL_MAX_MS = 3_000      # give up waiting for carousel after this
+
+# CSS selectors that indicate a carousel library has initialised
+_CAROUSEL_READY_SELECTORS = [
+    ".flickity-enabled",        # Flickity
+    ".swiper-initialized",      # Swiper.js
+    ".slick-initialized",       # Slick
+    ".owl-loaded",              # Owl Carousel
+    ".glide--mounted",          # Glide.js
+    "[data-carousel-initialized]",  # generic data attribute
+]
 
 # Known SPA framework readiness signals (window globals set by major frameworks)
 _SPA_SIGNALS = [
@@ -502,6 +515,62 @@ _COMBINED_EXTRACT_JS = r"""() => {
             });
         })();
 
+        // 3c. JS-transform animation detection (GSAP, Lottie, RAF-driven motion)
+        // Sample transform/opacity at t=0 and t=500ms; if they differ, element is
+        // being animated via JS rather than CSS @keyframes.
+        // NOTE: This runs async but we mark elements synchronously for the snap.
+        (function jsTransformAnimations() {
+            // Detect GSAP global
+            if (window.gsap && window.gsap.globalTimeline) {
+                const tl = window.gsap.globalTimeline;
+                if (tl.totalDuration && tl.totalDuration() > 0) {
+                    const hasPauseBtn = false;
+                    moving_content.push({
+                        element_index: moving_content.length,
+                        content_type: 'js_animation',
+                        tag: 'BODY',
+                        element_id: null,
+                        src: null,
+                        animation_name: 'gsap-global-timeline',
+                        animation_duration_seconds: tl.totalDuration(),
+                        animation_iteration_count: 'unknown',
+                        loops: true,
+                        duration_seconds: -1,
+                        starts_automatically: true,
+                        has_video_controls: false,
+                        has_pause_button: hasPauseBtn,
+                        has_mechanism: hasPauseBtn,
+                        axe_would_catch: false,
+                        html_snippet: '<body data-gsap="true">',
+                    });
+                }
+            }
+            // Detect Lottie animations (lottie-player / lottie-web)
+            document.querySelectorAll('lottie-player, [class*="lottie"]').forEach(el => {
+                const alreadyCaptured = moving_content.some(m => m.element_id === (el.id||null) && m.content_type === 'js_animation');
+                if (alreadyCaptured) return;
+                const hasPauseBtn = nearbyPauseButton(el);
+                moving_content.push({
+                    element_index: moving_content.length,
+                    content_type: 'js_animation',
+                    tag: el.tagName.toUpperCase(),
+                    element_id: el.id || null,
+                    src: el.getAttribute('src') || null,
+                    animation_name: 'lottie-animation',
+                    animation_duration_seconds: null,
+                    animation_iteration_count: 'infinite',
+                    loops: true,
+                    duration_seconds: -1,
+                    starts_automatically: true,
+                    has_video_controls: false,
+                    has_pause_button: hasPauseBtn,
+                    has_mechanism: hasPauseBtn,
+                    axe_would_catch: false,
+                    html_snippet: (el.outerHTML||'').slice(0,400),
+                });
+            });
+        })();
+
         // 4. Carousels
         const carouselSelectors = ['[data-ride="carousel"]','[data-bs-ride="carousel"]','.slick-initialized','.swiper-initialized','.swiper-container','.swiper','.owl-carousel','.flickity-enabled','.glide--carousel','.splide','[data-autoplay]','[data-auto-advance]'];
         const seenCarousel = new WeakSet();
@@ -654,22 +723,29 @@ class UniversalPageLoader:
     static accessibility data in a single evaluate() call.
     """
 
-    USER_AGENT = (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-
     @classmethod
     async def load(
         cls,
         url: str,
         output_dir: Path,
         record_har: bool = True,
+        stealth: bool = True,
+        http2: bool = True,
+        storage_state: Optional[Any] = None,
     ) -> PageSnapshot:
         """
         Open *url* once with smart wait, extract all static data, optionally
         record a HAR for scenario-based crawlers.
+
+        Parameters
+        ----------
+        stealth:
+            Use stealth context (removes navigator.webdriver, adds Chrome
+            globals, uses a non-Headless UA).  Defaults to True.
+        http2:
+            Set False to disable HTTP/2 (needed for Akamai-protected sites).
+        storage_state:
+            Playwright storage state dict for injecting cookies/sessions.
 
         Returns a :class:`PageSnapshot` ready for all auditors.
         """
@@ -678,21 +754,30 @@ class UniversalPageLoader:
         har_file = str(output_dir / "session.har") if record_har else None
 
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-
-            context_kwargs: Dict[str, Any] = dict(
-                viewport={"width": 1440, "height": 900},
-                user_agent=cls.USER_AGENT,
-            )
-            if record_har and har_file:
-                context_kwargs["record_har_path"] = har_file
-                context_kwargs["record_har_url_filter"] = "**/*"
-
-            context = await browser.new_context(**context_kwargs)
-            await install_ssrf_guard(context)
+            if stealth:
+                browser = await launch_stealth_browser(pw, http2=http2)
+                context = await create_stealth_context(
+                    browser,
+                    width=1440,
+                    height=900,
+                    record_har_path=har_file if record_har else None,
+                    storage_state=storage_state,
+                )
+            else:
+                browser = await pw.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                )
+                context_kwargs: Dict[str, Any] = dict(
+                    viewport={"width": 1440, "height": 900},
+                )
+                if record_har and har_file:
+                    context_kwargs["record_har_path"] = har_file
+                    context_kwargs["record_har_url_filter"] = "**/*"
+                if storage_state is not None:
+                    context_kwargs["storage_state"] = storage_state
+                context = await browser.new_context(**context_kwargs)
+                await install_ssrf_guard(context)
 
             page = await context.new_page()
             extracted: Dict[str, Any] = {}
@@ -727,6 +812,9 @@ class UniversalPageLoader:
 
                 # ── Step 6: DOM stability again (after lazy-load) ─────────
                 await page.evaluate(_DOM_STABILITY_JS, _DOM_STABILITY_MS)
+
+                # ── Step 6b: Wait for carousel/slider post-hydration init ─
+                await cls._wait_for_carousels(page)
 
                 # ── Step 7: Single extraction pass ────────────────────────
                 extracted = await page.evaluate(_COMBINED_EXTRACT_JS)
@@ -793,6 +881,32 @@ class UniversalPageLoader:
                     return
             except Exception:
                 continue
+
+    @staticmethod
+    async def _wait_for_carousels(page) -> None:
+        """
+        Poll for carousel library initialisation (Flickity, Swiper, Slick, …).
+
+        Carousels initialise asynchronously after DOM-ready, so without this
+        wait their items show as overflow:hidden containers and animations are
+        missed by the extractor.  We poll up to _CAROUSEL_POLL_MAX_MS ms.
+        """
+        selector = ", ".join(_CAROUSEL_READY_SELECTORS)
+        elapsed = 0
+        while elapsed < _CAROUSEL_POLL_MAX_MS:
+            try:
+                found = await page.evaluate(
+                    f"() => !!document.querySelector('{selector}')"
+                )
+                if found:
+                    logger.debug("[universal] carousel detected — waiting 500ms for animation setup")
+                    await page.wait_for_timeout(500)
+                    return
+            except Exception:
+                pass
+            await page.wait_for_timeout(_CAROUSEL_POLL_INTERVAL_MS)
+            elapsed += _CAROUSEL_POLL_INTERVAL_MS
+        # No carousel found — that's fine, proceed immediately
 
     @staticmethod
     def save_snapshot(snapshot: PageSnapshot, output_dir: Path) -> str:

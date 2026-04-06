@@ -184,6 +184,19 @@ class AsyncTextSpacingCrawler:
         finally:
             await page.close()
 
+    @classmethod
+    def from_snapshot(cls, snapshot_text_spacing: list, page_url: str, output_dir: str) -> "AsyncTextSpacingCrawler":
+        """Populate from a pre-crawled PageSnapshot instead of launching a browser."""
+        instance = cls.__new__(cls)
+        instance.base_url = page_url
+        instance.output_dir = Path(output_dir)
+        instance.max_depth = 0
+        instance.visited = {page_url}
+        instance.output_dir.mkdir(parents=True, exist_ok=True)
+        from ka11y.crawler.text_spacing_crawler import TextSpacingData
+        instance.results = [TextSpacingData(page_url=page_url, **item) for item in snapshot_text_spacing]
+        return instance
+
     def save_json(self):
         import json
 

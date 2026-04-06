@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -186,10 +187,12 @@ class RenderedLayoutCrawler:
         base_url: str,
         output_dir: str,
         max_depth: int = 0,
+        har_path: Optional[str] = None,
     ) -> None:
         self.base_url = base_url
         self.output_dir = Path(output_dir)
         self.max_depth = max_depth
+        self.har_path = har_path
         self._raw_results: Dict[str, Any] = {}
 
     # ── Public API ─────────────────────────────────────────────────────────────
@@ -294,6 +297,11 @@ class RenderedLayoutCrawler:
             ignore_https_errors=True,
         )
         await install_ssrf_guard(ctx)  # Bug 1 fix
+        if self.har_path and os.path.exists(self.har_path):
+            try:
+                await ctx.route_from_har(self.har_path, not_found="fallback")
+            except Exception as har_exc:
+                logger.warning(f"[rendered] HAR routing failed ({har_exc}); using live loads")
         return ctx
 
     async def _load_and_stabilize(self, page: Page) -> None:
