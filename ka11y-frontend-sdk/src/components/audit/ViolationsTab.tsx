@@ -184,18 +184,18 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       <p className="text-xs text-muted-foreground">{showingText}</p>
 
       <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden">
-        <Table className="min-w-[980px] sm:min-w-[1120px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
+        <Table className="w-full [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="text-xs w-20">{t("table.severity")}</TableHead>
-              <TableHead className="text-xs w-16">{t("table.source")}</TableHead>
+              <TableHead className="text-xs w-16 hidden md:table-cell">{t("table.source")}</TableHead>
               <TableHead className="text-xs w-24">{t("table.ruleId")}</TableHead>
-              <TableHead className="text-xs w-16">{t("table.sc")}</TableHead>
-              <TableHead className="text-xs">{t("table.criterion")}</TableHead>
-              <TableHead className="text-xs w-14">{t("table.level")}</TableHead>
-              <TableHead className="text-xs w-14">{t("table.tag")}</TableHead>
+              <TableHead className="text-xs w-16 hidden lg:table-cell">{t("table.sc")}</TableHead>
+              <TableHead className="text-xs hidden lg:table-cell">{t("table.criterion")}</TableHead>
+              <TableHead className="text-xs w-14 hidden md:table-cell">{t("table.level")}</TableHead>
+              <TableHead className="text-xs w-14 hidden lg:table-cell">{t("table.tag")}</TableHead>
               <TableHead className="text-xs">{t("table.reason")}</TableHead>
-              <TableHead className="text-xs min-w-[18rem]">{t("table.element")}</TableHead>
+              <TableHead className="text-xs">{t("table.element")}</TableHead>
               <TableHead className="text-xs w-16">{t("table.fix")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -219,7 +219,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                     {v.severity ?? "—"}
                   </Badge>
                 </TableCell>
-                <TableCell>
+                <TableCell className="hidden md:table-cell">
                   <Badge
                     variant="outline"
                     className={cn("text-[10px]", sourceColors[v.source] || sourceColors.unknown)}
@@ -228,12 +228,12 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                   </Badge>
                 </TableCell>
                 <TableCell className="font-mono text-xs">{v.rule_id}</TableCell>
-                <TableCell className="font-mono text-xs">{formatCriterionId(v.wcag_sc)}</TableCell>
-                <TableCell className="text-xs">{formatCriterionName(v.criterion_name, v.wcag_sc)}</TableCell>
-                <TableCell>
+                <TableCell className="font-mono text-xs hidden lg:table-cell">{formatCriterionId(v.wcag_sc)}</TableCell>
+                <TableCell className="text-xs hidden lg:table-cell">{formatCriterionName(v.criterion_name, v.wcag_sc)}</TableCell>
+                <TableCell className="hidden md:table-cell">
                   <Badge variant={v.level === "A" ? "default" : "outline"} className="text-[10px]">{formatLevel(v.level)}</Badge>
                 </TableCell>
-                <TableCell className="font-mono text-xs">{formatElementTag(v.element_tag)}</TableCell>
+                <TableCell className="font-mono text-xs hidden lg:table-cell">{formatElementTag(v.element_tag)}</TableCell>
                 <TableCell>
                   <Tooltip>
                     <TooltipTrigger asChild>

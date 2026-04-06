@@ -138,7 +138,7 @@ async def _stage_image_audit(
             ocr_results = detector.results
             contrast_report = _build_contrast_report(ocr_results)
             for _, converter in OCR_RESULT_CONVERTERS:
-                findings.extend(converter(ocr_results, url))
+                findings.extend(converter(ocr_results, url, job_id=job_id))
 
         if run_image_audit:
             auditor = AltTextAccessibilityAuditor()
