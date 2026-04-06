@@ -1,0 +1,228 @@
+---
+title: "Live 10-Site Analysis"
+description: "April 6, 2026 cross-site validation of ka11y on 10 public websites, including confirmed limitations and fix priorities"
+---
+
+## Scope
+
+This report captures a fresh live run completed on **2026-04-06** against 10 public websites using the current local repository state.
+
+- Campaign key: `ten_site_deep_en_20260406_rerun`
+- Output directory: `wcag_reports/ten_site_deep_en_20260406_rerun/`
+- Raw result cache: `wcag_reports/raw/ten_site_deep_en_20260406_rerun/`
+- Language: `en`
+- Depth: `0`
+- Checkers: `ka11y-node` + `ka11y-python`
+- Concurrency: `2`
+
+<Note>
+  The first attempt exposed a runner bug in `scripts/wcag_audit_runner.py`: it did not pass the required `run_media_audit` flag into `_run_python_stages()`. That helper was fixed before the final run below. All numbers in this document come from the rerun campaign only.
+</Note>
+
+### Site sample
+
+1. `https://www.govt.nz`
+2. `https://www.ookla.com`
+3. `https://webaim.org`
+4. `https://www.iana.org`
+5. `https://www.usa.gov`
+6. `https://www.mozilla.org`
+7. `https://www.a11yproject.com`
+8. `https://css-tricks.com`
+9. `https://www.smashingmagazine.com`
+10. `https://www.nhs.uk`
+
+## Aggregate result
+
+### Totals
+
+| Checker | Fail | Needs review | Pass | Summed runtime |
+|---|---:|---:|---:|---:|
+| `ka11y-node` | 394 | 455 | 9,590 | 383.9 s |
+| `ka11y-python` | 1,034 | 1,419 | 1,616 | 1,082.4 s |
+| Combined | 1,428 | 1,874 | 11,206 | 1,466.3 s |
+
+### Highest-volume success criteria
+
+| Checker | Dominant fail SCs | Dominant warning SCs |
+|---|---|---|
+| `ka11y-node` | `1.3.1` (128), `1.4.6` (119), `1.4.3` (42), `2.5.8` (22) | `1.4.3` (372), `1.4.6` (18), `2.4.9` (18) |
+| `ka11y-python` | `2.4.12` (321), `2.4.11` (290), `2.5.3` (157), `2.5.8` (67) | `1.4.12` (1,308), `1.4.11` (62), `2.4.11` (31) |
+
+### Per-site summary
+
+| Site | Node F/W/P | Node s | Python F/W/P | Python s |
+|---|---:|---:|---:|---:|
+| `govt.nz` | `5 / 5 / 26` | 9.2 | `26 / 151 / 47` | 28.5 |
+| `ookla.com` | `36 / 36 / 1334` | 37.2 | `107 / 191 / 321` | 306.1 |
+| `webaim.org` | `5 / 21 / 522` | 28.4 | `12 / 56 / 91` | 24.3 |
+| `iana.org` | `54 / 6 / 338` | 24.0 | `161 / 47 / 42` | 34.9 |
+| `usa.gov` | `12 / 4 / 794` | 41.1 | `234 / 211 / 139` | 153.4 |
+| `mozilla.org` | `8 / 6 / 1128` | 54.6 | `49 / 45 / 153` | 300.6 |
+| `a11yproject.com` | `9 / 3 / 763` | 31.2 | `28 / 74 / 184` | 34.6 |
+| `css-tricks.com` | `138 / 265 / 2055` | 65.9 | `341 / 267 / 293` | 137.6 |
+| `smashingmagazine.com` | `95 / 102 / 1856` | 58.4 | `52 / 227 / 238` | 42.5 |
+| `nhs.uk` | `32 / 7 / 774` | 33.8 | `24 / 150 / 108` | 20.0 |
+
+## What was confirmed
+
+### 1. Bot/WAF challenge pages can be audited as if they were real pages
+
+This was clearly reproduced on `govt.nz`.
+
+- `wcag_reports/raw/ten_site_deep_en_20260406_rerun/govt_nz.json` contains findings against `#main-iframe` and `src="/_Incapsula_Resource..."`.
+- The resulting Node failures are structural page-level failures such as `document-title`, `html-has-lang`, `landmark-one-main`, and `page-has-heading-one`, which are properties of the challenge frame, not necessarily of the intended page.
+
+Impact:
+
+- This can create high-confidence-looking false failures when the page is actually a protection interstitial.
+- The product currently does not short-circuit or relabel these results as "challenge page detected".
+
+### 2. Partial image-set degradation is logged, but not surfaced in the saved warning artifacts
+
+This was reproduced on two of ten sites:
+
+- `ka11y-python/logs/KAC_2026-04-06.log` shows:
+  - `16:35:16` `image_audit: crawler exceeded 300s — proceeding with partial image set from crawled_images/ookla_com_0406_1630`
+  - `16:39:18` `image_audit: crawler exceeded 300s — proceeding with partial image set from crawled_images/mozilla_org_0406_1634`
+- The corresponding persisted warning files remained empty:
+  - `wcag_reports/raw/ten_site_deep_en_20260406_rerun/python/ookla_com/warnings.json`
+  - `wcag_reports/raw/ten_site_deep_en_20260406_rerun/python/mozilla_org/warnings.json`
+
+Impact:
+
+- Operators can believe the report is complete even when the image crawl was truncated.
+- The UI and downstream exports cannot distinguish "full image coverage" from "best effort partial set".
+
+### 3. `2.5.3 Label in Name` is producing confirmed false positives
+
+The strongest live signal in this run is the Python `2.5.3` rule.
+
+Examples from the raw findings:
+
+- `css_tricks_com`: `Accessible name "CSS-Tricks" does not contain visible label "CSS-Tricks"`
+- `govt_nz`: `Accessible name "The Govt.nz app" does not contain visible label "The Govt.nz app"`
+
+These strings are visibly the same to a human reader, but the rule still emits failures. The same pattern appeared repeatedly across multiple sites.
+
+Impact:
+
+- `python_2_5_3_label_in_name` accounted for **157 fail rows** across the sample.
+- The current comparison/normalization logic is not robust enough for punctuation, whitespace, line breaks, or enriched-card labels.
+
+### 4. Static `1.4.12 Text Spacing` warnings dominate the Python output and swamp actionability
+
+`python_1_4_12_text_spacing_static` generated **1,308** `needs_review` rows across the 10 sites.
+
+Per-site counts were consistently high:
+
+- `css_tricks_com`: `233`
+- `smashingmagazine_com`: `206`
+- `usa_gov`: `198`
+- `ookla_com`: `185`
+- `govt_nz`: `151`
+- `nhs_uk`: `144`
+
+Typical reasons were generic:
+
+- `1.4.12: Fixed height detected. Verify text does not clip when spacing increases.`
+- `1.4.12: Potential clipping risk — fixed height with overflow hidden. Needs visual verification.`
+
+Impact:
+
+- This single heuristic family dominates the warning volume.
+- The signal-to-noise ratio is poor because many rows are structurally similar and would be better grouped.
+
+### 5. Focus-obscured checks can explode one overlay problem into dozens of fail rows
+
+`2.4.11` and `2.4.12` were the top Python fail criteria:
+
+- `2.4.11`: **290 fail rows**
+- `2.4.12`: **321 fail rows**
+
+The counts were concentrated in a few sites:
+
+- `css_tricks_com`: `95` (`2.4.11`) and `98` (`2.4.12`)
+- `usa_gov`: `97` and `98`
+- `iana_org`: `64` and `85`
+- `ookla_com`: `31` and `37`
+
+Representative reason:
+
+- `Focused <a> (step 7) is fully obscured (100% covered) by author-created overlay(s): <div>.`
+
+Impact:
+
+- The rule may be detecting a real overlay problem, but the reporting granularity is too fine.
+- One page state can create nearly 100 rows, which makes triage harder and inflates severity perception.
+
+### 6. Logo/icon heuristics in the image auditor are too strict for common production patterns
+
+The live run reproduced a strict logo rule on `mozilla.org`:
+
+- `FAIL [1.1.1] Logo alt must include the word 'logo' ... Found: 'Mozilla'`
+- `FAIL [4.1.2] Logo accessible name 'Mozilla' must include 'logo'.`
+
+Impact:
+
+- This is likely to over-report common brand-logo patterns where the product/site name alone is acceptable in context.
+- The current policy is stronger than many teams will expect from an automated checker.
+
+### 7. Heavy pages rely on fallback behavior that is not prominent enough in the final result
+
+`css-tricks.com` reproduced a navigation timeout fallback:
+
+- `ka11y-python/logs/KAC_2026-04-06.log` at `16:36:24` records `Page.goto: Timeout 30000ms exceeded ... retrying with domcontentloaded`.
+
+Impact:
+
+- The audit continued, which is good for resilience.
+- But the final result does not prominently mark the page as "completed under degraded loading conditions".
+
+## Expected checker differences vs suspicious differences
+
+Not every discrepancy in the sample is a bug.
+
+Expected scope differences:
+
+- `1.4.10`, `1.4.12`, `1.4.13`, `2.4.11`, and `2.4.12` appear as discrepancies on all 10 sites because they are Python rendered-layout checks and have no equivalent Node rule.
+- `1.4.3` and `1.4.6` differ because Node inspects DOM text while Python inspects OCR text inside images.
+
+Suspicious differences that need direct engineering attention:
+
+- `2.5.3` failures where visible label and accessible name are effectively identical.
+- `1.1.1` / `4.1.2` logo-name failures that require the literal word `logo`.
+- Partial-image-set runs where degradation is visible in logs but absent from saved warning payloads.
+
+## Priority fixes
+
+1. Detect challenge/interstitial pages before emitting normal findings.
+   Convert these into a degraded-run state with a dedicated warning and suppress page-level WCAG conclusions.
+
+2. Persist degradation warnings into the saved job artifacts and frontend result model.
+   Timeout fallback, partial image sets, and post-close Playwright exceptions should be visible in `warnings`, not only in logs.
+
+3. Fix `2.5.3` normalization and comparison.
+   This is the clearest confirmed logic defect from the live run.
+
+4. Group repeated `2.4.11` / `2.4.12` findings by overlay or page state.
+   Keep evidence rows internally, but collapse them into grouped report entries.
+
+5. Rework static `1.4.12` warning thresholds.
+   Either dedupe by selector/container or demote low-confidence fixed-height patterns behind a higher threshold.
+
+6. Relax or gate logo-specific `1.1.1` / `4.1.2` rules.
+   Requiring the literal word `logo` is too opinionated for a default automated result.
+
+7. Surface completeness metadata in exports.
+   A pass/fail number should not look final when the image set was partial.
+
+## Bottom line
+
+The stack completed all 10 sites without a hard job failure, and the live sample confirmed that ka11y can produce a large amount of useful DOM, OCR, and rendered-layout evidence. The dominant product risks are not "it crashes"; they are **result trustworthiness and report usability under degraded or heuristic conditions**.
+
+The highest-priority engineering work after this run is:
+
+- `2.5.3` false-positive correction
+- degraded-run visibility (`warnings`, partial image sets, timeout fallbacks)
+- deduping high-volume heuristic outputs (`1.4.12`, `2.4.11`, `2.4.12`)

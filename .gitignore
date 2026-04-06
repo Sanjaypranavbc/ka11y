@@ -9,3 +9,8 @@ ka11y-docs/package-lock.json
 ka11y-docs/package.json
 *.html
 wcag_reports
+.ai/
+crawled_images/
+scripts/__pycache__/
+scripts
+__pycache__/
