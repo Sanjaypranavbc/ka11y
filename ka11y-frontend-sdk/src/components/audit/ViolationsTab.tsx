@@ -251,6 +251,10 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
                     imageReference={v.image_reference}
                     imageSrc={v.image_src}
                     imageText={v.image_text}
+                    ruleId={v.rule_id}
+                    wcagSc={v.wcag_sc}
+                    criterionName={v.criterion_name}
+                    reason={v.reason}
                   />
                 </TableCell>
                 <TableCell>

@@ -230,6 +230,10 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                             imageReference={p.image_reference}
                             imageSrc={p.image_src}
                             imageText={p.image_text}
+                            ruleId={p.rule_id}
+                            wcagSc={p.wcag_sc}
+                            criterionName={p.criterion_name}
+                            reason={p.reason}
                           />
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-xs">

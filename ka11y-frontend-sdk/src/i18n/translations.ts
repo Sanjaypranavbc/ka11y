@@ -189,9 +189,12 @@ export const translations = {
 
     // ── Fix modal ────────────────────────────────────────────────────────────
     "modal.suggestedFix":     "Suggested Fix",
+    "modal.elementDetails":   "Element Details",
     "modal.elementHtml":      "Element HTML",
+    "modal.elementSelector":  "Element Selector",
+    "modal.fullView":         "Full view",
     "modal.copy":             "Copy",
-    "modal.copied":           "HTML copied to clipboard",
+    "modal.copied":           "Copied to clipboard",
     "modal.copyFailed":       "Copy failed — please copy manually",
     "modal.learnMore":        "Learn more",
   },
@@ -376,9 +379,12 @@ export const translations = {
 
     // ── Fix modal ────────────────────────────────────────────────────────────
     "modal.suggestedFix":     "推奨修正",
+    "modal.elementDetails":   "要素の詳細",
     "modal.elementHtml":      "要素HTML",
+    "modal.elementSelector":  "要素セレクタ",
+    "modal.fullView":         "全表示",
     "modal.copy":             "コピー",
-    "modal.copied":           "HTMLをクリップボードにコピーしました",
+    "modal.copied":           "クリップボードにコピーしました",
     "modal.copyFailed":       "コピーに失敗しました。手動でコピーしてください。",
     "modal.learnMore":        "詳細を見る",
   },
