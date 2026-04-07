@@ -31,6 +31,7 @@ import csv
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import requests
 
 from ka11y.config.logger import setup_logger
 
@@ -247,6 +248,53 @@ def _gate_4_find_transcript(
     )
 
 
+def _gate_4_check_captions(item: Dict[str, Any]) -> Tuple[Optional[Dict[str, str]], Optional[Tuple[str, str, int]]]:
+    """
+    1.2.2 Gate 4: Does the synchronized video have a captions track?
+    Returns (track_info, None) if found, else (None, ("FAILED", reason, 4)).
+    """
+    tracks = item.get("tracks") or []
+    for track in tracks:
+        kind = _normalize(track.get("kind") or "")
+        # Subtitles can serve as captions if they include non-speech audio cues.
+        if kind in ("captions", "subtitles"):
+            return (
+                {"type": "track", "url": track.get("src") or "", "kind": kind},
+                None,
+            )
+            
+    return (
+        None,
+        ("FAILED",
+         "Synchronized video is missing a <track kind=\"captions\"> "
+         "or <track kind=\"subtitles\"> element. WCAG 1.2.2 requires captions for "
+         "prerecorded synchronized media.",
+         4),
+    )
+
+
+def _gate_5_validate_track_url(track_url: str) -> Optional[Tuple[str, str, int]]:
+    """
+    1.2.2 Gate 5: Is the captions track URL reachable and valid?
+    Returns ("FAILED", reason, 5) if network request fails or returns 404.
+    """
+    if not track_url:
+        return ("FAILED", "Track element is present but src attribute is missing or empty. (F8 violation)", 5)
+        
+    try:
+        # Use HEAD to quickly check if the file exists without downloading it
+        resp = requests.head(track_url, timeout=5, allow_redirects=True)
+        if resp.status_code >= 400 and resp.status_code != 405:
+            # 405 Method Not Allowed occasionally happens for HEAD, but mostly it's 404
+            if resp.status_code == 404:
+                return ("FAILED", f"Caption file URL returned 404 Not Found: {track_url} (F8 violation)", 5)
+            return ("FAILED", f"Caption file URL returned HTTP error {resp.status_code}: {track_url} (F8 violation)", 5)
+    except Exception as e:
+        # Network errors = broken link
+        return ("FAILED", f"Caption file URL is unreachable: {str(e)} (F8 violation)", 5)
+        
+    return None
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Auditor class
 # ─────────────────────────────────────────────────────────────────────────────
@@ -270,6 +318,9 @@ class MediaAuditor:
         "wcag_1_2_1_status",
         "wcag_1_2_1_violation",
         "wcag_1_2_1_gate_reached",
+        "wcag_1_2_2_status",
+        "wcag_1_2_2_violation",
+        "wcag_1_2_2_gate_reached",
         "transcript_type",
         "transcript_url_or_text",
         "quality_report",
@@ -316,6 +367,12 @@ class MediaAuditor:
             "tag": item.get("tag", ""),
             "element_id": item.get("element_id"),
             "src": item.get("src"),
+            "wcag_1_2_1_status": "N/A",
+            "wcag_1_2_1_violation": "",
+            "wcag_1_2_1_gate_reached": 0,
+            "wcag_1_2_2_status": "N/A",
+            "wcag_1_2_2_violation": "",
+            "wcag_1_2_2_gate_reached": 0,
             "html_snippet": (item.get("html_snippet") or "")[:400],
             "transcript_type": None,
             "transcript_url_or_text": None,
@@ -344,12 +401,73 @@ class MediaAuditor:
                 "wcag_1_2_1_status": "N/A",
                 "wcag_1_2_1_violation": (
                     "Synchronized media (has both audio and video tracks). "
-                    "WCAG 1.2.1 does not apply — see 1.2.2 / 1.2.3."
+                    "WCAG 1.2.1 does not apply — see 1.2.2."
                 ),
                 "wcag_1_2_1_gate_reached": 2,
             })
+            
+            # ── 1.2.2 Flow for Synchronized Media ─────────────────────────────
+            
+            # Gate 3: Is it a labeled alternative?
+            gate3 = _gate_3_is_labeled_alternative(item)
+            if gate3:
+                status, violation, gate = gate3
+                base.update({
+                    "wcag_1_2_2_status": status,
+                    "wcag_1_2_2_violation": violation,
+                    "wcag_1_2_2_gate_reached": gate,
+                })
+                return base
+                
+            # Gate 4: Does it have a caption/subtitle track?
+            track_info, gate4_fail = _gate_4_check_captions(item)
+            if gate4_fail:
+                status, violation, gate = gate4_fail
+                base.update({
+                    "wcag_1_2_2_status": status,
+                    "wcag_1_2_2_violation": violation,
+                    "wcag_1_2_2_gate_reached": gate,
+                })
+                return base
+                
+            # Gate 5: Validate the track URL
+            track_url = track_info.get("url") or ""
+            # If the URL is relative, prepend the page_url
+            if track_url.startswith("/"):
+                # Basic absolute url resolution using requests
+                from urllib.parse import urljoin
+                track_url = urljoin(item.get("page_url", ""), track_url)
+            elif not track_url.startswith("http"):
+                from urllib.parse import urljoin
+                track_url = urljoin(item.get("page_url", ""), track_url)
+                
+            gate5_fail = _gate_5_validate_track_url(track_url)
+            if gate5_fail:
+                status, violation, gate = gate5_fail
+                base.update({
+                    "wcag_1_2_2_status": status,
+                    "wcag_1_2_2_violation": violation,
+                    "wcag_1_2_2_gate_reached": gate,
+                })
+                return base
+                
+            # Gate 6: Needs Review
+            track_kind = track_info["kind"]
+            review_msg = (
+                f"Video has a valid <track kind=\"{track_kind}\">. "
+                "Human review required to verify accuracy "
+            )
+            if track_kind == "subtitles":
+                review_msg += "and ensure non-speech audio cues (sound effects, speaker ID) are included."
+            else:
+                review_msg += "of the captions."
+                
+            base.update({
+                "wcag_1_2_2_status": "NEEDS_REVIEW",
+                "wcag_1_2_2_violation": review_msg, 
+                "wcag_1_2_2_gate_reached": 6,
+            })
             return base
-
 
 
         # ── Gate 3: Is it a labeled media alternative? ────────────────────

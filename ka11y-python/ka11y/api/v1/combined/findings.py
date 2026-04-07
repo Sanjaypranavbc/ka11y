@@ -362,7 +362,7 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
     return findings
 
 
-def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
+def _contrast_to_findings(ocr_results: list, page_url: str, job_id: str = "") -> List[Dict]:
     """
     Convert per-detection contrast data from OCR results into WCAG 1.4.3 findings.
 
@@ -406,8 +406,10 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             ratio_str = f"{ratio:.2f}:1" if ratio is not None else "unknown"
             text_snippet = (det.text or "")[:60].replace('"', "'")
             text_type = "large text" if is_large else "normal text"
+            image_url = f"/api/v1/combined/{job_id}/image?path={result.original_path}" if job_id else ""
+            img_tag = f'<img src="{image_url}" alt="contrast text preview" style="display:none;" />' if image_url else ""
             element_html = (
-                f'<img-text fg="{fg_hex}" bg="{bg_hex}" '
+                f'{img_tag}<img-text fg="{fg_hex}" bg="{bg_hex}" '
                 f'ratio="{ratio_str}">{text_snippet}</img-text>'
             )
             image_label = f'{result.filename} -- "{text_snippet}"'
@@ -480,7 +482,7 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     return findings
 
 
-def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
+def _contrast_enhanced_to_findings(ocr_results: list, page_url: str, job_id: str = "") -> List[Dict]:
     """
     WCAG 1.4.6 AAA Enhanced Contrast.
       AAA normal text : 7.0:1
@@ -520,8 +522,10 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
             ratio_str = f"{ratio:.2f}:1" if ratio is not None else "unknown"
             text_snippet = (det.text or "")[:60].replace('"', "'")
             text_type = "large text" if is_large else "normal text"
+            image_url = f"/api/v1/combined/{job_id}/image?path={result.original_path}" if job_id else ""
+            img_tag = f'<img src="{image_url}" alt="contrast text preview" style="display:none;" />' if image_url else ""
             element_html = (
-                f'<img-text fg="{fg_hex}" bg="{bg_hex}" '
+                f'{img_tag}<img-text fg="{fg_hex}" bg="{bg_hex}" '
                 f'ratio="{ratio_str}">{text_snippet}</img-text>'
             )
             image_label = f'{result.filename} -- "{text_snippet}"'

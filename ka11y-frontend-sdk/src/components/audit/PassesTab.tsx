@@ -196,15 +196,15 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="-mx-3 sm:mx-0 rounded-lg border border-border overflow-hidden mt-2">
-                <Table className="min-w-[980px] sm:min-w-[1120px] [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
+                <Table className="w-full [&_th]:h-10 [&_th]:px-2 sm:[&_th]:h-12 sm:[&_th]:px-4 [&_td]:px-2 [&_td]:py-2 sm:[&_td]:px-4 sm:[&_td]:py-3">
                   <TableHeader>
                     <TableRow className="bg-muted/30">
                       <TableHead className="text-xs">{t("table.ruleId")}</TableHead>
-                      <TableHead className="text-xs">{t("table.sc")}</TableHead>
-                      <TableHead className="text-xs">{t("table.criterion")}</TableHead>
-                      <TableHead className="text-xs">{t("table.level")}</TableHead>
-                      <TableHead className="text-xs">{t("table.tag")}</TableHead>
-                      <TableHead className="text-xs min-w-[18rem]">{t("table.element")}</TableHead>
+                      <TableHead className="text-xs hidden lg:table-cell">{t("table.sc")}</TableHead>
+                      <TableHead className="text-xs hidden lg:table-cell">{t("table.criterion")}</TableHead>
+                      <TableHead className="text-xs hidden md:table-cell">{t("table.level")}</TableHead>
+                      <TableHead className="text-xs hidden lg:table-cell">{t("table.tag")}</TableHead>
+                      <TableHead className="text-xs">{t("table.element")}</TableHead>
                       <TableHead className="text-xs">{t("table.reason")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -219,10 +219,10 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                     {items.slice(0, visible).map((p, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-mono text-xs">{p.rule_id}</TableCell>
-                        <TableCell className="font-mono text-xs">{formatCriterionId(p.wcag_sc)}</TableCell>
-                        <TableCell className="text-xs">{formatCriterionName(p.criterion_name, p.wcag_sc)}</TableCell>
-                        <TableCell><Badge variant="outline" className="text-[10px]">{formatLevel(p.level)}</Badge></TableCell>
-                        <TableCell className="font-mono text-xs">{formatElementTag(p.element_tag)}</TableCell>
+                        <TableCell className="font-mono text-xs hidden lg:table-cell">{formatCriterionId(p.wcag_sc)}</TableCell>
+                        <TableCell className="text-xs hidden lg:table-cell">{formatCriterionName(p.criterion_name, p.wcag_sc)}</TableCell>
+                        <TableCell className="hidden md:table-cell"><Badge variant="outline" className="text-[10px]">{formatLevel(p.level)}</Badge></TableCell>
+                        <TableCell className="font-mono text-xs hidden lg:table-cell">{formatElementTag(p.element_tag)}</TableCell>
                         <TableCell>
                           <FindingElementCell
                             elementHtml={p.element_html}
