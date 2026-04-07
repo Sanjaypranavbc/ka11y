@@ -1,4 +1,4 @@
-# ka11y-python Execution Flow
++# ka11y-python Execution Flow
 
 This document details the end-to-end execution flow of the `ka11y-python` accessibility audit system, from the initial API request to the final generated report.
 

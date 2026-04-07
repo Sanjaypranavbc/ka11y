@@ -31,6 +31,7 @@ class CombinedRequest(BaseModel):
     run_hover_focus_content_audit: bool = True
     run_focus_not_obscured_min_audit: bool = True
     run_focus_not_obscured_enh_audit: bool = True
+    run_sensory_audit: bool = True
     lang: str = "en"
 
 

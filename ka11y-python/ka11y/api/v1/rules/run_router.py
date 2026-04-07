@@ -35,6 +35,7 @@ RULE_FLAGS = {
     "1.4.13": {"run_hover_focus_content_audit": True},
     "2.4.11": {"run_focus_not_obscured_min_audit": True},
     "2.4.12": {"run_focus_not_obscured_enh_audit": True},
+    "1.3.3": {"run_sensory_audit": True},
 }
 
 def create_rule_handler(rule_id: str):

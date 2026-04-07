@@ -1034,6 +1034,59 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
     return findings
 
 
+def _sensory_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
+    """
+    Convert SensoryCharacteristicsAuditor records to standard findings
+    for WCAG 1.3.3 — Sensory Characteristics (Level A).
+
+    Each record represents one violating sentence extracted from the page.
+    All records from this auditor are FAILED (the auditor only emits rows
+    for actual violations; passing elements are not reported).
+    """
+    findings: List[Dict[str, Any]] = []
+    sev = _PYTHON_SEVERITY.get("1.3.3", "serious")
+
+    for r in records:
+        status_raw = r.get("wcag_1_3_3_status", "")
+
+        if status_raw == "FAILED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_3_3_sensory_characteristics",
+                    wcag_sc="1.3.3",
+                    status="fail",
+                    reason=r.get("wcag_1_3_3_violation")
+                           or (
+                               "Instruction relies solely on a sensory characteristic "
+                               f"({r.get('sensory_categories', 'unspecified')}) "
+                               "with no non-sensory identifier."
+                           ),
+                    severity=sev,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id") or None,
+                    element_tag=r.get("element_tag", ""),
+                    page_url=r.get("page_url") or page_url,
+                )
+            )
+        elif status_raw == "PASSED":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_3_3_sensory_characteristics",
+                    wcag_sc="1.3.3",
+                    status="pass",
+                    reason="Instruction provides sufficient non-sensory identifiers.",
+                    severity=None,
+                    element_html=r.get("html_snippet", ""),
+                    element_id=r.get("element_id") or None,
+                    element_tag=r.get("element_tag", ""),
+                    page_url=r.get("page_url") or page_url,
+                )
+            )
+
+    return findings
+
 def _rendered_text_spacing_to_findings(
     records: List[Dict], page_url: str
 ) -> List[Dict]:

@@ -49,6 +49,7 @@ from .findings import (
     _rendered_text_spacing_to_findings,
     _resize_text_to_findings,
     _ts_to_findings,
+    _sensory_to_findings,
 )
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
 
@@ -197,6 +198,69 @@ async def _stage_form_audit(
         return findings
     except Exception as _exc:
         _stage_error_and_warn(job_id, "form_audit", _exc)
+        return []
+
+
+async def _stage_sensory_audit(
+        url: str,
+        output_dir: Path,
+        max_depth: int,
+        run_sensory_audit: bool,
+        job_id: str,
+        lang: str = "en",
+) -> List[Dict]:
+    """
+    Crawl text-bearing elements → 1.3.3 sensory-characteristics check.
+
+    Pipeline:
+      AsyncSensoryCrawler  →  SensoryCharacteristicsAuditor  →  findings
+    """
+    # Import stage helpers lazily so this file can be used standalone.
+    from ka11y.api.v1.combined.stage_events import (
+        _stage_complete,
+        _stage_error_and_warn,
+        _stage_start,
+    )
+    from ka11y.api.v1.combined.findings import _sensory_to_findings  # noqa: F401
+
+    _stage_start(job_id, "sensory_audit")
+
+    if not run_sensory_audit:
+        _stage_complete(job_id, "sensory_audit", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.non_text.sensory_auditor import (
+            SensoryCharacteristicsAuditor,
+        )
+        from ka11y.crawler.sensory_crawler import AsyncSensoryCrawler
+
+        # ── Crawl ──────────────────────────────────────────────────────────
+        sensory_crawler = AsyncSensoryCrawler(
+            base_url=url,
+            output_dir=str(output_dir),
+            max_depth=max_depth,
+        )
+        elements = await sensory_crawler.crawl()
+        await asyncio.to_thread(sensory_crawler.save_raw_json)
+
+        # ── Audit ──────────────────────────────────────────────────────────
+        auditor = SensoryCharacteristicsAuditor(
+            output_dir=str(output_dir),
+            lang=lang,
+        )
+        records: List[Dict] = await asyncio.to_thread(
+            functools.partial(auditor.generate_audit_report, elements=elements)
+        )
+
+        # ── Convert to standard findings ───────────────────────────────────
+        findings: List[Dict] = _sensory_to_findings(records, url)
+
+        _stage_complete(job_id, "sensory_audit", len(findings))
+        return findings
+
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "sensory_audit", _exc)
         return []
 
 
@@ -515,6 +579,7 @@ async def _run_python_stages(
     run_hover_focus_content_audit: bool,
     run_focus_not_obscured_min_audit: bool,
     run_focus_not_obscured_enh_audit: bool,
+    run_sensory_audit: bool,
     job_id: str,
     lang: str = "en",
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
@@ -575,6 +640,12 @@ async def _run_python_stages(
                 url, output_dir, max_depth, run_media_audit, job_id
             )
         ),
+        _timed(
+            _stage_sensory_audit(
+                url, output_dir, max_depth, run_sensory_audit, job_id, lang
+            )
+        ),
+
         return_exceptions=True,
     )
 
