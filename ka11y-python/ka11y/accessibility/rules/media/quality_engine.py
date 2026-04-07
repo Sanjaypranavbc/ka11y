@@ -32,24 +32,80 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
-import nltk
-from faster_whisper import WhisperModel
-from jiwer import wer as compute_wer
-from nltk.tokenize import word_tokenize
+
+try:
+    import nltk
+    from nltk.tokenize import word_tokenize
+except Exception:  # pragma: no cover - depends on optional runtime deps
+    nltk = None
+    word_tokenize = None
+
+try:
+    from faster_whisper import WhisperModel
+except Exception:  # pragma: no cover - depends on optional runtime deps
+    WhisperModel = None
+
+try:
+    from jiwer import wer as compute_wer
+except Exception:  # pragma: no cover - depends on optional runtime deps
+    compute_wer = None
 
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="quality_engine")
 
-# ── Ensure required NLTK data is downloaded at import time ────────────────────
-try:
-    nltk.data.find("tokenizers/punkt_tab")
-except LookupError:
-    nltk.download("punkt_tab", quiet=True)
-try:
-    nltk.data.find("taggers/averaged_perceptron_tagger_eng")
-except LookupError:
-    nltk.download("averaged_perceptron_tagger_eng", quiet=True)
+_NLTK_READY = False
+
+
+def _ensure_nltk() -> bool:
+    """Best-effort NLTK setup for optional POS-tagging checks."""
+    global _NLTK_READY
+    if _NLTK_READY:
+        return True
+    if nltk is None or word_tokenize is None:
+        return False
+    try:
+        try:
+            nltk.data.find("tokenizers/punkt_tab")
+        except LookupError:
+            nltk.download("punkt_tab", quiet=True)
+        try:
+            nltk.data.find("taggers/averaged_perceptron_tagger_eng")
+        except LookupError:
+            nltk.download("averaged_perceptron_tagger_eng", quiet=True)
+        _NLTK_READY = True
+        return True
+    except Exception as exc:  # pragma: no cover - download path is environment-specific
+        logger.warning(f"[quality_engine] NLTK resources unavailable: {exc}")
+        return False
+
+
+def _fallback_wer(ref: str, hyp: str) -> float:
+    """Simple token-level WER fallback when jiwer is unavailable."""
+    ref_tokens = ref.split()
+    hyp_tokens = hyp.split()
+    if not ref_tokens:
+        return 0.0 if not hyp_tokens else 1.0
+
+    rows = len(ref_tokens) + 1
+    cols = len(hyp_tokens) + 1
+    dist = [[0] * cols for _ in range(rows)]
+
+    for i in range(rows):
+        dist[i][0] = i
+    for j in range(cols):
+        dist[0][j] = j
+
+    for i in range(1, rows):
+        for j in range(1, cols):
+            cost = 0 if ref_tokens[i - 1] == hyp_tokens[j - 1] else 1
+            dist[i][j] = min(
+                dist[i - 1][j] + 1,
+                dist[i][j - 1] + 1,
+                dist[i - 1][j - 1] + cost,
+            )
+
+    return dist[-1][-1] / len(ref_tokens)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -168,7 +224,7 @@ def _check_verbatim(whisper_text: str, dev_transcript: str) -> Dict[str, Any]:
             wer_score=None,
         )
 
-    score = compute_wer(ref, hyp)
+    score = compute_wer(ref, hyp) if compute_wer is not None else _fallback_wer(ref, hyp)
 
     if score <= _WER_PASS:
         return _check_result(
@@ -306,13 +362,20 @@ def _check_visual_content(dev_transcript: str) -> Dict[str, Any]:
     Uses NLTK POS tagging to detect action verbs and descriptive language.
     Always returns NEEDS_REVIEW — local processing cannot verify visual accuracy.
     """
-    tokens = word_tokenize(dev_transcript[:2000])  # Limit to avoid slow POS
-    tagged = nltk.pos_tag(tokens)
-
-    # Count action verbs (VBG = gerund, VBZ = 3rd person, VBD = past)
-    action_verbs = [word for word, tag in tagged if tag.startswith("VB")]
-    # Count descriptive adjectives
-    adjectives = [word for word, tag in tagged if tag.startswith("JJ")]
+    if _ensure_nltk():
+        tokens = word_tokenize(dev_transcript[:2000])  # Limit to avoid slow POS
+        tagged = nltk.pos_tag(tokens)
+        action_verbs = [word for word, tag in tagged if tag.startswith("VB")]
+        adjectives = [word for word, tag in tagged if tag.startswith("JJ")]
+        message_suffix = "Cannot verify visual accuracy without a vision model. Manual review required."
+    else:
+        tokens = re.findall(r"[\w'-]+", dev_transcript[:2000], re.UNICODE)
+        action_verbs = []
+        adjectives = []
+        message_suffix = (
+            "NLTK tagging is unavailable, so this is a coarse text-only heuristic. "
+            "Manual review required."
+        )
 
     verb_density = len(action_verbs) / max(len(tokens), 1)
     adj_density = len(adjectives) / max(len(tokens), 1)
@@ -321,8 +384,7 @@ def _check_visual_content(dev_transcript: str) -> Dict[str, Any]:
         "visual_content", "NEEDS_REVIEW",
         f"Transcript contains {len(action_verbs)} action verb(s) and "
         f"{len(adjectives)} adjective(s). Verb density: {verb_density:.2%}. "
-        f"Cannot verify visual accuracy without a vision model. "
-        f"Manual review required.",
+        f"{message_suffix}",
         verb_count=len(action_verbs),
         adjective_count=len(adjectives),
         verb_density=round(verb_density, 4),
@@ -474,6 +536,9 @@ def _transcribe_audio(audio_path: str) -> Optional[Dict[str, Any]]:
         }
     Or None if transcription fails.
     """
+    if WhisperModel is None:
+        logger.warning("[quality_engine] faster-whisper is unavailable; skipping transcription")
+        return None
     try:
         # Use the "base" model for speed/accuracy balance
         model_size = os.environ.get("WHISPER_MODEL_SIZE", "base")

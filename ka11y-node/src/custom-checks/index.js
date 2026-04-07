@@ -147,6 +147,11 @@ const CHECK_DEFINITIONS = _loadCheckDefinitions();
 const STATIC_CHECKS = CHECK_DEFINITIONS.filter(def => def.mode === 'static');
 const INTERACTIVE_CHECKS = CHECK_DEFINITIONS.filter(def => def.mode === 'interactive');
 
+function _selectChecks(checkDefs, criteriaId = null) {
+  if (!criteriaId) return checkDefs;
+  return checkDefs.filter(def => def && def.check && def.check.SC === criteriaId);
+}
+
 /**
  * Merge custom check results with axe mapResults() output.
  * Both arrays have shape: [{ successCriteriaId, rules: [...] }]
@@ -205,15 +210,16 @@ async function _runChecks(checkDefs, page) {
     .filter(r => r != null);
 }
 
-async function runStaticChecks(page) {
-  return _runChecks(STATIC_CHECKS, page);
+async function runStaticChecks(page, criteriaId = null) {
+  return _runChecks(_selectChecks(STATIC_CHECKS, criteriaId), page);
 }
 
-async function runInteractiveChecks(page) {
+async function runInteractiveChecks(page, criteriaId = null) {
   // Interactive checks must run sequentially (they mutate focus/keyboard/page state)
+  const selectedChecks = _selectChecks(INTERACTIVE_CHECKS, criteriaId);
   const results = [];
-  for (let i = 0; i < INTERACTIVE_CHECKS.length; i++) {
-    const checkDef = INTERACTIVE_CHECKS[i];
+  for (let i = 0; i < selectedChecks.length; i++) {
+    const checkDef = selectedChecks[i];
     try {
       results.push(await checkDef.check.run(page));
     } catch (err) {
@@ -225,11 +231,11 @@ async function runInteractiveChecks(page) {
   return results;
 }
 
-async function runAll(page) {
+async function runAll(page, criteriaId = null) {
   // Deterministic order: static first, then interactive.
   // Running both in parallel on the same page can cause state interference.
-  const staticR = await runStaticChecks(page);
-  const interactiveR = await runInteractiveChecks(page);
+  const staticR = await runStaticChecks(page, criteriaId);
+  const interactiveR = await runInteractiveChecks(page, criteriaId);
   return [...staticR, ...interactiveR];
 }
 

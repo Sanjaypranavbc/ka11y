@@ -62,6 +62,13 @@ def _normalize(text: Optional[str]) -> str:
     return re.sub(r"\s+", " ", nfc.strip()).casefold()
 
 
+def _normalize_for_match(text: Optional[str]) -> str:
+    """Normalise comparison text while treating punctuation as separators."""
+    base = _normalize(text)
+    base = re.sub(r"[^\w\s]", " ", base, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", base).strip()
+
+
 def _has_word_chars(text: str) -> bool:
     """True if text contains at least one Unicode letter or digit (not just symbols)."""
     return bool(re.search(r"[^\W_]", text, re.UNICODE))
@@ -94,15 +101,16 @@ def _label_in_name(visible: str, acc_name: str) -> bool:
     """
     if not visible:
         return True
-    stripped = _strip_punctuation(visible)
-    # Fall back to plain substring match if stripping removes everything.
-    if not stripped:
+    visible_cmp = _normalize_for_match(visible)
+    name_cmp = _normalize_for_match(acc_name)
+    # Fall back to plain substring match if normalisation removes everything.
+    if not visible_cmp:
         return visible in acc_name
     # CJK labels are not reliably tokenized by \b boundaries.
-    if _contains_cjk(stripped):
-        return stripped in acc_name
-    pattern = r"\b" + re.escape(stripped) + r"\b"
-    return bool(re.search(pattern, acc_name))
+    if _contains_cjk(visible_cmp):
+        return visible_cmp in name_cmp
+    pattern = r"(?<!\w)" + re.escape(visible_cmp) + r"(?!\w)"
+    return bool(re.search(pattern, name_cmp))
 
 
 def _check_253(el: InteractiveElementData):

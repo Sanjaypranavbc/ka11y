@@ -83,6 +83,16 @@ describe('runStaticChecks', () => {
     expect(results.every(r => r.rules[0].status === 'incomplete')).toBe(true);
     expect(results[0].rules[0].reason).toContain('Custom check execution failed');
   });
+
+  test('only executes checks for the requested success criterion', async () => {
+    const mockPage = { evaluate: jest.fn().mockResolvedValue({ duplicateIds: [] }) };
+
+    const results = await runStaticChecks(mockPage, '4.1.1');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].successCriteriaId).toBe('4.1.1');
+    expect(mockPage.evaluate).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('_loadCheckDefinitions', () => {
@@ -130,5 +140,22 @@ describe('runAll', () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results.every(r => Array.isArray(r.rules) && r.rules.length === 1)).toBe(true);
     expect(results.every(r => r.rules[0].status === 'incomplete')).toBe(true);
+  });
+
+  test('skips unrelated static and interactive checks when criterion is filtered', async () => {
+    const mockPage = {
+      evaluate: jest.fn().mockResolvedValue({ duplicateIds: [] }),
+      keyboard: { press: jest.fn() },
+      on: jest.fn(),
+      off: jest.fn(),
+      url: jest.fn().mockReturnValue('https://example.com'),
+    };
+
+    const results = await runAll(mockPage, '4.1.1');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].successCriteriaId).toBe('4.1.1');
+    expect(mockPage.evaluate).toHaveBeenCalledTimes(1);
+    expect(mockPage.keyboard.press).not.toHaveBeenCalled();
   });
 });

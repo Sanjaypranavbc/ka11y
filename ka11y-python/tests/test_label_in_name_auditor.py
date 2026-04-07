@@ -361,6 +361,12 @@ class TestLabelInNamePunctuation:
     def test_plain_label_still_works(self):
         assert _label_in_name("submit", "submit the form") is True
 
+    def test_hyphenated_label_matches_hyphenated_name(self):
+        assert _label_in_name("css-tricks", "css-tricks") is True
+
+    def test_dotted_label_matches_dotted_name(self):
+        assert _label_in_name("the govt.nz app", "download the govt.nz app") is True
+
     def test_non_matching_label_still_fails(self):
         assert _label_in_name("read more!", "learn more about accessibility") is False
 
@@ -418,3 +424,19 @@ class TestCheck253Punctuation:
         status, _ = _check_253(el)
         # "!!!" has no word characters → N/A (no visible text rule)
         assert status == "N/A"
+
+    def test_hyphenated_visible_label_matches_identical_accessible_name(self):
+        el = make_element(
+            visible_label="CSS-Tricks",
+            accessible_name="CSS-Tricks",
+        )
+        status, _ = _check_253(el)
+        assert status == "PASSED"
+
+    def test_dotted_visible_label_matches_identical_accessible_name(self):
+        el = make_element(
+            visible_label="The Govt.nz app",
+            accessible_name="The Govt.nz app",
+        )
+        status, _ = _check_253(el)
+        assert status == "PASSED"

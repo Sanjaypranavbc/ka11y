@@ -214,7 +214,7 @@ class AccessibilityService {
       );
 
       this._logger.info('Running static custom checks...');
-      const customResults = await runStaticChecks(page);
+      const customResults = await runStaticChecks(page, criteriaId);
       const filteredCustom = criteriaId
         ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
         : customResults;
@@ -295,7 +295,7 @@ class AccessibilityService {
       );
 
       this._logger.info('Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page);
+      const customResults = await runAll(page, criteriaId);
       const filteredCustom = criteriaId
         ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
         : customResults;

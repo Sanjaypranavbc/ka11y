@@ -21,6 +21,10 @@ The combined endpoint is the **primary API**. It runs the Node `axe_core` stage 
   How many link-levels deep to crawl. `0` audits only the submitted URL. `1` follows internal links one level deep. Keep low (≤ 2) to avoid long runtimes.
 </ParamField>
 
+<Note>
+  `max_depth = 0` is the fast path. In that mode, `ka11y-python` uses a single-load snapshot pipeline: one live page load feeds forms, interactive elements, target sizes, moving content, media, text-spacing data, and the HAR used by rendered-layout rules. Increasing depth disables that single-page fan-out because each discovered page must be loaded separately.
+</Note>
+
 <ParamField body="wcag_level" type="string" default="AAA">
   Conformance target: `"A"` | `"AA"` | `"AAA"`. Controls which axe-core tags are used and filters Python findings by WCAG level. Use `AAA` if you want `1.4.6 Contrast (Enhanced)` in the final finding arrays; lowering the level hides higher-level findings.
 </ParamField>

@@ -27,19 +27,45 @@ _jobs: Dict[str, Dict[str, Any]] = {}
 # SSE subscriber bus: job_id → list of per-client asyncio.Queue
 _subscribers: Dict[str, List[asyncio.Queue]] = {}
 
-# Bug 7 fix: do NOT create asyncio.Lock() at import time. Locks created at
-# module-import time can be bound to the wrong event loop under pytest-asyncio,
-# dev-server hot-reload, and alternative ASGI worker startup patterns.
-# Use lazy initialisation via _get_subscribers_lock() instead.
-_subscribers_lock: asyncio.Lock | None = None
+class _LazyAsyncLock:
+    """Loop-aware proxy around asyncio.Lock for safe module-level reuse."""
+
+    def __init__(self) -> None:
+        self._lock: asyncio.Lock | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def _ensure_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        if self._lock is None or self._loop is not loop:
+            self._lock = asyncio.Lock()
+            self._loop = loop
+        return self._lock
+
+    async def acquire(self) -> bool:
+        return await self._ensure_lock().acquire()
+
+    def release(self) -> None:
+        lock = self._ensure_lock()
+        if lock.locked():
+            lock.release()
+
+    def locked(self) -> bool:
+        return self._ensure_lock().locked()
+
+    async def __aenter__(self) -> "_LazyAsyncLock":
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        self.release()
+
+
+_subscribers_lock = _LazyAsyncLock()
 
 
 def _get_subscribers_lock() -> asyncio.Lock:
-    """Return the subscribers lock, creating it lazily inside the running loop."""
-    global _subscribers_lock
-    if _subscribers_lock is None:
-        _subscribers_lock = asyncio.Lock()
-    return _subscribers_lock
+    """Return the current loop's underlying subscribers lock."""
+    return _subscribers_lock._ensure_lock()
 
 
 # TTL for completed/failed jobs (1 hour)

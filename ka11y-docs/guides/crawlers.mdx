@@ -14,6 +14,38 @@ They navigate the page using Playwright Chromium in headless mode, inject JavaSc
 
 ---
 
+## Optimization verdict
+
+For the question "is the crawler optimized?": **yes on the Python side for single-page audits, and partially on the Node side for rule-filtered requests.**
+
+| Service | Optimization status | Why |
+|---------|---------------------|-----|
+| `ka11y-python` (`max_depth = 0`) | **Optimized** | One live navigation via `UniversalPageLoader`, one combined `page.evaluate(...)`, one HAR recording, then the resulting snapshot is fanned out to six static crawlers plus HAR-backed rendered checks. |
+| `ka11y-python` (`max_depth > 0`) | **Partially optimized** | Multi-page crawls still need one real load per discovered page, so the single-snapshot fan-out is intentionally disabled. |
+| `ka11y-node` | **Optimized per request** | axe-core and all Node custom checks share one Puppeteer page/browser session. When a request is filtered by `successCriteriaId`, only the matching custom checks are executed instead of the whole 24-check catalogue. |
+
+The main caveat is that `AsyncImageCrawler` still launches its own browser session even in single-page mode. That is intentional: it needs per-element screenshots for OCR, contrast, and image classification, which cannot be reconstructed from the universal snapshot alone.
+
+## What ka11y actually crawls
+
+At a high level, the stack extracts these raw artefacts before any WCAG rule logic runs:
+
+| Raw artefact | Producer | Consumed by |
+|--------------|----------|-------------|
+| `forms` snapshot | `UniversalPageLoader` / `AsyncFormCrawler` | `3.3.1`, `3.3.2` |
+| `interactive` snapshot | `UniversalPageLoader` / `InteractiveElementCrawler` | `2.5.3` |
+| `target_sizes` snapshot | `UniversalPageLoader` / `TargetSizeCrawler` | `2.5.8` |
+| `moving_content` snapshot | `UniversalPageLoader` / `MovingContentCrawler` | `2.2.2` |
+| `media` snapshot | `UniversalPageLoader` / `AsyncMediaCrawler` | `1.2.1`, `1.2.2` |
+| `text_spacing` snapshot | `UniversalPageLoader` / `TextSpacingCrawler` | static `1.4.12` heuristics |
+| HAR + rendered scenario snapshots | `UniversalPageLoader` + `RenderedLayoutCrawler` | `1.3.4`, `1.4.4`, `1.4.10`, `1.4.12`, `1.4.13`, `2.4.11`, `2.4.12` |
+| Per-element image screenshots + OCR metadata | `AsyncImageCrawler` + OCR pipeline | `1.1.1`, `1.4.3`, `1.4.5`, `1.4.6`, `1.4.11`, `4.1.2` |
+| Live DOM + interaction state on a single page | `ka11y-node` accessibility service | axe-core rules + 24 Node custom checks |
+
+The rest of this page breaks down the Python crawler contracts and payloads in detail.
+
+---
+
 ## Runtime architecture
 
 ### Single-load strategy via `UniversalPageLoader`
