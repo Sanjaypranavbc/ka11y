@@ -35,6 +35,7 @@ from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
 from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.universal_page import navigate_with_retry
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="media_crawler")
@@ -332,15 +333,7 @@ class AsyncMediaCrawler:
 
         page = await context.new_page()
         try:
-            # Retry pattern — same as MovingContentCrawler
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            except Exception:
-                try:
-                    await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                except Exception:
-                    await page.goto(url, wait_until="commit", timeout=15_000)
-
+            await navigate_with_retry(page, url)
             # Wait for JS-driven media players to initialise
             await page.wait_for_timeout(2000)
 

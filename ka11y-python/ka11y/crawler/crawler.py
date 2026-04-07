@@ -305,8 +305,29 @@ class AsyncImageCrawler:
             )
         )
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
+        # Suppress "Future exception was never retrieved" warnings for
+        # TargetClosedError.  These are emitted by Playwright's internal
+        # protocol futures when the browser is closed while a screenshot
+        # or evaluate call is in flight (e.g. after asyncio.wait_for cancel).
+        _orig_handler = asyncio.get_event_loop().get_exception_handler()
+
+        def _suppress_target_closed(loop, context):
+            exc = context.get("exception")
+            if exc is not None and "TargetClosedError" in type(exc).__name__:
+                return
+            if _orig_handler:
+                _orig_handler(loop, context)
+            else:
+                loop.default_exception_handler(context)
+
+        asyncio.get_event_loop().set_exception_handler(_suppress_target_closed)
+
+        pw = await async_playwright().start()
+        browser = None
+        context = None
+        download_session = None
+        try:
+            browser = await pw.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
@@ -320,27 +341,30 @@ class AsyncImageCrawler:
             # (including redirect hops) are protected against private-IP access.
             await install_ssrf_guard(context)
             page = await context.new_page()
-            page.set_default_timeout(60_000)
-            download_session = None
+            # Set a short page default.  Playwright 1.58 ignores per-call
+            # timeout= on Locator.screenshot() when a page default is set —
+            # the page default always wins.  Use asyncio.wait_for() for
+            # screenshot calls and keep this low so non-screenshot operations
+            # (evaluate, get_attribute, etc.) don't hang indefinitely.
+            page.set_default_timeout(10_000)
 
-            # ── page load ──
+            # ── page load — DCL first, fallback to commit ──
             console.print(Rule("[dim]Loading page[/dim]"))
-            try:
-                await page.goto(
-                    self.base_url, wait_until="domcontentloaded", timeout=30_000
-                )
-                console.print(f"  [green]✓[/green] Page loaded (domcontentloaded)")
-                logger.info("Page loaded (domcontentloaded strategy)")
-            except Exception as e:
-                logger.warning(
-                    f"'load' timed out: {e}  — retrying with domcontentloaded"
-                )
-                await page.goto(
-                    self.base_url, wait_until="domcontentloaded", timeout=60_000
-                )
-                console.print(
-                    f"  [yellow]⚠[/yellow] Page loaded (domcontentloaded fallback)"
-                )
+            nav_ok = False
+            for wait_until, timeout_ms in [
+                ("domcontentloaded", 30_000),
+                ("commit", 15_000),
+            ]:
+                try:
+                    await page.goto(self.base_url, wait_until=wait_until, timeout=timeout_ms)
+                    console.print(f"  [green]✓[/green] Page loaded ({wait_until})")
+                    logger.info(f"Page loaded ({wait_until} strategy)")
+                    nav_ok = True
+                    break
+                except Exception as e:
+                    logger.warning(f"goto({wait_until}) failed: {e}")
+            if not nav_ok:
+                raise RuntimeError(f"[crawler] Could not navigate to {self.base_url}")
 
             await page.wait_for_timeout(1_000)
             await self._trigger_lazy_loading(page)
@@ -473,7 +497,9 @@ class AsyncImageCrawler:
                                         ph = await img.evaluate_handle(
                                             "el => el.closest('a,button,li,td,div') || el.parentElement"
                                         )
-                                        await ph.screenshot(path=save_path)
+                                        await asyncio.wait_for(
+                                            ph.screenshot(path=save_path), timeout=5.0
+                                        )
                                         saved = True
                                     except Exception:
                                         pass
@@ -490,7 +516,9 @@ class AsyncImageCrawler:
                                 )
                                 if not saved:
                                     try:
-                                        await img.screenshot(path=save_path)
+                                        await asyncio.wait_for(
+                                            img.screenshot(path=save_path), timeout=5.0
+                                        )
                                         saved = True
                                     except Exception:
                                         pass
@@ -508,7 +536,9 @@ class AsyncImageCrawler:
                                         [container_h, img],
                                     )
                                     target = container_h if is_overlay else img
-                                    await target.screenshot(path=save_path)
+                                    await asyncio.wait_for(
+                                        target.screenshot(path=save_path), timeout=5.0
+                                    )
                                     saved = True
                                 except Exception:
                                     # Fallback: direct download
@@ -633,7 +663,12 @@ class AsyncImageCrawler:
 
                         btn_file = f"btn_{html_hash}.png"
                         btn_path = f"{btn_dir}/{btn_file}"
-                        await btn.screenshot(path=btn_path, timeout=5_000)
+                        # asyncio.wait_for enforces the 5s cap regardless of
+                        # page.set_default_timeout (Playwright 1.58 ignores
+                        # per-call timeout= on hidden/unstable elements).
+                        await asyncio.wait_for(
+                            btn.screenshot(path=btn_path), timeout=5.0
+                        )
 
                         # Reject near-empty screenshots
                         if os.path.getsize(btn_path) < 500:
@@ -937,9 +972,13 @@ class AsyncImageCrawler:
                                 "el => el.closest('a,button,li,[role=\"button\"]') "
                                 "     || el.parentElement || el"
                             )
-                            await parent_h.screenshot(path=fi_path, timeout=5_000)
+                            await asyncio.wait_for(
+                                parent_h.screenshot(path=fi_path), timeout=5.0
+                            )
                         except Exception:
-                            await fi.screenshot(path=fi_path, timeout=5_000)
+                            await asyncio.wait_for(
+                                fi.screenshot(path=fi_path), timeout=5.0
+                            )
 
                         captured_fi += 1
                         console.print(
@@ -1120,18 +1159,41 @@ class AsyncImageCrawler:
                         except Exception:
                             pass
 
+            except asyncio.CancelledError:
+                logger.info(f"[crawler] crawl cancelled for {self.base_url}")
+                raise
+
             except Exception as e:
                 logger.error(f"Crawl error: {e}")
                 import traceback
 
                 traceback.print_exc()
 
-            finally:
-                if download_session is not None and not download_session.closed:
+        finally:
+            # Cleanup is always attempted, even on CancelledError or timeout.
+            # Suppress TargetClosedError and similar Playwright shutdown races.
+            if download_session is not None and not download_session.closed:
+                try:
                     await download_session.close()
-                await context.close()
-                await browser.close()
-                logger.info(f"Browser closed — finished crawling {self.base_url}")
+                except Exception:
+                    pass
+            if context is not None:
+                try:
+                    await context.close()
+                except Exception:
+                    pass
+            if browser is not None:
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
+            try:
+                await pw.stop()
+            except Exception:
+                pass
+            logger.info(f"Browser closed — finished crawling {self.base_url}")
+            # Restore the exception handler we installed at crawl start.
+            asyncio.get_event_loop().set_exception_handler(_orig_handler)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Reporting

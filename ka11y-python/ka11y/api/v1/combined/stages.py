@@ -54,7 +54,7 @@ from .findings import (
     _resize_text_to_findings,
     _ts_to_findings,
 )
-from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
+from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start, _stage_warn
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -122,9 +122,10 @@ async def _stage_image_audit(
         try:
             await asyncio.wait_for(_crawl_and_save(), timeout=_CRAWL_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
-            logger.warning(
-                f"[combined] image_audit: crawler exceeded {_CRAWL_TIMEOUT_SECONDS}s "
-                f"— proceeding with partial image set from {image_crawler.output_dir}"
+            _stage_warn(
+                job_id,
+                f"image_audit: crawler exceeded {_CRAWL_TIMEOUT_SECONDS}s "
+                f"— partial image set from {image_crawler.output_dir}",
             )
 
         ocr_results: list = []
@@ -573,8 +574,12 @@ async def _run_python_stages(
         )
         har_path = snapshot.har_path
         logger.info(f"[stages] universal snapshot complete for {url}")
+        # Propagate any challenge/interstitial warnings from the snapshot loader
+        for w in snapshot.warnings:
+            _stage_warn(job_id, f"universal_snapshot: {w}")
     except Exception as exc:
         logger.warning(f"[stages] universal snapshot failed ({exc}); falling back to individual crawlers")
+        _stage_warn(job_id, f"universal_snapshot: failed — {exc}")
 
     # Each stage is wrapped with asyncio.wait_for so that a slow/unresponsive
     # target cannot hold a Playwright browser instance indefinitely (D2).

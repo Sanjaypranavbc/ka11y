@@ -19,6 +19,7 @@ from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
 from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.universal_page import navigate_with_retry
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data Model
@@ -159,7 +160,8 @@ class AsyncTextSpacingCrawler:
         page = await context.new_page()
 
         try:
-            await page.goto(url, wait_until="domcontentloaded")
+            await navigate_with_retry(page, url)
+            await page.wait_for_timeout(1_000)  # let JS populate text nodes
 
             raw = await page.evaluate(self.EXTRACT_JS)
 

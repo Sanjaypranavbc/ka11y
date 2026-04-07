@@ -26,18 +26,20 @@ describe('audio-transcript.check (WCAG 1.2.1)', () => {
   test('returns incomplete when audio has no detectable transcript', async () => {
     const page = makePage({
       audioCount: 1,
+      trackOnlyCount: 0,
       issues: [{ html: '<audio src="talk.mp3" controls></audio>' }],
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('incomplete');
     expect(result.rules[0].impact).toBe('serious');
     expect(result.rules[0].reason).toContain('1 of 1');
-    expect(result.rules[0].reason).toContain('no <track>');
+    expect(result.rules[0].reason).toContain('no detectable transcript evidence');
   });
 
   test('reports the correct counts when some audio is missing transcript', async () => {
     const page = makePage({
       audioCount: 3,
+      trackOnlyCount: 0,
       issues: [
         { html: '<audio src="a.mp3" controls></audio>' },
         { html: '<audio src="b.mp3" controls></audio>' },
@@ -46,6 +48,17 @@ describe('audio-transcript.check (WCAG 1.2.1)', () => {
     const result = await run(page);
     expect(result.rules[0].status).toBe('incomplete');
     expect(result.rules[0].reason).toContain('2 of 3');
+  });
+
+  test('track-only evidence still needs manual review', async () => {
+    const page = makePage({
+      audioCount: 1,
+      trackOnlyCount: 1,
+      issues: [{ html: '<audio src="talk.mp3" controls><track kind="captions"></audio>', hasTrack: true }],
+    });
+    const result = await run(page);
+    expect(result.rules[0].status).toBe('incomplete');
+    expect(result.rules[0].reason).toContain('rely only on <track> elements');
   });
 
   test('impact is null when passing', async () => {

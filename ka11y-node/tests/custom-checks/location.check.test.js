@@ -13,7 +13,10 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:    false,
       hasActiveNavItem:  false,
       hasSiteMap:        false,
-      hasLocationIndicator: true,
+      hasAriaCurrentStep: false,
+      hasJsonLdBreadcrumb: false,
+      hasVisibleLocationIndicator: true,
+      hasWeakLocationIndicator: false,
     });
     const result = await run(page);
     expect(result.successCriteriaId).toBe('2.4.8');
@@ -28,7 +31,10 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:    true,
       hasActiveNavItem:  false,
       hasSiteMap:        false,
-      hasLocationIndicator: true,
+      hasAriaCurrentStep: false,
+      hasJsonLdBreadcrumb: false,
+      hasVisibleLocationIndicator: true,
+      hasWeakLocationIndicator: false,
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('pass');
@@ -41,7 +47,10 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:    false,
       hasActiveNavItem:  true,
       hasSiteMap:        false,
-      hasLocationIndicator: true,
+      hasAriaCurrentStep: false,
+      hasJsonLdBreadcrumb: false,
+      hasVisibleLocationIndicator: true,
+      hasWeakLocationIndicator: false,
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('pass');
@@ -54,7 +63,10 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:    false,
       hasActiveNavItem:  false,
       hasSiteMap:        false,
-      hasLocationIndicator: false,
+      hasAriaCurrentStep: false,
+      hasJsonLdBreadcrumb: false,
+      hasVisibleLocationIndicator: false,
+      hasWeakLocationIndicator: false,
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('incomplete');
@@ -68,10 +80,29 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:       false,
       hasActiveNavItem:     false,
       hasSiteMap:           false,
-      hasLocationIndicator: true,
+      hasAriaCurrentStep: false,
+      hasJsonLdBreadcrumb: false,
+      hasVisibleLocationIndicator: true,
+      hasWeakLocationIndicator: false,
     });
     const result = await run(page);
     expect(result.rules[0].impact).toBeNull();
+  });
+
+  test('returns incomplete when only sitemap or JSON-LD location hints exist', async () => {
+    const page = makePage({
+      hasBreadcrumb: false,
+      hasAriaCurrent: false,
+      hasActiveNavItem: false,
+      hasSiteMap: true,
+      hasAriaCurrentStep: false,
+      hasJsonLdBreadcrumb: true,
+      hasVisibleLocationIndicator: false,
+      hasWeakLocationIndicator: true,
+    });
+    const result = await run(page);
+    expect(result.rules[0].status).toBe('incomplete');
+    expect(result.rules[0].reason).toContain('indirect location signals');
   });
 
   test('includes Japanese location keywords in source heuristics', () => {

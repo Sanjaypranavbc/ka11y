@@ -76,4 +76,13 @@ describe('accessible-auth.check (WCAG 3.3.8)', () => {
     expect(src).toContain('音声');
     expect(src).toContain('パスワード再設定');
   });
+
+  test('scopes passkey and CAPTCHA detection to the current auth form context', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/accessible-auth.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('authScopeFor');
+    expect(src).toContain('authScope.querySelectorAll');
+  });
 });

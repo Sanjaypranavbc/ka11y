@@ -6,18 +6,16 @@ function makePage({ focusable = [], url = 'https://example.com', navigates = fal
   let navListener = null;
   const page = {
     url: jest.fn().mockReturnValue(url),
-    evaluate: jest.fn(),
+    evaluate: jest.fn().mockImplementation((fn) => {
+      const src = String(fn);
+      if (src.includes('results.push({')) return Promise.resolve(focusable);
+      if (src.includes('__ka11yOnFocusNavState')) return Promise.resolve(false);
+      if (navigates && navListener) navListener();
+      return Promise.resolve(undefined);
+    }),
     on: jest.fn((event, cb) => { if (event === 'framenavigated') navListener = cb; }),
     off: jest.fn(),
   };
-
-  // First evaluate call: get focusable elements list
-  page.evaluate
-    .mockResolvedValueOnce(focusable)
-    .mockImplementation(() => {
-      if (navigates && navListener) navListener();
-      return Promise.resolve();
-    });
 
   return page;
 }
@@ -53,6 +51,15 @@ describe('on-focus.check (WCAG 3.2.1)', () => {
     const page = makePage({ focusable: [] });
     await run(page);
     expect(page.off).toHaveBeenCalledWith('framenavigated', expect.any(Function));
+  });
+
+  test('restores history instrumentation in source cleanup path', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/on-focus.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('originalPush');
+    expect(src).toContain('delete window[stateKey]');
   });
 
   test('SELECTOR (N7 fix): does not start with a comma and is a valid CSS selector string', () => {

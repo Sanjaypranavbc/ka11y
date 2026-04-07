@@ -59,6 +59,39 @@ _POST_SCROLL_WAIT_MS = 1_500       # wait after final scroll before extracting
 _CAROUSEL_POLL_INTERVAL_MS = 300   # how often to check for carousel init
 _CAROUSEL_POLL_MAX_MS = 3_000      # give up waiting for carousel after this
 
+# JavaScript that detects common WAF / challenge / interstitial page patterns.
+# Returns a list of human-readable reason strings, or an empty list on a clean page.
+_CHALLENGE_DETECT_JS = r"""() => {
+    const reasons = [];
+
+    // Incapsula / Imperva challenge iframes or resource URLs
+    const incapsulaIframe = document.querySelector('iframe[src*="_Incapsula_Resource"]');
+    if (incapsulaIframe) reasons.push('incapsula-challenge-iframe');
+
+    // Generic WAF challenge patterns
+    const body = (document.body ? document.body.innerText || '' : '').toLowerCase();
+    if (/checking your browser/i.test(body) && /cloudflare/i.test(body))
+        reasons.push('cloudflare-browser-check');
+    if (/ddos protection by cloudflare/i.test(body))
+        reasons.push('cloudflare-ddos-protection');
+    if (/enable javascript and cookies to continue/i.test(body))
+        reasons.push('js-cookie-challenge');
+    if (/403 forbidden/i.test(document.title) || /access denied/i.test(document.title))
+        reasons.push('access-denied-title');
+    if (/captcha/i.test(body) && document.querySelectorAll('iframe').length > 0)
+        reasons.push('captcha-iframe');
+
+    // Nearly-empty body combined with script-heavy page — WAF challenge shell pattern.
+    // Require BOTH: no main landmark AND very small visible text AND at least one script.
+    const mainContent = document.querySelector('main, [role="main"], #content, #main, article');
+    const bodyText = document.body ? document.body.innerText.trim() : '';
+    const scriptCount = document.querySelectorAll('script[src]').length;
+    if (!mainContent && bodyText.length < 100 && scriptCount >= 2)
+        reasons.push('near-empty-body');
+
+    return reasons;
+}"""
+
 # CSS selectors that indicate a carousel library has initialised
 _CAROUSEL_READY_SELECTORS = [
     ".flickity-enabled",        # Flickity
@@ -102,6 +135,9 @@ class PageSnapshot:
 
     # Path to the recorded HAR file (None if recording was skipped / failed)
     har_path: Optional[str] = None
+
+    # Degradation warnings accumulated during load (challenge pages, partial data, etc.)
+    warnings: List[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -782,9 +818,23 @@ class UniversalPageLoader:
             page = await context.new_page()
             extracted: Dict[str, Any] = {}
 
+            page_warnings: List[str] = []
             try:
                 # ── Step 1: Navigate ──────────────────────────────────────
                 await cls._navigate(page, url)
+
+                # ── Step 1b: Challenge / interstitial detection ───────────
+                try:
+                    challenge_reasons = await page.evaluate(_CHALLENGE_DETECT_JS)
+                    if challenge_reasons:
+                        msg = (
+                            f"challenge/interstitial page detected for {url}: "
+                            + ", ".join(challenge_reasons)
+                        )
+                        logger.warning(f"[universal] {msg}")
+                        page_warnings.append(msg)
+                except Exception as _ce:
+                    logger.debug(f"[universal] challenge detection error: {_ce}")
 
                 # ── Step 2: Wait for networkidle (best-effort, max 15s) ───
                 try:
@@ -831,9 +881,18 @@ class UniversalPageLoader:
             except Exception as exc:
                 logger.error(f"[universal] extraction failed for {url}: {exc}")
             finally:
-                await page.close()
-                await context.close()  # HAR is written on context close
-                await browser.close()
+                try:
+                    await page.close()
+                except Exception:
+                    pass
+                try:
+                    await context.close()  # HAR is written on context close
+                except Exception:
+                    pass
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
 
         if record_har and har_file:
             import os
@@ -850,6 +909,7 @@ class UniversalPageLoader:
             media=extracted.get("media", []),
             text_spacing=extracted.get("text_spacing", []),
             har_path=har_path,
+            warnings=page_warnings,
         )
 
     # ── Internal helpers ───────────────────────────────────────────────────
@@ -917,3 +977,29 @@ class UniversalPageLoader:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(dataclasses.asdict(snapshot), f, indent=2)
         return str(path)
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers (for use by individual crawlers that open their own page)
+# ---------------------------------------------------------------------------
+
+
+async def navigate_with_retry(page, url: str) -> None:
+    """Navigate *page* to *url* using the same retry chain as UniversalPageLoader.
+
+    Tries domcontentloaded first (30 s), then falls back to commit (15 s).
+    Raises RuntimeError if both attempts fail.
+
+    Individual crawlers should use this instead of bare ``page.goto()`` so that
+    slow / partially-broken pages are handled consistently.
+    """
+    for wait_until, timeout_ms in [
+        ("domcontentloaded", _GOTO_TIMEOUT_MS),
+        ("commit", 15_000),
+    ]:
+        try:
+            await page.goto(url, wait_until=wait_until, timeout=timeout_ms)
+            return
+        except Exception as exc:
+            logger.warning(f"[nav] goto({wait_until}) failed for {url}: {exc}")
+    raise RuntimeError(f"[nav] Could not navigate to {url}")
