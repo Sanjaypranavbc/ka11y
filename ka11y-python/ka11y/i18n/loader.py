@@ -25,11 +25,17 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # Allow Docker override via env var.
-# Default: resolve to ka11y-python/i18n/ from this file's location.
-#   __file__ = ka11y-python/ka11y/i18n/loader.py
-#   parents[2] = ka11y-python/
-_DEFAULT_I18N_DIR = str(Path(__file__).parents[2] / "i18n")
-I18N_DIR = Path(os.environ.get("KA11Y_I18N_DIR", _DEFAULT_I18N_DIR))
+# In the monorepo we prefer the shared repo-level i18n/ directory so frontend,
+# Python, and Node all read the same catalogue. If the service is deployed on
+# its own, fall back to the local ka11y-python/i18n/ copy.
+_LOCAL_I18N_DIR = Path(__file__).parents[2] / "i18n"
+_SHARED_I18N_DIR = Path(__file__).parents[3] / "i18n"
+_DEFAULT_I18N_DIR = (
+    _SHARED_I18N_DIR
+    if (_SHARED_I18N_DIR / "rules.yml").exists()
+    else _LOCAL_I18N_DIR
+)
+I18N_DIR = Path(os.environ.get("KA11Y_I18N_DIR", str(_DEFAULT_I18N_DIR)))
 
 
 @dataclass(frozen=True)
@@ -124,6 +130,11 @@ def load_rules(lang: str = "en") -> Dict[str, RuleEntry]:
 def get_wcag_names(lang: str = "en") -> Dict[str, str]:
     """Return {sc_id: name} for the given language."""
     return {sc_id: r.name for sc_id, r in load_rules(lang).items()}
+
+
+def get_wcag_descriptions(lang: str = "en") -> Dict[str, str]:
+    """Return {sc_id: description} for the given language."""
+    return {sc_id: r.description for sc_id, r in load_rules(lang).items()}
 
 
 def get_wcag_levels() -> Dict[str, str]:

@@ -69,7 +69,14 @@ async function run(page) {
       return true; // notification element has no live region ancestor
     });
 
-    const needsLiveRegions = formCount > 0 || hasSearchResults || hasCartOrCounter || hasNotificationArea;
+    // Forms alone are not enough to fail SC 4.1.3. Require an explicit dynamic-update
+    // context before treating missing live regions as a likely violation.
+    const dynamicContextsNeedingAnnouncements = [
+      hasSearchResults && 'search results',
+      hasCartOrCounter && 'cart/counter',
+      hasNotificationArea && 'notification area',
+    ].filter(Boolean);
+    const needsLiveRegions = dynamicContextsNeedingAnnouncements.length > 0;
 
     // Probe: check whether any live region already has text content at page-load time.
     // An empty live region (no content) has never been used yet — flag it as a signal
@@ -82,7 +89,7 @@ async function run(page) {
 
     // aria-atomic check: [role="alert"] or [aria-live="assertive"] missing aria-atomic="true"
     const alertsWithoutAtomic = Array.from(document.querySelectorAll(
-      '[role="alert"], [aria-live="assertive"]'
+      '[aria-live="assertive"]:not([role="alert"])'
     )).filter(el => el.getAttribute('aria-atomic') !== 'true');
 
     // Inline validation without live region ancestor
@@ -104,12 +111,7 @@ async function run(page) {
       hasPolite,
       needsLiveRegions,
       anyLiveRegionHasContent,
-      dynamicContexts: [
-        formCount > 0 && `${formCount} form(s)`,
-        hasSearchResults && 'search results',
-        hasCartOrCounter && 'cart/counter',
-        hasNotificationArea && 'notification area',
-      ].filter(Boolean),
+      dynamicContexts: dynamicContextsNeedingAnnouncements,
       alertsWithoutAtomicCount: alertsWithoutAtomic.length,
       invalidWithoutLiveRegionCount: invalidWithoutLiveRegion.length,
     };
@@ -125,7 +127,7 @@ async function run(page) {
       description: 'Status messages must be programmatically determinable',
       impact: null,
       status: 'incomplete',
-      reason: `${alertsWithoutAtomicCount} [role="alert"] or [aria-live="assertive"] element(s) are missing aria-atomic="true". Without aria-atomic, only changed portions may be announced rather than the full message.`,
+      reason: `${alertsWithoutAtomicCount} [aria-live="assertive"] element(s) are missing aria-atomic="true". Without aria-atomic, only changed portions may be announced rather than the full message.`,
       helpUrl: HELP_URL,
     });
   }
@@ -165,6 +167,24 @@ async function run(page) {
     return {
       successCriteriaId: SC,
       rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}) alongside dynamic contexts (${dynamicContexts.join(', ')}). ${contentNote} Verify live regions are correctly wired to each status update.`, helpUrl: HELP_URL }, ...extraRules],
+    };
+  }
+
+  // Forms often include validation and confirmation messages, but a static single-page
+  // scan cannot prove whether those messages are status messages under SC 4.1.3.
+  if (formCount > 0) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'Status messages must be programmatically determinable',
+        impact: liveRegionCount > 0 ? null : 'moderate',
+        status: 'incomplete',
+        reason: liveRegionCount > 0
+          ? `${formCount} form(s) and ${liveRegionCount} ARIA live region(s) found. Verify form validation, confirmation, and async updates are announced without moving focus.`
+          : `${formCount} form(s) found but no ARIA live regions detected. This alone is not enough to fail SC 4.1.3, but form validation, confirmation, and async updates should be manually verified.`,
+        helpUrl: HELP_URL,
+      }, ...extraRules],
     };
   }
 

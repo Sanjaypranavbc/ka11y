@@ -106,8 +106,8 @@ async function run(page) {
       ruleId: RULE_ID,
       description: 'Help mechanisms must appear in a consistent location across pages',
       impact: null,
-      status: 'pass',
-      reason: `${helpLinks.length} help link(s)${extrasStr} detected${locationStr}. Verify placement is consistent across all pages of the site.`,
+      status: 'incomplete',
+      reason: `${helpLinks.length} help link(s)${extrasStr} detected${locationStr}. Consistency across pages cannot be confirmed from a single-page scan, so verify the same help mechanisms appear in the same relative order across the site.`,
       helpUrl: HELP_URL,
     }],
   };

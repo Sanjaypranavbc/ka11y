@@ -3,7 +3,11 @@ title: "Combined Audit"
 description: "POST /api/v1/combined/ · GET /api/v1/combined/{job_id} · GET /api/v1/combined/{job_id}/stream · GET /api/v1/combined/{job_id}/image"
 ---
 
-The combined endpoint is the **primary API**. It runs axe-core (Node) and all Python auditors in parallel, merges findings into a single flat list, and exposes job status via REST polling and Server-Sent Events streaming. When OCR is enabled, a `contrast_report` is attached to the result and per-image files can be retrieved via the image endpoint.
+The combined endpoint is the **primary API**. It runs the Node `axe_core` stage and all Python auditors in parallel, merges findings into a single flat list, and exposes job status via REST polling and Server-Sent Events streaming. The Node stage includes raw axe-core results **plus 24 ka11y-node custom checks**. When OCR is enabled, a `contrast_report` is attached to the result and per-image files can be retrieved via the image endpoint.
+
+<Note>
+  Several Node custom checks are intentionally conservative. They return `incomplete` when a single-page heuristic cannot prove a real WCAG failure. Current examples include `1.2.1` transcript heuristics, `3.1.6` pronunciation, `3.2.6` consistent help, some `2.4.8` location signals, and `4.1.3` form-related status-message patterns.
+</Note>
 
 ---
 
@@ -22,7 +26,7 @@ The combined endpoint is the **primary API**. It runs axe-core (Node) and all Py
 </ParamField>
 
 <ParamField body="lang" type="string" default="en">
-  Result language for localized WCAG names and suggested fixes. Use `"ja"` for Japanese (`"en"` and `"de"` are also supported). Unsupported values fall back to English. Default result language is English.
+  Result language for localized WCAG names, suggested fixes, and catalogue-backed fallback reasons. Use `"ja"` for Japanese (`"en"` and `"de"` are also supported). Unsupported values fall back to English. Default result language is English.
 </ParamField>
 
 <ParamField body="run_ocr" type="boolean" default="true">
@@ -372,7 +376,7 @@ Content-Length: 48392
 
 | `stage_name` | WCAG SC | Description |
 |---|---|---|
-| `axe_core` | multiple | Node.js / axe-core WCAG scan |
+| `axe_core` | multiple | Node.js stage combining raw axe-core with 24 shipped Node custom checks |
 | `image_audit` | 1.1.1 | Image alt-text check (OCR-backed) |
 | `form_audit` | 3.3.1, 3.3.2 | Form label and error message check |
 | `label_in_name` | 2.5.3 | Accessible name must contain visible label |

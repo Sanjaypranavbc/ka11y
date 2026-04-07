@@ -91,3 +91,13 @@ def _stage_error_and_warn(job_id: str, name: str, exc: Exception | None) -> None
     logger.warning(f"[combined] {name} stage error: {msg}")
     _stage_error(job_id, name, msg)
     _jobs[job_id].setdefault("warnings", []).append(f"{name}: {msg}")
+
+
+def _stage_warn(job_id: str, message: str) -> None:
+    """Append a degradation warning to the job without changing stage status.
+
+    Use this for partial-success conditions (e.g. partial image set, challenge
+    page detected) where the stage continues but coverage is reduced.
+    """
+    logger.warning(f"[combined] {message}")
+    _jobs[job_id].setdefault("warnings", []).append(message)

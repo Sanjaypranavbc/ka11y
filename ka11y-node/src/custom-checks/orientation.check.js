@@ -16,7 +16,6 @@ const RULE_SUFFIX = {
   'manifest-orientation'     : 'manifest',
   'cross-origin-sheet'       : 'cross-origin-sheet',
   'writing-mode'             : 'writing-mode',
-  'viewport-scale'           : 'viewport-scale',
 };
 
 // Unambiguous violations → 'fail'; heuristic detections → 'incomplete'
@@ -366,24 +365,6 @@ async function run(page) {
         reason: `document.body has writing-mode: ${writingMode}, which forces a vertical (portrait-only) text layout and may restrict orientation.`,
         detail: writingMode,
       });
-    }
-
-    // ═════════════════════════════════════════════════════════════════════════
-    // Check 7 — <meta name="viewport"> maximum-scale=1 (prevents zoom/resize)
-    // ═════════════════════════════════════════════════════════════════════════
-    const viewportMeta = document.querySelector('meta[name="viewport"]');
-    if (viewportMeta) {
-      const content = viewportMeta.getAttribute('content') || '';
-      if (/maximum-scale\s*=\s*1(?:\.0+)?\b/.test(content)) {
-        findings.push({
-          type  : 'viewport-scale',
-          signal: 'viewport-scale',
-          target: 'meta[name="viewport"]',
-          snippet: viewportMeta.outerHTML,
-          reason: `<meta name="viewport"> sets maximum-scale=1, which prevents users from zooming and may compound orientation restrictions.`,
-          detail: content,
-        });
-      }
     }
 
     return findings;

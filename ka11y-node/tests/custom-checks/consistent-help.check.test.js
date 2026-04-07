@@ -15,21 +15,20 @@ describe('consistent-help.check (WCAG 3.2.6)', () => {
     expect(result.rules[0].ruleId).toBe('custom-consistent-help');
   });
 
-  test('passes when help link is detected in footer', async () => {
+  test('returns incomplete when help link is detected in footer', async () => {
     const page = makePage({
       helpLinks: [{ text: 'Contact Us', href: '/contact', inHeader: false, inFooter: true, inNav: false, html: '<a href="/contact">Contact Us</a>' }],
       chatWidget: false,
     });
     const result = await run(page);
-    expect(result.rules[0].status).toBe('pass');
+    expect(result.rules[0].status).toBe('incomplete');
     expect(result.rules[0].reason).toContain('footer');
   });
 
-  test('passes when only a chat widget is present', async () => {
+  test('returns incomplete when only a chat widget is present', async () => {
     const page = makePage({ helpLinks: [], chatWidget: true });
     const result = await run(page);
-    // A chat widget is a valid help mechanism — should pass
-    expect(result.rules[0].status).toBe('pass');
+    expect(result.rules[0].status).toBe('incomplete');
     expect(result.rules[0].reason).toContain('chat widget');
   });
 

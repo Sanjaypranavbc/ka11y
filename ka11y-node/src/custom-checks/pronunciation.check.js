@@ -185,8 +185,8 @@ async function run(page) {
         ruleId: RULE_ID,
         description: 'Pronunciation of words must be determinable where meaning is ambiguous',
         impact: null,
-        status: 'pass',
-        reason: `${rubyCount} <ruby> element(s) found covering ~${rubyPct}% of kanji characters on this ${htmlLang} page. Pronunciation is supported for the majority of CJK text.`,
+        status: 'incomplete',
+        reason: `${rubyCount} <ruby> element(s) found covering ~${rubyPct}% of kanji characters on this ${htmlLang} page. This is positive evidence, but SC 3.1.6 depends on whether ambiguous words have pronunciation support where needed, so manual verification is still required.`,
         helpUrl: HELP_URL,
       }],
     };
@@ -201,13 +201,14 @@ async function run(page) {
         description: 'Pronunciation of words must be determinable where meaning is ambiguous',
         impact: 'moderate',
         status: 'incomplete',
-        reason: `${rubyCount} <ruby> element(s) found but only ~${rubyPct}% of kanji characters are annotated (${kanjiWithRuby}/${kanjiCount}). Consider adding furigana to difficult or ambiguous kanji, especially technical terms and proper nouns.`,
+        reason: `${rubyCount} <ruby> element(s) found but only ~${rubyPct}% of kanji characters are annotated (${kanjiWithRuby}/${kanjiCount}). Consider adding furigana to difficult or ambiguous kanji, especially technical terms and proper nouns, and manually verify that ambiguous pronunciations are covered.`,
         helpUrl: HELP_URL,
       }],
     };
   }
 
-  // No ruby at all on a kanji-heavy page → fail
+  // No ruby at all on a kanji-heavy page is not enough to auto-fail SC 3.1.6.
+  // The criterion is about ambiguous pronunciation, so surface this as manual review.
   const sample = sampleKanji.slice(0, 3).map(s => `"${s}"`).join(', ');
   return {
     successCriteriaId: SC,
@@ -215,8 +216,8 @@ async function run(page) {
       ruleId: RULE_ID,
       description: 'Pronunciation of words must be determinable where meaning is ambiguous',
       impact: 'moderate',
-      status: 'fail',
-      reason: `No <ruby> elements found on this ${htmlLang} page (${cjkDensityPct}% CJK, ${kanjiCount} kanji characters). Difficult or ambiguous kanji cannot be determined by screen reader users. Add <ruby>漢字<rt>かんじ</rt></ruby> for technical terms, proper nouns, and unusual readings. Sample kanji text: ${sample}.`,
+      status: 'incomplete',
+      reason: `No <ruby> elements found on this ${htmlLang} page (${cjkDensityPct}% CJK, ${kanjiCount} kanji characters). This is not enough to auto-fail SC 3.1.6, but ambiguous terms may lack pronunciation support. Manually verify technical terms, proper nouns, and unusual readings. Sample kanji text: ${sample}.`,
       helpUrl: HELP_URL,
     }],
   };

@@ -12,6 +12,51 @@ const MIN_OUTLINE_WIDTH_PX = 2; // Sufficient for area requirement on typical el
 const MAX_ELEMENTS = 30;
 const SETTLE_MS = 80;
 
+function splitBoxShadowLayers(boxShadow) {
+  const layers = [];
+  let current = '';
+  let depth = 0;
+
+  for (const ch of String(boxShadow || '')) {
+    if (ch === '(') depth++;
+    if (ch === ')') depth = Math.max(0, depth - 1);
+
+    if (ch === ',' && depth === 0) {
+      if (current.trim()) layers.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (current.trim()) layers.push(current.trim());
+  return layers;
+}
+
+function extractBoxShadowMetrics(boxShadow) {
+  const layers = splitBoxShadowLayers(boxShadow);
+  let best = { spreadRadius: 0, color: null };
+
+  for (const layer of layers) {
+    const colorMatch = layer.match(/(rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-fA-F]{3,8}|transparent)/i);
+    const lengthsOnly = layer
+      .replace(/rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-fA-F]{3,8}/gi, ' ')
+      .replace(/\binset\b/gi, ' ');
+    const lengthTokens = lengthsOnly.match(/-?[\d.]+(?:px)?/g) || [];
+    const spreadRadius = lengthTokens.length >= 4 ? Math.abs(parseFloat(lengthTokens[3])) : 0;
+
+    if (spreadRadius >= best.spreadRadius) {
+      best = {
+        spreadRadius,
+        color: colorMatch ? colorMatch[0] : best.color,
+      };
+    }
+  }
+
+  return best;
+}
+
 async function run(page) {
   // Snapshot element styles before/after focus in separate evaluate calls
   // to allow the browser to settle between focus state changes.
@@ -169,9 +214,7 @@ async function run(page) {
       meetsAreaReq = areaMet;
     } else if (boxShadowAdded) {
       // Extract spread radius (4th px-length) from box-shadow first layer
-      const firstLayer = (focused.boxShadow || '').split(',')[0];
-      const pxVals = (firstLayer.match(/-?[\d.]+px/g) || []).map(parseFloat);
-      const spreadRadius = pxVals.length >= 4 ? Math.abs(pxVals[3]) : 0;
+      const { spreadRadius } = extractBoxShadowMetrics(focused.boxShadow);
       const borderWidth = parseFloat(focused.borderWidth) || 0;
       const borderChangedForArea = focused.borderWidth !== unfocused.borderWidth;
       const areaMet = outlineWidthPx >= MIN_OUTLINE_WIDTH_PX || spreadRadius >= MIN_OUTLINE_WIDTH_PX || (borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX);
@@ -188,7 +231,12 @@ async function run(page) {
     // B5: when element background is transparent, fall back to the page body background
     // rather than treating transparent as black (which produced wrong contrast ratios).
     let meetsContrast = true; // assume pass if we can't measure
-    const focusColor = hasVisibleOutline ? focused.outlineColor : focused.borderColor;
+    const boxShadowMetrics = boxShadowAdded ? extractBoxShadowMetrics(focused.boxShadow) : { color: null };
+    const focusColor = hasVisibleOutline
+      ? focused.outlineColor
+      : boxShadowAdded
+        ? (boxShadowMetrics.color || focused.borderColor)
+        : focused.borderColor;
     const isTransparent = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
     const bgColor = !isTransparent(focused.backgroundColor)
       ? focused.backgroundColor

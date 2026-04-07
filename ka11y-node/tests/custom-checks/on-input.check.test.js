@@ -5,7 +5,12 @@ const { run } = require('../../src/custom-checks/on-input.check');
 function makePage({ inputs = [], url = 'https://example.com' } = {}) {
   const page = {
     url: jest.fn().mockReturnValue(url),
-    evaluate: jest.fn().mockResolvedValueOnce(inputs).mockResolvedValue(undefined),
+    evaluate: jest.fn().mockImplementation((fn) => {
+      const src = String(fn);
+      if (src.includes('isCheckboxOrRadio')) return Promise.resolve(inputs);
+      if (src.includes('__ka11yOnInputNavState')) return Promise.resolve(false);
+      return Promise.resolve(undefined);
+    }),
     keyboard: { type: jest.fn().mockResolvedValue(), press: jest.fn().mockResolvedValue() },
     on:  jest.fn(),
     off: jest.fn(),
@@ -62,5 +67,14 @@ describe('on-input.check (WCAG 3.2.2)', () => {
     const page = makePage({ inputs: [] });
     const result = await run(page);
     expect(result.rules[0].ruleId).toBe('custom-on-input');
+  });
+
+  test('restores history instrumentation in source cleanup path', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/on-input.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('originalPush');
+    expect(src).toContain('delete window[stateKey]');
   });
 });

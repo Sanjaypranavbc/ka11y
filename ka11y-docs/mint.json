@@ -69,6 +69,7 @@
       "group": "WCAG Rules",
       "pages": [
         "rules/overview",
+        "rules/node-custom-checks",
         "rules/wcag-1-1-1",
         "rules/wcag-1-4-3",
         "rules/wcag-1-4-4",
@@ -100,6 +101,7 @@
         "internals/data-models",
         "internals/sse-events",
         "internals/output-format",
+        "internals/live-ten-site-analysis",
         "internals/config"
       ]
     },

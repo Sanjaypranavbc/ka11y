@@ -174,9 +174,6 @@ describe('focus-appearance.check (WCAG 2.4.13)', () => {
       [[STYLES.noOutline, focused]],
     );
     const result = await runWithTimers(page);
-    // box-shadow change is treated as a focus indicator; should NOT fail with "no-indicator"
-    if (result.rules[0].status === 'fail') {
-      expect(result.rules[0].reason).not.toContain('No visible focus indicator');
-    }
+    expect(result.rules[0].status).toBe('pass');
   });
 });

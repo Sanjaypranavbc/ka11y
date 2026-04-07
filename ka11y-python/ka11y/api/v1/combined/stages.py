@@ -19,8 +19,12 @@ import functools
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from ka11y.crawler.universal_page import PageSnapshot, UniversalPageLoader
+
 # Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
 _STAGE_TIMEOUT_SECONDS = 600
+# Maximum seconds for the universal snapshot (single page load for all crawlers).
+_SNAPSHOT_TIMEOUT_SECONDS = 60
 # Maximum seconds for the crawler pass only.  OCR always runs on whatever
 # images were saved before this deadline, so a slow/stuck target never
 # prevents contrast analysis from completing.
@@ -50,7 +54,7 @@ from .findings import (
     _resize_text_to_findings,
     _ts_to_findings,
 )
-from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
+from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start, _stage_warn
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -118,9 +122,10 @@ async def _stage_image_audit(
         try:
             await asyncio.wait_for(_crawl_and_save(), timeout=_CRAWL_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
-            logger.warning(
-                f"[combined] image_audit: crawler exceeded {_CRAWL_TIMEOUT_SECONDS}s "
-                f"— proceeding with partial image set from {image_crawler.output_dir}"
+            _stage_warn(
+                job_id,
+                f"image_audit: crawler exceeded {_CRAWL_TIMEOUT_SECONDS}s "
+                f"— partial image set from {image_crawler.output_dir}",
             )
 
         ocr_results: list = []
@@ -164,6 +169,7 @@ async def _stage_form_audit(
     max_depth: int,
     run_form_audit: bool,
     job_id: str,
+    snapshot: Optional[PageSnapshot] = None,
 ) -> List[Dict]:
     """Crawl forms → 3.3.1 / 3.3.2 label + error checks."""
     _stage_start(job_id, "form_audit")
@@ -177,10 +183,14 @@ async def _stage_form_audit(
         )
         from ka11y.crawler.forms_crawler import AsyncFormCrawler
 
-        form_crawler = AsyncFormCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth
-        )
-        form_inputs = await form_crawler.crawl()
+        if snapshot is not None:
+            form_crawler = AsyncFormCrawler.from_snapshot(snapshot.forms, url, str(output_dir))
+        else:
+            form_crawler = AsyncFormCrawler(
+                base_url=url, output_dir=str(output_dir), max_depth=max_depth
+            )
+            await form_crawler.crawl()
+        form_inputs = form_crawler.results
         await asyncio.to_thread(form_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -206,6 +216,7 @@ async def _stage_label_in_name(
     max_depth: int,
     run_label_in_name_audit: bool,
     job_id: str,
+    snapshot: Optional[PageSnapshot] = None,
 ) -> List[Dict]:
     """Crawl interactive elements → 2.5.3 label-in-name check."""
     _stage_start(job_id, "label_in_name")
@@ -219,10 +230,14 @@ async def _stage_label_in_name(
         )
         from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
 
-        interactive_crawler = InteractiveElementCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth
-        )
-        interactive_elements = await interactive_crawler.crawl()
+        if snapshot is not None:
+            interactive_crawler = InteractiveElementCrawler.from_snapshot(snapshot.interactive, url, str(output_dir))
+        else:
+            interactive_crawler = InteractiveElementCrawler(
+                base_url=url, output_dir=str(output_dir), max_depth=max_depth
+            )
+            await interactive_crawler.crawl()
+        interactive_elements = interactive_crawler.results
         await asyncio.to_thread(interactive_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -246,6 +261,7 @@ async def _stage_pause_stop_hide(
     max_depth: int,
     run_pause_stop_hide_audit: bool,
     job_id: str,
+    snapshot: Optional[PageSnapshot] = None,
 ) -> List[Dict]:
     """Crawl moving content → 2.2.2 pause/stop/hide check."""
     _stage_start(job_id, "pause_stop_hide")
@@ -259,10 +275,14 @@ async def _stage_pause_stop_hide(
         )
         from ka11y.crawler.moving_content_crawler import MovingContentCrawler
 
-        moving_crawler = MovingContentCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth
-        )
-        moving_items = await moving_crawler.crawl()
+        if snapshot is not None:
+            moving_crawler = MovingContentCrawler.from_snapshot(snapshot.moving_content, url, str(output_dir))
+        else:
+            moving_crawler = MovingContentCrawler(
+                base_url=url, output_dir=str(output_dir), max_depth=max_depth
+            )
+            await moving_crawler.crawl()
+        moving_items = moving_crawler.results
         await asyncio.to_thread(moving_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -286,6 +306,7 @@ async def _stage_target_size(
     max_depth: int,
     run_target_size_audit: bool,
     job_id: str,
+    snapshot: Optional[PageSnapshot] = None,
 ) -> List[Dict]:
     """Crawl touch targets → 2.5.8 target-size check."""
     _stage_start(job_id, "target_size")
@@ -299,10 +320,14 @@ async def _stage_target_size(
         )
         from ka11y.crawler.target_size_crawler import TargetSizeCrawler
 
-        ts_crawler = TargetSizeCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth
-        )
-        ts_items = await ts_crawler.crawl()
+        if snapshot is not None:
+            ts_crawler = TargetSizeCrawler.from_snapshot(snapshot.target_sizes, url, str(output_dir))
+        else:
+            ts_crawler = TargetSizeCrawler(
+                base_url=url, output_dir=str(output_dir), max_depth=max_depth
+            )
+            await ts_crawler.crawl()
+        ts_items = ts_crawler.results
         await asyncio.to_thread(ts_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -326,6 +351,7 @@ async def _stage_text_spacing(
     max_depth: int,
     run_text_spacing_audit: bool,
     job_id: str,
+    snapshot: Optional[PageSnapshot] = None,
 ) -> List[Dict]:
     """Crawl fixed-height/overflow elements → 1.4.12 text-spacing check."""
     _stage_start(job_id, "text_spacing")
@@ -339,10 +365,14 @@ async def _stage_text_spacing(
         )
         from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
 
-        ts_crawler = AsyncTextSpacingCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth
-        )
-        items = await ts_crawler.crawl()
+        if snapshot is not None:
+            ts_crawler = AsyncTextSpacingCrawler.from_snapshot(snapshot.text_spacing, url, str(output_dir))
+        else:
+            ts_crawler = AsyncTextSpacingCrawler(
+                base_url=url, output_dir=str(output_dir), max_depth=max_depth
+            )
+            await ts_crawler.crawl()
+        items = ts_crawler.results
         await asyncio.to_thread(ts_crawler.save_json)
 
         findings: List[Dict] = []
@@ -369,6 +399,7 @@ async def _stage_rendered_layout_audit(
     run_focus_not_obscured_min_audit: bool,
     run_focus_not_obscured_enh_audit: bool,
     job_id: str,
+    har_path: Optional[str] = None,
 ) -> List[Dict]:
     """
     Rendered-layout audit stage: Playwright scenarios for
@@ -395,7 +426,7 @@ async def _stage_rendered_layout_audit(
             run_all_evaluators,
         )
 
-        crawler = RenderedLayoutCrawler(base_url=url, output_dir=str(output_dir))
+        crawler = RenderedLayoutCrawler(base_url=url, output_dir=str(output_dir), har_path=har_path)
         raw = await crawler.crawl()
         await asyncio.to_thread(crawler.save_raw_json)
 
@@ -460,6 +491,7 @@ async def _stage_media_audit(
     max_depth: int,
     run_media_audit: bool,
     job_id: str,
+    snapshot: Optional[PageSnapshot] = None,
 ) -> List[Dict]:
     """Crawl media elements → 1.2.1 audio-only / video-only check."""
     _stage_start(job_id, "media_audit")
@@ -471,10 +503,14 @@ async def _stage_media_audit(
         from ka11y.accessibility.rules.media.media_auditor import MediaAuditor
         from ka11y.crawler.media_crawler import AsyncMediaCrawler
 
-        media_crawler = AsyncMediaCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth
-        )
-        media_items = await media_crawler.crawl()
+        if snapshot is not None:
+            media_crawler = AsyncMediaCrawler.from_snapshot(snapshot.media, url, str(output_dir))
+        else:
+            media_crawler = AsyncMediaCrawler(
+                base_url=url, output_dir=str(output_dir), max_depth=max_depth
+            )
+            await media_crawler.crawl()
+        media_items = media_crawler.results
         await asyncio.to_thread(media_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -519,41 +555,63 @@ async def _run_python_stages(
     lang: str = "en",
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
-    Run all Python audit stages concurrently (6 total).
+    Run all Python audit stages concurrently.
+
+    Phase 1: Universal snapshot — ONE page load feeds all static crawlers.
+    Phase 2: All audit stages run concurrently; snapshot-backed stages skip
+             their own browser launch; rendered_layout_audit replays from HAR.
 
     Returns (all_findings, contrast_report).
     """
+
+    # Phase 1: Universal snapshot (single page load)
+    snapshot: Optional[PageSnapshot] = None
+    har_path: Optional[str] = None
+    try:
+        snapshot = await asyncio.wait_for(
+            UniversalPageLoader.load(url=url, output_dir=Path(output_dir), record_har=True),
+            timeout=_SNAPSHOT_TIMEOUT_SECONDS,
+        )
+        har_path = snapshot.har_path
+        logger.info(f"[stages] universal snapshot complete for {url}")
+        # Propagate any challenge/interstitial warnings from the snapshot loader
+        for w in snapshot.warnings:
+            _stage_warn(job_id, f"universal_snapshot: {w}")
+    except Exception as exc:
+        logger.warning(f"[stages] universal snapshot failed ({exc}); falling back to individual crawlers")
+        _stage_warn(job_id, f"universal_snapshot: failed — {exc}")
 
     # Each stage is wrapped with asyncio.wait_for so that a slow/unresponsive
     # target cannot hold a Playwright browser instance indefinitely (D2).
     def _timed(coro):
         return asyncio.wait_for(coro, timeout=_STAGE_TIMEOUT_SECONDS)
 
+    # Phase 2: All stages concurrently
     results = await asyncio.gather(
         _timed(
             _stage_image_audit(
                 url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang
             )
         ),
-        _timed(_stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id)),
+        _timed(_stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id, snapshot=snapshot)),
         _timed(
             _stage_label_in_name(
-                url, output_dir, max_depth, run_label_in_name_audit, job_id
+                url, output_dir, max_depth, run_label_in_name_audit, job_id, snapshot=snapshot
             )
         ),
         _timed(
             _stage_pause_stop_hide(
-                url, output_dir, max_depth, run_pause_stop_hide_audit, job_id
+                url, output_dir, max_depth, run_pause_stop_hide_audit, job_id, snapshot=snapshot
             )
         ),
         _timed(
             _stage_target_size(
-                url, output_dir, max_depth, run_target_size_audit, job_id
+                url, output_dir, max_depth, run_target_size_audit, job_id, snapshot=snapshot
             )
         ),
         _timed(
             _stage_text_spacing(
-                url, output_dir, max_depth, run_text_spacing_audit, job_id
+                url, output_dir, max_depth, run_text_spacing_audit, job_id, snapshot=snapshot
             )
         ),
         _timed(
@@ -568,11 +626,12 @@ async def _run_python_stages(
                 run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit,
                 job_id,
+                har_path=har_path,
             )
         ),
         _timed(
             _stage_media_audit(
-                url, output_dir, max_depth, run_media_audit, job_id
+                url, output_dir, max_depth, run_media_audit, job_id, snapshot=snapshot
             )
         ),
         return_exceptions=True,

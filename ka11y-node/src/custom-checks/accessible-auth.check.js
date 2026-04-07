@@ -6,6 +6,19 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/accessible-authent
 
 async function run(page) {
   const data = await page.evaluate(() => {
+    function authScopeFor(form) {
+      return form.closest(
+        'dialog, [role="dialog"], [data-auth], [class*="auth" i], [class*="login" i], [class*="signin" i], [class*="signup" i], section, article'
+      ) || form;
+    }
+
+    function formLabel(form) {
+      if (form.id) return `form#${form.id}`;
+      const name = (form.getAttribute('name') || '').trim();
+      if (name) return `form[name="${name}"]`;
+      return 'authentication form';
+    }
+
     const forms = Array.from(document.querySelectorAll('form'));
     const authForms = forms.filter(form => {
       const hasPassword = !!form.querySelector('input[type="password"]');
@@ -20,35 +33,38 @@ async function run(page) {
     const issues = [];
 
     for (const form of authForms) {
+      const authScope = authScopeFor(form);
+      const currentFormLabel = formLabel(form);
+
       // 1. Detect CAPTCHA presence
       const hasCaptchaImg = !!(
-        form.querySelector('img[src*="captcha" i], img[alt*="captcha" i]') ||
-        form.querySelector('[class*="captcha" i], [id*="captcha" i]')
+        authScope.querySelector('img[src*="captcha" i], img[alt*="captcha" i]') ||
+        authScope.querySelector('[class*="captcha" i], [id*="captcha" i]')
       );
       // N10 fix: require multiple independent signals before flagging reCAPTCHA/hCaptcha.
       // [data-sitekey] alone is too broad — it's used by many non-CAPTCHA widgets.
       // Require either a recognisable CAPTCHA class/iframe OR data-sitekey combined with class context.
       const hasReCaptcha = !!(
-        document.querySelector('iframe[src*="recaptcha" i]') ||
-        document.querySelector('[class*="g-recaptcha" i]') ||
-        document.querySelector('[data-sitekey][class*="captcha" i], [data-sitekey][class*="recaptcha" i]') ||
+        authScope.querySelector('iframe[src*="recaptcha" i]') ||
+        authScope.querySelector('[class*="g-recaptcha" i]') ||
+        authScope.querySelector('[data-sitekey][class*="captcha" i], [data-sitekey][class*="recaptcha" i]') ||
         // hCaptcha
-        document.querySelector('[class*="h-captcha" i], [data-hcaptcha-widget-id]') ||
-        document.querySelector('[data-sitekey][class*="hcaptcha" i]')
+        authScope.querySelector('[class*="h-captcha" i], [data-hcaptcha-widget-id]') ||
+        authScope.querySelector('[data-sitekey][class*="hcaptcha" i]')
       );
       // Cloudflare Turnstile
-      const hasTurnstile = !!document.querySelector('.cf-turnstile, [data-cf-turnstile]');
+      const hasTurnstile = !!authScope.querySelector('.cf-turnstile, [data-cf-turnstile]');
       const hasAnyCaptcha = hasCaptchaImg || hasReCaptcha || hasTurnstile;
 
       // Bug fix: Expanded audio alternative detection
       const hasCaptchaAlt = !!(
         // Standard audio CAPTCHA button/link
-        document.querySelector('[class*="captcha-audio" i], [id*="audio-captcha" i]') ||
-        document.querySelector('button[aria-label*="audio" i], a[aria-label*="audio" i], button[aria-label*="音声" i], a[aria-label*="音声" i]') ||
+        authScope.querySelector('[class*="captcha-audio" i], [id*="audio-captcha" i]') ||
+        authScope.querySelector('button[aria-label*="audio" i], a[aria-label*="audio" i], button[aria-label*="音声" i], a[aria-label*="音声" i]') ||
         // reCAPTCHA's built-in audio button (class is obfuscated but aria-label is stable)
-        document.querySelector('[title*="audio" i][title*="captcha" i], [title*="音声" i]') ||
+        authScope.querySelector('[title*="audio" i][title*="captcha" i], [title*="音声" i]') ||
         // Links offering alternative text/audio
-        Array.from(document.querySelectorAll('a, button')).some(el => {
+        Array.from(authScope.querySelectorAll('a, button, [role="button"], [role="link"]')).some(el => {
           const text = (el.textContent || '').trim().toLowerCase();
           const label = (el.getAttribute('aria-label') || '').toLowerCase();
           return /audio|音声|can.?t\s+read|読み取れない|different\s+image|別の画像|refresh\s+captcha|画像を更新|alternative|別の方法|try\s+another|別の認証/i.test(text + label);
@@ -78,14 +94,14 @@ async function run(page) {
         /what\s+is\s+\d+\s*[\+\-\*×÷]\s*\d+|solve\s+the\s+(puzzle|equation|problem)|enter\s+the\s+(word|text|code|letters?|numbers?)\s+(you\s+see|shown|above|below|in\s+the\s+(image|picture))|answer\s+the\s+(question|challenge)|what\s+(color|colour|shape)\s+is|\d+\s*[\+\-\*×÷]\s*\d+|計算|問題を解|パズル|クイズ|画像に表示|表示された文字|見える文字|質問に答|何色|どの色|どの形/i.test(formText);
 
       // Passkey/WebAuthn alternative detection
-      const hasPasskeyOption = Array.from(document.querySelectorAll('button, a')).some(el =>
+      const hasPasskeyOption = Array.from(authScope.querySelectorAll('button, a, [role="button"], [role="link"]')).some(el =>
         /passkey|webauthn|biometric|fingerprint|face\s*id/i.test(el.textContent + (el.getAttribute('aria-label') || ''))
       );
 
       if (hasAnyCaptcha && !hasCaptchaAlt && !hasPasskeyOption) {
         issues.push({
           type: 'captcha-no-alternative',
-          detail: `CAPTCHA detected (${hasTurnstile ? 'Cloudflare Turnstile' : hasReCaptcha ? 'reCAPTCHA/hCaptcha' : 'image CAPTCHA'}) without a detectable audio or accessible alternative.`,
+          detail: `${currentFormLabel}: CAPTCHA detected (${hasTurnstile ? 'Cloudflare Turnstile' : hasReCaptcha ? 'reCAPTCHA/hCaptcha' : 'image CAPTCHA'}) without a detectable audio or accessible alternative.`,
         });
       }
       // If a passkey/WebAuthn option is available it provides an accessible authentication
@@ -94,13 +110,13 @@ async function run(page) {
         if (blocksCopyPaste) {
           issues.push({
             type: 'paste-blocked',
-            detail: 'Password field has inline onpaste/oncopy handler that blocks pasting, preventing use of password managers.',
+            detail: `${currentFormLabel}: password field blocks paste, preventing use of password managers.`,
           });
         }
         if (hasCognitiveTest) {
           issues.push({
             type: 'cognitive-test',
-            detail: 'Authentication appears to require solving a cognitive puzzle (math, riddle, or visual challenge) without a detectable accessible alternative.',
+            detail: `${currentFormLabel}: authentication appears to require solving a cognitive puzzle (math, riddle, or visual challenge) without a detectable accessible alternative.`,
           });
         }
       }

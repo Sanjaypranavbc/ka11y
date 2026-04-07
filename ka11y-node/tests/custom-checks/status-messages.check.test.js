@@ -8,22 +8,31 @@ function makePage(data) {
 
 describe('status-messages.check (WCAG 4.1.3)', () => {
   test('passes when live regions exist and no unprotected dynamic contexts', async () => {
-    // needsLiveRegions is falsy → all dynamic contexts are covered by live regions
-    const page = makePage({ liveRegionCount: 2, formCount: 1, hasAlerts: true, hasPolite: true, needsLiveRegions: false, dynamicContexts: [] });
+    const page = makePage({ liveRegionCount: 2, formCount: 0, hasAlerts: true, hasPolite: true, needsLiveRegions: false, dynamicContexts: [] });
     const result = await run(page);
     expect(result.successCriteriaId).toBe('4.1.3');
     expect(result.rules[0].status).toBe('pass');
   });
 
-  test('fails when forms exist but no live regions', async () => {
+  test('returns incomplete when forms exist but no live regions', async () => {
     const page = makePage({
       liveRegionCount: 0, formCount: 2, hasAlerts: false, hasPolite: false,
-      needsLiveRegions: true, dynamicContexts: ['2 form(s)'],
+      needsLiveRegions: false, dynamicContexts: [],
     });
     const result = await run(page);
-    expect(result.rules[0].status).toBe('fail');
-    expect(result.rules[0].impact).toBe('serious');
+    expect(result.rules[0].status).toBe('incomplete');
+    expect(result.rules[0].impact).toBe('moderate');
     expect(result.rules[0].reason).toMatch('2 form');
+  });
+
+  test('returns incomplete when forms and live regions exist but runtime wiring is unknown', async () => {
+    const page = makePage({
+      liveRegionCount: 1, formCount: 1, hasAlerts: false, hasPolite: true,
+      needsLiveRegions: false, dynamicContexts: [],
+    });
+    const result = await run(page);
+    expect(result.rules[0].status).toBe('incomplete');
+    expect(result.rules[0].reason).toContain('Verify form validation');
   });
 
   test('fails when notification area exists but no live regions', async () => {
@@ -118,5 +127,13 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
     expect(src).toContain('検索結果');
     expect(src).toContain('未読');
     expect(src).toContain('カート');
+  });
+
+  test('does not require explicit aria-atomic on role="alert"', () => {
+    const src = require('fs').readFileSync(
+      require('path').resolve(__dirname, '../../src/custom-checks/status-messages.check.js'),
+      'utf8'
+    );
+    expect(src).toContain('[aria-live="assertive"]:not([role="alert"])');
   });
 });

@@ -17,7 +17,7 @@ import contextvars
 from typing import Any, Dict, List, Optional
 
 from ka11y.config.logger import setup_logger
-from ka11y.i18n.loader import get_suggested_fixes, get_wcag_names
+from ka11y.i18n.loader import get_suggested_fixes, get_wcag_descriptions, get_wcag_names
 
 from .constants import _PYTHON_SEVERITY, _WCAG_LEVEL
 
@@ -49,7 +49,7 @@ def _make_finding(
     _lang = _lang_ctx.get()
     wcag_names = get_wcag_names(_lang)
     suggested_fixes = get_suggested_fixes(_lang)
-    has_element_data = bool((element_html or "").strip() or element_id or element_tag)
+    pass_has_element_data = bool((element_html or "").strip() or element_id)
     if is_pass:
         element = (
             {
@@ -58,7 +58,7 @@ def _make_finding(
                 "tag": element_tag,
                 "page_url": page_url,
             }
-            if has_element_data
+            if pass_has_element_data
             else None
         )
     else:
@@ -82,6 +82,12 @@ def _make_finding(
         "help_url": None,
         "element": element,
     }
+
+
+def _catalog_reason(wcag_sc: str, fallback: str) -> str:
+    """Use the rule catalogue description as the localised fallback reason."""
+    description = get_wcag_descriptions(_lang_ctx.get()).get(wcag_sc, "").strip()
+    return description or fallback
 
 
 def _is_incomplete_reason(reason: str) -> bool:
@@ -270,7 +276,9 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     rule_id="python_1_1_1_alt",
                     wcag_sc="1.1.1",
                     status="fail",
-                    reason=reason or "Image missing adequate alt text.",
+                    reason=reason or _catalog_reason(
+                        "1.1.1", "Image missing adequate alt text."
+                    ),
                     severity=_PYTHON_SEVERITY["1.1.1"],
                     element_html=element_html,
                     element_id=element_id,
@@ -285,7 +293,9 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     rule_id="python_1_1_1_alt",
                     wcag_sc="1.1.1",
                     status="pass",
-                    reason=reason or "Image has adequate alt text.",
+                    reason=reason or _catalog_reason(
+                        "1.1.1", "Image has adequate alt text."
+                    ),
                     severity=None,
                     element_html=element_html,
                     element_id=element_id,
@@ -319,7 +329,10 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     wcag_sc="4.1.2",
                     status="fail",
                     reason=reason
-                    or "Functional image is missing a meaningful accessible name.",
+                    or _catalog_reason(
+                        "4.1.2",
+                        "Functional image is missing a meaningful accessible name.",
+                    ),
                     severity=sev,
                     element_html=element_html,
                     element_id=element_id,
@@ -335,7 +348,10 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     wcag_sc="4.1.2",
                     status="pass",
                     reason=reason
-                    or "Functional image has a meaningful accessible name.",
+                    or _catalog_reason(
+                        "4.1.2",
+                        "Functional image has a meaningful accessible name.",
+                    ),
                     severity=None,
                     element_html=element_html,
                     element_id=element_id,
@@ -605,7 +621,10 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     wcag_sc="1.4.5",
                     status="fail",
                     reason=reason
-                    or "Image contains text — replace with real CSS-styled text.",
+                    or _catalog_reason(
+                        "1.4.5",
+                        "Image contains text — replace with real CSS-styled text.",
+                    ),
                     severity=sev,
                     element_html=element_html,
                     element_id=element_id,
@@ -621,7 +640,10 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     wcag_sc="1.4.5",
                     status="pass",
                     reason=reason
-                    or "Image does not contain text (or logo exception applies).",
+                    or _catalog_reason(
+                        "1.4.5",
+                        "Image does not contain text (or logo exception applies).",
+                    ),
                     severity=None,
                     element_html=element_html,
                     element_id=element_id,
@@ -658,7 +680,10 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     wcag_sc="1.4.11",
                     status="needs_review",
                     reason=reason
-                    or "UI component contrast could not be verified automatically.",
+                    or _catalog_reason(
+                        "1.4.11",
+                        "UI component contrast could not be verified automatically.",
+                    ),
                     severity=sev,
                     element_html=element_html,
                     element_id=element_id,
@@ -674,7 +699,10 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     wcag_sc="1.4.11",
                     status="fail",
                     reason=reason
-                    or "UI component contrast ratio is below 3:1 minimum.",
+                    or _catalog_reason(
+                        "1.4.11",
+                        "UI component contrast ratio is below 3:1 minimum.",
+                    ),
                     severity=sev,
                     element_html=element_html,
                     element_id=element_id,
@@ -689,7 +717,9 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     rule_id="python_1_4_11_non_text_contrast",
                     wcag_sc="1.4.11",
                     status="pass",
-                    reason=reason or "UI component meets 3:1 contrast ratio.",
+                    reason=reason or _catalog_reason(
+                        "1.4.11", "UI component meets 3:1 contrast ratio."
+                    ),
                     severity=None,
                     element_html=element_html,
                     element_id=element_id,
@@ -728,7 +758,7 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                         wcag_sc=sc,
                         status="fail",
                         reason=r.get(violation_key)
-                        or f"Form field violates WCAG {sc}.",
+                        or _catalog_reason(sc, f"Form field violates WCAG {sc}."),
                         severity=_PYTHON_SEVERITY[sc],
                         element_html=html,
                         element_id=eid,
@@ -743,7 +773,7 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                         rule_id=rule_id,
                         wcag_sc=sc,
                         status="pass",
-                        reason=f"Form field meets WCAG {sc}.",
+                        reason=_catalog_reason(sc, f"Form field meets WCAG {sc}."),
                         severity=None,
                         element_html=html,
                         element_id=eid,
@@ -768,7 +798,9 @@ def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     wcag_sc="2.5.3",
                     status="fail",
                     reason=r.get("wcag_2_5_3_violation")
-                    or "Accessible name does not contain visible label.",
+                    or _catalog_reason(
+                        "2.5.3", "Accessible name does not contain visible label."
+                    ),
                     severity=_PYTHON_SEVERITY["2.5.3"],
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -783,7 +815,9 @@ def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     rule_id="python_2_5_3_label_in_name",
                     wcag_sc="2.5.3",
                     status="pass",
-                    reason="Accessible name contains the visible label.",
+                    reason=_catalog_reason(
+                        "2.5.3", "Accessible name contains the visible label."
+                    ),
                     severity=None,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -806,7 +840,9 @@ def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     wcag_sc="2.2.2",
                     status="fail",
                     reason=r.get("wcag_2_2_2_violation")
-                    or "Auto-playing content has no pause/stop mechanism.",
+                    or _catalog_reason(
+                        "2.2.2", "Auto-playing content has no pause/stop mechanism."
+                    ),
                     severity=_PYTHON_SEVERITY["2.2.2"],
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -821,7 +857,10 @@ def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     rule_id="python_2_2_2_pause_stop_hide",
                     wcag_sc="2.2.2",
                     status="pass",
-                    reason="Moving content has a pause/stop mechanism or exception applies.",
+                    reason=_catalog_reason(
+                        "2.2.2",
+                        "Moving content has a pause/stop mechanism or exception applies.",
+                    ),
                     severity=None,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -901,7 +940,8 @@ def _rendered_rule_to_findings(
                     rule_id=rule_id,
                     wcag_sc=wcag_sc,
                     status="fail",
-                    reason=violation or f"Page violates WCAG {wcag_sc}.",
+                    reason=violation
+                    or _catalog_reason(wcag_sc, f"Page violates WCAG {wcag_sc}."),
                     severity=sev,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -916,7 +956,10 @@ def _rendered_rule_to_findings(
                     rule_id=rule_id,
                     wcag_sc=wcag_sc,
                     status="needs_review",
-                    reason=violation or f"WCAG {wcag_sc} requires manual review.",
+                    reason=violation
+                    or _catalog_reason(
+                        wcag_sc, f"WCAG {wcag_sc} requires manual review."
+                    ),
                     severity=sev,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -931,7 +974,7 @@ def _rendered_rule_to_findings(
                     rule_id=rule_id,
                     wcag_sc=wcag_sc,
                     status="pass",
-                    reason=pass_reason,
+                    reason=_catalog_reason(wcag_sc, pass_reason),
                     severity=None,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -980,7 +1023,10 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     rule_id="python_1_4_12_text_spacing_static",
                     wcag_sc="1.4.12",
                     status="fail",
-                    reason=violation or "Element clips text after spacing overrides.",
+                    reason=violation
+                    or _catalog_reason(
+                        "1.4.12", "Element clips text after spacing overrides."
+                    ),
                     severity=sev,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -996,7 +1042,10 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     wcag_sc="1.4.12",
                     status="needs_review",
                     reason=violation
-                    or "Fixed height with overflow hidden may clip text when spacing increases.",
+                    or _catalog_reason(
+                        "1.4.12",
+                        "Fixed height with overflow hidden may clip text when spacing increases.",
+                    ),
                     severity=sev,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -1012,7 +1061,10 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     wcag_sc="1.4.12",
                     status="needs_review",
                     reason=violation
-                    or "Fixed height detected. Verify text does not clip when spacing increases.",
+                    or _catalog_reason(
+                        "1.4.12",
+                        "Fixed height detected. Verify text does not clip when spacing increases.",
+                    ),
                     severity=sev,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -1027,7 +1079,9 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     rule_id="python_1_4_12_text_spacing_static",
                     wcag_sc="1.4.12",
                     status="pass",
-                    reason="No fixed-height/overflow-hidden clipping risk detected.",
+                    reason=_catalog_reason(
+                        "1.4.12", "No fixed-height/overflow-hidden clipping risk detected."
+                    ),
                     severity=None,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -1114,7 +1168,9 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     wcag_sc="1.2.1",
                     status="fail",
                     reason=r.get("wcag_1_2_1_violation")
-                    or "No text alternative for prerecorded media.",
+                    or _catalog_reason(
+                        "1.2.1", "No text alternative for prerecorded media."
+                    ),
                     severity=_PYTHON_SEVERITY.get("1.2.1", "critical"),
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -1130,7 +1186,9 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     wcag_sc="1.2.1",
                     status="needs_review",
                     reason=r.get("wcag_1_2_1_violation")
-                    or "Manual review required for transcript quality.",
+                    or _catalog_reason(
+                        "1.2.1", "Manual review required for transcript quality."
+                    ),
                     severity=_PYTHON_SEVERITY.get("1.2.1", "critical"),
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),
@@ -1145,7 +1203,10 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     rule_id="python_1_2_1_media",
                     wcag_sc="1.2.1",
                     status="pass",
-                    reason="Prerecorded media has an equivalent text alternative.",
+                    reason=_catalog_reason(
+                        "1.2.1",
+                        "Prerecorded media has an equivalent text alternative.",
+                    ),
                     severity=None,
                     element_html=r.get("html_snippet", ""),
                     element_id=r.get("element_id"),

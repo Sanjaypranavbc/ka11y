@@ -35,6 +35,7 @@ from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
 from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.universal_page import navigate_with_retry
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="media_crawler")
@@ -301,6 +302,19 @@ class AsyncMediaCrawler:
         )
         return self.results
 
+    @classmethod
+    def from_snapshot(cls, snapshot_media: list, page_url: str, output_dir: str) -> "AsyncMediaCrawler":
+        """Populate from a pre-crawled PageSnapshot instead of launching a browser."""
+        instance = cls.__new__(cls)
+        instance.base_url = page_url
+        instance.output_dir = Path(output_dir)
+        instance.max_depth = 0
+        instance._visited = {page_url}
+        instance.output_dir.mkdir(parents=True, exist_ok=True)
+        from ka11y.crawler.media_crawler import MediaElementData
+        instance.results = [MediaElementData(page_url=page_url, **item) for item in snapshot_media]
+        return instance
+
     def save_raw_json(self) -> str:
         """Persist raw crawler results to media_raw.json for debugging."""
         path = self.output_dir / "media_raw.json"
@@ -319,15 +333,7 @@ class AsyncMediaCrawler:
 
         page = await context.new_page()
         try:
-            # Retry pattern — same as MovingContentCrawler
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            except Exception:
-                try:
-                    await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                except Exception:
-                    await page.goto(url, wait_until="commit", timeout=15_000)
-
+            await navigate_with_retry(page, url)
             # Wait for JS-driven media players to initialise
             await page.wait_for_timeout(2000)
 

@@ -7,12 +7,14 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/audio-only-and-vid
 async function run(page) {
   const data = await page.evaluate(() => {
     const audioEls = Array.from(document.querySelectorAll('audio'));
-    if (audioEls.length === 0) return { audioCount: 0, issues: [] };
+    if (audioEls.length === 0) return { audioCount: 0, issues: [], trackOnlyCount: 0 };
 
     const issues = [];
+    let trackOnlyCount = 0;
 
     for (const audio of audioEls) {
-      // 1. <track> element inside <audio> (captions or descriptions)
+      // <track> can help with captions/subtitles, but for audio-only content it does not
+      // replace the transcript requirement under SC 1.2.1.
       const hasTrack = !!audio.querySelector(
         'track[kind="captions"], track[kind="descriptions"], track[kind="subtitles"]'
       );
@@ -48,16 +50,25 @@ async function run(page) {
         return !!target && (target.textContent || '').trim().length > 0;
       });
 
-      if (!hasTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription) {
+      const hasTranscriptEvidence =
+        transcriptLinks.length > 0 ||
+        hasFigCaption ||
+        hasDetailsTranscript ||
+        hasAriaDescription;
+
+      if (hasTrack && !hasTranscriptEvidence) trackOnlyCount++;
+
+      if (!hasTranscriptEvidence) {
         issues.push({
           html: audio.outerHTML.slice(0, 150),
           id: audio.id || null,
           src: (audio.getAttribute('src') || audio.querySelector('source')?.getAttribute('src') || '').slice(0, 80),
+          hasTrack,
         });
       }
     }
 
-    return { audioCount: audioEls.length, issues };
+    return { audioCount: audioEls.length, issues, trackOnlyCount };
   });
 
   if (data.audioCount === 0) {
@@ -82,7 +93,7 @@ async function run(page) {
         description: 'Audio-only prerecorded content must have a text alternative',
         impact: null,
         status: 'pass',
-        reason: `${data.audioCount} <audio> element(s) checked — all appear to have a text alternative (track element, nearby transcript link, figcaption, or aria-describedby).`,
+        reason: `${data.audioCount} <audio> element(s) checked — all appear to have transcript evidence (nearby transcript link, figcaption, transcript details, or aria-describedby text).`,
         helpUrl: HELP_URL,
       }],
     };
@@ -100,7 +111,7 @@ async function run(page) {
       description: 'Audio-only prerecorded content must have a text alternative',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable text alternative (no <track>, no nearby transcript link, no <figcaption>, no aria-describedby). Provide a full text transcript adjacent to each: ${elementList}.`,
+      reason: `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable transcript evidence (no nearby transcript link, no <figcaption>, no transcript details block, no aria-describedby text).${data.trackOnlyCount > 0 ? ` ${data.trackOnlyCount} rely only on <track> elements, which do not replace a full transcript for audio-only content.` : ''} Provide a full text transcript adjacent to each: ${elementList}.`,
       helpUrl: HELP_URL,
     }],
   };

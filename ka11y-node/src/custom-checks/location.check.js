@@ -45,7 +45,8 @@ async function run(page) {
       }
     }
 
-    const hasLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasSiteMap || hasAriaCurrentStep || hasJsonLdBreadcrumb;
+    const hasVisibleLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasAriaCurrentStep;
+    const hasWeakLocationIndicator = hasSiteMap || hasJsonLdBreadcrumb;
 
     return {
       hasBreadcrumb,
@@ -54,18 +55,17 @@ async function run(page) {
       hasSiteMap,
       hasAriaCurrentStep,
       hasJsonLdBreadcrumb,
-      hasLocationIndicator,
+      hasVisibleLocationIndicator,
+      hasWeakLocationIndicator,
     };
   });
 
-  if (data.hasLocationIndicator) {
+  if (data.hasVisibleLocationIndicator) {
     const mechanisms = [
       data.hasBreadcrumb && 'breadcrumb navigation',
       data.hasAriaCurrent && 'aria-current="page"',
       data.hasActiveNavItem && 'active navigation item',
-      data.hasSiteMap && 'sitemap link',
       data.hasAriaCurrentStep && 'aria-current="step"',
-      data.hasJsonLdBreadcrumb && 'JSON-LD BreadcrumbList',
     ].filter(Boolean).join(', ');
 
     return {
@@ -76,6 +76,25 @@ async function run(page) {
         impact: null,
         status: 'pass',
         reason: `Location indicator(s) detected: ${mechanisms}.`,
+        helpUrl: HELP_URL,
+      }],
+    };
+  }
+
+  if (data.hasWeakLocationIndicator) {
+    const weakMechanisms = [
+      data.hasSiteMap && 'sitemap link',
+      data.hasJsonLdBreadcrumb && 'JSON-LD BreadcrumbList',
+    ].filter(Boolean).join(', ');
+
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'Users must be able to determine their location within a set of web pages',
+        impact: 'moderate',
+        status: 'incomplete',
+        reason: `Only indirect location signals were detected (${weakMechanisms}). Provide a user-visible current-location cue such as breadcrumb navigation, aria-current="page", or a clearly marked current step.`,
         helpUrl: HELP_URL,
       }],
     };

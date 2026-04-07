@@ -35,7 +35,11 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
+from ka11y.config.logger import setup_logger
 from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.universal_page import navigate_with_retry
+
+logger = setup_logger(name="KAC", tag="target_size_crawler")
 
 
 class TargetSizeData(BaseModel):
@@ -304,10 +308,7 @@ class TargetSizeCrawler:
 
         page = await context.new_page()
         try:
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            except Exception:
-                await page.goto(url, wait_until="commit", timeout=15_000)
+            await navigate_with_retry(page, url)
             await page.wait_for_timeout(2000)
 
             raw: list = await page.evaluate(self.EXTRACT_JS)
@@ -327,9 +328,22 @@ class TargetSizeCrawler:
                         await self._crawl_page(context, href, depth + 1)
 
         except Exception as exc:
-            print(f"[TargetSizeCrawler] Error on {url}: {exc}")
+            logger.error(f"[target_size_crawler] Error on {url}: {exc}")
         finally:
             await page.close()
+
+    @classmethod
+    def from_snapshot(cls, snapshot_target_sizes: list, page_url: str, output_dir: str) -> "TargetSizeCrawler":
+        """Populate from a pre-crawled PageSnapshot instead of launching a browser."""
+        instance = cls.__new__(cls)
+        instance.base_url = page_url
+        instance.output_dir = Path(output_dir)
+        instance.max_depth = 0
+        instance.visited = {page_url}
+        instance.output_dir.mkdir(parents=True, exist_ok=True)
+        from ka11y.crawler.target_size_crawler import TargetSizeData
+        instance.results = [TargetSizeData(page_url=page_url, **item) for item in snapshot_target_sizes]
+        return instance
 
     def save_raw_json(self) -> str:
         path = self.output_dir / "target_size_raw.json"
