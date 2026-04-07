@@ -557,29 +557,43 @@ async def _run_python_stages(
     """
     Run all Python audit stages concurrently.
 
-    Phase 1: Universal snapshot — ONE page load feeds all static crawlers.
+    Phase 1: Universal snapshot — only in single-page mode (`max_depth == 0`).
+             Multi-page runs must use the real crawlers so depth-aware link
+             traversal is preserved.
     Phase 2: All audit stages run concurrently; snapshot-backed stages skip
-             their own browser launch; rendered_layout_audit replays from HAR.
+             their own browser launch when single-page mode is active;
+             rendered_layout_audit replays from HAR when available.
 
     Returns (all_findings, contrast_report).
     """
 
-    # Phase 1: Universal snapshot (single page load)
+    # Phase 1: Universal snapshot (single page load only)
     snapshot: Optional[PageSnapshot] = None
     har_path: Optional[str] = None
-    try:
-        snapshot = await asyncio.wait_for(
-            UniversalPageLoader.load(url=url, output_dir=Path(output_dir), record_har=True),
-            timeout=_SNAPSHOT_TIMEOUT_SECONDS,
+    if max_depth == 0:
+        try:
+            snapshot = await asyncio.wait_for(
+                UniversalPageLoader.load(
+                    url=url, output_dir=Path(output_dir), record_har=True
+                ),
+                timeout=_SNAPSHOT_TIMEOUT_SECONDS,
+            )
+            har_path = snapshot.har_path
+            logger.info(f"[stages] universal snapshot complete for {url}")
+            # Propagate any challenge/interstitial warnings from the snapshot loader
+            for w in snapshot.warnings:
+                _stage_warn(job_id, f"universal_snapshot: {w}")
+        except Exception as exc:
+            logger.warning(
+                f"[stages] universal snapshot failed ({exc}); "
+                "falling back to individual crawlers"
+            )
+            _stage_warn(job_id, f"universal_snapshot: failed — {exc}")
+    else:
+        logger.info(
+            f"[stages] skipping universal snapshot for max_depth={max_depth}; "
+            "using depth-aware crawlers"
         )
-        har_path = snapshot.har_path
-        logger.info(f"[stages] universal snapshot complete for {url}")
-        # Propagate any challenge/interstitial warnings from the snapshot loader
-        for w in snapshot.warnings:
-            _stage_warn(job_id, f"universal_snapshot: {w}")
-    except Exception as exc:
-        logger.warning(f"[stages] universal snapshot failed ({exc}); falling back to individual crawlers")
-        _stage_warn(job_id, f"universal_snapshot: failed — {exc}")
 
     # Each stage is wrapped with asyncio.wait_for so that a slow/unresponsive
     # target cannot hold a Playwright browser instance indefinitely (D2).
