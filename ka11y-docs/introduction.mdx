@@ -15,18 +15,40 @@ description: "ka11y — AI-powered WCAG accessibility auditing for the web"
 
 | Engine | What it checks |
 |--------|---------------|
-| **axe-core** (Node.js) | DOM structure, ARIA semantics, colour contrast, keyboard, 80+ rules |
+| **axe-core + Node custom checks** (Node.js) | DOM structure, ARIA semantics, focus/input interactions, keyboard behavior, parsing, use-of-color, authentication, status-message heuristics, and 24 shipped custom checks |
 | **Python auditors** | OCR-backed image/text checks, forms, label-in-name, moving content, target size, and rendered-layout WCAG checks |
 
 The two engines run **in parallel** for every audit. Results are merged into a single flat findings list, summarized by WCAG success criterion, and returned via a REST job API with real-time Server-Sent Events (SSE) progress streaming.
 
 ---
 
-## WCAG Coverage
+## Coverage Highlights
 
-<CardGroup cols={2}>
+<Note>
+  This section is a snapshot, not the full catalogue. For the full matrix see [Rules Overview](/rules/overview). For the complete Node-side custom rule set see [Node Custom Checks](/rules/node-custom-checks).
+</Note>
+
+<CardGroup cols={3}>
   <Card title="1.1.1 Non-text Content" icon="image" href="/rules/wcag-1-1-1">
     OCR + ML classification determines whether alt text accurately describes the image. Goes far beyond a simple "alt attribute present" check.
+  </Card>
+  <Card title="1.4.3 Contrast (Minimum)" icon="circle" href="/rules/wcag-1-4-3">
+    OCR-backed contrast analysis covers text inside images, not just DOM text that axe-core can already see.
+  </Card>
+  <Card title="1.4.4 Resize Text" icon="font" href="/rules/wcag-1-4-4">
+    Simulates 200% text scaling and checks for clipping, overlap, and unreadable layouts after real rendering.
+  </Card>
+  <Card title="1.4.10 Reflow" icon="mobile" href="/rules/wcag-1-4-10">
+    Re-renders the page at 320 px width and checks horizontal scrolling and broken responsive layouts.
+  </Card>
+  <Card title="1.4.12 Text Spacing" icon="font" href="/rules/wcag-1-4-12">
+    Injects the WCAG spacing overrides and diffs the resulting layout to find clipped text and broken components.
+  </Card>
+  <Card title="1.4.13 Content on Hover or Focus" icon="mouse-pointer" href="/rules/wcag-1-4-13">
+    Tests dismissibility, hoverability, and persistence for tooltips, popovers, and hover-triggered UI.
+  </Card>
+  <Card title="2.4.11 / 2.4.12 Focus Not Obscured" icon="eye" href="/rules/wcag-2-4-11-12">
+    Traverses real focus order and checks whether fixed or sticky overlays hide focused controls.
   </Card>
   <Card title="2.2.2 Pause, Stop, Hide" icon="pause" href="/rules/wcag-2-2-2">
     Detects animated GIFs, CSS animations, autoplay video, and JavaScript carousels — categories axe-core misses entirely.
@@ -45,6 +67,19 @@ The two engines run **in parallel** for every audit. Results are merged into a s
   </Card>
 </CardGroup>
 
+### Additional Node Custom Checks
+
+ka11y also ships **24** Node-side custom checks inside the `axe_core` stage. They cover criteria that plain axe-core does not cover well or does not cover at all:
+
+| Group | Criteria |
+|-------|----------|
+| **Perceivable** | `1.2.1`, `1.3.2`, `1.4.1`, `1.4.5` |
+| **Operable** | `2.1.2`, `2.1.4`, `2.4.5`, `2.4.7`, `2.4.8`, `2.4.9`, `2.4.13`, `2.5.2`, `2.5.7` |
+| **Understandable** | `3.1.6`, `3.2.1`, `3.2.2`, `3.2.6`, `3.3.3`, `3.3.4`, `3.3.7`, `3.3.8` |
+| **Robust** | `4.1.1`, `4.1.3` |
+
+Several of these checks are intentionally conservative and return `incomplete` when a single-page heuristic cannot prove a user-facing failure. See [Node Custom Checks](/rules/node-custom-checks) for the rule-by-rule behavior.
+
 ---
 
 ## Key Features
@@ -57,7 +92,7 @@ The two engines run **in parallel** for every audit. Results are merged into a s
     Connect to `GET /api/v1/combined/{job_id}/stream` immediately after submitting an audit to receive live stage events: `stage_start`, `stage_complete`, `stage_error`, `job_complete`, `job_failed`. Heartbeat keepalives fire every 25 s.
   </Accordion>
   <Accordion title="Pluggable rule architecture">
-    Each WCAG rule is a self-contained Crawler + Auditor pair. Adding a new rule means adding new files plus explicit registration in the `combined/` package (`findings.py`, `constants.py`, `stages.py`, and request models). See [Adding a Rule](/guides/adding-a-rule).
+    Python rule families are built as crawler/auditor pairs, while `ka11y-node` custom checks live as self-contained modules under `src/custom-checks/`. Adding a new rule still requires explicit registration in the `combined/` package (`findings.py`, `constants.py`, `stages.py`, and request models). See [Adding a Rule](/guides/adding-a-rule).
   </Accordion>
   <Accordion title="CSV + JSON output">
     Every auditor writes a per-stage CSV report alongside the consolidated `combined_report.json`. Artefacts are stored in a timestamped directory under `crawled_images/`.

@@ -8,6 +8,7 @@ any layout snapshot is taken.
 from __future__ import annotations
 
 import asyncio
+from typing import List
 
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
@@ -19,7 +20,7 @@ _SETTLE_LOOPS = 2
 _SETTLE_DELAY_MS = 300
 
 
-async def stabilize(page: Page, timeout_ms: int = 10_000) -> None:
+async def stabilize(page: Page, timeout_ms: int = 10_000) -> List[str]:
     """
     Wait for the page to be fully loaded and visually settled.
 
@@ -29,18 +30,27 @@ async def stabilize(page: Page, timeout_ms: int = 10_000) -> None:
     3. document.readyState === "complete"
     4. document.fonts.ready
     5. Short settle loops to let deferred JS finish painting
+
+    Returns a list of degradation warning strings (empty list = clean).
+    Callers may propagate these into the job's warning set.
     """
+    degradations: List[str] = []
+
     # 1 & 2 — handled by Playwright's goto() wait_until, but we also wait
     # explicitly here in case stabilize() is called after navigation.
     try:
         await page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
     except PlaywrightTimeout:
-        logger.warning("[stabilizer] domcontentloaded timeout — continuing")
+        msg = "[stabilizer] domcontentloaded timeout — continuing"
+        logger.warning(msg)
+        degradations.append(msg)
 
     try:
         await page.wait_for_load_state("load", timeout=timeout_ms)
     except PlaywrightTimeout:
-        logger.warning("[stabilizer] load timeout — continuing")
+        msg = "[stabilizer] load timeout — continuing"
+        logger.warning(msg)
+        degradations.append(msg)
 
     # 3 — readyState
     try:
@@ -48,7 +58,9 @@ async def stabilize(page: Page, timeout_ms: int = 10_000) -> None:
             "document.readyState === 'complete'", timeout=timeout_ms
         )
     except PlaywrightTimeout:
-        logger.warning("[stabilizer] readyState timeout — continuing")
+        msg = "[stabilizer] readyState timeout — continuing"
+        logger.warning(msg)
+        degradations.append(msg)
 
     # 4 — fonts
     try:
@@ -59,3 +71,5 @@ async def stabilize(page: Page, timeout_ms: int = 10_000) -> None:
     # 5 — brief settle
     for _ in range(_SETTLE_LOOPS):
         await asyncio.sleep(_SETTLE_DELAY_MS / 1000)
+
+    return degradations

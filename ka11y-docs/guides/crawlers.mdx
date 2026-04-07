@@ -6,15 +6,170 @@ description: "How each Playwright crawler extracts raw data from a page"
 All crawlers share the same contract:
 
 ```python
-async def crawl() -> List[Dict[str, Any]]
-def save_raw_json() -> None
+async def crawl() -> List[SomeModel]
+def save_raw_json() -> str          # returns saved path
 ```
 
-They navigate the page using Playwright Chromium in headless mode, inject JavaScript to extract element metadata, and return a flat list of dicts. They never apply WCAG logic — that is the auditor's responsibility.
+They navigate the page using Playwright Chromium in headless mode, inject JavaScript to extract element metadata, and return a flat list of typed Pydantic records. They never apply WCAG logic — that is the auditor's responsibility.
 
 ---
 
-## AsyncImageCrawler
+## Runtime architecture
+
+### Single-load strategy via `UniversalPageLoader`
+
+**File**: `ka11y/crawler/universal_page.py`
+
+In a full audit, the page is loaded **once**. `UniversalPageLoader.load()` runs a combined JavaScript extraction pass that populates a `PageSnapshot` with all data needed by every auditor:
+
+```python
+snapshot = await UniversalPageLoader.load(url=url, output_dir=output_dir)
+
+# snapshot fields (fed to individual crawlers via from_snapshot())
+snapshot.forms          # → AsyncFormCrawler
+snapshot.interactive    # → InteractiveElementCrawler
+snapshot.target_sizes   # → TargetSizeCrawler
+snapshot.moving_content # → MovingContentCrawler
+snapshot.media          # → AsyncMediaCrawler
+snapshot.text_spacing   # → TextSpacingCrawler
+
+# HAR recording
+snapshot.har_path       # path to HAR file replayed by RenderedLayoutCrawler
+
+# Degradation warnings
+snapshot.warnings       # List[str] — populated when the load was degraded
+```
+
+Each individual crawler exposes a `from_snapshot(...)` classmethod. The audit pipeline calls these instead of launching additional browsers, saving 5–7 full page loads per audit.
+
+`AsyncImageCrawler` is the only crawler that still launches its own browser session because it takes per-element screenshots which cannot be replicated from a single snapshot.
+
+### HAR replay for rendered layout
+
+When `UniversalPageLoader` loads the page it also records a HAR file. `RenderedLayoutCrawler` replays this HAR in isolated Playwright contexts at three viewport/zoom configurations (default, reflow, resize-text). Replaying from HAR eliminates network round-trips and ensures all snapshot-based auditors and the rendered-layout auditor see the same response body.
+
+### Shared navigation helper
+
+**Function**: `navigate_with_retry(page, url)` in `ka11y/crawler/universal_page.py`
+
+Every individual crawler's `_crawl_page()` method uses this helper instead of a bare `page.goto()`:
+
+```python
+await navigate_with_retry(page, url)
+```
+
+It tries `domcontentloaded` (30 s timeout) first, then falls back to `commit` (15 s). Both failures are logged as warnings and re-raised as a `RuntimeError` so the caller's `except` block can handle them cleanly. Using a shared helper means all crawlers degrade consistently under slow or partially-broken pages.
+
+### Page stabilization
+
+**File**: `ka11y/accessibility/rendered/stabilizer.py`
+
+`stabilize(page)` is used by `RenderedLayoutCrawler` after navigation to wait for the full render cycle:
+
+1. `domcontentloaded` load state
+2. `load` load state
+3. `document.readyState === 'complete'`
+4. `document.fonts.ready`
+5. Two short settle loops (300 ms each) for deferred JS paint
+
+Each step tolerates a timeout and continues rather than aborting. The function returns a `List[str]` of degradation warnings for any steps that timed out. Callers can propagate these into the job's warning set.
+
+---
+
+## Degraded-state behaviour
+
+### Challenge / interstitial pages
+
+`UniversalPageLoader` runs a challenge-detection JavaScript check after navigation. It looks for:
+
+| Signal | Example |
+|--------|---------|
+| Incapsula iframe | `<iframe src="/_Incapsula_Resource…">` |
+| Cloudflare browser check | Page body matches "Checking your browser" + "Cloudflare" |
+| Cloudflare DDoS protection | Body contains "DDoS protection by Cloudflare" |
+| JS/cookie gate | "Enable JavaScript and cookies to continue" |
+| Access denied title | `<title>403 Forbidden</title>` or "Access Denied" |
+| CAPTCHA iframe | "captcha" in body + at least one `<iframe>` |
+| Near-empty body | No `<main>` landmark + visible text < 100 chars + ≥ 2 external scripts |
+
+When a challenge page is detected, the loader adds a warning string to `snapshot.warnings`. The pipeline calls `_stage_warn()` for each warning, which persists it into the job's `warnings[]` list and broadcasts it over SSE. The audit continues on whatever content was actually rendered.
+
+**Important**: challenge-page detection does not abort the audit. The snapshot may contain partial or incorrect data. Findings from a challenge-page audit should be treated as indicative rather than authoritative.
+
+### Partial image set (image crawler timeout)
+
+`AsyncImageCrawler` runs under a `_CRAWL_TIMEOUT_SECONDS = 300` asyncio timeout. When the timeout fires:
+
+1. The crawl is cancelled.
+2. OCR and contrast analysis run on whichever screenshots were already saved to disk.
+3. `_stage_warn()` records a `"image_audit: crawler exceeded 300s — partial image set from …"` warning.
+
+The audit report will reflect only the images captured before the cutoff. The warning in `job.warnings[]` signals that coverage was reduced.
+
+### TargetClosedError suppression
+
+When `AsyncImageCrawler` cancels an in-flight `asyncio.wait_for()` around a screenshot call, Playwright may raise `TargetClosedError` from internal protocol futures. These are suppressed via a custom `asyncio` exception handler installed for the duration of the crawl and restored on exit. They do not indicate data loss — the screenshot that was cancelled is simply not included in the output.
+
+### OCR image failures
+
+`OCRPreprocessing` (in `ka11y/text_detector/text_detector.py`) tracks images that could not be processed in `self.skipped_images: List[str]`. An image is added to this list when:
+
+- The file does not exist (e.g. a crawler-produced screenshot was never flushed to disk due to a timeout).
+- The OCR backend raises any exception while trying to open or read the file.
+
+After `scan_directory()` completes, a `WARNING`-level log line lists all skipped paths. Callers can check `processor.skipped_images` to decide whether to emit a job-level warning.
+
+### Warning propagation path
+
+```
+PageSnapshot.warnings
+    └─▶ stages.py: for w in snapshot.warnings: _stage_warn(job_id, ...)
+            └─▶ stage_events.py: _stage_warn()
+                    ├─▶ logger.warning(...)
+                    └─▶ job["warnings"].append(...)  ← persisted in job store
+                            └─▶ _broadcast() SSE event
+```
+
+Partial-set and challenge-page warnings flow through this path and appear in the final audit JSON under `job.warnings[]`.
+
+---
+
+## `UniversalPageLoader`
+
+**File**: `ka11y/crawler/universal_page.py`
+
+### Load sequence
+
+1. Stealth Chromium context with realistic user-agent and viewport (1440 × 900).
+2. SSRF guard installed to block private-IP access.
+3. HAR recording started.
+4. `page.goto(url, wait_until="domcontentloaded", timeout=30s)`.
+5. `networkidle` wait (up to 15 s) for deferred resource loads.
+6. DOM-stability MutationObserver (waits for 600 ms quiescence, up to 12 s total).
+7. Lazy-load trigger: scrolls through 6 evenly-spaced vertical positions.
+8. 1 500 ms post-scroll settle.
+9. Carousel-init poll (up to 3 s) for Flickity, Swiper, Slick, Owl, Glide.
+10. Challenge-detection check → warnings appended to `snapshot.warnings`.
+11. Single `page.evaluate(_COMBINED_EXTRACT_JS)` call populates all snapshot lists.
+12. HAR recording stopped, path stored in `snapshot.har_path`.
+
+### `PageSnapshot` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `page_url` | `str` | Normalised URL that was loaded |
+| `forms` | `List[dict]` | Form field records (feeds `AsyncFormCrawler.from_snapshot()`) |
+| `interactive` | `List[dict]` | Interactive element records |
+| `target_sizes` | `List[dict]` | Rendered-size records |
+| `moving_content` | `List[dict]` | Auto-play / animation records |
+| `media` | `List[dict]` | `<audio>` / `<video>` records |
+| `text_spacing` | `List[dict]` | Text-container records |
+| `har_path` | `str \| None` | Path to HAR file for RenderedLayoutCrawler |
+| `warnings` | `List[str]` | Degradation warnings accumulated during load |
+
+---
+
+## `AsyncImageCrawler`
 
 **File**: `ka11y/crawler/crawler.py`
 **Crawls**: `<img>`, `<svg>`, `<button>`, background images, font icons (`<i>`, `<span>`)
@@ -58,6 +213,8 @@ output_dir/
     └── charts/
 ```
 
+Screenshots are taken with `asyncio.wait_for()` capped at 5 s each. This prevents a single stuck element from blocking the full crawl. Elements whose screenshots time out are omitted from the output set and counted in the partial-image-set warning if the overall crawl timeout also fires.
+
 ### Image classification cascade
 
 `ClassifyAssets` (in `ka11y/classifier/classfier.py`) runs a deterministic cascade:
@@ -74,12 +231,18 @@ output_dir/
 | 3 | Standalone icon → has alt → `informative/icons`, no alt → `decorative/decorative` |
 | 4 | alt present → `informative`, alt="" → `decorative`, alt absent → `decorative/missing_alt` |
 
+### Timeout and cleanup
+
+`AsyncImageCrawler` uses `pw = await async_playwright().start()` (explicit start) rather than `async with async_playwright()`. This ensures the browser, context, and download session are closed in the `finally` block even after a `wait_for` cancellation. A custom asyncio exception handler suppresses late `TargetClosedError` futures during the cleanup window.
+
 ---
 
-## AsyncFormCrawler
+## `AsyncFormCrawler`
 
 **File**: `ka11y/crawler/forms_crawler.py`
 **Crawls**: All form fields (`<input>`, `<textarea>`, `<select>`) inside `<form>` elements and implicit forms
+
+In a full audit, this crawler is populated from the universal snapshot via `AsyncFormCrawler.from_snapshot(snapshot.forms, url, output_dir)` — no additional browser launch.
 
 ### What it extracts per field
 
@@ -91,69 +254,80 @@ output_dir/
 | `placeholder` | `placeholder` attribute |
 | `aria_label` | Direct `aria-label` |
 | `aria_labelledby` | Referenced label text |
-| `label_text` | Text of associated `<label for="...">` |
-| `wrapping_label_text` | Text of wrapping `<label>` |
+| `label_text` | Text of associated `<label for="…">` |
+| `has_wrapping_label` | Whether a `<label>` wraps the field |
 | `required` | `required` attribute present |
 | `aria_required` | `aria-required="true"` |
 | `autocomplete` | `autocomplete` attribute value |
-| `aria_describedby` | Referenced description element |
-| `error_role` | Role of the describedby element |
-| `error_aria_live` | `aria-live` value on error element |
+| `aria_describedby` | Space-separated IDs of description elements |
+| `error_element_id` | ID of the preferred error container (alert/live region wins) |
+| `error_element_role` | `role` of that element |
+| `error_element_text` | Current visible text (may be empty before interaction) |
+| `error_has_role_alert` | Whether the error container has `role="alert"` |
+| `error_has_aria_live` | `aria-live` value on the error container |
 | `html_snippet` | Outer HTML (truncated to 600 chars) |
 
 ### JavaScript extraction
 
-The crawler injects a single `EXTRACT_JS` script that traverses all forms and implicit forms, resolves label associations, and returns the complete field metadata in one `page.evaluate()` call.
+The crawler injects a single `EXTRACT_JS` script. When `aria-describedby` lists multiple IDs, the script resolves all of them and selects the element with `role="alert"` or `aria-live` as the canonical error container, falling back to the first matching element. This mirrors the behaviour most assistive technologies use when resolving error associations.
 
 ---
 
-## InteractiveElementCrawler
+## `InteractiveElementCrawler`
 
 **File**: `ka11y/crawler/interactive_crawler.py`
-**Crawls**: `<button>`, `<a>`, `<input type="submit/button/reset/image">`, elements with `role` in `{button, link, menuitem, tab, option, treeitem, gridcell}`
+**Crawls**: `<button>`, `<a>`, `<input type="submit/button/reset/image">`, elements with `role` in `{button, link, menuitem, tab, option, treeitem, gridcell, switch, combobox, listbox}`
+
+In a full audit, populated from the universal snapshot via `InteractiveElementCrawler.from_snapshot(snapshot.interactive, url, output_dir)`.
 
 ### What it extracts per element
 
 | Field | Description |
 |-------|-------------|
 | `tag` | Element tag name |
-| `role` | ARIA role (explicit or implicit) |
+| `role` | Explicit ARIA role attribute |
 | `visible_label` | Visible text content (stripped) |
 | `aria_label` | `aria-label` attribute |
-| `aria_labelledby` | Referenced label text (resolved) |
-| `title` | `title` attribute |
-| `accessible_name` | Computed accessible name (AccName 1.1 algorithm) |
+| `aria_labelledby` | Space-separated IDs |
+| `aria_labelledby_text` | Resolved text from `aria-labelledby` IDs |
+| `title_attr` | `title` attribute |
+| `value_attr` | `value` attribute (for submit/button/reset inputs) |
+| `alt_attr` | `alt` attribute (for image inputs) |
+| `accessible_name` | Computed accessible name (AccName 1.1 approximation) |
 | `element_id` | `id` attribute |
 | `input_type` | For `<input>`, the `type` attribute |
+| `html_snippet` | Outer HTML (truncated to 400 chars) |
 
 ### Accessible name computation
 
-The crawler computes `accessible_name` client-side following a simplified AccName 1.1 priority order:
+The crawler computes `accessible_name` client-side following AccName 1.1 priority order:
 
-1. `aria-labelledby` (resolved text)
+1. `aria-labelledby` (resolved text from all referenced IDs)
 2. `aria-label`
-3. `value` (for `<input type="submit/button">`)
-4. `alt` (for `<input type="image">`)
-5. Element text content
-6. `title`
-
-This mirrors the computation a browser or assistive technology would perform.
+3. `value` attribute (for `<input type="submit|button|reset">`)
+4. `alt` attribute (for `<input type="image">`)
+5. Associated `<label for="id">` or wrapping `<label>` text
+6. `title` attribute
+7. Text content (for `<button>`, `<a>`, and role=button/link elements)
 
 ---
 
-## MovingContentCrawler
+## `MovingContentCrawler`
 
 **File**: `ka11y/crawler/moving_content_crawler.py`
 **Crawls**: Auto-playing video, animated GIFs, CSS/WAAPI animations, JavaScript carousels, `<marquee>`, `<blink>`
+
+In a full audit, populated from the universal snapshot via `MovingContentCrawler.from_snapshot(snapshot.moving_content, url, output_dir)`.
 
 ### Detection strategies
 
 | Type | Detection method |
 |------|-----------------|
-| `video_autoplay` | `<video>` with `autoplay` attribute |
-| `animated_gif` | `<img>` whose `src` ends in `.gif` |
-| `css_animation` | `document.getAnimations()` — running WAAPI or CSS animations with `iteration: Infinity` |
-| `carousel_autoplay` | Class/data-attribute detection for Bootstrap, Swiper, Slick, Owl, Flickity, Glide, Splide |
+| `video_autoplay` | `<video>` with `autoplay` attribute; skips videos ≤ 5 s |
+| `animated_gif` | `<img src="*.gif">` confirmed animated by frame-count check via httpx |
+| `css_animation` | `document.getAnimations()` — running WAAPI/CSS animations with total duration > 5 000 ms or `iterations: Infinity` |
+| `carousel_autoplay` | Class/data-attribute detection for Bootstrap, Swiper, Slick, Owl, Flickity, Glide, Splide, and generic `data-autoplay` patterns |
+| `video_iframe` | Embedded `<iframe>` from known video hosts (YouTube, Vimeo, Wistia, etc.) with `autoplay=1` or no explicit `autoplay=0` |
 | `marquee` | `<marquee>` elements |
 | `blink` | `<blink>` elements |
 
@@ -164,15 +338,57 @@ axe-core only flags `<blink>` and `<marquee>`. It does not detect:
 - JavaScript carousel libraries
 - `<video autoplay>`
 - Animated GIFs
+- Embedded iframe video auto-play
 
 The `axe_would_catch` boolean in each record lets you filter down to novel detections.
 
+### Pause mechanism detection
+
+For every detected element the crawler checks for a pause/stop control by:
+
+1. Walking up 2 parent levels and searching for `<button>`, `[role="button"]`, or `<a>` with text matching `/pause|stop/i`.
+2. For carousels, also searching inside the carousel root element itself.
+3. For carousels, checking for `[aria-label*="pause" i]` or `[aria-label*="stop" i]` descendants.
+
+The result is stored in `has_pause_button` and `has_mechanism`.
+
 ---
 
-## TargetSizeCrawler
+## `AsyncMediaCrawler`
+
+**File**: `ka11y/crawler/media_crawler.py`
+**Crawls**: `<audio>` and `<video>` elements
+
+In a full audit, populated from the universal snapshot via `AsyncMediaCrawler.from_snapshot(snapshot.media, url, output_dir)`.
+
+### What it extracts per element
+
+| Field | Description |
+|-------|-------------|
+| `tag` | `AUDIO` or `VIDEO` |
+| `element_id` | `id` attribute |
+| `src` | Resolved media source URL (`currentSrc` → `src` attr → first `<source>` child) |
+| `has_autoplay` | `autoplay` attribute present |
+| `has_controls` | `controls` attribute present |
+| `has_loop` | `loop` attribute present |
+| `is_muted` | `muted` property or attribute |
+| `tracks` | List of `<track>` children: `{kind, src, srclang, label}` |
+| `aria_hidden` | `aria-hidden="true"` (decorative signal) |
+| `role` | `role` attribute |
+| `aria_label` | `aria-label` attribute |
+| `aria_describedby_text` | Resolved text from `aria-describedby` IDs |
+| `nearby_links` | `<a>` links within 3 parent levels — auditor searches for transcript keywords |
+| `nearby_text` | Text content of immediate parent (up to 500 chars) |
+| `nearby_details` | `<details>` blocks within 3 parent levels — common collapsible transcript pattern |
+
+---
+
+## `TargetSizeCrawler`
 
 **File**: `ka11y/crawler/target_size_crawler.py`
-**Crawls**: All interactive elements: `<button>`, `<a>`, `<input>`, `<select>`, `<textarea>`, ARIA role equivalents
+**Crawls**: All interactive elements at 1440 px viewport width
+
+In a full audit, populated from the universal snapshot via `TargetSizeCrawler.from_snapshot(snapshot.target_sizes, url, output_dir)`.
 
 ### What it extracts per element
 
@@ -180,17 +396,76 @@ The `axe_would_catch` boolean in each record lets you filter down to novel detec
 |-------|-------------|
 | `rendered_width_px` | `getBoundingClientRect().width` |
 | `rendered_height_px` | `getBoundingClientRect().height` |
-| `padding_top/right/bottom/left` | Computed padding from `getComputedStyle` |
+| `padding_top/right/bottom/left_px` | Computed padding from `getComputedStyle` |
 | `is_inline_exception` | `<a>` in inline context (WCAG 2.5.8 exception 1) |
 | `is_ua_controlled_exception` | Native checkbox/radio with `appearance: auto` (exception 4) |
 | `is_offset_exception` | Undersized target has sufficient spacing (exception 5) |
-| `required_offset_x_px` / `required_offset_y_px` | Required clear area around target based on size deficit |
-| `nearest_target_gap_x_px` / `nearest_target_gap_y_px` | Nearest neighboring target gap along each axis |
+| `required_offset_x_px` / `required_offset_y_px` | Required clear area around the target based on size deficit |
+| `nearest_target_gap_x_px` / `nearest_target_gap_y_px` | Nearest neighbouring target gap along each axis |
+| `passes_size` | Pre-computed: `width ≥ 24 AND height ≥ 24` |
 
 ### Exception detection
 
-**Exception 1 — Inline**: An `<a>` element is inline when its `display` is `inline` and it is not the sole interactive element on its line. The crawler approximates this by checking `getComputedStyle().display === 'inline'`.
+**Exception 1 — Inline**: An `<a>` element is inline when `getComputedStyle().display === 'inline'` and the parent has visible text content outside the link. The crawler approximates surrounding text by stripping the link's own text from the parent's `textContent`.
 
-**Exception 4 — UA-controlled**: A `<input type="checkbox">` or `<input type="radio">` where `getComputedStyle().appearance` is `auto` or `checkbox`/`radio` (the browser controls the size).
+**Exception 4 — UA-controlled**: A `<input type="checkbox">` or `<input type="radio">` where `getComputedStyle().appearance` is not `'none'` (the browser controls the rendered size).
 
-**Exception 5 — Offset**: For undersized targets, the crawler computes required offset `((24 - width)/2, (24 - height)/2)`, inflates the target bounds by that amount, and marks `is_offset_exception=true` when no neighboring target intersects the inflated box.
+**Exception 5 — Offset**: For undersized targets (width < 24 or height < 24), the crawler computes required offset `((24 − width) / 2, (24 − height) / 2)`, inflates the target bounding box, and marks `is_offset_exception=true` when no other target intersects the inflated box.
+
+---
+
+## `TextSpacingCrawler`
+
+**File**: `ka11y/crawler/text_spacing_crawler.py`
+**Crawls**: Text containers for WCAG 1.4.12 (Text Spacing) analysis
+
+In a full audit, populated from the universal snapshot via `TextSpacingCrawler.from_snapshot(snapshot.text_spacing, url, output_dir)`.
+
+### What it extracts per element
+
+| Field | Description |
+|-------|-------------|
+| `tag` | Element tag name |
+| `element_id` | `id` attribute |
+| `class_name` | `class` attribute |
+| `text_length` | Character count of text content |
+| `text_preview` | First 100 chars of visible text |
+| `height` | Computed CSS `height` value |
+| `min_height` | Computed CSS `min-height` value |
+| `overflow` | Computed CSS `overflow` value |
+| `has_fixed_height` | `height` is set to a pixel value (not `auto`) |
+| `has_overflow_hidden` | `overflow: hidden` or `overflow: clip` |
+| `is_clipped` | `has_fixed_height AND has_overflow_hidden` — high-risk clipping signal |
+| `html_snippet` | Outer HTML (truncated) |
+
+### What the auditor looks for
+
+After applying WCAG 1.4.12 spacing overrides (line-height ≥ 1.5, letter-spacing ≥ 0.12em, word-spacing ≥ 0.16em), containers with `is_clipped=true` are the primary failure candidates. The auditor reports them as potential text-overflow violations.
+
+---
+
+## Interpreting real-site results
+
+### When `warnings[]` is non-empty
+
+A non-empty `warnings[]` list in the audit response means the audit ran under degraded conditions. Common patterns:
+
+| Warning prefix | What it means |
+|----------------|---------------|
+| `universal_snapshot: incapsula-challenge-iframe` | The page served a WAF challenge shell — audit data reflects the challenge page, not the real page |
+| `universal_snapshot: near-empty-body` | Page body was nearly empty at extraction time — likely a JS-gated page that requires interaction |
+| `universal_snapshot: cloudflare-browser-check` | Cloudflare challenge was active |
+| `image_audit: crawler exceeded 300s — partial image set` | OCR and contrast analysis cover only images captured before the timeout |
+| `universal_snapshot: failed — …` | The single-load strategy failed entirely; individual crawlers ran as fallback |
+
+### When findings seem lower than expected
+
+If a well-known accessible page scores more violations than expected, or a known-inaccessible page scores zero, check:
+
+1. `warnings[]` — a challenge page produces near-zero findings because there is almost no content.
+2. `stages[].status` — an `error` stage means that WCAG rule produced no findings at all (not zero violations).
+3. `stages[].findings_count` — zero findings from a completed stage is genuine; zero from an error stage is not.
+
+### `from_snapshot()` vs live crawl
+
+All crawlers except `AsyncImageCrawler` are populated via `from_snapshot()` in production. If you call a crawler's `crawl()` method directly (e.g. in isolation tests or one-off scripts) it launches its own Playwright session using `navigate_with_retry()` for page load. The extraction logic and output format are identical either way.

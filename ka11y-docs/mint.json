@@ -69,6 +69,7 @@
       "group": "WCAG Rules",
       "pages": [
         "rules/overview",
+        "rules/node-custom-checks",
         "rules/wcag-1-1-1",
         "rules/wcag-1-4-3",
         "rules/wcag-1-4-4",

@@ -16,7 +16,11 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
+from ka11y.config.logger import setup_logger
 from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.universal_page import navigate_with_retry
+
+logger = setup_logger(name="KAC", tag="forms_crawler")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pydantic models
@@ -221,11 +225,7 @@ class AsyncFormCrawler:
 
         page = await context.new_page()
         try:
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            except Exception:
-                # If even domcontentloaded times out, try with no wait condition
-                await page.goto(url, wait_until="commit", timeout=15_000)
+            await navigate_with_retry(page, url)
             await page.wait_for_timeout(2000)  # let JS render forms
 
             raw: list = await page.evaluate(self.EXTRACT_JS)
@@ -246,7 +246,7 @@ class AsyncFormCrawler:
                         await self._crawl_page(context, href, depth + 1)
 
         except Exception as exc:
-            print(f"[FormCrawler] Error on {url}: {exc}")
+            logger.error(f"[forms_crawler] Error on {url}: {exc}")
         finally:
             await page.close()
 

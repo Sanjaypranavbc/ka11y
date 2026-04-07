@@ -82,6 +82,9 @@ class OCRPreprocessing:
         logger.info("OCR Reader initialized")
 
         self.results: List[TextDetectionResult] = []
+        # Images that could not be processed (corrupt, missing, OCR backend failure).
+        # Populated by detect_text_in_image(); callers can check this to emit warnings.
+        self.skipped_images: List[str] = []
 
     def _determine_category(self, original_path: str) -> str:
         """Heuristic to determine category based on source path."""
@@ -223,6 +226,11 @@ class OCRPreprocessing:
         result = TextDetectionResult(
             filename=filename, original_path=abs_path, category=category
         )
+
+        if not Path(image_path).exists():
+            logger.error(f"[text_detector] image not found, skipping: {image_path}")
+            self.skipped_images.append(image_path)
+            return result
 
         try:
             detections = self.reader.readtext(image_path)
@@ -417,9 +425,9 @@ class OCRPreprocessing:
                 logger.debug(f"No text detected in {filename}")
 
         except Exception as e:
-            logger.error(f"Error processing {filename}: {str(e)}")
+            logger.error(f"[text_detector] Error processing {filename}: {str(e)}")
+            self.skipped_images.append(image_path)
             import traceback
-
             traceback.print_exc()
 
         return result
@@ -453,6 +461,12 @@ class OCRPreprocessing:
                     )
             else:
                 print(f"  . No text")
+
+        if self.skipped_images:
+            logger.warning(
+                f"[text_detector] {len(self.skipped_images)} image(s) could not be "
+                f"processed and were skipped: {self.skipped_images}"
+            )
 
 
 class TextClassification:
