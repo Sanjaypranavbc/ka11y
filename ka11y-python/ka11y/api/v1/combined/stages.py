@@ -58,6 +58,39 @@ from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start, 
 
 logger = setup_logger(name="KAC", tag="combined")
 
+_IMAGE_OCR_RULES = frozenset({"1.4.3", "1.4.6"})
+_IMAGE_AUDIT_RULES = frozenset({"1.1.1", "1.4.5", "1.4.11", "4.1.2"})
+_FORM_RULES = frozenset({"3.3.1", "3.3.2"})
+_LABEL_IN_NAME_RULES = frozenset({"2.5.3"})
+_MEDIA_RULES = frozenset({"1.2.1"})
+_PAUSE_STOP_HIDE_RULES = frozenset({"2.2.2"})
+_TARGET_SIZE_RULES = frozenset({"2.5.8"})
+_RENDERED_LAYOUT_RULES = {
+    "1.3.4": "run_orientation_audit",
+    "1.4.4": "run_resize_text_audit",
+    "1.4.10": "run_reflow_audit",
+    "1.4.12": "run_text_spacing_audit",
+    "1.4.13": "run_hover_focus_content_audit",
+    "2.4.11": "run_focus_not_obscured_min_audit",
+    "2.4.12": "run_focus_not_obscured_enh_audit",
+}
+_SNAPSHOT_BACKED_FLAGS = frozenset(
+    {
+        "run_form_audit",
+        "run_label_in_name_audit",
+        "run_media_audit",
+        "run_pause_stop_hide_audit",
+        "run_target_size_audit",
+        "run_text_spacing_audit",
+        "run_resize_text_audit",
+        "run_reflow_audit",
+        "run_orientation_audit",
+        "run_hover_focus_content_audit",
+        "run_focus_not_obscured_min_audit",
+        "run_focus_not_obscured_enh_audit",
+    }
+)
+
 
 # ── WCAG level filter ─────────────────────────────────────────────────────────
 
@@ -75,14 +108,69 @@ def _allowed_levels(wcag_level: str) -> set:
 
 
 async def _call_node_flat(
-    url: str, node_base_url: str, wcag_level: str = "AAA", lang: str = "en"
+    url: str,
+    node_base_url: str,
+    wcag_level: str = "AAA",
+    lang: str = "en",
+    success_criteria_id: Optional[str] = None,
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings."""
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
+    payload = {"url": url, "level": wcag_level, "lang": lang}
+    if success_criteria_id:
+        payload["successCriteriaId"] = success_criteria_id
     async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(endpoint, json={"url": url, "level": wcag_level, "lang": lang})
+        resp = await client.post(endpoint, json=payload)
         resp.raise_for_status()
         return resp.json().get("findings", [])
+
+
+def _select_stage_flags(
+    success_criteria_id: Optional[str], flags: Dict[str, bool]
+) -> Dict[str, bool]:
+    if not success_criteria_id:
+        return flags
+
+    selected = {name: False for name in flags}
+    sc_id = success_criteria_id.strip()
+
+    if sc_id in _IMAGE_OCR_RULES:
+        selected["run_ocr"] = flags["run_ocr"]
+        return selected
+
+    if sc_id in _IMAGE_AUDIT_RULES:
+        selected["run_image_audit"] = flags["run_image_audit"]
+        # Keep OCR enabled when the caller requested it because OCR/token
+        # matching improves the image-audit heuristics for these criteria.
+        selected["run_ocr"] = flags["run_ocr"]
+        return selected
+
+    if sc_id in _FORM_RULES:
+        selected["run_form_audit"] = flags["run_form_audit"]
+        return selected
+
+    if sc_id in _LABEL_IN_NAME_RULES:
+        selected["run_label_in_name_audit"] = flags["run_label_in_name_audit"]
+        return selected
+
+    if sc_id in _MEDIA_RULES:
+        selected["run_media_audit"] = flags["run_media_audit"]
+        return selected
+
+    if sc_id in _PAUSE_STOP_HIDE_RULES:
+        selected["run_pause_stop_hide_audit"] = flags["run_pause_stop_hide_audit"]
+        return selected
+
+    if sc_id in _TARGET_SIZE_RULES:
+        selected["run_target_size_audit"] = flags["run_target_size_audit"]
+        return selected
+
+    rendered_flag = _RENDERED_LAYOUT_RULES.get(sc_id)
+    if rendered_flag:
+        selected[rendered_flag] = flags[rendered_flag]
+        return selected
+
+    return selected
 
 
 # ── Individual stage coroutines ───────────────────────────────────────────────
@@ -553,6 +641,7 @@ async def _run_python_stages(
     run_focus_not_obscured_enh_audit: bool,
     job_id: str,
     lang: str = "en",
+    success_criteria_id: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Run all Python audit stages concurrently.
@@ -567,10 +656,40 @@ async def _run_python_stages(
     Returns (all_findings, contrast_report).
     """
 
+    stage_flags = _select_stage_flags(
+        success_criteria_id,
+        {
+            "run_ocr": run_ocr,
+            "run_image_audit": run_image_audit,
+            "run_form_audit": run_form_audit,
+            "run_label_in_name_audit": run_label_in_name_audit,
+            "run_media_audit": run_media_audit,
+            "run_pause_stop_hide_audit": run_pause_stop_hide_audit,
+            "run_target_size_audit": run_target_size_audit,
+            "run_resize_text_audit": run_resize_text_audit,
+            "run_reflow_audit": run_reflow_audit,
+            "run_text_spacing_audit": run_text_spacing_audit,
+            "run_orientation_audit": run_orientation_audit,
+            "run_hover_focus_content_audit": run_hover_focus_content_audit,
+            "run_focus_not_obscured_min_audit": run_focus_not_obscured_min_audit,
+            "run_focus_not_obscured_enh_audit": run_focus_not_obscured_enh_audit,
+        },
+    )
+
+    if not any(stage_flags.values()):
+        logger.info(
+            f"[stages] no Python stages selected for success_criteria_id="
+            f"{success_criteria_id!r}; skipping Python pipeline"
+        )
+        return [], None
+
     # Phase 1: Universal snapshot (single page load only)
     snapshot: Optional[PageSnapshot] = None
     har_path: Optional[str] = None
-    if max_depth == 0:
+    needs_snapshot = max_depth == 0 and any(
+        stage_flags[name] for name in _SNAPSHOT_BACKED_FLAGS
+    )
+    if needs_snapshot:
         try:
             snapshot = await asyncio.wait_for(
                 UniversalPageLoader.load(
@@ -589,10 +708,15 @@ async def _run_python_stages(
                 "falling back to individual crawlers"
             )
             _stage_warn(job_id, f"universal_snapshot: failed — {exc}")
-    else:
+    elif max_depth != 0:
         logger.info(
             f"[stages] skipping universal snapshot for max_depth={max_depth}; "
             "using depth-aware crawlers"
+        )
+    else:
+        logger.info(
+            "[stages] skipping universal snapshot; selected Python stages do not "
+            "consume snapshot/HAR data"
         )
 
     # Each stage is wrapped with asyncio.wait_for so that a slow/unresponsive
@@ -600,69 +724,172 @@ async def _run_python_stages(
     def _timed(coro):
         return asyncio.wait_for(coro, timeout=_STAGE_TIMEOUT_SECONDS)
 
-    # Phase 2: All stages concurrently
+    # Phase 2: Only the selected stages run.
+    stage_tasks: List[Tuple[str, Any]] = []
+    if stage_flags["run_ocr"] or stage_flags["run_image_audit"]:
+        stage_tasks.append(
+            (
+                "image_audit",
+                _timed(
+                    _stage_image_audit(
+                        url,
+                        output_dir,
+                        max_depth,
+                        stage_flags["run_ocr"],
+                        stage_flags["run_image_audit"],
+                        job_id,
+                        lang,
+                    )
+                ),
+            )
+        )
+    if stage_flags["run_form_audit"]:
+        stage_tasks.append(
+            (
+                "form_audit",
+                _timed(
+                    _stage_form_audit(
+                        url,
+                        output_dir,
+                        max_depth,
+                        stage_flags["run_form_audit"],
+                        job_id,
+                        snapshot=snapshot,
+                    )
+                ),
+            )
+        )
+    if stage_flags["run_label_in_name_audit"]:
+        stage_tasks.append(
+            (
+                "label_in_name",
+                _timed(
+                    _stage_label_in_name(
+                        url,
+                        output_dir,
+                        max_depth,
+                        stage_flags["run_label_in_name_audit"],
+                        job_id,
+                        snapshot=snapshot,
+                    )
+                ),
+            )
+        )
+    if stage_flags["run_pause_stop_hide_audit"]:
+        stage_tasks.append(
+            (
+                "pause_stop_hide",
+                _timed(
+                    _stage_pause_stop_hide(
+                        url,
+                        output_dir,
+                        max_depth,
+                        stage_flags["run_pause_stop_hide_audit"],
+                        job_id,
+                        snapshot=snapshot,
+                    )
+                ),
+            )
+        )
+    if stage_flags["run_target_size_audit"]:
+        stage_tasks.append(
+            (
+                "target_size",
+                _timed(
+                    _stage_target_size(
+                        url,
+                        output_dir,
+                        max_depth,
+                        stage_flags["run_target_size_audit"],
+                        job_id,
+                        snapshot=snapshot,
+                    )
+                ),
+            )
+        )
+    if stage_flags["run_text_spacing_audit"]:
+        stage_tasks.append(
+            (
+                "text_spacing",
+                _timed(
+                    _stage_text_spacing(
+                        url,
+                        output_dir,
+                        max_depth,
+                        stage_flags["run_text_spacing_audit"],
+                        job_id,
+                        snapshot=snapshot,
+                    )
+                ),
+            )
+        )
+
+    rendered_layout_enabled = any(
+        (
+            stage_flags["run_resize_text_audit"],
+            stage_flags["run_reflow_audit"],
+            stage_flags["run_text_spacing_audit"],
+            stage_flags["run_orientation_audit"],
+            stage_flags["run_hover_focus_content_audit"],
+            stage_flags["run_focus_not_obscured_min_audit"],
+            stage_flags["run_focus_not_obscured_enh_audit"],
+        )
+    )
+    if rendered_layout_enabled:
+        stage_tasks.append(
+            (
+                "rendered_layout_audit",
+                _timed(
+                    _stage_rendered_layout_audit(
+                        url,
+                        output_dir,
+                        stage_flags["run_resize_text_audit"],
+                        stage_flags["run_reflow_audit"],
+                        stage_flags["run_text_spacing_audit"],
+                        stage_flags["run_orientation_audit"],
+                        stage_flags["run_hover_focus_content_audit"],
+                        stage_flags["run_focus_not_obscured_min_audit"],
+                        stage_flags["run_focus_not_obscured_enh_audit"],
+                        job_id,
+                        har_path=har_path,
+                    )
+                ),
+            )
+        )
+
+    if stage_flags["run_media_audit"]:
+        stage_tasks.append(
+            (
+                "media_audit",
+                _timed(
+                    _stage_media_audit(
+                        url,
+                        output_dir,
+                        max_depth,
+                        stage_flags["run_media_audit"],
+                        job_id,
+                        snapshot=snapshot,
+                    )
+                ),
+            )
+        )
+
     results = await asyncio.gather(
-        _timed(
-            _stage_image_audit(
-                url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang
-            )
-        ),
-        _timed(_stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id, snapshot=snapshot)),
-        _timed(
-            _stage_label_in_name(
-                url, output_dir, max_depth, run_label_in_name_audit, job_id, snapshot=snapshot
-            )
-        ),
-        _timed(
-            _stage_pause_stop_hide(
-                url, output_dir, max_depth, run_pause_stop_hide_audit, job_id, snapshot=snapshot
-            )
-        ),
-        _timed(
-            _stage_target_size(
-                url, output_dir, max_depth, run_target_size_audit, job_id, snapshot=snapshot
-            )
-        ),
-        _timed(
-            _stage_text_spacing(
-                url, output_dir, max_depth, run_text_spacing_audit, job_id, snapshot=snapshot
-            )
-        ),
-        _timed(
-            _stage_rendered_layout_audit(
-                url,
-                output_dir,
-                run_resize_text_audit,
-                run_reflow_audit,
-                run_text_spacing_audit,
-                run_orientation_audit,
-                run_hover_focus_content_audit,
-                run_focus_not_obscured_min_audit,
-                run_focus_not_obscured_enh_audit,
-                job_id,
-                har_path=har_path,
-            )
-        ),
-        _timed(
-            _stage_media_audit(
-                url, output_dir, max_depth, run_media_audit, job_id, snapshot=snapshot
-            )
-        ),
+        *(task for _, task in stage_tasks),
         return_exceptions=True,
     )
 
     all_findings: List[Dict] = []
     contrast_report: Optional[Dict[str, Any]] = None
 
-    # Image audit returns (findings, contrast_report)
-    img_result = results[0]
-    if not isinstance(img_result, Exception):
-        img_findings, contrast_report = img_result
-        all_findings.extend(img_findings)
-
-    # All other stages return a plain findings list
-    for r in results[1:]:
-        if not isinstance(r, Exception):
-            all_findings.extend(r)
+    for (stage_name, _), result in zip(stage_tasks, results):
+        if isinstance(result, Exception):
+            logger.warning(f"[stages] {stage_name} timed out or failed outside stage guard: {result}")
+            continue
+        if stage_name == "image_audit":
+            img_findings, contrast_report = result
+            all_findings.extend(img_findings)
+        else:
+            all_findings.extend(result)
 
     return all_findings, contrast_report

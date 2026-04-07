@@ -338,7 +338,7 @@ function _suggestedFix(sc, ruleId, lang = 'en') {
  * @param {string} pageUrl    - URL of the page (for element.page_url)
  * @returns {Array<object>}
  */
-function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
+function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter = null) {
   const findings = [];
 
   const IMPACT_TO_SEVERITY = {
@@ -386,6 +386,7 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
   // ── violations → one finding per node ────────────────────────────────────
   for (const rule of axeResults.violations) {
     const sc  = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
+    if (criteriaFilter && sc !== criteriaFilter) continue;
     const sev = IMPACT_TO_SEVERITY[rule.impact] || null;
     for (const node of (rule.nodes || [])) {
       findings.push({
@@ -407,6 +408,7 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
   // ── incomplete → one finding per node ────────────────────────────────────
   for (const rule of (axeResults.incomplete || [])) {
     const sc  = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
+    if (criteriaFilter && sc !== criteriaFilter) continue;
     const sev = IMPACT_TO_SEVERITY[rule.impact] || null;
     for (const node of (rule.nodes || [])) {
       findings.push({
@@ -428,6 +430,7 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
   // ── passes → one finding per passing node (or one rule-level fallback) ─────
   for (const rule of axeResults.passes) {
     const sc = _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags);
+    if (criteriaFilter && sc !== criteriaFilter) continue;
     const nodes = Array.isArray(rule.nodes) ? rule.nodes : [];
     if (nodes.length === 0) {
       findings.push({

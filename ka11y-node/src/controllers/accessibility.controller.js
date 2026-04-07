@@ -265,9 +265,9 @@ class AccessibilityController {
    *             example:
    *               error: URL accessibility analysis failed
    *               message: net::ERR_NAME_NOT_RESOLVED
-   */
+  */
   async analyseUrlFlat(req, res) {
-    const { url, level = 'AA', lang = 'en' } = req.body;
+    const { url, level = 'AA', lang = 'en', successCriteriaId = null } = req.body;
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'url field is required and must be a string' });
@@ -282,11 +282,17 @@ class AccessibilityController {
     }
 
     const wcagLevel = ['A', 'AA', 'AAA'].includes(level) ? level : 'AA';
+    if (successCriteriaId != null && !/^\d+\.\d+\.\d+$/.test(successCriteriaId)) {
+      return res.status(400).json({ error: 'successCriteriaId must match format X.Y.Z (e.g. "1.1.1")' });
+    }
 
     try {
       const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
-      this._logger.info(`analyseUrlFlat start url=${url} level=${wcagLevel} lang=${safeLang}`);
-      const findings = await this._service.analyseUrlFlat(url, wcagLevel, safeLang);
+      const filter = successCriteriaId ?? null;
+      this._logger.info(
+        `analyseUrlFlat start url=${url} level=${wcagLevel} lang=${safeLang} successCriteriaId=${filter ?? 'none'}`
+      );
+      const findings = await this._service.analyseUrlFlat(url, wcagLevel, safeLang, filter);
       this._logger.info(`analyseUrlFlat done findings=${findings.length}`);
       res.json({ url, findings });
     } catch (err) {

@@ -307,3 +307,60 @@ async def test_python_result_exception_degrades_gracefully():
         assert job.get("status") in ("completed", "failed")
 
     store._jobs.pop(job_id, None)
+
+
+@pytest.mark.asyncio
+async def test_run_job_forwards_success_criteria_id_to_node_and_python():
+    from ka11y.api.v1.combined import store
+
+    job_id = "runner-test-filter-forwarding"
+    store._jobs[job_id] = {
+        "job_id": job_id,
+        "status": "running",
+        "url": "https://example.com",
+        "submitted_at": "2026-01-01T00:00:00+00:00",
+        "_created_at": 0,
+        "completed_at": None,
+        "report_path": None,
+        "result": None,
+        "error": None,
+        "current_stage": None,
+        "stages": [],
+        "warnings": [],
+    }
+
+    node_findings = [
+        {"status": "pass", "wcag_sc": "1.1.1", "level": "A", "reason": "ok", "element": None}
+    ]
+
+    with patch(
+        "ka11y.api.v1.combined.runner._run_python_stages",
+        new=AsyncMock(return_value=([], None)),
+    ) as run_python_stages, patch(
+        "ka11y.api.v1.combined.runner._call_node_flat",
+        new=AsyncMock(return_value=node_findings),
+    ) as call_node_flat, patch(
+        "ka11y.api.v1.combined.runner._build_report",
+        return_value={
+            "summary": {"violations": 0, "needs_review": 0, "passes": 1},
+            "findings": node_findings,
+            "warnings": [],
+        },
+    ), patch(
+        "ka11y.api.v1.combined.runner.load_config",
+        return_value={"input": {"output_dir": "/tmp/ka11y-runner-test"}},
+    ):
+        from ka11y.api.v1.combined.runner import _run_job
+        from ka11y.api.v1.combined.models import CombinedRequest
+
+        payload = CombinedRequest(
+            url="https://example.com",
+            success_criteria_id="1.1.1",
+        )
+
+        await _run_job(job_id, payload)
+
+        assert call_node_flat.await_args.kwargs["success_criteria_id"] == "1.1.1"
+        assert run_python_stages.await_args.kwargs["success_criteria_id"] == "1.1.1"
+
+    store._jobs.pop(job_id, None)

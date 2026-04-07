@@ -6,6 +6,7 @@ These tests run entirely in-process — no Playwright, no Docker, no Node servic
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from ka11y.main import app
 from ka11y.api.v1.combined import (
@@ -74,6 +75,23 @@ class TestAppStartup:
         get = client.get(f"/api/v1/combined/{job_id}")
         assert get.status_code == 200
         assert get.json()["job_id"] == job_id
+
+    def test_combined_post_rejects_invalid_success_criteria_id(self, client):
+        resp = client.post(
+            "/api/v1/combined/",
+            json={"url": "https://example.com", "success_criteria_id": "bad-id"},
+        )
+        assert resp.status_code == 422
+
+    def test_combined_request_rejects_disabled_required_stage_for_filtered_rule(self):
+        from ka11y.api.v1.combined.models import CombinedRequest
+
+        with pytest.raises(ValidationError):
+            CombinedRequest(
+                url="https://example.com",
+                success_criteria_id="1.4.3",
+                run_ocr=False,
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

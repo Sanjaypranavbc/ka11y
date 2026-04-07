@@ -1,7 +1,13 @@
 'use strict';
 
+const axeCore = require('axe-core');
 const dns = require('dns').promises;
-const { mapResults, mapResultsFlat, mapCustomResultsFlat } = require('../utils/axeResultMapper');
+const {
+  extractSuccessCriteriaId,
+  mapResults,
+  mapResultsFlat,
+  mapCustomResultsFlat,
+} = require('../utils/axeResultMapper');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 
 // Bug 3 fix: expanded from narrow RFC-1918/loopback/link-local set to include all
@@ -96,6 +102,51 @@ function _allowedLevels(level) {
   return levels;
 }
 
+const _criterionRuleCache = new Map();
+
+function _criterionRuleIds(tags, criteriaId) {
+  const cacheKey = `${tags.join(',')}|${criteriaId}`;
+  if (_criterionRuleCache.has(cacheKey)) return _criterionRuleCache.get(cacheKey);
+
+  const ruleIds = axeCore.getRules(tags)
+    .filter(rule => extractSuccessCriteriaId(rule.tags || [], rule.ruleId) === criteriaId)
+    .map(rule => rule.ruleId)
+    .filter(ruleId => typeof ruleId === 'string' && ruleId.length > 0);
+
+  const uniqueRuleIds = [...new Set(ruleIds)].sort();
+  _criterionRuleCache.set(cacheKey, uniqueRuleIds);
+  return uniqueRuleIds;
+}
+
+function _resolveConfiguredRunOnly(runOnlyConfig, criteriaId = null) {
+  const baseRunOnly = (
+    runOnlyConfig &&
+    runOnlyConfig.type === 'tag' &&
+    Array.isArray(runOnlyConfig.values) &&
+    runOnlyConfig.values.length > 0
+  )
+    ? { type: 'tag', values: [...runOnlyConfig.values] }
+    : { type: 'tag', values: _tagsForLevel('AA') };
+
+  if (!criteriaId) {
+    return { runOnly: baseRunOnly, skipAxe: false };
+  }
+
+  const ruleIds = _criterionRuleIds(baseRunOnly.values, criteriaId);
+  if (ruleIds.length === 0) {
+    return { runOnly: null, skipAxe: true };
+  }
+
+  return {
+    runOnly: { type: 'rule', values: ruleIds },
+    skipAxe: false,
+  };
+}
+
+function _resolveRunOnly(level, criteriaId = null) {
+  return _resolveConfiguredRunOnly({ type: 'tag', values: _tagsForLevel(level) }, criteriaId);
+}
+
 /**
  * AccessibilityService — SRP: orchestrates a single Puppeteer + axe analysis run.
  *
@@ -167,7 +218,8 @@ class AccessibilityService {
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
   async analyze(html, criteriaId = null) {
-    const { timeoutMs, runOnly } = this._config.axe;
+    const { timeoutMs, runOnly: configuredRunOnly } = this._config.axe;
+    const { runOnly, skipAxe } = _resolveConfiguredRunOnly(configuredRunOnly, criteriaId);
     let browser = null;
 
     await this._acquireSlot();
@@ -192,26 +244,31 @@ class AccessibilityService {
       this._logger.info('Loading HTML content into page...');
       await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
-      this._logger.info('Injecting axe-core...');
-      await this._injectAxe(page);
+      let axeResults = { violations: [], passes: [], incomplete: [] };
+      if (skipAxe) {
+        this._logger.info(`Skipping axe.run(); no axe-core rules match ${criteriaId}.`);
+      } else {
+        this._logger.info('Injecting axe-core...');
+        await this._injectAxe(page);
 
-      this._logger.info('Running axe.run() analysis...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
-          // axe is available as a global after script injection
-          // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
+        this._logger.info('Running axe.run() analysis...');
+        axeResults = await page.evaluate((runOptions) => {
+          return new Promise((resolve, reject) => {
+            // axe is available as a global after script injection
+            // eslint-disable-next-line no-undef
+            axe.run(document, { runOnly: runOptions }, (err, results) => {
+              if (err) reject(err);
+              else resolve(results);
+            });
           });
-        });
-      }, runOnly);
+        }, runOnly);
 
-      this._logger.info(
-        `axe.run() complete — violations: ${axeResults.violations.length}, ` +
-        `passes: ${axeResults.passes.length}, ` +
-        `incomplete: ${(axeResults.incomplete || []).length}`
-      );
+        this._logger.info(
+          `axe.run() complete — violations: ${axeResults.violations.length}, ` +
+          `passes: ${axeResults.passes.length}, ` +
+          `incomplete: ${(axeResults.incomplete || []).length}`
+        );
+      }
 
       this._logger.info('Running static custom checks...');
       const customResults = await runStaticChecks(page, criteriaId);
@@ -241,7 +298,8 @@ class AccessibilityService {
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
   async analyseUrl(url, criteriaId = null) {
-    const { timeoutMs, runOnly } = this._config.axe;
+    const { timeoutMs, runOnly: configuredRunOnly } = this._config.axe;
+    const { runOnly, skipAxe } = _resolveConfiguredRunOnly(configuredRunOnly, criteriaId);
     let browser = null;
 
     await _assertPublicUrl(url);
@@ -274,25 +332,30 @@ class AccessibilityService {
       // before axe/custom checks run.
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
-      this._logger.info('Injecting axe-core...');
-      await this._injectAxe(page);
+      let axeResults = { violations: [], passes: [], incomplete: [] };
+      if (skipAxe) {
+        this._logger.info(`Skipping axe.run(); no axe-core rules match ${criteriaId}.`);
+      } else {
+        this._logger.info('Injecting axe-core...');
+        await this._injectAxe(page);
 
-      this._logger.info('Running axe.run() analysis...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
-          // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
+        this._logger.info('Running axe.run() analysis...');
+        axeResults = await page.evaluate((runOptions) => {
+          return new Promise((resolve, reject) => {
+            // eslint-disable-next-line no-undef
+            axe.run(document, { runOnly: runOptions }, (err, results) => {
+              if (err) reject(err);
+              else resolve(results);
+            });
           });
-        });
-      }, runOnly);
+        }, runOnly);
 
-      this._logger.info(
-        `axe.run() complete — violations: ${axeResults.violations.length}, ` +
-        `passes: ${axeResults.passes.length}, ` +
-        `incomplete: ${(axeResults.incomplete || []).length}`
-      );
+        this._logger.info(
+          `axe.run() complete — violations: ${axeResults.violations.length}, ` +
+          `passes: ${axeResults.passes.length}, ` +
+          `incomplete: ${(axeResults.incomplete || []).length}`
+        );
+      }
 
       this._logger.info('Running all custom checks (static + interactive)...');
       const customResults = await runAll(page, criteriaId);
@@ -321,9 +384,9 @@ class AccessibilityService {
    * @param {string} url - Fully-qualified URL
    * @returns {Promise<Array<object>>} Flat findings array
    */
-  async analyseUrlFlat(url, level = 'AA', lang = 'en') {
+  async analyseUrlFlat(url, level = 'AA', lang = 'en', criteriaId = null) {
     const { timeoutMs } = this._config.axe;
-    const runOnly = { type: 'tag', values: _tagsForLevel(level) };
+    const { runOnly, skipAxe } = _resolveRunOnly(level, criteriaId);
     let browser = null;
 
     await _assertPublicUrl(url);
@@ -355,34 +418,41 @@ class AccessibilityService {
       // Use networkidle2 for parity with audit runner requirements and better JS coverage.
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
-      this._logger.info('[flat] Injecting axe-core...');
-      await this._injectAxe(page, '[flat]');
+      let axeResults = { violations: [], passes: [], incomplete: [] };
+      if (skipAxe) {
+        this._logger.info(`[flat] Skipping axe.run(); no axe-core rules match ${criteriaId}.`);
+      } else {
+        this._logger.info('[flat] Injecting axe-core...');
+        await this._injectAxe(page, '[flat]');
 
-      this._logger.info('[flat] Running axe.run()...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
-          // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
+        this._logger.info('[flat] Running axe.run()...');
+        axeResults = await page.evaluate((runOptions) => {
+          return new Promise((resolve, reject) => {
+            // eslint-disable-next-line no-undef
+            axe.run(document, { runOnly: runOptions }, (err, results) => {
+              if (err) reject(err);
+              else resolve(results);
+            });
           });
-        });
-      }, runOnly);
+        }, runOnly);
 
-      this._logger.info(
-        `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +
-        `passes: ${axeResults.passes.length}, ` +
-        `incomplete: ${(axeResults.incomplete || []).length}`
-      );
+        this._logger.info(
+          `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +
+          `passes: ${axeResults.passes.length}, ` +
+          `incomplete: ${(axeResults.incomplete || []).length}`
+        );
+      }
 
       this._logger.info('[flat] Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page);
+      const customResults = await runAll(page, criteriaId);
       const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);
       const allowedLevels = _allowedLevels(level);
-      const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
+      const customFindings = allCustomFindings.filter(
+        f => (!criteriaId || f.wcag_sc === criteriaId) && (!f.level || allowedLevels.has(f.level))
+      );
       this._logger.info(`[flat] Custom checks complete — ${customFindings.length} finding(s).`);
 
-      const findings = [...mapResultsFlat(axeResults, url, lang), ...customFindings];
+      const findings = [...mapResultsFlat(axeResults, url, lang, criteriaId), ...customFindings];
       const ORDER = { fail: 0, needs_review: 1, pass: 2 };
       findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
       return findings;

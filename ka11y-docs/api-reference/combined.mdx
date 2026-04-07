@@ -29,6 +29,14 @@ The combined endpoint is the **primary API**. It runs the Node `axe_core` stage 
   Conformance target: `"A"` | `"AA"` | `"AAA"`. Controls which axe-core tags are used and filters Python findings by WCAG level. Use `AAA` if you want `1.4.6 Contrast (Enhanced)` in the final finding arrays; lowering the level hides higher-level findings.
 </ParamField>
 
+<ParamField body="success_criteria_id" type="string">
+  Optional WCAG success-criterion filter in `X.Y.Z` format, for example `"1.1.1"` or `"2.5.3"`. When supplied, the combined job narrows Node execution to matching axe-core rule IDs plus matching Node custom checks, and `ka11y-python` only schedules the supporting crawler/auditor stages for that criterion.
+</ParamField>
+
+<Note>
+  Criterion-filtered combined jobs are now genuinely cheaper, not just post-filtered. Examples: `1.1.1` runs only the image pipeline on the Python side, `2.5.3` skips image/media/form crawlers entirely, and custom-only Node criteria can skip `axe.run()` in the internal flat stage. Some criteria still require their prerequisite toggle to stay enabled, for example `1.4.3` / `1.4.6` require `run_ocr: true`.
+</Note>
+
 <ParamField body="lang" type="string" default="en">
   Result language for localized WCAG names, suggested fixes, and catalogue-backed fallback reasons. Use `"ja"` for Japanese (`"en"` and `"de"` are also supported). Unsupported values fall back to English. Default result language is English.
 </ParamField>
@@ -92,6 +100,7 @@ curl -X POST http://localhost:8000/api/v1/combined/ \
   -d '{
     "url": "https://example.com",
     "wcag_level": "AAA",
+    "success_criteria_id": "1.1.1",
     "lang": "ja",
     "max_depth": 0,
     "run_ocr": true,
@@ -116,6 +125,7 @@ import httpx
 resp = httpx.post("http://localhost:8000/api/v1/combined/", json={
     "url": "https://example.com",
     "wcag_level": "AAA",
+    "success_criteria_id": "1.1.1",
     "lang": "ja",
     "max_depth": 0,
 })

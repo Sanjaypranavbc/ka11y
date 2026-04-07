@@ -97,6 +97,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
     """
     _jobs[job_id]["status"] = "running"
     url = str(payload.url)
+    filter_rule = filter_rule or payload.success_criteria_id
     _lang_ctx.set(payload.lang)  # Inherited by all child tasks via context copy
 
     config = load_config()
@@ -113,7 +114,13 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
         # Fire axe-core and all Python stages concurrently
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
-            _call_node_flat(url, node_base_url, payload.wcag_level, payload.lang)
+            _call_node_flat(
+                url,
+                node_base_url,
+                payload.wcag_level,
+                payload.lang,
+                success_criteria_id=filter_rule,
+            )
         )
         python_task = asyncio.create_task(
             _run_python_stages(
@@ -136,6 +143,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
                 lang=payload.lang,
                 job_id=job_id,
+                success_criteria_id=filter_rule,
             )
         )
 

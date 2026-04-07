@@ -58,7 +58,8 @@ Important conservative behaviors in the current implementation:
 - `3.2.6` consistent-help remains `incomplete` from a single-page audit because cross-page consistency cannot be proven statically.
 - `2.4.8` only passes on visible current-location cues. Sitemap and JSON-LD hints alone stay `incomplete`.
 - `4.1.3` no longer fails a page just because forms exist without live regions.
-- SC-filtered Node requests now short-circuit custom-check execution: when `/analyze-accessibility` or `/analyse-url` is called with `successCriteriaId`, only custom checks mapped to that criterion are executed.
+- SC-filtered Node requests now short-circuit both axe-core and custom-check execution: when a request is called with `successCriteriaId`, ka11y narrows axe-core to matching rule IDs and only executes custom checks mapped to that criterion.
+- Criterion-filtered combined jobs also prune the Python side: only crawler/auditor stages that can emit the requested WCAG SC are scheduled.
 
 See [Node Custom Checks](/rules/node-custom-checks) for the full rule-by-rule catalogue.
 

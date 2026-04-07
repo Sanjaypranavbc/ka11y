@@ -131,4 +131,47 @@ describe('AccessibilityService.analyseUrlFlat', () => {
     expect(page.waitForFunction).toHaveBeenCalledTimes(2);
     expect(findings).toEqual([]);
   });
+
+  test('uses rule-scoped axe execution for criterion-filtered flat runs', async () => {
+    const page = makePage({ violations: [], passes: [], incomplete: [] });
+    const service = makeService(page);
+    runAll.mockResolvedValue([]);
+
+    await service.analyseUrlFlat('https://example.com', 'AA', 'en', '1.1.1');
+
+    expect(page.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        type: 'rule',
+        values: expect.arrayContaining(['image-alt']),
+      }),
+    );
+    expect(runAll).toHaveBeenCalledWith(page, '1.1.1');
+  });
+
+  test('skips axe.run entirely when the filtered criterion has no axe-core rules', async () => {
+    const page = makePage({ violations: [], passes: [], incomplete: [] });
+    const service = makeService(page);
+
+    runAll.mockResolvedValue([
+      {
+        successCriteriaId: '3.3.8',
+        rules: [{
+          ruleId: 'custom-accessible-auth',
+          impact: 'serious',
+          status: 'fail',
+          reason: 'Authentication challenge has no accessible alternative.',
+          helpUrl: 'https://example.com/sc-338',
+        }],
+      },
+    ]);
+
+    const findings = await service.analyseUrlFlat('https://example.com', 'AA', 'en', '3.3.8');
+
+    expect(page.evaluate).not.toHaveBeenCalled();
+    expect(runAll).toHaveBeenCalledWith(page, '3.3.8');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].wcag_sc).toBe('3.3.8');
+    expect(findings[0].source).toBe('custom');
+  });
 });

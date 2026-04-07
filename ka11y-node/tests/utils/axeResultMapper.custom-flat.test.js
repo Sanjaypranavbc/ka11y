@@ -240,6 +240,37 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
       page_url: 'https://example.com',
     });
   });
+
+  test('criteriaFilter narrows flat axe findings to a single WCAG SC', () => {
+    const axeResults = makeAxeResults({
+      violations: [
+        {
+          id: 'image-alt',
+          tags: ['wcag111', 'wcag2a'],
+          impact: 'serious',
+          nodes: [{ html: '<img>', target: ['img'], failureSummary: 'Missing alt text' }],
+          help: 'Images should have alt text.',
+          helpUrl: 'https://example.com/image-alt',
+          description: 'Ensure images have alternative text',
+        },
+        {
+          id: 'label',
+          tags: ['wcag332', 'wcag2a'],
+          impact: 'moderate',
+          nodes: [{ html: '<input>', target: ['input'], failureSummary: 'Missing label' }],
+          help: 'Form controls need labels.',
+          helpUrl: 'https://example.com/label',
+          description: 'Ensure form controls have labels',
+        },
+      ],
+    });
+
+    const findings = mapResultsFlat(axeResults, 'https://example.com', 'en', '1.1.1');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].wcag_sc).toBe('1.1.1');
+    expect(findings[0].rule_id).toBe('image-alt');
+  });
 });
 
 describe('formatSuccessCriterion', () => {

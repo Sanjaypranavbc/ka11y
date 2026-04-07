@@ -16,15 +16,17 @@ They navigate the page using Playwright Chromium in headless mode, inject JavaSc
 
 ## Optimization verdict
 
-For the question "is the crawler optimized?": **yes on the Python side for single-page audits, and partially on the Node side for rule-filtered requests.**
+For the question "is the crawler optimized?": **yes for Python single-page audits, and yes for criterion-filtered Node requests.**
 
 | Service | Optimization status | Why |
 |---------|---------------------|-----|
 | `ka11y-python` (`max_depth = 0`) | **Optimized** | One live navigation via `UniversalPageLoader`, one combined `page.evaluate(...)`, one HAR recording, then the resulting snapshot is fanned out to six static crawlers plus HAR-backed rendered checks. |
 | `ka11y-python` (`max_depth > 0`) | **Partially optimized** | Multi-page crawls still need one real load per discovered page, so the single-snapshot fan-out is intentionally disabled. |
-| `ka11y-node` | **Optimized per request** | axe-core and all Node custom checks share one Puppeteer page/browser session. When a request is filtered by `successCriteriaId`, only the matching custom checks are executed instead of the whole 24-check catalogue. |
+| `ka11y-node` | **Optimized per request** | axe-core and all Node custom checks share one Puppeteer page/browser session. When a request is filtered by `successCriteriaId`, Node narrows axe-core to matching rule IDs and only executes the matching custom checks instead of the whole 24-check catalogue. |
 
 The main caveat is that `AsyncImageCrawler` still launches its own browser session even in single-page mode. That is intentional: it needs per-element screenshots for OCR, contrast, and image classification, which cannot be reconstructed from the universal snapshot alone.
+
+Single-criterion combined jobs also prune the Python side now. If the requested rule only needs the image pipeline, `ka11y-python` skips the universal snapshot entirely; if it only needs forms, media, or rendered-layout checks, only those supporting stages are scheduled.
 
 ## What ka11y actually crawls
 

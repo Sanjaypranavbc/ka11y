@@ -6,11 +6,15 @@ jest.mock('dns', () => ({
   },
 }));
 
-jest.mock('../../src/utils/axeResultMapper', () => ({
-  mapResults: jest.fn().mockReturnValue([{ successCriteriaId: '4.1.1', rules: [{ ruleId: 'duplicate-id' }] }]),
-  mapResultsFlat: jest.fn().mockReturnValue([]),
-  mapCustomResultsFlat: jest.fn().mockReturnValue([]),
-}));
+jest.mock('../../src/utils/axeResultMapper', () => {
+  const actual = jest.requireActual('../../src/utils/axeResultMapper');
+  return {
+    ...actual,
+    mapResults: jest.fn().mockReturnValue([{ successCriteriaId: '1.1.1', rules: [{ ruleId: 'image-alt' }] }]),
+    mapResultsFlat: jest.fn().mockReturnValue([]),
+    mapCustomResultsFlat: jest.fn().mockReturnValue([]),
+  };
+});
 
 jest.mock('../../src/custom-checks/index', () => ({
   runAll: jest.fn(),
@@ -79,17 +83,24 @@ describe('AccessibilityService criterion-aware custom-check execution', () => {
 
     runStaticChecks.mockResolvedValue([
       {
-        successCriteriaId: '4.1.1',
+        successCriteriaId: '1.1.1',
         rules: [{ ruleId: 'custom-html-parsing', status: 'pass' }],
       },
     ]);
 
-    const results = await service.analyze('<main>Hello</main>', '4.1.1');
+    const results = await service.analyze('<main>Hello</main>', '1.1.1');
 
-    expect(runStaticChecks).toHaveBeenCalledWith(page, '4.1.1');
+    expect(runStaticChecks).toHaveBeenCalledWith(page, '1.1.1');
+    expect(page.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        type: 'rule',
+        values: expect.arrayContaining(['image-alt']),
+      }),
+    );
     expect(mergeWithAxe).toHaveBeenCalledTimes(1);
     expect(results).toEqual(expect.arrayContaining([
-      expect.objectContaining({ successCriteriaId: '4.1.1' }),
+      expect.objectContaining({ successCriteriaId: '1.1.1' }),
     ]));
   });
 
@@ -99,17 +110,24 @@ describe('AccessibilityService criterion-aware custom-check execution', () => {
 
     runAll.mockResolvedValue([
       {
-        successCriteriaId: '4.1.1',
+        successCriteriaId: '1.1.1',
         rules: [{ ruleId: 'custom-html-parsing', status: 'pass' }],
       },
     ]);
 
-    const results = await service.analyseUrl('https://example.com', '4.1.1');
+    const results = await service.analyseUrl('https://example.com', '1.1.1');
 
-    expect(runAll).toHaveBeenCalledWith(page, '4.1.1');
+    expect(runAll).toHaveBeenCalledWith(page, '1.1.1');
+    expect(page.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        type: 'rule',
+        values: expect.arrayContaining(['image-alt']),
+      }),
+    );
     expect(mergeWithAxe).toHaveBeenCalledTimes(1);
     expect(results).toEqual(expect.arrayContaining([
-      expect.objectContaining({ successCriteriaId: '4.1.1' }),
+      expect.objectContaining({ successCriteriaId: '1.1.1' }),
     ]));
   });
 });
