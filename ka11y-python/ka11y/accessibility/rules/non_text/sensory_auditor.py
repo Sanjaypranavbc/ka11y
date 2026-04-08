@@ -10,24 +10,39 @@ Rule:
 
 Approach:
     1. Filter elements to those containing instructional sentences
-       (sentences that begin with an imperative verb: click, press, tap, …).
+       (imperative commands: "Click the round button" / declarative guidance:
+        "Required fields are marked in red" / Japanese equivalents:
+        "赤いボタンをクリックしてください").
     2. For each instructional sentence, check whether it references ONLY
-       a sensory property (colour, shape, size, position, sound) with no
-       non-sensory identifier (a real label, a named button text, etc.).
+       a sensory property (colour, shape, size, position, orientation, sound,
+       brightness, texture) with no non-sensory identifier (a real label, a
+       named button text, a quoted string, etc.).
     3. If sensory-only → FAILED; if sensory + non-sensory label → PASSED;
        if no sensory reference → PASSED (not relevant to this rule).
 
-spaCy is used for sentence segmentation and POS tagging.
-Model required: en_core_web_sm  (or the lang-appropriate model).
-Install: python -m spacy download en_core_web_sm
+Language support:
+    English  — spaCy en_core_web_sm  (or regex fallback)
+    Japanese — spaCy ja_core_news_sm (or regex fallback)
+    CJK text is detected automatically; word-boundary-safe regex is used
+    for Japanese so that \b does not break on CJK characters.
+
+Fixes over v1:
+    - All module-level regex patterns defined before first use (no forward refs)
+    - `brightness` and `texture` added as sensory categories (EN + JA)
+    - `title` attribute included in text-source iteration
+    - `_QUOTED_RE` extended to match Japanese quotation marks 「」 『』
+    - Language detected per-element via `lang=` attribute or CJK heuristic
+    - Japanese taxonomy: SENSORY_WORDS_JA, GENERIC_UI_NOUNS_JA, STOP_WORDS_JA
+    - Japanese instruction detection via _INSTRUCTION_PATTERN_JA (no \b)
+    - Japanese per-category regexes without word boundaries
+    - Japanese sentence splitting on 。！？
+    - Japanese meaningful-label check via remaining CJK content words
+    - spaCy loader preserves parser pipe for Japanese (tokenization dependency)
+    - _tokenize_sentences gains lang param + catches exceptions with regex fallback
+    - _violations_133 / _violations_133_regex unified lang-aware path
 
 Output:
     audit_sensory_report.csv  (written to output_dir)
-
-CSV columns:
-    page_url, element_tag, element_id, sentence,
-    sensory_categories, wcag_1_3_3_status, wcag_1_3_3_violation,
-    overall_status, html_snippet
 """
 
 from __future__ import annotations
@@ -40,7 +55,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from ka11y.crawler.sensory_crawler import SensoryElementData
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Sensory word taxonomy
+# English sensory word taxonomy
 # ─────────────────────────────────────────────────────────────────────────────
 
 SENSORY_WORDS: Dict[str, Set[str]] = {
@@ -75,12 +90,70 @@ SENSORY_WORDS: Dict[str, Set[str]] = {
         "beep", "chime", "bell", "tone", "sound", "audio", "alarm",
         "buzz", "ring", "ping", "notification",
     },
+    "brightness": {
+        "bright", "dark", "light", "dim", "shiny", "glowing", "faded",
+        "vivid", "dull", "luminous", "darker", "lighter", "brighter",
+    },
+    "texture": {
+        "rough", "smooth", "bumpy", "soft", "hard", "glossy", "matte",
+        "textured", "patterned", "striped", "dotted",
+    },
 }
 
-# Flattened set for quick membership tests
-ALL_SENSORY: Set[str] = set().union(*SENSORY_WORDS.values())
+# ─────────────────────────────────────────────────────────────────────────────
+# Japanese sensory word taxonomy
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Imperative verbs that signal instructional sentences
+SENSORY_WORDS_JA: Dict[str, Set[str]] = {
+    "color": {
+        "赤", "青", "緑", "黄", "橙", "紫", "ピンク", "黒", "白",
+        "灰色", "グレー", "金", "銀", "茶色", "水色", "藍", "紺",
+        "赤い", "青い", "緑色", "黄色", "黄色い", "白い", "黒い",
+        "色", "カラー", "色付き", "着色", "オレンジ", "ライトブルー",
+    },
+    "shape": {
+        "丸", "丸い", "円", "円形", "四角", "四角い", "長方形",
+        "三角", "三角形", "楕円", "星形", "ハート形", "形", "形状",
+        "正方形", "六角形", "ひし形",
+    },
+    "size": {
+        "大きい", "小さい", "巨大", "細い", "太い", "長い", "短い",
+        "広い", "狭い", "大きな", "小さな", "サイズ", "大", "小",
+        "大型", "小型", "大きめ", "小さめ",
+    },
+    "position": {
+        "左", "右", "上", "下", "中央", "中心", "隣", "横",
+        "上部", "下部", "左側", "右側", "真ん中", "そば", "近く",
+        "内側", "外側", "左上", "右上", "左下", "右下",
+        "手前", "奥", "前", "後ろ", "端", "角", "隅",
+    },
+    "orientation": {
+        "横向き", "縦向き", "水平", "垂直", "時計回り", "反時計回り",
+        "横", "縦", "斜め", "傾き",
+    },
+    "sound": {
+        "ビープ", "チャイム", "音", "通知音", "アラーム", "ベル",
+        "着信音", "サウンド", "音声", "ブザー", "効果音",
+    },
+    "brightness": {
+        "明るい", "暗い", "光る", "輝く", "鮮やか", "くすんだ",
+        "明度", "輝度", "明るめ", "暗め", "ぼんやり",
+    },
+    "texture": {
+        "滑らか", "粗い", "ざらざら", "つるつる", "光沢", "マット",
+        "テクスチャ", "縞模様", "水玉", "格子",
+    },
+}
+
+# Flattened sets for quick membership tests
+ALL_SENSORY_EN: Set[str] = set().union(*SENSORY_WORDS.values())
+ALL_SENSORY_JA: Set[str] = set().union(*SENSORY_WORDS_JA.values())
+ALL_SENSORY: Set[str] = ALL_SENSORY_EN  # backward-compat alias
+
+# ─────────────────────────────────────────────────────────────────────────────
+# English instruction vocabulary
+# ─────────────────────────────────────────────────────────────────────────────
+
 IMPERATIVE_VERBS: Set[str] = {
     "click", "press", "tap", "select", "choose", "go", "refer",
     "find", "see", "use", "follow", "navigate", "scroll", "drag",
@@ -90,7 +163,6 @@ IMPERATIVE_VERBS: Set[str] = {
     "mark", "focus", "locate", "identify",
 }
 
-# Generic UI nouns that do NOT count as meaningful (non-sensory) labels
 GENERIC_UI_NOUNS: Set[str] = {
     "button", "icon", "link", "item", "element", "option",
     "control", "widget", "field", "area", "section", "menu",
@@ -99,7 +171,6 @@ GENERIC_UI_NOUNS: Set[str] = {
     "textfield", "input", "tab", "arrow", "step", "card", "dialog",
 }
 
-# Common stop-words to exclude from string-based "meaningful label" checks.
 STOP_WORDS: Set[str] = {
     "the", "and", "for", "with", "from", "that", "this", "these", "those",
     "you", "your", "his", "her", "its", "our", "their", "will", "can",
@@ -111,50 +182,75 @@ STOP_WORDS: Set[str] = {
     "located", "positioned", "placed", "highlighted", "required", "optional",
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Japanese instruction vocabulary
+# ─────────────────────────────────────────────────────────────────────────────
+
+GENERIC_UI_NOUNS_JA: Set[str] = {
+    "ボタン", "アイコン", "リンク", "項目", "要素", "オプション",
+    "コントロール", "ウィジェット", "フィールド", "エリア", "セクション",
+    "メニュー", "パネル", "バー", "ボックス", "コンテナ", "フォーム",
+    "チェックボックス", "ラジオボタン", "ドロップダウン", "テキストボックス",
+    "入力欄", "タブ", "矢印", "ステップ", "カード", "ダイアログ", "モーダル",
+    "スイッチ", "スライダー", "トグル", "アコーディオン", "セレクトボックス",
+}
+
+STOP_WORDS_JA: Set[str] = {
+    "の", "に", "は", "を", "が", "で", "て", "と", "も", "な",
+    "い", "た", "か", "ら", "れ", "さ", "り", "る", "ます", "です",
+    "ある", "いる", "する", "なる", "から", "まで", "より",
+    "ため", "こと", "もの", "ところ", "とき", "ように", "ください",
+    "して", "でき", "あり", "これ", "それ", "あの", "この", "その",
+    "など", "という", "ており", "てい",
+}
+
 # Minimum text length to bother analysing
 _MIN_TEXT_LEN = 5
+_MIN_TEXT_LEN_CJK = 2  # CJK characters carry more meaning per character
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CJK / language detection helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CJK_CHAR_RE = re.compile(r"[\u3000-\u9fff\uff00-\uffef\u3400-\u4dbf]")
+
+
+def _is_cjk_text(text: str) -> bool:
+    """Return True when ≥15% of characters are CJK (Japanese/Chinese/Korean)."""
+    if not text:
+        return False
+    cjk = sum(1 for c in text if _CJK_CHAR_RE.match(c))
+    return cjk / max(len(text), 1) >= 0.15
+
+
+def _detect_lang(element: SensoryElementData) -> str:
+    """
+    Return a 2-character language code for the element.
+
+    Priority:
+      1. element.lang attribute (set by crawler from closest lang= ancestor)
+      2. CJK character-density heuristic across all text fields
+      3. Default: 'en'
+    """
+    lang = (getattr(element, "lang", None) or "").strip().lower()
+    if lang:
+        return lang[:2]
+    all_text = " ".join(filter(None, [
+        element.text,
+        element.aria_label,
+        getattr(element, "title", None),
+    ]))
+    if _is_cjk_text(all_text):
+        return "ja"
+    return "en"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# spaCy lazy-loader (avoids import overhead when audit is skipped)
+# ALL module-level regex patterns — defined here so every function below can
+# reference them at call time without forward-reference issues.
 # ─────────────────────────────────────────────────────────────────────────────
 
-_nlp_cache: Dict[str, Any] = {}
-
-
-def _get_nlp(lang: str = "en"):
-    lang_key = (lang or "en")[:2]
-    if lang_key in _nlp_cache:
-        return _nlp_cache[lang_key]
-
-    nlp = None
-    try:
-        import spacy  # type: ignore
-
-        model_name = "en_core_web_sm" if lang_key == "en" else f"{lang_key}_core_news_sm"
-        try:
-            nlp = spacy.load(model_name, disable=["ner", "parser"])
-            if "sentencizer" not in nlp.pipe_names:
-                nlp.add_pipe("sentencizer")
-        except OSError:
-            nlp = None
-    except ImportError:
-        nlp = None
-
-    _nlp_cache[lang_key] = nlp
-    return nlp
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Sentence-level helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def _tokenize_sentences(text: str, nlp) -> List[Any]:
-    """Return spaCy sentence spans for the given text."""
-    doc = nlp(text)
-    return list(doc.sents)
-
+# ── English patterns (use \b word boundaries) ────────────────────────────────
 
 _CONTROL_RE = re.compile(
     r"\b("
@@ -183,24 +279,269 @@ _POSITIONAL_INSTRUCTION_RE = re.compile(
     re.IGNORECASE,
 )
 _REQUIRED_FIELD_RE = re.compile(r"\b(required|optional)\s+fields?\b", re.IGNORECASE)
+
+# English sentence splitter
+_SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+# English imperative: start-of-sentence instruction signal
+_IMPERATIVE_RE = re.compile(
+    r"^\s*(please|kindly|to|now|just)?\s*("
+    + "|".join(re.escape(word) for word in sorted(IMPERATIVE_VERBS, key=len, reverse=True))
+    + r")\b",
+    re.IGNORECASE,
+)
+
+# Purposive phrase ("to continue processing", "to submit the form")
+_PURPOSE_PHRASE_RE = re.compile(
+    r"\bto\s+(?:continue|proceed|submit|complete|finish|save|confirm|cancel|"
+    r"close|open|start|return|go\s+back|move\s+on)\b(?:\s+\w+){0,2}",
+    re.IGNORECASE,
+)
+
+# English sensory word (used when stripping before label check)
+_SENSORY_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in sorted(ALL_SENSORY_EN, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+# Quoted text — English straight/curly quotes AND Japanese 「」 『』
+_QUOTED_RE = re.compile(
+    r'(?:'
+    r'["\u201c\u201d\u2018\u2019].+?["\u201c\u201d\u2018\u2019]'  # English/curly
+    r'|'
+    r'[\u300c\u300e].+?[\u300d\u300f]'                             # Japanese 「」『』
+    r')'
+)
+
+
+def _pluralize(word: str) -> str:
+    if " " in word:
+        return word
+    if word.endswith(("s", "x", "z", "ch", "sh")):
+        return word + "es"
+    if len(word) > 1 and word.endswith("y") and word[-2] not in "aeiou":
+        return word[:-1] + "ies"
+    return word + "s"
+
+
+_GENERIC_TERMS = set(GENERIC_UI_NOUNS)
+for _w in list(GENERIC_UI_NOUNS):
+    _GENERIC_TERMS.add(_pluralize(_w))
+
+_GENERIC_RE = re.compile(
+    r"\b(" + "|".join(re.escape(word) for word in sorted(_GENERIC_TERMS, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+# English per-category regexes (with \b word boundaries)
 _CATEGORY_REGEXES: Dict[str, re.Pattern[str]] = {
     cat: re.compile(
-        r"\b(" + "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True)) + r")\b",
+        r"\b(" + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)) + r")\b",
         re.IGNORECASE,
     )
     for cat, words in SENSORY_WORDS.items()
 }
+
+# ── Japanese patterns (NO \b — word boundaries do not work for CJK) ──────────
+
+# Japanese sentence splitter: split on Japanese full-stop punctuation
+_SENT_SPLIT_JA_RE = re.compile(r"(?<=[。！？])\s*")
+
+# ── Japanese instruction patterns split into two separate regexes ─────────────
+#
+# Detection vs. stripping are in tension for words like 確認 (confirm) or
+# 送信 (submit) which are ALSO common button-label nouns.
+#
+# _INSTRUCTION_SIGNAL_JA — broad, used only to DETECT that a sentence is
+#   instructional.  Includes bare action nouns (確認, 選択, …) so that
+#   "確認してください" fires even when re.search finds just the noun first.
+#
+# _INSTRUCTION_STRIP_JA  — conservative, used inside _has_meaningful_label_text_ja
+#   to STRIP instruction tokens before checking what meaningful label words
+#   remain.  Requires a verb suffix for ambiguous action nouns so that a bare
+#   "確認" (= "Confirm" button label) is NOT stripped and can serve as a label.
+
+_INSTRUCTION_SIGNAL_JA = re.compile(
+    r"("
+    r"してください|して下さい|しましょう|してみてください|してみて|"
+    r"クリック(?:して|する|してください|します|しろ)?|"
+    r"タップ(?:して|する|してください|します)?|"
+    r"押して(?:ください|みて)?|押す|"
+    r"選択(?:して|する|してください|します)?|"
+    r"入力(?:して|する|してください|します)?|"
+    r"検索(?:して|する|してください|します)?|"
+    r"スクロール(?:して|する|してください)?|"
+    r"ドラッグ(?:して|する|してください)?|"
+    r"移動(?:して|する|してください)?|"
+    r"開いて(?:ください)?|開く|"
+    r"閉じて(?:ください)?|閉じる|"
+    r"送信(?:して|する|してください)?|"
+    r"確認(?:して|する|してください)?|"
+    r"記入(?:して|する|してください)?|"
+    r"チェック(?:して|する|してください)?|"
+    r"有効(?:に)?(?:して|する)|無効(?:に)?(?:して|する)|"
+    r"必須(?:項目|フィールド|入力|欄)?|"
+    r"必要(?:です|な(?:項目|情報|フィールド|入力)?)?|"
+    r"マークされた?|示された?|表示された?|強調された?"
+    r")",
+)
+
+_INSTRUCTION_STRIP_JA = re.compile(
+    r"("
+    r"してください|して下さい|しましょう|してみてください|してみて|"
+    # Unambiguous action verbs — optional verb suffix (never standalone UI labels)
+    r"クリック(?:して|する|してください|します|しろ)?|"
+    r"タップ(?:して|する|してください|します)?|"
+    r"押して(?:ください|みて)?|"          # te-form only; bare 押す can mean a push-label
+    # Action verbs that also serve as UI labels — REQUIRE verb suffix to strip
+    r"選択(?:して|する|してください|します)|"
+    r"入力(?:して|する|してください|します)|"
+    r"検索(?:して|する|してください|します)|"
+    r"スクロール(?:して|する|してください)|"
+    r"ドラッグ(?:して|する|してください)|"
+    r"移動(?:して|する|してください)|"
+    r"開いて(?:ください)?|"              # te-form only
+    r"閉じて(?:ください)?|"              # te-form only
+    r"送信(?:して|する|してください)|"   # require suffix
+    r"確認(?:して|する|してください)|"   # require suffix (bare 確認 = "Confirm" label)
+    r"記入(?:して|する|してください)|"
+    r"チェック(?:して|する|してください)|"
+    r"有効(?:に)?(?:して|する)|無効(?:に)?(?:して|する)|"
+    r"必須(?:項目|フィールド|入力|欄)?|"
+    r"必要(?:です|な(?:項目|情報|フィールド|入力)?)?|"
+    r"マークされた?|示された?|表示された?|強調された?"
+    r")",
+)
+
+# Keep a unified alias used in is_instruction_text_ja
+_INSTRUCTION_PATTERN_JA = _INSTRUCTION_SIGNAL_JA
+
+# Japanese sensory word matcher (no word boundaries)
+_SENSORY_JA_RE = re.compile(
+    "(" + "|".join(re.escape(w) for w in sorted(ALL_SENSORY_JA, key=len, reverse=True)) + ")",
+)
+
+# Japanese generic UI noun matcher (no word boundaries)
+_GENERIC_JA_RE = re.compile(
+    "(" + "|".join(re.escape(w) for w in sorted(GENERIC_UI_NOUNS_JA, key=len, reverse=True)) + ")",
+)
+
+# Japanese stop-word matcher (no word boundaries)
+_STOP_WORDS_JA_RE = re.compile(
+    "(" + "|".join(re.escape(w) for w in sorted(STOP_WORDS_JA, key=len, reverse=True)) + ")",
+)
+
+# Japanese per-category regexes (no \b)
+_CATEGORY_REGEXES_JA: Dict[str, re.Pattern[str]] = {
+    cat: re.compile(
+        "(" + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)) + ")",
+    )
+    for cat, words in SENSORY_WORDS_JA.items()
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# spaCy lazy-loader
+# ─────────────────────────────────────────────────────────────────────────────
+
+_nlp_cache: Dict[str, Any] = {}
+
+
+def _get_nlp(lang: str = "en"):
+    """
+    Load and cache a spaCy model for the given language.
+
+    English  — en_core_web_sm  (parser disabled; sentencizer added)
+    Japanese — ja_core_news_sm (parser KEPT for tokenisation; sentencizer added
+               only if no senter/sentencizer pipe already present)
+    Others   — {lang}_core_news_sm with parser disabled
+    """
+    lang_key = (lang or "en")[:2]
+    if lang_key in _nlp_cache:
+        return _nlp_cache[lang_key]
+
+    nlp = None
+    try:
+        import spacy  # type: ignore
+
+        if lang_key == "en":
+            model_name = "en_core_web_sm"
+            disable = ["ner", "parser"]
+        elif lang_key == "ja":
+            # Japanese model needs tok2vec + morphologizer + parser for word
+            # segmentation (no spaces between words).
+            model_name = "ja_core_news_sm"
+            disable = ["ner"]
+        else:
+            model_name = f"{lang_key}_core_news_sm"
+            disable = ["ner", "parser"]
+
+        try:
+            nlp = spacy.load(model_name, disable=disable)
+            # Add a sentencizer only when no sentence-boundary component exists
+            has_senter = any(p in nlp.pipe_names for p in ("sentencizer", "senter"))
+            if not has_senter:
+                nlp.add_pipe("sentencizer")
+        except OSError:
+            nlp = None
+    except ImportError:
+        nlp = None
+
+    _nlp_cache[lang_key] = nlp
+    return nlp
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sentence tokenisation helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _split_sentences_regex(text: str, lang: str = "en") -> List[str]:
+    """Split *text* into sentences using pure regex (no spaCy required)."""
+    if lang == "ja" or _is_cjk_text(text):
+        parts = _SENT_SPLIT_JA_RE.split(text)
+    else:
+        parts = _SENT_SPLIT_RE.split(text)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _tokenize_sentences(text: str, nlp: Any, lang: str = "en") -> List[Any]:
+    """
+    Return sentence spans / strings for *text*.
+
+    Uses spaCy when available; falls back to regex splitting (via
+    _split_sentences_regex) on any failure so the auditor never crashes.
+    """
+    if nlp is not None:
+        try:
+            doc = nlp(text)
+            sents = list(doc.sents)
+            if sents:
+                return sents
+        except Exception:
+            pass
+    return _split_sentences_regex(text, lang)
 
 
 def _sentence_text(sent: Any) -> str:
     return sent.text if hasattr(sent, "text") else str(sent)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Text-source iteration
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 def _iter_text_sources(element: SensoryElementData) -> List[str]:
+    """
+    Collect all text fields from an element, deduplicated, in priority order:
+      visible text → aria-label → title tooltip → placeholder → value
+    """
     sources: List[str] = []
     for raw in (
         element.text,
         element.aria_label,
+        getattr(element, "title", None),       # tooltip — carries instructions
         getattr(element, "placeholder", None),
         getattr(element, "value", None),
     ):
@@ -210,10 +551,31 @@ def _iter_text_sources(element: SensoryElementData) -> List[str]:
     return sources
 
 
-def _is_instruction_text(text: str) -> bool:
+# ─────────────────────────────────────────────────────────────────────────────
+# Instruction detection
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _is_instruction_text_ja(text: str) -> bool:
+    """Return True if the Japanese text looks like an instruction."""
+    return bool(_INSTRUCTION_PATTERN_JA.search(text))
+
+
+def _is_instruction_text(text: str, lang: str = "en") -> bool:
+    """
+    Return True if *text* looks like an instruction (imperative or declarative).
+
+    Supports both imperative commands ("Click the round button") and
+    declarative guidance ("Required fields are marked in red"), plus
+    Japanese instruction patterns when lang='ja' or CJK chars are detected.
+    """
     text = text.strip()
     if not text:
         return False
+
+    if lang == "ja" or _is_cjk_text(text):
+        return _is_instruction_text_ja(text)
+
     if _IMPERATIVE_RE.match(text):
         return True
     if _REQUIRED_FIELD_RE.search(text):
@@ -228,93 +590,131 @@ def _is_instruction_text(text: str) -> bool:
     )
 
 
-def _is_instruction(sent) -> bool:
+def _is_instruction(sent: Any, lang: str = "en") -> bool:
+    return _is_instruction_text(_sentence_text(sent), lang)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sensory category detection
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _sensory_categories_in_text(text: str, lang: str = "en") -> List[str]:
     """
-    True if the sentence looks like an instruction.
+    Return list of sensory category names present in *text*.
 
-    Supports both imperative commands ("Click the round button") and
-    declarative guidance commonly used in forms ("Required fields are
-    marked in red").
+    For Japanese / CJK text: uses the \b-free Japanese regexes first, then
+    also checks English regexes for code-mixed content (e.g. "右の blue ボタン").
     """
-    return _is_instruction_text(_sentence_text(sent))
+    if lang == "ja" or _is_cjk_text(text):
+        cats_ja = [cat for cat, pat in _CATEGORY_REGEXES_JA.items() if pat.search(text)]
+        cats_en = [
+            cat for cat, pat in _CATEGORY_REGEXES.items()
+            if pat.search(text) and cat not in cats_ja
+        ]
+        return cats_ja + cats_en
+    return [cat for cat, pat in _CATEGORY_REGEXES.items() if pat.search(text)]
 
 
-def _sensory_categories_in_text(text: str) -> List[str]:
-    return [cat for cat, pattern in _CATEGORY_REGEXES.items() if pattern.search(text)]
+def _sensory_categories_in_sent(sent: Any, lang: str = "en") -> List[str]:
+    return _sensory_categories_in_text(_sentence_text(sent), lang)
 
 
-def _sensory_categories_in_sent(sent) -> List[str]:
-    """Return list of sensory category names found in the sentence text."""
-    return _sensory_categories_in_text(_sentence_text(sent))
+# ─────────────────────────────────────────────────────────────────────────────
+# Meaningful-label detection
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _remaining_label_words(text: str) -> List[str]:
+    """
+    English: strip purposive phrases, sensory words, generic UI nouns, and
+    imperative verbs; return any non-stop-word tokens that remain.
+    A non-empty return means a non-sensory identifier is present.
+    """
     stripped = _PURPOSE_PHRASE_RE.sub(" ", text)
     stripped = _SENSORY_RE.sub(" ", stripped)
     stripped = _GENERIC_RE.sub(" ", stripped)
     stripped = _IMPERATIVE_RE.sub(" ", stripped)
 
-    remaining_words: List[str] = []
+    remaining: List[str] = []
     for word in re.split(r"\W+", stripped):
-        word_lower = word.lower()
-        if not word_lower:
+        wl = word.lower()
+        if not wl:
             continue
-        if len(word_lower) <= 2 and not word_lower.isdigit():
+        if len(wl) <= 2 and not wl.isdigit():
             continue
-        if word_lower in STOP_WORDS:
+        if wl in STOP_WORDS:
             continue
-        remaining_words.append(word_lower)
-    return remaining_words
+        remaining.append(wl)
+    return remaining
 
 
-def _has_meaningful_label_text(text: str) -> bool:
+def _has_meaningful_label_text_ja(text: str) -> bool:
+    """
+    Japanese: strip sensory, generic UI, stop-word, and instruction tokens;
+    return True when CJK content words remain (= a specific identifier exists).
+
+    Example (PASS):  「送信」ボタンをクリック  → 送信 remains after stripping
+    Example (FAIL):  赤いボタンをクリックして  → nothing meaningful remains
+    """
+    # Quoted content is always a meaningful label (「確認」, 『ホーム』, …)
     if _QUOTED_RE.search(text):
         return True
+    stripped = _SENSORY_JA_RE.sub("", text)
+    stripped = _GENERIC_JA_RE.sub("", stripped)
+    stripped = _STOP_WORDS_JA_RE.sub("", stripped)
+    stripped = _INSTRUCTION_STRIP_JA.sub("", stripped)  # conservative strip
+    # Remove punctuation and whitespace
+    stripped = re.sub(r"[\s。、！？・「」『』（）【】〔〕…—\-～＝＋]+", "", stripped)
+    # Meaningful if CJK content words remain, or Latin word ≥3 chars
+    return bool(_CJK_CHAR_RE.search(stripped)) or bool(re.search(r"[a-zA-Z]{3,}", stripped))
+
+
+def _has_meaningful_label_text(text: str, lang: str = "en") -> bool:
+    """
+    Return True when *text* contains a non-sensory, non-generic noun that
+    could serve as a real identifier for the referenced UI element.
+
+    Quoted strings are always treated as meaningful regardless of language.
+    """
+    if _QUOTED_RE.search(text):
+        return True
+    if lang == "ja" or _is_cjk_text(text):
+        return _has_meaningful_label_text_ja(text)
     return bool(_remaining_label_words(text))
 
 
-def _has_meaningful_label(sent) -> bool:
-    """
-    Return True if the sentence contains a non-sensory, non-generic noun
-    that could serve as a real identifier for the referenced UI element.
-
-    Strategy:
-      - Any NOUN/PROPN that is NOT in ALL_SENSORY and NOT in GENERIC_UI_NOUNS
-        is considered a meaningful label (e.g. "Submit", "Next step", "Home").
-      - Quoted strings (e.g. 'Click "Save draft"') are always meaningful.
-    """
-    return _has_meaningful_label_text(_sentence_text(sent))
+def _has_meaningful_label(sent: Any, lang: str = "en") -> bool:
+    return _has_meaningful_label_text(_sentence_text(sent), lang)
 
 
-def _is_sensory_only(sent, sensory_cats: List[str]) -> bool:
+def _is_sensory_only(sent: Any, sensory_cats: List[str], lang: str = "en") -> bool:
     """
-    True when:
-      - the sentence contains at least one sensory word  AND
-      - it does NOT contain any meaningful (non-sensory) label.
+    True when the sentence has ≥1 sensory word AND no meaningful non-sensory label.
+    (sensory_cats is assumed non-empty at call site.)
     """
-    if not sensory_cats:
-        return False
-    return not _has_meaningful_label(sent)
+    return not _has_meaningful_label(sent, lang)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Per-element violation detector
+# Per-element violation detector (spaCy path)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def _violations_133(
     element: SensoryElementData,
-    nlp,
+    nlp: Any,
+    lang: str = "en",
 ) -> List[Tuple[str, str, List[str], str]]:
     """
     Analyse one element's text for WCAG 1.3.3 violations.
 
     Returns a list of (sentence_text, message, sensory_categories, status)
-    for each instructional sentence found in the element.
-    Status is either "FAILED" or "PASSED".
+    tuples for each instructional sentence found.  Status is "FAILED" or "PASSED".
     """
+    min_len = _MIN_TEXT_LEN_CJK if lang == "ja" else _MIN_TEXT_LEN
     texts_to_check = [
-        text for text in _iter_text_sources(element) if len(text.strip()) >= _MIN_TEXT_LEN
+        t for t in _iter_text_sources(element) if len(t.strip()) >= min_len
     ]
     if not texts_to_check:
         return []
@@ -322,25 +722,21 @@ def _violations_133(
     results: List[Tuple[str, str, List[str], str]] = []
 
     for src_text in texts_to_check:
-        try:
-            sents = _tokenize_sentences(src_text, nlp)
-        except Exception:
-            # Fallback: treat the whole text as one sentence
-            sents = [src_text]  # type: ignore
+        sents = _tokenize_sentences(src_text, nlp, lang)
 
         for sent in sents:
             sent_text = _sentence_text(sent)
-            if len(sent_text.strip()) < _MIN_TEXT_LEN:
+            if len(sent_text.strip()) < min_len:
                 continue
 
-            if not _is_instruction(sent):
+            if not _is_instruction(sent, lang):
                 continue
 
-            sensory_cats = _sensory_categories_in_sent(sent)
+            sensory_cats = _sensory_categories_in_sent(sent, lang)
             if not sensory_cats:
                 continue
 
-            if _is_sensory_only(sent, sensory_cats):
+            if _is_sensory_only(sent, sensory_cats, lang):
                 cats_str = ", ".join(sensory_cats)
                 msg = (
                     f"1.3.3: Instruction relies solely on sensory characteristic(s) "
@@ -349,7 +745,10 @@ def _violations_133(
                 )
                 results.append((sent_text.strip(), msg, sensory_cats, "FAILED"))
             else:
-                msg = f"1.3.3: Instruction contains sensory characteristic(s) but also provides a non-sensory identifier."
+                msg = (
+                    "1.3.3: Instruction contains sensory characteristic(s) "
+                    "but also provides a non-sensory identifier."
+                )
                 results.append((sent_text.strip(), msg, sensory_cats, "PASSED"))
 
     return results
@@ -364,6 +763,10 @@ class SensoryCharacteristicsAuditor:
     """
     Runs WCAG 1.3.3 checks against a list of SensoryElementData records
     and writes audit_sensory_report.csv to output_dir.
+
+    Language is detected per-element from the `lang` attribute recorded by
+    the crawler (or inferred from CJK character density), so a single audit
+    run handles mixed-language pages correctly.
     """
 
     CSV_FIELDS = [
@@ -381,7 +784,7 @@ class SensoryCharacteristicsAuditor:
     def __init__(self, output_dir: str, lang: str = "en"):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.lang = lang
+        self.lang = lang  # default language when element has no lang attr
 
     def generate_audit_report(
         self,
@@ -393,52 +796,50 @@ class SensoryCharacteristicsAuditor:
         Only elements that contain at least one instructional sentence with
         a sensory reference produce a row; others are silently skipped to
         keep the report focused on actionable issues.
-        """
-        nlp = _get_nlp(self.lang)
-        if nlp is None:
-            print(
-                "[SensoryAuditor] WARNING: spaCy not available. "
-                "Falling back to regex-only sentence splitting."
-            )
 
+        Language is resolved per element so multilingual pages are handled
+        correctly without re-running the auditor.
+        """
         records: List[Dict[str, Any]] = []
 
         for el in elements:
-            if nlp is not None:
-                viols = _violations_133(el, nlp)
-            else:
-                viols = _violations_133_regex(el)
+            el_lang = _detect_lang(el) or self.lang
+            nlp = _get_nlp(el_lang)
+
+            viols = (
+                _violations_133(el, nlp, el_lang)
+                if nlp is not None
+                else _violations_133_regex(el, el_lang)
+            )
 
             if not viols:
-                continue  # No instructional sensory text → skip
+                continue
 
             for sent_text, msg, cats, status in viols:
                 records.append(
                     {
-                        "page_url":          el.page_url,
-                        "element_tag":       el.tag,
-                        "element_id":        el.element_id or "",
-                        "sentence":          sent_text[:300],
-                        "sensory_categories": ", ".join(cats),
-                        "wcag_1_3_3_status": status,
+                        "page_url":             el.page_url,
+                        "element_tag":          el.tag,
+                        "element_id":           el.element_id or "",
+                        "sentence":             sent_text[:300],
+                        "sensory_categories":   ", ".join(cats),
+                        "wcag_1_3_3_status":    status,
                         "wcag_1_3_3_violation": msg if status == "FAILED" else "",
-                        "overall_status":    status,
-                        "html_snippet":      el.html[:400],
+                        "overall_status":       status,
+                        "html_snippet":         el.html[:400],
                     }
                 )
 
-        # ── Summary counts ────────────────────────────────────────────────────
         total_elements_checked = len(elements)
         total_violations       = sum(1 for r in records if r["overall_status"] == "FAILED")
         unique_pages           = len({r["page_url"] for r in records if r["overall_status"] == "FAILED"})
 
-        # ── Write CSV ─────────────────────────────────────────────────────────
         csv_path = self.output_dir / "audit_sensory_report.csv"
         with open(csv_path, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(fh, fieldnames=self.CSV_FIELDS)
             writer.writeheader()
             writer.writerows(records)
-            writer.writerow({f: "" for f in self.CSV_FIELDS})  # blank spacer
+            writer.writerow({f: "" for f in self.CSV_FIELDS})
 
             summary: Dict[str, Any] = {f: "" for f in self.CSV_FIELDS}
             summary.update(
@@ -460,11 +861,10 @@ class SensoryCharacteristicsAuditor:
         )
         return records
 
-    # ── Summary helper ────────────────────────────────────────────────────────
     @staticmethod
     def summarize(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-        total      = sum(1 for r in records if r["overall_status"] == "FAILED")
-        pages      = len({r.get("page_url", "") for r in records if r.get("overall_status") == "FAILED"})
+        total  = sum(1 for r in records if r["overall_status"] == "FAILED")
+        pages  = len({r.get("page_url", "") for r in records if r.get("overall_status") == "FAILED"})
         categories: Dict[str, int] = {}
         for r in records:
             if r.get("overall_status") == "FAILED":
@@ -473,83 +873,47 @@ class SensoryCharacteristicsAuditor:
                     if cat:
                         categories[cat] = categories.get(cat, 0) + 1
         return {
-            "total_violations":  total,
-            "affected_pages":    pages,
+            "total_violations":    total,
+            "affected_pages":      pages,
             "by_sensory_category": categories,
         }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Regex-only fallback (no spaCy)
+# Pure-regex fallback (no spaCy)
 # ─────────────────────────────────────────────────────────────────────────────
-
-_SENT_SPLIT_RE  = re.compile(r"(?<=[.!?])\s+")
-_IMPERATIVE_RE  = re.compile(
-    r"^\s*(please|kindly|to|now|just)?\s*("
-    + "|".join(re.escape(word) for word in sorted(IMPERATIVE_VERBS, key=len, reverse=True))
-    + r")\b",
-    re.IGNORECASE,
-)
-_PURPOSE_PHRASE_RE = re.compile(
-    r"\bto\s+(?:continue|proceed|submit|complete|finish|save|confirm|cancel|"
-    r"close|open|start|return|go\s+back|move\s+on)\b(?:\s+\w+){0,2}",
-    re.IGNORECASE,
-)
-_SENSORY_RE     = re.compile(
-    r"\b(" + "|".join(re.escape(word) for word in sorted(ALL_SENSORY, key=len, reverse=True)) + r")\b",
-    re.IGNORECASE,
-)
-
-
-def _pluralize(word: str) -> str:
-    if " " in word:
-        return word
-    if word.endswith(("s", "x", "z", "ch", "sh")):
-        return word + "es"
-    if len(word) > 1 and word.endswith("y") and word[-2] not in "aeiou":
-        return word[:-1] + "ies"
-    return word + "s"
-
-
-_GENERIC_TERMS = set(GENERIC_UI_NOUNS)
-for _word in list(GENERIC_UI_NOUNS):
-    _GENERIC_TERMS.add(_pluralize(_word))
-
-_GENERIC_RE     = re.compile(
-    r"\b(" + "|".join(re.escape(word) for word in sorted(_GENERIC_TERMS, key=len, reverse=True)) + r")\b",
-    re.IGNORECASE,
-)
-_QUOTED_RE      = re.compile(r'["\u201c\u201d\u2018\u2019].+?["\u201c\u201d\u2018\u2019]')
 
 
 def _violations_133_regex(
     element: SensoryElementData,
+    lang: str = "en",
 ) -> List[Tuple[str, str, List[str], str]]:
     """
     Pure-regex fallback when spaCy is unavailable.
-    Less accurate but zero-dependency.
+    Less accurate (no morphological analysis) but zero-dependency.
+    Supports both English and Japanese via _split_sentences_regex.
     """
-    texts = [text for text in _iter_text_sources(element) if len(text) >= _MIN_TEXT_LEN]
+    min_len = _MIN_TEXT_LEN_CJK if lang == "ja" else _MIN_TEXT_LEN
+    texts = [t for t in _iter_text_sources(element) if len(t) >= min_len]
 
     results: List[Tuple[str, str, List[str], str]] = []
 
     for src_text in texts:
-        sentences = _SENT_SPLIT_RE.split(src_text)
-        for sent_text in sentences:
+        for sent_text in _split_sentences_regex(src_text, lang):
             sent_text = sent_text.strip()
-            if len(sent_text) < _MIN_TEXT_LEN:
+            if len(sent_text) < min_len:
                 continue
 
-            if not _is_instruction_text(sent_text):
+            if not _is_instruction_text(sent_text, lang):
                 continue
 
-            cats = _sensory_categories_in_text(sent_text)
+            cats = _sensory_categories_in_text(sent_text, lang)
             if not cats:
                 continue
 
-            has_label = _has_meaningful_label_text(sent_text)
+            has_label = _has_meaningful_label_text(sent_text, lang)
 
-            if cats and not has_label:
+            if not has_label:
                 msg = (
                     f"1.3.3: Instruction relies solely on sensory characteristic(s) "
                     f"[{', '.join(cats)}] — \"{sent_text[:120]}\" — "
@@ -557,7 +921,10 @@ def _violations_133_regex(
                 )
                 results.append((sent_text, msg, cats, "FAILED"))
             else:
-                msg = f"1.3.3: Instruction contains sensory characteristic(s) but also provides a non-sensory identifier."
+                msg = (
+                    "1.3.3: Instruction contains sensory characteristic(s) "
+                    "but also provides a non-sensory identifier."
+                )
                 results.append((sent_text, msg, cats, "PASSED"))
 
     return results

@@ -1039,12 +1039,27 @@ def _sensory_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     Convert SensoryCharacteristicsAuditor records to standard findings
     for WCAG 1.3.3 — Sensory Characteristics (Level A).
 
-    Each record represents one violating sentence extracted from the page.
-    All records from this auditor are FAILED (the auditor only emits rows
-    for actual violations; passing elements are not reported).
+    If the stage ran but produced no sensory records, emit a synthetic
+    page-level pass so the rule still appears in the final report.
     """
     findings: List[Dict[str, Any]] = []
     sev = _PYTHON_SEVERITY.get("1.3.3", "serious")
+
+    if not records:
+        return [
+            _make_finding(
+                source="python",
+                rule_id="python_1_3_3_sensory_characteristics",
+                wcag_sc="1.3.3",
+                status="pass",
+                reason="No sensory-characteristics-only instructions detected in the crawled content.",
+                severity=None,
+                element_html="",
+                element_id=None,
+                element_tag=None,
+                page_url=page_url,
+            )
+        ]
 
     for r in records:
         status_raw = r.get("wcag_1_3_3_status", "")

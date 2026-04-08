@@ -5,11 +5,23 @@ Playwright-based crawler for WCAG 1.3.3 — Sensory Characteristics.
 
 Extracts all instructional text-bearing elements from a page:
   <p>, <li>, <label>, <legend>, <button>, aria-label values,
-  <span>, <div> with direct text, <a>, <td>, <th>, <caption>
+  <span>, <div> with direct text, <a>, <td>, <th>, <caption>,
+  <summary>, <figcaption>, <dt>, <dd>
 
 Each record captures the element's text, tag, ARIA attributes,
-and surrounding context so the auditor can detect instructions
-that rely solely on shape, size, color, position, or sound.
+title tooltip, element-level language hint, and surrounding context
+so the auditor can detect instructions that rely solely on shape,
+size, color, position, or sound — in both English and Japanese.
+
+Changes over v1:
+  - SensoryElementData gains `title` (tooltip text) and `lang` fields
+  - TARGET_SELECTOR extended: summary, figcaption, dt, dd
+  - EXTRACT_JS:
+      * isCJK() helper — CJK-aware minimum text length (≥1 vs ≥3)
+      * directTextLength() — dedup div/span by direct text nodes only
+      * elementLang()  — walks ancestors for closest lang= attribute
+      * title + lang extracted into every record
+      * next-sibling heading fallback in nearestHeading()
 """
 
 from __future__ import annotations
@@ -50,6 +62,12 @@ class SensoryElementData(BaseModel):
     parent_tag: Optional[str] = None
     nearest_heading: Optional[str] = None  # closest h1-h6 ancestor text
 
+    # Tooltip / title attribute text (often carries instructional content)
+    title: Optional[str] = None
+
+    # Closest lang= attribute value (element's own or nearest ancestor)
+    lang: Optional[str] = None
+
     # Raw markup (truncated)
     html: str = ""
 
@@ -69,7 +87,8 @@ class AsyncSensoryCrawler:
     TARGET_SELECTOR = (
         "p, li, label, legend, button, input, textarea, select, option, "
         "a, caption, th, td, "
-        "span, div, h1, h2, h3, h4, h5, h6"
+        "span, div, h1, h2, h3, h4, h5, h6, "
+        "summary, figcaption, dt, dd"
     )
 
     EXTRACT_JS = r"""() => {
@@ -94,53 +113,113 @@ class AsyncSensoryCrawler:
                 }
                 prev = prev.previousElementSibling;
             }
+            // Fallback: next sibling heading (element appears before its section header)
+            let next = el.nextElementSibling;
+            while (next) {
+                if (/^H[1-6]$/.test(next.tagName)) {
+                    return (next.innerText || '').trim().slice(0, 200);
+                }
+                next = next.nextElementSibling;
+            }
             return null;
         }
 
-        const SELECTOR = "p, li, label, legend, button, input, textarea, select, option, a, caption, th, td, span, div, h1, h2, h3, h4, h5, h6";
+        // True when text has >=15% CJK characters (Japanese / Chinese / Korean).
+        // CJK characters carry more semantic weight per character than Latin letters,
+        // so the minimum-length filter is lowered to 1 for CJK content.
+        function isCJK(text) {
+            if (!text) return false;
+            const cjk = (text.match(/[\u3000-\u9fff\uff00-\uffef\u3400-\u4dbf]/g) || []).length;
+            return cjk / Math.max(text.length, 1) >= 0.15;
+        }
+
+        // Length of text in DIRECT TEXT_NODE children only, ignoring descendant
+        // elements.  Used to decide whether a div/span has its own meaningful text
+        // beyond what its block-level children already contribute.
+        function directTextLength(el) {
+            let len = 0;
+            for (const node of el.childNodes) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    len += (node.textContent || '').trim().length;
+                }
+            }
+            return len;
+        }
+
+        // Walk up to the nearest ancestor with a lang= attribute; fall back to
+        // the documentElement lang.
+        function elementLang(el) {
+            let cur = el;
+            while (cur && cur !== document.documentElement) {
+                const l = cur.getAttribute && cur.getAttribute('lang');
+                if (l) return l;
+                cur = cur.parentElement;
+            }
+            return document.documentElement.getAttribute('lang') || null;
+        }
+
+        const SELECTOR = (
+            "p, li, label, legend, button, input, textarea, select, option, " +
+            "a, caption, th, td, " +
+            "span, div, h1, h2, h3, h4, h5, h6, " +
+            "summary, figcaption, dt, dd"
+        );
         const elements = Array.from(document.querySelectorAll(SELECTOR));
         const results  = [];
 
         for (const el of elements) {
-            // Only take elements with meaningful direct text OR an accessible name attribute
-            const ariaLabel = (el.getAttribute('aria-label') || '').trim();
+            // Collect all text sources for this element
+            const ariaLabel   = (el.getAttribute('aria-label') || '').trim();
             const placeholder = (el.getAttribute('placeholder') || '').trim();
-            const value = ((el.value ?? el.getAttribute('value')) || '').trim();
-            const rawText = (el.innerText || el.textContent || '').trim();
+            const titleAttr   = (el.getAttribute('title') || '').trim();
+            const value       = ((el.value != null ? el.value : el.getAttribute('value')) || '').trim();
+            const rawText     = (el.innerText || el.textContent || '').trim();
 
+            // Skip hidden inputs entirely
             if (el.tagName === 'INPUT' && (el.getAttribute('type') || '').toLowerCase() === 'hidden') {
                 continue;
             }
 
-            if (!rawText && !ariaLabel && !placeholder && !value) continue;
-            if (rawText && rawText.length < 3 && !ariaLabel && !placeholder && !value) continue;
+            // Skip elements with no content at all
+            if (!rawText && !ariaLabel && !placeholder && !value && !titleAttr) continue;
 
-            // For divs/spans: skip if they contain block-level children that will
-            // be captured separately, to avoid massive duplication.
+            // Minimum text length:
+            //   - CJK: 1 character (single kanji / hanzi is meaningful)
+            //   - Others: 3 characters (avoids noise like "x", "ok")
+            const minLen = (rawText && isCJK(rawText)) ? 1 : 3;
+            if (rawText && rawText.length < minLen && !ariaLabel && !placeholder && !value && !titleAttr) continue;
+
+            // For divs/spans: skip when they contain block-level children that
+            // are captured separately AND they have no meaningful direct text of
+            // their own (prevents massive duplication while retaining wrappers
+            // that carry genuine inline instructions).
             if (el.tagName === 'DIV' || el.tagName === 'SPAN') {
                 const hasBlockChild = Array.from(el.children).some(c =>
                     /^(P|LI|LABEL|LEGEND|BUTTON|H[1-6]|TABLE|UL|OL)$/.test(c.tagName)
                 );
-                if (hasBlockChild) continue;
+                if (hasBlockChild && directTextLength(el) < 5) continue;
             }
 
-            // Skip hidden elements
+            // Skip visually hidden elements (but NOT aria-hidden — those can still
+            // show sensory-only instructions to sighted users)
             const style = window.getComputedStyle(el);
             if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
 
             results.push({
-                tag:               el.tagName.toLowerCase(),
-                element_id:        el.id        || null,
-                element_class:     el.className || null,
-                text:              rawText.slice(0, 500),
-                aria_label:        el.getAttribute('aria-label')       || null,
-                aria_labelledby:   el.getAttribute('aria-labelledby')  || null,
-                placeholder:       el.getAttribute('placeholder')      || null,
-                value:             value || null,
-                role:              el.getAttribute('role')             || null,
-                parent_tag:        el.parentElement ? el.parentElement.tagName.toLowerCase() : null,
-                nearest_heading:   nearestHeading(el),
-                html:              outerHTML(el, 500),
+                tag:             el.tagName.toLowerCase(),
+                element_id:      el.id        || null,
+                element_class:   el.className || null,
+                text:            rawText.slice(0, 500),
+                aria_label:      el.getAttribute('aria-label')       || null,
+                aria_labelledby: el.getAttribute('aria-labelledby')  || null,
+                placeholder:     el.getAttribute('placeholder')      || null,
+                value:           value || null,
+                title:           titleAttr || null,
+                lang:            elementLang(el),
+                role:            el.getAttribute('role')             || null,
+                parent_tag:      el.parentElement ? el.parentElement.tagName.toLowerCase() : null,
+                nearest_heading: nearestHeading(el),
+                html:            outerHTML(el, 500),
             });
         }
 

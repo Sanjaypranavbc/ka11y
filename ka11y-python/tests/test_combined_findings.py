@@ -273,3 +273,15 @@ def test_1_3_3_pass_record_becomes_pass_finding():
         "tag": "p",
         "page_url": PAGE_URL,
     }
+
+
+def test_1_3_3_empty_records_become_synthetic_pass():
+    findings = _sensory_to_findings([], PAGE_URL)
+
+    assert len(findings) == 1
+    assert findings[0]["wcag_sc"] == "1.3.3"
+    assert findings[0]["status"] == "pass"
+    assert findings[0]["reason"] == (
+        "No sensory-characteristics-only instructions detected in the crawled content."
+    )
+    assert findings[0]["element"] is None
