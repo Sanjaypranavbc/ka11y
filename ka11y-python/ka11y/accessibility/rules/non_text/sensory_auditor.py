@@ -48,11 +48,12 @@ SENSORY_WORDS: Dict[str, Set[str]] = {
         "blue", "red", "green", "yellow", "orange", "purple", "pink",
         "black", "white", "grey", "gray", "cyan", "magenta", "brown",
         "violet", "indigo", "teal", "navy", "maroon", "gold", "silver",
-        "coloured", "colored",
+        "colour", "color", "coloured", "colored", "highlighted",
     },
     "shape": {
         "round", "rounded", "square", "circular", "circle", "triangular",
         "triangle", "rectangular", "oval", "hexagonal", "diamond",
+        "star", "star-shaped", "pill-shaped",
     },
     "size": {
         "big", "small", "large", "tiny", "huge", "little", "giant",
@@ -63,7 +64,12 @@ SENSORY_WORDS: Dict[str, Set[str]] = {
         "left", "right", "top", "bottom", "above", "below", "upper",
         "lower", "corner", "center", "centre", "middle", "side",
         "adjacent", "beside", "next", "nearby", "underneath", "beneath",
-        "leftmost", "rightmost", "topmost",
+        "leftmost", "rightmost", "topmost", "down", "up", "under",
+        "over", "inside", "outside",
+    },
+    "orientation": {
+        "horizontal", "vertical", "landscape", "portrait", "clockwise",
+        "counterclockwise", "upward", "downward",
     },
     "sound": {
         "beep", "chime", "bell", "tone", "sound", "audio", "alarm",
@@ -80,23 +86,29 @@ IMPERATIVE_VERBS: Set[str] = {
     "find", "see", "use", "follow", "navigate", "scroll", "drag",
     "hover", "open", "close", "expand", "collapse", "toggle",
     "submit", "enter", "fill", "type", "search", "pick", "hit",
-    "push", "check", "uncheck", "enable", "disable",
+    "push", "check", "uncheck", "enable", "disable", "tick",
+    "mark", "focus", "locate", "identify",
 }
 
 # Generic UI nouns that do NOT count as meaningful (non-sensory) labels
 GENERIC_UI_NOUNS: Set[str] = {
     "button", "icon", "link", "item", "element", "option",
     "control", "widget", "field", "area", "section", "menu",
-    "panel", "bar", "box", "container",
+    "panel", "bar", "box", "container", "form", "checkbox",
+    "radio", "radiobutton", "dropdown", "select", "listbox", "textbox",
+    "textfield", "input", "tab", "arrow", "step", "card", "dialog",
 }
 
-# Common stop-words and imperative verbs to exclude from "meaningful label" checks in regex fallback
+# Common stop-words to exclude from string-based "meaningful label" checks.
 STOP_WORDS: Set[str] = {
     "the", "and", "for", "with", "from", "that", "this", "these", "those",
     "you", "your", "his", "her", "its", "our", "their", "will", "can",
     "may", "must", "should", "some", "any", "all", "each", "every",
     "a", "an", "of", "to", "in", "on", "at", "by", "is", "are", "was", "were",
-    "please", "kindly", "just", "now", "simply", "merely",
+    "please", "kindly", "just", "now", "simply", "merely", "be", "been",
+    "being", "as", "if", "when", "then", "there", "here", "shown", "show",
+    "displayed", "display", "indicated", "indicate", "marked", "mark",
+    "located", "positioned", "placed", "highlighted", "required", "optional",
 }
 
 # Minimum text length to bother analysing
@@ -107,29 +119,30 @@ _MIN_TEXT_LEN = 5
 # spaCy lazy-loader (avoids import overhead when audit is skipped)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_nlp = None
+_nlp_cache: Dict[str, Any] = {}
 
 
 def _get_nlp(lang: str = "en"):
-    global _nlp
-    if _nlp is None:
-        try:
-            import spacy  # type: ignore
+    lang_key = (lang or "en")[:2]
+    if lang_key in _nlp_cache:
+        return _nlp_cache[lang_key]
 
-            # Pick the smallest available model; fall back to blank pipeline.
-            model_name = "en_core_web_sm" if lang == "en" else f"{lang}_core_news_sm"
-            try:
-                _nlp = spacy.load(model_name, disable=["ner", "parser"])
-                # Enable sentence segmentation via sentencizer (fast)
-                if "sentencizer" not in _nlp.pipe_names:
-                    _nlp.add_pipe("sentencizer")
-            except OSError:
-                # Model not installed — use blank pipeline with sentencizer
-                _nlp = spacy.blank(lang[:2])
-                _nlp.add_pipe("sentencizer")
-        except ImportError:
-            _nlp = None
-    return _nlp
+    nlp = None
+    try:
+        import spacy  # type: ignore
+
+        model_name = "en_core_web_sm" if lang_key == "en" else f"{lang_key}_core_news_sm"
+        try:
+            nlp = spacy.load(model_name, disable=["ner", "parser"])
+            if "sentencizer" not in nlp.pipe_names:
+                nlp.add_pipe("sentencizer")
+        except OSError:
+            nlp = None
+    except ImportError:
+        nlp = None
+
+    _nlp_cache[lang_key] = nlp
+    return nlp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -143,51 +156,121 @@ def _tokenize_sentences(text: str, nlp) -> List[Any]:
     return list(doc.sents)
 
 
+_CONTROL_RE = re.compile(
+    r"\b("
+    r"button|buttons|icon|icons|link|links|checkbox|checkboxes|radio|radios|"
+    r"field|fields|form|forms|menu|menus|tab|tabs|section|sections|item|items|"
+    r"option|options|arrow|arrows|dropdown|dropdowns|textbox|textboxes|"
+    r"textfield|textfields|input|inputs|card|cards|panel|panels|dialog|dialogs"
+    r")\b",
+    re.IGNORECASE,
+)
+_DECLARATIVE_HINT_RE = re.compile(
+    r"\b("
+    r"marked|shown|displayed|indicated|located|positioned|placed|highlighted|"
+    r"circled|underlined|selected|checked|available"
+    r")\b",
+    re.IGNORECASE,
+)
+_CONTROL_ACTION_HINT_RE = re.compile(
+    r"\b(submits?|opens?|closes?|saves?|cancels?|confirms?|continues?|"
+    r"proceeds?|navigates?|takes?)\b",
+    re.IGNORECASE,
+)
+_POSITIONAL_INSTRUCTION_RE = re.compile(
+    r"\b(on|to|at|in|under|over|below|above|beside|next to)\s+the\s+"
+    r"(left|right|top|bottom|center|centre|middle|upper|lower)\b",
+    re.IGNORECASE,
+)
+_REQUIRED_FIELD_RE = re.compile(r"\b(required|optional)\s+fields?\b", re.IGNORECASE)
+_CATEGORY_REGEXES: Dict[str, re.Pattern[str]] = {
+    cat: re.compile(
+        r"\b(" + "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True)) + r")\b",
+        re.IGNORECASE,
+    )
+    for cat, words in SENSORY_WORDS.items()
+}
+
+
+def _sentence_text(sent: Any) -> str:
+    return sent.text if hasattr(sent, "text") else str(sent)
+
+
+def _iter_text_sources(element: SensoryElementData) -> List[str]:
+    sources: List[str] = []
+    for raw in (
+        element.text,
+        element.aria_label,
+        getattr(element, "placeholder", None),
+        getattr(element, "value", None),
+    ):
+        text = (raw or "").strip()
+        if text and text not in sources:
+            sources.append(text)
+    return sources
+
+
+def _is_instruction_text(text: str) -> bool:
+    text = text.strip()
+    if not text:
+        return False
+    if _IMPERATIVE_RE.match(text):
+        return True
+    if _REQUIRED_FIELD_RE.search(text):
+        return True
+    return bool(
+        _CONTROL_RE.search(text)
+        and (
+            _DECLARATIVE_HINT_RE.search(text)
+            or _POSITIONAL_INSTRUCTION_RE.search(text)
+            or _CONTROL_ACTION_HINT_RE.search(text)
+        )
+    )
+
+
 def _is_instruction(sent) -> bool:
     """
-    True if the sentence contains an imperative verb that suggests an instruction.
-    We check the first few tokens for a VERB or a known imperative lemma.
+    True if the sentence looks like an instruction.
+
+    Supports both imperative commands ("Click the round button") and
+    declarative guidance commonly used in forms ("Required fields are
+    marked in red").
     """
-    # Common prefixes that don't change the instructional nature
-    SKIP_TOKENS = {"please", "kindly", "to", "now", "just"}
-    
-    count = 0
-    for token in sent:
-        if token.is_space or token.is_punct:
-            continue
-        
-        text_lower = token.text.lower()
-        if text_lower in SKIP_TOKENS:
-            continue
-            
-        # spaCy POS check
-        if hasattr(token, "pos_") and token.pos_ == "VERB":
-            return True
-        # Lemma/Text fallback
-        lemma = token.lemma_.lower() if hasattr(token, "lemma_") else text_lower
-        if lemma in IMPERATIVE_VERBS or text_lower in IMPERATIVE_VERBS:
-            return True
-        
-        # If we've seen a non-skip, non-verb word in the first few slots, 
-        # it's likely not an imperative sentence (e.g., "The button is red").
-        count += 1
-        if count > 2: 
-            break
-            
-    return False
+    return _is_instruction_text(_sentence_text(sent))
+
+
+def _sensory_categories_in_text(text: str) -> List[str]:
+    return [cat for cat, pattern in _CATEGORY_REGEXES.items() if pattern.search(text)]
 
 
 def _sensory_categories_in_sent(sent) -> List[str]:
-    """Return list of sensory category names found in the sentence tokens."""
-    found: List[str] = []
-    for cat, words in SENSORY_WORDS.items():
-        for token in sent:
-            text_lower = token.text.lower()
-            lemma_lower = token.lemma_.lower() if hasattr(token, "lemma_") else text_lower
-            if text_lower in words or lemma_lower in words:
-                if cat not in found:
-                    found.append(cat)
-    return found
+    """Return list of sensory category names found in the sentence text."""
+    return _sensory_categories_in_text(_sentence_text(sent))
+
+
+def _remaining_label_words(text: str) -> List[str]:
+    stripped = _PURPOSE_PHRASE_RE.sub(" ", text)
+    stripped = _SENSORY_RE.sub(" ", stripped)
+    stripped = _GENERIC_RE.sub(" ", stripped)
+    stripped = _IMPERATIVE_RE.sub(" ", stripped)
+
+    remaining_words: List[str] = []
+    for word in re.split(r"\W+", stripped):
+        word_lower = word.lower()
+        if not word_lower:
+            continue
+        if len(word_lower) <= 2 and not word_lower.isdigit():
+            continue
+        if word_lower in STOP_WORDS:
+            continue
+        remaining_words.append(word_lower)
+    return remaining_words
+
+
+def _has_meaningful_label_text(text: str) -> bool:
+    if _QUOTED_RE.search(text):
+        return True
+    return bool(_remaining_label_words(text))
 
 
 def _has_meaningful_label(sent) -> bool:
@@ -200,22 +283,7 @@ def _has_meaningful_label(sent) -> bool:
         is considered a meaningful label (e.g. "Submit", "Next step", "Home").
       - Quoted strings (e.g. 'Click "Save draft"') are always meaningful.
     """
-    text = sent.text if hasattr(sent, "text") else str(sent)
-
-    # Quoted text → meaningful label present
-    if re.search(r'["\u201c\u201d\u2018\u2019].+?["\u201c\u201d\u2018\u2019]', text):
-        return True
-
-    if hasattr(sent, "__iter__"):
-        for token in sent:
-            if hasattr(token, "pos_") and token.pos_ in ("NOUN", "PROPN"):
-                lemma = token.lemma_.lower() if hasattr(token, "lemma_") else token.text.lower()
-                word  = token.text.lower()
-                if word not in ALL_SENSORY and lemma not in ALL_SENSORY:
-                    if word not in GENERIC_UI_NOUNS and lemma not in GENERIC_UI_NOUNS:
-                        return True
-
-    return False
+    return _has_meaningful_label_text(_sentence_text(sent))
 
 
 def _is_sensory_only(sent, sensory_cats: List[str]) -> bool:
@@ -245,14 +313,11 @@ def _violations_133(
     for each instructional sentence found in the element.
     Status is either "FAILED" or "PASSED".
     """
-    text = element.text
-    if not text or len(text) < _MIN_TEXT_LEN:
+    texts_to_check = [
+        text for text in _iter_text_sources(element) if len(text.strip()) >= _MIN_TEXT_LEN
+    ]
+    if not texts_to_check:
         return []
-
-    # Also check aria-label text
-    texts_to_check = [text]
-    if element.aria_label and element.aria_label.strip():
-        texts_to_check.append(element.aria_label)
 
     results: List[Tuple[str, str, List[str], str]] = []
 
@@ -264,7 +329,7 @@ def _violations_133(
             sents = [src_text]  # type: ignore
 
         for sent in sents:
-            sent_text = sent.text if hasattr(sent, "text") else str(sent)
+            sent_text = _sentence_text(sent)
             if len(sent_text.strip()) < _MIN_TEXT_LEN:
                 continue
 
@@ -420,15 +485,38 @@ class SensoryCharacteristicsAuditor:
 
 _SENT_SPLIT_RE  = re.compile(r"(?<=[.!?])\s+")
 _IMPERATIVE_RE  = re.compile(
-    r"^\s*(please|kindly|to|now|just)?\s*(" + "|".join(sorted(IMPERATIVE_VERBS, key=len, reverse=True)) + r")\b",
+    r"^\s*(please|kindly|to|now|just)?\s*("
+    + "|".join(re.escape(word) for word in sorted(IMPERATIVE_VERBS, key=len, reverse=True))
+    + r")\b",
+    re.IGNORECASE,
+)
+_PURPOSE_PHRASE_RE = re.compile(
+    r"\bto\s+(?:continue|proceed|submit|complete|finish|save|confirm|cancel|"
+    r"close|open|start|return|go\s+back|move\s+on)\b(?:\s+\w+){0,2}",
     re.IGNORECASE,
 )
 _SENSORY_RE     = re.compile(
-    r"\b(" + "|".join(sorted(ALL_SENSORY, key=len, reverse=True)) + r")\b",
+    r"\b(" + "|".join(re.escape(word) for word in sorted(ALL_SENSORY, key=len, reverse=True)) + r")\b",
     re.IGNORECASE,
 )
+
+
+def _pluralize(word: str) -> str:
+    if " " in word:
+        return word
+    if word.endswith(("s", "x", "z", "ch", "sh")):
+        return word + "es"
+    if len(word) > 1 and word.endswith("y") and word[-2] not in "aeiou":
+        return word[:-1] + "ies"
+    return word + "s"
+
+
+_GENERIC_TERMS = set(GENERIC_UI_NOUNS)
+for _word in list(GENERIC_UI_NOUNS):
+    _GENERIC_TERMS.add(_pluralize(_word))
+
 _GENERIC_RE     = re.compile(
-    r"\b(" + "|".join(sorted(GENERIC_UI_NOUNS, key=len, reverse=True)) + r")\b",
+    r"\b(" + "|".join(re.escape(word) for word in sorted(_GENERIC_TERMS, key=len, reverse=True)) + r")\b",
     re.IGNORECASE,
 )
 _QUOTED_RE      = re.compile(r'["\u201c\u201d\u2018\u2019].+?["\u201c\u201d\u2018\u2019]')
@@ -441,9 +529,7 @@ def _violations_133_regex(
     Pure-regex fallback when spaCy is unavailable.
     Less accurate but zero-dependency.
     """
-    texts = [element.text or ""]
-    if element.aria_label:
-        texts.append(element.aria_label)
+    texts = [text for text in _iter_text_sources(element) if len(text) >= _MIN_TEXT_LEN]
 
     results: List[Tuple[str, str, List[str], str]] = []
 
@@ -454,35 +540,14 @@ def _violations_133_regex(
             if len(sent_text) < _MIN_TEXT_LEN:
                 continue
 
-            if not _IMPERATIVE_RE.match(sent_text):
+            if not _is_instruction_text(sent_text):
                 continue
 
-            sensory_hits = _SENSORY_RE.findall(sent_text)
-            if not sensory_hits:
+            cats = _sensory_categories_in_text(sent_text)
+            if not cats:
                 continue
 
-            # Determine categories
-            cats: List[str] = []
-            lower = sent_text.lower()
-            for cat, words in SENSORY_WORDS.items():
-                if any(w in lower for w in words):
-                    cats.append(cat)
-
-            # Has meaningful label?
-            has_quoted = bool(_QUOTED_RE.search(sent_text))
-            # Remove sensory + generic words + imperative verbs + stop words;
-            # anything left indicates a non-sensory identifier.
-            stripped = _SENSORY_RE.sub("", sent_text)
-            stripped = _GENERIC_RE.sub("", stripped)
-            stripped = _IMPERATIVE_RE.sub("", stripped)
-            
-            remaining_words = []
-            for w in re.split(r"\W+", stripped):
-                w_lower = w.lower()
-                if len(w) > 2 and w_lower not in STOP_WORDS and w_lower not in IMPERATIVE_VERBS:
-                    remaining_words.append(w)
-            
-            has_label = has_quoted or bool(remaining_words)
+            has_label = _has_meaningful_label_text(sent_text)
 
             if cats and not has_label:
                 msg = (

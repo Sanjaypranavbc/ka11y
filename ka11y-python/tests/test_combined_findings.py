@@ -12,6 +12,7 @@ from ka11y.api.v1.combined import (
     _name_role_value_to_findings,
     _non_text_contrast_to_findings,
 )
+from ka11y.api.v1.combined.findings import _sensory_to_findings
 from ka11y.api.v1.combined.models import CombinedRequest
 from ka11y.api.v1.combined.stages import _allowed_levels
 
@@ -218,5 +219,57 @@ def test_pass_converters_include_element_metadata_when_available():
         "html": '<img src="/img/logo.png" alt="Brand Name logo">',
         "element_id": "/img/logo.png",
         "tag": "img",
+        "page_url": PAGE_URL,
+    }
+
+
+def test_1_3_3_failed_record_becomes_fail_finding():
+    findings = _sensory_to_findings(
+        [
+            {
+                "page_url": PAGE_URL,
+                "element_tag": "p",
+                "element_id": "instructions",
+                "sensory_categories": "shape",
+                "wcag_1_3_3_status": "FAILED",
+                "wcag_1_3_3_violation": (
+                    '1.3.3: Instruction relies solely on sensory characteristic(s) '
+                    '[shape] - "Click the round button."'
+                ),
+                "html_snippet": "<p id='instructions'>Click the round button.</p>",
+            }
+        ],
+        PAGE_URL,
+    )
+
+    assert len(findings) == 1
+    assert findings[0]["wcag_sc"] == "1.3.3"
+    assert findings[0]["status"] == "fail"
+    assert findings[0]["severity"] == "serious"
+
+
+def test_1_3_3_pass_record_becomes_pass_finding():
+    findings = _sensory_to_findings(
+        [
+            {
+                "page_url": PAGE_URL,
+                "element_tag": "p",
+                "element_id": "instructions",
+                "sensory_categories": "color",
+                "wcag_1_3_3_status": "PASSED",
+                "wcag_1_3_3_violation": "",
+                "html_snippet": "<p id='instructions'>Click the blue Submit button.</p>",
+            }
+        ],
+        PAGE_URL,
+    )
+
+    assert len(findings) == 1
+    assert findings[0]["wcag_sc"] == "1.3.3"
+    assert findings[0]["status"] == "pass"
+    assert findings[0]["element"] == {
+        "html": "<p id='instructions'>Click the blue Submit button.</p>",
+        "element_id": "instructions",
+        "tag": "p",
         "page_url": PAGE_URL,
     }

@@ -43,6 +43,7 @@ class SensoryElementData(BaseModel):
     aria_label: Optional[str] = None  # aria-label on the element itself
     aria_labelledby: Optional[str] = None
     placeholder: Optional[str] = None # for input / textarea neighbours
+    value: Optional[str] = None       # visible value for button-like inputs
 
     # Structural context
     role: Optional[str] = None        # ARIA role
@@ -66,7 +67,7 @@ class AsyncSensoryCrawler:
 
     # Tags that typically carry user-facing instructional text
     TARGET_SELECTOR = (
-        "p, li, label, legend, button, "
+        "p, li, label, legend, button, input, textarea, select, option, "
         "a, caption, th, td, "
         "span, div, h1, h2, h3, h4, h5, h6"
     )
@@ -96,7 +97,7 @@ class AsyncSensoryCrawler:
             return null;
         }
 
-        const SELECTOR = "p, li, label, legend, button, a, caption, th, td, span, div, h1, h2, h3, h4, h5, h6";
+        const SELECTOR = "p, li, label, legend, button, input, textarea, select, option, a, caption, th, td, span, div, h1, h2, h3, h4, h5, h6";
         const elements = Array.from(document.querySelectorAll(SELECTOR));
         const results  = [];
 
@@ -104,10 +105,15 @@ class AsyncSensoryCrawler:
             // Only take elements with meaningful direct text OR an accessible name attribute
             const ariaLabel = (el.getAttribute('aria-label') || '').trim();
             const placeholder = (el.getAttribute('placeholder') || '').trim();
+            const value = ((el.value ?? el.getAttribute('value')) || '').trim();
             const rawText = (el.innerText || el.textContent || '').trim();
-            
-            if (!rawText && !ariaLabel && !placeholder) continue;
-            if (rawText && rawText.length < 3 && !ariaLabel && !placeholder) continue;
+
+            if (el.tagName === 'INPUT' && (el.getAttribute('type') || '').toLowerCase() === 'hidden') {
+                continue;
+            }
+
+            if (!rawText && !ariaLabel && !placeholder && !value) continue;
+            if (rawText && rawText.length < 3 && !ariaLabel && !placeholder && !value) continue;
 
             // For divs/spans: skip if they contain block-level children that will
             // be captured separately, to avoid massive duplication.
@@ -130,6 +136,7 @@ class AsyncSensoryCrawler:
                 aria_label:        el.getAttribute('aria-label')       || null,
                 aria_labelledby:   el.getAttribute('aria-labelledby')  || null,
                 placeholder:       el.getAttribute('placeholder')      || null,
+                value:             value || null,
                 role:              el.getAttribute('role')             || null,
                 parent_tag:        el.parentElement ? el.parentElement.tagName.toLowerCase() : null,
                 nearest_heading:   nearestHeading(el),
