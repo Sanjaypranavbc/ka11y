@@ -1,4 +1,4 @@
-# ML / CV / NLP Approaches for Missing WCAG Rules
+++==++++# ML / CV / NLP Approaches for Missing WCAG Rules
 
 > Source: `/COVERAGE.md` — 34 uncovered success criteria (6 Level A, 4 AA, 24 AAA)
 > Stack: Python (FastAPI + Playwright + existing ka11y-python pipeline)
