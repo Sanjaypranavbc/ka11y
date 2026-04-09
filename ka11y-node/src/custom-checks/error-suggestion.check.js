@@ -5,7 +5,7 @@ const RULE_ID = 'custom-error-suggestion';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/error-suggestion';
 
 // Patterns that indicate a message provides actual correction guidance
-const SUGGESTION_RE = /please\s+(enter|provide|use|select|check|make sure|ensure|type|choose|pick)|must\s+(be|contain|have|include|start|end|match|not|be\s+at\s+least|be\s+between)|should\s+(be|contain|include|not)|at\s+least\s+\d|at\s+most\s+\d|between\s+\d+\s+and\s+\d+|characters?\s+(long|minimum|maximum|required)|valid\s+(email|phone|date|format|url|number|value)|try\s+again|example:|入力してください|選択してください|確認してください|必要があります|以上|以下|文字以上|文字以下|文字以内|有効な(メール|電話|日付|形式|url|数値)|例[:：]/i;
+const SUGGESTION_RE = /please\s+(enter|provide|use|select|check|make sure|ensure|type|choose|pick)|must\s+(be|contain|have|include|start|end|match|not|be\s+at\s+least|be\s+between)|should\s+(be|contain|include|not)|at\s+least\s+\d|at\s+most\s+\d|between\s+\d+\s+and\s+\d+|characters?\s+(long|minimum|maximum|required)|valid\s+(email|phone|date|format|url|number|value)|try\s+again|example:|入力してください|選択してください|確認してください|必要があります|以上|以下|文字以上|文字以下|文字以内|有効な(メール|電話|日付|形式|url|数値)|例[:：]|お願いします|しなければなりません|べきです|試してください|やり直してください|提供してください|修正してください|が必要です|ください$/i;
 
 // Patterns that indicate a terse/uninformative error message
 const TERSE_RE = /^(invalid|error|required|failed|wrong|incorrect|bad\s+input|not\s+valid|this\s+field\s+is\s+required|無効|エラー|必須|失敗|不正|入力エラー)\.?$/i;

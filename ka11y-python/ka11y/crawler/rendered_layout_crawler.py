@@ -85,6 +85,20 @@ _TEXT_SPACING_CSS = """
 p, li, dt, dd, blockquote {
     margin-bottom: 2em !important;
 }
+/* CJK languages: letter-spacing and word-spacing WCAG overrides do not apply.
+   Japanese/Chinese/Korean fonts have built-in inter-character spacing and no
+   word separators, so applying these values causes false-positive clipping reports.
+   line-height override is still applied as vertical rhythm matters in CJK too. */
+:lang(ja), :lang(zh), :lang(zh-CN), :lang(zh-TW), :lang(zh-HK), :lang(ko),
+[lang="ja"], [lang="zh"], [lang="zh-CN"], [lang="zh-TW"], [lang="zh-HK"], [lang="ko"] {
+    letter-spacing: normal !important;
+    word-spacing: normal !important;
+}
+:lang(ja) *, :lang(zh) *, :lang(zh-CN) *, :lang(zh-TW) *, :lang(zh-HK) *, :lang(ko) *,
+[lang="ja"] *, [lang="zh"] *, [lang="zh-CN"] *, [lang="zh-TW"] *, [lang="zh-HK"] *, [lang="ko"] * {
+    letter-spacing: normal !important;
+    word-spacing: normal !important;
+}
 """
 
 # ── CSS for text-resize scenario (WCAG 1.4.4) ─────────────────────────────────

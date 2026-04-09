@@ -4,7 +4,7 @@ const SC = '3.2.6';
 const RULE_ID = 'custom-consistent-help';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/consistent-help';
 
-const HELP_PATTERNS = /\b(help|contact\s*us|support|faq|frequently\s*asked|live\s*chat|customer\s*service|get\s*help|need\s*help|assistance|helpdesk|help\s*centre|help\s*center|accessibility)\b|ヘルプ|お問い合わせ|問い合わせ|サポート|よくある質問|チャット|カスタマーサービス|サポートセンター|ヘルプセンター|ご相談/i;
+const HELP_PATTERNS = /\b(help|contact\s*us|support|faq|frequently\s*asked|live\s*chat|customer\s*service|get\s*help|need\s*help|assistance|helpdesk|help\s*centre|help\s*center|accessibility)\b|ヘルプ|お問い合わせ|問い合わせ|サポート|よくある質問|チャット|カスタマーサービス|サポートセンター|ヘルプセンター|ご相談|助け|フリーダイヤル|0120/i;
 
 async function run(page) {
   const data = await page.evaluate((helpPattern) => {
@@ -41,7 +41,7 @@ async function run(page) {
       document.querySelector('[data-testid*="chat" i], [aria-label*="live chat" i], [aria-label*="チャット" i]')
     );
 
-    // Known chatbot platform selectors
+    // Known chatbot platform selectors (including JP-common LINE and SmartHR widgets)
     const chatbotSelectors = [
       '#intercom-container',
       '#drift-widget',
@@ -50,6 +50,13 @@ async function run(page) {
       '.crisp-client',
       '[id*="tawk"]',
       '[class*="hubspot-chat"]',
+      // Japanese-specific chat/support widgets
+      '#line-chat-widget',
+      '[class*="line-chat" i]',
+      '[id*="smarthr-help" i]',
+      '[class*="smarthr-help" i]',
+      '[id*="tayori" i]',
+      '[class*="tayori" i]',
     ];
     const hasChatbot = chatbotSelectors.some(s => !!document.querySelector(s));
 

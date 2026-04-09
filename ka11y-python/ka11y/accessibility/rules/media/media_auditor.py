@@ -53,6 +53,18 @@ _TRANSCRIPT_LINK_KEYWORDS = [
     "show transcript",
     "full transcript",
     "download transcript",
+    # Japanese equivalents
+    "書き起こし",
+    "文字起こし",
+    "トランスクリプト",
+    "字幕",
+    "キャプション",
+    "テキスト版",
+    "音声テキスト",
+    "音声解説",
+    "音声ガイド",
+    "説明文",
+    "代替テキスト",
 ]
 
 # Keywords that indicate the media element is a labeled alternative for text.

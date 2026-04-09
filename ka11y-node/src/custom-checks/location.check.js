@@ -11,7 +11,7 @@ async function run(page) {
       document.querySelector('[aria-label*="breadcrumb" i]') ||
       document.querySelector('[aria-label*="パンくず" i]') ||
       document.querySelector('[class*="breadcrumb" i]') ||
-      document.querySelector('[class*="パンくず" i], [id*="パンくず" i]') ||
+      document.querySelector('[class*="パンくず" i], [id*="パンくず" i], [class*="pan-kuzu" i], [class*="panku-zu" i], [id*="pan-kuzu" i], [id*="panku-zu" i]') ||
       document.querySelector('[itemtype*="BreadcrumbList"]') ||
       document.querySelector('nav [aria-current="page"]') // current page in nav = location indicator
     );

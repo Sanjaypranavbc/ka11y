@@ -5,7 +5,7 @@ const RULE_ID = 'custom-pointer-cancellation';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/pointer-cancellation';
 
 // Patterns that indicate a meaningful action handler (not just style/UI feedback)
-const ACTION_PATTERN = /\b(submit|navigate|redirect|window\.location|document\.location|history\.(push|replace)|fetch|xhr|ajax|open\(|close\(|modal|dialog|toggle|show|hide|dispatch|emit|call|invoke|play|pause|remove|delete|add|insert|update|save|load|send|post|put|get)\b/i;
+const ACTION_PATTERN = /\b(submit|navigate|redirect|window\.location|document\.location|history\.(push|replace)|fetch|xhr|ajax|open\(|close\(|modal|dialog|toggle|show|hide|dispatch|emit|call|invoke|play|pause|remove|delete|add|insert|update|save|load|send|post|put|get)\b|送信|購入|削除|確認|登録|申込|注文|クリック/i;
 
 async function run(page) {
   const violations = await page.evaluate((actionPat) => {

@@ -24,7 +24,7 @@ async function run(page) {
       const transcriptLinks = container
         ? Array.from(container.querySelectorAll('a[href]')).filter(a => {
             const combined = ((a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '')).toLowerCase();
-            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト|説明文/i.test(combined);
+            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト|説明文|音声解説|音声ガイド|代替テキスト/i.test(combined);
           })
         : [];
 
@@ -37,7 +37,7 @@ async function run(page) {
             const text = (det.textContent || '').toLowerCase();
             const summary = (det.querySelector('summary') || {}).textContent || '';
             const combined = text + ' ' + summary.toLowerCase();
-            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト/i.test(combined);
+            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト|音声解説|音声ガイド|代替テキスト/i.test(combined);
           })
         : false;
 
