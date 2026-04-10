@@ -5,6 +5,8 @@ description: "POST /api/v1/combined/ · GET /api/v1/combined/{job_id} · GET /ap
 
 The combined endpoint is the **primary API**. It runs axe-core (Node) and all Python auditors in parallel, merges findings into a single flat list, and exposes job status via REST polling and Server-Sent Events streaming. When OCR is enabled, a `contrast_report` is attached to the result and per-image files can be retrieved via the image endpoint.
 
+If you want a **full production-style run**, omit the optional `run_*` booleans and let the defaults stay `true`. Disabling flags is useful for targeted debugging, but it is not the same as a full-stack audit.
+
 ---
 
 ## Submit an audit
@@ -114,6 +116,39 @@ resp = httpx.post("http://localhost:8000/api/v1/combined/", json={
 job_id = resp.json()["job_id"]
 ```
 </RequestExample>
+
+### Full-stack request with all rule families enabled
+
+The simplest way to keep every stage enabled is to send only the core request fields and omit the optional booleans:
+
+```bash cURL
+curl -X POST http://localhost:8000/api/v1/combined/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "wcag_level": "AAA",
+    "lang": "en",
+    "max_depth": 0
+  }'
+```
+
+That uses the current defaults:
+
+- `run_ocr = true`
+- `run_image_audit = true`
+- `run_form_audit = true`
+- `run_label_in_name_audit = true`
+- `run_media_audit = true`
+- `run_pause_stop_hide_audit = true`
+- `run_target_size_audit = true`
+- `run_resize_text_audit = true`
+- `run_reflow_audit = true`
+- `run_text_spacing_audit = true`
+- `run_orientation_audit = true`
+- `run_hover_focus_content_audit = true`
+- `run_focus_not_obscured_min_audit = true`
+- `run_focus_not_obscured_enh_audit = true`
+- `run_sensory_audit = true`
 
 ### Japanese output (`lang = "ja"`)
 

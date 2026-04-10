@@ -4,7 +4,8 @@ description: "Exhaustive mapping of every crawler field to the rules that consum
 ---
 
 > Generated: 2026-04-09  
-> Scope: `ka11y-node` (24 custom WCAG checks + axe-core) and `ka11y-python` (18 WCAG rules across 8 crawlers)
+> Updated: 2026-04-10  
+> Scope: `ka11y-node` (24 custom WCAG checks + axe-core) and `ka11y-python` (18 WCAG rules across the universal static pipeline, image crawler, and rendered-layout crawler)
 
 This is the canonical reference for what each crawler extracts from a page and which rule consumes which fields. Use this when adding a new rule, modifying a crawler, or debugging missing data.
 
@@ -376,31 +377,74 @@ AccessibilityService
 
 ## ka11y-python — Crawler Architecture
 
-ka11y-python uses dedicated async crawler classes. Each crawler is responsible for a specific content type.
+ka11y-python now has two distinct execution modes:
+
+- direct crawler classes still exist and keep the original model contracts
+- the combined production endpoint reuses **one universal static crawl** for seven structural rule families, then normalizes that snapshot back into the existing Pydantic models
 
 ```
-POST /api/v1/audit
+POST /api/v1/combined
         │
         ▼
-AuditService
-  ├── AsyncImageCrawler       → List[ImageMetadata]
-  ├── AsyncFormCrawler        → List[FormInputData]
-  ├── InteractiveElementCrawler → List[InteractiveElementData]
-  ├── TargetSizeCrawler       → List[TargetSizeData]
-  ├── MediaCrawler            → List[MediaElementData]
-  ├── MovingContentCrawler    → List[MovingContentData]
-  ├── SensoryCrawler          → List[SensoryElementData]
-  ├── TextSpacingCrawler      → List[TextSpacingData]
-  └── RenderedLayoutCrawler   → PageSnapshot (portrait/landscape/zoom variants)
+runner._run_job()
+  ├── AsyncImageCrawler
+  │     └── List[ImageMetadata]
+  ├── UniversalPageLoader
+  │     └── PageSnapshot
+  │           ├── forms
+  │           ├── interactive
+  │           ├── target_sizes
+  │           ├── moving_content
+  │           ├── media
+  │           ├── text_spacing
+  │           ├── sensory
+  │           ├── warnings
+  │           └── element_refs
+  ├── SnapshotNormalizer
+  │     └── existing Pydantic models:
+  │           FormInputData
+  │           InteractiveElementData
+  │           TargetSizeData
+  │           MovingContentData
+  │           MediaElementData
+  │           TextSpacingData
+  │           SensoryElementData
+  └── RenderedLayoutCrawler
+        └── PageSnapshot (portrait/landscape/zoom variants)
 ```
 
-**Universal fields present in every crawler record:**
+The universal static path is where ka11y-python now gets:
+
+- same-origin iframe traversal
+- open shadow-root traversal
+- structured extraction warnings for cross-origin frames and partial failures
+- sidecar provenance through `element_ref_id`, `selector`, and `frame_path`
+
+Legacy crawler classes remain useful for direct debugging and compatibility, but the combined endpoint no longer needs seven separate static page loads.
+
+**Universal fields present in normalized static records:**
 
 | Field | Description |
 |-------|-------------|
 | `page_url` | URL of the crawled page |
 | `element_index` | Sequential index of the element on the page |
 | `html_snippet` | Truncated `outerHTML` (≤ 600 chars) |
+| `selector` | Composed selector for evidence and deduplication |
+| `element_ref_id` | Stable key into `PageSnapshot.element_refs` |
+| `frame_path` | Same-origin iframe provenance (`main`, `main.1`, etc.) |
+
+### Live Validation Snapshot
+
+The production universal path was re-validated against a curated 10-site public matrix on `2026-04-10`.
+
+| Live site | Verified behavior |
+|----------|-------------------|
+| `w3schools_iframe` | `3493` normalized records came from non-main frames; cross-origin iframes surfaced as structured warnings |
+| `shoelace_button` | `171` shadow selectors confirmed open shadow-root traversal in normalized static records |
+| `shoelace_spinner` | `6` moving-content records were tagged as `loading_indicator`; `2.2.2` stayed at zero violations |
+| `w3schools_bootstrap_carousel` | Autoplay carousel still surfaced as a genuine `2.2.2` violation after heuristic tightening |
+| `mdn_japanese` | `lang=ja` passed the expectation-driven live checks through the same combined pipeline |
+| `w3schools_bootstrap_forms` | Real public form content produced `6` normalized form records and passed the live expectation gate |
 
 ---
 
@@ -450,6 +494,7 @@ AuditService
 | `aria_describedby` | `str` | `aria-describedby` attribute |
 | `error_element_id`, `error_element_role`, `error_element_text` | `str` | Resolved error element data |
 | `error_has_role_alert`, `error_has_aria_live` | `bool`, `str` | Error live region flags |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -463,6 +508,7 @@ AuditService
 | `title_attr`, `value_attr`, `alt_attr` | `str` | Native name sources |
 | `accessible_name` | `str` | Computed AccName 1.1 result |
 | `element_id`, `element_name`, `input_type` | `str` | Identity fields |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -478,6 +524,7 @@ AuditService
 | `required_offset_x_px`, `required_offset_y_px` | `float` | Required X/Y offset for exception 5 |
 | `nearest_target_gap_x_px`, `nearest_target_gap_y_px` | `float` | Gap to nearest neighbor |
 | `passes_size` | `bool` | Pre-computed pass flag |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -490,6 +537,7 @@ AuditService
 | `tracks` | `List[TrackData]` | `<track>` children (kind, src, srclang, label) |
 | `aria_hidden`, `role`, `aria_label`, `aria_describedby_text` | `str` | ARIA attributes |
 | `nearby_links`, `nearby_text`, `nearby_details` | `list`, `str`, `list` | External transcript detection |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -500,7 +548,10 @@ AuditService
 | `content_type` | `str` | video_autoplay, animated_gif, css_animation, carousel_autoplay, marquee_element, blink_element |
 | `animation_name`, `animation_duration_seconds`, `animation_iteration_count` | `str`, `float`, `str` | CSS animation details |
 | `loops`, `duration_seconds`, `starts_automatically` | `bool`, `float`, `bool` | Timing properties |
+| `duration_known` | `bool` | Whether duration was actually determined or only inferred |
+| `applicability_exception` | `str` | Essential exception marker, currently including `loading_indicator` |
 | `has_video_controls`, `has_pause_button`, `has_mechanism` | `bool` | Control mechanism flags |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -512,6 +563,7 @@ AuditService
 | `text`, `aria_label`, `aria_labelledby`, `placeholder`, `value` | `str` | All text sources |
 | `role`, `parent_tag`, `nearest_heading` | `str` | Structural context |
 | `title`, `lang` | `str` | Tooltip text and language code |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -523,6 +575,7 @@ AuditService
 | `text_length`, `text_preview` | `int`, `str` | Text content size |
 | `height`, `min_height`, `overflow` | `str` | CSS dimension values |
 | `has_fixed_height`, `has_overflow_hidden`, `is_clipped` | `bool` | Clipping risk flags |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -568,7 +621,7 @@ AuditService
 
 <Accordion title="1.2.1 — Audio-only and Video-only (MediaAuditor)">
 
-**Crawler:** `MediaCrawler`
+**Crawler:** normalized universal static snapshot → `MediaElementData`
 
 | Fields Used | Purpose |
 |------------|---------|
@@ -581,7 +634,7 @@ AuditService
 
 <Accordion title="1.3.3 — Sensory Characteristics (SensoryCharacteristicsAuditor)">
 
-**Crawler:** `SensoryCrawler`
+**Crawler:** normalized universal static snapshot → `SensoryElementData`
 
 | Fields Used | Purpose |
 |------------|---------|
@@ -641,7 +694,7 @@ AuditService
 
 <Accordion title="1.4.12 — Text Spacing (TextSpacingAuditor)">
 
-**Crawler:** `TextSpacingCrawler` + `RenderedLayoutCrawler`
+**Crawler:** normalized universal static snapshot → `TextSpacingData` + `RenderedLayoutCrawler`
 
 | Fields Used | Purpose |
 |------------|---------|
@@ -666,13 +719,14 @@ AuditService
 
 <Accordion title="2.2.2 — Pause, Stop, Hide (PauseStopHideAuditor)">
 
-**Crawler:** `MovingContentCrawler`
+**Crawler:** normalized universal static snapshot → `MovingContentData`
 
 | Fields Used | Purpose |
 |------------|---------|
 | `content_type` | Kind of moving content |
 | `starts_automatically` | Gate 1: must auto-start |
 | `duration_seconds`, `animation_iteration_count`, `loops` | Gate 2: must be long/infinite |
+| `duration_known`, `applicability_exception` | Duration ambiguity handling and essential exceptions such as loading indicators |
 | `has_video_controls`, `has_pause_button`, `has_mechanism` | Gate 3: mechanism must be absent |
 
 </Accordion>
@@ -704,31 +758,33 @@ AuditService
 
 <Accordion title="2.5.3 — Label in Name (LabelInNameAuditor)">
 
-**Crawler:** `InteractiveElementCrawler`
+**Crawler:** normalized universal static snapshot → `InteractiveElementData`
 
 | Fields Used | Purpose |
 |------------|---------|
 | `visible_label`, `accessible_name` | Label visibility vs programmatic name |
 | `aria_label`, `aria_labelledby`, `title_attr`, `value_attr`, `alt_attr` | Name sources |
+| `selector`, `element_ref_id`, `frame_path` | Provenance and deduplication evidence in same-origin frames |
 | CJK detection on `visible_label` | Substring match instead of `\b` regex for CJK |
 
 </Accordion>
 
 <Accordion title="2.5.8 — Target Size Minimum (TargetSizeAuditor)">
 
-**Crawler:** `TargetSizeCrawler`
+**Crawler:** normalized universal static snapshot → `TargetSizeData`
 
 | Fields Used | Purpose |
 |------------|---------|
 | `rendered_width_px`, `rendered_height_px` | Primary size check (≥ 24×24) |
 | `is_inline_exception`, `is_ua_controlled_exception`, `is_offset_exception` | Exception flags |
 | `required_offset_*`, `nearest_target_gap_*` | Exception 5 geometry |
+| `selector`, `element_ref_id`, `frame_path` | Provenance and same-origin iframe evidence |
 
 </Accordion>
 
 <Accordion title="3.3.1 / 3.3.2 — Error Identification + Labels (FormAccessibilityAuditor)">
 
-**Crawler:** `AsyncFormCrawler`
+**Crawler:** normalized universal static snapshot → `FormInputData`
 
 | Fields Used | Purpose |
 |------------|---------|
@@ -736,6 +792,7 @@ AuditService
 | `aria_describedby`, `error_element_id`, `error_has_role_alert`, `error_has_aria_live` | Error live region linkage |
 | `label_text`, `has_any_label`, `placeholder` | Accessible label presence |
 | `type`, `name`, `autocomplete` | Personal data autocomplete requirement |
+| `selector`, `element_ref_id`, `frame_path` | Provenance and same-origin iframe evidence |
 
 </Accordion>
 

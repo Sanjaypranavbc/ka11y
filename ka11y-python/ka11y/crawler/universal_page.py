@@ -501,6 +501,63 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
 
     const moving_content = [];
     (function extractMovingContent() {
+        const STATUS_ATTR_RE = /(^|[\s:_-])(spinner|loading|loader|progress|busy|skeleton|shimmer|throbber|preload|placeholder|buffer)([\s:_-]|$)/i;
+        const STATUS_TEXT_RE = /(loading|please wait|working|processing|buffering|syncing|saving|uploading|読み込み|読み込み中|ロード中|処理中|進行中|お待ちください|同期中|保存中|アップロード中|通信中|送信中)/i;
+        const STATUS_ROLE_SET = new Set(['progressbar', 'status']);
+        const STATUS_TAG_SET = new Set(['progress', 'sl-spinner', 'sl-progress-ring', 'sl-progress-bar']);
+
+        function composedParent(el) {
+            if (!el) return null;
+            if (el.parentElement) return el.parentElement;
+            const root = el.getRootNode ? el.getRootNode() : null;
+            return root && root.host ? root.host : null;
+        }
+
+        function textLikeValue(el, includeText = true) {
+            if (!el) return '';
+            const className = typeof el.className === 'string'
+                ? el.className
+                : (el.className && typeof el.className.baseVal === 'string' ? el.className.baseVal : '');
+            const parts = [
+                el.id || '',
+                className || '',
+                el.getAttribute ? (el.getAttribute('aria-label') || '') : '',
+                el.getAttribute ? (el.getAttribute('title') || '') : '',
+                el.getAttribute ? (el.getAttribute('data-testid') || '') : '',
+                el.getAttribute ? (el.getAttribute('data-state') || '') : '',
+                el.getAttribute ? (el.getAttribute('name') || '') : '',
+            ];
+            if (includeText) {
+                parts.push(el.innerText || el.textContent || '');
+            }
+            return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+        }
+
+        function hasLoadingStatusSignal(el, includeText = true) {
+            if (!el || !el.tagName) return false;
+            const localName = (el.localName || '').toLowerCase();
+            const role = ((el.getAttribute && el.getAttribute('role')) || '').toLowerCase();
+            const ariaBusy = ((el.getAttribute && el.getAttribute('aria-busy')) || '').toLowerCase();
+
+            if (STATUS_TAG_SET.has(localName)) return true;
+            if (STATUS_ROLE_SET.has(role)) return true;
+            if (ariaBusy === 'true') return true;
+
+            const signalValue = textLikeValue(el, includeText);
+            return STATUS_ATTR_RE.test(signalValue) || STATUS_TEXT_RE.test(signalValue);
+        }
+
+        function loadingStatusExceptionFor(el) {
+            let current = el;
+            let depth = 0;
+            while (current && depth < 8) {
+                if (hasLoadingStatusSignal(current, depth === 0)) return 'loading_indicator';
+                current = composedParent(current);
+                depth += 1;
+            }
+            return null;
+        }
+
         function isVisibleMoving(el) {
             if (!el || !el.getBoundingClientRect) return false;
             const rect = el.getBoundingClientRect();
@@ -551,6 +608,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
             if (duration !== null && duration <= 5) return;
             const loops = el.hasAttribute('loop');
             const pause = hasPauseButton(el);
+            const applicabilityException = loadingStatusExceptionFor(el);
             moving_content.push({
                 ...metaFor(el),
                 element_index: moving_content.length,
@@ -565,6 +623,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
                 duration_seconds: loops ? -1 : duration,
                 duration_known: duration !== null || loops,
                 starts_automatically: true,
+                applicability_exception: applicabilityException,
                 has_video_controls: el.hasAttribute('controls'),
                 has_pause_button: pause,
                 has_mechanism: el.hasAttribute('controls') || pause,
@@ -578,6 +637,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
             const src = (el.getAttribute('src') || '').toLowerCase().split('?')[0];
             if (!src.endsWith('.gif')) return;
             const pause = hasPauseButton(el);
+            const applicabilityException = loadingStatusExceptionFor(el);
             moving_content.push({
                 ...metaFor(el),
                 element_index: moving_content.length,
@@ -592,6 +652,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
                 duration_seconds: -1,
                 duration_known: true,
                 starts_automatically: true,
+                applicability_exception: applicabilityException,
                 has_video_controls: false,
                 has_pause_button: pause,
                 has_mechanism: pause,
@@ -618,6 +679,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
                 if (seen.has(dedupKey)) return;
                 seen.add(dedupKey);
                 const pause = hasPauseButton(el);
+                const applicabilityException = loadingStatusExceptionFor(el);
                 moving_content.push({
                     ...metaFor(el),
                     element_index: moving_content.length,
@@ -632,6 +694,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
                     duration_seconds: infinite ? -1 : totalMs / 1000,
                     duration_known: true,
                     starts_automatically: true,
+                    applicability_exception: applicabilityException,
                     has_video_controls: false,
                     has_pause_button: pause,
                     has_mechanism: pause || anim.playState === 'paused',
@@ -662,6 +725,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
                 const dedupKey = `${buildSelector(el)}::${name}`;
                 if (moving_content.some(item => item.selector === buildSelector(el) && item.animation_name === name)) return;
                 const pause = hasPauseButton(el);
+                const applicabilityException = loadingStatusExceptionFor(el);
                 moving_content.push({
                     ...metaFor(el),
                     element_index: moving_content.length,
@@ -676,6 +740,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
                     duration_seconds: infinite ? -1 : totalSeconds,
                     duration_known: true,
                     starts_automatically: true,
+                    applicability_exception: applicabilityException,
                     has_video_controls: false,
                     has_pause_button: pause,
                     has_mechanism: pause || (style.animationPlayState || '').includes('paused'),
@@ -689,6 +754,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
             if (!isVisibleMoving(el)) return;
             if (!carouselIsAutoplay(el)) return;
             const pause = hasPauseButton(el);
+            const applicabilityException = loadingStatusExceptionFor(el);
             moving_content.push({
                 ...metaFor(el),
                 element_index: moving_content.length,
@@ -703,6 +769,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
                 duration_seconds: -1,
                 duration_known: true,
                 starts_automatically: true,
+                applicability_exception: applicabilityException,
                 has_video_controls: false,
                 has_pause_button: pause,
                 has_mechanism: pause,
@@ -713,6 +780,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
 
         queryShadow(document, 'marquee, blink').forEach(el => {
             if (!isVisibleMoving(el)) return;
+            const applicabilityException = loadingStatusExceptionFor(el);
             moving_content.push({
                 ...metaFor(el),
                 element_index: moving_content.length,
@@ -727,6 +795,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
                 duration_seconds: -1,
                 duration_known: true,
                 starts_automatically: true,
+                applicability_exception: applicabilityException,
                 has_video_controls: false,
                 has_pause_button: false,
                 has_mechanism: false,

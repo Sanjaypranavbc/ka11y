@@ -59,6 +59,32 @@ from .store import _jobs
 logger = setup_logger(name="KAC", tag="combined")
 
 
+def _record_stage_metrics(
+    step_logger: ExecutionStepLogger | None,
+    *,
+    stage: str,
+    crawler_items: int,
+    auditor_records: int,
+    findings: int,
+    extra: Dict[str, Any] | None = None,
+) -> None:
+    if not step_logger:
+        return
+    context = {
+        "crawler_items": crawler_items,
+        "auditor_records": auditor_records,
+        "finding_count": findings,
+    }
+    if extra:
+        context.update(extra)
+    step_logger.record(
+        step=f"{stage}_summary",
+        status="completed",
+        message=f"{stage} crawler and auditor results recorded",
+        context=context,
+    )
+
+
 # ── WCAG level filter ─────────────────────────────────────────────────────────
 
 
@@ -96,6 +122,7 @@ async def _stage_image_audit(
     run_image_audit: bool,
     job_id: str,
     lang: str = "en",
+    step_logger: ExecutionStepLogger | None = None,
 ) -> Tuple[List[Dict], Optional[Dict[str, Any]]]:
     """Crawl images → OCR → 1.1.1 alt-text + 1.4.3 contrast."""
     _stage_start(job_id, "image_audit")
@@ -154,6 +181,22 @@ async def _stage_image_audit(
             )
             for _, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
                 findings.extend(converter(records, url))
+        else:
+            records = []
+
+        _record_stage_metrics(
+            step_logger,
+            stage="image_audit",
+            crawler_items=len(image_crawler.images_data),
+            auditor_records=len(records),
+            findings=len(findings),
+            extra={
+                "ocr_results": len(ocr_results),
+                "contrast_regions": (contrast_report or {}).get("summary", {}).get(
+                    "total_regions_analysed", 0
+                ),
+            },
+        )
 
         _stage_complete(job_id, "image_audit", len(findings))
         return findings, contrast_report
@@ -436,6 +479,7 @@ async def _stage_rendered_layout_audit(
     run_focus_not_obscured_min_audit: bool,
     run_focus_not_obscured_enh_audit: bool,
     job_id: str,
+    step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     """
     Rendered-layout audit stage: Playwright scenarios for
@@ -512,6 +556,14 @@ async def _stage_rendered_layout_audit(
             _focus_not_obscured_enh_to_findings(
                 [r for r in records if "wcag_2_4_12_status" in r], url
             )
+        )
+
+        _record_stage_metrics(
+            step_logger,
+            stage="rendered_layout_audit",
+            crawler_items=len(raw) if hasattr(raw, "__len__") else 0,
+            auditor_records=len(records),
+            findings=len(findings),
         )
 
         _stage_complete(job_id, "rendered_layout_audit", len(findings))
@@ -620,6 +672,7 @@ async def _stage_form_audit_universal(
     run_form_audit: bool,
     job_id: str,
     snapshot_task,
+    step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "form_audit")
     if not run_form_audit:
@@ -635,6 +688,13 @@ async def _stage_form_audit_universal(
             functools.partial(form_auditor.generate_audit_report, form_inputs=snapshot.forms)
         )
         findings = _form_to_findings(records, url)
+        _record_stage_metrics(
+            step_logger,
+            stage="form_audit",
+            crawler_items=len(snapshot.forms),
+            auditor_records=len(records),
+            findings=len(findings),
+        )
         _stage_complete(job_id, "form_audit", len(findings))
         return findings
     except Exception as _exc:
@@ -648,6 +708,7 @@ async def _stage_label_in_name_universal(
     run_label_in_name_audit: bool,
     job_id: str,
     snapshot_task,
+    step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "label_in_name")
     if not run_label_in_name_audit:
@@ -663,6 +724,13 @@ async def _stage_label_in_name_universal(
         auditor = LabelInNameAuditor(output_dir=str(output_dir))
         records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.interactive)
         findings = _lin_to_findings(records, url)
+        _record_stage_metrics(
+            step_logger,
+            stage="label_in_name",
+            crawler_items=len(snapshot.interactive),
+            auditor_records=len(records),
+            findings=len(findings),
+        )
         _stage_complete(job_id, "label_in_name", len(findings))
         return findings
     except Exception as _exc:
@@ -676,6 +744,7 @@ async def _stage_pause_stop_hide_universal(
     run_pause_stop_hide_audit: bool,
     job_id: str,
     snapshot_task,
+    step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "pause_stop_hide")
     if not run_pause_stop_hide_audit:
@@ -691,6 +760,18 @@ async def _stage_pause_stop_hide_universal(
         auditor = PauseStopHideAuditor(output_dir=str(output_dir))
         records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.moving_content)
         findings = _psh_to_findings(records, url)
+        _record_stage_metrics(
+            step_logger,
+            stage="pause_stop_hide",
+            crawler_items=len(snapshot.moving_content),
+            auditor_records=len(records),
+            findings=len(findings),
+            extra={
+                "na_records": sum(
+                    1 for record in records if record.get("wcag_2_2_2_status") == "N/A"
+                ),
+            },
+        )
         _stage_complete(job_id, "pause_stop_hide", len(findings))
         return findings
     except Exception as _exc:
@@ -704,6 +785,7 @@ async def _stage_target_size_universal(
     run_target_size_audit: bool,
     job_id: str,
     snapshot_task,
+    step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "target_size")
     if not run_target_size_audit:
@@ -719,6 +801,13 @@ async def _stage_target_size_universal(
         auditor = TargetSizeAuditor(output_dir=str(output_dir))
         records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.target_sizes)
         findings = _ts_to_findings(records, url)
+        _record_stage_metrics(
+            step_logger,
+            stage="target_size",
+            crawler_items=len(snapshot.target_sizes),
+            auditor_records=len(records),
+            findings=len(findings),
+        )
         _stage_complete(job_id, "target_size", len(findings))
         return findings
     except Exception as _exc:
@@ -732,6 +821,7 @@ async def _stage_text_spacing_universal(
     run_text_spacing_audit: bool,
     job_id: str,
     snapshot_task,
+    step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "text_spacing")
     if not run_text_spacing_audit:
@@ -747,6 +837,13 @@ async def _stage_text_spacing_universal(
         auditor = TextSpacingAuditor(output_dir=str(output_dir))
         records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.text_spacing)
         findings = _crawler_text_spacing_to_findings(records, url)
+        _record_stage_metrics(
+            step_logger,
+            stage="text_spacing",
+            crawler_items=len(snapshot.text_spacing),
+            auditor_records=len(records),
+            findings=len(findings),
+        )
         _stage_complete(job_id, "text_spacing", len(findings))
         return findings
     except Exception as _exc:
@@ -760,6 +857,7 @@ async def _stage_media_audit_universal(
     run_media_audit: bool,
     job_id: str,
     snapshot_task,
+    step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "media_audit")
     if not run_media_audit:
@@ -776,6 +874,13 @@ async def _stage_media_audit_universal(
             [item.model_dump() for item in snapshot.media],
         )
         findings = _media_to_findings(records, url)
+        _record_stage_metrics(
+            step_logger,
+            stage="media_audit",
+            crawler_items=len(snapshot.media),
+            auditor_records=len(records),
+            findings=len(findings),
+        )
         _stage_complete(job_id, "media_audit", len(findings))
         return findings
     except Exception as _exc:
@@ -790,6 +895,7 @@ async def _stage_sensory_audit_universal(
     job_id: str,
     lang: str,
     snapshot_task,
+    step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "sensory_audit")
     if not run_sensory_audit:
@@ -807,6 +913,13 @@ async def _stage_sensory_audit_universal(
             functools.partial(auditor.generate_audit_report, elements=snapshot.sensory)
         )
         findings = _sensory_to_findings(records, url)
+        _record_stage_metrics(
+            step_logger,
+            stage="sensory_audit",
+            crawler_items=len(snapshot.sensory),
+            auditor_records=len(records),
+            findings=len(findings),
+        )
         _stage_complete(job_id, "sensory_audit", len(findings))
         return findings
     except Exception as _exc:
@@ -880,32 +993,32 @@ async def _run_python_stages(
     results = await asyncio.gather(
         _timed(
             _stage_image_audit(
-                url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang
+                url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang, step_logger
             )
         ),
         _timed(
             _stage_form_audit_universal(
-                url, output_dir, run_form_audit, job_id, snapshot_task
+                url, output_dir, run_form_audit, job_id, snapshot_task, step_logger
             )
         ),
         _timed(
             _stage_label_in_name_universal(
-                url, output_dir, run_label_in_name_audit, job_id, snapshot_task
+                url, output_dir, run_label_in_name_audit, job_id, snapshot_task, step_logger
             )
         ),
         _timed(
             _stage_pause_stop_hide_universal(
-                url, output_dir, run_pause_stop_hide_audit, job_id, snapshot_task
+                url, output_dir, run_pause_stop_hide_audit, job_id, snapshot_task, step_logger
             )
         ),
         _timed(
             _stage_target_size_universal(
-                url, output_dir, run_target_size_audit, job_id, snapshot_task
+                url, output_dir, run_target_size_audit, job_id, snapshot_task, step_logger
             )
         ),
         _timed(
             _stage_text_spacing_universal(
-                url, output_dir, run_text_spacing_audit, job_id, snapshot_task
+                url, output_dir, run_text_spacing_audit, job_id, snapshot_task, step_logger
             )
         ),
         _timed(
@@ -920,16 +1033,17 @@ async def _run_python_stages(
                 run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit,
                 job_id,
+                step_logger,
             )
         ),
         _timed(
             _stage_media_audit_universal(
-                url, output_dir, run_media_audit, job_id, snapshot_task
+                url, output_dir, run_media_audit, job_id, snapshot_task, step_logger
             )
         ),
         _timed(
             _stage_sensory_audit_universal(
-                url, output_dir, run_sensory_audit, job_id, lang, snapshot_task
+                url, output_dir, run_sensory_audit, job_id, lang, snapshot_task, step_logger
             )
         ),
 

@@ -167,6 +167,12 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
         else:
             node_findings = node_result
             _stage_complete(job_id, "axe_core", len(node_findings))
+            step_logger.record(
+                step="axe_core_summary",
+                status="completed",
+                message="axe-core results recorded",
+                context={"finding_count": len(node_findings)},
+            )
 
         # ── Resolve Python result ─────────────────────────────────────────────
         python_findings: List[Dict] = []

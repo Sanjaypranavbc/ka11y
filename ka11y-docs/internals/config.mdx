@@ -3,6 +3,32 @@ title: "Configuration"
 description: "YAML config file and environment variables for ka11y-python"
 ---
 
+## Current Config Layers
+
+The crawler stack currently has **four** practical configuration layers, and they do not all do the same job:
+
+| Layer | Source | What it controls |
+|------|--------|------------------|
+| Base runtime config | `ka11y/config/config.yml` | crawler defaults for standalone/direct runs |
+| Environment | shell / Docker env vars | service wiring such as `NODE_BASE_URL` |
+| API request payload | `POST /api/v1/combined/` body | per-job behavior such as `lang`, `max_depth`, and `run_*` stage toggles |
+| Live test plan YAML | `ka11y-python/scripts/live_stage_plan.*.yml` | test harness inputs for real-site validation, not application runtime defaults |
+
+This distinction matters because the redesign docs mention language packs and site profiles, but that part is still **planned architecture**, not the current runtime config system.
+
+### What is implemented today
+
+- `config.yml` for crawler and output defaults
+- `NODE_BASE_URL` for Python → Node service routing
+- per-request `lang` and `run_*` booleans on the combined API
+- live-run plan YAML for real-site validation scenarios
+
+### What is not implemented yet
+
+- runtime-resolved `site-profiles/*.yml`
+- `languages/{lang}.yml` feeding crawler behavior directly at runtime
+- a cross-service config loader that automatically merges global + language + site overrides
+
 ## Config file
 
 ka11y-python reads `ka11y/config/config.yml` at startup via `ka11y/utils/config_loader.py`.
@@ -70,7 +96,7 @@ Set these in your shell, `.env` file, or `docker-compose.yml` `environment:` blo
 
 ### NODE_BASE_URL
 
-The Python service calls the Node/axe-core engine at `${NODE_BASE_URL}/api/v1/axe`.
+The Python service uses `NODE_BASE_URL` to reach the ka11y-node service during combined audits and live matrix runs.
 
 ```bash
 # Local dev (Node running on host)
@@ -119,6 +145,68 @@ Controls where OCR intermediate files are stored.
 ### `crawl_browser`
 
 Playwright viewport dimensions. Use `1920×1080` (desktop) or `375×812` (mobile) to test at different breakpoints.
+
+---
+
+## Combined API Request Config
+
+For the combined endpoint, the request body is the **real per-audit config layer**.
+
+Important fields:
+
+| Field | Effect |
+|------|--------|
+| `url` | target page |
+| `max_depth` | same-origin crawl depth |
+| `wcag_level` | post-merge WCAG filtering |
+| `lang` | localized output language plus some language-aware heuristics |
+| `run_*` booleans | stage enable/disable switches |
+
+If a `run_*` field is omitted, the current `CombinedRequest` defaults apply, which means the stage remains enabled.
+
+That is why the full-stack live plan can leave all `run_*` fields out and still run with every rule family turned on.
+
+---
+
+## Live Runner Plan Config
+
+`ka11y-python/scripts/live_stage_audit.py` uses YAML plan files as a **test harness config**, not as server runtime config.
+
+Example plan fields:
+
+| Field | Meaning |
+|------|---------|
+| `id` | stable run identifier |
+| `url` | live or staged URL |
+| `lang` | per-run request language |
+| `wcag_level` | per-run WCAG filtering |
+| `max_depth` | crawl depth for that run |
+| `run_*` | optional per-run stage overrides |
+| `expected_features` | human-readable coverage intent |
+| `expectations` | machine-checked validation rules for the run |
+
+Current plan files:
+
+| Plan | Purpose |
+|------|---------|
+| `live_stage_plan.public_matrix.yml` | focused universal-static real-site validation |
+| `live_stage_plan.public_full_stack.yml` | real-site validation with all combined-rule defaults enabled |
+
+The live runner also respects `--node-base-url` or `NODE_BASE_URL`, so the same plan file can be used locally, in Docker, or against a remote node service.
+
+---
+
+## Language and Japanese Behavior Today
+
+Current behavior is split across request config and code:
+
+- `lang: "ja"` in the combined request localizes the output and routes Japanese-aware behavior where already implemented
+- some Japanese/CJK heuristics still live in auditor code, especially sensory/media logic
+- the universal crawler itself is language-agnostic except for data collection and exception markers
+
+So today, Japanese support is **partly request-configured and partly code-driven**.
+
+The redesign target in `CRAWLER_ANALYSIS.md` is to move more of that behavior into explicit language config assets, but the docs should not imply that this migration is already complete.
 
 ---
 

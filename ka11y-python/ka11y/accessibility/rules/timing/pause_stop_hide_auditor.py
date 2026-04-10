@@ -101,6 +101,12 @@ def _check_222(item: MovingContentData) -> Tuple[str, str]:
       2. Content lasts more than 5 seconds (or loops indefinitely)
       3. No pause/stop/hide mechanism exists  →  FAILED
     """
+    if item.applicability_exception == "loading_indicator":
+        return (
+            "N/A",
+            "Loading or status indicator treated as an essential exception for WCAG 2.2.2.",
+        )
+
     # Gate 1: content must start automatically
     if not item.starts_automatically:
         return "PASSED", ""
@@ -181,6 +187,7 @@ class PauseStopHideAuditor:
         "loops",
         "duration_seconds",
         "starts_automatically",
+        "applicability_exception",
         # Mechanism
         "has_video_controls",
         "has_pause_button",
@@ -233,6 +240,7 @@ class PauseStopHideAuditor:
                     item.duration_seconds if item.duration_seconds is not None else ""
                 ),
                 "starts_automatically": item.starts_automatically,
+                "applicability_exception": item.applicability_exception or "",
                 "has_video_controls": item.has_video_controls,
                 "has_pause_button": item.has_pause_button,
                 "has_mechanism": item.has_mechanism,
@@ -251,7 +259,10 @@ class PauseStopHideAuditor:
         total = len(records)
         passed = sum(1 for r in records if r["wcag_2_2_2_status"] == "PASSED")
         failed = sum(1 for r in records if r["wcag_2_2_2_status"] == "FAILED")
-        needs_review = sum(1 for r in records if r["wcag_2_2_2_status"] == "NEEDS_REVIEW")
+        needs_review = sum(
+            1 for r in records if r["wcag_2_2_2_status"] == "NEEDS_REVIEW"
+        )
+        na = sum(1 for r in records if r["wcag_2_2_2_status"] == "N/A")
         checked = passed + failed + needs_review
         rate = round(passed / checked * 100, 1) if checked else 0
 
@@ -259,11 +270,15 @@ class PauseStopHideAuditor:
         for r in records:
             ct = r["content_type"]
             if ct not in by_type:
-                by_type[ct] = {"passed": 0, "failed": 0, "needs_review": 0}
+                by_type[ct] = {"passed": 0, "failed": 0, "needs_review": 0, "na": 0}
             bucket = (
                 "passed"
                 if r["wcag_2_2_2_status"] == "PASSED"
-                else ("failed" if r["wcag_2_2_2_status"] == "FAILED" else "needs_review")
+                else (
+                    "failed"
+                    if r["wcag_2_2_2_status"] == "FAILED"
+                    else ("needs_review" if r["wcag_2_2_2_status"] == "NEEDS_REVIEW" else "na")
+                )
             )
             by_type[ct][bucket] += 1
 
@@ -278,8 +293,9 @@ class PauseStopHideAuditor:
                 "tag": f"PASSED           : {passed}",
                 "element_id": f"FAILED           : {failed}",
                 "src": f"NEEDS_REVIEW     : {needs_review}",
-                "animation_name": f"Pass rate        : {rate}%",
-                "animation_duration_seconds": f"Axe-core misses  : {axe_would_miss}",
+                "animation_name": f"N/A              : {na}",
+                "animation_duration_seconds": f"Pass rate        : {rate}%",
+                "animation_iteration_count": f"Axe-core misses  : {axe_would_miss}",
                 "wcag_2_2_2_status": "PASSED" if failed == 0 and needs_review == 0 else ("FAILED" if failed else "NEEDS_REVIEW"),
                 "overall_status": "PASSED" if failed == 0 and needs_review == 0 else ("FAILED" if failed else "NEEDS_REVIEW"),
             }
@@ -295,12 +311,12 @@ class PauseStopHideAuditor:
             writer.writerow(summary)
 
         by_type_summary = "  |  ".join(
-            f"{ct}: {counts['passed']}P/{counts['failed']}F/{counts['needs_review']}R"
+            f"{ct}: {counts['passed']}P/{counts['failed']}F/{counts['needs_review']}R/{counts['na']}N"
             for ct, counts in by_type.items()
         )
         print(
             f"[PauseStopHideAuditor] audit_pause_stop_hide_report.csv → {csv_path}  "
-            f"({total} items | {passed} PASSED / {failed} FAILED / {needs_review} NEEDS_REVIEW | pass rate {rate}%) "
+            f"({total} items | {passed} PASSED / {failed} FAILED / {needs_review} NEEDS_REVIEW / {na} N/A | pass rate {rate}%) "
             f"| axe-core would miss {axe_would_miss}"
             + (f"\n  by type: {by_type_summary}" if by_type_summary else "")
         )
@@ -312,28 +328,34 @@ class PauseStopHideAuditor:
         passed = sum(1 for r in records if r["wcag_2_2_2_status"] == "PASSED")
         failed = sum(1 for r in records if r["wcag_2_2_2_status"] == "FAILED")
         needs_review = sum(1 for r in records if r["wcag_2_2_2_status"] == "NEEDS_REVIEW")
+        na = sum(1 for r in records if r["wcag_2_2_2_status"] == "N/A")
 
         failed_by_type: Dict[str, int] = {}
         passed_by_type: Dict[str, int] = {}
         review_by_type: Dict[str, int] = {}
+        na_by_type: Dict[str, int] = {}
         for r in records:
             ct = r["content_type"]
             if r["wcag_2_2_2_status"] == "FAILED":
                 failed_by_type[ct] = failed_by_type.get(ct, 0) + 1
             elif r["wcag_2_2_2_status"] == "PASSED":
                 passed_by_type[ct] = passed_by_type.get(ct, 0) + 1
-            else:
+            elif r["wcag_2_2_2_status"] == "NEEDS_REVIEW":
                 review_by_type[ct] = review_by_type.get(ct, 0) + 1
+            else:
+                na_by_type[ct] = na_by_type.get(ct, 0) + 1
 
         return {
             "total_items": total,
             "passed": passed,
             "failed": failed,
             "needs_review": needs_review,
+            "na": na,
             "pass_rate_pct": round(passed / (passed + failed + needs_review) * 100, 1) if (passed + failed + needs_review) else 0,
             "wcag_2_2_2_failed": failed,
             "axe_would_miss": sum(1 for r in records if not r["axe_would_catch"]),
             "failed_by_type": failed_by_type,
             "passed_by_type": passed_by_type,
             "needs_review_by_type": review_by_type,
+            "na_by_type": na_by_type,
         }

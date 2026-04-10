@@ -3,7 +3,116 @@ title: "Crawlers Reference"
 description: "How each Playwright crawler extracts raw data from a page"
 ---
 
-All crawlers share the same contract:
+## Current Production Path
+
+As of `2026-04-10`, the combined audit pipeline does **not** launch seven static crawlers independently anymore.
+
+- `AsyncImageCrawler` still owns image/OCR work.
+- `RenderedLayoutCrawler` still owns viewport, focus, hover, reflow, resize-text, and rendered text-spacing scenarios.
+- Static DOM rule families now share one browser load through `UniversalPageLoader` in `ka11y/crawler/universal_page.py`, then normalize back into the existing Pydantic models with `SnapshotNormalizer`.
+
+That universal static path currently powers:
+
+- forms
+- interactive elements
+- target size
+- moving content
+- media
+- text spacing
+- sensory characteristics
+
+The important practical difference is that the combined pipeline now gets:
+
+- same-origin iframe traversal with `frame_path` provenance
+- open shadow-root traversal with composed selectors
+- structured warnings for cross-origin frames and partial extraction
+- persisted `universal_snapshot_raw.json`, `universal_snapshot_normalized.json`, and Rich step logs
+
+The legacy crawler classes still exist and keep the same model contracts, so direct usage and compatibility paths remain intact.
+
+## Live Validation Status
+
+The production crawler plan is currently backed by the expectation-driven live runner in `ka11y-python/scripts/live_stage_audit.py` and the public matrix in `ka11y-python/scripts/live_stage_plan.public_matrix.yml`.
+
+Latest verified run: `2026-04-10`
+
+| Live check | What it confirmed |
+|-----------|-------------------|
+| `w3schools_iframe` | Same-origin iframe extraction worked with `3493` non-main-frame records; cross-origin frames were reported as structured warnings rather than being silently ignored |
+| `shoelace_button` | Open shadow traversal worked with `171` shadow selectors in normalized static records |
+| `shoelace_spinner` | Loading/status indicators were tagged with `applicability_exception=loading_indicator`; `2.2.2` produced no false violations |
+| `w3schools_bootstrap_carousel` | Real autoplay carousel motion still produced a genuine `2.2.2` violation after the loading-indicator heuristic was tightened |
+| `mdn_japanese` | `lang=ja` completed through the same combined pipeline and met the live expectation checks |
+| `w3schools_bootstrap_forms` | Real public form content produced the expected form-field coverage in the normalized snapshot |
+
+The curated 10-site public matrix passed all expectation checks in the latest run.
+
+## Real-Page Testing Modes
+
+There are now two documented real-site testing modes.
+
+### 1. Focused universal-static matrix
+
+**Plan file**: `ka11y-python/scripts/live_stage_plan.public_matrix.yml`
+
+Use this when the goal is to validate the universal static crawler itself:
+
+- iframe traversal
+- shadow traversal
+- loading-indicator exceptions
+- Japanese routing through the combined pipeline
+- normalized model coverage for forms, media, moving content, text spacing, target size, and sensory checks
+
+This matrix intentionally disables some expensive rendered and OCR stages per site so failures can be isolated to the universal static path.
+
+### 2. Full-stack matrix with all rules enabled
+
+**Plan file**: `ka11y-python/scripts/live_stage_plan.public_full_stack.yml`
+
+This is the production-style real-page suite. It leaves every `run_*` flag unset, so `CombinedRequest` defaults apply and all rule families remain enabled:
+
+- axe-core / ka11y-node
+- OCR + image audit
+- forms
+- label in name
+- pause / stop / hide
+- target size
+- resize text
+- reflow
+- text spacing
+- orientation
+- hover / focus content
+- focus not obscured minimum / enhanced
+- sensory characteristics
+
+Run it with:
+
+```bash
+python ka11y-python/scripts/live_stage_audit.py \
+  --plan ka11y-python/scripts/live_stage_plan.public_full_stack.yml \
+  --output-dir /tmp/ka11y_public_matrix_full \
+  --node-base-url http://localhost:3000
+```
+
+### Reading the result
+
+Each run produces:
+
+- a plan summary markdown/json file
+- per-run `combined_report.json`
+- `universal_snapshot_raw.json`
+- `universal_snapshot_normalized.json`
+- Rich step logs in `step_logs/`
+
+An expectation pass means:
+
+- the page completed end-to-end
+- the expected crawler coverage was observed on a real site
+- the targeted architecture promise from `CRAWLER_ANALYSIS.md` held on that live page
+
+---
+
+Legacy direct crawlers still share this contract:
 
 ```python
 async def crawl() -> List[Dict[str, Any]]
@@ -81,6 +190,8 @@ output_dir/
 **File**: `ka11y/crawler/forms_crawler.py`
 **Crawls**: All form fields (`<input>`, `<textarea>`, `<select>`) inside `<form>` elements and implicit forms
 
+> In the combined production path, `FormInputData` usually comes from the normalized universal snapshot, not a standalone `AsyncFormCrawler` browser session.
+
 ### What it extracts per field
 
 | Field | Description |
@@ -111,6 +222,8 @@ The crawler injects a single `EXTRACT_JS` script that traverses all forms and im
 
 **File**: `ka11y/crawler/interactive_crawler.py`
 **Crawls**: `<button>`, `<a>`, `<input type="submit/button/reset/image">`, elements with `role` in `{button, link, menuitem, tab, option, treeitem, gridcell}`
+
+> In the combined production path, `InteractiveElementData` usually comes from the normalized universal snapshot, with `selector`, `element_ref_id`, and `frame_path` attached for provenance.
 
 ### What it extracts per element
 
@@ -146,6 +259,8 @@ This mirrors the computation a browser or assistive technology would perform.
 **File**: `ka11y/crawler/moving_content_crawler.py`
 **Crawls**: Auto-playing video, animated GIFs, CSS/WAAPI animations, JavaScript carousels, `<marquee>`, `<blink>`
 
+> In the combined production path, `MovingContentData` is normalized from the universal snapshot so that same-origin frame traversal and open shadow traversal are available to `2.2.2`.
+
 ### Detection strategies
 
 | Type | Detection method |
@@ -156,6 +271,16 @@ This mirrors the computation a browser or assistive technology would perform.
 | `carousel_autoplay` | Class/data-attribute detection for Bootstrap, Swiper, Slick, Owl, Flickity, Glide, Splide |
 | `marquee` | `<marquee>` elements |
 | `blink` | `<blink>` elements |
+
+### Production-only metadata used by the combined pipeline
+
+| Field | Meaning |
+|------|---------|
+| `duration_known` | Distinguishes genuinely short media from cases where duration could not be determined |
+| `applicability_exception` | Used for essential exceptions such as `loading_indicator` in `2.2.2` |
+| `selector` | Composed selector for evidence and deduplication |
+| `element_ref_id` | Stable lookup key into the universal snapshot sidecar |
+| `frame_path` | Same-origin iframe provenance |
 
 ### Why this goes beyond axe-core
 
@@ -173,6 +298,8 @@ The `axe_would_catch` boolean in each record lets you filter down to novel detec
 
 **File**: `ka11y/crawler/target_size_crawler.py`
 **Crawls**: All interactive elements: `<button>`, `<a>`, `<input>`, `<select>`, `<textarea>`, ARIA role equivalents
+
+> In the combined production path, `TargetSizeData` is normalized from the universal snapshot, so same-origin frame content and shadow-root content can reach the auditor through the existing model.
 
 ### What it extracts per element
 
