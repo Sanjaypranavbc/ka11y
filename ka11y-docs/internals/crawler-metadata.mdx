@@ -382,6 +382,13 @@ ka11y-python now has two distinct execution modes:
 - direct crawler classes still exist and keep the original model contracts
 - the combined production endpoint reuses **one universal static crawl** for seven structural rule families, then normalizes that snapshot back into the existing Pydantic models
 
+**Direct answer:** Yes, the combined `ka11y-python` crawler is now universal for the static DOM rule families.
+
+That answer is **not** the same as "every stage uses one crawler". Two specialized crawlers still remain outside the universal static path:
+
+- `AsyncImageCrawler` for screenshots, OCR, image classification, and image-specific auditing
+- `RenderedLayoutCrawler` for viewport mutation, focus/hover simulation, reflow, resize-text, orientation, and focus-obscuration checks
+
 ```
 POST /api/v1/combined
         │
@@ -421,6 +428,74 @@ The universal static path is where ka11y-python now gets:
 - sidecar provenance through `element_ref_id`, `selector`, and `frame_path`
 
 Legacy crawler classes remain useful for direct debugging and compatibility, but the combined endpoint no longer needs seven separate static page loads.
+
+### How universal crawler data is audited
+
+The audit flow is intentionally **raw snapshot first, existing Pydantic models second, existing auditors third**.
+
+This is the current production order:
+
+1. `UniversalPageLoader.load()` does one Playwright session and extracts a `PageSnapshot`.
+2. The raw snapshot is persisted as `universal_snapshot_raw.json`.
+3. `SnapshotNormalizer.normalize()` converts each raw bucket into the existing Pydantic models.
+4. The normalized snapshot is persisted as `universal_snapshot_normalized.json`.
+5. `_run_python_stages()` creates one shared `snapshot_task` and passes it to every static auditor stage.
+6. Each stage waits on the same normalized snapshot, calls the existing auditor unchanged, and receives structured audit rows back.
+7. Stage-specific adapters convert those audit rows into unified combined findings.
+8. The combined runner merges universal-static findings with image/OCR findings, rendered-layout findings, and `ka11y-node` findings into `combined_report.json`.
+9. Rich step logs capture both crawler counts and auditor counts for every stage in `step_logs/combined_execution_steps.jsonl`.
+
+### Universal snapshot to auditor map
+
+| Raw snapshot bucket | Normalized model | Stage function | Auditor | Finding adapter | Main SCs |
+|--------------------|------------------|----------------|---------|-----------------|----------|
+| `forms` | `FormInputData` | `_stage_form_audit_universal()` | `FormAccessibilityAuditor` | `_form_to_findings()` | `3.3.1`, `3.3.2` |
+| `interactive` | `InteractiveElementData` | `_stage_label_in_name_universal()` | `LabelInNameAuditor` | `_lin_to_findings()` | `2.5.3` |
+| `moving_content` | `MovingContentData` | `_stage_pause_stop_hide_universal()` | `PauseStopHideAuditor` | `_psh_to_findings()` | `2.2.2` |
+| `target_sizes` | `TargetSizeData` | `_stage_target_size_universal()` | `TargetSizeAuditor` | `_ts_to_findings()` | `2.5.8` |
+| `text_spacing` | `TextSpacingData` | `_stage_text_spacing_universal()` | `TextSpacingAuditor` | `_crawler_text_spacing_to_findings()` | `1.4.12` static risk pass |
+| `media` | `MediaElementData` | `_stage_media_audit_universal()` | `MediaAuditor` | `_media_to_findings()` | `1.2.1` |
+| `sensory` | `SensoryElementData` | `_stage_sensory_audit_universal()` | `SensoryCharacteristicsAuditor` | `_sensory_to_findings()` | `1.3.3` |
+
+### Why normalization exists
+
+The universal crawler does **not** send raw dicts straight into the auditors.
+
+`SnapshotNormalizer` is the compatibility boundary that:
+
+- injects `page_url` into every normalized record
+- validates payloads against the existing Pydantic models
+- preserves `selector`, `element_ref_id`, and `frame_path` provenance for final findings
+- records `normalization_error` warnings instead of crashing the whole run if one record is malformed
+
+That means the auditors continue to operate on the same data contracts they already expected before the universal crawler existed.
+
+### What the auditors receive in practice
+
+The shared pattern looks like this:
+
+```text
+UniversalPageLoader
+  -> PageSnapshot.forms / interactive / target_sizes / moving_content / media / text_spacing / sensory
+  -> SnapshotNormalizer
+  -> List[ExistingPydanticModel]
+  -> ExistingAuditor.generate_audit_report(...)
+  -> stage-specific *_to_findings(...)
+  -> merged combined findings
+```
+
+The important detail is that the auditors are **not DOM-aware anymore at execution time** for these seven rule families. DOM traversal already happened in the universal crawl, and the auditors only reason over normalized records.
+
+### Files written by the universal audit path
+
+| File | Purpose |
+|------|---------|
+| `universal_snapshot_raw.json` | Exact extracted static snapshot before model validation |
+| `universal_snapshot_normalized.json` | Post-normalization records in existing Pydantic-compatible shapes |
+| `universal_snapshot_warnings.json` | Cross-origin frame skips, detached-frame failures, normalization warnings, and other extraction limitations |
+| `step_logs/combined_execution_steps.jsonl` | Rich-backed event log with crawler counts, auditor counts, finding counts, and warnings |
+| `step_logs/combined_execution_steps_summary.json` | Rollup summary of the run |
+| `combined_report.json` | Final merged output from universal static stages, image/OCR, rendered-layout, and node/axe checks |
 
 **Universal fields present in normalized static records:**
 
