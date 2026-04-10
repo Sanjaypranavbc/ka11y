@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -53,6 +54,7 @@ from .findings import (
     _sensory_to_findings,
 )
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
+from .store import _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -563,6 +565,7 @@ async def _load_universal_snapshot(
     url: str,
     output_dir: Path,
     max_depth: int,
+    job_id: str,
     step_logger: ExecutionStepLogger | None,
 ):
     from ka11y.crawler.snapshot_normalizer import SnapshotNormalizer
@@ -576,12 +579,39 @@ async def _load_universal_snapshot(
         step_logger=step_logger,
     )
     await asyncio.to_thread(UniversalPageLoader.save_snapshot, raw_snapshot, output_dir)
-    return await asyncio.to_thread(
+    normalized = await asyncio.to_thread(
         SnapshotNormalizer.normalize,
         raw_snapshot,
         output_dir=output_dir,
         step_logger=step_logger,
     )
+    if normalized.warnings:
+        warning_path = output_dir / "universal_snapshot_warnings.json"
+        await asyncio.to_thread(
+            warning_path.write_text,
+            json.dumps(normalized.warnings, indent=2, ensure_ascii=False),
+            "utf-8",
+        )
+        counts: Dict[str, int] = {}
+        for warning in normalized.warnings:
+            code = warning.get("code", "unknown_warning")
+            counts[code] = counts.get(code, 0) + 1
+        for code, count in sorted(counts.items()):
+            _jobs[job_id].setdefault("warnings", []).append(
+                f"universal_static:{code}: {count} occurrence(s)"
+            )
+        _jobs[job_id]["universal_warning_path"] = str(warning_path)
+        if step_logger:
+            step_logger.record(
+                step="universal_loader",
+                status="warning",
+                message="Universal crawl completed with extraction limitations",
+                context={
+                    "warning_counts": counts,
+                    "warning_path": str(warning_path),
+                },
+            )
+    return normalized
 
 
 async def _stage_form_audit_universal(
@@ -839,6 +869,7 @@ async def _run_python_stages(
                 url=url,
                 output_dir=output_dir,
                 max_depth=max_depth,
+                job_id=job_id,
                 step_logger=step_logger,
             )
         )
