@@ -50,6 +50,7 @@ class MovingContentData(BaseModel):
     # Moving-content properties
     loops: bool = False
     duration_seconds: Optional[float] = None  # -1 means infinite
+    duration_known: bool = True
     starts_automatically: bool = True
 
     # Pause / Stop / Hide mechanism
@@ -59,6 +60,10 @@ class MovingContentData(BaseModel):
 
     # axe-core would already flag this element
     axe_would_catch: bool = False
+
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
 
     html_snippet: str = ""
 

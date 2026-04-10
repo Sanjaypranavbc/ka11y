@@ -94,7 +94,7 @@ _HINTS: Dict[str, str] = {
 def _check_222(item: MovingContentData) -> Tuple[str, str]:
     """
     Returns (status, violation_message) for WCAG 2.2.2.
-    status: "PASSED" | "FAILED"
+    status: "PASSED" | "FAILED" | "NEEDS_REVIEW"
 
     WCAG 2.2.2 only applies when ALL three applicability gates are met:
       1. Content starts automatically
@@ -106,11 +106,26 @@ def _check_222(item: MovingContentData) -> Tuple[str, str]:
         return "PASSED", ""
 
     # Gate 2: content must last more than 5 seconds.
-    # duration_seconds == -1 means infinite; None means unknown (treat as applicable).
-    # loops == True also means infinite total duration regardless of single-loop duration.
+    # duration_seconds == -1 means infinite. Unknown finite duration is ambiguous.
     is_infinite = (
         item.duration_seconds == -1 or item.animation_iteration_count == "infinite"
     )
+    if (
+        not is_infinite
+        and not item.loops
+        and item.duration_seconds is None
+        and not item.duration_known
+    ):
+        if item.has_mechanism:
+            return "PASSED", ""
+        label = _TYPE_LABELS.get(item.content_type, item.content_type)
+        return (
+            "NEEDS_REVIEW",
+            f"2.2.2: {label} starts automatically but its duration could not be "
+            "determined. Verify whether it runs longer than 5 seconds and provide "
+            "a pause, stop, or hide mechanism if it does.",
+        )
+
     if (
         not is_infinite
         and not item.loops
@@ -170,6 +185,9 @@ class PauseStopHideAuditor:
         "has_video_controls",
         "has_pause_button",
         "has_mechanism",
+        "selector",
+        "element_ref_id",
+        "frame_path",
         # WCAG result
         "wcag_2_2_2_status",
         "wcag_2_2_2_violation",
@@ -218,6 +236,9 @@ class PauseStopHideAuditor:
                 "has_video_controls": item.has_video_controls,
                 "has_pause_button": item.has_pause_button,
                 "has_mechanism": item.has_mechanism,
+                "selector": item.selector or "",
+                "element_ref_id": item.element_ref_id or "",
+                "frame_path": item.frame_path or "",
                 "wcag_2_2_2_status": status,
                 "wcag_2_2_2_violation": violation,
                 "overall_status": status,
@@ -229,17 +250,22 @@ class PauseStopHideAuditor:
         # ── Summary counts ─────────────────────────────────────────────────
         total = len(records)
         passed = sum(1 for r in records if r["wcag_2_2_2_status"] == "PASSED")
-        failed = total - passed
-        rate = round(passed / total * 100, 1) if total else 0
+        failed = sum(1 for r in records if r["wcag_2_2_2_status"] == "FAILED")
+        needs_review = sum(1 for r in records if r["wcag_2_2_2_status"] == "NEEDS_REVIEW")
+        checked = passed + failed + needs_review
+        rate = round(passed / checked * 100, 1) if checked else 0
 
         by_type: Dict[str, Dict[str, int]] = {}
         for r in records:
             ct = r["content_type"]
             if ct not in by_type:
-                by_type[ct] = {"passed": 0, "failed": 0}
-            by_type[ct][
-                "passed" if r["wcag_2_2_2_status"] == "PASSED" else "failed"
-            ] += 1
+                by_type[ct] = {"passed": 0, "failed": 0, "needs_review": 0}
+            bucket = (
+                "passed"
+                if r["wcag_2_2_2_status"] == "PASSED"
+                else ("failed" if r["wcag_2_2_2_status"] == "FAILED" else "needs_review")
+            )
+            by_type[ct][bucket] += 1
 
         axe_would_miss = sum(1 for r in records if not r["axe_would_catch"])
 
@@ -251,10 +277,11 @@ class PauseStopHideAuditor:
                 "content_type": f"Total items      : {total}",
                 "tag": f"PASSED           : {passed}",
                 "element_id": f"FAILED           : {failed}",
-                "src": f"Pass rate        : {rate}%",
-                "animation_name": f"Axe-core misses  : {axe_would_miss}",
-                "wcag_2_2_2_status": "PASSED" if failed == 0 else "FAILED",
-                "overall_status": "PASSED" if failed == 0 else "FAILED",
+                "src": f"NEEDS_REVIEW     : {needs_review}",
+                "animation_name": f"Pass rate        : {rate}%",
+                "animation_duration_seconds": f"Axe-core misses  : {axe_would_miss}",
+                "wcag_2_2_2_status": "PASSED" if failed == 0 and needs_review == 0 else ("FAILED" if failed else "NEEDS_REVIEW"),
+                "overall_status": "PASSED" if failed == 0 and needs_review == 0 else ("FAILED" if failed else "NEEDS_REVIEW"),
             }
         )
 
@@ -268,12 +295,12 @@ class PauseStopHideAuditor:
             writer.writerow(summary)
 
         by_type_summary = "  |  ".join(
-            f"{ct}: {counts['passed']}P/{counts['failed']}F"
+            f"{ct}: {counts['passed']}P/{counts['failed']}F/{counts['needs_review']}R"
             for ct, counts in by_type.items()
         )
         print(
             f"[PauseStopHideAuditor] audit_pause_stop_hide_report.csv → {csv_path}  "
-            f"({total} items | {passed} PASSED / {failed} FAILED | pass rate {rate}%) "
+            f"({total} items | {passed} PASSED / {failed} FAILED / {needs_review} NEEDS_REVIEW | pass rate {rate}%) "
             f"| axe-core would miss {axe_would_miss}"
             + (f"\n  by type: {by_type_summary}" if by_type_summary else "")
         )
@@ -283,24 +310,30 @@ class PauseStopHideAuditor:
     def summarize(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         total = len(records)
         passed = sum(1 for r in records if r["wcag_2_2_2_status"] == "PASSED")
-        failed = total - passed
+        failed = sum(1 for r in records if r["wcag_2_2_2_status"] == "FAILED")
+        needs_review = sum(1 for r in records if r["wcag_2_2_2_status"] == "NEEDS_REVIEW")
 
         failed_by_type: Dict[str, int] = {}
         passed_by_type: Dict[str, int] = {}
+        review_by_type: Dict[str, int] = {}
         for r in records:
             ct = r["content_type"]
             if r["wcag_2_2_2_status"] == "FAILED":
                 failed_by_type[ct] = failed_by_type.get(ct, 0) + 1
-            else:
+            elif r["wcag_2_2_2_status"] == "PASSED":
                 passed_by_type[ct] = passed_by_type.get(ct, 0) + 1
+            else:
+                review_by_type[ct] = review_by_type.get(ct, 0) + 1
 
         return {
             "total_items": total,
             "passed": passed,
             "failed": failed,
-            "pass_rate_pct": round(passed / total * 100, 1) if total else 0,
+            "needs_review": needs_review,
+            "pass_rate_pct": round(passed / (passed + failed + needs_review) * 100, 1) if (passed + failed + needs_review) else 0,
             "wcag_2_2_2_failed": failed,
             "axe_would_miss": sum(1 for r in records if not r["axe_would_catch"]),
             "failed_by_type": failed_by_type,
             "passed_by_type": passed_by_type,
+            "needs_review_by_type": review_by_type,
         }

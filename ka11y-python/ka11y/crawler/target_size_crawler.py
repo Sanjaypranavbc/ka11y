@@ -73,6 +73,10 @@ class TargetSizeData(BaseModel):
     # Pre-computed pass/fail for size (width ≥ 24 AND height ≥ 24)
     passes_size: bool = True
 
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
+
     html_snippet: str = ""
 
 

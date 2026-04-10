@@ -87,6 +87,10 @@ class MediaElementData(BaseModel):
     # collapsible transcript sections.
     nearby_details: List[Dict[str, str]] = []  # [{"summary": "...", "content": "..."}]
 
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
+
 
 
 

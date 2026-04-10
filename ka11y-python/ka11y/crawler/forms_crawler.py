@@ -59,6 +59,10 @@ class FormInputData(BaseModel):
     error_has_role_alert: bool = False  # role="alert" present
     error_has_aria_live: Optional[str] = None  # aria-live value if set
 
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
+
     html: str = ""
 
 

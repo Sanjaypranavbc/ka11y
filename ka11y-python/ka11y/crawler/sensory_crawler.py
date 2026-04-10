@@ -68,6 +68,10 @@ class SensoryElementData(BaseModel):
     # Closest lang= attribute value (element's own or nearest ancestor)
     lang: Optional[str] = None
 
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
+
     # Raw markup (truncated)
     html: str = ""
 

@@ -43,19 +43,35 @@ def _make_finding(
     element_html: str = "",
     element_id: Optional[str] = None,
     element_tag: Optional[str] = None,
+    element_target: Optional[List[str]] = None,
+    element_selector: Optional[str] = None,
+    element_ref_id: Optional[str] = None,
+    frame_path: Optional[str] = None,
     page_url: str = "",
 ) -> Dict[str, Any]:
     is_pass = status == "pass"
     _lang = _lang_ctx.get()
     wcag_names = get_wcag_names(_lang)
     suggested_fixes = get_suggested_fixes(_lang)
-    has_element_data = bool((element_html or "").strip() or element_id or element_tag)
+    target = element_target or ([element_selector] if element_selector else None)
+    has_element_data = bool(
+        (element_html or "").strip()
+        or element_id
+        or element_tag
+        or target
+        or element_ref_id
+        or frame_path
+    )
     if is_pass:
         element = (
             {
                 "html": element_html[:600],
                 "element_id": element_id,
                 "tag": element_tag,
+                "target": target,
+                "selector": element_selector,
+                "element_ref_id": element_ref_id,
+                "frame_path": frame_path,
                 "page_url": page_url,
             }
             if has_element_data
@@ -66,6 +82,10 @@ def _make_finding(
             "html": element_html[:600],
             "element_id": element_id,
             "tag": element_tag,
+            "target": target,
+            "selector": element_selector,
+            "element_ref_id": element_ref_id,
+            "frame_path": frame_path,
             "page_url": page_url,
         }
 
@@ -87,6 +107,34 @@ def _make_finding(
 def _is_incomplete_reason(reason: str) -> bool:
     """Identify manual-review reasons that should surface as needs_review."""
     return reason.strip().upper().startswith("INCOMPLETE")
+
+
+def _record_element_kwargs(
+    record: Dict[str, Any],
+    page_url: str,
+    *,
+    html_key: str = "html_snippet",
+    element_id_keys: tuple[str, ...] = ("element_id",),
+    tag_key: str = "tag",
+) -> Dict[str, Any]:
+    element_id = None
+    for key in element_id_keys:
+        value = record.get(key)
+        if value:
+            element_id = value
+            break
+
+    selector = record.get("selector")
+    return {
+        "element_html": record.get(html_key, ""),
+        "element_id": element_id,
+        "element_tag": record.get(tag_key, ""),
+        "element_target": [selector] if selector else None,
+        "element_selector": selector,
+        "element_ref_id": record.get("element_ref_id"),
+        "frame_path": record.get("frame_path"),
+        "page_url": record.get("page_url") or page_url,
+    }
 
 
 # ── Image classification inference ────────────────────────────────────────────
@@ -699,15 +747,15 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
 def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
-        html = r.get("html_snippet", "")
-        # form_auditor.py uses "field_tag" / "field_id" / "field_name" keys
-        tag = r.get("field_tag") or r.get("tag", "INPUT")
-        eid = (
-            r.get("field_id")
-            or r.get("element_id")
-            or r.get("field_name")
-            or r.get("element_name")
+        element_kwargs = _record_element_kwargs(
+            r,
+            page_url,
+            html_key="html_snippet",
+            element_id_keys=("field_id", "element_id", "field_name", "element_name"),
+            tag_key="field_tag",
         )
+        if not element_kwargs["element_tag"]:
+            element_kwargs["element_tag"] = r.get("tag", "INPUT")
         for sc, status_key in [
             ("3.3.1", "wcag_3_3_1_status"),
             ("3.3.2", "wcag_3_3_2_status"),
@@ -726,10 +774,7 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                         reason=r.get(violation_key)
                         or f"Form field violates WCAG {sc}.",
                         severity=_PYTHON_SEVERITY[sc],
-                        element_html=html,
-                        element_id=eid,
-                        element_tag=tag,
-                        page_url=page_url,
+                        **element_kwargs,
                     )
                 )
             elif status_raw == "PASSED":
@@ -741,10 +786,7 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                         status="pass",
                         reason=f"Form field meets WCAG {sc}.",
                         severity=None,
-                        element_html=html,
-                        element_id=eid,
-                        element_tag=tag,
-                        page_url=page_url,
+                        **element_kwargs,
                     )
                 )
     return findings
@@ -766,10 +808,7 @@ def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     reason=r.get("wcag_2_5_3_violation")
                     or "Accessible name does not contain visible label.",
                     severity=_PYTHON_SEVERITY["2.5.3"],
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "PASSED":
@@ -781,10 +820,7 @@ def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason="Accessible name contains the visible label.",
                     severity=None,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
     return findings
@@ -804,10 +840,20 @@ def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     reason=r.get("wcag_2_2_2_violation")
                     or "Auto-playing content has no pause/stop mechanism.",
                     severity=_PYTHON_SEVERITY["2.2.2"],
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
+                )
+            )
+        elif status_raw == "NEEDS_REVIEW":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_2_2_2_pause_stop_hide",
+                    wcag_sc="2.2.2",
+                    status="needs_review",
+                    reason=r.get("wcag_2_2_2_violation")
+                    or "Moving content duration could not be determined automatically.",
+                    severity=_PYTHON_SEVERITY["2.2.2"],
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "PASSED":
@@ -819,10 +865,7 @@ def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason="Moving content has a pause/stop mechanism or exception applies.",
                     severity=None,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
     return findings
@@ -846,10 +889,7 @@ def _ts_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     reason=r.get("wcag_2_5_8_violation")
                     or f"Target size {w:.0f}×{h:.0f} px is below 24×24 px minimum.",
                     severity=_PYTHON_SEVERITY["2.5.8"],
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "PASSED":
@@ -861,10 +901,7 @@ def _ts_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason=f"Target size {w:.0f}×{h:.0f} px meets the 24×24 px minimum.",
                     severity=None,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
     return findings
@@ -899,10 +936,7 @@ def _rendered_rule_to_findings(
                     status="fail",
                     reason=violation or f"Page violates WCAG {wcag_sc}.",
                     severity=sev,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "NEEDS_REVIEW":
@@ -914,10 +948,7 @@ def _rendered_rule_to_findings(
                     status="needs_review",
                     reason=violation or f"WCAG {wcag_sc} requires manual review.",
                     severity=sev,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "PASSED":
@@ -929,10 +960,7 @@ def _rendered_rule_to_findings(
                     status="pass",
                     reason=pass_reason,
                     severity=None,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
     return findings
@@ -978,10 +1006,7 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     status="fail",
                     reason=violation or "Element clips text after spacing overrides.",
                     severity=sev,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "WARNING":
@@ -994,10 +1019,7 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     reason=violation
                     or "Fixed height with overflow hidden may clip text when spacing increases.",
                     severity=sev,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "INFO":
@@ -1010,10 +1032,7 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     reason=violation
                     or "Fixed height detected. Verify text does not clip when spacing increases.",
                     severity=sev,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "PASSED":
@@ -1025,10 +1044,7 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
                     status="pass",
                     reason="No fixed-height/overflow-hidden clipping risk detected.",
                     severity=None,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
     return findings
@@ -1078,10 +1094,12 @@ def _sensory_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                                "with no non-sensory identifier."
                            ),
                     severity=sev,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id") or None,
-                    element_tag=r.get("element_tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(
+                        r,
+                        page_url,
+                        element_id_keys=("element_id",),
+                        tag_key="element_tag",
+                    ),
                 )
             )
         elif status_raw == "PASSED":
@@ -1093,10 +1111,12 @@ def _sensory_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason="Instruction provides sufficient non-sensory identifiers.",
                     severity=None,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id") or None,
-                    element_tag=r.get("element_tag", ""),
-                    page_url=r.get("page_url") or page_url,
+                    **_record_element_kwargs(
+                        r,
+                        page_url,
+                        element_id_keys=("element_id",),
+                        tag_key="element_tag",
+                    ),
                 )
             )
 
@@ -1180,10 +1200,7 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     reason=r.get("wcag_1_2_1_violation")
                     or "No text alternative for prerecorded media.",
                     severity=_PYTHON_SEVERITY.get("1.2.1", "critical"),
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "NEEDS_REVIEW":
@@ -1196,10 +1213,7 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     reason=r.get("wcag_1_2_1_violation")
                     or "Manual review required for transcript quality.",
                     severity=_PYTHON_SEVERITY.get("1.2.1", "critical"),
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
         elif status_raw == "PASSED":
@@ -1211,10 +1225,7 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="pass",
                     reason="Prerecorded media has an equivalent text alternative.",
                     severity=None,
-                    element_html=r.get("html_snippet", ""),
-                    element_id=r.get("element_id"),
-                    element_tag=r.get("tag", ""),
-                    page_url=page_url,
+                    **_record_element_kwargs(r, page_url),
                 )
             )
     return findings

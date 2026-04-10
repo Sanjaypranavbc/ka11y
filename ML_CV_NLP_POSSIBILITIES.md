@@ -1,4 +1,4 @@
-# Reviewed ML / CV / NLP Approaches for Remaining and Review-Heavy WCAG Rules
+ # Reviewed ML / CV / NLP Approaches for Remaining and Review-Heavy WCAG Rules
 
 > Baseline source: `COVERAGE.md` dated 2026-03-26
 > Repo reconciliation date: 2026-04-10

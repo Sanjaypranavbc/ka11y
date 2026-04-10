@@ -43,6 +43,10 @@ class TextSpacingData(BaseModel):
     has_fixed_height: bool
     has_overflow_hidden: bool
 
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
+
     html_snippet: str
     is_clipped: bool
 

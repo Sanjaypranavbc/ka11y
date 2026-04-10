@@ -21,6 +21,7 @@ from urllib.parse import quote, urlparse
 from ka11y.config.logger import setup_logger
 from ka11y.preprocessor.text_helper_models import _json_serializer
 from ka11y.utils.config_loader import load_config
+from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import _lang_ctx
 from .models import CombinedRequest
@@ -60,9 +61,10 @@ def _merge_findings(
             first = target[0]
             if isinstance(first, str):
                 target_sig = first.strip().lower()
+        ref_id = (el.get("element_ref_id") or "").strip().lower()
         el_id = (el.get("element_id") or "").strip()
         el_html = (el.get("html") or "").strip()[:120].lower()
-        ident = target_sig or el_id or el_html
+        ident = target_sig or ref_id or el_id or el_html
         return (f.get("wcag_sc", ""), f.get("status", ""), ident)
 
     for f in python_findings:
@@ -108,8 +110,21 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     _jobs[job_id]["output_dir"] = str(output_dir)
+    step_logger = ExecutionStepLogger(
+        output_dir=output_dir,
+        name="combined_execution_steps",
+        job_id=job_id,
+    )
+    _jobs[job_id]["step_log_path"] = str(step_logger.jsonl_path)
+    _jobs[job_id]["step_summary_path"] = str(step_logger.summary_path)
 
     try:
+        step_logger.record(
+            step="combined_job",
+            status="running",
+            message="Combined audit job started",
+            context={"url": url, "lang": payload.lang, "wcag_level": payload.wcag_level},
+        )
         # Fire axe-core and all Python stages concurrently
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
@@ -137,6 +152,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 run_sensory_audit= payload.run_sensory_audit,
                 lang=payload.lang,
                 job_id=job_id,
+                step_logger=step_logger,
             )
         )
 
@@ -224,6 +240,17 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             f"{(contrast_report or {}).get('summary', {}).get('total_regions_analysed', 0)} | "
             f"report → {report_path}"
         )
+        step_logger.finalize(
+            status="completed",
+            message="Combined audit job completed",
+            context={
+                "report_path": str(report_path),
+                "violations": report["summary"]["violations"],
+                "needs_review": report["summary"]["needs_review"],
+                "passes": report["summary"]["passes"],
+                "warnings": len(report.get("warnings", [])),
+            },
+        )
 
         await _broadcast(
             job_id,
@@ -240,6 +267,11 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 "error": str(exc),
                 "current_stage": None,
             }
+        )
+        step_logger.finalize(
+            status="error",
+            message="Combined audit job failed",
+            context={"error": str(exc)},
         )
         await _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
 

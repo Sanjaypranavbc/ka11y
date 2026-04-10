@@ -31,6 +31,7 @@ _CRAWL_TIMEOUT_SECONDS = 300
 import httpx
 
 from ka11y.config.logger import setup_logger
+from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import (
     IMAGE_AUDIT_RECORD_CONVERTERS,
@@ -557,6 +558,232 @@ async def _stage_media_audit(
         return []
 
 
+async def _load_universal_snapshot(
+    *,
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    step_logger: ExecutionStepLogger | None,
+):
+    from ka11y.crawler.snapshot_normalizer import SnapshotNormalizer
+    from ka11y.crawler.universal_page import UniversalPageLoader
+
+    raw_snapshot = await UniversalPageLoader.load(
+        url=url,
+        output_dir=output_dir,
+        max_depth=max_depth,
+        record_har=False,
+        step_logger=step_logger,
+    )
+    await asyncio.to_thread(UniversalPageLoader.save_snapshot, raw_snapshot, output_dir)
+    return await asyncio.to_thread(
+        SnapshotNormalizer.normalize,
+        raw_snapshot,
+        output_dir=output_dir,
+        step_logger=step_logger,
+    )
+
+
+async def _stage_form_audit_universal(
+    url: str,
+    output_dir: Path,
+    run_form_audit: bool,
+    job_id: str,
+    snapshot_task,
+) -> List[Dict]:
+    _stage_start(job_id, "form_audit")
+    if not run_form_audit:
+        _stage_complete(job_id, "form_audit", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
+
+        snapshot = await snapshot_task
+        form_auditor = FormAccessibilityAuditor(output_dir=str(output_dir))
+        records = await asyncio.to_thread(
+            functools.partial(form_auditor.generate_audit_report, form_inputs=snapshot.forms)
+        )
+        findings = _form_to_findings(records, url)
+        _stage_complete(job_id, "form_audit", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "form_audit", _exc)
+        return []
+
+
+async def _stage_label_in_name_universal(
+    url: str,
+    output_dir: Path,
+    run_label_in_name_audit: bool,
+    job_id: str,
+    snapshot_task,
+) -> List[Dict]:
+    _stage_start(job_id, "label_in_name")
+    if not run_label_in_name_audit:
+        _stage_complete(job_id, "label_in_name", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
+            LabelInNameAuditor,
+        )
+
+        snapshot = await snapshot_task
+        auditor = LabelInNameAuditor(output_dir=str(output_dir))
+        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.interactive)
+        findings = _lin_to_findings(records, url)
+        _stage_complete(job_id, "label_in_name", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "label_in_name", _exc)
+        return []
+
+
+async def _stage_pause_stop_hide_universal(
+    url: str,
+    output_dir: Path,
+    run_pause_stop_hide_audit: bool,
+    job_id: str,
+    snapshot_task,
+) -> List[Dict]:
+    _stage_start(job_id, "pause_stop_hide")
+    if not run_pause_stop_hide_audit:
+        _stage_complete(job_id, "pause_stop_hide", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
+            PauseStopHideAuditor,
+        )
+
+        snapshot = await snapshot_task
+        auditor = PauseStopHideAuditor(output_dir=str(output_dir))
+        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.moving_content)
+        findings = _psh_to_findings(records, url)
+        _stage_complete(job_id, "pause_stop_hide", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "pause_stop_hide", _exc)
+        return []
+
+
+async def _stage_target_size_universal(
+    url: str,
+    output_dir: Path,
+    run_target_size_audit: bool,
+    job_id: str,
+    snapshot_task,
+) -> List[Dict]:
+    _stage_start(job_id, "target_size")
+    if not run_target_size_audit:
+        _stage_complete(job_id, "target_size", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
+            TargetSizeAuditor,
+        )
+
+        snapshot = await snapshot_task
+        auditor = TargetSizeAuditor(output_dir=str(output_dir))
+        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.target_sizes)
+        findings = _ts_to_findings(records, url)
+        _stage_complete(job_id, "target_size", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "target_size", _exc)
+        return []
+
+
+async def _stage_text_spacing_universal(
+    url: str,
+    output_dir: Path,
+    run_text_spacing_audit: bool,
+    job_id: str,
+    snapshot_task,
+) -> List[Dict]:
+    _stage_start(job_id, "text_spacing")
+    if not run_text_spacing_audit:
+        _stage_complete(job_id, "text_spacing", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
+            TextSpacingAuditor,
+        )
+
+        snapshot = await snapshot_task
+        auditor = TextSpacingAuditor(output_dir=str(output_dir))
+        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.text_spacing)
+        findings = _crawler_text_spacing_to_findings(records, url)
+        _stage_complete(job_id, "text_spacing", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "text_spacing", _exc)
+        return []
+
+
+async def _stage_media_audit_universal(
+    url: str,
+    output_dir: Path,
+    run_media_audit: bool,
+    job_id: str,
+    snapshot_task,
+) -> List[Dict]:
+    _stage_start(job_id, "media_audit")
+    if not run_media_audit:
+        _stage_complete(job_id, "media_audit", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.media.media_auditor import MediaAuditor
+
+        snapshot = await snapshot_task
+        auditor = MediaAuditor(output_dir=str(output_dir))
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report,
+            [item.model_dump() for item in snapshot.media],
+        )
+        findings = _media_to_findings(records, url)
+        _stage_complete(job_id, "media_audit", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "media_audit", _exc)
+        return []
+
+
+async def _stage_sensory_audit_universal(
+    url: str,
+    output_dir: Path,
+    run_sensory_audit: bool,
+    job_id: str,
+    lang: str,
+    snapshot_task,
+) -> List[Dict]:
+    _stage_start(job_id, "sensory_audit")
+    if not run_sensory_audit:
+        _stage_complete(job_id, "sensory_audit", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.non_text.sensory_auditor import (
+            SensoryCharacteristicsAuditor,
+        )
+
+        snapshot = await snapshot_task
+        auditor = SensoryCharacteristicsAuditor(output_dir=str(output_dir), lang=lang)
+        records = await asyncio.to_thread(
+            functools.partial(auditor.generate_audit_report, elements=snapshot.sensory)
+        )
+        findings = _sensory_to_findings(records, url)
+        _stage_complete(job_id, "sensory_audit", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "sensory_audit", _exc)
+        return []
+
+
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
 
@@ -582,6 +809,7 @@ async def _run_python_stages(
     run_sensory_audit: bool,
     job_id: str,
     lang: str = "en",
+    step_logger: ExecutionStepLogger | None = None,
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     Run all Python audit stages concurrently (6 total).
@@ -594,31 +822,59 @@ async def _run_python_stages(
     def _timed(coro):
         return asyncio.wait_for(coro, timeout=_STAGE_TIMEOUT_SECONDS)
 
+    static_rules_enabled = any(
+        (
+            run_form_audit,
+            run_label_in_name_audit,
+            run_media_audit,
+            run_pause_stop_hide_audit,
+            run_target_size_audit,
+            run_text_spacing_audit,
+            run_sensory_audit,
+        )
+    )
+    snapshot_task = (
+        asyncio.create_task(
+            _load_universal_snapshot(
+                url=url,
+                output_dir=output_dir,
+                max_depth=max_depth,
+                step_logger=step_logger,
+            )
+        )
+        if static_rules_enabled
+        else None
+    )
+
     results = await asyncio.gather(
         _timed(
             _stage_image_audit(
                 url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang
             )
         ),
-        _timed(_stage_form_audit(url, output_dir, max_depth, run_form_audit, job_id)),
         _timed(
-            _stage_label_in_name(
-                url, output_dir, max_depth, run_label_in_name_audit, job_id
+            _stage_form_audit_universal(
+                url, output_dir, run_form_audit, job_id, snapshot_task
             )
         ),
         _timed(
-            _stage_pause_stop_hide(
-                url, output_dir, max_depth, run_pause_stop_hide_audit, job_id
+            _stage_label_in_name_universal(
+                url, output_dir, run_label_in_name_audit, job_id, snapshot_task
             )
         ),
         _timed(
-            _stage_target_size(
-                url, output_dir, max_depth, run_target_size_audit, job_id
+            _stage_pause_stop_hide_universal(
+                url, output_dir, run_pause_stop_hide_audit, job_id, snapshot_task
             )
         ),
         _timed(
-            _stage_text_spacing(
-                url, output_dir, max_depth, run_text_spacing_audit, job_id
+            _stage_target_size_universal(
+                url, output_dir, run_target_size_audit, job_id, snapshot_task
+            )
+        ),
+        _timed(
+            _stage_text_spacing_universal(
+                url, output_dir, run_text_spacing_audit, job_id, snapshot_task
             )
         ),
         _timed(
@@ -636,13 +892,13 @@ async def _run_python_stages(
             )
         ),
         _timed(
-            _stage_media_audit(
-                url, output_dir, max_depth, run_media_audit, job_id
+            _stage_media_audit_universal(
+                url, output_dir, run_media_audit, job_id, snapshot_task
             )
         ),
         _timed(
-            _stage_sensory_audit(
-                url, output_dir, max_depth, run_sensory_audit, job_id, lang
+            _stage_sensory_audit_universal(
+                url, output_dir, run_sensory_audit, job_id, lang, snapshot_task
             )
         ),
 

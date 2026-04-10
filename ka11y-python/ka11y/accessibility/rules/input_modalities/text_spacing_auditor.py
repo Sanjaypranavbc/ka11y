@@ -69,6 +69,9 @@ class TextSpacingAuditor:
         "wcag_1_4_12_status",
         "wcag_1_4_12_violation",
         "overall_status",
+        "selector",
+        "element_ref_id",
+        "frame_path",
         "html_snippet",
     ]
 
@@ -108,6 +111,9 @@ class TextSpacingAuditor:
                         else ("N/A" if status == "N/A" else "PASSED")
                     )
                 ),
+                "selector": item.selector or "",
+                "element_ref_id": item.element_ref_id or "",
+                "frame_path": item.frame_path or "",
                 "html_snippet": item.html_snippet[:400],
             }
 

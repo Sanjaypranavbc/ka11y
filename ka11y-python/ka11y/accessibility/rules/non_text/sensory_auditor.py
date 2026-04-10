@@ -778,6 +778,9 @@ class SensoryCharacteristicsAuditor:
         "wcag_1_3_3_status",
         "wcag_1_3_3_violation",
         "overall_status",
+        "selector",
+        "element_ref_id",
+        "frame_path",
         "html_snippet",
     ]
 
@@ -826,6 +829,9 @@ class SensoryCharacteristicsAuditor:
                         "wcag_1_3_3_status":    status,
                         "wcag_1_3_3_violation": msg if status == "FAILED" else "",
                         "overall_status":       status,
+                        "selector":             el.selector or "",
+                        "element_ref_id":       el.element_ref_id or "",
+                        "frame_path":           el.frame_path or "",
                         "html_snippet":         el.html[:400],
                     }
                 )

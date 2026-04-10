@@ -48,6 +48,10 @@ class InteractiveElementData(BaseModel):
     # Final computed accessible name (AccName-1.1 approximation)
     accessible_name: Optional[str] = None
 
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
+
     html_snippet: str = ""
 
 

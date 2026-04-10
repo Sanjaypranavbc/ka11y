@@ -13,6 +13,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from ka11y.config.logger import setup_logger
+from ka11y.utils.step_logger import append_step_log
 
 from .store import _broadcast, _jobs
 
@@ -44,6 +45,13 @@ def _stage_start(job_id: str, name: str) -> None:
     job = _jobs[job_id]
     job["current_stage"] = name
     job.setdefault("stages", []).append(rec)
+    append_step_log(
+        job.get("step_log_path"),
+        step=f"stage:{name}",
+        status="running",
+        message="Stage started",
+        context={"job_id": job_id, "stage_name": name, "started_at": now},
+    )
     _fire_broadcast(job_id, "stage_start", {"stage_name": name, "started_at": now})
 
 
@@ -62,6 +70,18 @@ def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
             f"[combined] _stage_complete: stage '{name}' not found in running state "
             f"for job {job_id} — SSE progress may appear stale"
         )
+    append_step_log(
+        _jobs[job_id].get("step_log_path"),
+        step=f"stage:{name}",
+        status="completed",
+        message="Stage completed",
+        context={
+            "job_id": job_id,
+            "stage_name": name,
+            "completed_at": now,
+            "findings_count": findings_count,
+        },
+    )
     _fire_broadcast(
         job_id,
         "stage_complete",
@@ -82,6 +102,13 @@ def _stage_error(job_id: str, name: str, error: str) -> None:
             f"[combined] _stage_error: stage '{name}' not found in running state "
             f"for job {job_id} — stage record will not be updated"
         )
+    append_step_log(
+        _jobs[job_id].get("step_log_path"),
+        step=f"stage:{name}",
+        status="error",
+        message="Stage failed",
+        context={"job_id": job_id, "stage_name": name, "error": error, "completed_at": now},
+    )
     _fire_broadcast(job_id, "stage_error", {"stage_name": name, "error": error})
 
 

@@ -285,6 +285,9 @@ class MediaAuditor:
         "transcript_type",
         "transcript_url_or_text",
         "quality_report",
+        "selector",
+        "element_ref_id",
+        "frame_path",
         "html_snippet",
     ]
 
@@ -332,6 +335,9 @@ class MediaAuditor:
             "transcript_type": None,
             "transcript_url_or_text": None,
             "quality_report": None,
+            "selector": item.get("selector"),
+            "element_ref_id": item.get("element_ref_id"),
+            "frame_path": item.get("frame_path"),
         }
 
         # ── Gate 1: Is it prerecorded? ────────────────────────────────────

@@ -217,6 +217,9 @@ class FormAccessibilityAuditor:
         "error_has_role_alert",
         "error_has_aria_live",
         "error_element_text",
+        "selector",
+        "element_ref_id",
+        "frame_path",
         # Raw element
         "html_snippet",
     ]
@@ -266,6 +269,9 @@ class FormAccessibilityAuditor:
                 "error_has_role_alert": f.error_has_role_alert,
                 "error_has_aria_live": f.error_has_aria_live or "",
                 "error_element_text": (f.error_element_text or "")[:200],
+                "selector": f.selector or "",
+                "element_ref_id": f.element_ref_id or "",
+                "frame_path": f.frame_path or "",
                 # HTML
                 "html_snippet": f.html[:400],
             }
