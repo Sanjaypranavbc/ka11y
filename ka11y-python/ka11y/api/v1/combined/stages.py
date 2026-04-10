@@ -32,6 +32,11 @@ _CRAWL_TIMEOUT_SECONDS = 300
 import httpx
 
 from ka11y.config.logger import setup_logger
+from ka11y.utils.crawler_settings import (
+    get_max_ocr_images_per_run,
+    get_max_warning_samples,
+    select_ocr_candidate_paths,
+)
 from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import (
@@ -57,6 +62,32 @@ from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
 from .store import _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
+
+
+def _warning_samples(
+    warnings: List[Dict[str, Any]],
+    *,
+    sample_limit: int,
+) -> List[Dict[str, Any]]:
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for warning in warnings:
+        code = str(warning.get("code") or "unknown_warning")
+        group = grouped.setdefault(code, {"code": code, "count": 0, "samples": []})
+        group["count"] += 1
+        if len(group["samples"]) >= sample_limit:
+            continue
+
+        sample = {
+            key: value
+            for key, value in warning.items()
+            if key != "code" and value not in (None, "", [], {})
+        }
+        message = sample.get("message")
+        if isinstance(message, str) and len(message) > 320:
+            sample["message"] = message[:317] + "..."
+        group["samples"].append(sample)
+
+    return [grouped[key] for key in sorted(grouped)]
 
 
 def _record_stage_metrics(
@@ -157,9 +188,37 @@ async def _stage_image_audit(
         ocr_results: list = []
         contrast_report: Optional[Dict[str, Any]] = None
         findings: List[Dict] = []
+        ocr_paths: List[str] = []
 
         if run_ocr:
-            detector = OCRPreprocessing(source_directory=image_crawler.output_dir, lang=lang)
+            max_ocr_images = get_max_ocr_images_per_run()
+            ocr_paths, skipped_ocr_paths = select_ocr_candidate_paths(
+                image_crawler.images_data,
+                limit=max_ocr_images,
+            )
+            if skipped_ocr_paths:
+                warning = (
+                    f"image_audit: OCR limited to {len(ocr_paths)} image(s); "
+                    f"skipped {len(skipped_ocr_paths)} lower-priority screenshot(s)"
+                )
+                _jobs[job_id].setdefault("warnings", []).append(warning)
+                if step_logger:
+                    step_logger.record(
+                        step="image_audit",
+                        status="warning",
+                        message="OCR budget applied",
+                        context={
+                            "selected_images": len(ocr_paths),
+                            "skipped_images": len(skipped_ocr_paths),
+                            "budget": max_ocr_images,
+                        },
+                    )
+
+            detector = OCRPreprocessing(
+                source_directory=image_crawler.output_dir,
+                lang=lang,
+                include_paths=ocr_paths,
+            )
             await asyncio.to_thread(detector.scan_directory)
 
             saver = TextClassification(source_directory=image_crawler.output_dir)
@@ -192,6 +251,7 @@ async def _stage_image_audit(
             findings=len(findings),
             extra={
                 "ocr_results": len(ocr_results),
+                "ocr_images_scanned": len(ocr_paths) if run_ocr else 0,
                 "contrast_regions": (contrast_report or {}).get("summary", {}).get(
                     "total_regions_analysed", 0
                 ),
@@ -644,6 +704,10 @@ async def _load_universal_snapshot(
             json.dumps(normalized.warnings, indent=2, ensure_ascii=False),
             "utf-8",
         )
+        warning_details = _warning_samples(
+            normalized.warnings,
+            sample_limit=get_max_warning_samples(),
+        )
         counts: Dict[str, int] = {}
         for warning in normalized.warnings:
             code = warning.get("code", "unknown_warning")
@@ -652,6 +716,8 @@ async def _load_universal_snapshot(
             _jobs[job_id].setdefault("warnings", []).append(
                 f"universal_static:{code}: {count} occurrence(s)"
             )
+        if warning_details:
+            _jobs[job_id]["warning_details"] = warning_details
         _jobs[job_id]["universal_warning_path"] = str(warning_path)
         if step_logger:
             step_logger.record(
@@ -660,6 +726,7 @@ async def _load_universal_snapshot(
                 message="Universal crawl completed with extraction limitations",
                 context={
                     "warning_counts": counts,
+                    "warning_samples": warning_details,
                     "warning_path": str(warning_path),
                 },
             )

@@ -1346,7 +1346,8 @@ class UniversalPageLoader:
             "sensory": [],
         }
 
-        for frame, frame_path in cls._iter_same_origin_frames(page, page_url=page_url, output=output):
+        frames = await cls._collect_same_origin_frames(page, page_url=page_url, output=output)
+        for frame, frame_path in frames:
             try:
                 frame_data = await frame.evaluate(
                     _COMBINED_EXTRACT_JS,
@@ -1358,15 +1359,15 @@ class UniversalPageLoader:
                 )
             except Exception as exc:
                 output.partial = True
-                output.warnings.append(
-                    {
-                        "code": "frame_extract_failed",
-                        "page_url": page_url,
-                        "frame_path": frame_path,
-                        "document_url": frame.url or page_url,
-                        "message": str(exc),
-                    }
+                warning = await cls._build_frame_warning(
+                    code="frame_extract_failed",
+                    page_url=page_url,
+                    frame=frame,
+                    frame_path=frame_path,
+                    message=str(exc),
+                    error_type=type(exc).__name__,
                 )
+                output.warnings.append(warning)
                 continue
 
             for key in combined:
@@ -1438,7 +1439,7 @@ class UniversalPageLoader:
         return list(dict.fromkeys(resolved))
 
     @classmethod
-    def _iter_same_origin_frames(
+    async def _collect_same_origin_frames(
         cls,
         page: Page,
         *,
@@ -1447,27 +1448,83 @@ class UniversalPageLoader:
     ) -> List[tuple]:
         frames: List[tuple] = []
 
-        def walk(frame, path: str) -> None:
+        async def walk(frame, path: str) -> None:
             frames.append((frame, path))
             for index, child in enumerate(frame.child_frames):
                 child_path = f"{path}.{index}"
                 child_url = child.url or ""
                 if child_url and not cls._is_same_origin(page_url, child_url):
-                    output.warnings.append(
-                        {
-                            "code": "cross_origin_frame_skipped",
-                            "page_url": page_url,
-                            "frame_path": child_path,
-                            "document_url": child_url,
-                            "message": "Skipped cross-origin frame during universal extraction",
-                        }
+                    warning = await cls._build_frame_warning(
+                        code="cross_origin_frame_skipped",
+                        page_url=page_url,
+                        frame=child,
+                        frame_path=child_path,
+                        message="Skipped cross-origin frame during universal extraction",
                     )
+                    output.warnings.append(warning)
                     output.partial = True
                     continue
-                walk(child, child_path)
+                await walk(child, child_path)
 
-        walk(page.main_frame, "main")
+        await walk(page.main_frame, "main")
         return frames
+
+    @classmethod
+    async def _build_frame_warning(
+        cls,
+        *,
+        code: str,
+        page_url: str,
+        frame,
+        frame_path: str,
+        message: str,
+        error_type: str | None = None,
+    ) -> Dict[str, Any]:
+        warning: Dict[str, Any] = {
+            "code": code,
+            "page_url": page_url,
+            "frame_path": frame_path,
+            "parent_frame_path": frame_path.rpartition(".")[0] or None,
+            "document_url": frame.url or page_url,
+            "frame_name": getattr(frame, "name", "") or None,
+            "message": message,
+        }
+        if error_type:
+            warning["error_type"] = error_type
+
+        try:
+            frame_el = await frame.frame_element()
+        except Exception:
+            frame_el = None
+
+        if frame_el is None:
+            return warning
+
+        try:
+            frame_meta = await frame_el.evaluate(
+                """(el) => ({
+                    tag: (el.tagName || '').toLowerCase(),
+                    id: el.id || null,
+                    name_attr: el.getAttribute('name'),
+                    title: el.getAttribute('title'),
+                    src: el.getAttribute('src'),
+                    sandbox: el.getAttribute('sandbox'),
+                    loading: el.getAttribute('loading'),
+                    referrerpolicy: el.getAttribute('referrerpolicy'),
+                    allow: el.getAttribute('allow'),
+                    aria_label: el.getAttribute('aria-label'),
+                    html_snippet: (el.outerHTML || '').slice(0, 240),
+                })"""
+            )
+        except Exception:
+            frame_meta = None
+
+        if isinstance(frame_meta, dict):
+            for key, value in frame_meta.items():
+                if value not in (None, "", []):
+                    warning[key] = value
+
+        return warning
 
     @staticmethod
     async def _navigate(page: Page, url: str) -> None:

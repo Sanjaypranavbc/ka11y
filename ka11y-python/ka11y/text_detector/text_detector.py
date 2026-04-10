@@ -45,8 +45,15 @@ except (ImportError, RuntimeError):
 
 
 class OCRPreprocessing:
-    def __init__(self, source_directory: str, output_directory: Optional[str] = None, lang: str = "en"):
+    def __init__(
+        self,
+        source_directory: str,
+        output_directory: Optional[str] = None,
+        lang: str = "en",
+        include_paths: Optional[List[str]] = None,
+    ):
         self.source_directory = source_directory
+        self.include_paths = [str(Path(path).resolve()) for path in (include_paths or []) if path]
 
         if output_directory is None:
             self.base_output_dir = source_directory
@@ -429,15 +436,23 @@ class OCRPreprocessing:
         logger.info(f"Scanning directory: {self.source_directory}")
 
         image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        image_files = []
-        for root, dirs, files in os.walk(self.source_directory):
-            # Avoid scanning our own output directories if they are inside source
-            if "text_detected" in root or "contrast" in root:
-                continue
+        if self.include_paths:
+            image_files = [
+                path
+                for path in self.include_paths
+                if Path(path).suffix.lower() in image_extensions and Path(path).exists()
+            ]
+            logger.info(f"OCR candidate allowlist active: {len(image_files)} file(s)")
+        else:
+            image_files = []
+            for root, dirs, files in os.walk(self.source_directory):
+                # Avoid scanning our own output directories if they are inside source
+                if "text_detected" in root or "contrast" in root:
+                    continue
 
-            for file in files:
-                if Path(file).suffix.lower() in image_extensions:
-                    image_files.append(os.path.join(root, file))
+                for file in files:
+                    if Path(file).suffix.lower() in image_extensions:
+                        image_files.append(os.path.join(root, file))
 
         for idx, image_path in enumerate(image_files, 1):
             result = self.detect_text_in_image(image_path)

@@ -60,6 +60,11 @@ from ka11y.accessibility.rendered.evaluators import (
     focus_not_obscured_minimum as ev_fnom,
     focus_not_obscured_enhanced as ev_fnoe,
 )
+from ka11y.utils.crawler_settings import (
+    build_text_spacing_cjk_selector_css,
+    get_max_focus_steps,
+    get_max_hover_candidates,
+)
 
 logger = setup_logger(name="KAC", tag="rendered_layout")
 
@@ -70,8 +75,8 @@ _REFLOW_W, _REFLOW_H = 320, 640
 _PORTRAIT_W, _PORTRAIT_H = 390, 844
 _LANDSCAPE_W, _LANDSCAPE_H = 844, 390
 
-_MAX_FOCUS_STEPS = 100
-_MAX_HOVER_CANDIDATES = 20
+_MAX_FOCUS_STEPS = get_max_focus_steps()
+_MAX_HOVER_CANDIDATES = get_max_hover_candidates()
 _PAGE_TIMEOUT_MS = 30_000
 
 # ── CSS for text-spacing scenario (WCAG 1.4.12) ───────────────────────────────
@@ -85,21 +90,7 @@ _TEXT_SPACING_CSS = """
 p, li, dt, dd, blockquote {
     margin-bottom: 2em !important;
 }
-/* CJK languages: letter-spacing and word-spacing WCAG overrides do not apply.
-   Japanese/Chinese/Korean fonts have built-in inter-character spacing and no
-   word separators, so applying these values causes false-positive clipping reports.
-   line-height override is still applied as vertical rhythm matters in CJK too. */
-:lang(ja), :lang(zh), :lang(zh-CN), :lang(zh-TW), :lang(zh-HK), :lang(ko),
-[lang="ja"], [lang="zh"], [lang="zh-CN"], [lang="zh-TW"], [lang="zh-HK"], [lang="ko"] {
-    letter-spacing: normal !important;
-    word-spacing: normal !important;
-}
-:lang(ja) *, :lang(zh) *, :lang(zh-CN) *, :lang(zh-TW) *, :lang(zh-HK) *, :lang(ko) *,
-[lang="ja"] *, [lang="zh"] *, [lang="zh-CN"] *, [lang="zh-TW"] *, [lang="zh-HK"] *, [lang="ko"] * {
-    letter-spacing: normal !important;
-    word-spacing: normal !important;
-}
-"""
+""" + build_text_spacing_cjk_selector_css()
 
 # ── CSS for text-resize scenario (WCAG 1.4.4) ─────────────────────────────────
 
@@ -141,6 +132,39 @@ _OVERLAY_JS = """
 
 _HOVER_CANDIDATES_JS = """
 () => {
+    function safeSelector(el) {
+        try {
+            if (el.id) return `#${CSS.escape(el.id)}`;
+            const parts = [];
+            let cur = el;
+            while (cur && cur.nodeType === 1 && parts.length < 6) {
+                let part = cur.tagName.toLowerCase();
+                if (cur.classList && cur.classList.length > 0) {
+                    part += [...cur.classList]
+                        .slice(0, 2)
+                        .map(cls => `.${CSS.escape(cls)}`)
+                        .join('');
+                }
+                const parent = cur.parentElement;
+                if (parent) {
+                    const sameTag = [...parent.children].filter(child => child.tagName === cur.tagName);
+                    if (sameTag.length > 1) {
+                        part += `:nth-of-type(${sameTag.indexOf(cur) + 1})`;
+                    }
+                }
+                parts.unshift(part);
+                const selector = parts.join(' > ');
+                try {
+                    if (document.querySelector(selector) === el) return selector;
+                } catch (e) {}
+                cur = parent;
+            }
+            return parts.join(' > ');
+        } catch (e) {
+            return '';
+        }
+    }
+
     const candidates = [];
     const triggers = document.querySelectorAll(
         '[aria-expanded], [data-tooltip], [title]:not(html):not(head), ' +
@@ -148,8 +172,10 @@ _HOVER_CANDIDATES_JS = """
     );
     let idx = 0;
     for (const el of triggers) {
+        try {
         if (idx >= 20) break;
         const rect = el.getBoundingClientRect();
+        if (!rect || !Number.isFinite(rect.width) || !Number.isFinite(rect.height)) continue;
         if (rect.width === 0 || rect.height === 0) continue;
         const cs = window.getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden') continue;
@@ -158,12 +184,16 @@ _HOVER_CANDIDATES_JS = """
         candidates.push({
             tag: el.tagName.toLowerCase(),
             id: el.id || null,
+            selector: safeSelector(el),
             html: html,
             rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height,
                     top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left },
             index: idx,
         });
         idx++;
+        } catch (e) {
+            continue;
+        }
     }
     return candidates;
 }
@@ -204,6 +234,8 @@ class RenderedLayoutCrawler:
         self.base_url = base_url
         self.output_dir = Path(output_dir)
         self.max_depth = max_depth
+        self.max_focus_steps = _MAX_FOCUS_STEPS
+        self.max_hover_candidates = _MAX_HOVER_CANDIDATES
         self._raw_results: Dict[str, Any] = {}
 
     # ── Public API ─────────────────────────────────────────────────────────────
@@ -417,7 +449,7 @@ class RenderedLayoutCrawler:
             # Collect fixed/sticky overlays once
             overlays = await page.evaluate(_OVERLAY_JS)
 
-            for step_idx in range(_MAX_FOCUS_STEPS):
+            for step_idx in range(self.max_focus_steps):
                 await page.keyboard.press("Tab")
                 await asyncio.sleep(0.05)
 
@@ -471,7 +503,7 @@ class RenderedLayoutCrawler:
 
             candidates = await page.evaluate(_HOVER_CANDIDATES_JS)
 
-            for cand in candidates[:_MAX_HOVER_CANDIDATES]:
+            for cand in candidates[: self.max_hover_candidates]:
                 result = await self._test_hover_candidate(page, cand)
                 if result is not None:
                     results.append(result)
@@ -491,11 +523,15 @@ class RenderedLayoutCrawler:
         """Test one hover candidate for 1.4.13 behaviour."""
         tag = cand.get("tag", "")
         cand_id = cand.get("id")
+        selector = cand.get("selector", "")
         html = cand.get("html", "")
-        rect_d = cand.get("rect", {})
+        resolved_rect = await self._resolve_hover_candidate_box(page, cand)
+        if not resolved_rect:
+            logger.debug(f"[rendered] skipping hover candidate with no visible box: {selector or cand_id or tag}")
+            return None
 
-        cx = float(rect_d.get("x", 0)) + float(rect_d.get("width", 1)) / 2
-        cy = float(rect_d.get("y", 0)) + float(rect_d.get("height", 1)) / 2
+        cx = float(resolved_rect.get("x", 0)) + float(resolved_rect.get("width", 1)) / 2
+        cy = float(resolved_rect.get("y", 0)) + float(resolved_rect.get("height", 1)) / 2
 
         try:
             # Collect baseline visible regions count
@@ -519,9 +555,9 @@ class RenderedLayoutCrawler:
             if not popup_appeared:
                 # Try focus trigger
                 try:
-                    await page.focus(
-                        cand.get("selector", "") or f"#{cand_id}" if cand_id else tag
-                    )
+                    focus_selector = selector or (f"#{cand_id}" if cand_id else "")
+                    if focus_selector:
+                        await page.locator(focus_selector).first.focus()
                     await asyncio.sleep(0.2)
                     after_focus = await page.evaluate(
                         '() => document.querySelectorAll(\'[aria-expanded="true"], '
@@ -599,6 +635,48 @@ class RenderedLayoutCrawler:
 
         except Exception as exc:
             logger.debug(f"[rendered] hover test failed for {tag}: {exc}")
+            return None
+
+    async def _resolve_hover_candidate_box(
+        self,
+        page: Page,
+        cand: Dict[str, Any],
+    ) -> Optional[Dict[str, float]]:
+        rect_d = cand.get("rect") or {}
+        try:
+            width = float(rect_d.get("width", 0))
+            height = float(rect_d.get("height", 0))
+            x = float(rect_d.get("x", 0))
+            y = float(rect_d.get("y", 0))
+            if width > 0 and height > 0:
+                return {"x": x, "y": y, "width": width, "height": height}
+        except (TypeError, ValueError):
+            pass
+
+        selector = str(cand.get("selector", "") or "").strip()
+        if not selector:
+            return None
+
+        try:
+            locator = page.locator(selector).first
+            await locator.scroll_into_view_if_needed(timeout=2_000)
+            box = await locator.bounding_box()
+            if not box:
+                return None
+            width = float(box.get("width", 0))
+            height = float(box.get("height", 0))
+            if width <= 0 or height <= 0:
+                return None
+            return {
+                "x": float(box.get("x", 0)),
+                "y": float(box.get("y", 0)),
+                "width": width,
+                "height": height,
+            }
+        except Exception as exc:
+            logger.debug(
+                f"[rendered] failed to resolve hover candidate box for {selector}: {exc}"
+            )
             return None
 
 

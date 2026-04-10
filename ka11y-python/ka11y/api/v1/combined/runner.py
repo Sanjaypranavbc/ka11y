@@ -10,6 +10,7 @@ builds the final report, and updates the job store.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import time
@@ -40,9 +41,10 @@ def _merge_findings(
     Merge axe-core and Python findings with deduplication.
 
     Dedup key: (wcag_sc, status, element_signature)
-      - element_signature prefers a stable selector/target, then element_id,
-        then the first 120 chars of element.html
-        normalised to lower-case so minor HTML differences don't create dupes.
+      - element_signature prefers page-aware selectors/targets first so
+        Python and node findings can still meet on the same live element.
+      - fallback HTML signatures are hashed and namespaced by page/frame/tag
+        to avoid merging unrelated repeated components by truncated markup.
       - Findings with no element info are never deduplicated (always kept).
 
     Override rule: when both axe-core and Python fire on the same key, the
@@ -53,18 +55,43 @@ def _merge_findings(
     merged: dict = {}  # key -> finding dict
     no_key: list = []  # findings with no dedup key (keep all)
 
+    def _normalize_target_sig(target: Any) -> str:
+        if isinstance(target, str):
+            targets = [target]
+        elif isinstance(target, list):
+            targets = [item for item in target if isinstance(item, str)]
+        else:
+            targets = []
+        cleaned = [" ".join(item.split()).strip().lower() for item in targets if item.strip()]
+        if not cleaned:
+            return ""
+        return "||".join(dict.fromkeys(cleaned))
+
+    def _normalize_html_sig(html: str) -> str:
+        collapsed = " ".join(html.split()).strip().lower()
+        if not collapsed:
+            return ""
+        return hashlib.sha1(collapsed[:400].encode("utf-8")).hexdigest()[:16]
+
     def _sig(f: Dict) -> tuple:
         el = f.get("element") or {}
-        target = el.get("target") or []
-        target_sig = ""
-        if isinstance(target, list) and target:
-            first = target[0]
-            if isinstance(first, str):
-                target_sig = first.strip().lower()
+        page_url = (el.get("page_url") or "").strip().lower()
+        frame_path = (el.get("frame_path") or "").strip().lower()
+        selector = " ".join(str(el.get("selector") or "").split()).strip().lower()
+        target_sig = _normalize_target_sig(el.get("target"))
         ref_id = (el.get("element_ref_id") or "").strip().lower()
-        el_id = (el.get("element_id") or "").strip()
-        el_html = (el.get("html") or "").strip()[:120].lower()
-        ident = target_sig or ref_id or el_id or el_html
+        tag = (el.get("tag") or "").strip().lower()
+        el_id = (el.get("element_id") or "").strip().lower()
+        html_sig = _normalize_html_sig(str(el.get("html") or ""))
+
+        page_scope = "|".join(part for part in (page_url, frame_path) if part)
+        ident = (
+            (f"sel:{page_scope}|{selector}" if selector else "")
+            or (f"target:{page_scope}|{target_sig}" if target_sig else "")
+            or (f"ref:{page_scope}|{ref_id}" if ref_id else "")
+            or (f"id:{page_scope}|{tag}|{el_id}" if el_id else "")
+            or (f"html:{page_scope}|{tag}|{html_sig}" if html_sig else "")
+        )
         return (f.get("wcag_sc", ""), f.get("status", ""), ident)
 
     for f in python_findings:
@@ -214,6 +241,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
 
         report = _build_report(url, all_findings, contrast_report=contrast_report)
         report["warnings"] = _jobs[job_id].get("warnings", [])
+        report["warning_details"] = _jobs[job_id].get("warning_details", [])
 
         # Inject image_url into each contrast-report image for the frontend
         if report.get("contrast_report"):
