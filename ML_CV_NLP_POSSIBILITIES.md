@@ -26,6 +26,96 @@
 - `3.3.9` can pass with password-based login when an alternative or assistive mechanism exists.
 - Tool-generated ASR can help triage `1.2.4` and `1.2.9`, but it never proves the site itself provides captions or a live text alternative.
 
+## Japanese Language Analysis
+
+- Repo baseline: Japanese support is already materially present in [JAPANESE_COVERAGE_REPORT.md](/home/pranav/Documents/ka11y/JAPANESE_COVERAGE_REPORT.md) and [COVERAGE_JA.md](/home/pranav/Documents/ka11y/COVERAGE_JA.md).
+- Reusable Japanese foundations already in repo:
+  - `sensory_auditor.py` already has Japanese/CJK taxonomy and language detection.
+  - OCR already supports `ja + en` / PaddleOCR `japan`.
+  - `rendered_layout_crawler.py` already has CJK-aware text-spacing overrides.
+  - Node custom checks already include many JP heuristics for auth, help, transcripts, breadcrumbs, link purpose, and error patterns.
+- Main implementation rule: do not build ad hoc per-check Japanese regexes everywhere. Add shared JP text-normalization, tokenization, synonym, and media-label utilities, then reuse them across rule families.
+
+### Japanese Readiness by Family
+
+| Family | JP impact | How to tackle |
+| --- | --- | --- |
+| `NEXT-MEDIA` | Medium | Add Japanese media labels and transcript/caption/sign-language lexicons: `字幕`, `キャプション`, `ライブ字幕`, `書き起こし`, `文字起こし`, `音声解説`, `音声ガイド`, `手話`, `日本手話`, `JSL`, `解説版`. Keep media-quality judgment mostly language-agnostic after discovery. |
+| `NEXT-NLP` | High | English token/word-boundary logic will fail on Japanese. Use `lang=ja` plus CJK density detection, NFKC normalization, SudachiPy/fugashi or spaCy Japanese tokenization, and multilingual embeddings rather than English-only models. |
+| `NEXT-CROSS` | Medium-High | Normalize full-width/half-width characters, kana/romanized variants, and common UI synonyms like `ログイン` / `サインイン`, `検索` / `さがす`, `ヘルプ` / `サポート` / `お問い合わせ`. Prefer destination/action identity over text similarity alone. |
+| `NEXT-LAYOUT` | High | Preserve existing CJK spacing behavior. Handle `ruby`, vertical writing, shorter readable line lengths, and avoid importing Latin typography assumptions directly into Japanese checks. |
+| `NEXT-FLOW` | Medium | Expand JP auth/help/error/confirmation keywords and watch for Japanese enterprise UI patterns such as OTP, postal-code autofill, furigana fields, address normalization, and multi-step registration forms. |
+| `NEXT-TIME` / `NEXT-INTERACT` / `P-CRAWL` | Low | Mostly language-agnostic. Japanese work is mainly around labels/messages emitted to users and around recognizing JP warning/help text when the rule depends on visible messaging. |
+
+### Japanese-Specific Gaps for These Reviewed Rules
+
+| Rule group | Japanese-specific risk | Recommended tactic |
+| --- | --- | --- |
+| `1.2.3` to `1.2.9` | Discovery misses JP transcript/caption/sign-language labels | Centralize JP media-keyword detection and support separate described/transcript pages, not just adjacent text. |
+| `1.3.6`, `3.1.3`, `3.1.4`, `3.1.5` | English word boundaries and readability formulas are unreliable | Use JP tokenization, glossary markers like `用語集`, `注釈`, `説明`, and easy-language markers like `やさしい日本語`, `ふりがな`, `読み仮名`, `ルビ`. |
+| `3.2.3`, `3.2.4` | Text-only matching breaks on JP synonyms and mixed-script labels | Normalize NFKC, compare route/action identity first, then compare normalized labels with multilingual embeddings. |
+| `3.3.5`, `3.3.6`, `3.3.9` | Help/auth/review language is often highly domain-specific in Japanese | Extend lexicons for `確認`, `見直し`, `修正`, `やり直し`, `お問い合わせ`, `サポート`, `認証`, `二段階認証`, `ワンタイムパスワード`, `画像認証`, `パズル認証`. |
+| `1.4.8`, `2.4.10` | Latin presentation assumptions produce false positives on Japanese text | Keep CJK spacing exceptions, add `ruby` and `writing-mode` handling, and use the SC's `40`-character guidance for CJK text blocks. |
+
+### Japanese Implementation Strategy
+
+1. Add shared JP text utilities instead of duplicating regexes:
+   - Unicode normalization via `unicodedata.normalize("NFKC", text)`
+   - full-width/half-width normalization
+   - kana/romanized variant handling for high-value UI terms
+   - optional `ruby` stripping plus base-text extraction
+
+2. Build one Japanese lexical package reused across checks:
+   - media labels
+   - help/support labels
+   - auth/captcha/OTP labels
+   - confirmation/review/undo labels
+   - glossary/definition markers
+   - easy-language markers
+
+3. Use Japanese-aware NLP only where text semantics actually matter:
+   - `3.1.3`, `3.1.4`, `3.1.5`, `1.3.6`, `3.2.4`
+   - prefer multilingual embeddings plus deterministic filters
+   - avoid English readability formulas for Japanese
+
+4. Keep CJK typography logic centralized:
+   - preserve the current text-spacing exception model
+   - add explicit handling for `ruby`, `rt`, and `writing-mode: vertical-rl`
+   - do not apply Latin-style word-spacing expectations to Japanese
+
+5. Expand test coverage before claiming JP-ready support for new rules:
+   - full Japanese fixture pages
+   - mixed JP/EN pages
+   - forms with `必須`, `任意`, postal code/address autofill, furigana
+   - auth with `ログイン`, `サインイン`, OTP, CAPTCHA
+   - transcript/caption/sign-language media pages
+
+### Japanese Rule Triage
+
+- Best near-term Japanese additions:
+  - `2.5.5`, `1.4.9`, `2.3.1`, `2.3.2`, `3.3.7`
+  - Reason: these are mostly language-agnostic or already have the needed JP foundations.
+
+- Medium Japanese effort:
+  - `3.2.3`, `3.2.4`, `3.3.9`, `2.4.10`, `1.4.8`
+  - Reason: the checks are feasible, but label normalization and Japanese UI conventions matter.
+
+- High Japanese effort / review-heavy:
+  - `1.2.3` to `1.2.9`, `1.3.6`, `3.1.3`, `3.1.4`, `3.1.5`, `3.3.5`, `3.3.6`
+  - Reason: these depend on Japanese semantics, editorial intent, or content completeness, not just page structure.
+
+### Japanese Workflow
+
+```text
+Detect page/media language
+  -> if lang=ja or CJK density is high, switch to JP pipeline
+  -> normalize Unicode (NFKC), width variants, and ruby/base text
+  -> apply shared JP lexicons and JP-aware tokenization where semantics matter
+  -> keep layout/CV/numeric checks language-agnostic where possible
+  -> emit PASS / FAIL only for high-confidence evidence
+  -> otherwise emit NEEDS_REVIEW with JP-specific evidence attached
+```
+
 ## Rule-by-Rule Review
 
 ## NEXT-MEDIA
