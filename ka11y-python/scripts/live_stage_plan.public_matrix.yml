@@ -1,0 +1,231 @@
+runs:
+  - id: baseline_example
+    url: https://example.com/
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Simple baseline page for end-to-end sanity.
+    expected_features:
+      - baseline_dom
+      - no_frames
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        interactive: 1
+        target_sizes: 1
+      max_snapshot_warnings: 0
+
+  - id: w3schools_bootstrap_forms
+    url: https://www.w3schools.com/bootstrap/bootstrap_forms.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Public Bootstrap forms page with multiple rendered inputs.
+    expected_features:
+      - forms
+      - labels
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        forms: 6
+        interactive: 15
+        target_sizes: 15
+
+  - id: w3schools_forms
+    url: https://www.w3schools.com/html/html_forms.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Real-world dense form page with multiple inputs.
+    expected_features:
+      - forms
+      - validation_examples
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        forms: 10
+        interactive: 20
+        target_sizes: 20
+
+  - id: w3schools_iframe
+    url: https://www.w3schools.com/html/html_iframe.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Same-origin iframe extraction plus cross-origin limitation reporting.
+    expected_features:
+      - same_origin_iframe
+      - cross_origin_warnings
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        interactive: 20
+      min_non_main_frame_records: 100
+      required_warning_codes:
+        - cross_origin_frame_skipped
+
+  - id: w3schools_video
+    url: https://www.w3schools.com/html/html5_video.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Native video/media extraction.
+    expected_features:
+      - media
+      - video
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        media: 1
+        interactive: 10
+        target_sizes: 10
+
+  - id: w3schools_bootstrap_carousel
+    url: https://www.w3schools.com/bootstrap/bootstrap_carousel.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Auto-advancing carousel detection on a public component page.
+    expected_features:
+      - moving_content
+      - carousel
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        moving_content: 1
+        interactive: 20
+
+  - id: shoelace_button
+    url: https://shoelace.style/components/button
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Open shadow-root interactive components.
+    expected_features:
+      - shadow_dom
+      - interactive_components
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        interactive: 50
+        target_sizes: 50
+      min_shadow_selectors: 50
+
+  - id: shoelace_input
+    url: https://shoelace.style/components/input
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Shadow-contained form controls and label relationships.
+    expected_features:
+      - shadow_dom
+      - forms
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        forms: 5
+        interactive: 20
+      min_shadow_selectors: 20
+
+  - id: shoelace_spinner
+    url: https://shoelace.style/components/spinner
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Loading/status indicator exception handling for 2.2.2.
+    expected_features:
+      - shadow_dom
+      - loading_indicator_exception
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        moving_content: 1
+      min_shadow_selectors: 5
+      min_loading_indicator_exceptions: 1
+      expect_zero_wcag_sc:
+        - 2.2.2
+
+  - id: mdn_japanese
+    url: https://developer.mozilla.org/ja/docs/Web/HTML/Reference/Global_attributes/lang
+    lang: ja
+    wcag_level: AAA
+    max_depth: 0
+    notes: Japanese documentation page routed through the same production pipeline.
+    expected_features:
+      - japanese
+      - cjk
+    run_ocr: false
+    run_image_audit: false
+    run_resize_text_audit: false
+    run_reflow_audit: false
+    run_orientation_audit: false
+    run_hover_focus_content_audit: false
+    run_focus_not_obscured_min_audit: false
+    run_focus_not_obscured_enh_audit: false
+    expectations:
+      min_counts:
+        interactive: 20
+        target_sizes: 20
