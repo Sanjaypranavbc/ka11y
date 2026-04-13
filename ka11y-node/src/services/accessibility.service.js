@@ -1,5 +1,7 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const dns = require('dns').promises;
 const { mapResults, mapResultsFlat, mapCustomResultsFlat } = require('../utils/axeResultMapper');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
@@ -75,6 +77,31 @@ function _installSsrfInterceptor(page) {
 }
 
 const MAX_CONCURRENT = parseInt(process.env.PUPPETEER_MAX_CONCURRENT) || 3;
+const AXE_LOCALE_DIR = path.join(path.dirname(require.resolve('axe-core/package.json')), 'locales');
+const AXE_LOCALE_ALIASES = {
+  de: 'de',
+  da: 'da',
+  el: 'el',
+  es: 'es',
+  eu: 'eu',
+  fr: 'fr',
+  he: 'he',
+  it: 'it',
+  ja: 'ja',
+  ko: 'ko',
+  nl: 'nl',
+  no: 'no_NB',
+  'no-nb': 'no_NB',
+  pl: 'pl',
+  pt: 'pt_PT',
+  'pt-pt': 'pt_PT',
+  'pt-br': 'pt_BR',
+  ru: 'ru',
+  zh: 'zh_CN',
+  'zh-cn': 'zh_CN',
+  'zh-tw': 'zh_TW',
+};
+const _axeLocaleCache = new Map();
 
 /**
  * Map a WCAG conformance level string to axe-core tag arrays.
@@ -94,6 +121,32 @@ function _allowedLevels(level) {
   if (level === 'AA' || level === 'AAA') levels.add('AA');
   if (level === 'AAA') levels.add('AAA');
   return levels;
+}
+
+function _sanitizeLocaleLang(lang = 'en') {
+  return String(lang || 'en').replace(/[^a-zA-Z-]/g, '').toLowerCase();
+}
+
+function _loadAxeLocale(lang = 'en') {
+  const normalized = _sanitizeLocaleLang(lang);
+  if (!normalized || normalized === 'en') return null;
+  if (_axeLocaleCache.has(normalized)) return _axeLocaleCache.get(normalized);
+
+  const localeId = AXE_LOCALE_ALIASES[normalized] || AXE_LOCALE_ALIASES[normalized.split('-')[0]];
+  if (!localeId) {
+    _axeLocaleCache.set(normalized, null);
+    return null;
+  }
+
+  const localePath = path.join(AXE_LOCALE_DIR, `${localeId}.json`);
+  try {
+    const locale = JSON.parse(fs.readFileSync(localePath, 'utf8'));
+    _axeLocaleCache.set(normalized, locale);
+    return locale;
+  } catch {
+    _axeLocaleCache.set(normalized, null);
+    return null;
+  }
 }
 
 /**
@@ -159,6 +212,18 @@ class AccessibilityService {
     }
   }
 
+  async _configureAxeLocale(page, lang = 'en', logPrefix = '') {
+    const locale = _loadAxeLocale(lang);
+    if (!locale) return;
+
+    const prefix = logPrefix ? `${logPrefix} ` : '';
+    await page.evaluate((localePayload) => {
+      // eslint-disable-next-line no-undef
+      axe.configure({ locale: localePayload });
+    }, locale);
+    this._logger.info(`${prefix}Configured axe-core locale: ${_sanitizeLocaleLang(lang)}`);
+  }
+
   /**
    * Analyzes HTML for accessibility issues.
    *
@@ -195,6 +260,7 @@ class AccessibilityService {
 
       this._logger.info('Injecting axe-core...');
       await this._injectAxe(page);
+      await this._configureAxeLocale(page, lang);
 
       this._logger.info('Running axe.run() analysis...');
       const axeResults = await page.evaluate((runOptions) => {
@@ -278,6 +344,7 @@ class AccessibilityService {
 
       this._logger.info('Injecting axe-core...');
       await this._injectAxe(page);
+      await this._configureAxeLocale(page, lang);
 
       this._logger.info('Running axe.run() analysis...');
       const axeResults = await page.evaluate((runOptions) => {
@@ -360,6 +427,7 @@ class AccessibilityService {
 
       this._logger.info('[flat] Injecting axe-core...');
       await this._injectAxe(page, '[flat]');
+      await this._configureAxeLocale(page, lang, '[flat]');
 
       this._logger.info('[flat] Running axe.run()...');
       const axeResults = await page.evaluate((runOptions) => {

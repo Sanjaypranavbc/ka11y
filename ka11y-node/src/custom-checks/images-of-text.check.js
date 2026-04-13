@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '1.4.5';
 const RULE_ID = 'custom-images-of-text';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/images-of-text';
@@ -16,7 +21,12 @@ const TEXT_IMG_CLASS_PATTERN = /\b(banner|text-image|headline|quote|caption|prom
 // Minimum alt-text word count that suggests a meaningful textual description (image with text)
 const MIN_WORDS_FOR_TEXT_IMAGE = 5;
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const data = await page.evaluate((params) => {
     const { logoPattern, srcPattern, classPattern, minWords } = params;
     const logoRe   = new RegExp(logoPattern, 'i');
@@ -128,8 +138,8 @@ async function run(page) {
         impact:      null,
         status:      'pass',
         reason:      data.checkedCount > 0
-          ? `${data.checkedCount} image(s) checked — no images detected as likely containing non-essential text. (OCR-level verification available via the Python pipeline.)`
-          : 'No candidate images detected for 1.4.5 text-image check.',
+          ? _t(sharedContext, '{count} image(s) checked — no images detected as likely containing non-essential text. (OCR-level verification available via the Python pipeline.)', '画像 {count} 件を確認しましたが、本質的でないテキストを含む可能性が高い画像は検出されませんでした。（OCR レベルの検証は Python パイプラインで利用できます。）', { count: data.checkedCount })
+          : _t(sharedContext, 'No candidate images detected for 1.4.5 text-image check.', '1.4.5 の画像内テキスト確認の対象となる画像は検出されませんでした。'),
         helpUrl: HELP_URL,
       }],
     };
@@ -148,7 +158,7 @@ async function run(page) {
         description: 'Images should not contain text unless the visual presentation is essential',
         impact:      'moderate',
         status:      'fail',
-        reason:      `${allViolations.length} image(s) appear to contain non-essential text based on src path and alt-text heuristics: ${sample}. Use real HTML/CSS text instead of text baked into images.`,
+        reason:      _t(sharedContext, '{count} image(s) appear to contain non-essential text based on src path and alt-text heuristics: {sample}. Use real HTML/CSS text instead of text baked into images.', 'src パスと alt テキストのヒューリスティクスに基づき、本質的でないテキストを含む可能性がある画像が {count} 件検出されました: {sample}。画像に埋め込んだ文字ではなく、実際の HTML/CSS テキストを使用してください。', { count: allViolations.length, sample }),
         helpUrl: HELP_URL,
       }],
     };
@@ -165,7 +175,7 @@ async function run(page) {
       description: 'Images should not contain text unless the visual presentation is essential',
       impact:      'minor',
       status:      'incomplete',
-      reason:      `${reviews.length} image(s) may contain text — manual or OCR verification recommended: ${sample}.`,
+      reason:      _t(sharedContext, '{count} image(s) may contain text — manual or OCR verification recommended: {sample}.', 'テキストを含む可能性がある画像が {count} 件あります。目視または OCR による確認を推奨します: {sample}。', { count: reviews.length, sample }),
       helpUrl: HELP_URL,
     }],
   };

@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.5.7';
 const RULE_ID = 'custom-dragging-movements';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements';
@@ -18,7 +23,12 @@ const DND_LIBRARY_MARKERS = [
 // Selectors that indicate a single-pointer alternative to drag
 const ALT_SELECTOR = 'button, [role="button"], a[href], input[type="button"], input[type="submit"]';
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const data = await page.evaluate((libraryMarkers, altSel) => {
     const draggables = [];
 
@@ -90,7 +100,11 @@ async function run(page) {
         description: 'All functionality that uses dragging movements must have a single-pointer alternative',
         impact: null,
         status: 'pass',
-        reason: 'No drag-and-drop functionality detected.',
+        reason: _t(
+          sharedContext,
+          'No drag-and-drop functionality detected.',
+          'ドラッグアンドドロップ機能は検出されませんでした。'
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -108,7 +122,12 @@ async function run(page) {
         description: 'All functionality that uses dragging movements must have a single-pointer alternative',
         impact: null,
         status: 'pass',
-        reason: `${totalCount} draggable element(s) detected — each appears to have a single-pointer alternative nearby.`,
+        reason: _t(
+          sharedContext,
+          '{total_count} draggable element(s) detected — each appears to have a single-pointer alternative nearby.',
+          'ドラッグ可能な要素が {total_count} 件検出され、いずれも近くに単一ポインターで操作できる代替手段があるように見えます。',
+          { total_count: totalCount },
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -123,7 +142,17 @@ async function run(page) {
       description: 'All functionality that uses dragging movements must have a single-pointer alternative',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${totalCount} draggable element(s) detected${hasLibraryDnd ? ` (incl. ${libraryCount} from D&D library)` : ''}. ${totalMissing} appear to lack a nearby single-pointer alternative (button/link). Verify each drag action has an accessible equivalent: ${sample || 'D&D library elements present — verify alternatives exist'}.`,
+      reason: _t(
+        sharedContext,
+        '{total_count} draggable element(s) detected{library_suffix}. {missing_count} appear to lack a nearby single-pointer alternative (button/link). Verify each drag action has an accessible equivalent: {sample}.',
+        'ドラッグ可能な要素が {total_count} 件検出されました{library_suffix}。このうち {missing_count} 件は近くに単一ポインターで操作できる代替手段（ボタンやリンク）がないように見えます。各ドラッグ操作にアクセシブルな同等手段があることを確認してください: {sample}。',
+        {
+          total_count: totalCount,
+          library_suffix: hasLibraryDnd ? ` (including ${libraryCount} from D&D library)` : '',
+          missing_count: totalMissing,
+          sample: sample || 'D&D library elements present — verify alternatives exist',
+        },
+      ),
       helpUrl: HELP_URL,
     }],
   };

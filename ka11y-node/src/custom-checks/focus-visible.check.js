@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.4.7';
 const RULE_ID = 'custom-focus-visible';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-visible';
@@ -16,7 +21,12 @@ const SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ');
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   // Collect element metadata once — include stable selectors (B11: DOM index shifts when
   // focus triggers DOM mutations; stable selectors survive re-queries after mutations).
   const elements = await page.evaluate((sel, max) => {
@@ -144,7 +154,7 @@ async function run(page) {
   if (violations.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Focusable elements must have a visible focus indicator', impact: null, status: 'pass', reason: `All ${elements.length} sampled focusable elements have a visible focus indicator.`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Focusable elements must have a visible focus indicator', impact: null, status: 'pass', reason: _t(sharedContext, 'All {count} sampled focusable elements have a visible focus indicator.', 'サンプリングしたフォーカス可能要素 {count} 件すべてに、視認できるフォーカスインジケーターがあります。', { count: elements.length }), helpUrl: HELP_URL }],
     };
   }
 
@@ -155,7 +165,15 @@ async function run(page) {
       description: 'Focusable elements must have a visible focus indicator',
       impact: 'serious',
       status: 'fail',
-      reason: `${violations.length} focusable element(s) lack a visible focus indicator: ${violations.slice(0, 3).map(v => `<${v.tagName}${v.id ? ` id="${v.id}"` : ''}>`).join(', ')}.`,
+      reason: _t(
+        sharedContext,
+        '{count} focusable element(s) lack a visible focus indicator: {sample}.',
+        'フォーカス可能要素 {count} 件に、視認できるフォーカスインジケーターがありません: {sample}。',
+        {
+          count: violations.length,
+          sample: violations.slice(0, 3).map(v => `<${v.tagName}${v.id ? ` id="${v.id}"` : ''}>`).join(', '),
+        },
+      ),
       helpUrl: HELP_URL,
     }],
   };

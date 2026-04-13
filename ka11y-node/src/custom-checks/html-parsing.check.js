@@ -1,10 +1,20 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '4.1.1';
 const RULE_ID = 'custom-html-parsing';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/parsing';
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const data = await page.evaluate(() => {
     // 4.1.1 parsing signal used here: duplicate IDs.
     // Duplicate names and landmark structure are not parsing errors, so they are
@@ -74,7 +84,7 @@ async function run(page) {
   if (issues.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'HTML must have no parsing errors that affect AT', impact: null, status: 'pass', reason: `${totalIdCount} element(s) with id attributes checked — all id values are unique, no broken ARIA references, and no orphaned label[for] elements detected.`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'HTML must have no parsing errors that affect AT', impact: null, status: 'pass', reason: _t(sharedContext, '{count} element(s) with id attributes checked — all id values are unique, no broken ARIA references, and no orphaned label[for] elements detected.', 'id 属性を持つ要素 {count} 件を確認し、重複 ID、壊れた ARIA 参照、孤立した label[for] 要素は検出されませんでした。', { count: totalIdCount }), helpUrl: HELP_URL }],
     };
   }
 
@@ -85,7 +95,12 @@ async function run(page) {
       description: 'HTML must have no parsing errors that affect AT',
       impact: 'critical',
       status: 'fail',
-      reason: `${issues.join('; ')}. Duplicate ids break ARIA references and can confuse assistive technologies.`,
+      reason: _t(
+        sharedContext,
+        '{issues}. Duplicate ids break ARIA references and can confuse assistive technologies.',
+        '{issues}。重複した id は ARIA 参照を壊し、支援技術の解釈を妨げる可能性があります。',
+        { issues: issues.join('; ') },
+      ),
       helpUrl: HELP_URL,
     }],
   };

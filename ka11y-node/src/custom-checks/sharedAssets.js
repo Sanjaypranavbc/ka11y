@@ -82,11 +82,9 @@ function _pickLocalizedValue(raw, lang = 'en') {
   return null;
 }
 
-function renderReasonTemplate(checkKey, reasonCode, params = {}, context = {}, fallback = '') {
+function renderLocalizedText(raw, params = {}, context = {}, fallback = '') {
   const sharedContext = getSharedRuleContext(context);
-  const templates = getCheckConfig(checkKey, sharedContext).reason_templates || {};
-  const rawTemplate = templates[reasonCode];
-  const template = _pickLocalizedValue(rawTemplate, sharedContext.lang);
+  const template = _pickLocalizedValue(raw, sharedContext.lang);
 
   if (!template) return fallback;
 
@@ -96,12 +94,20 @@ function renderReasonTemplate(checkKey, reasonCode, params = {}, context = {}, f
   });
 }
 
+function renderReasonTemplate(checkKey, reasonCode, params = {}, context = {}, fallback = '') {
+  const sharedContext = getSharedRuleContext(context);
+  const templates = getCheckConfig(checkKey, sharedContext).reason_templates || {};
+  const rawTemplate = templates[reasonCode];
+  return renderLocalizedText(rawTemplate, params, sharedContext, fallback);
+}
+
 module.exports = {
   buildKeywordPattern,
   getCheckConfig,
   getKeywordList,
   getNumberConfig,
   getSharedRuleContext,
+  renderLocalizedText,
   renderReasonTemplate,
   sanitizeLang,
 };
