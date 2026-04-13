@@ -1,11 +1,24 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderReasonTemplate,
+} = require('./sharedAssets');
+
 const SC = '1.2.1';
 const RULE_ID = 'custom-audio-transcript';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/audio-only-and-video-only-prerecorded';
 
-async function run(page) {
-  const data = await page.evaluate(() => {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const transcriptPattern = buildKeywordPattern(
+    getKeywordList('audio_transcript', 'transcript_keywords', sharedContext)
+  ) || 'transcript|caption|text\\s+version|description';
+
+  const data = await page.evaluate((keywordPattern) => {
+    const transcriptRe = new RegExp(keywordPattern, 'i');
     const audioEls = Array.from(document.querySelectorAll('audio'));
     if (audioEls.length === 0) return { audioCount: 0, issues: [] };
 
@@ -24,7 +37,7 @@ async function run(page) {
       const transcriptLinks = container
         ? Array.from(container.querySelectorAll('a[href]')).filter(a => {
             const combined = ((a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '')).toLowerCase();
-            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト|説明文|音声解説|音声ガイド|代替テキスト/i.test(combined);
+            return transcriptRe.test(combined);
           })
         : [];
 
@@ -37,7 +50,7 @@ async function run(page) {
             const text = (det.textContent || '').toLowerCase();
             const summary = (det.querySelector('summary') || {}).textContent || '';
             const combined = text + ' ' + summary.toLowerCase();
-            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト|音声解説|音声ガイド|代替テキスト/i.test(combined);
+            return transcriptRe.test(combined);
           })
         : false;
 
@@ -58,7 +71,7 @@ async function run(page) {
     }
 
     return { audioCount: audioEls.length, issues };
-  });
+  }, transcriptPattern);
 
   if (data.audioCount === 0) {
     return {
@@ -68,7 +81,13 @@ async function run(page) {
         description: 'Audio-only prerecorded content must have a text alternative',
         impact: null,
         status: 'pass',
-        reason: 'No <audio> elements found on this page.',
+        reason: renderReasonTemplate(
+          'audio_transcript',
+          'no_audio',
+          {},
+          sharedContext,
+          'No <audio> elements found on this page.',
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -82,7 +101,13 @@ async function run(page) {
         description: 'Audio-only prerecorded content must have a text alternative',
         impact: null,
         status: 'pass',
-        reason: `${data.audioCount} <audio> element(s) checked — all appear to have a text alternative (track element, nearby transcript link, figcaption, or aria-describedby).`,
+        reason: renderReasonTemplate(
+          'audio_transcript',
+          'pass_detected',
+          { audio_count: data.audioCount },
+          sharedContext,
+          `${data.audioCount} <audio> element(s) checked — all appear to have a text alternative.`,
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -100,7 +125,17 @@ async function run(page) {
       description: 'Audio-only prerecorded content must have a text alternative',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable text alternative (no <track>, no nearby transcript link, no <figcaption>, no aria-describedby). Provide a full text transcript adjacent to each: ${elementList}.`,
+      reason: renderReasonTemplate(
+        'audio_transcript',
+        'missing_transcript',
+        {
+          issue_count: data.issues.length,
+          audio_count: data.audioCount,
+          element_list: elementList,
+        },
+        sharedContext,
+        `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable text alternative: ${elementList}.`,
+      ),
       helpUrl: HELP_URL,
     }],
   };
