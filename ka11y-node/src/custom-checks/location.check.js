@@ -17,7 +17,7 @@ async function run(page, context = {}) {
   ) || 'breadcrumb|パンくず';
   const sitemapPattern = buildKeywordPattern(
     getKeywordList('location', 'sitemap_keywords', sharedContext)
-  ) || 'sitemap|site\\s*map|サイトマップ';
+  ) || 'sitemap|site\\s*map';
 
   const data = await page.evaluate((patterns) => {
     const breadcrumbRe = new RegExp(patterns.breadcrumbPattern, 'i');
@@ -48,7 +48,7 @@ async function run(page, context = {}) {
 
     // 4. Sitemap or location landmark (rare but valid)
     const hasSiteMap = !!(
-      document.querySelector('a[href*="sitemap" i], a[href*="site-map" i], a[href*="site map" i], a[href*="サイトマップ" i]') ||
+      document.querySelector('a[href*="sitemap" i], a[href*="site-map" i], a[href*="site map" i]') ||
       Array.from(document.querySelectorAll('a, [aria-label]')).some(el =>
         sitemapRe.test(el.textContent || '') ||
         sitemapRe.test(el.getAttribute('href') || '') ||

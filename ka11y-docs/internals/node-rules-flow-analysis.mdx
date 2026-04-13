@@ -7,6 +7,8 @@ description: "End-to-end request flow and rule-by-rule execution details for the
 > Scope: `ka11y-node/src/custom-checks/` (24 custom WCAG checks) + `ka11y-node/src/services/`
 > Stack: Node.js + Express + Puppeteer + axe-core
 
+> Update 2026-04-13: custom checks now receive shared rule context (`lang` + shared config) from the service layer. Migrated checks read EN/JA heuristics and selected reason templates from `config/universal.yml` instead of hardcoded JS lists.
+
 ---
 
 ## Architecture & Request Flow

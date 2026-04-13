@@ -42,7 +42,7 @@ async function run(page, context = {}) {
     );
 
     const hasSitemap = !!(
-      document.querySelector('a[href*="sitemap"], a[href*="site-map"], a[href*="site map"], a[href*="サイトマップ"]') ||
+      document.querySelector('a[href*="sitemap"], a[href*="site-map"], a[href*="site map"]') ||
       Array.from(document.querySelectorAll('a')).some(a =>
         sitemapRe.test(a.textContent || '') || sitemapRe.test(a.href || '')
       )
