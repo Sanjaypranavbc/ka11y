@@ -185,6 +185,10 @@ For Japanese pages, OCR runs with Japanese + English recognition to improve mixe
 ```
 </ResponseExample>
 
+<Note>
+  The shared runtime config now defaults `browser.ignore_https_errors` to `true`, so certificate-expiry targets usually continue through the normal crawl path. The degraded `502` example above applies when TLS ignoring is explicitly disabled or a browser stage still rejects the target.
+</Note>
+
 ---
 
 ## Poll job status
@@ -275,11 +279,11 @@ Returns the full job record. Poll every 3 – 5 s until `status` is `"completed"
   "job_id": "b5ea3ea7-...",
   "status": "completed",
   "stages": [
-    { "name": "axe_core", "status": "error", "error": "Failed to launch the browser process!" },
+    { "name": "axe_core", "status": "error", "error": "Target TLS certificate invalid" },
     { "name": "image_audit", "status": "completed", "findings_count": 8 }
   ],
   "warnings": [
-    "axe_core: Server error '500 Internal Server Error' for url 'http://node:3000/api/v1/analyse-url-flat'"
+    "axe_core: Server error '502 Bad Gateway' for url 'http://node:3000/api/v1/analyse-url-flat'"
   ],
   "result": { /* Python-only findings */ }
 }

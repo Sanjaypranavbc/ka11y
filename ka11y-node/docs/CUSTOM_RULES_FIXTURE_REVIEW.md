@@ -3,6 +3,32 @@
 Date: 2026-04-13
 Scope: `ka11y-node/src/custom-checks`, `ka11y-node/src/utils`, `ka11y-node/src/controllers`, `ka11y-python/ka11y`
 
+## Implementation Status
+
+Status update as of 2026-04-13:
+
+- Fixed: Node and Python now default to the shared repo-root `config/universal.yml` and shared repo-root `i18n/`.
+- Fixed: crawler/browser contexts now honor shared `browser.ignore_https_errors`, which prevents expired-cert targets from surfacing as generic frontend failures in the normal path.
+- Fixed: Node flat findings localize `criterion_name` from shared i18n instead of using a frozen English-only startup map.
+- Fixed: Node grouped endpoints now accept `lang` and pass shared rule context into custom checks.
+- Fixed: `mapCustomResultsFlat()` now preserves selector/snippet/source/media-query evidence from custom checks more consistently.
+- Fixed: `custom-pronunciation` now exports explicit metadata and reads thresholds/prefixes from shared config.
+- Fixed: missing Jest coverage was added for `orientation.check.js`, `pronunciation.check.js`, shared check-assets loading, and flat evidence/localization mapping.
+- Fixed: several high-risk EN/JA heuristics moved out of JS source and into shared YAML under `config/universal.yml`:
+  - `audio_transcript`
+  - `multiple_ways`
+  - `consistent_help`
+  - `error_prevention`
+  - `error_suggestion`
+  - `location`
+  - `pointer_cancellation`
+  - `pronunciation`
+
+Items still not fully implemented:
+
+- Custom-rule output does not yet expose a universal `reason_code` / `reason_params` contract for every rule.
+- Not every Node rule with Japanese heuristics has been migrated to shared YAML yet; the highest-risk ones above were prioritized first.
+
 ## Summary
 
 The Node custom-rule stack already has strong rule coverage, but it is not yet aligned with the Python side in three important areas:

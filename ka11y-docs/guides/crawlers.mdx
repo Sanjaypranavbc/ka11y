@@ -120,10 +120,11 @@ An expectation pass means:
 
 ## Runtime Config Knobs
 
-These crawler controls are live today in `ka11y-python/ka11y/config/config.yml` and are read through `ka11y/utils/crawler_settings.py`.
+These crawler controls now live in the shared repo-root `config/universal.yml` and are read through `ka11y/utils/crawler_settings.py` on the Python side and `sharedConfigLoader.js` on the Node side.
 
 | Config key | Purpose |
 |-----------|---------|
+| `browser.ignore_https_errors` | Shared default for Playwright/Puppeteer TLS handling. This prevents expired or misconfigured target certificates from turning into generic frontend failures during normal crawls. |
 | `crawler.language.cjk_langs` | Builds the rendered text-spacing override CSS for JA/ZH/KO-style languages |
 | `crawler.reporting.max_warning_samples` | Caps how many warning samples are surfaced into `warning_details` |
 | `crawler.performance.max_focus_steps` | Bounds rendered focus traversal |
@@ -131,6 +132,15 @@ These crawler controls are live today in `ka11y-python/ka11y/config/config.yml` 
 | `crawler.performance.max_ocr_images_per_run` | Caps OCR work on heavy pages and enables allowlist-based OCR selection |
 
 Config loading is cached through `load_config()`, but callers receive defensive copies so helper usage stays mutation-safe.
+
+### TLS and expired certificates
+
+As of `2026-04-13`, the crawler/browser contexts default to `ignore_https_errors=true` from the shared config. That means a bad target certificate no longer turns the standard frontend crawl flow into a generic Node `500` in the normal case.
+
+Important caveats:
+
+- This setting is meant for controlled auditing environments, not as a blanket security recommendation.
+- If you explicitly disable it, Node now returns a clearer TLS-oriented error to clients instead of an opaque internal server error.
 
 ---
 
