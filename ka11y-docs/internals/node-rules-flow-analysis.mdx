@@ -22,8 +22,8 @@ flowchart TD
 
     subgraph "Parallel Audit Pipelines"
         F["axe-core Engine"]
-        G["18 Static Custom Checks"]
-        H["6 Interactive Custom Checks"]
+        G["19 Static Custom Checks"]
+        H["5 Interactive Custom Checks"]
     end
 
     E --> F
@@ -65,6 +65,7 @@ flowchart TD
         S16["Location"]
         S17["Orientation (Static)"]
         S18["Images of Text"]
+        S19["Pronunciation"]
     end
 
     subgraph "Interactive Checks (Sequential)"
@@ -73,11 +74,10 @@ flowchart TD
         I3["On Focus"]
         I4["On Input"]
         I5["Keyboard Trap"]
-        I6["Pronunciation"]
     end
 
-    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18
-    INTER --> I1 --> I2 --> I3 --> I4 --> I5 --> I6
+    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19
+    INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
 
 ---
@@ -894,7 +894,7 @@ flowchart TD
 | 2.4.13 | Focus Appearance | focus-appearance.check.js | Interactive | Interactive | High |
 | 2.5.2 | Pointer Cancellation | pointer-cancellation.check.js | Static | Static | Medium |
 | 2.5.7 | Dragging Movements | dragging-movements.check.js | Static | Static | Medium |
-| 3.1.6 | Pronunciation | pronunciation.check.js | Interactive | Interactive | High |
+| 3.1.6 | Pronunciation | pronunciation.check.js | Static | Static | High |
 | 3.2.1 | On Focus | on-focus.check.js | Interactive | Interactive | High |
 | 3.2.2 | On Input | on-input.check.js | Interactive | Interactive | High |
 | 3.2.6 | Consistent Help | consistent-help.check.js | Static | Static | Medium |

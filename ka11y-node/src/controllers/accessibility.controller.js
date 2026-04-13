@@ -49,6 +49,11 @@ class AccessibilityController {
    *                   When provided, only rules mapped to that criterion are returned.
    *                   Omit or set to null to return all rules.
    *                 example: "1.1.1"
+   *               lang:
+   *                 type: string
+   *                 nullable: true
+   *                 description: Optional output language code for localized metadata and custom-rule reasons.
+   *                 example: "ja"
    *           examples:
    *             image_with_alt:
    *               summary: Image with alt text (passes image-alt)
@@ -204,6 +209,11 @@ class AccessibilityController {
    *                   Optional WCAG Success Criterion filter (e.g. "1.1.1").
    *                   Omit or set to null to return all rules.
    *                 example: "1.1.1"
+   *               lang:
+   *                 type: string
+   *                 nullable: true
+   *                 description: Optional output language code for localized metadata and custom-rule reasons.
+   *                 example: "ja"
    *           examples:
    *             basic_url:
    *               summary: Analyse a public URL
