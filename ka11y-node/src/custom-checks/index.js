@@ -24,6 +24,7 @@ const STATIC_ORDER = [
   'custom-location',
   'custom-orientation',
   'custom-images-of-text',
+  'custom-pronunciation',
 ];
 
 const INTERACTIVE_ORDER = [
