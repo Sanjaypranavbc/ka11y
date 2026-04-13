@@ -1,7 +1,8 @@
 # Crawler Metadata Reference
 
 > Generated: 2026-04-09  
-> Scope: `ka11y-node` (24 custom WCAG checks + axe-core) and `ka11y-python` (18 WCAG rules across 8 crawlers)
+> Updated: 2026-04-13  
+> Scope: `ka11y-node` (24 custom WCAG checks + axe-core) and `ka11y-python` (18 WCAG rules across the universal static pipeline, image crawler, and rendered-layout crawler)
 
 This document exhaustively maps every piece of data extracted from a crawled page to the rules that consume it. It is the canonical reference for what each crawler must provide and what each rule consumes.
 
@@ -12,6 +13,7 @@ This document exhaustively maps every piece of data extracted from a crawled pag
 - [ka11y-node — Crawler Architecture](#ka11y-node--crawler-architecture)
 - [ka11y-node — Rule-by-Rule Data Requirements](#ka11y-node--rule-by-rule-data-requirements)
 - [ka11y-python — Crawler Architecture](#ka11y-python--crawler-architecture)
+- [How universal crawler data is audited](#how-universal-crawler-data-is-audited)
 - [ka11y-python — Crawler Data Models](#ka11y-python--crawler-data-models)
 - [ka11y-python — Rule-by-Rule Data Requirements](#ka11y-python--rule-by-rule-data-requirements)
 - [Cross-Service Field Mapping](#cross-service-field-mapping)
@@ -437,23 +439,115 @@ AccessibilityService
 
 ## ka11y-python — Crawler Architecture
 
-ka11y-python uses dedicated async crawler classes. Each crawler is responsible for a specific content type. The `RenderedLayoutCrawler` is a special-purpose crawler that takes full-page Playwright snapshots at different viewport sizes and zoom levels for visual/rendered checks.
+ka11y-python now has two execution modes:
+
+- direct crawler classes still exist and preserve the original model contracts for debugging or compatibility
+- the combined production endpoint now reuses **one universal static crawl** for seven DOM rule families, then normalizes that snapshot back into the existing Pydantic models
+
+Direct answer: yes, the combined `ka11y-python` crawler is now universal for the static DOM rule families.
+
+That does **not** mean every stage uses one crawler. Two specialized crawlers remain outside the universal static path:
+
+- `AsyncImageCrawler` for screenshots, OCR, image classification, and image-specific auditing
+- `RenderedLayoutCrawler` for viewport mutation, focus/hover simulation, reflow, resize-text, orientation, and focus-obscuration checks
 
 ```
-POST /api/v1/audit
+POST /api/v1/combined
         │
         ▼
-AuditService
-  ├── AsyncImageCrawler      → List[ImageMetadata]
-  ├── AsyncFormCrawler       → List[FormInputData]
-  ├── InteractiveElementCrawler → List[InteractiveElementData]
-  ├── TargetSizeCrawler      → List[TargetSizeData]
-  ├── MediaCrawler           → List[MediaElementData]
-  ├── MovingContentCrawler   → List[MovingContentData]
-  ├── SensoryCrawler         → List[SensoryElementData]
-  ├── TextSpacingCrawler     → List[TextSpacingData]
-  └── RenderedLayoutCrawler  → PageSnapshot (portrait/landscape/zoom variants)
+runner._run_job()
+  ├── AsyncImageCrawler
+  │     └── List[ImageMetadata]
+  ├── UniversalPageLoader
+  │     └── PageSnapshot
+  │           ├── forms
+  │           ├── interactive
+  │           ├── target_sizes
+  │           ├── moving_content
+  │           ├── media
+  │           ├── text_spacing
+  │           ├── sensory
+  │           ├── warnings
+  │           └── element_refs
+  ├── SnapshotNormalizer
+  │     └── existing Pydantic models:
+  │           FormInputData
+  │           InteractiveElementData
+  │           TargetSizeData
+  │           MovingContentData
+  │           MediaElementData
+  │           TextSpacingData
+  │           SensoryElementData
+  └── RenderedLayoutCrawler
+        └── PageSnapshot (portrait/landscape/zoom variants)
 ```
+
+The universal static path is where ka11y-python now gets:
+
+- same-origin iframe traversal
+- open shadow-root traversal
+- structured extraction warnings for cross-origin frames and partial failures
+- sidecar provenance through `element_ref_id`, `selector`, and `frame_path`
+- final-report `warning_details` with sampled frame metadata
+
+Recent hardening on top of the universal path:
+
+- `_merge_findings()` now prefers page-aware selector/target/ref evidence before HTML fallback
+- OCR is now budgeted on heavy pages through `crawler.performance.max_ocr_images_per_run`
+- rendered hover and focus probes are bounded by `max_hover_candidates` and `max_focus_steps`
+- CJK text-spacing overrides are built from `crawler.language.cjk_langs`
+
+Legacy crawler classes remain useful for direct debugging and compatibility, but the combined endpoint no longer needs seven separate static page loads.
+
+### How universal crawler data is audited
+
+The audit flow is intentionally **raw snapshot first, existing Pydantic models second, existing auditors third**.
+
+This is the current production order:
+
+1. `UniversalPageLoader.load()` does one Playwright session and extracts a `PageSnapshot`.
+2. The raw snapshot is persisted as `universal_snapshot_raw.json`.
+3. `SnapshotNormalizer.normalize()` converts each raw bucket into the existing Pydantic models.
+4. The normalized snapshot is persisted as `universal_snapshot_normalized.json`.
+5. `_run_python_stages()` creates one shared `snapshot_task` and passes it to every static auditor stage.
+6. Each stage waits on the same normalized snapshot, calls the existing auditor unchanged, and receives structured audit rows back.
+7. Stage-specific adapters convert those audit rows into unified combined findings.
+8. The combined runner merges universal-static findings with image/OCR findings, rendered-layout findings, and `ka11y-node` findings into `combined_report.json`.
+9. Rich step logs capture crawler counts, auditor counts, finding counts, OCR-budget decisions, and warning summaries in `step_logs/combined_execution_steps.jsonl`.
+
+### Universal snapshot to auditor map
+
+| Raw snapshot bucket | Normalized model | Stage function | Auditor | Main SCs |
+|--------------------|------------------|----------------|---------|----------|
+| `forms` | `FormInputData` | `_stage_form_audit_universal()` | `FormAccessibilityAuditor` | `3.3.1`, `3.3.2` |
+| `interactive` | `InteractiveElementData` | `_stage_label_in_name_universal()` | `LabelInNameAuditor` | `2.5.3` |
+| `moving_content` | `MovingContentData` | `_stage_pause_stop_hide_universal()` | `PauseStopHideAuditor` | `2.2.2` |
+| `target_sizes` | `TargetSizeData` | `_stage_target_size_universal()` | `TargetSizeAuditor` | `2.5.8` |
+| `text_spacing` | `TextSpacingData` | `_stage_text_spacing_universal()` | `TextSpacingAuditor` | `1.4.12` |
+| `media` | `MediaElementData` | `_stage_media_audit_universal()` | `MediaAuditor` | `1.2.1` |
+| `sensory` | `SensoryElementData` | `_stage_sensory_audit_universal()` | `SensoryCharacteristicsAuditor` | `1.3.3` |
+
+### Files written by the universal audit path
+
+| File | Purpose |
+|------|---------|
+| `universal_snapshot_raw.json` | Exact extracted static snapshot before model validation |
+| `universal_snapshot_normalized.json` | Post-normalization records in existing Pydantic-compatible shapes |
+| `universal_snapshot_warnings.json` | Cross-origin frame skips, detached-frame failures, normalization warnings, and other extraction limitations |
+| `step_logs/combined_execution_steps.jsonl` | Rich-backed event log with crawler counts, auditor counts, finding counts, OCR-budget events, and warnings |
+| `step_logs/combined_execution_steps_summary.json` | Rollup summary of the run |
+| `combined_report.json` | Final merged output from universal static stages, image/OCR, rendered-layout, and node/axe checks, including `warning_details` |
+
+**Universal fields present in normalized static records:**
+
+| Field | Description |
+|-------|-------------|
+| `page_url` | URL of the crawled page |
+| `element_index` | Sequential index of the element on the page |
+| `html_snippet` | Truncated `outerHTML` (≤ 600 chars) |
+| `selector` | Composed selector for evidence and deduplication |
+| `element_ref_id` | Stable key into `PageSnapshot.element_refs` |
+| `frame_path` | Same-origin iframe provenance (`main`, `main.1`, etc.) |
 
 ---
 
@@ -540,6 +634,7 @@ AuditService
 | `error_has_role_alert` | `bool` | Error element has `role="alert"` |
 | `error_has_aria_live` | `str` | `aria-live` value on error element |
 | `html_snippet` | `str` | Truncated outerHTML (≤600 chars) |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -562,6 +657,7 @@ AuditService
 | `element_name` | `str` | `name` attribute |
 | `input_type` | `str` | For `<input>`, the `type` attribute |
 | `html_snippet` | `str` | Truncated outerHTML |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -586,6 +682,7 @@ AuditService
 | `nearest_target_gap_y_px` | `float` | Gap to nearest Y neighbor |
 | `passes_size` | `bool` | Pre-computed pass flag |
 | `html_snippet` | `str` | Truncated outerHTML |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -611,6 +708,7 @@ AuditService
 | `nearby_text` | `str` | Parent container text |
 | `nearby_details` | `List[str]` | `<details>` block summaries |
 | `html_snippet` | `str` | Truncated outerHTML |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -629,11 +727,14 @@ AuditService
 | `animation_iteration_count` | `str` | `"infinite"` or numeric |
 | `loops` | `bool` | Loops flag |
 | `duration_seconds` | `float` | Video duration (-1 = infinite) |
+| `duration_known` | `bool` | Whether the media duration was known at extraction time |
 | `starts_automatically` | `bool` | Auto-plays without user action |
 | `has_video_controls` | `bool` | `<video controls>` present |
 | `has_pause_button` | `bool` | Nearby pause/stop button detected |
 | `has_mechanism` | `bool` | Any control mechanism present |
+| `applicability_exception` | `str` | Structured exemption such as `loading_indicator` |
 | `html_snippet` | `str` | Truncated outerHTML |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -657,6 +758,7 @@ AuditService
 | `title` | `str` | `title` tooltip attribute |
 | `lang` | `str` | Closest `lang=` ancestor value |
 | `html_snippet` | `str` | Truncated outerHTML |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
@@ -678,12 +780,13 @@ AuditService
 | `has_overflow_hidden` | `bool` | `overflow: hidden` or `clip` |
 | `is_clipped` | `bool` | `scrollHeight > clientHeight` or `scrollWidth > clientWidth` |
 | `html_snippet` | `str` | Truncated outerHTML |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
 
 ---
 
 ### RenderedLayoutCrawler → `PageSnapshot` + `ElementSnapshot`
 
-**File:** `ka11y/crawler/rendered_crawler.py`
+**File:** `ka11y/crawler/rendered_layout_crawler.py`
 
 **PageSnapshot fields:**
 

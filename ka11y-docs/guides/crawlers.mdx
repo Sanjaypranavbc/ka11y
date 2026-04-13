@@ -5,7 +5,7 @@ description: "How each Playwright crawler extracts raw data from a page"
 
 ## Current Production Path
 
-As of `2026-04-10`, the combined audit pipeline does **not** launch seven static crawlers independently anymore.
+As of `2026-04-13`, the combined audit pipeline does **not** launch seven static crawlers independently anymore.
 
 - `AsyncImageCrawler` still owns image/OCR work.
 - `RenderedLayoutCrawler` still owns viewport, focus, hover, reflow, resize-text, and rendered text-spacing scenarios.
@@ -26,6 +26,9 @@ The important practical difference is that the combined pipeline now gets:
 - same-origin iframe traversal with `frame_path` provenance
 - open shadow-root traversal with composed selectors
 - structured warnings for cross-origin frames and partial extraction
+- sampled `warning_details` in the final `combined_report.json`
+- stronger page-aware finding dedup across static and rendered paths
+- config-driven budgets for OCR, hover scans, focus scans, and warning samples
 - persisted `universal_snapshot_raw.json`, `universal_snapshot_normalized.json`, and Rich step logs
 
 The legacy crawler classes still exist and keep the same model contracts, so direct usage and compatibility paths remain intact.
@@ -34,7 +37,7 @@ The legacy crawler classes still exist and keep the same model contracts, so dir
 
 The production crawler plan is currently backed by the expectation-driven live runner in `ka11y-python/scripts/live_stage_audit.py` and the public matrix in `ka11y-python/scripts/live_stage_plan.public_matrix.yml`.
 
-Latest verified run: `2026-04-10`
+Latest verified run: `2026-04-13`
 
 | Live check | What it confirmed |
 |-----------|-------------------|
@@ -44,6 +47,8 @@ Latest verified run: `2026-04-10`
 | `w3schools_bootstrap_carousel` | Real autoplay carousel motion still produced a genuine `2.2.2` violation after the loading-indicator heuristic was tightened |
 | `mdn_japanese` | `lang=ja` completed through the same combined pipeline and met the live expectation checks |
 | `w3schools_bootstrap_forms` | Real public form content produced the expected form-field coverage in the normalized snapshot |
+| `drupal_rendered_probe` | Rendered hover/focus probe completed without the earlier stale-box hover failure mode |
+| `bbc_ocr_budget_probe` | OCR budget logging confirmed selected vs skipped image counts on a heavy real page |
 
 The curated 10-site public matrix passed all expectation checks in the latest run.
 
@@ -102,13 +107,30 @@ Each run produces:
 - per-run `combined_report.json`
 - `universal_snapshot_raw.json`
 - `universal_snapshot_normalized.json`
+- `universal_snapshot_warnings.json`
 - Rich step logs in `step_logs/`
+
+`combined_report.json` now also carries `warning_details`, which is a sampled view of the universal crawler limitations that were recorded during extraction.
 
 An expectation pass means:
 
 - the page completed end-to-end
 - the expected crawler coverage was observed on a real site
 - the targeted architecture promise from `CRAWLER_ANALYSIS.md` held on that live page
+
+## Runtime Config Knobs
+
+These crawler controls are live today in `ka11y-python/ka11y/config/config.yml` and are read through `ka11y/utils/crawler_settings.py`.
+
+| Config key | Purpose |
+|-----------|---------|
+| `crawler.language.cjk_langs` | Builds the rendered text-spacing override CSS for JA/ZH/KO-style languages |
+| `crawler.reporting.max_warning_samples` | Caps how many warning samples are surfaced into `warning_details` |
+| `crawler.performance.max_focus_steps` | Bounds rendered focus traversal |
+| `crawler.performance.max_hover_candidates` | Bounds rendered hover probing candidates |
+| `crawler.performance.max_ocr_images_per_run` | Caps OCR work on heavy pages and enables allowlist-based OCR selection |
+
+Config loading is cached through `load_config()`, but callers receive defensive copies so helper usage stays mutation-safe.
 
 ---
 

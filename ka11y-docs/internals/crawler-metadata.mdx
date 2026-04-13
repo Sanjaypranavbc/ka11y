@@ -4,7 +4,7 @@ description: "Exhaustive mapping of every crawler field to the rules that consum
 ---
 
 > Generated: 2026-04-09  
-> Updated: 2026-04-10  
+> Updated: 2026-04-13  
 > Scope: `ka11y-node` (24 custom WCAG checks + axe-core) and `ka11y-python` (18 WCAG rules across the universal static pipeline, image crawler, and rendered-layout crawler)
 
 This is the canonical reference for what each crawler extracts from a page and which rule consumes which fields. Use this when adding a new rule, modifying a crawler, or debugging missing data.
@@ -426,6 +426,15 @@ The universal static path is where ka11y-python now gets:
 - open shadow-root traversal
 - structured extraction warnings for cross-origin frames and partial failures
 - sidecar provenance through `element_ref_id`, `selector`, and `frame_path`
+- final-report `warning_details` with sampled frame metadata
+
+Recent hardening on top of the universal path:
+
+- `_merge_findings()` now prefers page-aware selector/target/ref evidence before HTML fallback
+- OCR is budgeted on heavy pages through `crawler.performance.max_ocr_images_per_run`
+- rendered hover and focus probes are bounded by `max_hover_candidates` and `max_focus_steps`
+- CJK text-spacing overrides are built from `crawler.language.cjk_langs`
+- config loading is cached and returned as defensive copies
 
 Legacy crawler classes remain useful for direct debugging and compatibility, but the combined endpoint no longer needs seven separate static page loads.
 
@@ -443,7 +452,7 @@ This is the current production order:
 6. Each stage waits on the same normalized snapshot, calls the existing auditor unchanged, and receives structured audit rows back.
 7. Stage-specific adapters convert those audit rows into unified combined findings.
 8. The combined runner merges universal-static findings with image/OCR findings, rendered-layout findings, and `ka11y-node` findings into `combined_report.json`.
-9. Rich step logs capture both crawler counts and auditor counts for every stage in `step_logs/combined_execution_steps.jsonl`.
+9. Rich step logs capture crawler counts, auditor counts, finding counts, OCR-budget events, and warnings in `step_logs/combined_execution_steps.jsonl`.
 
 ### Universal snapshot to auditor map
 
@@ -493,9 +502,9 @@ The important detail is that the auditors are **not DOM-aware anymore at executi
 | `universal_snapshot_raw.json` | Exact extracted static snapshot before model validation |
 | `universal_snapshot_normalized.json` | Post-normalization records in existing Pydantic-compatible shapes |
 | `universal_snapshot_warnings.json` | Cross-origin frame skips, detached-frame failures, normalization warnings, and other extraction limitations |
-| `step_logs/combined_execution_steps.jsonl` | Rich-backed event log with crawler counts, auditor counts, finding counts, and warnings |
+| `step_logs/combined_execution_steps.jsonl` | Rich-backed event log with crawler counts, auditor counts, finding counts, OCR-budget events, and warnings |
 | `step_logs/combined_execution_steps_summary.json` | Rollup summary of the run |
-| `combined_report.json` | Final merged output from universal static stages, image/OCR, rendered-layout, and node/axe checks |
+| `combined_report.json` | Final merged output from universal static stages, image/OCR, rendered-layout, and node/axe checks, including `warning_details` |
 
 **Universal fields present in normalized static records:**
 
@@ -508,9 +517,19 @@ The important detail is that the auditors are **not DOM-aware anymore at executi
 | `element_ref_id` | Stable key into `PageSnapshot.element_refs` |
 | `frame_path` | Same-origin iframe provenance (`main`, `main.1`, etc.) |
 
+### Recent Hardening Additions
+
+| Area | Current behavior |
+|------|------------------|
+| Universal warnings | `stages.py` samples warning metadata into `warning_details` so blocked frames are visible in the final report |
+| Merge dedup | `runner._merge_findings()` now prefers `element_ref_id`, selector/target evidence, and page URL before HTML fallback |
+| OCR budget | `image_audit` uses `max_ocr_images_per_run` and `select_ocr_candidate_paths()`; Rich logs record selected vs skipped images |
+| Rendered limits | `RenderedLayoutCrawler` reads `max_focus_steps` and `max_hover_candidates` from config |
+| CJK text spacing | `build_text_spacing_cjk_selector_css()` generates the override CSS from `crawler.language.cjk_langs` |
+
 ### Live Validation Snapshot
 
-The production universal path was re-validated against a curated 10-site public matrix on `2026-04-10`.
+The production universal path was re-validated against a curated 10-site public matrix on `2026-04-13`.
 
 | Live site | Verified behavior |
 |----------|-------------------|
@@ -520,6 +539,8 @@ The production universal path was re-validated against a curated 10-site public 
 | `w3schools_bootstrap_carousel` | Autoplay carousel still surfaced as a genuine `2.2.2` violation after heuristic tightening |
 | `mdn_japanese` | `lang=ja` passed the expectation-driven live checks through the same combined pipeline |
 | `w3schools_bootstrap_forms` | Real public form content produced `6` normalized form records and passed the live expectation gate |
+| `drupal_rendered_probe` | Rendered hover/focus probing completed without the earlier stale-box hover failure mode |
+| `bbc_ocr_budget_probe` | OCR budget logging confirmed selected vs skipped images on a heavy page |
 
 ---
 

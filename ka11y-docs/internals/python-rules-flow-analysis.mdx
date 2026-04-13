@@ -4,63 +4,107 @@ description: "End-to-end request flow and rule-by-rule execution details for the
 ---
 
 > Generated: 2026-04-06
-> Scope: `ka11y-python/ka11y/accessibility/rules/` + `ka11y-python/ka11y/accessibility/rendered/evaluators/` (18 WCAG criteria)
-> Stack: Python 3.10+ + Playwright + PaddleOCR + ML Classifier
+> Updated: 2026-04-13
+> Scope: `ka11y-python/ka11y/accessibility/rules/` + `ka11y-python/ka11y/accessibility/rendered/evaluators/` + combined orchestration (`runner.py`, `stages.py`, `findings.py`)
+> Stack: Python 3.10+ + Playwright + OCR (PaddleOCR with EasyOCR fallback) + ML Classifier
 
 ---
 
 ## Architecture & Request Flow
 
+### Current Production Path
+
+The current production flow is the combined pipeline, not the older single-service `/api/v1/audit` model.
+
+- One combined request fans out into `ka11y-node` and `ka11y-python`.
+- `ka11y-python` now uses **one universal static crawl** for seven DOM rule families.
+- `AsyncImageCrawler` still owns image capture, OCR, and contrast/image auditing.
+- `RenderedLayoutCrawler` still owns rendered, focus, hover, orientation, reflow, and resize scenarios.
+- The final report is merged, deduplicated, enriched with provenance, and written as `combined_report.json`.
+
 ```mermaid
 flowchart TD
-    A[HTTP POST /api/v1/audit] --> B["Crawler: Playwright"]
-    B --> C["Page Snapshot / DOM Data"]
-    B --> D["Image Harvest"]
-    
-    subgraph "Parallel Audit Pipelines"
-        E["Rendered Evaluators"]
-        F["Static Rule Auditors"]
-        G["Multimodal Image Audit"]
+    A[HTTP POST /api/v1/combined] --> B["runner._run_job()"]
+    B --> C["ka11y-node: axe-core + custom checks"]
+    B --> D["ka11y-python: _run_python_stages()"]
+
+    subgraph "Python Crawler Branches"
+        E["UniversalPageLoader"]
+        F["AsyncImageCrawler"]
+        G["RenderedLayoutCrawler"]
     end
-    
-    C --> E
-    C --> F
+
+    D --> E
+    D --> F
     D --> G
-    
-    E --> H["Orientation / Reflow / Resize Text / Text Spacing / Hover / Focus Obscured"]
-    F --> I["Forms / Label-in-Name / Target-Size / Static Text-Spacing"]
-    G --> J["Classification + OCR + Contrast"]
-    
-    H & I & J --> K["Findings Aggregator"]
-    K --> L["JSON / CSV Report Results"]
+
+    E --> H["SnapshotNormalizer"]
+    H --> I["Existing Pydantic models"]
+    I --> J["Form / Label-in-Name / Pause-Stop-Hide / Target-Size / Text-Spacing / Media / Sensory auditors"]
+
+    F --> K["Classification + OCR + Contrast + Alt/Text audit"]
+    G --> L["Reflow / Resize Text / Orientation / Hover / Focus-Not-Obscured evaluators"]
+
+    C --> M["Node findings"]
+    J --> N["Universal-static findings"]
+    K --> O["Image findings"]
+    L --> P["Rendered findings"]
+
+    M & N & O & P --> Q["Merge + dedup + level filter + warning enrichment"]
+    Q --> R["combined_report.json + step logs"]
 ```
 
 ### Custom Check Execution Model
 
 ```mermaid
 flowchart TD
-    Index["Rules Index"] --> Static["Static / DOM Auditors"]
+    Index["Combined Request"] --> Static["Universal Static Auditors"]
     Index --> Rendered["Rendered / Stateful Evaluators"]
     Index --> Multi["Multimodal / CV Auditors"]
-    
-    subgraph "Static Auditors"
-        S1["Form Auditor"]
-        S2["Label-in-Name"]
-        S3["Target-Size"]
+
+    subgraph "Universal Static Path"
+        S1["UniversalPageLoader"]
+        S2["SnapshotNormalizer"]
+        S3["Existing auditors on normalized models"]
     end
-    
-    subgraph "Rendered Evaluators"
-        R1["Reset Styles"]
-        R2["Inject Overrides/Mutation"]
-        R3["Compare Geometric Diffs"]
+
+    subgraph "Rendered Path"
+        R1["RenderedLayoutCrawler"]
+        R2["Viewport / CSS mutation / focus / hover"]
+        R3["Evaluator records -> findings"]
     end
-    
-    subgraph "Multimodal Auditors"
-        M1["ML Classification"]
-        M2["PaddleOCR Extraction"]
-        M3["Cross-Modal Validation"]
+
+    subgraph "Image Path"
+        M1["AsyncImageCrawler"]
+        M2["OCR budget + OCR extraction"]
+        M3["Alt / contrast / image-of-text validation"]
     end
 ```
+
+### Current Python Stage Map
+
+| Stage | Data source | Audit mode | Notes |
+|------|-------------|------------|------|
+| `form_audit` | Universal snapshot -> `FormInputData` | Static | Same-origin frames and open shadow roots supported through the universal crawl |
+| `label_in_name` | Universal snapshot -> `InteractiveElementData` | Static | Provenance carried through `selector`, `element_ref_id`, `frame_path` |
+| `pause_stop_hide` | Universal snapshot -> `MovingContentData` | Static | Supports `duration_known` and `applicability_exception=loading_indicator` |
+| `target_size` | Universal snapshot -> `TargetSizeData` | Static | Same-origin iframe and shadow-root coverage inherited from universal crawl |
+| `text_spacing` | Universal snapshot -> `TextSpacingData` | Static | Structural risk pass |
+| `media_audit` | Universal snapshot -> `MediaElementData` | Static | Transcript/nearby-link checks on normalized records |
+| `sensory_audit` | Universal snapshot -> `SensoryElementData` | Static | Language-aware, including JP/CJK handling |
+| `image_audit` | `AsyncImageCrawler` + OCR | Multimodal | OCR is now budgeted and logged for large pages |
+| `rendered_layout_audit` | `RenderedLayoutCrawler` | Rendered | Hover/focus path hardened against stale or invisible boxes |
+
+### Recent Hardening Additions
+
+| Area | Current behavior |
+|------|------------------|
+| Universal warnings | Cross-origin and failed-frame warnings are sampled into `warning_details` in `combined_report.json` |
+| Merge dedup | `runner._merge_findings()` prefers page-aware selector/target/ref evidence before HTML fallback |
+| OCR budget | `crawler.performance.max_ocr_images_per_run` caps OCR scope and logs selected vs skipped images with Rich |
+| Rendered limits | `crawler.performance.max_focus_steps` and `crawler.performance.max_hover_candidates` bound rendered probes |
+| CJK text spacing | `crawler.language.cjk_langs` drives the rendered text-spacing override CSS |
+| Config loading | `load_config()` is cached and returns defensive copies so runtime helpers do not mutate shared state |
 
 ---
 

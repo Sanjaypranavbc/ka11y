@@ -1,6 +1,7 @@
-# ka11y-python Crawler: Complete Analysis, Bugs & Universal Redesign
+# ka11y-python Crawler: Complete Analysis, Status, Bugs & Universal Architecture
 
 > **Written:** 2026-04-10 — verified against full repo  
+> **Updated:** 2026-04-13 — production status and hardening pass verified against current code  
 > **Scope:** All 9 crawlers + orchestrator (`stages.py`, `runner.py`, `findings.py`) + `universal_page.py`  
 > **Cross-references:** `CRAWLER_METADATA.md` (field contracts), `PLUGPLAY_CONFIG_PLAN.md` (config architecture)
 
@@ -8,20 +9,43 @@
 
 ## Table of Contents
 
+0. [Current Status](#0-current-status)
 1. [What the Crawler Module Does](#1-what-the-crawler-module-does)
 2. [End-to-End Data Flow](#2-end-to-end-data-flow)
 3. [Every Crawler — Verified Details](#3-every-crawler--verified-details)
 4. [Every Auditor — What It Reads](#4-every-auditor--what-it-reads)
 5. [Pipeline Orchestration](#5-pipeline-orchestration)
-6. [Bug Report — Verified](#6-bug-report--verified)
-7. [Why 9 Separate Crawlers Is the Problem](#7-why-9-separate-crawlers-is-the-problem)
-8. [Proposed Architecture: Universal Production Crawler](#8-proposed-architecture-universal-production-crawler)
+6. [Bug Report — Historical And Current](#6-bug-report--historical-and-current)
+7. [Why 9 Separate Crawlers Was The Problem](#7-why-9-separate-crawlers-was-the-problem)
+8. [Architecture Status: Universal Production Crawler](#8-architecture-status-universal-production-crawler)
 9. [Config Integration](#9-config-integration)
 10. [Complete Field Contract](#10-complete-field-contract)
 11. [Migration Plan](#11-migration-plan-phased)
 12. [Files to Create / Modify](#12-files-to-create--modify)
 
 ---
+
+## 0. Current Status
+
+The major architecture change proposed in this document is now **implemented** for the static DOM rule families.
+
+Current production state:
+
+- `UniversalPageLoader` is live in `stages.py` through `_load_universal_snapshot()`.
+- `SnapshotNormalizer` is live and converts the raw universal snapshot back into the existing Pydantic models before the auditors run.
+- The combined pipeline no longer launches seven separate static crawlers for forms, interactive elements, target size, moving content, media, text spacing, and sensory checks.
+- `AsyncImageCrawler` remains separate for screenshots, OCR, and image-specific auditing.
+- `RenderedLayoutCrawler` remains separate for viewport/focus/hover/reflow/orientation checks.
+
+Additional hardening implemented after the original redesign:
+
+- cross-origin and failed-frame warnings now carry sampled iframe metadata and are surfaced as `warning_details` in `combined_report.json`
+- merge dedup now uses page-aware selector/target/ref signatures before HTML fallback
+- rendered hover probing now re-resolves element boxes instead of trusting stale DOM coordinates
+- OCR now uses a config-backed budget on heavy pages and logs the selected vs skipped image counts
+- CJK text-spacing overrides and performance/reporting budgets are now config-driven instead of scattered hardcoded values
+
+Everything below remains useful as detailed analysis, but some bug entries are now historical because the redesign has already landed.
 
 ## 1. What the Crawler Module Does
 
@@ -54,18 +78,18 @@ _run_job(job_id, payload)   ← runner.py
         │                │
         │       ┌────────┴──────────────────────────────────────────────────┐
         │       │  9 concurrent stages                                       │
-        │       │  image_audit │ form_audit │ label_in_name │ pause_stop_hide│
-        │       │  target_size │ text_spacing │ rendered_layout │ media_audit│
+        │       │  image_audit │ rendered_layout │ form_audit │ label_in_name│
+        │       │  pause_stop_hide │ target_size │ text_spacing │ media_audit│
         │       │  sensory_audit                                             │
         │       └────────────────────────────────────────────────────────────┘
         │
         ├─ _merge_findings(node_findings, python_findings)
-        │       Dedup key: (wcag_sc, status, element_signature)
+        │       Dedup key: page-aware selector/target/ref/html signature
         │       Python findings win over axe-core on collision
         │
         ├─ Filter by WCAG level (A / AA / AAA)
         ├─ Sort by status (fail → needs_review → pass)
-        └─ Save combined_report.json
+        └─ Save combined_report.json + warning_details + step logs
 ```
 
 ### Stage → Crawler → Auditor → WCAG Coverage
@@ -73,14 +97,14 @@ _run_job(job_id, payload)   ← runner.py
 | Stage | Crawler | Auditor | WCAG Criteria |
 |-------|---------|---------|---------------|
 | `image_audit` | `AsyncImageCrawler` | `AltTextAccessibilityAuditor` | 1.1.1, 4.1.2, 1.4.3, 1.4.5, 1.4.11 |
-| `form_audit` | `AsyncFormCrawler` | `FormAccessibilityAuditor` | 3.3.1, 3.3.2 |
-| `label_in_name` | `InteractiveElementCrawler` | `LabelInNameAuditor` | 2.5.3 |
-| `pause_stop_hide` | `MovingContentCrawler` | `PauseStopHideAuditor` | 2.2.2 |
-| `target_size` | `TargetSizeCrawler` | `TargetSizeAuditor` | 2.5.8 |
-| `text_spacing` | `AsyncTextSpacingCrawler` | `TextSpacingAuditor` | 1.4.12 (structural) |
+| `form_audit` | `UniversalPageLoader` -> `SnapshotNormalizer` -> `FormInputData` | `FormAccessibilityAuditor` | 3.3.1, 3.3.2 |
+| `label_in_name` | `UniversalPageLoader` -> `SnapshotNormalizer` -> `InteractiveElementData` | `LabelInNameAuditor` | 2.5.3 |
+| `pause_stop_hide` | `UniversalPageLoader` -> `SnapshotNormalizer` -> `MovingContentData` | `PauseStopHideAuditor` | 2.2.2 |
+| `target_size` | `UniversalPageLoader` -> `SnapshotNormalizer` -> `TargetSizeData` | `TargetSizeAuditor` | 2.5.8 |
+| `text_spacing` | `UniversalPageLoader` -> `SnapshotNormalizer` -> `TextSpacingData` | `TextSpacingAuditor` | 1.4.12 (structural) |
 | `rendered_layout_audit` | `RenderedLayoutCrawler` | `run_all_evaluators()` | 1.4.4, 1.4.10, 1.4.12 (rendered), 1.3.4, 1.4.13, 2.4.11, 2.4.12 |
-| `media_audit` | `AsyncMediaCrawler` | `MediaAuditor` | 1.2.1 |
-| `sensory_audit` | `AsyncSensoryCrawler` | `SensoryCharacteristicsAuditor` | 1.3.3 |
+| `media_audit` | `UniversalPageLoader` -> `SnapshotNormalizer` -> `MediaElementData` | `MediaAuditor` | 1.2.1 |
+| `sensory_audit` | `UniversalPageLoader` -> `SnapshotNormalizer` -> `SensoryElementData` | `SensoryCharacteristicsAuditor` | 1.3.3 |
 
 ---
 
@@ -198,21 +222,21 @@ _run_job(job_id, payload)   ← runner.py
   1. `baseline` — 1280×720
   2. `reflow_320` — 320×640
   3. `text_spacing_baseline` — 1280×720 (before CSS)
-  4. `text_spacing_override` — 1280×720 + WCAG 1.4.12 CSS injection:
+  4. `text_spacing_override` — 1280×720 + WCAG 1.4.12 CSS injection built from config:
      ```css
      * { line-height: 1.5 !important; letter-spacing: 0.12em !important;
          word-spacing: 0.16em !important; }
      p,li,dt,dd,blockquote { margin-bottom: 2em !important; }
-     /* CJK hardcoded — BUG-007: should be config-driven */
-     :lang(ja), :lang(zh), [lang="ja"], [lang="zh"] {
+     /* CJK selectors are now generated from config */
+     :lang(ja), :lang(zh), :lang(ko), [lang="ja"], [lang="zh"], [lang="ko"] {
          letter-spacing: normal !important; word-spacing: normal !important; }
      ```
   5. `resize_text_200` — `document.documentElement.style.fontSize = '200%'`
   6. `orientation_portrait` — 390×844
   7. `orientation_landscape` — 844×390
 - **Sequential scans:**
-  - Focus scan — Tab through focusable elements; captures `FocusStep` with `covering_elements` overlay data
-  - Hover scan — hovers over tooltip/dropdown candidates; captures `HoverInteractionResult`
+  - Focus scan — Tab through focusable elements; captures `FocusStep` with `covering_elements` overlay data, bounded by config-backed `max_focus_steps`
+  - Hover scan — generates candidate selectors up front, re-resolves candidate boxes before hover, and caps work by config-backed `max_hover_candidates`
 - **Wait:** `domcontentloaded` → `stabilize()` from `ka11y/accessibility/rendered/stabilizer.py` (adaptive, not hardcoded)
 - **SSRF Guard:** ✅ `install_ssrf_guard(ctx)` on line 310
 - **Shadow DOM:** No
@@ -246,11 +270,10 @@ _run_job(job_id, payload)   ← runner.py
 - **Iframe:** ❌ No
 - **Saves:** `sensory_raw.json`
 
-### 3.10 `UniversalPageLoader` — `universal_page.py` (UNUSED / PARTIAL)
+### 3.10 `UniversalPageLoader` — `universal_page.py` (PRODUCTION STATIC PATH)
 
-- **Purpose:** Load the page once, extract all static data in one `evaluate()` pass, optionally record a HAR
-- **Status:** ✅ Implemented — ❌ **not wired into the pipeline** — ❌ **not production-ready as-is**
-- **Verification:** `grep -rn "UniversalPageLoader" ka11y/api/` → 0 matches
+- **Purpose:** Load the page once, extract all static DOM buckets in one universal pass, traverse same-origin frames, and persist structured warnings for anything partial or blocked
+- **Status:** ✅ Implemented — ✅ **wired into the combined pipeline** through `_load_universal_snapshot()` — ✅ **production path for the seven static rule families**
 - **Wait strategy (lines 701–731):**
   1. `domcontentloaded` (30s) → fallback `commit` (15s)
   2. `networkidle` (15s, best-effort)
@@ -259,16 +282,13 @@ _run_job(job_id, payload)   ← runner.py
   5. Lazy-scroll (6 steps) + IntersectionObserver trigger
   6. Second stability check
   7. Single `page.evaluate(_COMBINED_EXTRACT_JS)`
-- **Shadow DOM:** ⚠️ Partial
-  - Forms / interactive / target sizes use `queryShadow()`
-  - Moving content / media / text spacing still use `document.querySelectorAll(...)`
-  - Label and ARIA ID resolution still uses `document.querySelector(...)` / `document.getElementById(...)`, so shadow-contained labels and `aria-describedby` targets can still be missed
-  - Forms found in a shadow root still use `form.querySelectorAll(...)`, so nested shadow descendants under that form are missed
-- **Iframe:** ❌ No frame-tree traversal
-- **Output contract:** ❌ Raw dict lists only; does not normalize into existing Pydantic models
-- **HAR recording:** ⚠️ Saved to `session.har`, but current `RenderedLayoutCrawler` cannot consume it
-- **Combined JS output:** `{ forms, interactive, target_sizes, moving_content, media, text_spacing }`
-- **Missing:** `sensory`, same-origin frame extraction, cross-origin frame metadata, canonical element identity, extractor error reporting, normalization layer
+- **Shadow DOM:** ✅ Open shadow roots supported; composed selectors are preserved in `selector` and `element_ref_id`
+- **Iframe:** ✅ Same-origin frame traversal; cross-origin or detached frames become structured warnings with sampled iframe metadata
+- **Output contract:** ✅ Raw `PageSnapshot` + `element_refs` + warnings, then normalized into existing Pydantic models by `SnapshotNormalizer`
+- **HAR recording:** Not part of the current production path; rendered-layout remains independent
+- **Combined JS output:** `{ forms, interactive, target_sizes, moving_content, media, text_spacing, sensory }`
+- **Artifacts written:** `universal_snapshot_raw.json`, `universal_snapshot_normalized.json`, `universal_snapshot_warnings.json`, `combined_report.json` with `warning_details`, and Rich step logs
+- **Current limits:** closed shadow roots remain inaccessible by browser design; cross-origin frames are reported as limitations, not extracted
 
 ---
 
@@ -435,36 +455,50 @@ What it does NOT fix: two Python stages both emitting `1.4.12` findings for the 
 
 ## 6. Bug Report — Verified
 
-### BUG-001 · CRITICAL — `UniversalPageLoader` Exists But Is Never Called
+### BUG-001 · RESOLVED — `UniversalPageLoader` Is Now The Production Static Path
 
-**Files:** `universal_page.py` (805 lines), `stages.py`
+**Files:** `universal_page.py`, `snapshot_normalizer.py`, `stages.py`
 
-`grep -rn "UniversalPageLoader" ka11y/api/` → **0 matches**. Dead code. Nine separate Playwright contexts open instead.
+Historical issue: `UniversalPageLoader` originally existed as dead code while seven static crawler sessions still launched independently.
 
-```
-9 crawlers × (browser launch ~1s + page.goto ~3s + wait ~1.5–2s)
-= ~54s of redundant overhead running in the background
-```
+Current status:
+
+- `_load_universal_snapshot()` now wires the loader into the combined path
+- one shared static crawl now feeds forms, label-in-name, pause/stop/hide, target size, text spacing, media, and sensory checks
+- the redundant seven static page loads are gone from the combined pipeline
 
 ---
 
-### BUG-002 · HIGH — Shadow DOM Support Is Incomplete Across Both Legacy Crawlers And `UniversalPageLoader`
+### BUG-002 · PARTIALLY RESOLVED — Legacy Crawlers Still Lag, Production Universal Path Covers Open Shadow Roots
 
 **Files:** `forms_crawler.py:93`, `interactive_crawler.py:209`, `media_crawler.py`, `moving_content_crawler.py`, `target_size_crawler.py`, `sensory_crawler.py`, `universal_page.py`
 
-Six of the seven legacy static crawlers still use `document.querySelectorAll(...)`, so open shadow roots are invisible. `universal_page.py` only partially fixes this: forms / interactive / target sizes use `queryShadow()`, but moving content / media / text spacing still do not, and shadow-root label resolution is still document-scoped. Shadow coverage is therefore incomplete in both the current runtime and the current redesign draft.
+Historical issue: the legacy crawler set had poor open-shadow coverage.
+
+Current status:
+
+- the combined production path now relies on `UniversalPageLoader`, not the legacy static crawlers
+- live verification on Shoelace pages confirmed open shadow-root traversal through composed selectors
+- legacy standalone crawler classes still do not provide equivalent parity, so direct/debug usage remains weaker than the combined path
+- closed shadow roots remain inaccessible by design and must stay a documented limitation
 
 ---
 
-### BUG-003 · HIGH — WCAG 1.4.12 Double-Reported, Dedup Not Guaranteed
+### BUG-003 · RESOLVED / HARDENED — `1.4.12` Dedup No Longer Depends On HTML Prefix Alone
 
-**Files:** `stages.py:387–422`, `stages.py:425–518`
+**Files:** `findings.py`, `runner.py`, `stages.py`
 
-Both `AsyncTextSpacingCrawler` + `RenderedLayoutCrawler` emit findings tagged `wcag_sc="1.4.12"`. The `_merge_findings()` dedup uses `html[:120].lower()` as element signature. The two stages generate their `html_snippet` differently, so the signatures often differ → same element appears as two findings.
+Historical issue: structural and rendered `1.4.12` findings could double-report because merge keys depended too heavily on truncated HTML.
+
+Current status:
+
+- merge dedup now prefers `element_ref_id`, selector/target, and page-aware evidence before HTML fallback
+- the final combined report can still keep multiple `1.4.12` findings when they genuinely refer to different elements or different failure modes
+- residual risk now is evidence quality, not the old HTML-prefix-only merge key
 
 ---
 
-### BUG-004 · HIGH — Null Video Duration = False Positives (2.2.2)
+### BUG-004 · RESOLVED — Unknown Video Duration Downgrades To `needs_review`
 
 **File:** `moving_content_crawler.py` (JS)
 
@@ -475,7 +509,7 @@ if (vidDuration !== null && vidDuration <= 5) return;
 // WCAG 2.2.2 only applies to content > 5 seconds
 ```
 
-**Fix:** Add `duration_known: bool`. Auditor marks unknown-duration as `needs_review`.
+**Current status:** `duration_known` is carried through the moving-content model and the auditor now downgrades unknown-duration cases to `needs_review` instead of auto-failing them.
 
 ---
 
@@ -502,27 +536,29 @@ const formList = forms.length > 0 ? forms : [document.body];
 
 ---
 
-### BUG-007 · MEDIUM — Hardcoded CJK Text Spacing CSS
+### BUG-007 · RESOLVED — CJK Text Spacing CSS Is Config-Driven
 
 **File:** `rendered_layout_crawler.py:69–102`
 
-```css
-/* Not configurable — should come from languages/{lang}.yml text_spacing block */
-:lang(ja), :lang(zh), [lang="ja"], [lang="zh"] {
-    letter-spacing: normal !important;
-    word-spacing: normal !important;
-}
-```
+Current status:
 
-`PLUGPLAY_CONFIG_PLAN.md` defines `apply_letter_spacing: false` / `apply_word_spacing: false` for CJK — these flags should drive the CSS builder.
+- `build_text_spacing_cjk_selector_css()` now builds the override CSS from `crawler.language.cjk_langs`
+- the default config covers `ja`, `zh`, `zh-CN`, `zh-TW`, `zh-HK`, and `ko`
+- the rendered crawler no longer hardcodes a fixed JA/ZH selector list
 
 ---
 
-### BUG-008 · MEDIUM — No iFrame DOM Extraction (Except URL-Pattern Detection)
+### BUG-008 · PARTIALLY RESOLVED — Same-Origin iFrame DOM Extraction Exists, Cross-Origin Remains A Reported Limitation
 
 **Files:** `forms_crawler.py`, `interactive_crawler.py`, `media_crawler.py`
 
-`MovingContentCrawler` detects video platform iframes by URL pattern only. No crawler extracts DOM from within iframes. Forms in iframes, social buttons, custom video controls in iframes are all missed.
+Historical issue: the old crawler set did not extract iframe DOM content beyond limited URL-pattern heuristics.
+
+Current status:
+
+- the universal production path extracts same-origin frame DOM content and preserves `frame_path`
+- cross-origin frames are surfaced in `universal_snapshot_warnings.json` and `combined_report.json.warning_details`
+- cross-origin frame internals are still unavailable by browser security design and remain an expected limitation
 
 ---
 
@@ -599,7 +635,7 @@ print(f"[FormCrawler] Error on {url}: {exc}")  # all other crawlers use setup_lo
 
 ### NOT A BUG — `_merge_findings` Already Deduplicates Node vs Python
 
-Working correctly. BUG-003 is specifically about two Python stages producing duplicate 1.4.12 findings that `_merge_findings` can't catch because their element signatures differ.
+Working correctly. The historical `1.4.12` duplication problem was within Python-stage evidence quality, not node-vs-python merging.
 
 ### NOT A BUG — Stage Event Race Already Fixed
 
@@ -642,7 +678,7 @@ Background redundant load time  ≈ 40s across 8 extra browsers
 
 ---
 
-## 8. Proposed Architecture: Universal Production Crawler
+## 8. Architecture Status: Universal Production Crawler
 
 ### Design Principle
 > Load the static DOM once, extract across the full same-origin frame tree and open shadow roots, normalize into the current Pydantic models, and keep provenance in a sidecar so auditors stay unchanged while findings become deduplicable and production-traceable.
@@ -1242,9 +1278,11 @@ This preserves the current Japanese / CJK behavior instead of flattening it down
 
 ---
 
-## 11. Migration Plan (Phased)
+## 11. Migration Plan (Phased Status)
 
 ### Phase 0 — Correctness Hardening Before Cutover
+
+**Status:** Mostly completed in the production path. Remaining work is parity for some legacy standalone crawlers, not the combined endpoint.
 
 | Bug | File | Change |
 |-----|------|--------|
@@ -1259,6 +1297,8 @@ This preserves the current Japanese / CJK behavior instead of flattening it down
 
 ### Phase 1 — Build The Universal Raw Extraction Engine
 
+**Status:** Implemented.
+
 1. Keep `universal_page.py` as the entrypoint, but refactor it into a true `UniversalCrawlerEngine`.
 2. Add the missing `sensory` bucket.
 3. Traverse `page.frames()` and extract all same-origin frames.
@@ -1267,6 +1307,8 @@ This preserves the current Japanese / CJK behavior instead of flattening it down
 6. Persist `universal_raw_snapshot.json` for debugging and rollout diffing.
 
 ### Phase 2 — Normalize Into Existing Pydantic Models
+
+**Status:** Implemented via `snapshot_normalizer.py`.
 
 1. Implement `ka11y/crawler/snapshot_normalizer.py`.
 2. Convert every raw bucket into the existing models:
@@ -1283,6 +1325,8 @@ This preserves the current Japanese / CJK behavior instead of flattening it down
 
 ### Phase 3 — Integrate Into `stages.py`
 
+**Status:** Implemented for the combined endpoint.
+
 1. Replace the seven static crawler loads with one universal load when any static rule is enabled.
 2. Fan out the normalized model lists to the existing auditors in parallel.
 3. Keep `_stage_image_audit()` unchanged in this phase.
@@ -1291,6 +1335,8 @@ This preserves the current Japanese / CJK behavior instead of flattening it down
 6. Optional later optimization: pass `storage_state.json` once the image and rendered crawlers accept it.
 
 ### Phase 4 — Finding Enrichment And Deduplication
+
+**Status:** Implemented and then hardened further with page-aware merge keys and warning propagation.
 
 ```python
 def _finding_key(finding: dict) -> tuple[str, str, str]:
@@ -1315,14 +1361,17 @@ Rules for this phase:
 
 ### Phase 5 — Config And Language Externalization
 
-1. Implement `ka11y/config/loader.py` and load `config/crawlers.config.yml`.
-2. Create `config/languages/en.yml` and `config/languages/ja.yml`.
-3. Migrate current hardcoded EN / JA / CJK logic into config without changing behavior.
-4. Inject only the needed language assets into each extractor.
-5. Move rendered text-spacing CSS generation to language config.
-6. Add runtime-resolved site profiles for framework-specific selectors, consent banners, or known page-behavior quirks.
+**Status:** Partially implemented.
+
+1. `ka11y/utils/config_loader.py` now provides cached config loading with defensive copies.
+2. `ka11y/utils/crawler_settings.py` now exposes config-backed crawler budgets and CJK selector generation.
+3. Rendered text-spacing CSS generation is already driven from `crawler.language.cjk_langs`.
+4. Performance/reporting knobs are live in `config/config.yml`.
+5. Full per-language YAML assets and runtime site profiles remain future work.
 
 ### Phase 6 — Parity, Performance, And Rollout Gates
+
+**Status:** In progress.
 
 1. Add parity tests comparing legacy crawler output vs universal normalized output for all seven static rule families.
 2. Add dedicated fixtures for:
@@ -1340,55 +1389,35 @@ Rules for this phase:
    - bounded extraction payload size
    - bounded wait time
    - bounded memory growth on large pages
-4. Roll out behind a feature flag.
-5. Retire legacy static crawlers only after parity + performance gates pass.
+4. Expectation-driven live site validation is already in place through `scripts/live_stage_audit.py`.
+5. Legacy standalone static crawlers should only be retired after parity and debugging needs are fully closed.
 
 ---
 
-## 12. Files to Create / Modify
+## 12. Files Created / Modified
 
-### New Files
+### Created
 
 | File | Purpose |
 |------|---------|
-| `ka11y/crawler/extractor_protocol.py` | `RuleExtractor` Protocol |
-| `ka11y/crawler/element_ref.py` | Canonical element identity / provenance sidecar |
 | `ka11y/crawler/snapshot_normalizer.py` | Raw snapshot -> existing Pydantic models |
-| `ka11y/crawler/extractors/__init__.py` | `STATIC_EXTRACTORS` list |
-| `ka11y/crawler/extractors/forms.py` | `FormsExtractor` |
-| `ka11y/crawler/extractors/interactive.py` | `InteractiveExtractor` |
-| `ka11y/crawler/extractors/target_size.py` | `TargetSizeExtractor` |
-| `ka11y/crawler/extractors/moving_content.py` | `MovingContentExtractor` |
-| `ka11y/crawler/extractors/media.py` | `MediaExtractor` |
-| `ka11y/crawler/extractors/text_spacing.py` | `TextSpacingExtractor` |
-| `ka11y/crawler/extractors/sensory.py` | `SensoryExtractor` |
-| `ka11y/config/loader.py` | `KA11yConfig` class (replaces empty `config/__init__.py`) |
-| `config/crawlers.config.yml` | Extractor + independent crawler registry |
-| `config/languages/en.yml` | English keyword lists and text-spacing flags |
-| `config/languages/ja.yml` | Japanese keyword lists, instruction patterns, quote pairs, and text-spacing flags |
-| `tests/test_universal_snapshot_normalizer.py` | Verifies raw -> model normalization |
-| `tests/test_universal_crawler_parity.py` | Legacy crawler vs universal parity tests |
-| `tests/test_universal_shadow_iframe.py` | Shadow-root and iframe edge-case coverage |
+| `ka11y/utils/step_logger.py` | Rich-backed step logging persisted to run artifacts |
+| `scripts/live_stage_audit.py` | Real-site expectation runner for live validation |
+| `scripts/live_stage_plan.example.yml` | Live validation plan template |
 
-### Modified Files
+### Modified
 
 | File | What Changes | Bug Fixed |
 |------|-------------|-----------|
-| `ka11y/crawler/universal_page.py` | Refactor into frame-aware raw extractor; add `sensory`, sidecar identity, partial-extraction reporting | BUG-001, 012, 013, 014, 015 |
-| `ka11y/api/v1/combined/stages.py` | Replace 7 static crawler calls with one universal load + normalization path | BUG-001 |
-| `ka11y/api/v1/combined/findings.py` | Enrich findings with canonical element refs before dedup | BUG-003, 015 |
-| `ka11y/api/v1/combined/runner.py` | Use canonical dedup key instead of HTML-prefix-only fallback | BUG-003, 015 |
-| `ka11y/crawler/forms_crawler.py` | Shared shadow helpers, orphan controls, partial-extraction warnings, logger | BUG-002, 006, 010, 011 |
-| `ka11y/crawler/interactive_crawler.py` | Shared shadow helpers, partial-extraction warnings | BUG-002, 010 |
-| `ka11y/crawler/media_crawler.py` | Shared shadow helpers for parity baseline | BUG-002 |
-| `ka11y/crawler/moving_content_crawler.py` | `duration_known`, shared shadow helpers, better pause-control detection hooks | BUG-002, 004 |
-| `ka11y/crawler/target_size_crawler.py` | `Math.round` → `Math.ceil`, shared shadow helpers | BUG-002, 005 |
-| `ka11y/crawler/text_spacing_crawler.py` | Shared shadow helpers for parity baseline | BUG-002 |
-| `ka11y/crawler/sensory_crawler.py` | Shared shadow helpers for parity baseline | BUG-002 |
-| `ka11y/crawler/rendered_layout_crawler.py` | Config-driven text-spacing CSS builder | BUG-007 |
-| `ka11y/accessibility/rules/media/media_auditor.py` | Config-based transcript / alternative keywords | Config |
-| `ka11y/accessibility/rules/non_text/sensory_auditor.py` | Config-based JA / EN sensory assets without losing current heuristics | Config |
-| `tests/test_combined_findings.py` | Add canonical dedup coverage for `1.4.12` | BUG-003 |
+| `ka11y/crawler/universal_page.py` | Production universal static extraction, same-origin frames, warning metadata, and provenance sidecars | BUG-001, 008 |
+| `ka11y/api/v1/combined/stages.py` | Shared universal snapshot loading, warning sampling, and OCR-budget logging | BUG-001, 004 |
+| `ka11y/api/v1/combined/findings.py` | Provenance-aware finding enrichment from normalized records | BUG-003 |
+| `ka11y/api/v1/combined/runner.py` | Stronger dedup keys and final `warning_details` propagation | BUG-003 |
+| `ka11y/crawler/rendered_layout_crawler.py` | Config-driven text-spacing CSS and safer focus/hover probing | BUG-007 |
+| `ka11y/text_detector/text_detector.py` | OCR candidate allowlist support for large-page budgets | Performance |
+| `ka11y/utils/crawler_settings.py` | Config-backed hover/focus/OCR/warning limits and CJK selector builder | Config |
+| `ka11y/utils/config_loader.py` | Cached config loading with defensive copies | Config |
+| `ka11y/config/config.yml` | Live crawler performance/reporting/language knobs | Config |
 
 ---
 
