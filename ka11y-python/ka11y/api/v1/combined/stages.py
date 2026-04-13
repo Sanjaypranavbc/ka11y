@@ -165,7 +165,10 @@ async def _stage_image_audit(
         from ka11y.accessibility.rules.non_text.alttext import (
             AltTextAccessibilityAuditor,
         )
-        from ka11y.crawler.crawler import AsyncImageCrawler
+        from ka11y.crawler.crawler import (
+            AsyncImageCrawler,
+            ImageCrawlerNavigationError,
+        )
         from ka11y.text_detector.text_detector import (
             OCRPreprocessing,
             TextClassification,
@@ -260,6 +263,21 @@ async def _stage_image_audit(
 
         _stage_complete(job_id, "image_audit", len(findings))
         return findings, contrast_report
+    except ImageCrawlerNavigationError as _exc:
+        if step_logger:
+            step_logger.record(
+                step="image_audit",
+                status="warning",
+                message="Image crawl could not resolve or load the target page",
+                context={
+                    "code": getattr(_exc, "code", None),
+                    "url": getattr(_exc, "url", url),
+                    "host": getattr(_exc, "host", None),
+                    "attempts": getattr(_exc, "attempts", None),
+                },
+            )
+        _stage_error_and_warn(job_id, "image_audit", _exc)
+        return [], None
     except Exception as _exc:
         _stage_error_and_warn(job_id, "image_audit", _exc)
         return [], None

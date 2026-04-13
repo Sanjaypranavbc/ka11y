@@ -3,6 +3,7 @@ import json
 import csv
 import hashlib
 import asyncio
+import socket
 from urllib.parse import urljoin, urlparse
 from playwright.async_api import async_playwright
 
@@ -36,6 +37,18 @@ CONFIG = load_config()
 
 console = Console(force_terminal=True)
 logger = setup_logger(name="KAC", tag="crawler")
+
+_DNS_PRECHECK_ATTEMPTS = 3
+_NAVIGATION_ATTEMPTS = 2
+_NAVIGATION_BACKOFF_SECONDS = (1.0, 2.0)
+_RETRYABLE_NAVIGATION_TOKENS = (
+    "ERR_NAME_NOT_RESOLVED",
+    "ERR_NETWORK_CHANGED",
+    "ERR_CONNECTION_RESET",
+    "ERR_CONNECTION_TIMED_OUT",
+    "ERR_INTERNET_DISCONNECTED",
+    "NS_ERROR_UNKNOWN_HOST",
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +93,41 @@ class _CR:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+class ImageCrawlerNavigationError(RuntimeError):
+    """Raised when the image crawler cannot resolve or load the target page."""
+
+    def __init__(
+        self,
+        *,
+        code: str,
+        url: str,
+        host: str | None,
+        original_message: str,
+        attempts: int,
+    ) -> None:
+        self.code = code
+        self.url = url
+        self.host = host
+        self.original_message = original_message
+        self.attempts = attempts
+        super().__init__(self._build_message())
+
+    def _build_message(self) -> str:
+        host_part = f" host={self.host}" if self.host else ""
+        if self.code == "dns_resolution_failed":
+            return (
+                f"dns_resolution_failed{host_part} url={self.url}; image crawl could not "
+                f"resolve the hostname after {self.attempts} attempt(s), so OCR and "
+                f"image-audit checks were skipped. Original error: {self.original_message}"
+            )
+        return (
+            f"page_navigation_failed{host_part} url={self.url}; image crawl could not load "
+            f"the page after {self.attempts} attempt(s), so OCR and image-audit checks were "
+            f"skipped. Original error: {self.original_message}"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 class AsyncImageCrawler:
 
     def __init__(self, base_url: str, max_depth: int):
@@ -107,6 +155,135 @@ class AsyncImageCrawler:
         dirs.append(base / "metadata")
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _host_from_url(url: str) -> str | None:
+        parsed = urlparse(url)
+        return parsed.hostname or None
+
+    @staticmethod
+    def _is_retryable_navigation_error(message: str) -> bool:
+        upper = str(message or "").upper()
+        return any(token in upper for token in _RETRYABLE_NAVIGATION_TOKENS)
+
+    def _build_navigation_error(
+        self,
+        exc: Exception,
+        *,
+        attempts: int,
+    ) -> ImageCrawlerNavigationError:
+        message = str(exc)
+        upper = message.upper()
+        code = (
+            "dns_resolution_failed"
+            if "ERR_NAME_NOT_RESOLVED" in upper or "NS_ERROR_UNKNOWN_HOST" in upper
+            else "page_navigation_failed"
+        )
+        return ImageCrawlerNavigationError(
+            code=code,
+            url=self.base_url,
+            host=self._host_from_url(self.base_url),
+            original_message=message,
+            attempts=attempts,
+        )
+
+    async def _dns_preflight(self) -> None:
+        host = self._host_from_url(self.base_url)
+        if not host:
+            raise ImageCrawlerNavigationError(
+                code="dns_resolution_failed",
+                url=self.base_url,
+                host=None,
+                original_message="URL has no hostname component",
+                attempts=1,
+            )
+
+        last_error: Exception | None = None
+        for attempt in range(1, _DNS_PRECHECK_ATTEMPTS + 1):
+            try:
+                await asyncio.to_thread(
+                    socket.getaddrinfo,
+                    host,
+                    443,
+                    0,
+                    socket.SOCK_STREAM,
+                )
+                return
+            except socket.gaierror as exc:
+                last_error = exc
+                if attempt >= _DNS_PRECHECK_ATTEMPTS:
+                    break
+                delay = _NAVIGATION_BACKOFF_SECONDS[min(attempt - 1, len(_NAVIGATION_BACKOFF_SECONDS) - 1)]
+                logger.warning(
+                    "DNS preflight failed for %s on attempt %s/%s: %s. Retrying in %.1fs",
+                    host,
+                    attempt,
+                    _DNS_PRECHECK_ATTEMPTS,
+                    exc,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+            except Exception as exc:
+                last_error = exc
+                break
+
+        raise ImageCrawlerNavigationError(
+            code="dns_resolution_failed",
+            url=self.base_url,
+            host=host,
+            original_message=str(last_error or "unknown DNS resolution error"),
+            attempts=_DNS_PRECHECK_ATTEMPTS,
+        )
+
+    async def _goto_with_resilience(self, page) -> None:
+        await self._dns_preflight()
+        last_error: Exception | None = None
+        attempts_used = 0
+
+        for attempt in range(1, _NAVIGATION_ATTEMPTS + 1):
+            attempts_used = attempt
+            timeout_ms = 30_000 if attempt == 1 else 60_000
+            try:
+                await page.goto(
+                    self.base_url,
+                    wait_until="domcontentloaded",
+                    timeout=timeout_ms,
+                )
+                if attempt == 1:
+                    console.print(f"  [green]✓[/green] Page loaded (domcontentloaded)")
+                    logger.info("Page loaded (domcontentloaded strategy)")
+                else:
+                    console.print(
+                        f"  [yellow]⚠[/yellow] Page loaded (retry attempt {attempt}/{_NAVIGATION_ATTEMPTS})"
+                    )
+                    logger.info(
+                        "Page loaded after retry attempt %s/%s",
+                        attempt,
+                        _NAVIGATION_ATTEMPTS,
+                    )
+                return
+            except Exception as exc:
+                last_error = exc
+                if attempt >= _NAVIGATION_ATTEMPTS:
+                    break
+
+                delay = _NAVIGATION_BACKOFF_SECONDS[min(attempt - 1, len(_NAVIGATION_BACKOFF_SECONDS) - 1)]
+                logger.warning(
+                    "Page load failed for %s on attempt %s/%s: %s. Retrying in %.1fs",
+                    self.base_url,
+                    attempt,
+                    _NAVIGATION_ATTEMPTS,
+                    exc,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                if self._is_retryable_navigation_error(str(exc)):
+                    await self._dns_preflight()
+
+        raise self._build_navigation_error(
+            last_error or RuntimeError("unknown page navigation error"),
+            attempts=attempts_used or 1,
+        )
 
     # ── visibility check ──────────────────────────────────────────────────────
     async def _is_visible(self, element) -> bool:
@@ -323,22 +500,7 @@ class AsyncImageCrawler:
 
             # ── page load ──
             console.print(Rule("[dim]Loading page[/dim]"))
-            try:
-                await page.goto(
-                    self.base_url, wait_until="domcontentloaded", timeout=30_000
-                )
-                console.print(f"  [green]✓[/green] Page loaded (domcontentloaded)")
-                logger.info("Page loaded (domcontentloaded strategy)")
-            except Exception as e:
-                logger.warning(
-                    f"'load' timed out: {e}  — retrying with domcontentloaded"
-                )
-                await page.goto(
-                    self.base_url, wait_until="domcontentloaded", timeout=60_000
-                )
-                console.print(
-                    f"  [yellow]⚠[/yellow] Page loaded (domcontentloaded fallback)"
-                )
+            await self._goto_with_resilience(page)
 
             await page.wait_for_timeout(1_000)
             await self._trigger_lazy_loading(page)
