@@ -84,7 +84,10 @@ def get_image_crawler(
     """Provide an AsyncImageCrawler scoped to this request's output dir."""
     from ka11y.crawler.crawler import AsyncImageCrawler
 
-    return AsyncImageCrawler(base_url=url, max_depth=max_depth)
+    crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
+    crawler.output_dir = str(output_dir)
+    Path(crawler.output_dir).mkdir(parents=True, exist_ok=True)
+    return crawler
 
 
 def get_form_crawler(

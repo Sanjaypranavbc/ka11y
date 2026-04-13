@@ -16,7 +16,7 @@ Dependencies are provided via FastAPI's DI system (see api/dependencies.py).
 import traceback
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import HttpUrl
 
 from ka11y.crawler.crawler import AsyncImageCrawler
@@ -27,6 +27,7 @@ from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassificati
 from ka11y.config.logger import setup_logger
 
 from ka11y.api.v1.dependencies import (
+    get_config,
     get_output_dir,
     get_image_crawler,
     get_alt_text_auditor,
@@ -45,15 +46,15 @@ logger = setup_logger(name="KAC", tag="crawl")
 @router.post("/", response_model=CrawlResponse)
 async def run_crawler(
     payload: CrawlRequest,
-    # ── injected dependencies ──────────────────────────────────────────────
-    output_dir: Path = Depends(get_output_dir),
-    crawler: AsyncImageCrawler = Depends(get_image_crawler),
-    auditor: AltTextAccessibilityAuditor = Depends(get_alt_text_auditor),
-    form_crawler: AsyncFormCrawler = Depends(get_form_crawler),
-    form_auditor: FormAccessibilityAuditor = Depends(get_form_auditor),
 ):
     url = str(payload.url)
     max_depth = payload.max_depth
+    config = get_config()
+    output_dir = get_output_dir(url, config)
+    crawler = get_image_crawler(url, max_depth, output_dir)
+    auditor = get_alt_text_auditor()
+    form_crawler = get_form_crawler(url, max_depth, output_dir)
+    form_auditor = get_form_auditor(output_dir)
 
     logger.info("=" * 60)
     logger.info("KA11Y PIPELINE START")

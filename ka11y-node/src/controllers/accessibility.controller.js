@@ -345,6 +345,50 @@ class AccessibilityController {
       });
     }
   }
+
+  async analyseRuleUrl(req, res) {
+    const { successCriteriaId } = req.params;
+    const { url } = req.body;
+
+    if (!/^\d+\.\d+\.\d+$/.test(successCriteriaId || '')) {
+      return res.status(400).json({ error: 'successCriteriaId must match format X.Y.Z (e.g. "1.1.1")' });
+    }
+
+    if (!url || typeof url !== 'string') {
+      this._logger.warn('analyseRuleUrl rejected: url field missing or not a string');
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      this._logger.warn(`analyseRuleUrl rejected: invalid URL "${url}"`);
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      this._logger.warn(`analyseRuleUrl rejected: unsupported protocol "${parsedUrl.protocol}"`);
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    try {
+      this._logger.info(`analyseRuleUrl start url=${url} successCriteriaId=${successCriteriaId}`);
+      const results = await this._service.analyseUrl(url, successCriteriaId);
+      this._logger.info(`analyseRuleUrl done results=${results.length}`);
+      res.json({ url, successCriteriaId, results });
+    } catch (err) {
+      if (err instanceof SsrfGuardError) {
+        this._logger.warn(`analyseRuleUrl rejected (SSRF guard): ${err.message}`);
+        return res.status(400).json({ error: 'Invalid URL', message: err.message });
+      }
+      this._logger.error(`analyseRuleUrl failed: ${err.message}`);
+      res.status(500).json({
+        error: 'URL accessibility analysis failed',
+        message: err.message,
+      });
+    }
+  }
 }
 
 module.exports = AccessibilityController;
