@@ -15,6 +15,10 @@ By the end you will have:
   The worked example is simplified for clarity. Your crawler and auditor may be more complex — follow the same structural pattern.
 </Note>
 
+<Note>
+  If you are adding or modifying a Node custom check instead of a Python auditor, do not hardcode language-specific keywords in the JS source. Put shared thresholds, EN/JA keyword lists, and localized reason templates in `config/universal.yml`, and keep WCAG metadata in the shared repo-root `i18n/`.
+</Note>
+
 ---
 
 ## Overview: the files you touch
