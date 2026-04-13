@@ -239,6 +239,7 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
       element_id: 'hero',
       tag: 'IMG',
       target: ['#hero'],
+      selector: '#hero',
       page_url: 'https://example.com',
     });
     expect(findings[1].element).toEqual({
@@ -246,6 +247,7 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
       element_id: null,
       tag: 'IMG',
       target: ['header img.logo'],
+      selector: 'header img.logo',
       page_url: 'https://example.com',
     });
   });
@@ -280,6 +282,9 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: 'save',
       tag: 'BUTTON',
       target: ['#save'],
+      selector: '#save',
+      source: null,
+      media_query: null,
       page_url: 'https://example.com',
     });
     expect(findings[1].element).toEqual({
@@ -287,6 +292,9 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: null,
       tag: 'a',
       target: ['.cta'],
+      selector: '.cta',
+      source: null,
+      media_query: null,
       page_url: 'https://example.com',
     });
   });
@@ -310,6 +318,9 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: 'podcast-player',
       tag: 'AUDIO',
       target: [],
+      selector: null,
+      source: null,
+      media_query: null,
       page_url: 'https://example.com',
     });
   });
@@ -333,6 +344,9 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: null,
       tag: 'HTML',
       target: ['html'],
+      selector: null,
+      source: null,
+      media_query: null,
       page_url: 'https://example.com',
     });
   });

@@ -149,7 +149,7 @@ class AccessibilityController {
    *               message: Protocol error — browser context was destroyed
    */
   async analyze(req, res) {
-    const { html, successCriteriaId } = req.body;
+    const { html, successCriteriaId, lang = 'en' } = req.body;
 
     if (!html || typeof html !== 'string') {
       this._logger.warn('analyze rejected: html field missing or not a string');
@@ -162,8 +162,9 @@ class AccessibilityController {
 
     try {
       const filter = successCriteriaId ?? null;
-      this._logger.info(`analyze start successCriteriaId=${filter ?? 'none'} htmlLength=${html.length}`);
-      const results = await this._service.analyze(html, filter);
+      const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
+      this._logger.info(`analyze start successCriteriaId=${filter ?? 'none'} lang=${safeLang} htmlLength=${html.length}`);
+      const results = await this._service.analyze(html, filter, safeLang);
       this._logger.info(`analyze done results=${results.length}`);
       res.json({ results });
     } catch (err) {
@@ -307,7 +308,7 @@ class AccessibilityController {
   }
 
   async analyseUrl(req, res) {
-    const { url, successCriteriaId } = req.body;
+    const { url, successCriteriaId, lang = 'en' } = req.body;
 
     if (!url || typeof url !== 'string') {
       this._logger.warn('analyseUrl rejected: url field missing or not a string');
@@ -333,8 +334,9 @@ class AccessibilityController {
 
     try {
       const filter = successCriteriaId ?? null;
-      this._logger.info(`analyseUrl start url=${url} successCriteriaId=${filter ?? 'none'}`);
-      const results = await this._service.analyseUrl(url, filter);
+      const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
+      this._logger.info(`analyseUrl start url=${url} successCriteriaId=${filter ?? 'none'} lang=${safeLang}`);
+      const results = await this._service.analyseUrl(url, filter, safeLang);
       this._logger.info(`analyseUrl done results=${results.length}`);
       res.json({ url, results });
     } catch (err) {
@@ -356,7 +358,7 @@ class AccessibilityController {
 
   async analyseRuleUrl(req, res) {
     const { successCriteriaId } = req.params;
-    const { url } = req.body;
+    const { url, lang = 'en' } = req.body;
 
     if (!/^\d+\.\d+\.\d+$/.test(successCriteriaId || '')) {
       return res.status(400).json({ error: 'successCriteriaId must match format X.Y.Z (e.g. "1.1.1")' });
@@ -381,8 +383,9 @@ class AccessibilityController {
     }
 
     try {
-      this._logger.info(`analyseRuleUrl start url=${url} successCriteriaId=${successCriteriaId}`);
-      const results = await this._service.analyseUrl(url, successCriteriaId);
+      const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
+      this._logger.info(`analyseRuleUrl start url=${url} successCriteriaId=${successCriteriaId} lang=${safeLang}`);
+      const results = await this._service.analyseUrl(url, successCriteriaId, safeLang);
       this._logger.info(`analyseRuleUrl done results=${results.length}`);
       res.json({ url, successCriteriaId, results });
     } catch (err) {

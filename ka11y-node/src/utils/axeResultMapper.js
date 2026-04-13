@@ -532,21 +532,26 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
       : (typeof raw.outerHTML === 'string'
         ? raw.outerHTML.slice(0, 600)
         : (typeof raw.snippet === 'string' ? raw.snippet.slice(0, 600) : ''));
-    const selector = typeof raw.selector === 'string' ? raw.selector : null;
     const target = Array.isArray(raw.target)
       ? raw.target
       : (typeof raw.target === 'string'
         ? [raw.target]
-        : (selector ? [selector] : []));
+        : []);
+    const selector = typeof raw.selector === 'string'
+      ? raw.selector
+      : (typeof target[0] === 'string' ? target[0] : null);
+    const normalizedTarget = target.length > 0
+      ? target
+      : (selector ? [selector] : []);
     const elementId = raw.element_id || raw.id || extractIdFromTarget(target) || null;
     const tag = raw.tag || raw.tagName || extractTag(html);
 
-    if (!html && !elementId && target.length === 0 && !tag && !selector) return null;
+    if (!html && !elementId && normalizedTarget.length === 0 && !tag && !selector) return null;
     return {
       html,
       element_id: elementId,
       tag: typeof tag === 'string' ? tag : null,
-      target,
+      target: normalizedTarget,
       selector,
       source: raw.source || null,
       media_query: raw.mediaQuery || raw.media_query || null,
@@ -574,6 +579,9 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
         element_id: elementId,
         tag,
         target: [],
+        selector: null,
+        source: null,
+        media_query: null,
         page_url: pageUrl,
       });
       if (inferred.length >= 3) break;
@@ -587,6 +595,9 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
       element_id: null,
       tag: 'HTML',
       target: ['html'],
+      selector: null,
+      source: null,
+      media_query: null,
       page_url: pageUrl,
     };
   }

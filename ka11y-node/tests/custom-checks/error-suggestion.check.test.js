@@ -1,6 +1,7 @@
 'use strict';
 
 const { run } = require('../../src/custom-checks/error-suggestion.check');
+const { getKeywordList } = require('../../src/custom-checks/sharedAssets');
 
 function makePage(data) {
   return { evaluate: jest.fn().mockResolvedValue(data) };
@@ -117,13 +118,11 @@ describe('error-suggestion.check (WCAG 3.3.3)', () => {
     });
   });
 
-  test('includes Japanese correction/error keywords in source heuristics', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/error-suggestion.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('入力してください');
-    expect(src).toContain('有効な');
-    expect(src).toContain('必須');
+  test('loads Japanese correction/error keywords from shared universal config', () => {
+    const suggestionKeywords = getKeywordList('error_suggestion', 'suggestion_keywords');
+    const terseKeywords = getKeywordList('error_suggestion', 'terse_keywords');
+    expect(suggestionKeywords).toContain('入力してください');
+    expect(suggestionKeywords).toContain('有効なメール');
+    expect(terseKeywords).toContain('必須');
   });
 });

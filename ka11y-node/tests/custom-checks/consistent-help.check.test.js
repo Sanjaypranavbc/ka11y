@@ -1,6 +1,7 @@
 'use strict';
 
 const { run } = require('../../src/custom-checks/consistent-help.check');
+const { getKeywordList } = require('../../src/custom-checks/sharedAssets');
 
 function makePage(data) {
   return { evaluate: jest.fn().mockResolvedValue(data) };
@@ -44,13 +45,11 @@ describe('consistent-help.check (WCAG 3.2.6)', () => {
     expect(result.rules[0].reason).toContain('header');
   });
 
-  test('includes Japanese help keywords in source heuristics', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/consistent-help.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('お問い合わせ');
-    expect(src).toContain('ヘルプセンター');
-    expect(src).toContain('チャット');
+  test('loads Japanese help keywords from shared universal config', () => {
+    const helpKeywords = getKeywordList('consistent_help', 'help_keywords');
+    const chatKeywords = getKeywordList('consistent_help', 'chat_keywords');
+    expect(helpKeywords).toContain('お問い合わせ');
+    expect(helpKeywords).toContain('ヘルプセンター');
+    expect(chatKeywords).toContain('チャット');
   });
 });

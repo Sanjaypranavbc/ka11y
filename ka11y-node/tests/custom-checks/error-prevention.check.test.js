@@ -1,6 +1,7 @@
 'use strict';
 
 const { run } = require('../../src/custom-checks/error-prevention.check');
+const { getKeywordList } = require('../../src/custom-checks/sharedAssets');
 
 function makePage(data) {
   return { evaluate: jest.fn().mockResolvedValue(data) };
@@ -42,5 +43,11 @@ describe('error-prevention.check (WCAG 3.3.4)', () => {
     const result = await run(page);
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('destructive');
+  });
+
+  test('loads Japanese high-risk form keywords from shared universal config', () => {
+    expect(getKeywordList('error_prevention', 'financial_keywords')).toContain('購入');
+    expect(getKeywordList('error_prevention', 'legal_keywords')).toContain('利用規約');
+    expect(getKeywordList('error_prevention', 'destructive_keywords')).toContain('アカウント削除');
   });
 });

@@ -166,7 +166,7 @@ class AccessibilityService {
    * @param {string|null} [criteriaId]  - Optional WCAG SC filter (e.g. "1.1.1")
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
-  async analyze(html, criteriaId = null) {
+  async analyze(html, criteriaId = null, lang = 'en') {
     const { timeoutMs, runOnly } = this._config.axe;
     let browser = null;
 
@@ -215,7 +215,7 @@ class AccessibilityService {
       );
 
       this._logger.info('Running static custom checks...');
-      const customResults = await runStaticChecks(page);
+      const customResults = await runStaticChecks(page, { lang });
       const filteredCustom = criteriaId
         ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
         : customResults;
@@ -241,7 +241,7 @@ class AccessibilityService {
    * @param {string|null} [criteriaId]  - Optional WCAG SC filter (e.g. "1.1.1")
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
-  async analyseUrl(url, criteriaId = null) {
+  async analyseUrl(url, criteriaId = null, lang = 'en') {
     const { timeoutMs, runOnly } = this._config.axe;
     let browser = null;
 
@@ -297,7 +297,7 @@ class AccessibilityService {
       );
 
       this._logger.info('Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page);
+      const customResults = await runAll(page, { lang });
       const filteredCustom = criteriaId
         ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
         : customResults;
@@ -379,7 +379,7 @@ class AccessibilityService {
       );
 
       this._logger.info('[flat] Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page);
+      const customResults = await runAll(page, { lang });
       const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);
       const allowedLevels = _allowedLevels(level);
       const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));

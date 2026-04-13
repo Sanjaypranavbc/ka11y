@@ -1,17 +1,36 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+} = require('./sharedAssets');
+
 const SC = '2.4.8';
 const RULE_ID = 'custom-location';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/location';
 
-async function run(page) {
-  const data = await page.evaluate(() => {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const breadcrumbPattern = buildKeywordPattern(
+    getKeywordList('location', 'breadcrumb_keywords', sharedContext)
+  ) || 'breadcrumb|パンくず';
+  const sitemapPattern = buildKeywordPattern(
+    getKeywordList('location', 'sitemap_keywords', sharedContext)
+  ) || 'sitemap|site\\s*map|サイトマップ';
+
+  const data = await page.evaluate((patterns) => {
+    const breadcrumbRe = new RegExp(patterns.breadcrumbPattern, 'i');
+    const sitemapRe = new RegExp(patterns.sitemapPattern, 'i');
     // 1. Breadcrumb navigation — explicit aria-label or class patterns
     const hasBreadcrumb = !!(
-      document.querySelector('[aria-label*="breadcrumb" i]') ||
-      document.querySelector('[aria-label*="パンくず" i]') ||
       document.querySelector('[class*="breadcrumb" i]') ||
-      document.querySelector('[class*="パンくず" i], [id*="パンくず" i], [class*="pan-kuzu" i], [class*="panku-zu" i], [id*="pan-kuzu" i], [id*="panku-zu" i]') ||
+      document.querySelector('[class*="pan-kuzu" i], [class*="panku-zu" i], [id*="pan-kuzu" i], [id*="panku-zu" i]') ||
+      Array.from(document.querySelectorAll('[class], [id], [aria-label]')).some(el =>
+        breadcrumbRe.test(el.getAttribute('class') || '') ||
+        breadcrumbRe.test(el.getAttribute('id') || '') ||
+        breadcrumbRe.test(el.getAttribute('aria-label') || '')
+      ) ||
       document.querySelector('[itemtype*="BreadcrumbList"]') ||
       document.querySelector('nav [aria-current="page"]') // current page in nav = location indicator
     );
@@ -29,8 +48,12 @@ async function run(page) {
 
     // 4. Sitemap or location landmark (rare but valid)
     const hasSiteMap = !!(
-      document.querySelector('a[href*="sitemap" i], a[href*="site-map" i], a[href*="サイトマップ" i]') ||
-      document.querySelector('[aria-label*="site map" i], [aria-label*="sitemap" i], [aria-label*="サイトマップ" i]')
+      document.querySelector('a[href*="sitemap" i], a[href*="site-map" i], a[href*="site map" i], a[href*="サイトマップ" i]') ||
+      Array.from(document.querySelectorAll('a, [aria-label]')).some(el =>
+        sitemapRe.test(el.textContent || '') ||
+        sitemapRe.test(el.getAttribute('href') || '') ||
+        sitemapRe.test(el.getAttribute('aria-label') || '')
+      )
     );
 
     // 5. aria-current="step" — indicates current step in a multi-step process
@@ -56,7 +79,7 @@ async function run(page) {
       hasJsonLdBreadcrumb,
       hasLocationIndicator,
     };
-  });
+  }, { breadcrumbPattern, sitemapPattern });
 
   if (data.hasLocationIndicator) {
     const mechanisms = [

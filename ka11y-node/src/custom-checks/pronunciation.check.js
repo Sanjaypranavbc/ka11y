@@ -108,13 +108,13 @@ async function run(page, context = {}) {
       }
     }
 
-    const cjkSectionSelector = langPrefixes
-      .map(prefix => `[lang^="${String(prefix).toLowerCase()}"]`)
-      .join(', ');
     const cjkSectionIssues = [];
 
-    if (!isCjkPage && cjkSectionSelector) {
-      const cjkSections = document.querySelectorAll(cjkSectionSelector);
+    if (!isCjkPage) {
+      const cjkSections = Array.from(document.querySelectorAll('[lang]')).filter(section => {
+        const sectionLang = (section.getAttribute('lang') || '').toLowerCase();
+        return langPrefixes.some(prefix => sectionLang.startsWith(String(prefix).toLowerCase()));
+      });
       for (const section of cjkSections) {
         const secRubyEls = Array.from(section.querySelectorAll('ruby'));
         const secText = (section.innerText || section.textContent || '').trim();

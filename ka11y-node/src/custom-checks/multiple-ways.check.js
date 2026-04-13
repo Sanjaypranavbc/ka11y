@@ -53,15 +53,27 @@ async function run(page, context = {}) {
 
     // Additional navigation mechanisms per WCAG 2.4.5 technique list
     const hasBreadcrumb = !!(
-      document.querySelector('[class*="breadcrumb" i], [id*="breadcrumb" i], [class*="パンくず" i], [id*="パンくず" i]') ||
+      Array.from(document.querySelectorAll('[class], [id], [aria-label]')).some(el =>
+        breadcrumbRe.test(el.getAttribute('class') || '') ||
+        breadcrumbRe.test(el.getAttribute('id') || '') ||
+        breadcrumbRe.test(el.getAttribute('aria-label') || '')
+      ) ||
       Array.from(document.querySelectorAll('[aria-label]')).some(el => breadcrumbRe.test(el.getAttribute('aria-label') || '')) ||
-      document.querySelector('nav[aria-label*="breadcrumb" i]') ||
+      Array.from(document.querySelectorAll('nav[aria-label], [role="navigation"][aria-label]')).some(el =>
+        breadcrumbRe.test(el.getAttribute('aria-label') || '')
+      ) ||
       // Schema.org breadcrumb structured data
       document.querySelector('[itemtype*="BreadcrumbList"]')
     );
 
     const hasTableOfContents = !!(
-      document.querySelector('[aria-label*="table of contents" i], [aria-label*="目次" i], [id*="toc" i], [class*="toc" i], [id*="目次" i], [class*="目次" i]') ||
+      document.querySelector('[id*="toc" i], [class*="toc" i]') ||
+      Array.from(document.querySelectorAll('[class], [id], [aria-label]')).some(el =>
+        tocRe.test(el.getAttribute('class') || '') ||
+        tocRe.test(el.getAttribute('id') || '') ||
+        tocRe.test(el.getAttribute('aria-label') || '')
+      ) ||
+      Array.from(document.querySelectorAll('[aria-label]')).some(el => tocRe.test(el.getAttribute('aria-label') || '')) ||
       Array.from(document.querySelectorAll('a')).some(a =>
         tocRe.test(a.textContent || '')
       )

@@ -44,6 +44,24 @@ def get_cjk_langs() -> list[str]:
     return langs or ["ja", "zh", "zh-CN", "zh-TW", "zh-HK", "ko"]
 
 
+def get_check_config_value(check_key: str, *path: str, default: Any = None) -> Any:
+    return get_config_value("checks", check_key, *path, default=default)
+
+
+def get_localized_check_terms(check_key: str, term_key: str) -> list[str]:
+    raw = get_check_config_value(check_key, term_key, default=[])
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    if not isinstance(raw, dict):
+        return []
+
+    terms: list[str] = []
+    for values in raw.values():
+        if isinstance(values, list):
+            terms.extend(str(item).strip() for item in values if str(item).strip())
+    return list(dict.fromkeys(terms))
+
+
 def get_max_warning_samples() -> int:
     return get_int_config(
         "crawler",

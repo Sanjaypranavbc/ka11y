@@ -3,17 +3,14 @@
 const { run } = require('../../src/custom-checks/orientation.check');
 
 function makePage(...values) {
-  return {
-    evaluate: jest.fn()
-      .mockResolvedValueOnce(values[0])
-      .mockResolvedValueOnce(values[1])
-      .mockResolvedValueOnce(values[2]),
-  };
+  const evaluate = jest.fn();
+  values.forEach(value => evaluate.mockResolvedValueOnce(value));
+  return { evaluate };
 }
 
 describe('orientation.check (WCAG 1.3.4)', () => {
   test('passes when no manifest or DOM orientation locks are found', async () => {
-    const page = makePage(null, null, []);
+    const page = makePage(null, []);
     const result = await run(page);
 
     expect(result.successCriteriaId).toBe('1.3.4');
@@ -40,7 +37,7 @@ describe('orientation.check (WCAG 1.3.4)', () => {
   });
 
   test('marks CSS orientation media queries as needs review', async () => {
-    const page = makePage(null, null, [{
+    const page = makePage(null, [{
       type: 'css-media-structural',
       target: '.app-shell',
       selector: '.app-shell',
