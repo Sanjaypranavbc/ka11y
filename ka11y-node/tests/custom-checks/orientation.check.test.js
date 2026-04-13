@@ -57,4 +57,16 @@ describe('orientation.check (WCAG 1.3.4)', () => {
       mediaQuery: '(orientation: landscape)',
     });
   });
+
+  test('localizes reasons to Japanese when lang=ja', async () => {
+    const page = makePage(
+      'https://example.com/manifest.json',
+      JSON.stringify({ orientation: 'portrait' }),
+      [],
+    );
+    const result = await run(page, { lang: 'ja' });
+    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].reason).toContain('単一の画面向き');
+    expect(result.rules[0].reason).toContain('portrait');
+  });
 });

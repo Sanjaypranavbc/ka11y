@@ -28,6 +28,8 @@ const I18N_DIR = process.env.KA11Y_I18N_DIR || DEFAULT_I18N_DIR;
 
 /** @type {Map<string, Record<string, object>>} */
 const _cache = new Map();
+/** @type {Map<string, object>} */
+const _localeCache = new Map();
 
 /**
  * Safely parse a YAML file. Returns {} on any error so callers never crash.
@@ -90,6 +92,26 @@ function getRules(lang = 'en') {
   return merged;
 }
 
+function getLocaleData(lang = 'en') {
+  const safeLang = String(lang || 'en').replace(/[^a-zA-Z-]/g, '').slice(0, 10) || 'en';
+  if (_localeCache.has(safeLang)) return _localeCache.get(safeLang);
+  if (safeLang === 'en') {
+    const empty = {};
+    _localeCache.set(safeLang, empty);
+    return empty;
+  }
+
+  const localePath = path.join(I18N_DIR, 'locales', `${safeLang}.yml`);
+  const locale = _loadYaml(localePath);
+  _localeCache.set(safeLang, locale);
+  return locale;
+}
+
+function getAxeRuleLocales(lang = 'en') {
+  const locale = getLocaleData(lang);
+  return locale && typeof locale.axe_rules === 'object' ? locale.axe_rules : {};
+}
+
 /**
  * Returns all rules as a sorted array for API responses.
  *
@@ -111,4 +133,4 @@ function getRulesArray(lang = 'en') {
     });
 }
 
-module.exports = { getRules, getRulesArray };
+module.exports = { getRules, getRulesArray, getAxeRuleLocales, getLocaleData };

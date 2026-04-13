@@ -84,10 +84,16 @@ const {
   BEST_PRACTICE_NAME,
   WCAG_LEVEL,
 } = require('./wcagMetadata');
-const { getRules } = require('./rulesLoader');
+const { getAxeRuleLocales, getRules } = require('./rulesLoader');
 
 // English rules cached at startup as fallback.
 const _enRules = getRules('en');
+const FAILURE_SUMMARY_PREFIX_RE = /^(?:Fix (?:any|all) of the following:|次の(?:いずれか|すべて)を修正します:)\s*/i;
+
+function cleanReason(summary, fallback) {
+  if (summary) return summary.replace(FAILURE_SUMMARY_PREFIX_RE, '').trim();
+  return fallback || '';
+}
 
 /**
  * Maps axe-core raw results into the structured response format.
@@ -108,9 +114,7 @@ function mapResults(axeResults, criteriaFilter = null) {
       description: rule.description,
       impact:      rule.impact || null,
       status:      'fail',
-      reason:      node.failureSummary
-        ? node.failureSummary.replace(/^Fix (?:any|all) of the following:\s*/i, '').trim()
-        : rule.help,
+      reason:      cleanReason(node.failureSummary, rule.help),
       helpUrl:     rule.helpUrl,
       _criteriaId: _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags),
     };
@@ -139,9 +143,7 @@ function mapResults(axeResults, criteriaFilter = null) {
       description: rule.description,
       impact:      rule.impact || null,
       status:      'incomplete',
-      reason:      node.failureSummary
-        ? node.failureSummary.replace(/^Fix (?:any|all) of the following:\s*/i, '').trim()
-        : rule.help,
+      reason:      cleanReason(node.failureSummary, rule.help),
       helpUrl:     rule.helpUrl,
       _criteriaId: _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags),
     };
@@ -287,7 +289,7 @@ function _normalizeCriterionId(sc, ruleId, tags = []) {
 function _criterionName(sc, ruleId, fallbackName = null, lang = 'en') {
   if (!sc) return null;
   if (sc === BEST_PRACTICE_ID) {
-    const guide = rulesGuide[ruleId];
+    const guide = _localizedGuideEntry(ruleId, lang);
     return (guide && guide.title) || fallbackName || BEST_PRACTICE_NAME;
   }
   const rules = lang === 'en' ? _enRules : getRules(lang);
@@ -305,8 +307,21 @@ function _suggestedFix(sc, ruleId, lang = 'en') {
     const yamlFix = rules[sc] && rules[sc].suggested_fix;
     if (yamlFix) return yamlFix;
   }
-  const guide = rulesGuide[ruleId];
+  const guide = _localizedGuideEntry(ruleId, lang);
   return (guide && guide.fixTip) || null;
+}
+
+function _localizedGuideEntry(ruleId, lang = 'en') {
+  const guide = rulesGuide[ruleId];
+  if (!guide) return null;
+  if (lang === 'en') return guide;
+
+  const localized = getAxeRuleLocales(lang)[ruleId] || {};
+  return {
+    ...guide,
+    title: localized.title || guide.title,
+    fixTip: localized.suggested_fix || localized.fixTip || guide.fixTip,
+  };
 }
 
 /**
@@ -360,11 +375,6 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
     if (!html) return null;
     const m = html.match(/^<(\w+)/);
     return m ? m[1].toUpperCase() : null;
-  }
-
-  function cleanReason(summary, fallback) {
-    if (summary) return summary.replace(/^Fix (?:any|all) of the following:\s*/i, '').trim();
-    return fallback || '';
   }
 
   function buildElement(node) {

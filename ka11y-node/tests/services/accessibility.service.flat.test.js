@@ -135,4 +135,21 @@ describe('AccessibilityService.analyseUrlFlat', () => {
     expect(page.waitForFunction).toHaveBeenCalledTimes(2);
     expect(findings).toEqual([]);
   });
+
+  test('configures axe-core locale when lang=ja', async () => {
+    const page = makePage({ violations: [], passes: [], incomplete: [] });
+    const service = makeService(page);
+    runAll.mockResolvedValue([]);
+
+    await service.analyseUrlFlat('https://example.com', 'AA', 'ja');
+
+    const localeCall = page.evaluate.mock.calls.find(([fn]) =>
+      typeof fn === 'function' && fn.toString().includes('axe.configure')
+    );
+    expect(localeCall).toBeTruthy();
+    expect(localeCall[1]).toMatchObject({
+      rules: expect.any(Object),
+      checks: expect.any(Object),
+    });
+  });
 });

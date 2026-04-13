@@ -4,11 +4,16 @@ const {
   buildKeywordPattern,
   getKeywordList,
   getSharedRuleContext,
+  renderLocalizedText,
 } = require('./sharedAssets');
 
 const SC = '2.4.8';
 const RULE_ID = 'custom-location';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/location';
+
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
 
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
@@ -98,7 +103,7 @@ async function run(page, context = {}) {
         description: 'Users must be able to determine their location within a set of web pages',
         impact: null,
         status: 'pass',
-        reason: `Location indicator(s) detected: ${mechanisms}.`,
+        reason: _t(sharedContext, 'Location indicator(s) detected: {mechanisms}.', '現在位置を示す手段が検出されました: {mechanisms}。', { mechanisms }),
         helpUrl: HELP_URL,
       }],
     };
@@ -111,7 +116,7 @@ async function run(page, context = {}) {
       description: 'Users must be able to determine their location within a set of web pages',
       impact: 'moderate',
       status: 'incomplete',
-      reason: 'No location indicator detected (no breadcrumb, no aria-current="page" in navigation, no active nav item, no sitemap link). If this is a multi-page site, provide a breadcrumb or highlight the current page in navigation.',
+      reason: _t(sharedContext, 'No location indicator detected (no breadcrumb, no aria-current="page" in navigation, no active nav item, no sitemap link). If this is a multi-page site, provide a breadcrumb or highlight the current page in navigation.', '現在位置を示す手段は検出されませんでした（パンくず、ナビゲーション内の aria-current="page"、アクティブなナビ項目、サイトマップリンクなし）。複数ページのサイトであれば、パンくずを提供するか、ナビゲーションで現在ページを明示してください。'),
       helpUrl: HELP_URL,
     }],
   };

@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '1.3.4';
 const RULE_ID = 'custom-orientation';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/orientation';
@@ -27,14 +32,43 @@ const DEFINITE_FAIL_TYPES = new Set([
   'writing-mode',
 ]);
 
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+function _localizeFindingReason(finding, context) {
+  switch (finding.type) {
+    case 'manifest-orientation':
+      return _t(context, 'Web App Manifest sets "orientation": "{detail}", locking the PWA to a single display orientation.', 'Web App Manifest で "orientation": "{detail}" が設定されており、PWA が単一の画面向きに固定されます。', { detail: finding.detail || finding.snippet || '' });
+    case 'script-lock':
+      return _t(context, 'Inline <script> {target} calls orientation-locking API: {detail}. This may lock the page to a specific orientation.', 'インライン <script> {target} で画面向き固定 API が呼び出されています: {detail}。ページが特定の向きに固定される可能性があります。', { target: finding.target || '', detail: finding.detail || finding.snippet || '' });
+    case 'css-rotate':
+      return _t(context, 'Element {target} has a forced 90°/270° rotation via {detail}, forcing a specific visual orientation.', '要素 {target} に {detail} による 90°/270° の強制回転があり、特定の視覚的な向きに固定される可能性があります。', { target: finding.target || '', detail: finding.detail || '' });
+    case 'css-media-hide':
+      return _t(context, '"{target}" in {source} is hidden inside @media {media_query} — content inaccessible in that orientation.', '{source} 内の "{target}" は @media {media_query} の中で非表示にされており、その画面向きではコンテンツにアクセスできません。', { target: finding.target || '', source: finding.source || 'stylesheet', media_query: finding.mediaQuery || '' });
+    case 'cross-origin-sheet':
+      return _t(context, 'External stylesheet "{source}" is cross-origin and could not be inspected for orientation rules. Manual review required.', '外部スタイルシート "{source}" はクロスオリジンのため、画面向きに関する CSS ルールを検査できませんでした。手動確認が必要です。', { source: finding.source || finding.target || '' });
+    case 'meta-viewport-orientation':
+      return _t(context, '<meta name="viewport"> includes "orientation=" which restricts the page to a specific orientation.', '<meta name="viewport"> に "orientation=" が含まれており、ページが特定の画面向きに制限されています。');
+    case 'css-media-structural':
+      return _t(context, '"{target}" in {source} applies structural CSS inside @media {media_query} that may break layout in that orientation. Manual review recommended.', '{source} 内の "{target}" は @media {media_query} の中で構造的な CSS を適用しており、その画面向きでレイアウトが崩れる可能性があります。手動確認を推奨します。', { target: finding.target || '', source: finding.source || 'stylesheet', media_query: finding.mediaQuery || '' });
+    case 'writing-mode':
+      return _t(context, 'document.body has writing-mode: {detail}, which forces a vertical text layout and may restrict orientation.', 'document.body に writing-mode: {detail} が設定されており、縦書きレイアウトが強制されて画面向きが制限される可能性があります。', { detail: finding.detail || '' });
+    case 'viewport-scale':
+      return _t(context, '<meta name="viewport"> sets maximum-scale=1, which prevents users from zooming and may compound orientation restrictions.', '<meta name="viewport"> に maximum-scale=1 が設定されており、ユーザーが拡大できず、画面向きの制約を悪化させる可能性があります。');
+    default:
+      return finding.reason;
+  }
+}
+
 // Builds one rule entry from a raw finding object.
-function buildRule(finding) {
+function buildRule(finding, context = {}) {
   return {
     ruleId     : `${RULE_ID}-${RULE_SUFFIX[finding.type] ?? finding.type}`,
     description: FALLBACK_DESCRIPTION,
     impact     : 'serious',
     status     : DEFINITE_FAIL_TYPES.has(finding.type) ? 'fail' : 'incomplete',
-    reason     : finding.reason,
+    reason     : _localizeFindingReason(finding, context),
     target     : finding.target     ?? null,
     selector   : finding.selector   ?? null,
     snippet    : finding.snippet    ?? null,
@@ -45,7 +79,8 @@ function buildRule(finding) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-async function run(page) {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
 
   // ── Web App Manifest orientation field (Node context) ─────────────────────
   // BUG-FIX 1: manifest.orientation may not be a string (could be an object in
@@ -71,7 +106,7 @@ async function run(page) {
               type   : 'manifest-orientation',
               target : 'manifest.json',
               snippet: `"orientation": "${orientationValue}"`,
-              reason : `Web App Manifest sets "orientation": "${orientationValue}", locking the PWA to a single display orientation.`,
+              detail : orientationValue,
             });
           }
         } catch (_) { /* invalid JSON — skip */ }
@@ -187,7 +222,7 @@ async function run(page) {
         // nth-of-type(N). Use a data-driven selector that is always accurate.
         selector: `script:not([src]):nth-child(${[...document.querySelectorAll('script')].indexOf(script) + 1})`,
         snippet : matches[0],
-        reason  : `Inline <script> #${idx + 1} calls orientation-locking API: ${[...new Set(matches)].join(', ')}. This may lock the page to a specific orientation.`,
+        detail  : [...new Set(matches)].join(', '),
       });
     });
 
@@ -226,7 +261,7 @@ async function run(page) {
         target  : elToSelector(el),
         selector: elToSelector(el),
         snippet : elToSnippet(el),
-        reason  : `Element ${elToSelector(el)} has a forced 90°/270° rotation via ${via}, forcing a specific visual orientation.`,
+        detail  : via,
       });
     });
 
@@ -262,7 +297,6 @@ async function run(page) {
                     snippet   : inner.cssText.slice(0, 120),
                     source    : sheetLabel,
                     mediaQuery: mediaText,
-                    reason    : `"${inner.selectorText}" in ${sheetLabel} is hidden inside @media ${mediaText} — content inaccessible in ${orientMatch[1]} orientation.`,
                   });
                 }
               }
@@ -288,7 +322,6 @@ async function run(page) {
             type  : 'cross-origin-sheet',
             target: sheet.href,
             source: sheet.href,
-            reason: `External stylesheet "${sheet.href}" is cross-origin and could not be inspected for orientation rules. Manual review required.`,
           });
         }
       }
@@ -306,7 +339,6 @@ async function run(page) {
           target  : 'meta[name="viewport"]',
           selector: 'meta[name="viewport"]',
           snippet : viewport.outerHTML,
-          reason  : `<meta name="viewport"> includes "orientation=" which restricts the page to a specific orientation.`,
         });
       }
     }
@@ -335,7 +367,6 @@ async function run(page) {
                     snippet   : inner.cssText.slice(0, 120),
                     source    : sheetLabel,
                     mediaQuery: mediaText,
-                    reason    : `"${inner.selectorText}" in ${sheetLabel} applies structural CSS inside @media ${mediaText} that may break layout in ${orientMatch[1]} orientation. Manual review recommended.`,
                   });
                 }
               }
@@ -363,7 +394,6 @@ async function run(page) {
         type  : 'writing-mode',
         signal: 'writing-mode',
         target: 'body',
-        reason: `document.body has writing-mode: ${writingMode}, which forces a vertical (portrait-only) text layout and may restrict orientation.`,
         detail: writingMode,
       });
     }
@@ -380,7 +410,6 @@ async function run(page) {
           signal: 'viewport-scale',
           target: 'meta[name="viewport"]',
           snippet: viewportMeta.outerHTML,
-          reason: `<meta name="viewport"> sets maximum-scale=1, which prevents users from zooming and may compound orientation restrictions.`,
           detail: content,
         });
       }
@@ -405,7 +434,7 @@ async function run(page) {
         snippet    : null,
         source     : null,
         mediaQuery : null,
-        reason     : 'No orientation-locking patterns detected (JS lock calls, forced CSS rotation, orientation-hiding media queries, manifest lock, or viewport meta).',
+        reason     : _t(sharedContext, 'No orientation-locking patterns detected (JS lock calls, forced CSS rotation, orientation-hiding media queries, manifest lock, or viewport meta).', '画面向き固定のパターンは検出されませんでした（JS の lock 呼び出し、強制回転 CSS、画面向き依存の非表示メディアクエリ、manifest ロック、viewport メタ設定など）。'),
         helpUrl    : HELP_URL,
       }],
     };
@@ -413,7 +442,7 @@ async function run(page) {
 
   return {
     successCriteriaId: SC,
-    rules: allFindings.map(buildRule),
+    rules: allFindings.map(finding => buildRule(finding, sharedContext)),
   };
 }
 

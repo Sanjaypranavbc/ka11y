@@ -779,3 +779,95 @@ rules:
       動的に追加されるメッセージ（「送信しました」「エラーが発生しました」「読み込み中」等）は
       role="status" または role="alert"、aria-live="polite" または aria-live="assertive" を
       使用してスクリーンリーダーに通知してください。
+
+axe_rules:
+  accesskeys:
+    title: "accesskey の一意性"
+    suggested_fix: "各 accesskey 属性には一意の文字を割り当ててください。accesskey はブラウザーやスクリーンリーダーのショートカットと競合しやすいため、本当に必要かも見直してください。"
+  aria-allowed-role:
+    title: "要素に許可された ARIA ロール"
+    suggested_fix: "role 属性を削除するか、その要素で許可されているロールに置き換えてください。"
+  aria-dialog-name:
+    title: "ARIA ダイアログのアクセシブル名"
+    suggested_fix: "ダイアログ内の見出しを参照する aria-labelledby、または aria-label を追加してください。"
+  aria-text:
+    title: "フォーカス可能要素上の ARIA text ロール"
+    suggested_fix: "インタラクティブ要素やフォーカス可能な子要素を含む要素から role=\"text\" を削除してください。"
+  aria-treeitem-name:
+    title: "ARIA treeitem のアクセシブル名"
+    suggested_fix: "role=\"treeitem\" を持つ要素には、可視テキストまたは aria-label を追加してください。"
+  empty-heading:
+    title: "空の見出しなし"
+    suggested_fix: "すべての見出しに意味のあるテキストを入れてください。装飾目的だけなら見出し要素をやめて CSS を使ってください。"
+  empty-table-header:
+    title: "空の表見出しなし"
+    suggested_fix: "各 th 要素に説明的なテキストを追加してください。見えない見出しが必要なら空のままではなく visually-hidden クラスを使ってください。"
+  focus-order-semantics:
+    title: "フォーカス順とセマンティクス"
+    suggested_fix: "ネイティブのインタラクティブ要素を使うか、フォーカス可能な要素に適切な ARIA ロールを追加してください。"
+  frame-tested:
+    title: "axe でテスト可能な iframe"
+    suggested_fix: "iframe の内容は別途テストしてください。可能であれば同一オリジンで配信し、自動テストが到達できるようにしてください。"
+  heading-order:
+    title: "見出しレベルの順序"
+    suggested_fix: "見出しレベルは順番どおりに使用してください。見出しのレベルは見た目ではなく文書構造を表すものです。"
+  hidden-content:
+    title: "非表示コンテンツの確認"
+    suggested_fix: "非表示コンテンツを確認し、モーダルがフォーカスを適切に閉じ込めて通知されること、装飾要素だけが aria-hidden=\"true\" になっていることを確認してください。"
+  image-redundant-alt:
+    title: "冗長でない画像代替テキスト"
+    suggested_fix: "画像の役割と同じ可視テキストが隣接している場合、その画像には alt=\"\" を設定して重複読上げを避けてください。"
+  label-title-only:
+    title: "title のみのラベル禁止"
+    suggested_fix: "title 属性だけに頼らず、可視の label 要素を追加してください。title は補足情報として残して構いません。"
+  landmark-banner-is-top-level:
+    title: "トップレベルのバナーランドマーク"
+    suggested_fix: "header 要素または role=\"banner\" の要素を body 直下のトップレベルに移動してください。"
+  landmark-complementary-is-top-level:
+    title: "トップレベルの補足ランドマーク"
+    suggested_fix: "aside 要素は main の子ではなく、ページのトップレベルで main の兄弟要素として配置してください。"
+  landmark-contentinfo-is-top-level:
+    title: "トップレベルの contentinfo ランドマーク"
+    suggested_fix: "footer 要素または role=\"contentinfo\" の要素は、別のランドマークの中ではなく body 直下に配置してください。"
+  landmark-main-is-top-level:
+    title: "トップレベルの main ランドマーク"
+    suggested_fix: "main 要素を body の直接の子要素にしてください。"
+  landmark-no-duplicate-banner:
+    title: "重複するバナーランドマークなし"
+    suggested_fix: "複数のバナーランドマークは 1 つに統合してください。セクション内ヘッダーが必要なら div や文脈上の header を使ってください。"
+  landmark-no-duplicate-contentinfo:
+    title: "重複する contentinfo ランドマークなし"
+    suggested_fix: "フッター情報は 1 つの footer にまとめてください。article や section 内の文脈的フッターは許容されます。"
+  landmark-no-duplicate-main:
+    title: "重複する main ランドマークなし"
+    suggested_fix: "重複した main 要素を削除し、1 つだけ残してください。"
+  landmark-one-main:
+    title: "main ランドマークは 1 つ"
+    suggested_fix: "主たるコンテンツを main 要素で囲んでください。"
+  landmark-unique:
+    title: "一意なランドマークラベル"
+    suggested_fix: "同じ種類のランドマークを複数使う場合は、aria-label を一意にしてください。"
+  meta-viewport-large:
+    title: "大きなズームを許可する viewport"
+    suggested_fix: "maximum-scale の制限を削除するか、少なくとも 5 に設定してください。"
+  page-has-heading-one:
+    title: "ページに h1 がある"
+    suggested_fix: "ページの主題を示す h1 を 1 つ追加してください。"
+  presentation-role-conflict:
+    title: "フォーカス可能要素の presentation ロール"
+    suggested_fix: "フォーカス可能要素に role=\"presentation\" や role=\"none\" を付けないでください。必要なら role を削除するか、その要素をフォーカス不可にしてください。"
+  region:
+    title: "ランドマーク内のコンテンツ"
+    suggested_fix: "主要なコンテンツはランドマーク要素で囲んでください。主コンテンツは main、ナビゲーションは nav を使ってください。"
+  scope-attr-valid:
+    title: "有効な table header scope"
+    suggested_fix: "列見出しには scope=\"col\"、行見出しには scope=\"row\" を使ってください。グループ化見出しには rowgroup や colgroup を使用してください。"
+  skip-link:
+    title: "スキップリンク"
+    suggested_fix: "最初のフォーカス可能要素としてスキップリンクを追加し、リンク先 ID が存在することと、必要なら tabindex=\"-1\" でフォーカスできることを確認してください。"
+  tabindex:
+    title: "正の tabindex なし"
+    suggested_fix: "要素をタブ順に含めるなら tabindex=\"0\"、外すなら tabindex=\"-1\" を使ってください。正の tabindex ではなく DOM 構造を調整してください。"
+  table-duplicate-name:
+    title: "caption と summary の重複なし"
+    suggested_fix: "caption には簡潔な表題を、summary には表の構造説明を設定し、同じ内容の繰り返しを避けてください。"

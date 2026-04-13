@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.4.13';
 const RULE_ID = 'custom-focus-appearance';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance';
@@ -12,7 +17,12 @@ const MIN_OUTLINE_WIDTH_PX = 2; // Sufficient for area requirement on typical el
 const MAX_ELEMENTS = 30;
 const SETTLE_MS = 80;
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   // Snapshot element styles before/after focus in separate evaluate calls
   // to allow the browser to settle between focus state changes.
 
@@ -225,7 +235,7 @@ async function run(page) {
         description: 'Focus indicators must have sufficient area and contrast',
         impact: null,
         status: 'pass',
-        reason: `${passes.length} focusable element(s) sampled — all have a focus indicator meeting minimum area (≥${MIN_OUTLINE_WIDTH_PX}px outline) and contrast (≥${MIN_CONTRAST}:1) requirements.`,
+        reason: _t(sharedContext, '{count} focusable element(s) sampled — all have a focus indicator meeting minimum area (≥{outline_px}px outline) and contrast (≥{contrast}:1) requirements.', 'フォーカス可能要素 {count} 件をサンプリングし、いずれも最小面積（アウトライン {outline_px}px 以上）とコントラスト（{contrast}:1 以上）の要件を満たすフォーカスインジケーターがありました。', { count: passes.length, outline_px: MIN_OUTLINE_WIDTH_PX, contrast: MIN_CONTRAST }),
         helpUrl: HELP_URL,
       }],
     };
@@ -240,7 +250,7 @@ async function run(page) {
       description: 'Focus indicators must have sufficient area and contrast',
       impact: 'serious',
       status: 'fail',
-      reason: `${violations.length} focusable element(s) have focus indicators that do not fully meet WCAG 2.4.13: ${sample}. Ensure outline-width ≥ ${MIN_OUTLINE_WIDTH_PX}px and contrast ≥ ${MIN_CONTRAST}:1 between the indicator colour and adjacent background.`,
+      reason: _t(sharedContext, '{count} focusable element(s) have focus indicators that do not fully meet WCAG 2.4.13: {sample}. Ensure outline-width ≥ {outline_px}px and contrast ≥ {contrast}:1 between the indicator colour and adjacent background.', 'フォーカス可能要素 {count} 件のフォーカスインジケーターが WCAG 2.4.13 を十分に満たしていません: {sample}。インジケーターのアウトライン幅を {outline_px}px 以上にし、隣接背景とのコントラストを {contrast}:1 以上にしてください。', { count: violations.length, sample, outline_px: MIN_OUTLINE_WIDTH_PX, contrast: MIN_CONTRAST }),
       helpUrl: HELP_URL,
     }],
   };

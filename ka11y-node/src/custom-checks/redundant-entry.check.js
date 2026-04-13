@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '3.3.7';
 const RULE_ID = 'custom-redundant-entry';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/redundant-entry';
@@ -57,6 +62,10 @@ const PERSONAL_KEYWORDS = [
   [/\b(country)\b|国/, 'country'],
   [/\b(company|organization|organisation|business)\b|会社|法人/, 'organization'],
 ];
+
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
 
 function summarizeGroups(groups) {
   return groups.slice(0, 3).map((group) => {
@@ -1053,7 +1062,8 @@ function mergeFrameData(main, frameDataList) {
   return merged;
 }
 
-async function run(page) {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   await page.waitForLoadState?.('domcontentloaded').catch(() => {});
   await page.waitForNetworkIdle?.({ timeout: 3000 }).catch(() => {});
   await page.waitForSelector('input, select, textarea', { timeout: 5000 }).catch(() => {});
@@ -1107,14 +1117,14 @@ async function run(page) {
   }
 
   if (data.formCount === 0) {
-    return buildResult('pass', null, 'No forms detected on this page.');
+    return buildResult('pass', null, _t(sharedContext, 'No forms detected on this page.', 'このページにフォームはありません。'));
   }
 
   if (data.repeatedGroups.length === 0) {
     return buildResult(
       'pass',
       null,
-      `${data.candidateCount} personal-data field(s) checked — no repeated required personal-data fields were detected in a way that suggests redundant re-entry.`
+      _t(sharedContext, '{count} personal-data field(s) checked — no repeated required personal-data fields were detected in a way that suggests redundant re-entry.', '個人情報フィールド {count} 件を確認しましたが、冗長な再入力を示唆する必須の繰り返し入力は検出されませんでした。', { count: data.candidateCount })
     );
   }
 
@@ -1124,7 +1134,7 @@ async function run(page) {
     return buildResult(
       'fail',
       'moderate',
-      `${data.highConfidenceGroups.length} high-confidence redundant-entry issue(s) detected: required personal data appears to be entered again with no detectable reuse/prefill mechanism. Examples: ${sample}.`,
+      _t(sharedContext, '{count} high-confidence redundant-entry issue(s) detected: required personal data appears to be entered again with no detectable reuse/prefill mechanism. Examples: {sample}.', '高信頼度の冗長再入力の問題が {count} 件検出されました。必須の個人情報が、再利用または事前入力の仕組みなしに再度入力されているように見えます。例: {sample}。', { count: data.highConfidenceGroups.length, sample }),
       {},
       elements
     );
@@ -1136,7 +1146,7 @@ async function run(page) {
     return buildResult(
       'incomplete',
       'moderate',
-      `${data.reviewGroups.length} repeated required personal-data group(s) detected that need manual verification for SC 3.3.7. Confirm whether previously entered values are auto-populated or selectable in the real process flow. Examples: ${sample}.`,
+      _t(sharedContext, 'Repeated required personal-data group(s) detected ({count}) that need manual verification for SC 3.3.7. Confirm whether previously entered values are auto-populated or selectable in the real process flow. Examples: {sample}.', 'SC 3.3.7 について手動確認が必要な、必須の個人情報の繰り返し入力グループが {count} 件検出されました。実際の処理フローで、以前入力した値が自動入力または選択可能か確認してください。例: {sample}。', { count: data.reviewGroups.length, sample }),
       {},
       elements
     );
@@ -1145,7 +1155,7 @@ async function run(page) {
   return buildResult(
     'pass',
     null,
-    `${data.repeatedGroups.length} repeated personal-data group(s) detected, and reuse or prefill mechanisms were also detected.`
+    _t(sharedContext, '{count} repeated personal-data group(s) detected, and reuse or prefill mechanisms were also detected.', '繰り返し入力される個人情報グループが {count} 件検出されましたが、再利用または事前入力の仕組みも検出されました。', { count: data.repeatedGroups.length })
   );
 }
 

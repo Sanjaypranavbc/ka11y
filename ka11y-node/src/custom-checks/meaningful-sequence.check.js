@@ -1,12 +1,22 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '1.3.2';
 const RULE_ID = 'custom-meaningful-sequence';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/meaningful-sequence';
 // MAX_CONTAINERS limits how many flex/grid containers are inspected (not total elements).
 const MAX_CONTAINERS = 500;
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const violations = await page.evaluate((maxC) => {
     const results = [];
     let containerCount = 0;
@@ -124,7 +134,7 @@ async function run(page) {
   if (violations.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Reading and navigation order must be programmatically determinable', impact: null, status: 'pass', reason: `Up to ${MAX_CONTAINERS} flex/grid containers inspected — no CSS reordering (flex-direction reverse or order property) found that diverges from DOM order.`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Reading and navigation order must be programmatically determinable', impact: null, status: 'pass', reason: _t(sharedContext, 'Up to {count} flex/grid containers inspected — no CSS reordering (flex-direction reverse or order property) found that diverges from DOM order.', '最大 {count} 件の flex/grid コンテナを確認しましたが、DOM 順序と食い違う CSS による並び替え（flex-direction の反転や order プロパティ）は検出されませんでした。', { count: MAX_CONTAINERS }), helpUrl: HELP_URL }],
     };
   }
 
@@ -137,7 +147,7 @@ async function run(page) {
       description: 'Reading and navigation order must be programmatically determinable',
       impact: 'moderate',
       status: 'incomplete',
-      reason: `${violations.length} flex/grid container(s) visually reorder content relative to DOM order. Verify the DOM order matches the intended reading sequence. Details: ${sample}.`,
+      reason: _t(sharedContext, '{count} flex/grid container(s) visually reorder content relative to DOM order. Verify the DOM order matches the intended reading sequence. Details: {sample}.', 'flex/grid コンテナ {count} 件で、DOM 順序に対して視覚的な並び替えが行われています。DOM 順序が意図した読み上げ・閲覧順と一致しているか確認してください。詳細: {sample}。', { count: violations.length, sample }),
       helpUrl: HELP_URL,
     }],
   };

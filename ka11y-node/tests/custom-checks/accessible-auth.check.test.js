@@ -42,7 +42,7 @@ describe('accessible-auth.check (WCAG 3.3.8)', () => {
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('fail');
-    expect(result.rules[0].reason).toContain('paste');
+    expect(result.rules[0].reason).toContain('blocks past');
   });
 
   test('fails for cognitive test without alternative', async () => {
@@ -75,5 +75,17 @@ describe('accessible-auth.check (WCAG 3.3.8)', () => {
     expect(src).toContain('ログイン');
     expect(src).toContain('音声');
     expect(src).toContain('パスワード再設定');
+  });
+
+  test('localizes reasons to Japanese when lang=ja', async () => {
+    const page = makePage({
+      hasAuthForm: true,
+      authFormCount: 1,
+      issues: [{ type: 'captcha-no-alternative', provider: 'reCAPTCHA/hCaptcha' }],
+    });
+    const result = await run(page, { lang: 'ja' });
+    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].reason).toContain('問題のある認証フォーム');
+    expect(result.rules[0].reason).toContain('アクセシブルな代替手段');
   });
 });

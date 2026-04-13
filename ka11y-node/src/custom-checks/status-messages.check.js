@@ -1,10 +1,20 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '4.1.3';
 const RULE_ID = 'custom-status-messages';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/status-messages';
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const data = await page.evaluate(() => {
     const liveRegions = Array.from(document.querySelectorAll(
       '[aria-live], [role="status"], [role="alert"], [role="log"], [role="timer"], [role="marquee"]'
@@ -102,20 +112,23 @@ async function run(page) {
       formCount,
       hasAlerts,
       hasPolite,
+      hasSearchResults,
+      hasCartOrCounter,
+      hasNotificationArea,
       needsLiveRegions,
       anyLiveRegionHasContent,
-      dynamicContexts: [
-        formCount > 0 && `${formCount} form(s)`,
-        hasSearchResults && 'search results',
-        hasCartOrCounter && 'cart/counter',
-        hasNotificationArea && 'notification area',
-      ].filter(Boolean),
       alertsWithoutAtomicCount: alertsWithoutAtomic.length,
       invalidWithoutLiveRegionCount: invalidWithoutLiveRegion.length,
     };
   });
 
-  const { liveRegionCount, formCount, hasAlerts, hasPolite, needsLiveRegions, anyLiveRegionHasContent, dynamicContexts, alertsWithoutAtomicCount, invalidWithoutLiveRegionCount } = data;
+  const { liveRegionCount, formCount, hasAlerts, hasPolite, hasSearchResults, hasCartOrCounter, hasNotificationArea, needsLiveRegions, anyLiveRegionHasContent, alertsWithoutAtomicCount, invalidWithoutLiveRegionCount } = data;
+  const dynamicContexts = [
+    formCount > 0 && _t(sharedContext, '{count} form(s)', 'フォーム {count} 件', { count: formCount }),
+    hasSearchResults && _t(sharedContext, 'search results', '検索結果'),
+    hasCartOrCounter && _t(sharedContext, 'cart/counter', 'カート/カウンター'),
+    hasNotificationArea && _t(sharedContext, 'notification area', '通知領域'),
+  ].filter(Boolean);
 
   // Build extra INCOMPLETE rules for aria-atomic and inline validation issues
   const extraRules = [];
@@ -125,7 +138,7 @@ async function run(page) {
       description: 'Status messages must be programmatically determinable',
       impact: null,
       status: 'incomplete',
-      reason: `${alertsWithoutAtomicCount} [role="alert"] or [aria-live="assertive"] element(s) are missing aria-atomic="true". Without aria-atomic, only changed portions may be announced rather than the full message.`,
+      reason: _t(sharedContext, '{count} [role="alert"] or [aria-live="assertive"] element(s) are missing aria-atomic="true". Without aria-atomic, only changed portions may be announced rather than the full message.', '[role="alert"] または [aria-live="assertive"] 要素 {count} 件に aria-atomic="true" がありません。aria-atomic がないと、完全なメッセージではなく変更部分だけが読み上げられる可能性があります。', { count: alertsWithoutAtomicCount }),
       helpUrl: HELP_URL,
     });
   }
@@ -135,7 +148,7 @@ async function run(page) {
       description: 'Status messages must be programmatically determinable',
       impact: null,
       status: 'incomplete',
-      reason: `${invalidWithoutLiveRegionCount} [aria-invalid] element(s) have no live region ancestor (aria-live, role="status/alert/log"). Inline validation errors may not be announced to screen reader users.`,
+      reason: _t(sharedContext, '{count} [aria-invalid] element(s) have no live region ancestor (aria-live, role="status/alert/log"). Inline validation errors may not be announced to screen reader users.', '[aria-invalid] 要素 {count} 件にライブリージョンの祖先（aria-live、role="status/alert/log"）がありません。インラインの入力検証エラーがスクリーンリーダー利用者に通知されない可能性があります。', { count: invalidWithoutLiveRegionCount }),
       helpUrl: HELP_URL,
     });
   }
@@ -149,7 +162,7 @@ async function run(page) {
         description: 'Status messages must be programmatically determinable',
         impact: 'serious',
         status: 'fail',
-        reason: `Dynamic content contexts detected (${dynamicContexts.join(', ')}) but no ARIA live regions found. Validation errors and status updates will not be announced to screen readers.`,
+        reason: _t(sharedContext, 'Dynamic content contexts detected ({contexts}) but no ARIA live regions found. Validation errors and status updates will not be announced to screen readers.', '動的コンテンツの文脈（{contexts}）が検出されましたが、ARIA ライブリージョンが見つかりません。入力エラーや状態更新がスクリーンリーダーに通知されません。', { contexts: dynamicContexts.join(', ') }),
         helpUrl: HELP_URL,
       }, ...extraRules],
     };
@@ -160,11 +173,11 @@ async function run(page) {
   // all-empty live regions may be structural placeholders that are never written to.
   if (needsLiveRegions && liveRegionCount > 0) {
     const contentNote = anyLiveRegionHasContent
-      ? 'At least one live region contains text at page load.'
-      : 'All live regions are empty at page load — confirm they are populated on status updates at runtime.';
+      ? _t(sharedContext, 'At least one live region contains text at page load.', '少なくとも 1 つのライブリージョンには、ページ読み込み時点でテキストが含まれています。')
+      : _t(sharedContext, 'All live regions are empty at page load — confirm they are populated on status updates at runtime.', 'ページ読み込み時点では、すべてのライブリージョンが空です。実行時の状態更新で内容が設定されることを確認してください。');
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}) alongside dynamic contexts (${dynamicContexts.join(', ')}). ${contentNote} Verify live regions are correctly wired to each status update.`, helpUrl: HELP_URL }, ...extraRules],
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: _t(sharedContext, '{count} ARIA live region(s) found (assertive: {has_alerts}, polite: {has_polite}) alongside dynamic contexts ({contexts}). {content_note} Verify live regions are correctly wired to each status update.', 'ARIA ライブリージョンが {count} 件見つかりました（assertive: {has_alerts}, polite: {has_polite}）。動的コンテンツの文脈（{contexts}）も検出されています。{content_note} 各ステータス更新に対して、ライブリージョンが正しく接続されていることを確認してください。', { count: liveRegionCount, has_alerts: hasAlerts, has_polite: hasPolite, contexts: dynamicContexts.join(', '), content_note: contentNote }), helpUrl: HELP_URL }, ...extraRules],
     };
   }
 
@@ -172,14 +185,14 @@ async function run(page) {
   if (liveRegionCount > 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'pass', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}).`, helpUrl: HELP_URL }, ...extraRules],
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'pass', reason: _t(sharedContext, '{count} ARIA live region(s) found (assertive: {has_alerts}, polite: {has_polite}).', 'ARIA ライブリージョンが {count} 件見つかりました（assertive: {has_alerts}, polite: {has_polite}）。', { count: liveRegionCount, has_alerts: hasAlerts, has_polite: hasPolite }), helpUrl: HELP_URL }, ...extraRules],
     };
   }
 
   // No dynamic contexts and no live regions — not enough info, mark incomplete
   return {
     successCriteriaId: SC,
-    rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: 'moderate', status: 'incomplete', reason: 'No ARIA live regions detected. If this page displays status updates (alerts, notifications, form feedback), verify they use role="status", role="alert", or aria-live.', helpUrl: HELP_URL }, ...extraRules],
+    rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: 'moderate', status: 'incomplete', reason: _t(sharedContext, 'No ARIA live regions detected. If this page displays status updates (alerts, notifications, form feedback), verify they use role="status", role="alert", or aria-live.', 'ARIA ライブリージョンは検出されませんでした。このページでステータス更新（アラート、通知、フォームのフィードバックなど）を表示する場合は、role="status"、role="alert"、または aria-live を使用していることを確認してください。'), helpUrl: HELP_URL }, ...extraRules],
   };
 }
 

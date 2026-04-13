@@ -196,6 +196,52 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
     expect(findings[0].suggested_fix).toContain('Move <aside> elements');
   });
 
+  test('best-practice axe rule localizes criterion_name and suggested_fix for lang=ja', () => {
+    const axeResults = makeAxeResults({
+      violations: [{
+        id:     'landmark-complementary-is-top-level',
+        tags:   ['cat.semantics', 'best-practice'],
+        impact: 'moderate',
+        nodes:  [{
+          html: '<aside>Related links</aside>',
+          target: ['aside'],
+          failureSummary: '次のすべてを修正します: 補足ランドマークが別のランドマーク内にあります。',
+        }],
+        help:   '補足ランドマークはトップレベルである必要があります。',
+        helpUrl: 'https://dequeuniversity.com/rules/axe/4.11/landmark-complementary-is-top-level',
+        description: 'Complementary landmarks should not be nested.',
+      }],
+    });
+
+    const findings = mapResultsFlat(axeResults, 'https://example.com', 'ja');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].criterion_name).toBe('トップレベルの補足ランドマーク');
+    expect(findings[0].suggested_fix).toContain('aside 要素');
+    expect(findings[0].reason).toBe('補足ランドマークが別のランドマーク内にあります。');
+  });
+
+  test('lang=ja strips the localized axe failure-summary prefix', () => {
+    const axeResults = makeAxeResults({
+      violations: [{
+        id: 'image-alt',
+        tags: ['wcag111'],
+        impact: 'serious',
+        nodes: [{
+          html: '<img src="logo.png">',
+          target: ['img'],
+          failureSummary: '次のすべてを修正します: 画像に代替テキストがありません。',
+        }],
+        help: '画像には代替テキストが必要です。',
+        helpUrl: 'https://example.com/image-alt',
+        description: 'Images must have alternative text',
+      }],
+    });
+
+    const findings = mapResultsFlat(axeResults, 'https://example.com', 'ja');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].reason).toBe('画像に代替テキストがありません。');
+  });
+
   test('AAA criteria like 1.4.6 resolve to names and levels', () => {
     const axeResults = makeAxeResults({
       violations: [{
