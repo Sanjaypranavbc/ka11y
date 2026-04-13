@@ -16,7 +16,10 @@ def _load_config_cached(config_path: str) -> dict:
 
 def load_config(config_path: str | None = None):
     if config_path is None:
-        config_path = Path(__file__).resolve().parents[1] / "config" / "config.yml"
+        repo_root = Path(__file__).resolve().parents[3]
+        shared_config_path = repo_root / "config" / "universal.yml"
+        local_config_path = Path(__file__).resolve().parents[1] / "config" / "config.yml"
+        config_path = shared_config_path if shared_config_path.exists() else local_config_path
     else:
         config_path = Path(config_path)
 

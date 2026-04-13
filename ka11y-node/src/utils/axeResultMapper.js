@@ -83,7 +83,6 @@ const {
   BEST_PRACTICE_ID,
   BEST_PRACTICE_NAME,
   WCAG_LEVEL,
-  WCAG_NAMES,
 } = require('./wcagMetadata');
 const { getRules } = require('./rulesLoader');
 
@@ -285,13 +284,14 @@ function _normalizeCriterionId(sc, ruleId, tags = []) {
   return null;
 }
 
-function _criterionName(sc, ruleId, fallbackName = null) {
+function _criterionName(sc, ruleId, fallbackName = null, lang = 'en') {
   if (!sc) return null;
   if (sc === BEST_PRACTICE_ID) {
     const guide = rulesGuide[ruleId];
     return (guide && guide.title) || fallbackName || BEST_PRACTICE_NAME;
   }
-  return WCAG_NAMES[sc] || null;
+  const rules = lang === 'en' ? _enRules : getRules(lang);
+  return (rules[sc] && rules[sc].name) || null;
 }
 
 function _criterionLevel(sc) {
@@ -370,15 +370,17 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
   function buildElement(node) {
     const html = (node && node.html ? node.html : '').slice(0, 600);
     const target = Array.isArray(node && node.target) ? node.target : [];
+    const selector = typeof target[0] === 'string' ? target[0] : null;
     const elementId = (node && node.element_id) || extractIdFromTarget(target) || null;
     const tag = extractTag(html);
 
-    if (!html && !elementId && target.length === 0 && !tag) return null;
+    if (!html && !elementId && target.length === 0 && !tag && !selector) return null;
     return {
       html,
       element_id: elementId,
       tag,
       target,
+      selector,
       page_url: pageUrl,
     };
   }
@@ -392,7 +394,7 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
         source:         'axe',
         rule_id:        rule.id,
         wcag_sc:        sc,
-        criterion_name: _criterionName(sc, rule.id, rule.description || null),
+        criterion_name: _criterionName(sc, rule.id, rule.description || null, lang),
         level:          _criterionLevel(sc),
         severity:       sev,
         status:         'fail',
@@ -413,7 +415,7 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
         source:         'axe',
         rule_id:        rule.id,
         wcag_sc:        sc,
-        criterion_name: _criterionName(sc, rule.id, rule.description || null),
+        criterion_name: _criterionName(sc, rule.id, rule.description || null, lang),
         level:          _criterionLevel(sc),
         severity:       sev,
         status:         'needs_review',
@@ -434,7 +436,7 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
         source:         'axe',
         rule_id:        rule.id,
         wcag_sc:        sc,
-        criterion_name: _criterionName(sc, rule.id, rule.description || null),
+        criterion_name: _criterionName(sc, rule.id, rule.description || null, lang),
         level:          _criterionLevel(sc),
         severity:       null,
         status:         'pass',
@@ -451,7 +453,7 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
         source:         'axe',
         rule_id:        rule.id,
         wcag_sc:        sc,
-        criterion_name: _criterionName(sc, rule.id, rule.description || null),
+        criterion_name: _criterionName(sc, rule.id, rule.description || null, lang),
         level:          _criterionLevel(sc),
         severity:       null,
         status:         'pass',
@@ -527,19 +529,27 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
     if (!raw || typeof raw !== 'object') return null;
     const html = typeof raw.html === 'string'
       ? raw.html.slice(0, 600)
-      : (typeof raw.outerHTML === 'string' ? raw.outerHTML.slice(0, 600) : '');
+      : (typeof raw.outerHTML === 'string'
+        ? raw.outerHTML.slice(0, 600)
+        : (typeof raw.snippet === 'string' ? raw.snippet.slice(0, 600) : ''));
+    const selector = typeof raw.selector === 'string' ? raw.selector : null;
     const target = Array.isArray(raw.target)
       ? raw.target
-      : (typeof raw.selector === 'string' ? [raw.selector] : []);
+      : (typeof raw.target === 'string'
+        ? [raw.target]
+        : (selector ? [selector] : []));
     const elementId = raw.element_id || raw.id || extractIdFromTarget(target) || null;
     const tag = raw.tag || raw.tagName || extractTag(html);
 
-    if (!html && !elementId && target.length === 0 && !tag) return null;
+    if (!html && !elementId && target.length === 0 && !tag && !selector) return null;
     return {
       html,
       element_id: elementId,
       tag: typeof tag === 'string' ? tag : null,
       target,
+      selector,
+      source: raw.source || null,
+      media_query: raw.mediaQuery || raw.media_query || null,
       page_url: pageUrl,
     };
   }
@@ -601,7 +611,7 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
       const normalizedElements = explicitElements
         .map(normalizeElement)
         .filter(e => e !== null);
-      const fallbackElement = normalizeElement(rule && rule.element ? rule.element : null);
+      const fallbackElement = normalizeElement(rule && rule.element ? rule.element : rule);
       const inferredFromReason = inferElementsFromReason((rule && rule.reason) || '');
 
       let elementList = normalizedElements.length > 0
@@ -618,13 +628,15 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
           source:         'custom',
           rule_id:        (rule && rule.ruleId) || 'custom-unknown-rule',
           wcag_sc:        sc,
-          criterion_name: _criterionName(sc, null, (rule && rule.description) || null),
+          criterion_name: _criterionName(sc, null, (rule && rule.description) || null, lang),
           level:          _criterionLevel(sc),
           severity:       status === 'pass' ? null : (impact ? (IMPACT_TO_SEVERITY[impact] || null) : null),
           status:         status,
           reason:         (rule && rule.reason) || (rule && rule.description) || '',
           suggested_fix:  status === 'pass' ? null : _suggestedFix(sc, null, lang),
           help_url:       (rule && rule.helpUrl) || null,
+          element_selector: element && typeof element.selector === 'string' ? element.selector : ((rule && typeof rule.selector === 'string') ? rule.selector : null),
+          selector:       element && typeof element.selector === 'string' ? element.selector : ((rule && typeof rule.selector === 'string') ? rule.selector : null),
           element:        element || null,
         });
       }

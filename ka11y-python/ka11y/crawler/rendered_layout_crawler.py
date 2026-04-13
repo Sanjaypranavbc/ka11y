@@ -39,7 +39,7 @@ from playwright.async_api import (
 
 from ka11y.config.logger import setup_logger
 from ka11y.accessibility.rendered.evidence import capture_screenshot, save_raw_json
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.accessibility.rendered.geometry import rect_from_dict
 from ka11y.accessibility.rendered.heuristics import compute_obscuration
 from ka11y.accessibility.rendered.models import (
@@ -335,11 +335,10 @@ class RenderedLayoutCrawler:
     async def _make_context(
         self, browser: Browser, width: int, height: int
     ) -> BrowserContext:
-        ctx = await browser.new_context(
+        ctx = await new_crawler_context(
+            browser,
             viewport={"width": width, "height": height},
-            ignore_https_errors=True,
         )
-        await install_ssrf_guard(ctx)  # Bug 1 fix
         return ctx
 
     async def _load_and_stabilize(self, page: Page) -> None:

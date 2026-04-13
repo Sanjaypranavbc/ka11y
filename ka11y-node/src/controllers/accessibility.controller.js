@@ -297,6 +297,10 @@ class AccessibilityController {
         this._logger.warn(`analyseUrlFlat rejected (SSRF guard): ${err.message}`);
         return res.status(400).json({ error: 'Invalid URL', message: err.message });
       }
+      if (/ERR_CERT_/i.test(err.message || '')) {
+        this._logger.warn(`analyseUrlFlat rejected (TLS certificate): ${err.message}`);
+        return res.status(502).json({ error: 'Target TLS certificate invalid', message: err.message });
+      }
       this._logger.error(`analyseUrlFlat failed: ${err.message}`);
       res.status(500).json({ error: 'URL flat analysis failed', message: err.message });
     }
@@ -337,6 +341,10 @@ class AccessibilityController {
       if (err instanceof SsrfGuardError) {
         this._logger.warn(`analyseUrl rejected (SSRF guard): ${err.message}`);
         return res.status(400).json({ error: 'Invalid URL', message: err.message });
+      }
+      if (/ERR_CERT_/i.test(err.message || '')) {
+        this._logger.warn(`analyseUrl rejected (TLS certificate): ${err.message}`);
+        return res.status(502).json({ error: 'Target TLS certificate invalid', message: err.message });
       }
       this._logger.error(`analyseUrl failed: ${err.message}`);
       res.status(500).json({
@@ -381,6 +389,10 @@ class AccessibilityController {
       if (err instanceof SsrfGuardError) {
         this._logger.warn(`analyseRuleUrl rejected (SSRF guard): ${err.message}`);
         return res.status(400).json({ error: 'Invalid URL', message: err.message });
+      }
+      if (/ERR_CERT_/i.test(err.message || '')) {
+        this._logger.warn(`analyseRuleUrl rejected (TLS certificate): ${err.message}`);
+        return res.status(502).json({ error: 'Target TLS certificate invalid', message: err.message });
       }
       this._logger.error(`analyseRuleUrl failed: ${err.message}`);
       res.status(500).json({

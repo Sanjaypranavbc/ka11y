@@ -176,6 +176,7 @@ class AccessibilityService {
       browser = await this._puppeteer.launch({
         headless:       this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
+        ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
         args:           this._config.browser.args,
       });
 
@@ -251,6 +252,7 @@ class AccessibilityService {
       browser = await this._puppeteer.launch({
         headless:       this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
+        ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
         args:           this._config.browser.args,
       });
 
@@ -333,6 +335,7 @@ class AccessibilityService {
       browser = await this._puppeteer.launch({
         headless:       this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
+        ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
         args:           this._config.browser.args,
       });
 

@@ -50,6 +50,7 @@ function makeService(page) {
     browser: {
       headless: 'shell',
       executablePath: undefined,
+      ignoreHTTPSErrors: true,
       args: [],
     },
     axe: {
@@ -127,6 +128,9 @@ describe('AccessibilityService.analyseUrlFlat', () => {
     const findings = await service.analyseUrlFlat('https://example.com', 'AA');
 
     expect(page.setBypassCSP).toHaveBeenCalledWith(true);
+    expect(service._puppeteer.launch).toHaveBeenCalledWith(expect.objectContaining({
+      ignoreHTTPSErrors: true,
+    }));
     expect(page.addScriptTag).toHaveBeenCalledTimes(2);
     expect(page.waitForFunction).toHaveBeenCalledTimes(2);
     expect(findings).toEqual([]);

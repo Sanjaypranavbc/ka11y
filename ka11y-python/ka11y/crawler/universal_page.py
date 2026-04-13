@@ -12,7 +12,7 @@ from urllib.parse import urljoin, urlparse
 from playwright.async_api import BrowserContext, Page, async_playwright
 
 from ka11y.config.logger import setup_logger
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.utils.step_logger import ExecutionStepLogger
 
 logger = setup_logger(name="KAC", tag="universal_page")
@@ -1137,8 +1137,7 @@ class UniversalPageLoader:
                 context_kwargs["record_har_path"] = str(har_file)
                 context_kwargs["record_har_url_filter"] = "**/*"
 
-            context = await browser.new_context(**context_kwargs)
-            await install_ssrf_guard(context)
+            context = await new_crawler_context(browser, **context_kwargs)
 
             try:
                 visited: set[str] = set()

@@ -26,6 +26,9 @@ ocr:
     logo_text: "logo_text"
     with_text: "with_text"
 
+browser:
+  ignore_https_errors: true
+
 crawler:
   include_data_uris: false
   include_invisible: false

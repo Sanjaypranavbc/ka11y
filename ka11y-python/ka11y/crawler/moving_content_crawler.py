@@ -24,7 +24,7 @@ from PIL import Image
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.context_factory import new_crawler_context
 
 from ka11y.config.logger import setup_logger
 
@@ -626,7 +626,8 @@ class MovingContentCrawler:
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
-            context = await browser.new_context(
+            context = await new_crawler_context(
+                browser,
                 viewport={"width": 1440, "height": 900},
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -634,7 +635,6 @@ class MovingContentCrawler:
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
-            await install_ssrf_guard(context)  # Bug 1 fix
             try:
                 await self._crawl_page(context, self.base_url, depth=0)
             finally:

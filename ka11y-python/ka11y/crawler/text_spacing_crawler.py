@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.context_factory import new_crawler_context
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data Model
@@ -144,8 +144,10 @@ class AsyncTextSpacingCrawler:
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
-            context = await browser.new_context(viewport={"width": 1440, "height": 900})
-            await install_ssrf_guard(context)  # Bug 1 fix
+            context = await new_crawler_context(
+                browser,
+                viewport={"width": 1440, "height": 900},
+            )
 
             try:
                 await self._crawl_page(context, self.base_url, 0)

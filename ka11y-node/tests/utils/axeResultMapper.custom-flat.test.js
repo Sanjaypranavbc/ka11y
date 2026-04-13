@@ -129,6 +129,15 @@ describe('mapCustomResultsFlat', () => {
       expect(findings[0].criterion_name).toBe('Non-text Content');
       expect(findings[0].level).toBe('A');
     });
+
+    test('lang=ja localizes criterion_name for known SC codes', () => {
+      const findings = mapCustomResultsFlat([{
+        successCriteriaId: '1.1.1',
+        rules: [{ ruleId: 'custom-alt', status: 'fail', reason: 'bad' }],
+      }], 'https://example.com', 'ja');
+      expect(findings[0].criterion_name).toBe('非テキストコンテンツ');
+      expect(findings[0].suggested_fix).toContain('alt');
+    });
   });
 });
 
@@ -324,6 +333,36 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: null,
       tag: 'HTML',
       target: ['html'],
+      page_url: 'https://example.com',
+    });
+  });
+
+  test('preserves selector-based structured evidence from custom checks', () => {
+    const findings = mapCustomResultsFlat([
+      {
+        successCriteriaId: '1.3.4',
+        rules: [{
+          ruleId: 'custom-orientation-meta-viewport',
+          status: 'fail',
+          reason: 'Viewport locks orientation.',
+          selector: 'meta[name="viewport"]',
+          target: 'meta[name="viewport"]',
+          snippet: '<meta name="viewport" content="orientation=portrait">',
+          source: 'https://example.com/app.css',
+          mediaQuery: '(orientation: portrait)',
+        }],
+      },
+    ], 'https://example.com');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].selector).toBe('meta[name="viewport"]');
+    expect(findings[0].element_selector).toBe('meta[name="viewport"]');
+    expect(findings[0].element).toMatchObject({
+      html: '<meta name="viewport" content="orientation=portrait">',
+      selector: 'meta[name="viewport"]',
+      target: ['meta[name="viewport"]'],
+      source: 'https://example.com/app.css',
+      media_query: '(orientation: portrait)',
       page_url: 'https://example.com',
     });
   });

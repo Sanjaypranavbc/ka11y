@@ -25,11 +25,12 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # Allow Docker override via env var.
-# Default: resolve to ka11y-python/i18n/ from this file's location.
-#   __file__ = ka11y-python/ka11y/i18n/loader.py
-#   parents[2] = ka11y-python/
-_DEFAULT_I18N_DIR = str(Path(__file__).parents[2] / "i18n")
-I18N_DIR = Path(os.environ.get("KA11Y_I18N_DIR", _DEFAULT_I18N_DIR))
+# Prefer the repo-shared i18n directory, then fall back to the service-local copy.
+_REPO_ROOT = Path(__file__).parents[3]
+_SHARED_I18N_DIR = _REPO_ROOT / "i18n"
+_LOCAL_I18N_DIR = Path(__file__).parents[2] / "i18n"
+_DEFAULT_I18N_DIR = _SHARED_I18N_DIR if _SHARED_I18N_DIR.exists() else _LOCAL_I18N_DIR
+I18N_DIR = Path(os.environ.get("KA11Y_I18N_DIR", str(_DEFAULT_I18N_DIR)))
 
 
 @dataclass(frozen=True)
