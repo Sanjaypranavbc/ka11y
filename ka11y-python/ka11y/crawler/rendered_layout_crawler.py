@@ -40,6 +40,7 @@ from playwright.async_api import (
 from ka11y.config.logger import setup_logger
 from ka11y.accessibility.rendered.evidence import capture_screenshot, save_raw_json
 from ka11y.crawler.context_factory import new_crawler_context
+from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.accessibility.rendered.geometry import rect_from_dict
 from ka11y.accessibility.rendered.heuristics import compute_obscuration
 from ka11y.accessibility.rendered.models import (
@@ -364,6 +365,14 @@ class RenderedLayoutCrawler:
             )
         except PlaywrightTimeout:
             logger.warning(f"[rendered] goto timeout for {self.base_url}")
+            
+        # ── Cookie Handling ──
+        try:
+            cookie_state = await handle_cookies(page)
+            logger.debug(f"[rendered] Cookie handling state for {self.base_url}: {cookie_state}")
+        except Exception as e:
+            logger.debug(f"[rendered] Cookie handling exception for {self.base_url}: {e}")
+            
         await stabilize(page)
 
     async def _snapshot_at_viewport(

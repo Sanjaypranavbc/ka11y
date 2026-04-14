@@ -10,6 +10,7 @@ from playwright.async_api import async_playwright
 
 from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
+from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.crawler.policy import CrawlPolicy
 from pathlib import Path
 from typing import List, Set, Tuple, Optional, Any
@@ -464,6 +465,13 @@ class AsyncImageCrawler:
             # ── page load ──
             console.print(Rule("[dim]Loading page[/dim]"))
             await navigate_with_resilience(page, url)
+
+            # ── Cookie Handling ──
+            try:
+                cookie_state = await handle_cookies(page)
+                logger.debug(f"[image_crawler] Cookie handling state for {url}: {cookie_state}")
+            except Exception as e:
+                logger.debug(f"[image_crawler] Cookie handling exception for {url}: {e}")
 
             await page.wait_for_timeout(1_000)
             await self._trigger_lazy_loading(page)
