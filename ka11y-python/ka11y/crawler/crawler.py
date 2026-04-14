@@ -41,6 +41,7 @@ logger = setup_logger(name="KAC", tag="crawler")
 _DNS_PRECHECK_ATTEMPTS = 3
 _NAVIGATION_ATTEMPTS = 2
 _NAVIGATION_BACKOFF_SECONDS = (1.0, 2.0)
+_SCREENSHOT_TIMEOUT_MS = 5_000
 _RETRYABLE_NAVIGATION_TOKENS = (
     "ERR_NAME_NOT_RESOLVED",
     "ERR_NETWORK_CHANGED",
@@ -423,6 +424,37 @@ class AsyncImageCrawler:
                     return urljoin(self.base_url, first)
         return None
 
+    async def _safe_screenshot(
+        self,
+        element,
+        *,
+        path: str,
+        timeout_ms: int = _SCREENSHOT_TIMEOUT_MS,
+        min_width: int = 1,
+        min_height: int = 1,
+    ) -> bool:
+        """
+        Capture a screenshot with a hard upper bound and a fast visibility/size guard.
+        """
+        try:
+            box = await element.bounding_box()
+        except Exception:
+            return False
+
+        if not box:
+            return False
+        if box.get("width", 0) < min_width or box.get("height", 0) < min_height:
+            return False
+
+        try:
+            await asyncio.wait_for(
+                element.screenshot(path=path, timeout=timeout_ms),
+                timeout=(timeout_ms / 1000) + 1,
+            )
+            return True
+        except Exception:
+            return False
+
     # ── save helper ───────────────────────────────────────────────────────────
     def _subpath(self, cr: _CR) -> str:
         if cr.type == "functional":
@@ -633,8 +665,10 @@ class AsyncImageCrawler:
                                         ph = await img.evaluate_handle(
                                             "el => el.closest('a,button,li,td,div') || el.parentElement"
                                         )
-                                        await ph.screenshot(path=save_path)
-                                        saved = True
+                                        saved = await self._safe_screenshot(
+                                            ph,
+                                            path=save_path,
+                                        )
                                     except Exception:
                                         pass
 
@@ -649,11 +683,10 @@ class AsyncImageCrawler:
                                     download_session, abs_src, save_path
                                 )
                                 if not saved:
-                                    try:
-                                        await img.screenshot(path=save_path)
-                                        saved = True
-                                    except Exception:
-                                        pass
+                                    saved = await self._safe_screenshot(
+                                        img,
+                                        path=save_path,
+                                    )
 
                             else:
                                 # Detect overlay container (text overlaid on image)
@@ -668,8 +701,10 @@ class AsyncImageCrawler:
                                         [container_h, img],
                                     )
                                     target = container_h if is_overlay else img
-                                    await target.screenshot(path=save_path)
-                                    saved = True
+                                    saved = await self._safe_screenshot(
+                                        target,
+                                        path=save_path,
+                                    )
                                 except Exception:
                                     # Fallback: direct download
                                     saved = await self.classifier._download_file(
@@ -793,7 +828,14 @@ class AsyncImageCrawler:
 
                         btn_file = f"btn_{html_hash}.png"
                         btn_path = f"{btn_dir}/{btn_file}"
-                        await btn.screenshot(path=btn_path, timeout=5_000)
+                        if not await btn.is_visible(timeout=1_000):
+                            continue
+                        if not await self._safe_screenshot(btn, path=btn_path):
+                            logger.debug(
+                                "  Button %s skipped — screenshot precheck/timeout failed",
+                                bi + 1,
+                            )
+                            continue
 
                         # Reject near-empty screenshots
                         if os.path.getsize(btn_path) < 500:
@@ -1097,9 +1139,11 @@ class AsyncImageCrawler:
                                 "el => el.closest('a,button,li,[role=\"button\"]') "
                                 "     || el.parentElement || el"
                             )
-                            await parent_h.screenshot(path=fi_path, timeout=5_000)
+                            saved = await self._safe_screenshot(parent_h, path=fi_path)
                         except Exception:
-                            await fi.screenshot(path=fi_path, timeout=5_000)
+                            saved = await self._safe_screenshot(fi, path=fi_path)
+                        if not saved:
+                            continue
 
                         captured_fi += 1
                         console.print(
