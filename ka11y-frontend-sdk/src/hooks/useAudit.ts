@@ -71,9 +71,9 @@ function flattenFinding(f: Record<string, unknown>) {
     (typeof f.selector === "string" ? (f.selector as string) : null) ||
     (typeof targetFromElement?.[0] === "string" ? (targetFromElement[0] as string) : null);
   const elementHtml = explicitHtml || htmlFromElement || "";
-  const imageText = extractImageText(elementHtml);
-  const imageSrc = extractImageSrc(elementHtml);
-  const imageReference = inferImageReference(reason, imageSrc, idFromElement);
+  const imageText = (typeof element?.image_text === "string" ? element.image_text : null) || extractImageText(elementHtml);
+  const imageSrc = (typeof element?.image_src === "string" ? element.image_src : null) || extractImageSrc(elementHtml);
+  const imageReference = (typeof element?.image_reference === "string" ? element.image_reference : null) || inferImageReference(reason, imageSrc, idFromElement);
 
   return {
     ...f,
