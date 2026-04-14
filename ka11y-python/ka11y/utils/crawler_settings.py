@@ -133,6 +133,7 @@ def select_ocr_candidate_paths(
 ) -> tuple[list[str], list[str]]:
     ranked: list[tuple[tuple[int, int, str], str]] = []
     seen: set[str] = set()
+    seen_asset_keys: set[str] = set()
 
     for index, item in enumerate(images):
         path = str(getattr(item, "screenshot_path", "") or "").strip()
@@ -150,6 +151,20 @@ def select_ocr_candidate_paths(
         is_complex = bool(getattr(item, "is_complex", False))
         is_decorative = bool(getattr(item, "is_decorative", False))
         is_logo = bool(getattr(item, "is_logo", False))
+        src = str(getattr(item, "src", "") or "").strip()
+
+        # Live-site bug fix: repeated decorative/logo assets often get screenshotted
+        # multiple times on the same page (e.g. carousels, duplicated heroes, sticky
+        # headers). OCRing every duplicate burns most of the image-audit budget while
+        # producing identical text/contrast results. Deduplicate those low-priority
+        # assets by their source URL before ranking.
+        asset_key = None
+        if src and (is_decorative or is_logo or classification == "decorative"):
+            asset_key = f"{classification}:{sub_type}:{src}"
+        if asset_key:
+            if asset_key in seen_asset_keys:
+                continue
+            seen_asset_keys.add(asset_key)
 
         if is_button or sub_type == "buttons":
             priority = 0

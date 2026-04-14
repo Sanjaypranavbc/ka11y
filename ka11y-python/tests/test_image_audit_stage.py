@@ -23,6 +23,68 @@ def test_image_crawler_navigation_error_dns_message_is_frontend_clear():
     assert "OCR and image-audit checks were skipped" in message
 
 
+def test_build_image_audit_report_surfaces_all_audited_images():
+    from ka11y.api.v1.combined.findings import _build_image_audit_report
+
+    report = _build_image_audit_report(
+        [
+            {
+                "filename": "hero.png",
+                "screenshot_path": "/tmp/hero.png",
+                "src": "https://example.com/hero.png",
+                "url": "https://example.com",
+                "alt_text": "",
+                "title": "",
+                "classification": "informative",
+                "sub_type": "",
+                "overall_status": "FAILED",
+                "has_ocr_text": True,
+                "detected_text": "Sale now on",
+                "contrast_violations_count": 2,
+                "wcag_1_1_1_status": "FAILED",
+                "wcag_4_1_2_status": "N/A",
+                "wcag_1_4_5_status": "FAILED",
+                "wcag_1_4_11_status": "FAILED",
+                "wcag_1_1_1_reason": "Missing alt text",
+                "wcag_4_1_2_reason": "N/A",
+                "wcag_1_4_5_reason": "Text baked into image",
+                "wcag_1_4_11_reason": "Insufficient contrast",
+            },
+            {
+                "filename": "icon.png",
+                "screenshot_path": "/tmp/icon.png",
+                "src": "https://example.com/icon.png",
+                "url": "https://example.com",
+                "alt_text": "Search",
+                "title": "",
+                "classification": "functional",
+                "sub_type": "icons",
+                "overall_status": "PASSED",
+                "has_ocr_text": False,
+                "detected_text": "",
+                "contrast_violations_count": 0,
+                "wcag_1_1_1_status": "PASSED",
+                "wcag_4_1_2_status": "PASSED",
+                "wcag_1_4_5_status": "N/A",
+                "wcag_1_4_11_status": "N/A",
+                "wcag_1_1_1_reason": "Has alt text",
+                "wcag_4_1_2_reason": "Accessible name present",
+                "wcag_1_4_5_reason": "",
+                "wcag_1_4_11_reason": "",
+            },
+        ]
+    )
+
+    assert report["summary"]["total_images"] == 2
+    assert report["summary"]["failed"] == 1
+    assert report["summary"]["passed"] == 1
+    assert report["summary"]["with_ocr_text"] == 1
+    assert report["summary"]["with_contrast_violations"] == 1
+    assert report["summary"]["by_classification"]["informative"]["failed"] == 1
+    assert report["summary"]["by_classification"]["functional"]["passed"] == 1
+    assert [img["filename"] for img in report["images"]] == ["hero.png", "icon.png"]
+
+
 @pytest.mark.asyncio
 async def test_stage_image_audit_surfaces_dns_resolution_warning():
     from ka11y.api.v1.combined import store
