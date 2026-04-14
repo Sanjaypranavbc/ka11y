@@ -16,11 +16,17 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
+const LANGUAGE_STORAGE_KEY = "ka11y_ui_lang";
+
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Lang>("en");
+  const [lang, setLangState] = useState<Lang>(() => {
+    const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY) as Lang;
+    return saved === "en" || saved === "ja" ? saved : "en";
+  });
 
   const setLang = useCallback((next: Lang) => {
     setLangState(next);
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, next);
   }, []);
 
   const t = useCallback(

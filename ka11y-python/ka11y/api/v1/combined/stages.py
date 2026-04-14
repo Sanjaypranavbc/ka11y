@@ -138,10 +138,21 @@ async def _call_node_flat(
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings."""
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(endpoint, json={"url": url, "level": wcag_level, "lang": lang})
-        resp.raise_for_status()
-        return resp.json().get("findings", [])
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(endpoint, json={"url": url, "level": wcag_level, "lang": lang})
+            resp.raise_for_status()
+            return resp.json().get("findings", [])
+    except httpx.ConnectError:
+        raise RuntimeError(f"axe_core: Node engine unreachable at {node_base_url}")
+    except httpx.TimeoutException:
+        raise RuntimeError(f"axe_core: Node engine timed out ({endpoint})")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 502:
+            raise RuntimeError(f"axe_core: Node engine Bad Gateway ({endpoint})")
+        raise RuntimeError(f"axe_core: Node engine returned {e.response.status_code}")
+    except Exception as e:
+        raise RuntimeError(f"axe_core: unexpected error calling Node: {e}")
 
 
 # ── Individual stage coroutines ───────────────────────────────────────────────

@@ -43,9 +43,18 @@ PYTHONUNBUFFERED=1
   In Docker Compose the Python container resolves `node` by Docker's internal DNS — use `http://node:3000`. For local development outside Docker use `http://localhost:3000`.
 </Note>
 
+### Environment Matrix & Connectivity
+
+| Scenario | `NODE_BASE_URL` (Python) | Browser/Frontend |
+|----------|--------------------------|-------------------|
+| **Full Docker Compose** | `http://node:3000` | Calls `/api/*` (proxied to Python) |
+| **Host-run Python + Node** | `http://localhost:3000` | Calls `http://localhost:8000/api/*` |
+| **Hybrid (Container Python)** | `http://host.docker.internal:3000` | Calls `/api/*` |
+
 <Warning>
-  `node:3000` is **not** a browser-safe hostname. The frontend should never call it directly. Browser requests stay on `/api/*`, then nginx/Vite proxies to Python, and Python calls Node through `NODE_BASE_URL`.
+  `node:3000` is a Docker-internal hostname. The browser cannot resolve it. Always ensure the frontend calls only the Python API origin (or a proxy).
 </Warning>
+
 
 ---
 

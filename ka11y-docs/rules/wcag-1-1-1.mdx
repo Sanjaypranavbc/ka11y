@@ -55,8 +55,8 @@ Before auditing, every image passes through a deterministic classification casca
 
 When `run_ocr: true` (default), ka11y uses **PaddleOCR when available** and falls back to **EasyOCR** when PaddleOCR is unavailable in the running environment:
 
-```
-EasyOCR → text regions + confidence → contrast check → category
+```text
+OCR engine → text regions + confidence → contrast check → category
                                                         ├── with_text
                                                         ├── no_text
                                                         └── button_text / logo_text

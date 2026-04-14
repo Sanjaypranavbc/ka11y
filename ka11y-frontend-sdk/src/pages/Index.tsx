@@ -96,7 +96,7 @@ const Index = () => {
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() =>
     typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false
   );
-  const { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings } =
+  const { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings, activeRun } =
     useAudit();
 
   const isLoading = jobStatus === "pending" || jobStatus === "running";
@@ -153,6 +153,8 @@ const Index = () => {
         <DashboardHeader
           url={result.url}
           generatedAt={result.generated_at}
+          reportLang={result.lang}
+          activeRun={activeRun}
           onExportJSON={exportJSON}
           onToggleSidebar={() => setSidebarOpen(true)}
           isDarkMode={isDarkMode}

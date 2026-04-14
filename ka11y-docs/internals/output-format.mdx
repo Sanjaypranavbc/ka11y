@@ -18,6 +18,7 @@ description: "Complete reference for the CombinedReport JSON structure returned 
 interface CombinedReport {
   url:             string;            // Canonical URL that was audited
   generated_at:    string;            // ISO-8601 UTC timestamp
+  lang:            string;            // Result language ("en" | "ja")
   warnings:        string[];          // Degradation messages (e.g. "axe-core stage failed")
   warning_details: WarningSample[];   // Sampled structured crawler warnings
   summary:         Summary;
