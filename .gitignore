@@ -14,6 +14,8 @@ crawled_images
 mcp
 Scripts
 scripts
-!ka11y-python/scripts/
-!ka11y-python/scripts/live_stage_audit.py
-!ka11y-python/scripts/live_stage_plan.example.yml
+ka11y-python/scripts/
+ka11y-python/scripts/live_stage_audit.py
+ka11y-python/scripts/live_stage_plan.example.yml
+*.json
+
