@@ -53,7 +53,7 @@ Before auditing, every image passes through a deterministic classification casca
 
 ## OCR pipeline
 
-When `run_ocr: true` (default), EasyOCR scans every crawled image:
+When `run_ocr: true` (default), ka11y uses **PaddleOCR when available** and falls back to **EasyOCR** when PaddleOCR is unavailable in the running environment:
 
 ```
 EasyOCR → text regions + confidence → contrast check → category
@@ -64,6 +64,8 @@ EasyOCR → text regions + confidence → contrast check → category
 
 The detected words are then used to validate whether informative-image alt text reflects the visible text content.
 
+For Japanese submissions (`lang: "ja"`), the OCR/image pipeline runs with Japanese-aware recognition while keeping the same API field names and report structure.
+
 ## Output
 
 **CSV file:** `audit_report.csv`
@@ -71,6 +73,17 @@ The detected words are then used to validate whether informative-image alt text 
 Columns: `filename`, `src`, `url`, `classification`, `sub_type`, `is_logo`, `is_icon`, `is_button`, `is_functional`, `is_decorative`, `alt_text`, `title`, `has_ocr_text`, `detected_text`, `contrast_violations_count`, `wcag_1_1_1_status`, `wcag_4_1_2_status`, `wcag_1_4_5_status`, `wcag_1_4_11_status`, `overall_status`, `wcag_1_1_1_reason`, `wcag_4_1_2_reason`, `wcag_1_4_5_reason`, `wcag_1_4_11_reason`, `screenshot_path`
 
 Status values: `PASSED` · `FAILED` · `N/A`
+
+In the combined API, this rule family also feeds the top-level `image_audit_report`:
+
+- `image_audit_report` is present when `run_image_audit=true`
+- `contrast_report` is separate and only appears when `run_ocr=true`
+- frontend image previews can be rendered from `image_audit_report.images[].image_url` even when OCR is disabled
+
+Localization in the combined finding arrays works like this:
+
+- `criterion_name` and `suggested_fix` are shared-i18n backed
+- Python `reason` strings come from the active auditor implementation, so some `1.1.1` reasons remain English until that auditor text is localized
 
 ## Common violations
 

@@ -8,6 +8,8 @@ description: "End-to-end request flow and rule-by-rule execution details for the
 > Stack: Node.js + Express + Puppeteer + axe-core
 
 > Update 2026-04-13: custom checks now receive shared rule context (`lang` + shared config) from the service layer. Migrated checks read EN/JA heuristics and selected reason templates from `config/universal.yml` instead of hardcoded JS lists.
+>
+> Update 2026-04-14: flat and grouped Node result paths now both carry `lang`, and the mapped Node findings localize `criterion_name`, `reason`, and `suggested_fix` for Japanese. Best-practice metadata is loaded through the shared locale overlays in `i18n/locales/`.
 
 ---
 
@@ -79,6 +81,21 @@ flowchart TD
     STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19
     INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
+
+### Localization and Shared Config
+
+Current Node output behavior:
+
+- grouped and flat endpoints both accept `lang`
+- WCAG names and suggested fixes come from shared `i18n/rules.yml` plus optional locale overlays
+- axe-core summaries are normalized through the locale-aware mapper so Japanese failure summaries no longer leak English prefixes into `reason`
+- migrated custom checks receive shared rule context and can read EN/JA heuristics and reason templates from `config/universal.yml`
+
+This means Japanese Node findings now localize all user-facing finding text that is owned by the Node mapper:
+
+- `criterion_name`
+- `reason`
+- `suggested_fix`
 
 ---
 

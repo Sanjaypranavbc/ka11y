@@ -106,6 +106,20 @@ flowchart TD
 | CJK text spacing | `crawler.language.cjk_langs` drives the rendered text-spacing override CSS |
 | Config loading | `load_config()` is cached and returns defensive copies so runtime helpers do not mutate shared state |
 
+### Localization and Language Routing
+
+The combined request `lang` now feeds both stacks, but the Python output contract is still split by responsibility:
+
+- `criterion_name` is localized through the shared i18n loader
+- `suggested_fix` is localized through the same shared `rules.yml` + locale overlay path
+- `reason` is only localized when the emitting Python auditor/evaluator provides localized text
+
+Practical outcome today:
+
+- Japanese combined runs get JP-aware OCR and JP-aware sensory/text-spacing heuristics where implemented
+- Python `reason` strings are still mixed: some newer or config-driven auditors localize, while several older converters remain English
+- Node output is more fully localized than Python output at the finding-text layer
+
 ---
 
 ## Rule-by-Rule Analysis

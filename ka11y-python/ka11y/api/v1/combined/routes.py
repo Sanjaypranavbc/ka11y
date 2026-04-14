@@ -219,6 +219,7 @@ async def submit_combined_audit(payload: CombinedRequest):
         "status": "pending",
         "url": url,
         "submitted_at": now,
+        "lang": payload.lang,
         "_created_at": time.time(),
         "completed_at": None,
         "report_path": None,

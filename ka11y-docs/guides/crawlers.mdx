@@ -30,6 +30,7 @@ The important practical difference is that the combined pipeline now gets:
 - stronger page-aware finding dedup across static and rendered paths
 - config-driven budgets for OCR, hover scans, focus scans, and warning samples
 - persisted `universal_snapshot_raw.json`, `universal_snapshot_normalized.json`, and Rich step logs
+- `image_audit_report` image records even when OCR is disabled; `contrast_report` remains OCR-only
 
 The legacy crawler classes still exist and keep the same model contracts, so direct usage and compatibility paths remain intact.
 
@@ -112,6 +113,12 @@ Each run produces:
 
 `combined_report.json` now also carries `warning_details`, which is a sampled view of the universal crawler limitations that were recorded during extraction.
 
+For image-heavy runs, remember the split contract:
+
+- `image_audit_report` is populated when `run_image_audit=true`, even if `run_ocr=false`
+- `contrast_report` is only populated when `run_ocr=true`
+- frontend image viewers should accept image URLs from either report type
+
 An expectation pass means:
 
 - the page completed end-to-end
@@ -132,6 +139,24 @@ These crawler controls now live in the shared repo-root `config/universal.yml` a
 | `crawler.performance.max_ocr_images_per_run` | Caps OCR work on heavy pages and enables allowlist-based OCR selection |
 
 Config loading is cached through `load_config()`, but callers receive defensive copies so helper usage stays mutation-safe.
+
+### Navigation hardening for image crawl
+
+`AsyncImageCrawler` now hardens real-site navigation before OCR and image auditing begin:
+
+- DNS failures are preflighted and retried before the stage is marked as failed
+- transient `Page.goto()` navigation errors use bounded retry/backoff instead of failing immediately
+- the combined pipeline records a clearer `image_audit:*` warning when the page still cannot be resolved or loaded
+
+This is why a missing image audit should now be treated as a crawl/navigation problem first, not as a Japanese-language OCR problem.
+
+### Language routing and Japanese output
+
+The crawler layer itself is not language-specific, but the image/OCR path now uses the submitted combined `lang` consistently:
+
+- `lang=ja` is passed into OCR so Japanese and mixed-script images are scanned with Japanese-aware recognition
+- Node receives the same `lang` for axe/custom-rule mapping, which localizes `criterion_name`, `reason`, and `suggested_fix`
+- Python uses the same `lang` for shared `criterion_name` / `suggested_fix` lookups, while `reason` localization still depends on the individual auditor implementation
 
 ### TLS and expired certificates
 

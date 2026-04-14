@@ -40,6 +40,7 @@ class JobStatusResponse(BaseModel):
     status: str  # pending | running | completed | failed
     url: str
     submitted_at: str
+    lang: str
     completed_at: Optional[str] = None
     report_path: Optional[str] = None
     result: Optional[Dict[str, Any]] = None

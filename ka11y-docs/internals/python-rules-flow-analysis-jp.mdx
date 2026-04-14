@@ -4,63 +4,121 @@ description: "Pythonアクセシビリティ・オーディターのエンドツ
 ---
 
 > 生成日: 2026-04-06
-> スコープ: `ka11y-python/ka11y/accessibility/rules/` + `ka11y-python/ka11y/accessibility/rendered/evaluators/` (18のWCAG達成基準)
-> スタック: Python 3.10+ + Playwright + PaddleOCR + ML 分類器
+> 更新日: 2026-04-13
+> スコープ: `ka11y-python/ka11y/accessibility/rules/` + `ka11y-python/ka11y/accessibility/rendered/evaluators/` + 統合オーケストレーション（`runner.py`, `stages.py`, `findings.py`）
+> スタック: Python 3.10+ + Playwright + OCR（PaddleOCR、未利用時は EasyOCR にフォールバック）+ ML 分類器
 
 ---
 
 ## アーキテクチャと要求フロー
 
+### 現在の本番経路
+
+現在の本番フローは、旧 `/api/v1/audit` 単体サービスではなく **combined パイプライン** です。
+
+- 1 件の combined リクエストが `ka11y-node` と `ka11y-python` に分岐する
+- `ka11y-python` は 7 つの DOM ルール群に対して **1 回の universal static crawl** を共有する
+- `AsyncImageCrawler` は画像取得、OCR、コントラスト、画像監査を担当する
+- `RenderedLayoutCrawler` は表示方向、リフロー、テキストサイズ変更、ホバー、フォーカス系の評価を担当する
+- 最終レポートはマージ、重複排除、warning 付与を行い `combined_report.json` として保存される
+
 ```mermaid
 flowchart TD
-    A[HTTP POST /api/v1/audit] --> B["クローラー: Playwright"]
-    B --> C["ページスナップショット / DOMデータ"]
-    B --> D["画像収集"]
-    
-    subgraph "並列監査パイプライン"
-        E["レンダリング評価 (Rendered)"]
-        F["静的ルール監査 (Static)"]
-        G["マルチモーダル画像監査 (Multimodal)"]
+    A[HTTP POST /api/v1/combined] --> B["runner._run_job()"]
+    B --> C["ka11y-node: axe-core + custom checks"]
+    B --> D["ka11y-python: _run_python_stages()"]
+
+    subgraph "Python クローラー分岐"
+        E["UniversalPageLoader"]
+        F["AsyncImageCrawler"]
+        G["RenderedLayoutCrawler"]
     end
-    
-    C --> E
-    C --> F
+
+    D --> E
+    D --> F
     D --> G
-    
-    E --> H["表示の向き / リフロー / テキストのサイズ変更 / テキストの間隔 / ホバー / フォーカスの重なり"]
-    F --> I["フォーム / 名前(name)中のラベル / ターゲットのサイズ / 静的なテキストの間隔"]
-    G --> J["分類 + OCR + コントラスト"]
-    
-    H & I & J --> K["検出結果アグリゲーター"]
-    K --> L["JSON / CSV レポート結果"]
+
+    E --> H["SnapshotNormalizer"]
+    H --> I["既存の Pydantic モデル"]
+    I --> J["フォーム / Label in Name / Pause-Stop-Hide / Target Size / Text Spacing / Media / Sensory オーディター"]
+
+    F --> K["分類 + OCR + コントラスト + Alt/Text 監査"]
+    G --> L["Reflow / Resize Text / Orientation / Hover / Focus Not Obscured 評価器"]
+
+    C --> M["Node findings"]
+    J --> N["Universal static findings"]
+    K --> O["Image findings"]
+    L --> P["Rendered findings"]
+
+    M & N & O & P --> Q["マージ + 重複排除 + レベルフィルタ + warning 付与"]
+    Q --> R["combined_report.json + step logs"]
 ```
 
 ### カスタムチェックの実行モデル
 
 ```mermaid
 flowchart TD
-    Index["ルールインデックス"] --> Static["静的 / DOM監査"]
-    Index --> Rendered["レンダリング / ステートフル評価"]
-    Index --> Multi["マルチモーダル / CV監査"]
-    
-    subgraph "静的監査 (Static)"
-        S1["フォーム・オーディター"]
-        S2["名前(name)中のラベル"]
-        S3["ターゲットのサイズ"]
+    Index["Combined Request"] --> Static["Universal Static オーディター"]
+    Index --> Rendered["Rendered / Stateful 評価器"]
+    Index --> Multi["Multimodal / CV オーディター"]
+
+    subgraph "Universal Static 経路"
+        S1["UniversalPageLoader"]
+        S2["SnapshotNormalizer"]
+        S3["正規化済みモデルに対する既存オーディター"]
     end
-    
-    subgraph "レンダリング評価 (Rendered)"
-        R1["スタイルのリセット"]
-        R2["オーバーライドの注入/変更"]
-        R3["幾何学的な差分の比較"]
+
+    subgraph "Rendered 経路"
+        R1["RenderedLayoutCrawler"]
+        R2["viewport / CSS mutation / focus / hover"]
+        R3["評価レコード -> findings"]
     end
-    
-    subgraph "マルチモーダル監査 (Multimodal)"
-        M1["ML 分類"]
-        M2["PaddleOCR テキスト抽出"]
-        M3["クロスモーダル検証"]
+
+    subgraph "Image 経路"
+        M1["AsyncImageCrawler"]
+        M2["OCR budget + OCR extraction"]
+        M3["Alt / contrast / image-of-text validation"]
     end
 ```
+
+### 現在の Python ステージ構成
+
+| ステージ | データソース | 監査モード | 備考 |
+|------|-------------|------------|------|
+| `form_audit` | Universal snapshot -> `FormInputData` | Static | same-origin iframe と open shadow root を universal crawl から継承 |
+| `label_in_name` | Universal snapshot -> `InteractiveElementData` | Static | `selector`、`element_ref_id`、`frame_path` の来歴を保持 |
+| `pause_stop_hide` | Universal snapshot -> `MovingContentData` | Static | `duration_known` と `applicability_exception=loading_indicator` に対応 |
+| `target_size` | Universal snapshot -> `TargetSizeData` | Static | iframe / shadow-root のカバレッジを継承 |
+| `text_spacing` | Universal snapshot -> `TextSpacingData` | Static | 構造リスク判定 |
+| `media_audit` | Universal snapshot -> `MediaElementData` | Static | transcript / nearby-link 判定 |
+| `sensory_audit` | Universal snapshot -> `SensoryElementData` | Static | 日本語 / CJK を含む言語対応 |
+| `image_audit` | `AsyncImageCrawler` + OCR | Multimodal | OCR には予算上限があり、大規模ページでも段階的に処理 |
+| `rendered_layout_audit` | `RenderedLayoutCrawler` | Rendered | hover / focus の失敗モードを強化済み |
+
+### 直近の強化点
+
+| 領域 | 現在の挙動 |
+|------|------------------|
+| Universal warnings | cross-origin / failed-frame warning を `warning_details` にサンプリングして出力 |
+| Merge dedup | `runner._merge_findings()` は HTML フォールバックより selector / target / ref を優先 |
+| OCR budget | `crawler.performance.max_ocr_images_per_run` が OCR 対象数を制限し、選択 / スキップ数をログ出力 |
+| Rendered limits | `crawler.performance.max_focus_steps` と `crawler.performance.max_hover_candidates` で探索量を制御 |
+| CJK text spacing | `crawler.language.cjk_langs` が日本語など CJK 向け spacing override CSS を決定 |
+| Config loading | `load_config()` はキャッシュされるが、防御的コピーを返して共有状態の破壊を防ぐ |
+
+### 日本語化と言語ルーティング
+
+combined リクエストの `lang` は Node と Python の両方に渡されますが、Python 側の finding 文字列は責務によって挙動が分かれます。
+
+- `criterion_name` は共有 i18n ローダーから日本語化される
+- `suggested_fix` も同じ shared `rules.yml` + locale overlay から日本語化される
+- `reason` は各 Python オーディター / evaluator が返す文言に依存する
+
+現在の実務上の挙動:
+
+- 日本語監査では OCR や sensory / text-spacing 系の一部ヒューリスティックが `lang=ja` に追従する
+- Python の `reason` はまだ混在しており、古い converter は英語のままのものがある
+- finding テキスト全体の日本語化は、現時点では Python より Node の方が進んでいる
 
 ---
 

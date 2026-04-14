@@ -243,6 +243,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
         report = _build_report(
             url,
             all_findings,
+            lang=payload.lang,
             contrast_report=contrast_report,
             image_audit_report=image_audit_report,
         )

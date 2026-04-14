@@ -6,6 +6,10 @@ description: "Node.js アクセシビリティ監査機能のエンドツーエ�
 > 生成日: 2026-04-08
 > スコープ: `ka11y-node/src/custom-checks/`（カスタム WCAG チェック 24 件）+ `ka11y-node/src/services/`
 > スタック: Node.js + Express + Puppeteer + axe-core
+>
+> 更新日 2026-04-13: カスタムチェックはサービス層から共有ルールコンテキスト（`lang` + 共有設定）を受け取るようになりました。移行済みチェックは、ハードコードされた JS 配列ではなく `config/universal.yml` から EN/JA のヒューリスティックと一部の理由テンプレートを読み込みます。
+>
+> 更新日 2026-04-14: grouped / flat の両方の Node エンドポイントで `lang` が最後まで伝播し、`criterion_name`、`reason`、`suggested_fix` が日本語化されます。ベストプラクティス系メタデータも `i18n/locales/` の共有ロケールオーバーレイから読み込みます。
 
 ---
 
@@ -20,8 +24,8 @@ flowchart TD
 
     subgraph "並列監査パイプライン"
         F["axe-core エンジン"]
-        G["静的カスタムチェック 18 件"]
-        H["インタラクティブカスタムチェック 6 件"]
+        G["静的カスタムチェック 19 件"]
+        H["インタラクティブカスタムチェック 5 件"]
     end
 
     E --> F
@@ -63,6 +67,7 @@ flowchart TD
         S16["現在位置情報"]
         S17["表示方向（静的）"]
         S18["文字画像"]
+        S19["発音"]
     end
 
     subgraph "インタラクティブチェック（順次実行）"
@@ -71,12 +76,26 @@ flowchart TD
         I3["フォーカス時の動作"]
         I4["入力時の動作"]
         I5["キーボードトラップ"]
-        I6["発音"]
     end
 
-    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18
-    INTER --> I1 --> I2 --> I3 --> I4 --> I5 --> I6
+    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19
+    INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
+
+### 日本語化と共有設定
+
+現在の Node 出力の動作:
+
+- grouped / flat の両方のエンドポイントが `lang` を受け付ける
+- WCAG 名称と `suggested_fix` は共有の `i18n/rules.yml` とロケールオーバーレイから取得する
+- axe-core の失敗要約はロケール対応のマッパーで正規化されるため、日本語監査で英語の接頭辞が `reason` に混ざらない
+- 移行済みのカスタムチェックは共有コンテキストを受け取り、`config/universal.yml` から EN/JA のヒューリスティックや理由テンプレートを参照できる
+
+その結果、日本語の Node finding では Node 側が所有する主要フィールドが日本語化されます:
+
+- `criterion_name`
+- `reason`
+- `suggested_fix`
 
 ---
 

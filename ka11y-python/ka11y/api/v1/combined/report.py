@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 def _build_report(
     url: str,
     all_findings: List[Dict],
+    lang: str = "en",
     contrast_report: Optional[Dict[str, Any]] = None,
     image_audit_report: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -54,6 +55,7 @@ def _build_report(
     return {
         "url": url,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "lang": lang,
         "summary": {
             "total_findings": len(all_findings),
             "violations": len(violations),

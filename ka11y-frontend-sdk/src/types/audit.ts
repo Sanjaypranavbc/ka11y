@@ -134,6 +134,7 @@ export interface AuditResult {
   status: "pending" | "running" | "completed" | "failed";
   url: string;
   generated_at: string;
+  lang?: string;
   total: number;
   violations_count: number;
   needs_review_count: number;
@@ -160,6 +161,8 @@ export interface AuditConfig {
   run_label_in_name_audit: boolean;
   run_pause_stop_hide_audit: boolean;
   run_target_size_audit: boolean;
+  run_media_audit: boolean;
+  run_sensory_audit: boolean;
   // Rendered-layout checks (Playwright)
   run_resize_text_audit: boolean;
   run_reflow_audit: boolean;
