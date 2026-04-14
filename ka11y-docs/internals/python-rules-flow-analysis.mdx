@@ -18,9 +18,10 @@ The current production flow is the combined pipeline, not the older single-servi
 
 - One combined request fans out into `ka11y-node` and `ka11y-python`.
 - `ka11y-python` now uses **one universal static crawl** for seven DOM rule families.
-- `AsyncImageCrawler` still owns image capture, OCR, and contrast/image auditing.
+- `AsyncImageCrawler` now uses an **optimized single-session queue** for image capture, sharing a browser/context and crawl policy.
 - `RenderedLayoutCrawler` still owns rendered, focus, hover, orientation, reflow, and resize scenarios.
-- The final report is merged, deduplicated, enriched with provenance, and written as `combined_report.json`.
+- Every crawler now shares a central **Navigation Resilience** layer (DNS preflight + backoff) and a **Crawl Policy** (normalization + budgets).
+- **Reporting:** Universal stages now hard-fail (mark as `error`) if the crawler extracts 0 pages, preventing false coverage reports.
 
 ```mermaid
 flowchart TD
@@ -28,12 +29,18 @@ flowchart TD
     B --> C["ka11y-node: axe-core + custom checks"]
     B --> D["ka11y-python: _run_python_stages()"]
 
+    subgraph "Centralized Crawl Support"
+        CP["CrawlPolicy: budgets + normalization"]
+        NR["Navigation: DNS + retry + backoff"]
+    end
+
     subgraph "Python Crawler Branches"
-        E["UniversalPageLoader"]
-        F["AsyncImageCrawler"]
+        E["UniversalPageLoader (Source of Truth)"]
+        F["AsyncImageCrawler (Optimized Queue)"]
         G["RenderedLayoutCrawler"]
     end
 
+    CP & NR -.-> E & F & G
     D --> E
     D --> F
     D --> G
@@ -99,12 +106,11 @@ flowchart TD
 
 | Area | Current behavior |
 |------|------------------|
+| Zero-coverage guard | Universal stages mark themselves `error` if `pages_crawled == 0` instead of emitting false passes |
+| Navigation Resilience | Centralized `navigate_with_resilience` (DNS preflight, backoff, retry) shared across all crawlers |
+| Crawl Policy | `CrawlPolicy` centralizes URL normalization, same-origin rules, and page/link budgets |
+| Image session queue | `AsyncImageCrawler` uses one browser/context for multi-page crawls instead of recursive launches |
 | Universal warnings | Cross-origin and failed-frame warnings are sampled into `warning_details` in `combined_report.json` |
-| Merge dedup | `runner._merge_findings()` prefers page-aware selector/target/ref evidence before HTML fallback |
-| OCR budget | `crawler.performance.max_ocr_images_per_run` caps OCR scope and logs selected vs skipped images with Rich |
-| Rendered limits | `crawler.performance.max_focus_steps` and `crawler.performance.max_hover_candidates` bound rendered probes |
-| CJK text spacing | `crawler.language.cjk_langs` drives the rendered text-spacing override CSS |
-| Config loading | `load_config()` is cached and returns defensive copies so runtime helpers do not mutate shared state |
 
 ### Localization and Language Routing
 

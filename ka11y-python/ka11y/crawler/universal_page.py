@@ -13,6 +13,8 @@ from playwright.async_api import BrowserContext, Page, async_playwright
 
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.context_factory import new_crawler_context
+from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
+from ka11y.crawler.policy import CrawlPolicy
 from ka11y.utils.step_logger import ExecutionStepLogger
 
 logger = setup_logger(name="KAC", tag="universal_page")
@@ -1110,8 +1112,12 @@ class UniversalPageLoader:
         max_depth: int = 0,
         record_har: bool = False,
         step_logger: ExecutionStepLogger | None = None,
+        policy: CrawlPolicy | None = None,
     ) -> PageSnapshot:
         output_dir.mkdir(parents=True, exist_ok=True)
+        if policy is None:
+            policy = CrawlPolicy(max_depth=max_depth)
+        
         snapshot = PageSnapshot(page_url=url)
         har_path: Optional[str] = None
         har_file = output_dir / "universal_session.har"
@@ -1146,7 +1152,7 @@ class UniversalPageLoader:
                     root_url=url,
                     url=url,
                     depth=0,
-                    max_depth=max_depth,
+                    policy=policy,
                     visited=visited,
                     output=snapshot,
                     step_logger=step_logger,
@@ -1189,15 +1195,23 @@ class UniversalPageLoader:
         root_url: str,
         url: str,
         depth: int,
-        max_depth: int,
+        policy: CrawlPolicy,
         visited: set[str],
         output: PageSnapshot,
         step_logger: ExecutionStepLogger | None,
     ) -> None:
-        normalized_url = cls._normalize_url(url)
+        normalized_url = policy.normalize_url(url)
         if normalized_url in visited:
             return
         visited.add(normalized_url)
+
+        if not policy.is_allowed(normalized_url, root_url):
+            logger.info(f"[universal] skipping off-origin/disallowed URL: {normalized_url}")
+            return
+
+        if output.pages_crawled >= policy.max_pages:
+            logger.warning(f"[universal] crawl budget exceeded ({policy.max_pages} pages)")
+            return
 
         page = await context.new_page()
         page_warning_count = 0
@@ -1215,6 +1229,12 @@ class UniversalPageLoader:
             await cls._prepare_page(page, normalized_url, step_logger=step_logger)
             extracted = await cls._extract_page(page, page_url=normalized_url, output=output)
             links = await cls._extract_links(page, root_url)
+            
+            # Limit links per page
+            if len(links) > policy.max_links_per_page:
+                logger.info(f"[universal] capping links from {len(links)} to {policy.max_links_per_page}")
+                links = links[:policy.max_links_per_page]
+
             output.page_summaries.append(
                 {
                     "page_url": normalized_url,
@@ -1251,6 +1271,15 @@ class UniversalPageLoader:
                         "warnings": page_warning_count,
                     },
                 )
+        except NavigationError as exc:
+             # Captured as warning instead of hard error for universal crawl
+             warning = {
+                 "code": exc.code,
+                 "page_url": normalized_url,
+                 "message": str(exc),
+             }
+             output.warnings.append(warning)
+             logger.warning(f"[universal] {exc.code} for {normalized_url}: {exc}")
         except Exception as exc:
             output.partial = True
             warning = {
@@ -1270,18 +1299,16 @@ class UniversalPageLoader:
         finally:
             await page.close()
 
-        if depth >= max_depth:
+        if depth >= policy.max_depth:
             return
 
         for link in links:
-            if cls._normalize_url(link) in visited:
-                continue
             await cls._crawl_url(
                 context=context,
                 root_url=root_url,
                 url=link,
                 depth=depth + 1,
-                max_depth=max_depth,
+                policy=policy,
                 visited=visited,
                 output=output,
                 step_logger=step_logger,
@@ -1295,7 +1322,7 @@ class UniversalPageLoader:
         *,
         step_logger: ExecutionStepLogger | None,
     ) -> None:
-        await cls._navigate(page, url)
+        await navigate_with_resilience(page, url)
 
         try:
             await page.wait_for_load_state("networkidle", timeout=_NETWORKIDLE_TIMEOUT_MS)
@@ -1526,30 +1553,6 @@ class UniversalPageLoader:
         return warning
 
     @staticmethod
-    async def _navigate(page: Page, url: str) -> None:
-        attempts = [
-            ("domcontentloaded", _GOTO_TIMEOUT_MS),
-            ("load", 20_000),
-            ("commit", 15_000),
-        ]
-        for wait_until, timeout_ms in attempts:
-            try:
-                await page.goto(url, wait_until=wait_until, timeout=timeout_ms)
-                if wait_until == "commit":
-                    try:
-                        await page.wait_for_selector("body", state="attached", timeout=5_000)
-                    except Exception:
-                        pass
-                    try:
-                        await page.wait_for_load_state("domcontentloaded", timeout=5_000)
-                    except Exception:
-                        pass
-                return
-            except Exception as exc:
-                logger.warning(f"[universal] goto({wait_until}) failed for {url}: {exc}")
-        raise RuntimeError(f"Could not navigate to {url}")
-
-    @staticmethod
     async def _wait_for_spa(page: Page) -> None:
         for signal in _SPA_SIGNALS:
             try:
@@ -1584,13 +1587,6 @@ class UniversalPageLoader:
         )
         digest = hashlib.sha1(basis.encode("utf-8")).hexdigest()[:16]
         return f"{category}_{digest}"
-
-    @staticmethod
-    def _normalize_url(url: str) -> str:
-        normalized = url.split("#", 1)[0]
-        if normalized.endswith("/") and len(normalized) > len("https://a/"):
-            return normalized.rstrip("/")
-        return normalized
 
     @staticmethod
     def _is_same_origin(base_url: str, other_url: str) -> bool:

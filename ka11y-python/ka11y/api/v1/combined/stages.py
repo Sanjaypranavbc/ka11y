@@ -763,6 +763,8 @@ async def _load_universal_snapshot(
                     "warning_path": str(warning_path),
                 },
             )
+    if normalized.pages_crawled == 0:
+        raise Exception("Universal crawl failed: 0 pages extracted")
     return normalized
 
 
