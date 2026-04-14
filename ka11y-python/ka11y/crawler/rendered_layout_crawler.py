@@ -240,29 +240,43 @@ class RenderedLayoutCrawler:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    async def crawl(self) -> Dict[str, Any]:
+    async def crawl(self, discovered_urls: List[str] | None = None) -> List[Dict[str, Any]]:
         """
-        Run all rendering scenarios and return a dict keyed by scenario name,
-        containing the raw data consumed by each evaluator.
+        Run all rendering scenarios and return a list of dicts (one per page),
+        each containing the raw data consumed by evaluators.
         """
+        urls = discovered_urls if discovered_urls else [self.base_url]
+        all_results = []
+
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
             try:
-                results = await self._run_all_scenarios(browser)
+                for url in urls:
+                    logger.info(f"[rendered] starting scenarios for {url}")
+                    # Temporarily override base_url for the scenario runners
+                    original_base = self.base_url
+                    self.base_url = url
+                    try:
+                        page_results = await self._run_all_scenarios(browser)
+                        page_results["page_url"] = url
+                        all_results.append(page_results)
+                    finally:
+                        self.base_url = original_base
             finally:
                 await browser.close()
 
-        self._raw_results = results
-        return results
+        self._raw_results_list = all_results
+        return all_results
 
     def save_raw_json(self) -> None:
         """Save raw scenario results as JSON files for debugging."""
-        for name, data in self._raw_results.items():
-            save_raw_json(self.output_dir, f"scenario_{name}", data)
-        save_raw_json(self.output_dir, "rendered_layout_raw", self._raw_results)
+        path = self.output_dir / "rendered_layout_raw_all.json"
+        with path.open("w", encoding="utf-8") as fh:
+            json.dump(self._raw_results_list, fh, indent=2, ensure_ascii=False)
+        logger.info(f"[rendered] saved raw results for {len(self._raw_results_list)} pages to {path}")
 
     # ── Internal scenario runner ───────────────────────────────────────────────
 
@@ -683,7 +697,7 @@ class RenderedLayoutCrawler:
 
 
 def run_all_evaluators(
-    raw: Dict[str, Any],
+    raw_list: List[Dict[str, Any]],
     page_url: str,
     run_resize_text: bool = True,
     run_reflow: bool = True,
@@ -702,74 +716,79 @@ def run_all_evaluators(
         FocusStep,
         HoverInteractionResult,
     )
+    
+    all_findings = []
 
-    def _snap(key: str) -> PageSnapshot:
-        d = raw.get(key, {})
-        try:
-            return PageSnapshot.model_validate(d)
-        except Exception:
-            return PageSnapshot(
-                scenario=key,
-                page_url=page_url,
-                viewport_width=1280,
-                viewport_height=720,
-            )
-
-    def _focus_steps() -> List[FocusStep]:
-        steps = []
-        for d in raw.get("focus_scan", []):
+    for raw in raw_list:
+        current_url = raw.get("page_url", page_url)
+        
+        def _snap(key: str) -> PageSnapshot:
+            d = raw.get(key, {})
             try:
-                steps.append(FocusStep.model_validate(d))
+                return PageSnapshot.model_validate(d)
             except Exception:
-                pass
-        return steps
+                return PageSnapshot(
+                    scenario=key,
+                    page_url=current_url,
+                    viewport_width=1280,
+                    viewport_height=720,
+                )
 
-    def _hover_results() -> List[HoverInteractionResult]:
-        results = []
-        for d in raw.get("hover_scan", []):
-            try:
-                results.append(HoverInteractionResult.model_validate(d))
-            except Exception:
-                pass
-        return results
+        def _focus_steps() -> List[FocusStep]:
+            steps = []
+            for d in raw.get("focus_scan", []):
+                try:
+                    steps.append(FocusStep.model_validate(d))
+                except Exception:
+                    pass
+            return steps
 
-    all_records: List[RuleAuditRecord] = []
+        def _hover_results() -> List[HoverInteractionResult]:
+            results = []
+            for d in raw.get("hover_scan", []):
+                try:
+                    results.append(HoverInteractionResult.model_validate(d))
+                except Exception:
+                    pass
+            return results
 
-    if run_reflow:
-        all_records.extend(ev_reflow.evaluate(_snap("reflow_320")))
+        records = []
+        if run_resize_text:
+            from ka11y.accessibility.rendered.evaluators import evaluate_resize_text
+            records.extend(evaluate_resize_text(_snap("baseline"), _snap("resize_text_200")))
 
-    if run_text_spacing:
-        all_records.extend(
-            ev_text_spacing.evaluate(
-                _snap("text_spacing_baseline"),
-                _snap("text_spacing_override"),
+        if run_reflow:
+            from ka11y.accessibility.rendered.evaluators import evaluate_reflow
+            records.extend(evaluate_reflow(_snap("baseline"), _snap("reflow_320")))
+
+        if run_text_spacing:
+            from ka11y.accessibility.rendered.evaluators import evaluate_text_spacing
+            records.extend(
+                evaluate_text_spacing(
+                    _snap("text_spacing_baseline"), _snap("text_spacing_override")
+                )
             )
-        )
 
-    if run_resize_text:
-        all_records.extend(
-            ev_resize.evaluate(
-                _snap("baseline"),
-                _snap("resize_text_200"),
+        if run_orientation:
+            from ka11y.accessibility.rendered.evaluators import evaluate_orientation
+            records.extend(
+                evaluate_orientation(
+                    _snap("orientation_portrait"), _snap("orientation_landscape")
+                )
             )
-        )
 
-    if run_orientation:
-        all_records.extend(
-            ev_orientation.evaluate(
-                _snap("orientation_portrait"),
-                _snap("orientation_landscape"),
-            )
-        )
+        if run_hover_focus_content:
+            from ka11y.accessibility.rendered.evaluators import evaluate_hover_focus_content
+            records.extend(evaluate_hover_focus_content(_hover_results()))
 
-    if run_hover_focus_content:
-        all_records.extend(ev_hover.evaluate(_hover_results()))
+        if run_focus_not_obscured_min:
+            from ka11y.accessibility.rendered.evaluators import evaluate_focus_not_obscured_min
+            records.extend(evaluate_focus_not_obscured_min(_focus_steps()))
 
-    focus_steps = _focus_steps()
-    if run_focus_not_obscured_min:
-        all_records.extend(ev_fnom.evaluate(focus_steps))
+        if run_focus_not_obscured_enh:
+            from ka11y.accessibility.rendered.evaluators import evaluate_focus_not_obscured_enh
+            records.extend(evaluate_focus_not_obscured_enh(_focus_steps()))
+            
+        all_findings.extend([r.model_dump() for r in records])
 
-    if run_focus_not_obscured_enh:
-        all_records.extend(ev_fnoe.evaluate(focus_steps))
-
-    return [r.to_dict() for r in all_records]
+    return all_findings

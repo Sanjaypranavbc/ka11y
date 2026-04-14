@@ -124,12 +124,14 @@ async function run(page, context = {}) {
         if (hasGridPlacement) {
           results.push({
             tagName: el.tagName.toLowerCase(),
-            id: el.id || null,
+            element_id: el.id || null,
+            target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+            tag: el.tagName.toUpperCase(),
             display,
             flexDir: null,
             orders: null,
             reasonCode: 'grid-explicit-placement',
-            html: el.outerHTML.slice(0, 200),
+            html: el.outerHTML.slice(0, 150),
           });
           continue;
         }
@@ -143,12 +145,14 @@ async function run(page, context = {}) {
         if (hasFloated && hasNonFloated) {
           results.push({
             tagName: el.tagName.toLowerCase(),
-            id: el.id || null,
+            element_id: el.id || null,
+            target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+            tag: el.tagName.toUpperCase(),
             display,
             flexDir: null,
             orders: null,
             reasonCode: 'mixed-floats',
-            html: el.outerHTML.slice(0, 200),
+            html: el.outerHTML.slice(0, 150),
           });
           continue;
         }
@@ -158,12 +162,14 @@ async function run(page, context = {}) {
 
       results.push({
         tagName: el.tagName.toLowerCase(),
-        id: el.id || null,
+        element_id: el.id || null,
+        target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
         display,
         flexDir: flexDir || null,
         orders: hasExplicitOrder ? orders : null,
         reasonCode: isReversed ? 'flex-direction-reverse' : 'css-order-reorders',
-        html: el.outerHTML.slice(0, 200),
+        html: el.outerHTML.slice(0, 150),
       });
     }
 
@@ -191,6 +197,7 @@ async function run(page, context = {}) {
       impact: 'moderate',
       status: 'incomplete',
       reason: _t(sharedContext, '{count} flex/grid container(s) visually reorder content relative to DOM order. Verify the DOM order matches the intended reading sequence. Details: {sample}.', 'flex/grid コンテナ {count} 件で、DOM 順序に対して視覚的な並び替えが行われています。DOM 順序が意図した読み上げ・閲覧順と一致しているか確認してください。詳細: {sample}。', { count: violations.length, sample }),
+      elements: violations,
       helpUrl: HELP_URL,
     }],
   };

@@ -1114,9 +1114,17 @@ class UniversalPageLoader:
         step_logger: ExecutionStepLogger | None = None,
         policy: CrawlPolicy | None = None,
     ) -> PageSnapshot:
+        """
+        Main entry point for universal crawling. Uses a single browser session
+        and a bounded queue (Optimized v2).
+        """
         output_dir.mkdir(parents=True, exist_ok=True)
         if policy is None:
-            policy = CrawlPolicy(max_depth=max_depth)
+            policy = CrawlPolicy(
+                max_depth=max_depth,
+                max_pages=20,  # Default safety cap
+                max_links_per_page=50
+            )
         
         snapshot = PageSnapshot(page_url=url)
         har_path: Optional[str] = None
@@ -1126,9 +1134,13 @@ class UniversalPageLoader:
             step_logger.record(
                 step="universal_loader",
                 status="running",
-                message="Starting universal crawl",
+                message="Starting universal crawl (queue-based)",
                 context={"url": url, "max_depth": max_depth, "record_har": record_har},
             )
+
+        from collections import deque
+        queue: deque[tuple[str, int]] = deque([(url, 0)])
+        visited: set[str] = set()
 
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
@@ -1146,17 +1158,36 @@ class UniversalPageLoader:
             context = await new_crawler_context(browser, **context_kwargs)
 
             try:
-                visited: set[str] = set()
-                await cls._crawl_url(
-                    context=context,
-                    root_url=url,
-                    url=url,
-                    depth=0,
-                    policy=policy,
-                    visited=visited,
-                    output=snapshot,
-                    step_logger=step_logger,
-                )
+                while queue:
+                    current_url, current_depth = queue.popleft()
+                    normalized_url = policy.normalize_url(current_url)
+
+                    if normalized_url in visited:
+                        continue
+                    visited.add(normalized_url)
+
+                    if not policy.is_allowed(normalized_url, url):
+                        logger.info(f"[universal] skipping off-origin/disallowed URL: {normalized_url}")
+                        continue
+
+                    if snapshot.pages_crawled >= policy.max_pages:
+                        logger.warning(f"[universal] crawl budget exceeded ({policy.max_pages} pages)")
+                        break
+
+                    new_links = await cls._crawl_one_url(
+                        context=context,
+                        root_url=url,
+                        url=normalized_url,
+                        depth=current_depth,
+                        policy=policy,
+                        output=snapshot,
+                        step_logger=step_logger,
+                    )
+
+                    if current_depth < policy.max_depth:
+                        for link in new_links:
+                            queue.append((link, current_depth + 1))
+
             finally:
                 await context.close()
                 await browser.close()
@@ -1188,7 +1219,7 @@ class UniversalPageLoader:
         return snapshot
 
     @classmethod
-    async def _crawl_url(
+    async def _crawl_one_url(
         cls,
         *,
         context: BrowserContext,
@@ -1196,23 +1227,9 @@ class UniversalPageLoader:
         url: str,
         depth: int,
         policy: CrawlPolicy,
-        visited: set[str],
         output: PageSnapshot,
         step_logger: ExecutionStepLogger | None,
-    ) -> None:
-        normalized_url = policy.normalize_url(url)
-        if normalized_url in visited:
-            return
-        visited.add(normalized_url)
-
-        if not policy.is_allowed(normalized_url, root_url):
-            logger.info(f"[universal] skipping off-origin/disallowed URL: {normalized_url}")
-            return
-
-        if output.pages_crawled >= policy.max_pages:
-            logger.warning(f"[universal] crawl budget exceeded ({policy.max_pages} pages)")
-            return
-
+    ) -> List[str]:
         page = await context.new_page()
         page_warning_count = 0
         links: List[str] = []
@@ -1223,11 +1240,11 @@ class UniversalPageLoader:
                     step="universal_page",
                     status="running",
                     message="Opening page",
-                    context={"url": normalized_url, "depth": depth},
+                    context={"url": url, "depth": depth},
                 )
 
-            await cls._prepare_page(page, normalized_url, step_logger=step_logger)
-            extracted = await cls._extract_page(page, page_url=normalized_url, output=output)
+            await cls._prepare_page(page, url, step_logger=step_logger)
+            extracted = await cls._extract_page(page, page_url=url, output=output)
             links = await cls._extract_links(page, root_url)
             
             # Limit links per page
@@ -1237,7 +1254,7 @@ class UniversalPageLoader:
 
             output.page_summaries.append(
                 {
-                    "page_url": normalized_url,
+                    "page_url": url,
                     "depth": depth,
                     "forms": len(extracted.get("forms", [])),
                     "interactive": len(extracted.get("interactive", [])),
@@ -1250,7 +1267,7 @@ class UniversalPageLoader:
                 }
             )
             output.pages_crawled += 1
-            page_warning_count = len([w for w in output.warnings if w.get("page_url") == normalized_url])
+            page_warning_count = len([w for w in output.warnings if w.get("page_url") == url])
 
             if step_logger:
                 step_logger.record(
@@ -1258,7 +1275,7 @@ class UniversalPageLoader:
                     status="completed",
                     message="Extracted page",
                     context={
-                        "url": normalized_url,
+                        "url": url,
                         "depth": depth,
                         "forms": len(extracted.get("forms", [])),
                         "interactive": len(extracted.get("interactive", [])),
@@ -1275,20 +1292,20 @@ class UniversalPageLoader:
              # Captured as warning instead of hard error for universal crawl
              warning = {
                  "code": exc.code,
-                 "page_url": normalized_url,
+                 "page_url": url,
                  "message": str(exc),
              }
              output.warnings.append(warning)
-             logger.warning(f"[universal] {exc.code} for {normalized_url}: {exc}")
+             logger.warning(f"[universal] {exc.code} for {url}: {exc}")
         except Exception as exc:
             output.partial = True
             warning = {
                 "code": "page_extract_failed",
-                "page_url": normalized_url,
+                "page_url": url,
                 "message": str(exc),
             }
             output.warnings.append(warning)
-            logger.warning(f"[universal] failed to extract {normalized_url}: {exc}")
+            logger.warning(f"[universal] failed to extract {url}: {exc}")
             if step_logger:
                 step_logger.record(
                     step="universal_page",
@@ -1299,20 +1316,8 @@ class UniversalPageLoader:
         finally:
             await page.close()
 
-        if depth >= policy.max_depth:
-            return
+        return links
 
-        for link in links:
-            await cls._crawl_url(
-                context=context,
-                root_url=root_url,
-                url=link,
-                depth=depth + 1,
-                policy=policy,
-                visited=visited,
-                output=output,
-                step_logger=step_logger,
-            )
 
     @classmethod
     async def _prepare_page(

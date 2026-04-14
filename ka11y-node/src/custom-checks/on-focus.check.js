@@ -8,7 +8,7 @@ const {
 const SC = '3.2.1';
 const RULE_ID = 'custom-on-focus';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
-const MAX_ELEMENTS = 60;
+const MAX_ELEMENTS = 500;
 const SETTLE_MS = 100;
 
 // Includes form controls (input, select, textarea) — they can carry onfocus handlers
@@ -61,6 +61,8 @@ async function run(page, context = {}) {
           tagName: el.tagName.toLowerCase(),
           id: el.id || null,
           html: el.outerHTML.slice(0, 150),
+          target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+          tag: el.tagName.toUpperCase(),
         });
         if (results.length >= max) break;
       }
@@ -119,6 +121,14 @@ async function run(page, context = {}) {
       impact: 'serious',
       status: 'fail',
       reason: _t(sharedContext, 'Focusing {element} triggered an unexpected navigation or context change. Testing stopped at the first violation — additional elements may be affected. Review all focusable elements for focus-triggered navigation.', '{element} にフォーカスした際、予期しないナビゲーションまたはコンテキスト変更が発生しました。最初の違反でテストを停止しているため、他の要素にも影響がある可能性があります。フォーカスで遷移が起きないか、すべてのフォーカス可能要素を確認してください。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` }),
+      elements: [
+        {
+          html: violations[0].html,
+          element_id: violations[0].id,
+          target: violations[0].target,
+          tag: violations[0].tag,
+        }
+      ],
       helpUrl: HELP_URL,
     }],
   };

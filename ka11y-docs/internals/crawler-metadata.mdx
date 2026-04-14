@@ -377,47 +377,29 @@ AccessibilityService
 
 ## ka11y-python — Crawler Architecture
 
-ka11y-python now has two distinct execution modes:
+ka11y-python uses a **Universal Discovery** architecture for the combined audit pipeline:
 
-- direct crawler classes still exist and keep the original model contracts
-- the combined production endpoint reuses **one universal static crawl** for seven structural rule families, then normalizes that snapshot back into the existing Pydantic models
-
-**Direct answer:** Yes, the combined `ka11y-python` crawler is now universal for the static DOM rule families.
-
-That answer is **not** the same as "every stage uses one crawler". Two specialized crawlers still remain outside the universal static path:
-
-- `AsyncImageCrawler` for screenshots, OCR, image classification, and image-specific auditing
-- `RenderedLayoutCrawler` for viewport mutation, focus/hover simulation, reflow, resize-text, orientation, and focus-obscuration checks
+- `UniversalPageLoader` is the **Single Source of Truth** for page discovery and navigation.
+- It performs one shared universal static crawl for seven rule families.
+- `AsyncImageCrawler` and `RenderedLayoutCrawler` consume the **same discovered page inventory** from the universal loader.
 
 ```
 POST /api/v1/combined
         │
         ▼
 runner._run_job()
-  ├── AsyncImageCrawler
-  │     └── List[ImageMetadata]
-  ├── UniversalPageLoader
-  │     └── PageSnapshot
-  │           ├── forms
-  │           ├── interactive
-  │           ├── target_sizes
-  │           ├── moving_content
-  │           ├── media
-  │           ├── text_spacing
-  │           ├── sensory
-  │           ├── warnings
-  │           └── element_refs
-  ├── SnapshotNormalizer
-  │     └── existing Pydantic models:
-  │           FormInputData
-  │           InteractiveElementData
-  │           TargetSizeData
-  │           MovingContentData
-  │           MediaElementData
-  │           TextSpacingData
-  │           SensoryElementData
-  └── RenderedLayoutCrawler
-        └── PageSnapshot (portrait/landscape/zoom variants)
+  ├── UniversalPageLoader (Discovery & Static Extraction)
+  │     ├── List[DiscoveredURLs] ──┐
+  │     └── PageSnapshot           │
+  │           ├── forms            │
+  │           ├── interactive      │
+  │           ├── ...              │
+  ├── SnapshotNormalizer           │
+  │     └── Pydantic models        │
+  ├── AsyncImageCrawler <──────────┘
+  │     └── ImageMetadata (Screenshots/OCR)
+  └── RenderedLayoutCrawler <──────┘
+        └── PageSnapshots (Portrait/Landscape/Reflow)
 ```
 
 The universal static path is where ka11y-python now gets:

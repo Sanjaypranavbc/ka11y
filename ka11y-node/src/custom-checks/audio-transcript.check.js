@@ -64,8 +64,9 @@ async function run(page, context = {}) {
       if (!hasTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription) {
         issues.push({
           html: audio.outerHTML.slice(0, 150),
-          id: audio.id || null,
-          src: (audio.getAttribute('src') || audio.querySelector('source')?.getAttribute('src') || '').slice(0, 80),
+          element_id: audio.id || null,
+          target: audio.id ? [`audio#${CSS.escape(audio.id)}`] : ['audio'],
+          tag: 'AUDIO',
         });
       }
     }
@@ -113,11 +114,6 @@ async function run(page, context = {}) {
     };
   }
 
-  const elementList = data.issues
-    .slice(0, 3)
-    .map(i => i.id ? `<audio id="${i.id}">` : (i.src ? `<audio src="${i.src}">` : i.html.slice(0, 60)))
-    .join(', ');
-
   return {
     successCriteriaId: SC,
     rules: [{
@@ -131,11 +127,12 @@ async function run(page, context = {}) {
         {
           issue_count: data.issues.length,
           audio_count: data.audioCount,
-          element_list: elementList,
+          element_list: '',
         },
         sharedContext,
-        `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable text alternative: ${elementList}.`,
+        `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable text alternative.`,
       ),
+      elements: data.issues,
       helpUrl: HELP_URL,
     }],
   };

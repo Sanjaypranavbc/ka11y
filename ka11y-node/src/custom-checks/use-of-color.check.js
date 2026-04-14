@@ -135,8 +135,9 @@ async function run(page, context = {}) {
         if (colorDiffers) {
           violations.push({
             html: link.outerHTML.slice(0, 150),
-            id:   link.id || null,
-            text: linkText.slice(0, 60),
+            element_id: link.id || null,
+            target: link.id ? [`a#${CSS.escape(link.id)}`] : ['a[href]'],
+            tag: 'A',
           });
         }
       }
@@ -163,8 +164,6 @@ async function run(page, context = {}) {
     };
   }
 
-  const sample = data.violations.slice(0, 3).map(v => `"${v.text}"`).join(', ');
-
   return {
     successCriteriaId: SC,
     rules: [{
@@ -172,7 +171,8 @@ async function run(page, context = {}) {
       description: 'Color must not be the only visual means of conveying information',
       impact: 'serious',
       status: 'fail',
-      reason: _t(sharedContext, '{count} inline link(s) appear to be distinguished from surrounding text by colour alone (no underline, border, background, or font-weight difference): {sample}. Add a non-color visual cue such as underline or border-bottom.', '周囲のテキストとの差が色だけになっているように見えるインラインリンクが {count} 件検出されました（下線、境界線、背景、文字の太さの違いなし）: {sample}。下線や border-bottom など、色以外の視覚的手がかりを追加してください。', { count: data.violations.length, sample }),
+      reason: _t(sharedContext, '{count} inline link(s) appear to be distinguished from surrounding text by colour alone (no underline, border, background, or font-weight difference). Add a non-color visual cue such as underline or border-bottom.', '周囲のテキストとの差が色だけになっているように見えるインラインリンクが {count} 件検出されました（下線、境界線、背景、文字の太さの違いなし）。下線や border-bottom など、色以外の視覚的手がかりを追加してください。', { count: data.violations.length }),
+      elements: data.violations,
       helpUrl: HELP_URL,
     }],
   };

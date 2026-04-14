@@ -100,7 +100,10 @@ async function run(page, context = {}) {
       riskForms.push({
         category,
         hasSafeguard,
-        formId: form.id || null,
+        element_id: form.id || null,
+        html: form.outerHTML.slice(0, 150),
+        target: form.id ? [`form#${CSS.escape(form.id)}`] : ['form'],
+        tag: 'FORM',
       });
     }
 
@@ -138,8 +141,6 @@ async function run(page, context = {}) {
 
   if (unsafeForms.length > 0) {
     const categories = [...new Set(unsafeForms.map(f => f.category))];
-    const formRefs = unsafeForms.slice(0, 3)
-      .map(f => f.formId ? `form#${f.formId}` : `<form> (${f.category})`).join(', ');
     return {
       successCriteriaId: SC,
       rules: [{
@@ -154,11 +155,12 @@ async function run(page, context = {}) {
           unsafe_count: unsafeForms.length,
           total_count: data.length,
           category_list: categories.join('/'),
-          form_refs: formRefs,
+          form_refs: '',
         },
         sharedContext,
-        `${unsafeForms.length} of ${data.length} ${categories.join('/')} form(s) have no review step, confirmation checkbox, multi-step indicator, or preview mechanism: ${formRefs}.`,
+        `${unsafeForms.length} of ${data.length} ${categories.join('/')} form(s) have no review step, confirmation checkbox, multi-step indicator, or preview mechanism.`,
       ),
+      elements: unsafeForms,
       helpUrl: HELP_URL,
     }],
     };

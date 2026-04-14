@@ -362,7 +362,7 @@ class AsyncImageCrawler:
     # ─────────────────────────────────────────────────────────────────────────
     # Main crawl
     # ─────────────────────────────────────────────────────────────────────────
-    async def crawl_page(self):
+    async def crawl_page(self, discovered_urls: List[str] | None = None):
         """
         Crawl the base_url and its descendants up to max_depth using a single
         browser session and a bounded queue. (Optimized v2)
@@ -373,7 +373,12 @@ class AsyncImageCrawler:
             max_links_per_page=CONFIG.get("crawler", {}).get("max_links_per_page", 50),
         )
 
-        queue: deque[Tuple[str, int]] = deque([(self.base_url, 0)])
+        if discovered_urls:
+            # Seed the queue with pre-discovered URLs at depth 0
+            queue: deque[Tuple[str, int]] = deque([(u, 0) for u in discovered_urls])
+        else:
+            queue: deque[Tuple[str, int]] = deque([(self.base_url, 0)])
+
         self.visited_urls.clear()
 
         async with async_playwright() as p:
@@ -432,7 +437,17 @@ class AsyncImageCrawler:
 
             await context.close()
             await browser.close()
-            logger.info(f"Browser closed — finished image crawl for {self.base_url}")
+            
+            if not self.visited_urls:
+                raise ImageCrawlerNavigationError(
+                    code="zero_pages_crawled",
+                    url=self.base_url,
+                    host=urlparse(self.base_url).hostname,
+                    original_message="Crawl budget or navigation failures resulted in 0 pages being reached.",
+                    attempts=1
+                )
+            
+            logger.info(f"Browser closed — finished image crawl for {self.base_url} ({len(self.visited_urls)} pages)")
 
     async def _crawl_one_page(
         self,

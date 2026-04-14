@@ -8,7 +8,7 @@ const {
 const SC = '2.4.7';
 const RULE_ID = 'custom-focus-visible';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-visible';
-const MAX_ELEMENTS = 100;
+const MAX_ELEMENTS = 500;
 // Settle delay: allow CSS transitions and React/Vue re-renders to apply before capturing styles
 const SETTLE_MS = 80;
 
@@ -147,7 +147,14 @@ async function run(page, context = {}) {
                       borderChanged || bgChanged || colorChanged || transformChanged;
 
     if (!isVisible) {
-      violations.push({ tagName: el.tagName, id: el.id, html: el.html });
+      violations.push({
+        html: el.html,
+        element_id: el.id || null,
+        target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
+        tagName: el.tagName,
+        id: el.id,
+      });
     }
   }
 
@@ -171,9 +178,10 @@ async function run(page, context = {}) {
         'フォーカス可能要素 {count} 件に、視認できるフォーカスインジケーターがありません: {sample}。',
         {
           count: violations.length,
-          sample: violations.slice(0, 3).map(v => `<${v.tagName}${v.id ? ` id="${v.id}"` : ''}>`).join(', '),
+          sample: violations.slice(0, 3).map(v => `<${v.tagName.toLowerCase()}${v.id ? ` id="${v.id}"` : ''}>`).join(', '),
         },
       ),
+      elements: violations,
       helpUrl: HELP_URL,
     }],
   };

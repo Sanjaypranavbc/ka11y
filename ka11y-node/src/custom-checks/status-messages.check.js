@@ -93,7 +93,12 @@ async function run(page, context = {}) {
     // aria-atomic check: [role="alert"] or [aria-live="assertive"] missing aria-atomic="true"
     const alertsWithoutAtomic = Array.from(document.querySelectorAll(
       '[role="alert"], [aria-live="assertive"]'
-    )).filter(el => el.getAttribute('aria-atomic') !== 'true');
+    )).filter(el => el.getAttribute('aria-atomic') !== 'true').map(el => ({
+      html: el.outerHTML.slice(0, 150),
+      element_id: el.id || null,
+      target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+      tag: el.tagName.toUpperCase(),
+    }));
 
     // Inline validation without live region ancestor
     const invalidWithoutLiveRegion = Array.from(document.querySelectorAll('[aria-invalid]')).filter(el => {
@@ -105,7 +110,12 @@ async function run(page, context = {}) {
         node = node.parentElement;
       }
       return true;
-    });
+    }).map(el => ({
+      html: el.outerHTML.slice(0, 150),
+      element_id: el.id || null,
+      target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+      tag: el.tagName.toUpperCase(),
+    }));
 
     return {
       liveRegionCount: liveRegions.length,
@@ -117,12 +127,12 @@ async function run(page, context = {}) {
       hasNotificationArea,
       needsLiveRegions,
       anyLiveRegionHasContent,
-      alertsWithoutAtomicCount: alertsWithoutAtomic.length,
-      invalidWithoutLiveRegionCount: invalidWithoutLiveRegion.length,
+      alertsWithoutAtomic,
+      invalidWithoutLiveRegion,
     };
   });
 
-  const { liveRegionCount, formCount, hasAlerts, hasPolite, hasSearchResults, hasCartOrCounter, hasNotificationArea, needsLiveRegions, anyLiveRegionHasContent, alertsWithoutAtomicCount, invalidWithoutLiveRegionCount } = data;
+  const { liveRegionCount, formCount, hasAlerts, hasPolite, hasSearchResults, hasCartOrCounter, hasNotificationArea, needsLiveRegions, anyLiveRegionHasContent, alertsWithoutAtomic, invalidWithoutLiveRegion } = data;
   const dynamicContexts = [
     formCount > 0 && _t(sharedContext, '{count} form(s)', 'フォーム {count} 件', { count: formCount }),
     hasSearchResults && _t(sharedContext, 'search results', '検索結果'),
@@ -132,26 +142,29 @@ async function run(page, context = {}) {
 
   // Build extra INCOMPLETE rules for aria-atomic and inline validation issues
   const extraRules = [];
-  if (alertsWithoutAtomicCount > 0) {
+  if (alertsWithoutAtomic.length > 0) {
     extraRules.push({
       ruleId: `${RULE_ID}-atomic`,
       description: 'Status messages must be programmatically determinable',
       impact: null,
       status: 'incomplete',
-      reason: _t(sharedContext, '{count} [role="alert"] or [aria-live="assertive"] element(s) are missing aria-atomic="true". Without aria-atomic, only changed portions may be announced rather than the full message.', '[role="alert"] または [aria-live="assertive"] 要素 {count} 件に aria-atomic="true" がありません。aria-atomic がないと、完全なメッセージではなく変更部分だけが読み上げられる可能性があります。', { count: alertsWithoutAtomicCount }),
+      reason: _t(sharedContext, '{count} [role="alert"] or [aria-live="assertive"] element(s) are missing aria-atomic="true". Without aria-atomic, only changed portions may be announced rather than the full message.', '[role="alert"] または [aria-live="assertive"] 要素 {count} 件に aria-atomic="true" がありません。aria-atomic がないと、完全なメッセージではなく変更部分だけが読み上げられる可能性があります。', { count: alertsWithoutAtomic.length }),
+      elements: alertsWithoutAtomic,
       helpUrl: HELP_URL,
     });
   }
-  if (invalidWithoutLiveRegionCount > 0) {
+  if (invalidWithoutLiveRegion.length > 0) {
     extraRules.push({
       ruleId: `${RULE_ID}-inline-validation`,
       description: 'Status messages must be programmatically determinable',
       impact: null,
       status: 'incomplete',
-      reason: _t(sharedContext, '{count} [aria-invalid] element(s) have no live region ancestor (aria-live, role="status/alert/log"). Inline validation errors may not be announced to screen reader users.', '[aria-invalid] 要素 {count} 件にライブリージョンの祖先（aria-live、role="status/alert/log"）がありません。インラインの入力検証エラーがスクリーンリーダー利用者に通知されない可能性があります。', { count: invalidWithoutLiveRegionCount }),
+      reason: _t(sharedContext, '{count} [aria-invalid] element(s) have no live region ancestor (aria-live, role="status/alert/log"). Inline validation errors may not be announced to screen reader users.', '[aria-invalid] 要素 {count} 件にライブリージョンの祖先（aria-live、role="status/alert/log"）がありません。インラインの入力検証エラーがスクリーンリーダー利用者に通知されない可能性があります。', { count: invalidWithoutLiveRegion.length }),
+      elements: invalidWithoutLiveRegion,
       helpUrl: HELP_URL,
     });
   }
+
 
   // Page has dynamic contexts but no live regions at all → clear fail
   if (needsLiveRegions && liveRegionCount === 0) {

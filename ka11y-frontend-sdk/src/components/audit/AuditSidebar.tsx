@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -74,7 +74,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
     url: localStorage.getItem("ka11y_last_url") ?? "",
     max_depth: 0,
     wcag_level: "AAA",
-    lang: (localStorage.getItem("ka11y_last_lang") as "en" | "ja") ?? "en",
+    lang: uiLang,
     run_ocr: true,
     run_image_audit: true,
     run_form_audit: true,
@@ -91,6 +91,10 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
     run_focus_not_obscured_min_audit: true,
     run_focus_not_obscured_enh_audit: true,
   });
+
+  useEffect(() => {
+    setConfig((c) => ({ ...c, lang: uiLang }));
+  }, [uiLang]);
 
   const isRunning = jobStatus === "pending" || jobStatus === "running";
 
@@ -214,28 +218,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
               </div>
             </div>
 
-            <div>
-              <Label className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
-                {t("sidebar.auditLanguage") as any || "Audit Language"}
-              </Label>
-              <div className="mt-1.5 flex rounded-md overflow-hidden border border-border text-[10px] font-semibold">
-                {(["en", "ja"] as const).map((l) => (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => setConfig((c) => ({ ...c, lang: l }))}
-                    className={cn(
-                      "flex-1 cursor-pointer py-1.5 transition-colors uppercase",
-                      config.lang === l
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-[hsl(var(--input))] text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
+
           </div>
 
           {/* Toggles */}

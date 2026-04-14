@@ -33,6 +33,7 @@ class NormalizedPageSnapshot:
     sensory: List[SensoryElementData] = field(default_factory=list)
     warnings: List[Dict[str, Any]] = field(default_factory=list)
     element_refs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    page_summaries: List[Dict[str, Any]] = field(default_factory=list)
     partial: bool = False
     pages_crawled: int = 0
     har_path: str | None = None
@@ -61,6 +62,7 @@ class SnapshotNormalizer:
             page_url=snapshot.page_url,
             warnings=list(snapshot.warnings),
             element_refs=dict(snapshot.element_refs),
+            page_summaries=list(snapshot.page_summaries),
             partial=snapshot.partial,
             pages_crawled=snapshot.pages_crawled,
             har_path=snapshot.har_path,
@@ -148,9 +150,9 @@ class SnapshotNormalizer:
             "moving_content": [item.model_dump() for item in snapshot.moving_content],
             "media": [item.model_dump() for item in snapshot.media],
             "text_spacing": [item.model_dump() for item in snapshot.text_spacing],
-            "sensory": [item.model_dump() for item in snapshot.sensory],
             "warnings": snapshot.warnings,
             "element_refs": snapshot.element_refs,
+            "page_summaries": snapshot.page_summaries,
             "partial": snapshot.partial,
             "pages_crawled": snapshot.pages_crawled,
             "har_path": snapshot.har_path,

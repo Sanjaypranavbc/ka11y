@@ -21,12 +21,22 @@ async function run(page, context = {}) {
     // intentionally excluded from this rule to avoid false positives.
     const seenIds = Object.create(null);
     const dupeIds = [];
+    const elements = [];
     let totalIdCount = 0;
     document.querySelectorAll('[id]').forEach(el => {
       totalIdCount++;
       const id = el.id;
-      if (seenIds[id]) dupeIds.push(id);
-      else seenIds[id] = true;
+      if (seenIds[id]) {
+        dupeIds.push(id);
+        elements.push({
+          html: el.outerHTML.slice(0, 150),
+          element_id: id,
+          target: [`#${CSS.escape(id)}`],
+          tag: el.tagName.toUpperCase(),
+        });
+      } else {
+        seenIds[id] = true;
+      }
     });
 
     // Broken ARIA reference check
@@ -36,7 +46,15 @@ async function run(page, context = {}) {
         const val = el.getAttribute(attr);
         if (!val) continue;
         for (const id of val.split(/\s+/).filter(Boolean)) {
-          if (!document.getElementById(id)) brokenRefs.push({ attr, id, html: el.outerHTML.slice(0, 100) });
+          if (!document.getElementById(id)) {
+            brokenRefs.push({ attr, id, html: el.outerHTML.slice(0, 100) });
+            elements.push({
+              html: el.outerHTML.slice(0, 150),
+              element_id: el.id || null,
+              target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+              tag: el.tagName.toUpperCase(),
+            });
+          }
         }
       }
     }
@@ -47,6 +65,12 @@ async function run(page, context = {}) {
       const forId = label.getAttribute('for');
       if (forId && !document.getElementById(forId)) {
         orphanedLabels.push({ for: forId, html: label.outerHTML.slice(0, 100) });
+        elements.push({
+          html: label.outerHTML.slice(0, 150),
+          element_id: label.id || null,
+          target: label.id ? [`#${CSS.escape(label.id)}`] : ['label'],
+          tag: 'LABEL',
+        });
       }
     }
 
@@ -55,10 +79,11 @@ async function run(page, context = {}) {
       totalIdCount,
       brokenRefs,
       orphanedLabels,
+      elements,
     };
   });
 
-  const { duplicateIds, totalIdCount, brokenRefs, orphanedLabels } = data;
+  const { duplicateIds, totalIdCount, brokenRefs, orphanedLabels, elements } = data;
   const issues = [];
 
   if (duplicateIds.length > 0) {
@@ -101,6 +126,7 @@ async function run(page, context = {}) {
         '{issues}。重複した id は ARIA 参照を壊し、支援技術の解釈を妨げる可能性があります。',
         { issues: issues.join('; ') },
       ),
+      elements: elements,
       helpUrl: HELP_URL,
     }],
   };

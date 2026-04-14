@@ -167,6 +167,7 @@ async def _stage_image_audit(
     job_id: str,
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
+    discovered_urls: List[str] | None = None,
 ) -> Tuple[List[Dict], Optional[Dict[str, Any]]]:
     """Crawl images → OCR → 1.1.1 alt-text + 1.4.3 contrast."""
     _stage_start(job_id, "image_audit")
@@ -190,7 +191,7 @@ async def _stage_image_audit(
         image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
 
         async def _crawl_and_save() -> None:
-            await image_crawler.crawl_page()
+            await image_crawler.crawl_page(discovered_urls=discovered_urls)
             await asyncio.to_thread(image_crawler.save_results)
 
         try:
@@ -573,6 +574,7 @@ async def _stage_rendered_layout_audit(
     run_focus_not_obscured_enh_audit: bool,
     job_id: str,
     step_logger: ExecutionStepLogger | None = None,
+    discovered_urls: List[str] | None = None,
 ) -> List[Dict]:
     """
     Rendered-layout audit stage: Playwright scenarios for
@@ -600,7 +602,7 @@ async def _stage_rendered_layout_audit(
         )
 
         crawler = RenderedLayoutCrawler(base_url=url, output_dir=str(output_dir))
-        raw = await crawler.crawl()
+        raw = await crawler.crawl(discovered_urls=discovered_urls)
         await asyncio.to_thread(crawler.save_raw_json)
 
         records = await asyncio.to_thread(
@@ -1082,24 +1084,34 @@ async def _run_python_stages(
             run_sensory_audit,
         )
     )
-    snapshot_task = (
-        asyncio.create_task(
-            _load_universal_snapshot(
-                url=url,
-                output_dir=output_dir,
-                max_depth=max_depth,
-                job_id=job_id,
-                step_logger=step_logger,
-            )
+    # 1. Run universal snapshot first (Single Source of Truth for Discovery)
+    snapshot = None
+    discovered_urls = [url]
+    if static_rules_enabled:
+        snapshot = await _load_universal_snapshot(
+            url=url,
+            output_dir=output_dir,
+            max_depth=max_depth,
+            job_id=job_id,
+            step_logger=step_logger,
         )
-        if static_rules_enabled
-        else None
-    )
+        discovered_urls = [s["page_url"] for s in snapshot.page_summaries]
+        if not discovered_urls:
+            discovered_urls = [url]
+
+    # 2. Run all other stages using the shared page inventory
+    # Wrap snapshot in a future for the universal stages that expect it
+    snapshot_task = asyncio.Future()
+    if snapshot:
+        snapshot_task.set_result(snapshot)
+    else:
+        snapshot_task.set_result(None)
 
     results = await asyncio.gather(
         _timed(
             _stage_image_audit(
-                url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang, step_logger
+                url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang, step_logger,
+                discovered_urls=discovered_urls
             )
         ),
         _timed(
@@ -1140,6 +1152,7 @@ async def _run_python_stages(
                 run_focus_not_obscured_enh_audit,
                 job_id,
                 step_logger,
+                discovered_urls=discovered_urls
             )
         ),
         _timed(

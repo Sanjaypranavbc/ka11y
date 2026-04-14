@@ -8,7 +8,7 @@ const {
 const SC = '3.2.2';
 const RULE_ID = 'custom-on-input';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
-const MAX_INPUTS = 30;
+const MAX_INPUTS = 300;
 const SETTLE_MS = 120;
 
 // Safe test values per input type — use syntactically valid values to avoid
@@ -63,6 +63,8 @@ async function run(page, context = {}) {
         isSelect: el.tagName.toLowerCase() === 'select',
         isCheckboxOrRadio: ['checkbox', 'radio'].includes((el.getAttribute('type') || '').toLowerCase()),
         html: el.outerHTML.slice(0, 150),
+        target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
       }));
     }, SELECTOR, MAX_INPUTS);
 
@@ -141,6 +143,14 @@ async function run(page, context = {}) {
       impact: 'serious',
       status: 'fail',
       reason: _t(sharedContext, 'Changing {element} triggered an unexpected navigation or context change.', '{element} の値を変更した際、予期しないナビゲーションまたはコンテキスト変更が発生しました。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` }),
+      elements: [
+        {
+          html: violations[0].html,
+          element_id: violations[0].id,
+          target: violations[0].target,
+          tag: violations[0].tag,
+        }
+      ],
       helpUrl: HELP_URL,
     }],
   };
