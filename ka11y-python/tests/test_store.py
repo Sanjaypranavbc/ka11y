@@ -18,7 +18,7 @@ from ka11y.api.v1.combined.store import (
     _broadcast,
     _close_subscribers,
     _subscribers,
-    _subscribers_lock,
+    _get_subscribers_lock,
 )
 
 
@@ -30,7 +30,7 @@ from ka11y.api.v1.combined.store import (
 async def _add_subscriber(job_id: str) -> asyncio.Queue:
     """Simulate the route handler adding a subscriber under the lock."""
     q: asyncio.Queue = asyncio.Queue()
-    async with _subscribers_lock:
+    async with _get_subscribers_lock():
         _subscribers.setdefault(job_id, []).append(q)
     return q
 

@@ -194,6 +194,13 @@ def test_make_finding_keeps_element_for_pass_when_provided():
         "html": '<img id="logo" alt="Logo" src="/logo.png">',
         "element_id": "logo",
         "tag": "img",
+        "target": None,
+        "selector": None,
+        "element_ref_id": None,
+        "frame_path": None,
+        "image_src": None,
+        "image_reference": None,
+        "image_text": None,
         "page_url": PAGE_URL,
     }
 
@@ -219,6 +226,13 @@ def test_pass_converters_include_element_metadata_when_available():
         "html": '<img src="/img/logo.png" alt="Brand Name logo">',
         "element_id": "/img/logo.png",
         "tag": "img",
+        "target": None,
+        "selector": None,
+        "element_ref_id": None,
+        "frame_path": None,
+        "image_src": None,
+        "image_reference": "logo.png",
+        "image_text": None,
         "page_url": PAGE_URL,
     }
 
@@ -271,6 +285,13 @@ def test_1_3_3_pass_record_becomes_pass_finding():
         "html": "<p id='instructions'>Click the blue Submit button.</p>",
         "element_id": "instructions",
         "tag": "p",
+        "target": None,
+        "selector": None,
+        "element_ref_id": None,
+        "frame_path": None,
+        "image_src": None,
+        "image_reference": None,
+        "image_text": None,
         "page_url": PAGE_URL,
     }
 

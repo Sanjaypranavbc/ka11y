@@ -91,100 +91,33 @@ _SOCIAL_BRAND_NAMES: set[str] = {
     "threads",
 }
 
+# Logo/Home/Action keywords in multiple languages
+_LOGO_WORDS: set[str] = {"logo", "ロゴ", "標榜"}
+_HOME_WORDS: set[str] = {"home", "ホーム", "トップ"}
+
 # Acceptable action/purpose words for buttons
 _BUTTON_ACTION_WORDS: set[str] = {
-    "menu",
-    "close",
-    "open",
-    "search",
-    "back",
-    "forward",
-    "next",
-    "prev",
-    "previous",
-    "submit",
-    "send",
-    "cancel",
-    "confirm",
-    "ok",
-    "yes",
-    "no",
-    "save",
-    "delete",
-    "edit",
-    "add",
-    "remove",
-    "upload",
-    "download",
-    "share",
-    "print",
-    "copy",
-    "paste",
-    "cut",
-    "undo",
-    "redo",
-    "refresh",
-    "reload",
-    "home",
-    "settings",
-    "help",
-    "info",
-    "more",
-    "less",
-    "expand",
-    "collapse",
-    "toggle",
-    "play",
-    "pause",
-    "stop",
-    "mute",
-    "unmute",
-    "fullscreen",
-    "exit fullscreen",
-    "zoom in",
-    "zoom out",
-    "like",
-    "dislike",
-    "comment",
-    "reply",
-    "follow",
-    "unfollow",
-    "subscribe",
-    "unsubscribe",
-    "login",
-    "logout",
-    "sign in",
-    "sign out",
-    "sign up",
-    "register",
-    "checkout",
-    "cart",
-    "bag",
-    "wishlist",
-    "filter",
-    "sort",
-    "view",
-    "hide",
-    "show",
-    "skip",
-    "navigate",
-    "go to",
-    "load more",
-    "read more",
-    "see more",
-    "see all",
-    "cookies settings",
-    "accept all cookies",
-    "reject all",
-    "accept cookies",
-    "decline cookies",
-    "manage cookies",
-    "cookie preferences",
-    "previous slide",
-    "next slide",
-    "go to slide",
-    "new window",
-    "opens in new tab",
+    "menu", "close", "open", "search", "back", "forward", "next", "prev", "previous",
+    "submit", "send", "cancel", "confirm", "ok", "yes", "no", "save", "delete",
+    "edit", "add", "remove", "upload", "download", "share", "print", "copy",
+    "paste", "cut", "undo", "redo", "refresh", "reload", "home", "settings",
+    "help", "info", "more", "less", "expand", "collapse", "toggle", "play",
+    "pause", "stop", "mute", "unmute", "fullscreen", "exit fullscreen",
+    "zoom in", "zoom out", "like", "dislike", "comment", "reply", "follow",
+    "unfollow", "subscribe", "unsubscribe", "login", "logout", "sign in",
+    "sign out", "sign up", "register", "checkout", "cart", "bag", "wishlist",
+    "filter", "sort", "view", "hide", "show", "skip", "navigate", "go to",
+    "load more", "read more", "see more", "see all", "cookies settings",
+    "accept all cookies", "reject all", "accept cookies", "decline cookies",
+    "manage cookies", "cookie preferences", "previous slide", "next slide",
+    "go to slide", "new window", "opens in new tab",
+    # Japanese actions
+    "メニュー", "閉じる", "開く", "検索", "戻る", "進む", "次へ", "前へ",
+    "送信", "キャンセル", "確定", "保存", "削除", "編集", "追加", "削除",
+    "共有", "印刷", "コピー", "貼り付け", "切り取り", "元に戻す", "やり直し",
+    "更新", "ホーム", "設定", "ヘルプ", "詳細", "表示", "非表示",
+    "再生", "一時停止", "停止", "消音", "音量", "ログイン", "ログアウト",
+    "登録", "カート", "お気に入り", "絞り込み", "並べ替え",
 }
 
 # Report CSV columns (order preserved)
@@ -327,14 +260,13 @@ def _check_1_1_1_logo(alt: str) -> tuple[bool, str]:
         return False, "FAIL [1.1.1] Logo has empty/missing alt text"
 
     norm = _norm(alt)
-    if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
-        return True, f"PASS [1.1.1] Logo alt includes 'logo'/'home': '{alt}'"
+    words = set(norm.split())
+    if (words & _LOGO_WORDS) or (words & _HOME_WORDS):
+        return True, f"PASS [1.1.1] Logo alt includes logo/home keyword: '{alt}'"
 
     return (
         False,
-        f"FAIL [1.1.1] Logo alt must include the word 'logo' "
-        f"(e.g. 'Kao logo'). Found: '{alt}'. "
-        f"Screen readers need 'logo' to announce the image purpose.",
+        f"FAIL [1.1.1] Logo alt must include 'logo' or 'home' (or local equivalents). Found: '{alt}'",
     )
 
 
@@ -434,11 +366,12 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
     norm = _norm(name)
 
     if sub_type == "logos":
-        if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
-            return True, f"PASS [4.1.2] Logo accessible name includes 'logo': '{name}'"
+        words = set(norm.split())
+        if (words & _LOGO_WORDS) or (words & _HOME_WORDS):
+            return True, f"PASS [4.1.2] Logo accessible name includes keyword: '{name}'"
         return (
             False,
-            f"FAIL [4.1.2] Logo accessible name '{name}' must include 'logo'.",
+            f"FAIL [4.1.2] Logo accessible name '{name}' must include 'logo' or 'home'.",
         )
 
     if sub_type == "icons" and norm in _SOCIAL_BRAND_NAMES:
@@ -764,7 +697,7 @@ class AltTextAccessibilityAuditor:
                 effective_has_text,
             )
 
-            if text_flag:
+            if text_flag and classification not in ("complex",) and sub_type not in ("charts",):
                 wcag_1_4_5_pass = False
                 wcag_1_4_5_reason = (
                         "FAIL [1.4.5] " + _1_4_5reason +
