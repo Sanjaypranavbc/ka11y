@@ -19,10 +19,12 @@ interface CombinedReport {
   url:             string;            // Canonical URL that was audited
   generated_at:    string;            // ISO-8601 UTC timestamp
   warnings:        string[];          // Degradation messages (e.g. "axe-core stage failed")
+  warning_details: WarningSample[];   // Sampled structured crawler warnings
   summary:         Summary;
   violations:      Finding[];
   needs_review:    Finding[];
   passes:          Finding[];
+  image_audit_report: ImageAuditReport | null; // Present when run_image_audit=true and images were audited
   contrast_report: ContrastReport | null;  // Present when OCR is enabled and images are found
 }
 ```
@@ -67,16 +69,16 @@ Every entry in `violations`, `needs_review`, and `passes` is a `Finding` object:
 
 ```typescript
 interface Finding {
-  source:         "axe" | "python";
-  rule_id:        string;           // e.g. "python_1_1_1_alt" or axe rule id
+  source:         "axe" | "python" | "custom";
+  rule_id:        string;           // e.g. "python_1_1_1_alt", axe rule id, or custom rule id
   wcag_sc:        string;           // e.g. "1.1.1"
   criterion_name: string | null;    // e.g. "Non-text Content"
   level:          "A" | "AA" | "AAA" | null;
   severity:       "critical" | "high" | "medium" | "low" | null;
   status:         "fail" | "pass" | "needs_review";
-  reason:         string;           // Human-readable explanation
+  reason:         string;           // Human-readable explanation (localized where supported by the emitting rule)
   suggested_fix:  string | null;    // Remediation hint — null for passes
-  help_url:       string | null;    // Link to axe rule docs (axe findings only)
+  help_url:       string | null;    // axe or custom help URL when available
   element: {
     html:       string;             // First 600 chars of outerHTML
     element_id: string | null;
@@ -91,6 +93,7 @@ interface Finding {
 **`source`**
 `"axe"` — produced by axe-core running in Node/Puppeteer.
 `"python"` — produced by a Python auditor in ka11y-python.
+`"custom"` — produced by a Node custom rule.
 
 **`rule_id`**
 For Python rules the convention is `python_{sc_underscored}_{short_name}`:
@@ -118,6 +121,13 @@ Assigned per WCAG success criterion. Python-assigned severities:
 
 axe-core severities are passed through as-is from axe's `impact` field (`critical`, `serious` → `high`, `moderate` → `medium`, `minor` → `low`).
 
+**Localization**
+
+- `criterion_name` is localized from shared WCAG i18n in both Node and Python
+- `suggested_fix` is localized from shared WCAG i18n in both Node and Python
+- Node `reason` strings are localized for axe findings and migrated custom checks
+- Python `reason` strings depend on the emitting auditor; some legacy auditors still emit English reason text even when `lang="ja"`
+
 **`status`**
 
 | Value | Meaning |
@@ -135,6 +145,7 @@ axe-core severities are passed through as-is from axe's `impact` field (`critica
   "url": "https://example.com",
   "generated_at": "2025-11-04T10:22:31.000Z",
   "warnings": [],
+  "warning_details": [],
   "summary": {
     "total_findings": 3,
     "violations": 1,
@@ -209,6 +220,25 @@ axe-core severities are passed through as-is from axe's `impact` field (`critica
       "element": null
     }
   ],
+  "image_audit_report": {
+    "summary": {
+      "total_images": 2,
+      "passed": 1,
+      "failed": 1,
+      "with_ocr_text": 0,
+      "with_contrast_violations": 0
+    },
+    "images": [
+      {
+        "filename": "banner.jpg",
+        "path": "/app/crawled_images/example_com/abc123/images/banner.jpg",
+        "image_url": "/api/v1/combined/abc123/image?path=%2Fapp%2Fcrawled_images%2Fexample_com%2Fabc123%2Fimages%2Fbanner.jpg",
+        "classification": "image",
+        "overall_status": "FAILED",
+        "wcag_1_1_1_reason": "Image has no alt attribute."
+      }
+    ]
+  },
   "contrast_report": {
     "summary": {
       "total_regions_analysed": 10,
@@ -292,6 +322,52 @@ Frontends should consume `image_url` directly — no URL construction is needed 
 
 ---
 
+## ImageAuditReport
+
+Produced by the image auditor when `run_image_audit: true`. Attached to `CombinedReport.image_audit_report` even when OCR is disabled and `contrast_report` is `null`.
+
+```typescript
+interface ImageAuditReport {
+  summary: {
+    total_images:             number;
+    passed:                   number;
+    failed:                   number;
+    with_ocr_text:            number;
+    with_contrast_violations: number;
+    by_classification: Record<string, { passed: number; failed: number; total: number }>;
+  };
+  images: ImageAuditImageDetail[];
+}
+
+interface ImageAuditImageDetail {
+  filename:                  string;
+  path:                      string;
+  image_url:                 string;   // Pre-built URL: GET /api/v1/combined/{job_id}/image?path=...
+  src?:                      string | null;
+  url?:                      string | null;
+  alt_text?:                 string | null;
+  title?:                    string | null;
+  classification:            "button" | "icon" | "logo" | "image" | "chart" | "informative" | "decorative" | "other";
+  sub_type?:                 string | null;
+  overall_status:            "PASSED" | "FAILED" | string;
+  has_ocr_text:              boolean;
+  detected_text:             string;
+  contrast_violations_count: number;
+  wcag_1_1_1_status:         string;
+  wcag_4_1_2_status:         string;
+  wcag_1_4_5_status:         string;
+  wcag_1_4_11_status:        string;
+  wcag_1_1_1_reason:         string;
+  wcag_4_1_2_reason:         string;
+  wcag_1_4_5_reason:         string;
+  wcag_1_4_11_reason:        string;
+}
+```
+
+This report is what allows the frontend Image Visualiser to show audited images even when OCR is off and there is no `contrast_report`.
+
+---
+
 ## Warnings
 
 The `warnings` array carries human-readable notes about degraded results. These do **not** count as violations.
@@ -302,6 +378,18 @@ The `warnings` array carries human-readable notes about degraded results. These 
 | Python stage failed | `"image_audit stage failed — 1.1.1 results not included. Error: Playwright timeout"` |
 
 When `warnings` is non-empty, treat the report as a **partial result** — rerunning after fixing the infrastructure issue may produce additional findings.
+
+## WarningSample
+
+`warning_details` is a structured, sampled view of crawler limitations that are too noisy for the flat `warnings` string list.
+
+```typescript
+interface WarningSample {
+  code: string;                  // e.g. "cross_origin_frame_skipped"
+  count: number;
+  samples: Record<string, unknown>[];
+}
+```
 
 ---
 

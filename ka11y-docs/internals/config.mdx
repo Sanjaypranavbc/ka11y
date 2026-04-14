@@ -23,6 +23,8 @@ The runtime now has six practical configuration layers:
 - shared `browser.ignore_https_errors` controls Playwright/Puppeteer TLS handling
 - migrated Node custom checks load EN/JA keywords and selected reason templates from the shared config
 - per-request `lang` still controls output localization and per-job behavior
+- Node now localizes custom-rule `reason` detail fragments as well as top-level `suggested_fix`
+- Python combined finding builders localize `criterion_name` and `suggested_fix` from shared i18n
 
 ### What is not implemented yet
 
@@ -145,9 +147,11 @@ Japanese behavior is no longer purely hardcoded:
 
 - `lang: "ja"` localizes shared WCAG metadata in Node and Python
 - `config/universal.yml` now supplies EN/JA keyword lists and thresholds for migrated Node checks
-- some Python-side auditors and some older Node rules still keep language-specific logic in source code
+- Node `reason` strings are localized for axe findings and migrated custom rules
+- Python `suggested_fix` values are localized through shared i18n, but Python `reason` strings still depend on the emitting auditor
+- some Python-side auditors still keep language-specific logic or English reason text in source code
 
-So the system is now partly request-configured and partly shared-config-driven, with the remaining code-driven heuristics still being migrated.
+So the system is now partly request-configured and partly shared-config-driven, with the remaining Python code-driven heuristics still being migrated.
 
 ## Adding a New Shared Config Key
 

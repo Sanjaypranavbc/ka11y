@@ -124,7 +124,7 @@ Returned in `result.violations`, `result.needs_review`, and `result.passes`:
 
 ```typescript
 interface Finding {
-  source:         "axe" | "python";
+  source:         "axe" | "python" | "custom";
   rule_id:        string;           // e.g. "python_1_1_1_alt"
   wcag_sc:        string;           // e.g. "1.1.1"
   criterion_name: string | null;
@@ -154,6 +154,7 @@ interface JobStatusResponse {
   job_id:        string;
   status:        "pending" | "running" | "completed" | "failed";
   url:           string;
+  // Current contract note: the response does not yet echo the submitted `lang`.
   submitted_at:  string;       // ISO-8601
   completed_at:  string | null;
   report_path:   string | null;
@@ -185,6 +186,7 @@ interface CombinedReport {
   url:          string;
   generated_at: string;      // ISO-8601
   warnings:     string[];
+  warning_details?: WarningSample[];
   summary: {
     total_findings:  number;
     violations:      number;
@@ -198,6 +200,7 @@ interface CombinedReport {
   violations:      Finding[];
   needs_review:    Finding[];
   passes:          Finding[];
+  image_audit_report: ImageAuditReport | null;
   contrast_report: ContrastReport | null;
 }
 ```
@@ -242,3 +245,46 @@ interface ContrastDetection {
   bounding_box?: number[];             // [x, y, w, h] pixels
 }
 ```
+
+## ImageAuditReport
+
+Produced by the image auditor independently of OCR. This means `image_audit_report` can be present even when `contrast_report` is `null`.
+
+```typescript
+interface ImageAuditReport {
+  summary: {
+    total_images:             number;
+    passed:                   number;
+    failed:                   number;
+    with_ocr_text:            number;
+    with_contrast_violations: number;
+    by_classification: Record<string, { passed: number; failed: number; total: number }>;
+  };
+  images: ImageAuditImageDetail[];
+}
+
+interface ImageAuditImageDetail {
+  filename:                  string;
+  path:                      string;
+  image_url:                 string;
+  classification:            string;
+  sub_type?:                 string | null;
+  overall_status:            string;
+  detected_text:             string;
+  contrast_violations_count: number;
+  wcag_1_1_1_status:         string;
+  wcag_4_1_2_status:         string;
+  wcag_1_4_5_status:         string;
+  wcag_1_4_11_status:        string;
+  wcag_1_1_1_reason:         string;
+  wcag_4_1_2_reason:         string;
+  wcag_1_4_5_reason:         string;
+  wcag_1_4_11_reason:        string;
+}
+```
+
+## Localization Notes
+
+- Node and Python both localize `criterion_name` and `suggested_fix` from shared repo-root i18n assets.
+- Node localizes `reason` for axe findings and migrated custom checks when `lang="ja"`.
+- Python `reason` localization depends on the auditor implementation; some legacy auditors still emit English reason text.
