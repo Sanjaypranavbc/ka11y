@@ -15,6 +15,7 @@ from ka11y.config.logger import setup_logger
 from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
 from ka11y.crawler.policy import CrawlPolicy
+from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.utils.step_logger import ExecutionStepLogger
 
 logger = setup_logger(name="KAC", tag="universal_page")
@@ -1335,6 +1336,14 @@ class UniversalPageLoader:
             logger.debug(f"[universal] networkidle timeout for {url}")
 
         await cls._wait_for_spa(page)
+        
+        # ── Cookie Handling ──
+        try:
+            cookie_state = await handle_cookies(page)
+            logger.debug(f"[universal] Cookie handling state for {url}: {cookie_state}")
+        except Exception as e:
+            logger.debug(f"[universal] Cookie handling exception for {url}: {e}")
+
         try:
             await page.evaluate(_DOM_STABILITY_JS, _DOM_STABILITY_MS)
         except Exception:
