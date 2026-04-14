@@ -20,6 +20,30 @@ function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
 }
 
+function _formatTrapDetail(detail, context) {
+  if (!detail || typeof detail !== 'object') return '';
+
+  if (detail.type === 'arrow-key-trap') {
+    return _t(
+      context,
+      'arrow-key trap in [role="{role}"]',
+      '[role="{role}"] 内で矢印キー操作のトラップの可能性',
+      { role: detail.role },
+    );
+  }
+
+  if (detail.type === 'iframe-tab-trap') {
+    return _t(
+      context,
+      'Tab trap in iframe ({frameUrl})',
+      'iframe 内で Tab トラップの可能性 ({frameUrl})',
+      { frameUrl: detail.frameUrl },
+    );
+  }
+
+  return '';
+}
+
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   // Focus the page body to start from a known position
@@ -254,7 +278,11 @@ async function run(page, context = {}) {
         }
 
         if (frameTrapHtml) {
-          iframeTrapFindings.push({ html: frameTrapHtml, frameUrl: frame.url() });
+          iframeTrapFindings.push({
+            type: 'iframe-tab-trap',
+            html: frameTrapHtml,
+            frameUrl: frame.url(),
+          });
         }
       } catch (_) {
         // Cross-origin frame — skip
@@ -270,8 +298,14 @@ async function run(page, context = {}) {
   }
 
   if (!trapHtml) {
-    const arrowDetail = arrowTrapFindings.map(f => `arrow-key trap in [role="${f.role}"]`).join('; ');
-    const iframeDetail = iframeTrapFindings.map(f => `Tab trap in iframe (${f.frameUrl.slice(0, 60)})`).join('; ');
+    const arrowDetail = arrowTrapFindings
+      .map(f => _formatTrapDetail(f, sharedContext))
+      .filter(Boolean)
+      .join('; ');
+    const iframeDetail = iframeTrapFindings
+      .map(f => _formatTrapDetail({ ...f, frameUrl: f.frameUrl.slice(0, 60) }, sharedContext))
+      .filter(Boolean)
+      .join('; ');
     const allDetail = [arrowDetail, iframeDetail].filter(Boolean).join('; ');
     return {
       successCriteriaId: SC,

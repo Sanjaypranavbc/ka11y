@@ -64,6 +64,33 @@ function makePage({ tabElements = [], shiftTabElements = [null] } = {}) {
   return page;
 }
 
+function makeArrowTrapPage() {
+  const responses = [
+    undefined, // body.focus()
+    null,      // forward Tab exits immediately
+    null,      // Shift+Tab exits immediately
+    [],        // tree widgets
+    [],        // grid widgets
+    [],        // listbox widgets
+    [],        // menu widgets
+    [{ id: 'tabs', html: '<div role="tablist">...</div>', selector: '#tabs', role: 'tablist' }],
+    undefined, // focus widget
+    '10:DIV',  // before ArrowDown
+    '10:DIV',  // after ArrowDown -> trap
+    [],        // radiogroup widgets
+  ];
+  let idx = 0;
+
+  return {
+    evaluate: jest.fn().mockImplementation(() => Promise.resolve(responses[idx++] ?? null)),
+    keyboard: {
+      press: jest.fn().mockResolvedValue(undefined),
+      down: jest.fn().mockResolvedValue(undefined),
+      up: jest.fn().mockResolvedValue(undefined),
+    },
+  };
+}
+
 describe('keyboard-trap.check (WCAG 2.1.2)', () => {
   test('passes when forward Tab focus moves freely', async () => {
     // Simulate 3 different elements then null (focus leaves page)
@@ -129,5 +156,14 @@ describe('keyboard-trap.check (WCAG 2.1.2)', () => {
       const result = await run(page);
       expect(result.rules[0].status).toBe('pass');
     });
+  });
+
+  test('Japanese reason localizes arrow-trap details', async () => {
+    const page = makeArrowTrapPage();
+    const result = await run(page, { lang: 'ja' });
+    expect(result.rules[0].status).toBe('incomplete');
+    expect(result.rules[0].reason).toContain('矢印キー操作');
+    expect(result.rules[0].reason).toContain('[role="tablist"]');
+    expect(result.rules[0].reason).not.toContain('arrow-key trap in');
   });
 });

@@ -21,6 +21,40 @@ function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
 }
 
+function _formatIssue(issue, context) {
+  if (!issue) return '';
+
+  if (typeof issue === 'string') {
+    return issue;
+  }
+
+  switch (issue.code) {
+    case 'no-indicator':
+      return _t(context, 'no-indicator', 'フォーカスインジケーターなし');
+    case 'outline-too-thin':
+      return _t(
+        context,
+        'outline-width {outlineWidth} < {minWidth}px (area requirement)',
+        'アウトライン幅 {outlineWidth} が {minWidth}px 未満です（面積要件）。',
+        issue,
+      );
+    case 'low-contrast':
+      return _t(
+        context,
+        'focus indicator contrast < {contrast}:1 against background',
+        'フォーカスインジケーターのコントラストが背景に対して {contrast}:1 未満です。',
+        issue,
+      );
+    default:
+      return '';
+  }
+}
+
+function _formatIssueList(issues, context) {
+  if (!Array.isArray(issues) || issues.length === 0) return '';
+  return issues.map(issue => _formatIssue(issue, context)).filter(Boolean).join('; ');
+}
+
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   // Snapshot element styles before/after focus in separate evaluate calls
@@ -159,8 +193,7 @@ async function run(page, context = {}) {
       // No visible indicator at all — this is a fail
       violations.push({
         ...el,
-        issue: 'no-indicator',
-        detail: 'No visible focus indicator (outline, box-shadow, or border change) detected.',
+        issues: [{ code: 'no-indicator' }],
       });
       continue;
     }
@@ -215,12 +248,22 @@ async function run(page, context = {}) {
 
     if (!meetsAreaReq || !meetsContrast) {
       const issues = [];
-      if (!meetsAreaReq) issues.push(`outline-width ${focused.outlineWidth} < ${MIN_OUTLINE_WIDTH_PX}px (area requirement)`);
-      if (!meetsContrast) issues.push(`focus indicator contrast < ${MIN_CONTRAST}:1 against background`);
+      if (!meetsAreaReq) {
+        issues.push({
+          code: 'outline-too-thin',
+          outlineWidth: focused.outlineWidth,
+          minWidth: MIN_OUTLINE_WIDTH_PX,
+        });
+      }
+      if (!meetsContrast) {
+        issues.push({
+          code: 'low-contrast',
+          contrast: MIN_CONTRAST,
+        });
+      }
       violations.push({
         ...el,
-        issue: issues.join('; '),
-        detail: `Focus indicator found but does not meet WCAG 2.4.13: ${issues.join('; ')}.`,
+        issues,
       });
     } else {
       passes.push(el);
@@ -241,7 +284,10 @@ async function run(page, context = {}) {
     };
   }
 
-  const sample = violations.slice(0, 3).map(v => `<${v.tag}${v.id ? ` id="${v.id}"` : ''}> (${v.issue})`).join('; ');
+  const sample = violations
+    .slice(0, 3)
+    .map((v) => `<${v.tag}${v.id ? ` id="${v.id}"` : ''}> (${_formatIssueList(v.issues, sharedContext)})`)
+    .join('; ');
 
   return {
     successCriteriaId: SC,
