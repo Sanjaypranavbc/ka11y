@@ -32,6 +32,7 @@ Main files:
 
 - `ka11y-python/ka11y/crawler/universal_page.py`
 - `ka11y-python/ka11y/crawler/snapshot_normalizer.py`
+- `ka11y-python/ka11y/crawler/cookie_handler.py`
 
 Use this for:
 
@@ -41,6 +42,12 @@ Use this for:
 - sensory characteristics
 - text spacing source data
 - general static DOM inspection
+
+**Page Preparation & Cookie Handling:**
+The `universal_page.py` crawler is responsible for navigating to the target URL and preparing the DOM for deterministic extraction. This includes:
+- Waiting for Single Page Application (SPA) hydration.
+- Automatically handling cookie consent banners via `handle_cookies()` (prioritizes rejecting cookies to minimize personalization/layout noise, falls back to accepting or visually removing blocking overlays).
+- Verifying DOM stability (`_DOM_STABILITY_JS`) to ensure no layout shifts occur during extraction.
 
 Best practice:
 
