@@ -14,7 +14,7 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance';
 // 2. Contrast ratio between focused and unfocused states ≥ 3:1
 const MIN_CONTRAST = 3.0;
 const MIN_OUTLINE_WIDTH_PX = 2; // Sufficient for area requirement on typical elements
-const MAX_ELEMENTS = 30;
+const MAX_ELEMENTS = 500;
 const SETTLE_MS = 80;
 
 function _t(context, en, ja, params = {}) {
@@ -297,6 +297,12 @@ async function run(page, context = {}) {
       impact: 'serious',
       status: 'fail',
       reason: _t(sharedContext, '{count} focusable element(s) have focus indicators that do not fully meet WCAG 2.4.13: {sample}. Ensure outline-width ≥ {outline_px}px and contrast ≥ {contrast}:1 between the indicator colour and adjacent background.', 'フォーカス可能要素 {count} 件のフォーカスインジケーターが WCAG 2.4.13 を十分に満たしていません: {sample}。インジケーターのアウトライン幅を {outline_px}px 以上にし、隣接背景とのコントラストを {contrast}:1 以上にしてください。', { count: violations.length, sample, outline_px: MIN_OUTLINE_WIDTH_PX, contrast: MIN_CONTRAST }),
+      elements: violations.map(v => ({
+        html: v.html,
+        element_id: v.id || null,
+        target: v.id ? [`${v.tag.toLowerCase()}#${CSS.escape(v.id)}`] : [v.tag.toLowerCase()],
+        tag: v.tag.toUpperCase(),
+      })),
       helpUrl: HELP_URL,
     }],
   };
