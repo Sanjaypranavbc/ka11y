@@ -183,7 +183,7 @@ curl -X POST http://localhost:8000/api/v1/combined/ \
 
 For Japanese pages, OCR runs with Japanese + English recognition to improve mixed-script detection while keeping API field names and endpoint contracts unchanged.
 
-The result payload currently does **not** echo `lang` back in the job record or final report. Clients that need to label the report language should keep track of the submitted request language themselves.
+The result payload now echoes `lang` back in the job record and final report.
 
 <ResponseExample>
 ```json HTTP 202
@@ -192,6 +192,7 @@ The result payload currently does **not** echo `lang` back in the job record or 
   "status": "pending",
   "url": "https://example.com",
   "submitted_at": "2026-03-17T17:13:48.409Z",
+  "lang": "ja",
   "completed_at": null,
   "report_path": null,
   "result": null,

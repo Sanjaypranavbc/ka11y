@@ -73,6 +73,7 @@ The frontend is available at **http://localhost:8080** and the Mintlify docs at 
 | Depends on | `node` (healthy) |
 | Volume | `./output/crawled_images:/app/crawled_images`, `./output/logs:/app/logs` |
 | Healthcheck | `curl http://localhost:8000/api/v1/health` |
+| System Health | `curl http://localhost:8000/api/v1/system/health` |
 | Start period | 90 s |
 
 ### ka11y-frontend
