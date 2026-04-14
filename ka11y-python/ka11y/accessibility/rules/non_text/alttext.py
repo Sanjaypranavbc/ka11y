@@ -260,8 +260,7 @@ def _check_1_1_1_logo(alt: str) -> tuple[bool, str]:
         return False, "FAIL [1.1.1] Logo has empty/missing alt text"
 
     norm = _norm(alt)
-    words = set(norm.split())
-    if (words & _LOGO_WORDS) or (words & _HOME_WORDS):
+    if any(w in norm for w in _LOGO_WORDS) or any(w in norm for w in _HOME_WORDS):
         return True, f"PASS [1.1.1] Logo alt includes logo/home keyword: '{alt}'"
 
     return (
@@ -366,8 +365,7 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
     norm = _norm(name)
 
     if sub_type == "logos":
-        words = set(norm.split())
-        if (words & _LOGO_WORDS) or (words & _HOME_WORDS):
+        if any(w in norm for w in _LOGO_WORDS) or any(w in norm for w in _HOME_WORDS):
             return True, f"PASS [4.1.2] Logo accessible name includes keyword: '{name}'"
         return (
             False,

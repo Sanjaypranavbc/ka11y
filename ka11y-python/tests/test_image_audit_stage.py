@@ -115,7 +115,7 @@ async def test_stage_image_audit_surfaces_dns_resolution_warning():
             self.images_data = []
             self.output_dir = "/tmp/ka11y-image-audit-test"
 
-        async def crawl_page(self):
+        async def crawl_page(self, **kwargs):
             raise ImageCrawlerNavigationError(
                 code="dns_resolution_failed",
                 url=self.base_url,
