@@ -204,11 +204,12 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
         # ── Resolve Python result ─────────────────────────────────────────────
         python_findings: List[Dict] = []
         contrast_report: Optional[Dict[str, Any]] = None
+        image_audit_report: Optional[Dict[str, Any]] = None
 
         if isinstance(python_result, Exception):
             pass  # all stages failed — warnings already recorded
-        elif isinstance(python_result, tuple) and len(python_result) == 2:
-            python_findings, contrast_report = python_result
+        elif isinstance(python_result, tuple) and len(python_result) == 3:
+            python_findings, contrast_report, image_audit_report = python_result
         else:
             # Unexpected return type — degrade gracefully rather than raising
             logger.warning(
@@ -239,17 +240,24 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             key=lambda f: {"fail": 0, "needs_review": 1, "pass": 2}.get(f["status"], 3)
         )
 
-        report = _build_report(url, all_findings, contrast_report=contrast_report)
+        report = _build_report(
+            url,
+            all_findings,
+            contrast_report=contrast_report,
+            image_audit_report=image_audit_report,
+        )
         report["warnings"] = _jobs[job_id].get("warnings", [])
         report["warning_details"] = _jobs[job_id].get("warning_details", [])
 
-        # Inject image_url into each contrast-report image for the frontend
-        if report.get("contrast_report"):
-            for img in report["contrast_report"].get("images", []):
-                img["image_url"] = (
-                    f"/api/v1/combined/{job_id}/image"
-                    f"?path={quote(img['path'], safe='')}"
-                )
+        # Inject image_url into image-backed reports for frontend rendering.
+        for report_key in ("contrast_report", "image_audit_report"):
+            if report.get(report_key):
+                for img in report[report_key].get("images", []):
+                    if img.get("path"):
+                        img["image_url"] = (
+                            f"/api/v1/combined/{job_id}/image"
+                            f"?path={quote(img['path'], safe='')}"
+                        )
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:

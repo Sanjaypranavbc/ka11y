@@ -43,6 +43,7 @@ from .findings import (
     IMAGE_AUDIT_RECORD_CONVERTERS,
     OCR_RESULT_CONVERTERS,
     _build_contrast_report,
+    _build_image_audit_report,
     _crawler_text_spacing_to_findings,
     _focus_not_obscured_enh_to_findings,
     _focus_not_obscured_min_to_findings,
@@ -190,6 +191,7 @@ async def _stage_image_audit(
 
         ocr_results: list = []
         contrast_report: Optional[Dict[str, Any]] = None
+        image_audit_report: Optional[Dict[str, Any]] = None
         findings: List[Dict] = []
         ocr_paths: List[str] = []
 
@@ -241,6 +243,7 @@ async def _stage_image_audit(
                 ocr_results=ocr_results,
                 output_dir=image_crawler.output_dir,
             )
+            image_audit_report = _build_image_audit_report(records)
             for _, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
                 findings.extend(converter(records, url))
         else:
@@ -262,7 +265,7 @@ async def _stage_image_audit(
         )
 
         _stage_complete(job_id, "image_audit", len(findings))
-        return findings, contrast_report
+        return findings, contrast_report, image_audit_report
     except ImageCrawlerNavigationError as _exc:
         if step_logger:
             step_logger.record(
@@ -277,10 +280,10 @@ async def _stage_image_audit(
                 },
             )
         _stage_error_and_warn(job_id, "image_audit", _exc)
-        return [], None
+        return [], None, None
     except Exception as _exc:
         _stage_error_and_warn(job_id, "image_audit", _exc)
-        return [], None
+        return [], None, None
 
 
 async def _stage_form_audit(
@@ -1038,11 +1041,15 @@ async def _run_python_stages(
     job_id: str,
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
-) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+) -> Tuple[
+    List[Dict[str, Any]],
+    Optional[Dict[str, Any]],
+    Optional[Dict[str, Any]],
+]:
     """
     Run all Python audit stages concurrently (6 total).
 
-    Returns (all_findings, contrast_report).
+    Returns (all_findings, contrast_report, image_audit_report).
     """
 
     # Each stage is wrapped with asyncio.wait_for so that a slow/unresponsive
@@ -1137,11 +1144,12 @@ async def _run_python_stages(
 
     all_findings: List[Dict] = []
     contrast_report: Optional[Dict[str, Any]] = None
+    image_audit_report: Optional[Dict[str, Any]] = None
 
-    # Image audit returns (findings, contrast_report)
+    # Image audit returns (findings, contrast_report, image_audit_report)
     img_result = results[0]
     if not isinstance(img_result, Exception):
-        img_findings, contrast_report = img_result
+        img_findings, contrast_report, image_audit_report = img_result
         all_findings.extend(img_findings)
 
     # All other stages return a plain findings list
@@ -1149,4 +1157,4 @@ async def _run_python_stages(
         if not isinstance(r, Exception):
             all_findings.extend(r)
 
-    return all_findings, contrast_report
+    return all_findings, contrast_report, image_audit_report

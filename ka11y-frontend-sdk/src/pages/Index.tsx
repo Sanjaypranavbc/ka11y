@@ -218,7 +218,12 @@ const Index = () => {
               {activeTab === "violations"          && <ViolationsTab violations={result.violations} pageSize={maxRows} />}
               {activeTab === "needs-review"        && <NeedsReviewTab items={result.needs_review} pageSize={maxRows} />}
               {activeTab === "passes"              && <PassesTab passes={result.passes} pageSize={maxRows} />}
-              {activeTab === "image-visualisation" && <ImageVisualisationTab contrastReport={result.contrast_report} />}
+              {activeTab === "image-visualisation" && (
+                <ImageVisualisationTab
+                  contrastReport={result.contrast_report}
+                  imageAuditReport={result.image_audit_report}
+                />
+              )}
               {activeTab === "settings"            && (
                 <SettingsTab
                   maxRows={maxRows}

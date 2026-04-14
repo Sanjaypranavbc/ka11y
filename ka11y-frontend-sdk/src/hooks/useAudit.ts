@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { AuditConfig, AuditResult, ContrastReport, StageInfo } from "@/types/audit";
+import { AuditConfig, AuditResult, ContrastReport, ImageAuditReport, StageInfo } from "@/types/audit";
 import { emptyAuditResult } from "@/data/sampleData";
 
 const IMG_TEXT_RE = /<img-text\b[^>]*>([\s\S]*?)<\/img-text>/i;
@@ -107,6 +107,7 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
     passes: (((report.passes as Record<string, unknown>[]) || []).map(flattenFinding) as AuditResult["passes"]) || [],
     warnings: (report.warnings as string[]) || (pollData.warnings as string[]) || [],
     contrast_report: (report.contrast_report as ContrastReport) ?? null,
+    image_audit_report: (report.image_audit_report as ImageAuditReport) ?? null,
   };
 }
 

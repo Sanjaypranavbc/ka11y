@@ -244,18 +244,17 @@ async def get_combined_audit(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
-    # Inject image_url into contrast_report images so the frontend can load them.
-    # _build_contrast_report stores only the filesystem `path`; the serving URL
-    # is constructed here at response time to keep the image endpoint URL in one place.
+    # Inject image_url into image-backed reports so the frontend can load them.
     result = job.get("result") or {}
-    contrast_report = result.get("contrast_report") or {}
-    for img in contrast_report.get("images", []):
-        if not img.get("image_url") and img.get("path"):
-            from urllib.parse import quote
+    from urllib.parse import quote
 
-            img["image_url"] = (
-                f"/api/v1/combined/{job_id}/image?path={quote(img['path'], safe='')}"
-            )
+    for report_key in ("contrast_report", "image_audit_report"):
+        report = result.get(report_key) or {}
+        for img in report.get("images", []):
+            if not img.get("image_url") and img.get("path"):
+                img["image_url"] = (
+                    f"/api/v1/combined/{job_id}/image?path={quote(img['path'], safe='')}"
+                )
 
     return job
 
@@ -273,8 +272,14 @@ async def get_job_image(job_id: str, path: str):
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
     result = job.get("result") or {}
-    contrast_report = result.get("contrast_report") or {}
-    valid_paths = {img["path"] for img in contrast_report.get("images", [])}
+    valid_paths = set()
+    for report_key in ("contrast_report", "image_audit_report"):
+        report = result.get(report_key) or {}
+        valid_paths.update(
+            img["path"]
+            for img in report.get("images", [])
+            if img.get("path")
+        )
 
     if path not in valid_paths:
         raise HTTPException(

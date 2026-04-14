@@ -294,6 +294,83 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
     }
 
 
+def _build_image_audit_report(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Surface the full Python image-audit result set in a frontend-friendly shape.
+
+    Unlike contrast_report, this covers all audited images, including ones with
+    no OCR text or no contrast data, so the UI can still show that image audit
+    ran and what it concluded.
+    """
+    images: List[Dict[str, Any]] = []
+    by_classification: Dict[str, Dict[str, int]] = {}
+    passed = 0
+    failed = 0
+    with_ocr_text = 0
+    with_contrast_violations = 0
+
+    for record in records:
+        classification = str(record.get("classification") or "other")
+        overall_status = str(record.get("overall_status") or "FAILED")
+        if overall_status == "PASSED":
+            passed += 1
+        else:
+            failed += 1
+
+        if record.get("has_ocr_text"):
+            with_ocr_text += 1
+        contrast_violations_count = int(record.get("contrast_violations_count") or 0)
+        if contrast_violations_count > 0:
+            with_contrast_violations += 1
+
+        bucket = by_classification.setdefault(
+            classification,
+            {"passed": 0, "failed": 0, "total": 0},
+        )
+        bucket["total"] += 1
+        if overall_status == "PASSED":
+            bucket["passed"] += 1
+        else:
+            bucket["failed"] += 1
+
+        images.append(
+            {
+                "filename": record.get("filename"),
+                "path": record.get("screenshot_path"),
+                "src": record.get("src"),
+                "url": record.get("url"),
+                "alt_text": record.get("alt_text"),
+                "title": record.get("title"),
+                "classification": classification,
+                "sub_type": record.get("sub_type") or None,
+                "overall_status": overall_status,
+                "has_ocr_text": bool(record.get("has_ocr_text")),
+                "detected_text": record.get("detected_text") or "",
+                "contrast_violations_count": contrast_violations_count,
+                "wcag_1_1_1_status": record.get("wcag_1_1_1_status"),
+                "wcag_4_1_2_status": record.get("wcag_4_1_2_status"),
+                "wcag_1_4_5_status": record.get("wcag_1_4_5_status"),
+                "wcag_1_4_11_status": record.get("wcag_1_4_11_status"),
+                "wcag_1_1_1_reason": record.get("wcag_1_1_1_reason") or "",
+                "wcag_4_1_2_reason": record.get("wcag_4_1_2_reason") or "",
+                "wcag_1_4_5_reason": record.get("wcag_1_4_5_reason") or "",
+                "wcag_1_4_11_reason": record.get("wcag_1_4_11_reason") or "",
+            }
+        )
+
+    return {
+        "summary": {
+            "total_images": len(records),
+            "passed": passed,
+            "failed": failed,
+            "with_ocr_text": with_ocr_text,
+            "with_contrast_violations": with_contrast_violations,
+            "by_classification": by_classification,
+        },
+        "images": images,
+    }
+
+
 # ── Per-auditor finding converters ────────────────────────────────────────────
 
 
