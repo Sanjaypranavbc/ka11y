@@ -153,7 +153,7 @@ async def test_stage_image_audit_surfaces_dns_resolution_warning():
         "ka11y.text_detector.text_detector.TextClassification",
         DummyTextClassification,
     ):
-        findings, contrast_report = await _stage_image_audit(
+        findings, contrast_report, image_audit_report = await _stage_image_audit(
             url="https://www.kao.com/jp/",
             output_dir=Path("/tmp"),
             max_depth=0,
@@ -166,6 +166,7 @@ async def test_stage_image_audit_surfaces_dns_resolution_warning():
 
     assert findings == []
     assert contrast_report is None
+    assert image_audit_report is None
     assert store._jobs[job_id]["warnings"]
     assert any(
         "dns_resolution_failed" in warning

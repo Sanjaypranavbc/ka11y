@@ -7,7 +7,8 @@ Each stage coroutine:
   - owns its crawler + auditor lifecycle
   - calls _stage_start / _stage_complete / _stage_error_and_warn
   - offloads CPU-bound auditor work via asyncio.to_thread()
-  - returns a flat List[Dict] of findings (image_audit also returns contrast_report)
+  - returns a flat List[Dict] of findings
+  - image_audit also returns contrast_report and image_audit_report
 
 _run_python_stages() gathers all stages concurrently.
 """
