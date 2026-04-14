@@ -150,7 +150,7 @@ async function run(page, context = {}) {
       violations.push({
         html: el.html,
         element_id: el.id || null,
-        target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        target: el.id ? [`${el.tagName.toLowerCase()}#${el.id.replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, "\\$&")}`] : [el.tagName.toLowerCase()],
         tag: el.tagName.toUpperCase(),
         tagName: el.tagName,
         id: el.id,

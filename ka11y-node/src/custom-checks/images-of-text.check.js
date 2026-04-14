@@ -1,6 +1,8 @@
 'use strict';
 
 const {
+  buildKeywordPattern,
+  getKeywordList,
   getSharedRuleContext,
   renderLocalizedText,
 } = require('./sharedAssets');
@@ -73,15 +75,19 @@ async function run(page, context = {}) {
         violations.push({
           src:  src.slice(-80),
           alt:  alt.slice(0, 100),
-          html: img.outerHTML.slice(0, 200),
-          id:   img.id || null,
+          html: img.outerHTML.slice(0, 150),
+          element_id: img.id || null,
+          target: img.id ? [`img#${CSS.escape(img.id)}`] : ['img[src]'],
+          tag: 'IMG',
         });
       } else if (score === 2) {
         needsReview.push({
           src:  src.slice(-80),
           alt:  alt.slice(0, 100),
-          html: img.outerHTML.slice(0, 200),
-          id:   img.id || null,
+          html: img.outerHTML.slice(0, 150),
+          element_id: img.id || null,
+          target: img.id ? [`img#${CSS.escape(img.id)}`] : ['img[src]'],
+          tag: 'IMG',
         });
       }
     }
@@ -100,8 +106,10 @@ async function run(page, context = {}) {
       bgTextViolations.push({
         src:  cs.backgroundImage.slice(0, 80),
         text: text.slice(0, 60),
-        html: el.outerHTML.slice(0, 200),
-        id:   el.id || null,
+        html: el.outerHTML.slice(0, 150),
+        element_id: el.id || null,
+        target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
       });
     }
 
@@ -110,7 +118,13 @@ async function run(page, context = {}) {
     for (const svg of document.querySelectorAll('svg')) {
       const textEls = svg.querySelectorAll('text');
       if (textEls.length > 0 && svg.closest('a, button, [role="img"], figure')) {
-        svgTextViolations.push({ type: 'svg-text-image', html: svg.outerHTML.slice(0, 200) });
+        svgTextViolations.push({
+          type: 'svg-text-image',
+          html: svg.outerHTML.slice(0, 150),
+          element_id: svg.id || null,
+          target: svg.id ? [`svg#${CSS.escape(svg.id)}`] : ['svg'],
+          tag: 'SVG',
+        });
       }
     }
 
@@ -159,6 +173,7 @@ async function run(page, context = {}) {
         impact:      'moderate',
         status:      'fail',
         reason:      _t(sharedContext, '{count} image(s) appear to contain non-essential text based on src path and alt-text heuristics: {sample}. Use real HTML/CSS text instead of text baked into images.', 'src パスと alt テキストのヒューリスティクスに基づき、本質的でないテキストを含む可能性がある画像が {count} 件検出されました: {sample}。画像に埋め込んだ文字ではなく、実際の HTML/CSS テキストを使用してください。', { count: allViolations.length, sample }),
+        elements: allViolations,
         helpUrl: HELP_URL,
       }],
     };
@@ -176,6 +191,7 @@ async function run(page, context = {}) {
       impact:      'minor',
       status:      'incomplete',
       reason:      _t(sharedContext, '{count} image(s) may contain text — manual or OCR verification recommended: {sample}.', 'テキストを含む可能性がある画像が {count} 件あります。目視または OCR による確認を推奨します: {sample}。', { count: reviews.length, sample }),
+      elements: reviews,
       helpUrl: HELP_URL,
     }],
   };

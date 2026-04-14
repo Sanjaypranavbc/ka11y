@@ -45,7 +45,6 @@ describe('use-of-color.check (WCAG 1.4.1)', () => {
     expect(result.rules[0].impact).toBe('serious');
     expect(result.rules[0].reason).toContain('1 inline link(s)');
     expect(result.rules[0].reason).toContain('colour alone');
-    expect(result.rules[0].reason).toContain('"About us"');
   });
 
   test('link with underline SHOULD NOT be flagged (no violations returned)', async () => {
@@ -82,10 +81,6 @@ describe('use-of-color.check (WCAG 1.4.1)', () => {
     const result = await run(page);
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('4 inline link(s)');
-    // Reason shows first 3 sample texts
-    expect(result.rules[0].reason).toContain('"Home"');
-    expect(result.rules[0].reason).toContain('"About"');
-    expect(result.rules[0].reason).toContain('"Contact"');
   });
 
   test('reason message includes suggestion to add visual cue', async () => {

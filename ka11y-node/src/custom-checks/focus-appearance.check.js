@@ -300,7 +300,7 @@ async function run(page, context = {}) {
       elements: violations.map(v => ({
         html: v.html,
         element_id: v.id || null,
-        target: v.id ? [`${v.tag.toLowerCase()}#${CSS.escape(v.id)}`] : [v.tag.toLowerCase()],
+        target: v.id ? [`${v.tag.toLowerCase()}#${v.id.replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, "\\$&")}`] : [v.tag.toLowerCase()],
         tag: v.tag.toUpperCase(),
       })),
       helpUrl: HELP_URL,

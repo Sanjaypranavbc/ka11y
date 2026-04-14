@@ -146,9 +146,10 @@ function _selectorToElement(selector) {
 
   return {
     selector: sel,
-    tagName: tag ? tag.toUpperCase() : null,
-    id,
-    html: clampString(html, 200),
+    tag: tag ? tag.toUpperCase() : null,
+    element_id: id,
+    target: [sel],
+    html: clampString(html, 150),
   };
 }
 
@@ -164,7 +165,7 @@ function _elementsFromGroups(groups, max = 8) {
     for (const selector of selectors) {
       const element = _selectorToElement(selector);
       if (!element) continue;
-      const dedupeKey = `${element.selector}|${element.tagName || ''}|${element.id || ''}`;
+      const dedupeKey = `${element.selector}|${element.tag || ''}|${element.element_id || ''}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
       out.push(element);

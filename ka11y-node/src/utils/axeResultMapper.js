@@ -642,7 +642,10 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
       if (elementList.length === 0 && status === 'needs_review') {
         elementList = [fallbackPageElement()];
       }
-      if (elementList.length === 0) elementList = [null];
+      // Added fallback for pass and fail states where elements are still empty
+      if (elementList.length === 0) {
+        elementList = [fallbackPageElement()];
+      }
 
       for (const element of elementList) {
         findings.push({

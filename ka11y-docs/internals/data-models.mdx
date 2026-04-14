@@ -137,6 +137,7 @@ interface Finding {
   element:        {
     html:       string;             // first 600 chars of outer HTML
     element_id: string | null;
+    target:     string[];           // selector chain
     tag:        string | null;
     page_url:   string;
   } | null;                         // null for passes
@@ -286,5 +287,5 @@ interface ImageAuditImageDetail {
 ## Localization Notes
 
 - Node and Python both localize `criterion_name` and `suggested_fix` from shared repo-root i18n assets.
-- Node localizes `reason` for axe findings and migrated custom checks when `lang="ja"`.
+- Node localizes `reason` for axe findings and all custom checks when `lang="ja"`. All custom checks now use centralized `config/universal.yml` keywords for localized heuristics.
 - Python `reason` localization depends on the auditor implementation; some legacy auditors still emit English reason text.
