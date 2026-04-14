@@ -47,6 +47,9 @@ def _make_finding(
     element_selector: Optional[str] = None,
     element_ref_id: Optional[str] = None,
     frame_path: Optional[str] = None,
+    image_src: Optional[str] = None,
+    image_reference: Optional[str] = None,
+    image_text: Optional[str] = None,
     page_url: str = "",
 ) -> Dict[str, Any]:
     is_pass = status == "pass"
@@ -61,17 +64,22 @@ def _make_finding(
         or target
         or element_ref_id
         or frame_path
+        or image_src
+        or image_reference
     )
     if is_pass:
         element = (
             {
-                "html": element_html[:600],
+                "html": element_html[:600] if element_html else "",
                 "element_id": element_id,
                 "tag": element_tag,
                 "target": target,
                 "selector": element_selector,
                 "element_ref_id": element_ref_id,
                 "frame_path": frame_path,
+                "image_src": image_src,
+                "image_reference": image_reference,
+                "image_text": image_text,
                 "page_url": page_url,
             }
             if has_element_data
@@ -79,13 +87,16 @@ def _make_finding(
         )
     else:
         element = {
-            "html": element_html[:600],
+            "html": element_html[:600] if element_html else "",
             "element_id": element_id,
             "tag": element_tag,
             "target": target,
             "selector": element_selector,
             "element_ref_id": element_ref_id,
             "frame_path": frame_path,
+            "image_src": image_src,
+            "image_reference": image_reference,
+            "image_text": image_text,
             "page_url": page_url,
         }
 
@@ -388,6 +399,10 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         element_html = f'<img src="{src}"{alt_attr}>'
         element_id = r.get("src") or r.get("filename") or None
 
+        path = r.get("screenshot_path")
+        filename = r.get("filename")
+        detected_text = r.get("detected_text")
+
         if status_raw == "FAILED":
             findings.append(
                 _make_finding(
@@ -400,6 +415,9 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -415,6 +433,9 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -436,6 +457,10 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
         element_html = f'<img src="{src}"{alt_attr}>'
         element_id = r.get("src") or r.get("filename") or None
 
+        path = r.get("screenshot_path")
+        filename = r.get("filename")
+        detected_text = r.get("detected_text")
+
         if status_raw == "FAILED":
             findings.append(
                 _make_finding(
@@ -449,6 +474,9 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -465,6 +493,9 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )
