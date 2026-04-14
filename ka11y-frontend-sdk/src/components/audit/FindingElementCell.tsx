@@ -130,7 +130,11 @@ export function FindingElementCell({
         </code>
       )}
 
-      {source && source !== reference && (
+      {source && source.startsWith("/api/v1/") ? (
+        <div className="mt-2 mb-2 rounded-md overflow-hidden border bg-muted/30">
+          <img src={source} alt="Violation element" className="max-h-32 w-auto object-contain" loading="lazy" />
+        </div>
+      ) : source && source !== reference ? (
         <div className="flex items-start gap-1.5">
           <Badge variant="outline" className="h-4 px-1.5 text-[9px] shrink-0">
             {t("table.imageSrc")}
@@ -139,7 +143,7 @@ export function FindingElementCell({
             {source}
           </span>
         </div>
-      )}
+      ) : null}
     </div>
   );
 
@@ -246,14 +250,21 @@ export function FindingElementCell({
               </section>
             )}
 
-            {source && (
+            {source && source.startsWith("/api/v1/") ? (
+              <section className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">{t("table.imageSrc")}</h4>
+                <div className="rounded-md border bg-muted/20 overflow-hidden flex justify-center p-2">
+                  <img src={source} alt="Violation element expanded" className="max-h-96 w-auto object-contain" loading="lazy" />
+                </div>
+              </section>
+            ) : source ? (
               <section className="space-y-2">
                 <h4 className="text-sm font-medium text-foreground">{t("table.imageSrc")}</h4>
                 <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs leading-relaxed break-all">
                   {source}
                 </div>
               </section>
-            )}
+            ) : null}
 
             {ocrText && (
               <section className="space-y-2">

@@ -259,6 +259,17 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(img['path'], safe='')}"
                         )
+                        
+        for array_key in ("violations", "needs_review", "passes"):
+            for finding in report.get(array_key, []):
+                element = finding.get("element")
+                if element and isinstance(element, dict):
+                    src = element.get("image_src")
+                    if src and not src.startswith("/api/v1/"):
+                        element["image_src"] = (
+                            f"/api/v1/combined/{job_id}/image"
+                            f"?path={quote(src, safe='')}"
+                        )
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:

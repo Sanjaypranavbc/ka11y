@@ -257,6 +257,15 @@ async def get_combined_audit(job_id: str):
                     f"/api/v1/combined/{job_id}/image?path={quote(img['path'], safe='')}"
                 )
 
+    for array_key in ("violations", "needs_review", "passes"):
+        arr = result.get(array_key) or []
+        for finding in arr:
+            element = finding.get("element")
+            if element and isinstance(element, dict):
+                src = element.get("image_src")
+                if src and not src.startswith("/api/v1/"):
+                    element["image_src"] = f"/api/v1/combined/{job_id}/image?path={quote(src, safe='')}"
+
     return job
 
 
