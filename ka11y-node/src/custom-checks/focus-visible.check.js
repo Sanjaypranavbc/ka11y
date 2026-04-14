@@ -8,7 +8,7 @@ const {
 const SC = '2.4.7';
 const RULE_ID = 'custom-focus-visible';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-visible';
-const MAX_ELEMENTS = 500;
+const MAX_ELEMENTS = 2000;
 // Settle delay: allow CSS transitions and React/Vue re-renders to apply before capturing styles
 const SETTLE_MS = 80;
 
@@ -41,7 +41,15 @@ async function run(page, context = {}) {
       seen.add(el);
       let stableSel = null;
       if (el.id && idCounts[el.id] === 1) stableSel = `#${CSS.escape(el.id)}`;
-      items.push({ idx: items.length, stableSel, tagName: el.tagName.toLowerCase(), id: el.id || null, html: el.outerHTML.slice(0, 200) });
+      items.push({ 
+        idx: items.length, 
+        stableSel, 
+        tagName: el.tagName.toLowerCase(), 
+        tag: el.tagName.toUpperCase(),
+        target: stableSel ? [stableSel] : [el.tagName.toLowerCase()],
+        id: el.id || null, 
+        html: el.outerHTML.slice(0, 200) 
+      });
       if (items.length >= max) break;
     }
     return items;
@@ -150,8 +158,8 @@ async function run(page, context = {}) {
       violations.push({
         html: el.html,
         element_id: el.id || null,
-        target: el.id ? [`${el.tagName.toLowerCase()}#${el.id.replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, "\\$&")}`] : [el.tagName.toLowerCase()],
-        tag: el.tagName.toUpperCase(),
+        target: el.target,
+        tag: el.tag,
         tagName: el.tagName,
         id: el.id,
       });

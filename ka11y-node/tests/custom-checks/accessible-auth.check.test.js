@@ -67,16 +67,6 @@ describe('accessible-auth.check (WCAG 3.3.8)', () => {
     expect(result.rules[0].reason).toContain('no CAPTCHA');
   });
 
-  test('includes Japanese auth/CAPTCHA patterns in source heuristics', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/accessible-auth.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('ログイン');
-    expect(src).toContain('音声');
-    expect(src).toContain('パスワード再設定');
-  });
-
   test('localizes reasons to Japanese when lang=ja', async () => {
     const page = makePage({
       hasAuthForm: true,

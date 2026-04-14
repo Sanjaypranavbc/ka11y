@@ -20,15 +20,15 @@ async function run(page, context = {}) {
   
   const loginFormPattern = buildKeywordPattern(
     getKeywordList('accessible_auth', 'login_form_keywords', sharedContext)
-  ) || 'log\\s*in|sign\\s*in|login|signin|authenticate|username|email\\s+address|create\\s+account|register|forgot\\s+password|ログイン|サインイン|認証|ユーザー名|メールアドレス|アカウント作成|新規登録|会員登録|パスワード|パスワードを忘れ|パスワード再設定';
+  );
 
   const captchaAltPattern = buildKeywordPattern(
     getKeywordList('accessible_auth', 'captcha_alt_keywords', sharedContext)
-  ) || 'audio|音声|can.?t\\s+read|読み取れない|different\\s+image|別の画像|refresh\\s+captcha|画像を更新|alternative|別の方法|try\\s+another|別の認証';
+  );
 
   const cognitiveTestPattern = buildKeywordPattern(
     getKeywordList('accessible_auth', 'cognitive_test_keywords', sharedContext)
-  ) || 'what\\s+is\\s+\\d+\\s*[\\+\\-\\*×÷]\\s*\\d+|solve\\s+the\\s+(puzzle|equation|problem)|enter\\s+the\\s+(word|text|code|letters?|numbers?)\\s+(you\\s+see|shown|above|below|in\\s+the\\s+(image|picture))|answer\\s+the\\s+(question|challenge)|what\\s+(color|colour|shape)\\s+is|\\d+\\s*[\\+\\-\\*×÷]\\s*\\d+|計算|問題を解|パズル|クイズ|画像に表示|表示された文字|見える文字|質問に答|何色|どの色|どの形';
+  );
 
   const data = await page.evaluate((loginFormReStr, captchaAltReStr, cognitiveTestReStr) => {
     const loginFormRe = new RegExp(`\\b(${loginFormReStr})\\b|${loginFormReStr}`, 'i');

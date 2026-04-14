@@ -12,15 +12,6 @@ const RULE_ID = 'custom-images-of-text';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/images-of-text';
 
 // Logo/brand images are exempt from 1.4.5 (WCAG exception: logotypes)
-const LOGO_PATTERN = /\b(logo|brand|wordmark|logotype|favicon)\b|ロゴ|ブランド/i;
-
-// Patterns in alt, src path, or class/id that strongly suggest the image contains text
-// rather than being a photo, diagram, or decorative graphic.
-const TEXT_IMG_ALT_PATTERN = /^[\w\s,.:;!?'"()\-]{20,}$|"[^"]{10,}"|[A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+/;
-const TEXT_IMG_SRC_PATTERN = /\/(banner|headline|text|quote|caption|ad|promo|slide|card|cta|announcement|copy|slogan|tagline|infographic|poster|flyer|screenshot|バナー|見出し|テキスト|引用|キャプション|広告|プロモ|カード|お知らせ|コピー|スローガン|ポスター|フライヤー|スクリーンショット)\b/i;
-const TEXT_IMG_CLASS_PATTERN = /\b(banner|text-image|headline|quote|caption|promo|screenshot|infographic)\b|バナー|見出し|テキスト|キャプション|プロモ|インフォグラフィック/i;
-
-// Minimum alt-text word count that suggests a meaningful textual description (image with text)
 const MIN_WORDS_FOR_TEXT_IMAGE = 5;
 
 function _t(context, en, ja, params = {}) {
@@ -29,11 +20,19 @@ function _t(context, en, ja, params = {}) {
 
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
+  const logoPattern = buildKeywordPattern(
+    getKeywordList('images_of_text', 'logo_keywords', sharedContext)
+  );
+
+  const textKeywordPattern = buildKeywordPattern(
+    getKeywordList('images_of_text', 'text_keywords', sharedContext)
+  );
+
   const data = await page.evaluate((params) => {
-    const { logoPattern, srcPattern, classPattern, minWords } = params;
+    const { logoPattern, textKeywordPattern, minWords } = params;
     const logoRe   = new RegExp(logoPattern, 'i');
-    const srcRe    = new RegExp(srcPattern,  'i');
-    const classRe  = new RegExp(classPattern,'i');
+    const srcRe    = new RegExp(textKeywordPattern,  'i');
+    const classRe  = new RegExp(textKeywordPattern,'i');
 
     const violations    = [];
     const needsReview   = [];
@@ -130,10 +129,9 @@ async function run(page, context = {}) {
 
     return { violations, needsReview, bgTextViolations, svgTextViolations, checkedCount };
   }, {
-    logoPattern:  LOGO_PATTERN.source,
-    srcPattern:   TEXT_IMG_SRC_PATTERN.source,
-    classPattern: TEXT_IMG_CLASS_PATTERN.source,
-    minWords:     MIN_WORDS_FOR_TEXT_IMAGE,
+    logoPattern,
+    textKeywordPattern,
+    minWords: MIN_WORDS_FOR_TEXT_IMAGE,
   });
 
   const allViolations = [

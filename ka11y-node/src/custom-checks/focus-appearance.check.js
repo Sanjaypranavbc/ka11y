@@ -14,7 +14,7 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance';
 // 2. Contrast ratio between focused and unfocused states ≥ 3:1
 const MIN_CONTRAST = 3.0;
 const MIN_OUTLINE_WIDTH_PX = 2; // Sufficient for area requirement on typical elements
-const MAX_ELEMENTS = 500;
+const MAX_ELEMENTS = 2000;
 const SETTLE_MS = 80;
 
 function _t(context, en, ja, params = {}) {
@@ -92,7 +92,9 @@ async function run(page, context = {}) {
       items.push({
         idx:       items.length,
         stableSel,
-        tag:       el.tagName.toLowerCase(),
+        tag:       el.tagName.toUpperCase(),
+        tagName:   el.tagName.toLowerCase(),
+        target:    stableSel ? [stableSel] : [el.tagName.toLowerCase()],
         id:        el.id || null,
         html:      el.outerHTML.slice(0, 150),
       });
@@ -300,8 +302,8 @@ async function run(page, context = {}) {
       elements: violations.map(v => ({
         html: v.html,
         element_id: v.id || null,
-        target: v.id ? [`${v.tag.toLowerCase()}#${v.id.replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, "\\$&")}`] : [v.tag.toLowerCase()],
-        tag: v.tag.toUpperCase(),
+        target: v.target,
+        tag: v.tag,
       })),
       helpUrl: HELP_URL,
     }],

@@ -11,7 +11,7 @@ const SC = '2.4.9';
 const RULE_ID = 'custom-link-purpose';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/link-purpose-link-only';
 
-const MAX_LINKS = 100;
+const MAX_LINKS = 2000;
 
 function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
@@ -21,7 +21,7 @@ async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const genericLinkPattern = buildKeywordPattern(
     getKeywordList('link_purpose', 'generic_link_keywords', sharedContext)
-  ) || 'click\\s+here|here|read\\s+more|more|learn\\s+more|details|continue|go|link|こちら|詳細|詳しくはこちら|もっと見る|続きを';
+  );
 
   const data = await page.evaluate((maxLinks, genericRe) => {
     const re = new RegExp(`^(${genericRe})\\.?$`, 'i');

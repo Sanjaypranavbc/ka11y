@@ -487,3 +487,269 @@ crawler:
 crawl_browser:
   width: 1920
   height: 1080
+
+  accessible_auth:
+    login_form_keywords:
+      en:
+        - "log\\s*in"
+        - "sign\\s*in"
+        - "login"
+        - "signin"
+        - "authenticate"
+        - "username"
+        - "email\\s+address"
+        - "create\\s+account"
+        - "register"
+        - "forgot\\s+password"
+      ja:
+        - "ログイン"
+        - "サインイン"
+        - "認証"
+        - "ユーザー名"
+        - "メールアドレス"
+        - "アカウント作成"
+        - "新規登録"
+        - "会員登録"
+        - "パスワード"
+        - "パスワードを忘れ"
+        - "パスワード再設定"
+    captcha_alt_keywords:
+      en:
+        - "audio"
+        - "can.?t\\s+read"
+        - "different\\s+image"
+        - "refresh\\s+captcha"
+        - "alternative"
+        - "try\\s+another"
+      ja:
+        - "音声"
+        - "読み取れない"
+        - "別の画像"
+        - "画像を更新"
+        - "別の方法"
+        - "別の認証"
+    cognitive_test_keywords:
+      en:
+        - "what\\s+is\\s+\\d+\\s*[\\+\\-\\*×÷]\\s*\\d+"
+        - "solve\\s+the\\s+(puzzle|equation|problem)"
+        - "enter\\s+the\\s+(word|text|code|letters?|numbers?)\\s+(you\\s+see|shown|above|below|in\\s+the\\s+(image|picture))"
+        - "answer\\s+the\\s+(question|challenge)"
+        - "what\\s+(color|colour|shape)\\s+is"
+        - "\\d+\\s*[\\+\\-\\*×÷]\\s*\\d+"
+      ja:
+        - "計算"
+        - "問題を解"
+        - "パズル"
+        - "クイズ"
+        - "画像に表示"
+        - "表示された文字"
+        - "見える文字"
+        - "質問に答"
+        - "何色"
+        - "どの色"
+        - "どの形"
+
+  status_messages:
+    search_result_keywords:
+      en:
+        - "result"
+      ja:
+        - "結果"
+    counter_badge_keywords:
+      en:
+        - "count"
+        - "counter"
+        - "notification"
+        - "unread"
+      ja:
+        - "新着"
+        - "件"
+        - "通知"
+        - "未読"
+    cart_keywords:
+      en:
+        - "cart"
+        - "basket"
+      ja:
+        - "カート"
+        - "買い物かご"
+    notification_class_keywords:
+      en:
+        - "notification"
+        - "toast"
+        - "snackbar"
+        - "flash"
+        - "alert"
+        - "banner"
+      ja:
+        - "notification"
+        - "toast"
+        - "snackbar"
+        - "flash"
+        - "alert"
+        - "banner"
+
+  link_purpose:
+    generic_link_keywords:
+      en:
+        - "click\\s+here"
+        - "here"
+        - "read\\s+more"
+        - "more"
+        - "learn\\s+more"
+        - "more\\s+info(rmation)?"
+        - "details"
+        - "continue"
+        - "go"
+        - "link"
+        - "this"
+        - "see\\s+more"
+        - "view\\s+more"
+        - "find\\s+out\\s+more"
+        - "click"
+        - "tap"
+        - "press\\s+here"
+        - "start"
+        - "begin"
+        - "open"
+        - "show"
+        - "hide"
+        - "toggle"
+      ja:
+        - "こちら"
+        - "こちらへ"
+        - "詳細"
+        - "詳しくはこちら"
+        - "詳細はこちら"
+        - "もっと見る"
+        - "続きを読む"
+        - "もっと読む"
+        - "続きはこちら"
+        - "詳しく見る"
+        - "もっと詳しく"
+        - "開く"
+        - "見る"
+        - "確認する"
+        - "ここをクリック"
+        - "クリック"
+        - "タップ"
+        - "詳細を見る"
+        - "さらに"
+        - "リンク"
+
+  images_of_text:
+    text_keywords:
+      en:
+        - "text"
+        - "word"
+        - "message"
+        - "letter"
+        - "title"
+        - "heading"
+        - "quote"
+        - "banner"
+        - "sign"
+        - "button"
+      ja:
+        - "文字"
+        - "テキスト"
+        - "メッセージ"
+        - "手紙"
+        - "タイトル"
+        - "見出し"
+        - "引用"
+        - "バナー"
+        - "サイン"
+        - "ボタン"
+    logo_keywords:
+      en:
+        - "logo"
+        - "brand"
+        - "trademark"
+        - "mark"
+        - "logotype"
+      ja:
+        - "ロゴ"
+        - "ブランド"
+        - "商標"
+        - "マーク"
+        - "ロゴタイプ"
+
+  redundant_entry:
+    address_keywords:
+      en:
+        - "address"
+        - "zip"
+        - "postal"
+        - "street"
+        - "city"
+        - "state"
+        - "province"
+        - "country"
+      ja:
+        - "住所"
+        - "郵便番号"
+        - "都道府県"
+        - "市区町村"
+        - "番地"
+    name_keywords:
+      en:
+        - "name"
+        - "first\\s*name"
+        - "last\\s*name"
+        - "full\\s*name"
+      ja:
+        - "名前"
+        - "氏名"
+        - "姓"
+        - "名"
+        - "ふりがな"
+        - "フリガナ"
+    contact_keywords:
+      en:
+        - "email"
+        - "e-mail"
+        - "phone"
+        - "telephone"
+        - "mobile"
+        - "cell"
+      ja:
+        - "メール"
+        - "アドレス"
+        - "電話"
+        - "携帯"
+        - "スマホ"
+    shipping_billing_keywords:
+      en:
+        - "shipping"
+        - "billing"
+        - "delivery"
+        - "payment"
+      ja:
+        - "配送"
+        - "請求"
+        - "お届け先"
+        - "支払"
+    confirmation_keywords:
+      en:
+        - "confirm"
+        - "verify"
+        - "re-enter"
+        - "again"
+      ja:
+        - "確認"
+        - "再入力"
+        - "もう一度"
+    reuse_control_keywords:
+      en:
+        - "same\\s+as"
+        - "use\\s+previous"
+        - "copy\\s+from"
+        - "reuse"
+      ja:
+        - "同じ"
+        - "上記と同じ"
+        - "コピーする"
+        - "使用する"
+        - "反映する"
+

@@ -1,6 +1,8 @@
 'use strict';
 
 const {
+  buildKeywordPattern,
+  getKeywordList,
   getSharedRuleContext,
   renderLocalizedText,
 } = require('./sharedAssets');

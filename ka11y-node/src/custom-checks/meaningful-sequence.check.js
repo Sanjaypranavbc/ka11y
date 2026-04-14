@@ -9,7 +9,7 @@ const SC = '1.3.2';
 const RULE_ID = 'custom-meaningful-sequence';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/meaningful-sequence';
 // MAX_CONTAINERS limits how many flex/grid containers are inspected (not total elements).
-const MAX_CONTAINERS = 500;
+const MAX_CONTAINERS = 2000;
 
 function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);

@@ -10,7 +10,7 @@ const RULE_ID = 'custom-use-of-color';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/use-of-color';
 
 // Maximum links to sample (performance guard)
-const MAX_LINKS = 150;
+const MAX_LINKS = 2000;
 
 function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
