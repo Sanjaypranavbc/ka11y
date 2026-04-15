@@ -265,7 +265,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 element = finding.get("element")
                 if element and isinstance(element, dict):
                     src = element.get("image_src")
-                    if src and not src.startswith("/api/v1/"):
+                    if src and not src.startswith("/api/v1/") and not src.startswith(("http://", "https://", "data:")):
                         element["image_src"] = (
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(src, safe='')}"
