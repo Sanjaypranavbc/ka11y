@@ -47,13 +47,17 @@ class SemanticRelationshipEngine:
             const hasTitle = parentControl.hasAttribute('title');
             isInLabeledControl = hasAria || hasText || hasTitle;
         }
+        
+        // Detect video component wrappers
+        const isVideoContext = !!el.closest('video, [class*="video" i], [class*="player" i], [data-video-id]');
 
         return {
             described_by_text: describedByText,
             group_name: groupName,
             native_label_text: nativeLabelText,
             is_in_data_table: !!el.closest('table:not([role="presentation"])'),
-            is_in_labeled_control: isInLabeledControl
+            is_in_labeled_control: isInLabeledControl,
+            is_video_context: isVideoContext
         };
     }"""
 
@@ -75,6 +79,7 @@ class SemanticRelationshipEngine:
                 context.semantics.described_by_text = relations.get("described_by_text")
                 context.semantics.is_in_data_table = relations.get("is_in_data_table", False)
                 context.semantics.is_in_labeled_control = relations.get("is_in_labeled_control", False)
+                context.semantics.is_video_context = relations.get("is_video_context", False)
                 
                 group_name = relations.get("group_name")
                 if group_name and context.accessible_name:

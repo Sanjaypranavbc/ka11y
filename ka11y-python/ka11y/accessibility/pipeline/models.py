@@ -57,6 +57,7 @@ class VisualContext(BaseModel):
     rendered_contrast: Optional[float] = None
     is_obscured_by_floating_element: bool = False
     visible_label_text: Optional[str] = None
+    src: Optional[str] = None
 
 class SemanticContext(BaseModel):
     tag_name: str
@@ -72,6 +73,7 @@ class SemanticContext(BaseModel):
     described_by_text: Optional[str] = None
     is_in_data_table: bool = False
     is_in_labeled_control: bool = False
+    is_video_context: bool = False
 
 class InteractionContext(BaseModel):
     is_focusable: bool = False

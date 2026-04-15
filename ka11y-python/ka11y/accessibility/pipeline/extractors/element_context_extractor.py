@@ -61,12 +61,28 @@ class ElementContextExtractor:
             const rawAriaLabel = el.getAttribute('aria-label');
             const rawAlt = el.getAttribute('alt');
             const rawTitle = el.getAttribute('title');
+            
+            // Extract the image source for the frontend to render
+            let rawSrc = el.getAttribute('src');
+            if (el.tagName === 'VIDEO') {
+                rawSrc = el.getAttribute('poster');
+            } else if (el.tagName === 'SVG') {
+                rawSrc = null; // SVG is inline, no separate source
+            }
+
+            // Truncate massive SVG payloads to keep the JSON report clean
+            let htmlSnippet = el.outerHTML || '';
+            if (el.tagName === 'SVG' && htmlSnippet.length > 250) {
+                htmlSnippet = htmlSnippet.slice(0, 247) + '...';
+            } else {
+                htmlSnippet = htmlSnippet.slice(0, 400);
+            }
 
             results.push({
                 element_id: el.id,
                 tag_name: el.tagName.toLowerCase(),
                 role: el.getAttribute('role'),
-                html_snippet: el.outerHTML.slice(0, 300),
+                html_snippet: htmlSnippet,
                 bbox: bbox,
                 computed_styles: {
                     'color': style.color,
@@ -83,7 +99,8 @@ class ElementContextExtractor:
                 raw_alt: rawAlt,
                 raw_title: rawTitle,
                 text_content: el.innerText || '',
-                visible_label_text: getVisibleLabelText(el)
+                visible_label_text: getVisibleLabelText(el),
+                src: rawSrc
             });
         });
         return results;
@@ -116,7 +133,8 @@ class ElementContextExtractor:
                 opacity=float(data['computed_styles'].get('opacity', 1.0).replace(' ', '') or 1.0),
                 bounding_box=bbox,
                 computed_styles=data['computed_styles'],
-                visible_label_text=data.get('visible_label_text')
+                visible_label_text=data.get('visible_label_text'),
+                src=data.get('src')
             )
 
             interaction = InteractionContext(

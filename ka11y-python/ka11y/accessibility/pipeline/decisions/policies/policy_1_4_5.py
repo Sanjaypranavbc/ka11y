@@ -6,10 +6,13 @@ class Policy145(WCAGPolicy):
     wcag_sc = "1.4.5"
 
     def evaluate(self, element: ElementContext) -> RuleVerdict:
-        # Exemptions: Logos, Decorative, and Essential presentation (Charts/Complex)
+        # Exemptions: Logos, Decorative, and Essential presentation (Charts/Complex/Video)
         exempt_classes = ["logo", "decorative", "complex", "chart"]
         if element.visual.cv_classification in exempt_classes:
             return self._not_applicable(element, "exemption_applies", f"Exemption applies for classification: {element.visual.cv_classification}")
+
+        if element.semantics.is_video_context:
+            return self._not_applicable(element, "video_thumbnail_exempt", "Video thumbnails/posters are essential presentations and exempt from Images of Text.")
 
         # If OCR found significant text, it might be an image-of-text
         if element.visual.ocr_text and len(element.visual.ocr_text.strip()) > 3:

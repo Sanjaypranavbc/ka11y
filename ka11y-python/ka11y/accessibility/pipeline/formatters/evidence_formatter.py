@@ -34,5 +34,9 @@ class EvidenceFormatter:
                     "evidence": v.evidence
                 }
             }
+            
+            if v.element.visual.src:
+                finding["element"]["image_src"] = v.element.visual.src
+
             legacy_list.append(finding)
         return legacy_list
