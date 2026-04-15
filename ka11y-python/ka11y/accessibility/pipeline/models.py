@@ -62,13 +62,16 @@ class SemanticContext(BaseModel):
     tag_name: str
     role: Optional[str] = None
     section_type: SectionType = SectionType.UNKNOWN
+    ancestor_tags: List[str] = Field(default_factory=list)
     ancestor_roles: List[str] = Field(default_factory=list)
+    parent_tags: List[str] = Field(default_factory=list)
     parent_roles: List[str] = Field(default_factory=list)
     is_required: bool = False
     is_disabled: bool = False
     controlled_by: Optional[str] = None
     described_by_text: Optional[str] = None
     is_in_data_table: bool = False
+    is_in_labeled_control: bool = False
 
 class InteractionContext(BaseModel):
     is_focusable: bool = False
@@ -89,10 +92,6 @@ class ElementContext(BaseModel):
     interaction: InteractionContext
     accessible_name: Optional[AccessibleName] = None
 
-class TargetElement(ElementContext):
-    """Alias for ElementContext for rule evaluation."""
-    pass
-
 class RuleVerdict(BaseModel):
     rule_id: str
     wcag_sc: str
@@ -101,4 +100,4 @@ class RuleVerdict(BaseModel):
     reason_code: str
     human_reason: str
     evidence: Dict[str, Any] = Field(default_factory=dict)
-    element: TargetElement
+    element: ElementContext

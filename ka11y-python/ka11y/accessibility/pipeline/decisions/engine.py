@@ -1,5 +1,5 @@
 from typing import List, Dict
-from ..models import TargetElement, RuleVerdict, VerdictStatus
+from ..models import ElementContext, RuleVerdict, VerdictStatus
 from ..router.rule_target_router import RuleTargetRouter
 from .policies.base_policy import WCAGPolicy
 
@@ -11,7 +11,7 @@ class DecisionEngine:
     def __init__(self, policies: Dict[str, WCAGPolicy]):
         self.policies = policies
 
-    def evaluate_element(self, element: TargetElement) -> List[RuleVerdict]:
+    def evaluate_element(self, element: ElementContext) -> List[RuleVerdict]:
         verdicts = []
         applicable_rules = RuleTargetRouter.get_applicable_rules(element)
         

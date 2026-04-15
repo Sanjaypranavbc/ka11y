@@ -49,6 +49,9 @@ class ElementContextExtractor:
         }
 
         elements.forEach((el, index) => {
+            if (!el.id) {
+                el.id = `ka11y-auto-${index}`;
+            }
             const style = window.getComputedStyle(el);
             if (style.display === 'none' || style.visibility === 'hidden') return;
 
@@ -60,7 +63,7 @@ class ElementContextExtractor:
             const rawTitle = el.getAttribute('title');
 
             results.push({
-                element_id: el.id || `ka11y-auto-${index}`,
+                element_id: el.id,
                 tag_name: el.tagName.toLowerCase(),
                 role: el.getAttribute('role'),
                 html_snippet: el.outerHTML.slice(0, 300),
@@ -101,8 +104,10 @@ class ElementContextExtractor:
                 tag_name=data['tag_name'],
                 role=data['role'],
                 section_type=section_type,
-                ancestor_roles=[r for r in data['ancestor_roles'] if r],
-                parent_roles=[r for r in data['ancestor_roles'][:2] if r] # Closer ones
+                ancestor_tags=[t.lower() for t in data['ancestor_tags'] if t],
+                ancestor_roles=[r.lower() for r in data['ancestor_roles'] if r],
+                parent_tags=[t.lower() for t in data['ancestor_tags'][:2] if t],
+                parent_roles=[r.lower() for r in data['ancestor_roles'][:2] if r] # Closer ones
             )
 
             bbox = BoundingBox(**data['bbox'])

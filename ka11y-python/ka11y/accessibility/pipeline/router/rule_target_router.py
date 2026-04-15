@@ -1,11 +1,11 @@
 from typing import List
-from ..models import TargetElement
+from ..models import ElementContext
 
 class RuleTargetRouter:
     """Determines which WCAG rules apply to a given element context."""
     
     @staticmethod
-    def get_applicable_rules(element: TargetElement) -> List[str]:
+    def get_applicable_rules(element: ElementContext) -> List[str]:
         rules = []
         
         # 1. Images & Visual Media

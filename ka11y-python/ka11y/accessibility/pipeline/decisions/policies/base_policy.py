@@ -1,16 +1,16 @@
 from abc import ABC, abstractmethod
-from ...models import TargetElement, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 
 class WCAGPolicy(ABC):
     rule_id: str
     wcag_sc: str
     
     @abstractmethod
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         """Evaluate the element context and return a verdict."""
         pass
 
-    def _pass(self, el: TargetElement, code: str, msg: str, evidence: dict = None) -> RuleVerdict:
+    def _pass(self, el: ElementContext, code: str, msg: str, evidence: dict = None) -> RuleVerdict:
         return RuleVerdict(
             rule_id=self.rule_id,
             wcag_sc=self.wcag_sc,
@@ -22,7 +22,7 @@ class WCAGPolicy(ABC):
             element=el
         )
 
-    def _fail(self, el: TargetElement, code: str, msg: str, evidence: dict = None, confidence: float = 0.9) -> RuleVerdict:
+    def _fail(self, el: ElementContext, code: str, msg: str, evidence: dict = None, confidence: float = 0.9) -> RuleVerdict:
         return RuleVerdict(
             rule_id=self.rule_id,
             wcag_sc=self.wcag_sc,
@@ -34,7 +34,7 @@ class WCAGPolicy(ABC):
             element=el
         )
 
-    def _needs_review(self, el: TargetElement, code: str, msg: str, evidence: dict = None, confidence: float = 0.5) -> RuleVerdict:
+    def _needs_review(self, el: ElementContext, code: str, msg: str, evidence: dict = None, confidence: float = 0.5) -> RuleVerdict:
         return RuleVerdict(
             rule_id=self.rule_id,
             wcag_sc=self.wcag_sc,
@@ -46,7 +46,7 @@ class WCAGPolicy(ABC):
             element=el
         )
 
-    def _not_applicable(self, el: TargetElement, code: str, msg: str) -> RuleVerdict:
+    def _not_applicable(self, el: ElementContext, code: str, msg: str) -> RuleVerdict:
         return RuleVerdict(
             rule_id=self.rule_id,
             wcag_sc=self.wcag_sc,

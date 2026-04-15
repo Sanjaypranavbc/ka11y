@@ -37,11 +37,23 @@ class SemanticRelationshipEngine:
             nativeLabelText = (label.innerText || label.textContent || '').trim();
         }
 
+        let isInLabeledControl = false;
+        const parentControl = el.closest('button, a, [role="button"], [role="link"], [role="menuitem"]');
+        if (parentControl) {
+            // A control is labeled if it has an aria label, or if it has text nodes inside it 
+            // (other than this exact image's alt text if it had one).
+            const hasAria = parentControl.hasAttribute('aria-label') || parentControl.hasAttribute('aria-labelledby');
+            const hasText = (parentControl.innerText || parentControl.textContent || '').trim().length > 0;
+            const hasTitle = parentControl.hasAttribute('title');
+            isInLabeledControl = hasAria || hasText || hasTitle;
+        }
+
         return {
             described_by_text: describedByText,
             group_name: groupName,
             native_label_text: nativeLabelText,
-            is_in_data_table: !!el.closest('table:not([role="presentation"])')
+            is_in_data_table: !!el.closest('table:not([role="presentation"])'),
+            is_in_labeled_control: isInLabeledControl
         };
     }"""
 
@@ -62,6 +74,7 @@ class SemanticRelationshipEngine:
 
                 context.semantics.described_by_text = relations.get("described_by_text")
                 context.semantics.is_in_data_table = relations.get("is_in_data_table", False)
+                context.semantics.is_in_labeled_control = relations.get("is_in_labeled_control", False)
                 
                 group_name = relations.get("group_name")
                 if group_name and context.accessible_name:

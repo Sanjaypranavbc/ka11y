@@ -1,13 +1,13 @@
 import re
 from .base_policy import WCAGPolicy
-from ...models import TargetElement, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 from ...config.thresholds import GENERIC_ALT_STRINGS, MIN_ICON_ALT_LENGTH
 
 class Policy111(WCAGPolicy):
     rule_id = "python_1_1_1_alt"
     wcag_sc = "1.1.1"
 
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         # 1. Handle Decorative Exemption
         if element.visual.cv_classification == "decorative" or element.semantics.role in ("presentation", "none"):
             if not element.accessible_name or not element.accessible_name.name.strip():
@@ -16,10 +16,8 @@ class Policy111(WCAGPolicy):
 
         # 2. Handle Functional redundancy (Crucial for FP reduction)
         # If image is inside a link/button that already has a name, the image is decorative.
-        is_in_labeled_control = any(r in element.semantics.ancestor_roles for r in ("button", "link"))
-        if is_in_labeled_control:
-            if element.semantics.described_by_text or (element.accessible_name and element.accessible_name.source != "alt_attribute"):
-                 return self._pass(element, "functional_redundant", "Image is part of a labeled control; specific alt is not required.")
+        if element.semantics.is_in_labeled_control:
+            return self._pass(element, "functional_redundant", "Image is part of a labeled control; specific alt is not required.")
 
         # 3. Check for Missing Name
         if not element.accessible_name or not element.accessible_name.name.strip():

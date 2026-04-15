@@ -1,12 +1,12 @@
 import re
 from .base_policy import WCAGPolicy
-from ...models import TargetElement, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 
 class Policy253(WCAGPolicy):
     rule_id = "python_2_5_3_label_in_name"
     wcag_sc = "2.5.3"
 
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         # Only applies to elements with a visible text label AND an accessible name
         visible_text = element.visual.visible_label_text
         if not visible_text or not element.accessible_name:
