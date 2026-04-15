@@ -15,9 +15,33 @@ class ElementContextExtractor:
     """
 
     _UNIFIED_EXTRACTION_JS = r"""() => {
-        const results = [];
-        const elements = document.querySelectorAll('a, button, input, select, textarea, [role], img, svg, [tabindex]');
+        // 1. Gather all elements including Shadow DOM
+        function getAllElements(root) {
+            let elms = [];
+            const children = root.children;
+            if (!children) return elms;
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                elms.push(child);
+                if (child.shadowRoot) {
+                    elms = elms.concat(getAllElements(child.shadowRoot));
+                }
+                elms = elms.concat(getAllElements(child));
+            }
+            return elms;
+        }
+
+        const allNodes = getAllElements(document.body);
         
+        // Filter elements of interest
+        const elements = allNodes.filter(el => {
+            const t = el.tagName.toLowerCase();
+            return ['a', 'button', 'input', 'select', 'textarea', 'img', 'svg'].includes(t) ||
+                   el.hasAttribute('role') || el.hasAttribute('tabindex') ||
+                   (window.getComputedStyle(el).backgroundImage !== 'none' && el.hasAttribute('aria-label'));
+        });
+
+        // 2. Helpers
         function getEffectiveBBox(el) {
             let target = el;
             if (el.tagName === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) {
@@ -31,11 +55,11 @@ class ElementContextExtractor:
         function getAncestry(el) {
             const tags = [];
             const roles = [];
-            let current = el.parentElement;
+            let current = el.parentElement || (el.getRootNode && el.getRootNode().host);
             while (current && current !== document.documentElement) {
                 tags.push(current.tagName);
                 roles.push(current.getAttribute('role') || '');
-                current = current.parentElement;
+                current = current.parentElement || (current.getRootNode && current.getRootNode().host);
             }
             return { tags, roles };
         }
@@ -48,35 +72,57 @@ class ElementContextExtractor:
             return null;
         }
 
+        function isVisuallyHidden(el, style, bbox) {
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return true;
+            if (bbox.width === 0 || bbox.height === 0) return true;
+            if (style.clip === 'rect(0px, 0px, 0px, 0px)') return true;
+            return false;
+        }
+        
+        function getResolvedBackground(el) {
+            let current = el;
+            while (current && current.nodeType === 1) {
+                const bg = window.getComputedStyle(current).backgroundColor;
+                const match = bg.match(/rgba?\([^,]+, [^,]+, [^,]+, ([^)]+)\)/);
+                if (!match || parseFloat(match[1]) > 0) {
+                    if (bg !== 'rgba(0, 0, 0, 0)') return bg;
+                }
+                current = current.parentElement || (current.getRootNode && current.getRootNode().host);
+            }
+            return 'rgb(255, 255, 255)';
+        }
+
+        const results = [];
         elements.forEach((el, index) => {
             if (!el.id) {
                 el.id = `ka11y-auto-${index}`;
             }
             const style = window.getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden') return;
+            const bbox = getEffectiveBBox(el);
+            
+            if (isVisuallyHidden(el, style, bbox)) return;
+            // Ignore aria-hidden logic is handled in SemanticsEngine, we still extract it 
+            // if it might be focusable, but generally we let rules decide based on properties.
 
             const ancestry = getAncestry(el);
-            const bbox = getEffectiveBBox(el);
             
             const rawAriaLabel = el.getAttribute('aria-label');
             const rawAlt = el.getAttribute('alt');
             const rawTitle = el.getAttribute('title');
             
-            // Extract the image source for the frontend to render
             let rawSrc = el.getAttribute('src');
-            if (el.tagName === 'VIDEO') {
-                rawSrc = el.getAttribute('poster');
-            } else if (el.tagName === 'SVG') {
-                rawSrc = null; // SVG is inline, no separate source
-            }
+            if (el.tagName === 'VIDEO') rawSrc = el.getAttribute('poster');
+            else if (el.tagName === 'SVG') rawSrc = null;
 
-            // Truncate massive SVG payloads to keep the JSON report clean
             let htmlSnippet = el.outerHTML || '';
             if (el.tagName === 'SVG' && htmlSnippet.length > 250) {
                 htmlSnippet = htmlSnippet.slice(0, 247) + '...';
             } else {
                 htmlSnippet = htmlSnippet.slice(0, 400);
             }
+            
+            const controls = (el.getAttribute('aria-controls') || '').split(/\s+/).filter(Boolean);
+            const owns = (el.getAttribute('aria-owns') || '').split(/\s+/).filter(Boolean);
 
             results.push({
                 element_id: el.id,
@@ -89,8 +135,11 @@ class ElementContextExtractor:
                     'background-color': style.backgroundColor,
                     'font-size': style.fontSize,
                     'font-weight': style.fontWeight,
-                    'opacity': style.opacity
+                    'opacity': style.opacity,
+                    'display': style.display
                 },
+                resolved_bg: getResolvedBackground(el),
+                has_bg_image: style.backgroundImage !== 'none' && style.backgroundImage !== 'initial',
                 ancestor_tags: ancestry.tags,
                 ancestor_roles: ancestry.roles,
                 is_focusable: el.tabIndex >= 0 || ['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName),
@@ -100,9 +149,28 @@ class ElementContextExtractor:
                 raw_title: rawTitle,
                 text_content: el.innerText || '',
                 visible_label_text: getVisibleLabelText(el),
-                src: rawSrc
+                src: rawSrc,
+                controls_elements: controls,
+                owns_elements: owns
             });
         });
+        
+        // Compute Adjacent Spacing for 2.5.8 natively
+        const interactives = results.filter(r => r.is_focusable);
+        for (let i = 0; i < interactives.length; i++) {
+            let r = interactives[i];
+            let minGap = 9999;
+            for (let j = 0; j < interactives.length; j++) {
+                if (i === j) continue;
+                let other = interactives[j];
+                let dx = Math.max(0, Math.max(r.bbox.x - (other.bbox.x + other.bbox.width), other.bbox.x - (r.bbox.x + r.bbox.width)));
+                let dy = Math.max(0, Math.max(r.bbox.y - (other.bbox.y + other.bbox.height), other.bbox.y - (r.bbox.y + r.bbox.height)));
+                let dist = Math.max(dx, dy);
+                if (dist < minGap) minGap = dist;
+            }
+            r.adjacent_spacing_px = minGap === 9999 ? 0 : minGap;
+        }
+
         return results;
     }"""
 
@@ -124,7 +192,9 @@ class ElementContextExtractor:
                 ancestor_tags=[t.lower() for t in data['ancestor_tags'] if t],
                 ancestor_roles=[r.lower() for r in data['ancestor_roles'] if r],
                 parent_tags=[t.lower() for t in data['ancestor_tags'][:2] if t],
-                parent_roles=[r.lower() for r in data['ancestor_roles'][:2] if r] # Closer ones
+                parent_roles=[r.lower() for r in data['ancestor_roles'][:2] if r],
+                controls_elements=data.get('controls_elements', []),
+                owns_elements=data.get('owns_elements', [])
             )
 
             bbox = BoundingBox(**data['bbox'])
@@ -134,14 +204,17 @@ class ElementContextExtractor:
                 bounding_box=bbox,
                 computed_styles=data['computed_styles'],
                 visible_label_text=data.get('visible_label_text'),
-                src=data.get('src')
+                src=data.get('src'),
+                resolved_background_color=data.get('resolved_bg', 'rgb(255, 255, 255)'),
+                has_bg_image=data.get('has_bg_image', False)
             )
 
             interaction = InteractionContext(
                 is_focusable=data['is_focusable'],
                 tab_index=data['tab_index'],
                 effective_clickable_bbox=bbox,
-                clickable_area_px=bbox.area
+                clickable_area_px=bbox.area,
+                adjacent_spacing_px=data.get('adjacent_spacing_px', 0.0)
             )
 
             acc_name = None

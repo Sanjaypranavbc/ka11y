@@ -22,8 +22,16 @@ class Policy131(WCAGPolicy):
         if tag in ("input", "select", "textarea"):
             # Check for orphaned checkboxes/radios
             if element.visual.computed_styles.get("type") in ("radio", "checkbox"):
-                if element.semantics.section_type != "form_region" and not element.semantics.described_by_text:
-                     return self._needs_review(element, "orphaned_input", "Checkbox/radio is not inside a fieldset or form region, and has no aria-describedby. Verify relationships are clear.")
+                has_semantic_group = (
+                    element.semantics.section_type == "form_region" or 
+                    element.semantics.described_by_text or
+                    element.semantics.controls_elements or
+                    element.semantics.owns_elements or
+                    "group" in element.semantics.ancestor_roles or
+                    "radiogroup" in element.semantics.ancestor_roles
+                )
+                if not has_semantic_group:
+                     return self._needs_review(element, "orphaned_input", "Checkbox/radio is not inside a fieldset or semantic group. Verify relationships are clear.")
             
             # Check if it has a label
             if not element.accessible_name and not element.visual.visible_label_text:

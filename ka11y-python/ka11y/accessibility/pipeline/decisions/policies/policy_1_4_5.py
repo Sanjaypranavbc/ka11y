@@ -16,6 +16,16 @@ class Policy145(WCAGPolicy):
 
         # If OCR found significant text, it might be an image-of-text
         if element.visual.ocr_text and len(element.visual.ocr_text.strip()) > 3:
+            # Mitigation: If the alt text perfectly matches the OCR text, 
+            # it indicates a deliberate text alternative, which is technically allowed 
+            # if the visual presentation is essential.
+            if element.accessible_name and element.accessible_name.name:
+                import re
+                def clean(s): return re.sub(r'[^a-z0-9]', '', s.lower())
+                
+                if clean(element.visual.ocr_text) == clean(element.accessible_name.name):
+                    return self._pass(element, "text_matches_alt", "Image contains text, but it perfectly matches the alt text fallback. Manual review recommended only if the text could be styled via CSS.")
+
             snippet = element.visual.ocr_text[:30]
             return self._needs_review(
                 element, 

@@ -47,15 +47,8 @@ async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_
 
             # 3. Enrich with interaction states (e.g., Focus rings)
             if run_focus_audit:
-                # To prevent massive slowdowns, only evaluate focus visibility on max 50 focusable elements for now
-                focusable_contexts = [ctx for ctx in element_contexts if ctx.interaction.is_focusable][:50]
-                for ctx in focusable_contexts:
-                    delta = await InteractionStateRunner.evaluate_focus_visibility(page, f"#{ctx.element_id}")
-                    ctx.interaction.has_focus_ring = delta.get("has_visual_change", False)
-                    # Heuristic thickness/contrast estimation based on CSS delta
-                    if ctx.interaction.has_focus_ring:
-                        ctx.interaction.focus_ring_thickness_px = 2.0  # Heuristic fallback
-                        ctx.interaction.focus_ring_contrast = 4.5      # Heuristic fallback
+                # Execute batched JS to simulate focus across all interactive nodes natively
+                await InteractionStateRunner.batch_evaluate_focus(page, element_contexts)
 
             await browser.close()
 

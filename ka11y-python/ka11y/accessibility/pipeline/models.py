@@ -54,6 +54,8 @@ class VisualContext(BaseModel):
     ocr_text: Optional[str] = None
     cv_classification: Optional[str] = None  # e.g., "logo", "decorative", "complex"
     background_type: str = "solid"           # "solid", "gradient", "image", "mixed"
+    resolved_background_color: str = "rgb(255, 255, 255)"
+    has_bg_image: bool = False
     rendered_contrast: Optional[float] = None
     is_obscured_by_floating_element: bool = False
     visible_label_text: Optional[str] = None
@@ -70,6 +72,8 @@ class SemanticContext(BaseModel):
     is_required: bool = False
     is_disabled: bool = False
     controlled_by: Optional[str] = None
+    controls_elements: List[str] = Field(default_factory=list)
+    owns_elements: List[str] = Field(default_factory=list)
     described_by_text: Optional[str] = None
     is_in_data_table: bool = False
     is_in_labeled_control: bool = False

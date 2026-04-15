@@ -36,9 +36,9 @@ class Policy143(WCAGPolicy):
 
         styles = element.visual.computed_styles
         fg_color = styles.get("color", "rgb(0,0,0)")
-        bg_color = styles.get("background-color", "rgb(255,255,255)")
+        bg_color = element.visual.resolved_background_color
         
-        # Handle transparent backgrounds (heuristic: requires visual context analyzer in future)
+        # Handle transparent backgrounds (if resolver failed to find solid)
         if "rgba" in bg_color and bg_color.endswith(", 0)"):
             return self._needs_review(element, "transparent_bg", "Background is transparent. Cannot compute text contrast statically.")
 

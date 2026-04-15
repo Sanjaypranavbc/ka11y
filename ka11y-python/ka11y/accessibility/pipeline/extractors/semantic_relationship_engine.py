@@ -25,10 +25,16 @@ class SemanticRelationshipEngine:
         }
 
         let groupName = null;
-        const fieldset = el.closest('fieldset');
-        if (fieldset) {
-            const legend = fieldset.querySelector('legend');
-            if (legend) groupName = (legend.innerText || legend.textContent || '').trim();
+        let currentFieldset = el.parentElement;
+        while (currentFieldset && currentFieldset !== document.documentElement) {
+            if (currentFieldset.tagName === 'FIELDSET') {
+                const legend = currentFieldset.querySelector('legend');
+                if (legend) {
+                    groupName = (legend.innerText || legend.textContent || '').trim();
+                    break;
+                }
+            }
+            currentFieldset = currentFieldset.parentElement || (currentFieldset.getRootNode && currentFieldset.getRootNode().host);
         }
 
         let nativeLabelText = null;

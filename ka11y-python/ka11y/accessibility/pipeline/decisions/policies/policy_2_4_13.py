@@ -13,12 +13,15 @@ class Policy2413(WCAGPolicy):
         if not element.interaction.has_focus_ring:
             return self._fail(element, "no_focus_indicator", "Element has no visible focus indicator (fails 2.4.7 prerequisite).")
             
-        thickness = element.interaction.focus_ring_thickness_px
-        if thickness < MIN_FOCUS_THICKNESS_PX:
-            return self._needs_review(element, "thin_focus_ring", f"Focus indicator thickness ({thickness}px) is below the {MIN_FOCUS_THICKNESS_PX}px minimum. Manual review required.")
-            
+        # If contrast change is significant, we pass it regardless of thickness 
+        # (e.g., background goes from white to dark grey)
         contrast = element.interaction.focus_ring_contrast
-        if contrast and contrast < MIN_FOCUS_CONTRAST:
+        
+        thickness = element.interaction.focus_ring_thickness_px
+        if thickness < MIN_FOCUS_THICKNESS_PX and (not contrast or contrast < 3.0):
+            return self._needs_review(element, "thin_or_low_contrast_focus", f"Focus indicator thickness ({thickness}px) is below the {MIN_FOCUS_THICKNESS_PX}px minimum, and contrast change is not prominent. Manual review required.")
+            
+        if contrast and contrast < MIN_FOCUS_CONTRAST and thickness < MIN_FOCUS_THICKNESS_PX:
             return self._fail(element, "low_contrast_focus", f"Focus indicator contrast ({contrast}:1) is below the {MIN_FOCUS_CONTRAST}:1 minimum.")
             
-        return self._pass(element, "valid_focus_appearance", f"Focus indicator meets thickness ({thickness}px) and contrast ({contrast or 'adequate'}:1) requirements.")
+        return self._pass(element, "valid_focus_appearance", f"Focus indicator is prominent and distinct.")
