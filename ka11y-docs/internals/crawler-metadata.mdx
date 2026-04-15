@@ -862,17 +862,6 @@ The production universal path was re-validated against a curated 10-site public 
 
 </Accordion>
 
-<Accordion title="1.4.5 — Images of Text (AltTextAccessibilityAuditor)">
-
-**Crawler:** `AsyncImageCrawler` + OCR `TextDetector`
-
-| Fields Used | Purpose |
-|------------|---------|
-| `contains_text` (OCR) | Text detection flag |
-| `classification` | Exempt logos, diagrams, maps |
-| OCR `detections` | Detected text evidence |
-
-</Accordion>
 
 <Accordion title="1.4.10 — Reflow (ReflowEvaluator)">
 
@@ -949,31 +938,7 @@ The production universal path was re-validated against a curated 10-site public 
 
 </Accordion>
 
-<Accordion title="2.5.3 — Label in Name (LabelInNameAuditor)">
 
-**Crawler:** normalized universal static snapshot → `InteractiveElementData`
-
-| Fields Used | Purpose |
-|------------|---------|
-| `visible_label`, `accessible_name` | Label visibility vs programmatic name |
-| `aria_label`, `aria_labelledby`, `title_attr`, `value_attr`, `alt_attr` | Name sources |
-| `selector`, `element_ref_id`, `frame_path` | Provenance and deduplication evidence in same-origin frames |
-| CJK detection on `visible_label` | Substring match instead of `\b` regex for CJK |
-
-</Accordion>
-
-<Accordion title="2.5.8 — Target Size Minimum (TargetSizeAuditor)">
-
-**Crawler:** normalized universal static snapshot → `TargetSizeData`
-
-| Fields Used | Purpose |
-|------------|---------|
-| `rendered_width_px`, `rendered_height_px` | Primary size check (≥ 24×24) |
-| `is_inline_exception`, `is_ua_controlled_exception`, `is_offset_exception` | Exception flags |
-| `required_offset_*`, `nearest_target_gap_*` | Exception 5 geometry |
-| `selector`, `element_ref_id`, `frame_path` | Provenance and same-origin iframe evidence |
-
-</Accordion>
 
 <Accordion title="3.3.1 / 3.3.2 — Error Identification + Labels (FormAccessibilityAuditor)">
 
