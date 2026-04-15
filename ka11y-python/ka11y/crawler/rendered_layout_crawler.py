@@ -27,7 +27,6 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
 
 from playwright.async_api import (
     Browser,
@@ -38,7 +37,6 @@ from playwright.async_api import (
 )
 
 from ka11y.config.logger import setup_logger
-from ka11y.accessibility.rendered.evidence import capture_screenshot, save_raw_json
 from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.accessibility.rendered.geometry import rect_from_dict
@@ -47,20 +45,9 @@ from ka11y.accessibility.rendered.models import (
     FocusStep,
     HoverInteractionResult,
     PageSnapshot,
-    Rect,
-    RuleAuditRecord,
 )
 from ka11y.accessibility.rendered.snapshot_collector import collect_snapshot
 from ka11y.accessibility.rendered.stabilizer import stabilize
-from ka11y.accessibility.rendered.evaluators import (
-    resize_text as ev_resize,
-    reflow as ev_reflow,
-    text_spacing as ev_text_spacing,
-    orientation as ev_orientation,
-    hover_focus_content as ev_hover,
-    focus_not_obscured_minimum as ev_fnom,
-    focus_not_obscured_enhanced as ev_fnoe,
-)
 from ka11y.utils.crawler_settings import (
     build_text_spacing_cjk_selector_css,
     get_max_focus_steps,

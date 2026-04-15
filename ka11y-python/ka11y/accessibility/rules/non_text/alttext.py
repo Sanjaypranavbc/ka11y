@@ -33,7 +33,6 @@ from __future__ import annotations
 import re
 import csv
 from pathlib import Path
-from typing import List, Optional
 from datetime import datetime
 
 from ka11y.config.logger import setup_logger

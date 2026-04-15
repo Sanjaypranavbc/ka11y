@@ -7,9 +7,7 @@ Covers: _norm, _is_empty, all _check_1_1_1_* helpers, _check_4_1_2,
 import csv
 from pathlib import Path
 from typing import List, Optional
-from unittest.mock import MagicMock
 
-import pytest
 
 from ka11y.accessibility.rules.non_text.alttext import (
     AltTextAccessibilityAuditor,

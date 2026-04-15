@@ -15,8 +15,9 @@
   - Node locale plumbing is wired and tested: lang is sanitized, axe locale is configured, and flat findings localize criterion labels and reasons.
   - Japanese-aware Python parsing exists in sensory_auditor.py and label_in_name_auditor.py, with passing targeted tests for CJK handling.
 - Biggest gaps:
-  - Japanese image handling is incomplete: alttext.py still relies on English-only logo/action heuristics, and four targeted Japanese tests fail.
-  - Media quality automation is blocked in the current environment because quality_engine.py imports nltk and faster_whisper, both unavailable here.
+  - Japanese image handling is partially complete: `alttext.py` contains Japanese action/logo keywords but `_SOCIAL_BRAND_NAMES` requires specific string formats.
+  - Media quality automation (WCAG 1.2.1 Gate 5) in `quality_engine.py` is entirely Anglo-centric. It hardcodes NLTK's English POS tagger, English audio event keywords (`_AUDIO_EVENT_KEYWORDS`), and English speaker patterns (`_SPEAKER_PATTERNS`), breaking Japanese transcript evaluation.
+  - `media_auditor.py` handles Japanese transcript link keywords, but `_MEDIA_ALT_KEYWORDS` (used to exempt media alternatives) only contains English strings ("audio version", "video alternative").
   - Japanese routing is inconsistent because create_rule_url_only_handler() hardcodes lang="en" for URL-only rule endpoints.
 - Risk areas:
   - 2.4.3 and 2.4.6 rely on fallback/proxy mappings rather than direct rule engines.

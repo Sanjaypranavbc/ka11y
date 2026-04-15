@@ -16,10 +16,9 @@ We compare a baseline snapshot (no overrides) with a modified snapshot
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import List
 
 from ..models import ElementSnapshot, PageSnapshot, RuleAuditRecord
-from ..heuristics import find_clipped_text_elements
 
 _RULE_KEY = "wcag_1_4_12"
 

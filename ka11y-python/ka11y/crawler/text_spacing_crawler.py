@@ -10,7 +10,6 @@ Focus:
   • Text-heavy elements
 """
 
-import asyncio
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse

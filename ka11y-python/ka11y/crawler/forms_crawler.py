@@ -6,9 +6,7 @@ Extracts inputs, labels, error message containers, and ARIA attributes
 needed for WCAG 3.3.1 / 3.3.2 auditing.
 """
 
-import asyncio
 import json
-import time
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse

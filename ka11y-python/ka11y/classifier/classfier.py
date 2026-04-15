@@ -3,10 +3,6 @@ import hashlib
 import aiohttp
 from pydantic import BaseModel
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich import box
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.models import ImageData
 
@@ -412,7 +408,7 @@ class ClassifyAssets:
         c.classification = "informative"
         c.sub_type = sub
         logger.info(f"[STEP 4] informative/{sub}")
-        self._rich_result(f"STEP 4 · informative", "informative", sub, "green")
+        self._rich_result("STEP 4 · informative", "informative", sub, "green")
         return c.model_dump()
 
     # ─────────────────────────────────────────────────────────────────────────

@@ -18,7 +18,6 @@ import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import HttpUrl
 
 from ka11y.crawler.forms_crawler import AsyncFormCrawler
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor

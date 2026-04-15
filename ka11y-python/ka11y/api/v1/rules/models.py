@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
 from pydantic import BaseModel, Field, HttpUrl
 
 class RuleRunRequest(BaseModel):
@@ -12,3 +11,4 @@ class RuleRunRequest(BaseModel):
 
 class RuleUrlOnlyRequest(BaseModel):
     url: HttpUrl
+    lang: str = "en"

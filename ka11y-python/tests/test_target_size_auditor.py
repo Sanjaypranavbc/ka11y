@@ -6,10 +6,8 @@ Covers: _check_258 helper, TargetSizeAuditor.generate_audit_report, TargetSizeAu
 import csv
 from pathlib import Path
 
-import pytest
 
 from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
-    MIN_PX,
     TargetSizeAuditor,
     _check_258,
 )

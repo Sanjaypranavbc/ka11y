@@ -76,6 +76,13 @@ _MEDIA_ALT_KEYWORDS = [
     "video version",
     "video alternative",
     "alternative for",
+    # Japanese equivalents
+    "音声版",
+    "動画版",
+    "代替音声",
+    "音声代替",
+    "テキストの音声化",
+    "読み上げ",
 ]
 
 # Track kinds that count as a text alternative.
@@ -291,9 +298,10 @@ class MediaAuditor:
         "html_snippet",
     ]
 
-    def __init__(self, output_dir: str) -> None:
+    def __init__(self, output_dir: str, lang: str = "en") -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.lang = lang
 
     def generate_audit_report(
         self,
@@ -464,6 +472,8 @@ class MediaAuditor:
                 transcript_text=transcript_info.get("url_or_text") or "",
                 transcript_type=transcript_info.get("type") or "link",
                 media_type=media_type,
+                output_dir=str(self.output_dir),
+                lang=self.lang,
             )
         except Exception as exc:
             logger.warning(

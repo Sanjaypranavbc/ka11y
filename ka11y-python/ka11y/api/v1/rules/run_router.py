@@ -4,7 +4,6 @@ import uuid
 import time
 import asyncio
 from datetime import datetime, timezone
-from typing import Optional
 
 from fastapi import APIRouter
 from ka11y.api.v1.combined.models import CombinedRequest, JobStatusResponse
@@ -56,7 +55,7 @@ def create_rule_url_only_handler(rule_id: str):
             rule_id=rule_id,
             url=str(payload.url),
             max_depth=0,
-            lang="en",
+            lang=payload.lang,
         )
 
     return handler

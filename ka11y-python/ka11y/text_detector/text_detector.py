@@ -4,12 +4,10 @@ import os
 import json
 import shutil
 import sys
-import logging
 import csv
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
-import cv2
 from ka11y.preprocessor import extract_color
 from ka11y.accessibility.rules.non_text import contrast_analyser
 from ka11y.preprocessor.text_helper_models import (
@@ -467,7 +465,7 @@ class OCRPreprocessing:
                         f"  ⚠ {result.contrast_violations_count} contrast violations detected!"
                     )
             else:
-                print(f"  . No text")
+                print("  . No text")
 
 
 class TextClassification:
@@ -559,11 +557,11 @@ class TextClassification:
         self._generate_contrast_markdown(md_file, images_with_violations)
 
         print(f"\n{'=' * 60}")
-        print(f"SCAN COMPLETE")
+        print("SCAN COMPLETE")
         print(f"Total images: {len(self.results)}")
         print(f"With text: {images_with_text}")
         print(f"Contrast violations: {images_with_violations}")
-        print(f"Reports saved to:")
+        print("Reports saved to:")
         print(f"  - {json_file}")
         print(f"  - {csv_file}")
         print(f"  - {contrast_json}")

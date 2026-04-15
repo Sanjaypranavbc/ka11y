@@ -1,7 +1,6 @@
-import asyncio
 import logging
 import re
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
 

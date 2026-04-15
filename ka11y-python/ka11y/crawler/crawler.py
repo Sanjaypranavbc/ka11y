@@ -3,17 +3,16 @@ import json
 import csv
 import hashlib
 import asyncio
-import socket
 from collections import deque
 from urllib.parse import urljoin, urlparse
 from playwright.async_api import async_playwright
 
 from ka11y.crawler.context_factory import new_crawler_context
-from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
+from ka11y.crawler.navigation import navigate_with_resilience
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.crawler.policy import CrawlPolicy
 from pathlib import Path
-from typing import List, Set, Tuple, Optional, Any
+from typing import List, Set, Tuple
 from pydantic import BaseModel, Field
 from datetime import datetime
 import time
@@ -22,7 +21,6 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.rule import Rule
-from rich.text import Text
 from rich.progress import (
     Progress,
     SpinnerColumn,

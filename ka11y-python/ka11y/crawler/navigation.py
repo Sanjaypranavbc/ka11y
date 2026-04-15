@@ -3,9 +3,8 @@ from __future__ import annotations
 import asyncio
 import socket
 import logging
-from typing import List, Optional
 from urllib.parse import urlparse
-from playwright.async_api import Page, Error as PlaywrightError
+from playwright.async_api import Page
 
 logger = logging.getLogger("KAC.navigation")
 

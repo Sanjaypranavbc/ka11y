@@ -26,8 +26,7 @@ Rules are sorted numerically by SC ID (1.1.1 < 1.2.1 < ... < 4.1.3).
 
 from __future__ import annotations
 
-from functools import cmp_to_key
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse

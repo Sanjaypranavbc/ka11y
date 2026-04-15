@@ -17,11 +17,7 @@ import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import HttpUrl
 
-from ka11y.crawler.crawler import AsyncImageCrawler
-from ka11y.crawler.forms_crawler import AsyncFormCrawler
-from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
 from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
 from ka11y.config.logger import setup_logger

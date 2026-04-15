@@ -14,7 +14,6 @@ Run with:
 All tests use synthetic dict inputs (no Playwright, no network, no audio).
 """
 
-import pytest
 
 # ── Gate functions under test ────────────────────────────────────────────────
 

@@ -12,8 +12,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .geometry import (
     document_has_horizontal_scroll,
-    has_horizontal_scroll,
-    is_fixed_or_sticky,
     overlap_ratio,
     text_container_overflows,
 )

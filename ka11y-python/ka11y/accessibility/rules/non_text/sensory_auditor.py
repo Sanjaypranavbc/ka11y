@@ -50,7 +50,7 @@ from __future__ import annotations
 import csv
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from ka11y.crawler.sensory_crawler import SensoryElementData
 

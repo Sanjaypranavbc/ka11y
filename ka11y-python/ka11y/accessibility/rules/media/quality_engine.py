@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 import nltk
+import spacy
 from faster_whisper import WhisperModel
 from jiwer import wer as compute_wer
 from nltk.tokenize import word_tokenize
@@ -51,6 +52,24 @@ try:
 except LookupError:
     nltk.download("averaged_perceptron_tagger_eng", quiet=True)
 
+# ── Load spaCy models ─────────────────────────────────────────────────────────
+_SPACY_MODELS = {
+    "en": "en_core_web_sm",
+    "ja": "ja_core_news_sm",
+}
+_nlp_cache = {}
+
+def _get_nlp(lang: str):
+    if lang not in _nlp_cache:
+        model_name = _SPACY_MODELS.get(lang, _SPACY_MODELS["en"])
+        try:
+            _nlp_cache[lang] = spacy.load(model_name)
+        except Exception:
+            # Fallback if model not found
+            logger.warning(f"spaCy model {model_name} not found. Some checks may be less accurate.")
+            _nlp_cache[lang] = None
+    return _nlp_cache[lang]
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 # Maximum media file size to download (100 MB)
@@ -65,24 +84,45 @@ _WER_FAIL = 0.40       # WER > 0.40 → <60% match → FAIL (summary, not transc
 
 # Non-speech audio event keywords for Check 3
 _AUDIO_EVENT_KEYWORDS = {
-    "applause", "laughter", "music", "silence", "pause", "noise",
-    "clapping", "cheering", "alarm", "beep", "crash", "door", "phone",
-    "inaudible", "crosstalk", "sound", "sigh", "cough", "crying",
-    "singing", "humming", "whistling", "thunder", "rain", "wind",
-    "footsteps", "knock", "ring", "buzz", "click", "snap", "pop",
-    "gasp", "scream", "whisper", "mumbling", "static", "feedback",
+    "en": {
+        "applause", "laughter", "music", "silence", "pause", "noise",
+        "clapping", "cheering", "alarm", "beep", "crash", "door", "phone",
+        "inaudible", "crosstalk", "sound", "sigh", "cough", "crying",
+        "singing", "humming", "whistling", "thunder", "rain", "wind",
+        "footsteps", "knock", "ring", "buzz", "click", "snap", "pop",
+        "gasp", "scream", "whisper", "mumbling", "static", "feedback",
+    },
+    "ja": {
+        "拍手", "笑い声", "音楽", "静寂", "沈黙", "休止", "雑音", "ノイズ",
+        "手拍子", "歓声", "アラーム", "ビープ音", "衝突音", "ドア", "電話",
+        "聞き取り不能", "クロストーク", "音", "ため息", "咳", "泣き声",
+        "歌", "鼻歌", "口笛", "雷", "雨", "風", "足音", "ノック", "ベル",
+        "ブザー", "クリック", "スナップ", "破裂音", "喘ぎ", "悲鳴", "ささやき",
+        "つぶやき", "スタティック", "フィードバック",
+    }
 }
 
 # Speaker label regex patterns for Check 2
-_SPEAKER_PATTERNS = [
-    re.compile(r"^[A-Z][a-zA-Z\s]{1,30}:\s", re.MULTILINE),     # Name: text
-    re.compile(r"\[[A-Z][a-zA-Z\s]{1,30}\]", re.MULTILINE),       # [Name]
-    re.compile(r"^Speaker\s\d+:", re.MULTILINE | re.IGNORECASE),   # Speaker 1:
-    re.compile(r"^Interviewer:", re.MULTILINE | re.IGNORECASE),    # Interviewer:
-    re.compile(r"^Host:", re.MULTILINE | re.IGNORECASE),           # Host:
-    re.compile(r"^Narrator:", re.MULTILINE | re.IGNORECASE),       # Narrator:
-    re.compile(r"^Moderator:", re.MULTILINE | re.IGNORECASE),      # Moderator:
-]
+_SPEAKER_PATTERNS = {
+    "en": [
+        re.compile(r"^[A-Z][a-zA-Z\s]{1,30}:\s", re.MULTILINE),     # Name: text
+        re.compile(r"\[[A-Z][a-zA-Z\s]{1,30}\]", re.MULTILINE),       # [Name]
+        re.compile(r"^Speaker\s\d+:", re.MULTILINE | re.IGNORECASE),   # Speaker 1:
+        re.compile(r"^Interviewer:", re.MULTILINE | re.IGNORECASE),    # Interviewer:
+        re.compile(r"^Host:", re.MULTILINE | re.IGNORECASE),           # Host:
+        re.compile(r"^Narrator:", re.MULTILINE | re.IGNORECASE),       # Narrator:
+        re.compile(r"^Moderator:", re.MULTILINE | re.IGNORECASE),      # Moderator:
+    ],
+    "ja": [
+        re.compile(r"^[^\s：]{1,10}：", re.MULTILINE),              # 名前：
+        re.compile(r"^【[^\s】]{1,10}】", re.MULTILINE),             # 【名前】
+        re.compile(r"^話者\s?\d+：", re.MULTILINE),                 # 話者1：
+        re.compile(r"^インタビュアー：", re.MULTILINE),              # インタビュアー：
+        re.compile(r"^ホスト：", re.MULTILINE),                      # ホスト：
+        re.compile(r"^ナレーター：", re.MULTILINE),                  # ナレーター：
+        re.compile(r"^司会：", re.MULTILINE),                       # 司会：
+    ]
+}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -150,7 +190,7 @@ def _prepare_transcript(text: str, source_type: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _check_verbatim(whisper_text: str, dev_transcript: str) -> Dict[str, Any]:
+def _check_verbatim(whisper_text: str, dev_transcript: str, lang: str = "en") -> Dict[str, Any]:
     """
     Check 1: All speech is transcribed verbatim.
 
@@ -167,6 +207,18 @@ def _check_verbatim(whisper_text: str, dev_transcript: str) -> Dict[str, Any]:
             "Insufficient text for comparison.",
             wer_score=None,
         )
+
+    # For Japanese, we MUST tokenize into words/morphemes before computing WER
+    # otherwise jiwer treats the entire string as one word (or fails).
+    if lang == "ja":
+        nlp = _get_nlp("ja")
+        if nlp:
+            ref = " ".join([t.text for t in nlp(ref)])
+            hyp = " ".join([t.text for t in nlp(hyp)])
+        else:
+            # Fallback: character-level comparison if spaCy fails
+            ref = " ".join(list(ref.replace(" ", "")))
+            hyp = " ".join(list(hyp.replace(" ", "")))
 
     score = compute_wer(ref, hyp)
 
@@ -202,6 +254,7 @@ def _check_verbatim(whisper_text: str, dev_transcript: str) -> Dict[str, Any]:
 def _check_speaker_ids(
     dev_transcript: str,
     whisper_segment_count: int = 0,
+    lang: str = "en",
 ) -> Dict[str, Any]:
     """
     Check 2: All speakers are identified.
@@ -210,8 +263,9 @@ def _check_speaker_ids(
     If faster-whisper detects multiple distinct segments with gaps > 2s
     (suggesting speaker changes) but the transcript has zero labels → FAIL.
     """
+    patterns = _SPEAKER_PATTERNS.get(lang, _SPEAKER_PATTERNS["en"])
     found_labels = []
-    for pattern in _SPEAKER_PATTERNS:
+    for pattern in patterns:
         matches = pattern.findall(dev_transcript)
         found_labels.extend(matches)
 
@@ -248,7 +302,7 @@ def _check_speaker_ids(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _check_non_speech_events(dev_transcript: str) -> Dict[str, Any]:
+def _check_non_speech_events(dev_transcript: str, lang: str = "en") -> Dict[str, Any]:
     """
     Check 3: All non-speech audio events are noted.
 
@@ -256,8 +310,9 @@ def _check_non_speech_events(dev_transcript: str) -> Dict[str, Any]:
     then checks for known audio event keywords.
     """
     # Extract all bracketed/parenthesized content
-    bracketed = re.findall(r"\[([^\]]+)\]", dev_transcript)
-    parenthesized = re.findall(r"\(([^)]+)\)", dev_transcript)
+    # Also include Japanese brackets 【】 and （）
+    bracketed = re.findall(r"[\[【]([^\]】]+)[\]】]", dev_transcript)
+    parenthesized = re.findall(r"[\(（]([^\)）]+)[\)）]", dev_transcript)
     all_descriptors = bracketed + parenthesized
 
     if not all_descriptors:
@@ -270,10 +325,11 @@ def _check_non_speech_events(dev_transcript: str) -> Dict[str, Any]:
         )
 
     # Check if any descriptors match known audio event keywords
+    keywords = _AUDIO_EVENT_KEYWORDS.get(lang, _AUDIO_EVENT_KEYWORDS["en"])
     matched_events = []
     for desc in all_descriptors:
         desc_lower = desc.lower().strip()
-        for keyword in _AUDIO_EVENT_KEYWORDS:
+        for keyword in keywords:
             if keyword in desc_lower:
                 matched_events.append(desc.strip())
                 break
@@ -299,23 +355,33 @@ def _check_non_speech_events(dev_transcript: str) -> Dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _check_visual_content(dev_transcript: str) -> Dict[str, Any]:
+def _check_visual_content(dev_transcript: str, lang: str = "en") -> Dict[str, Any]:
     """
     Check 4: All meaningful visual content is described (video-only).
 
-    Uses NLTK POS tagging to detect action verbs and descriptive language.
-    Always returns NEEDS_REVIEW — local processing cannot verify visual accuracy.
+    Uses POS tagging to detect action verbs and descriptive language.
     """
-    tokens = word_tokenize(dev_transcript[:2000])  # Limit to avoid slow POS
-    tagged = nltk.pos_tag(tokens)
+    if lang == "ja":
+        nlp = _get_nlp("ja")
+        if not nlp:
+            return _check_result("visual_content", "NEEDS_REVIEW", "Japanese POS tagger not available.")
 
-    # Count action verbs (VBG = gerund, VBZ = 3rd person, VBD = past)
-    action_verbs = [word for word, tag in tagged if tag.startswith("VB")]
-    # Count descriptive adjectives
-    adjectives = [word for word, tag in tagged if tag.startswith("JJ")]
+        doc = nlp(dev_transcript[:2000])
+        action_verbs = [t.text for t in doc if t.pos_ == "VERB"]
+        adjectives = [t.text for t in doc if t.pos_ == "ADJ"]
+        token_count = len(doc)
+    else:
+        tokens = word_tokenize(dev_transcript[:2000])  # Limit to avoid slow POS
+        tagged = nltk.pos_tag(tokens)
 
-    verb_density = len(action_verbs) / max(len(tokens), 1)
-    adj_density = len(adjectives) / max(len(tokens), 1)
+        # Count action verbs (VBG = gerund, VBZ = 3rd person, VBD = past)
+        action_verbs = [word for word, tag in tagged if tag.startswith("VB")]
+        # Count descriptive adjectives
+        adjectives = [word for word, tag in tagged if tag.startswith("JJ")]
+        token_count = len(tokens)
+
+    verb_density = len(action_verbs) / max(token_count, 1)
+    adj_density = len(adjectives) / max(token_count, 1)
 
     return _check_result(
         "visual_content", "NEEDS_REVIEW",
@@ -519,6 +585,7 @@ def evaluate_transcript_quality(
     transcript_type: str = "link",
     media_type: str = "audio_only",
     output_dir: str = "",
+    lang: str = "en",
 ) -> Dict[str, Any]:
     """
     Gate 5 orchestrator: run all applicable quality checks.
@@ -535,6 +602,8 @@ def evaluate_transcript_quality(
         "audio_only" or "video_only" — determines which checks run.
     output_dir : str
         Directory for temporary file downloads.
+    lang : str
+        Language code ("en", "ja", etc.)
 
     Returns
     -------
@@ -564,17 +633,18 @@ def evaluate_transcript_quality(
             if transcription:
                 # Check 1: Verbatim
                 checks.append(_check_verbatim(
-                    transcription["text"], clean_transcript
+                    transcription["text"], clean_transcript, lang=lang
                 ))
 
                 # Check 2: Speaker IDs
                 checks.append(_check_speaker_ids(
                     clean_transcript,
                     whisper_segment_count=transcription["segment_count"],
+                    lang=lang,
                 ))
 
                 # Check 3: Non-speech events
-                checks.append(_check_non_speech_events(clean_transcript))
+                checks.append(_check_non_speech_events(clean_transcript, lang=lang))
 
                 # Check 5: Sequence
                 checks.append(_check_sequence(
@@ -586,8 +656,8 @@ def evaluate_transcript_quality(
                     "verbatim", "NEEDS_REVIEW",
                     "Could not transcribe audio (faster-whisper failed)."
                 ))
-                checks.append(_check_speaker_ids(clean_transcript))
-                checks.append(_check_non_speech_events(clean_transcript))
+                checks.append(_check_speaker_ids(clean_transcript, lang=lang))
+                checks.append(_check_non_speech_events(clean_transcript, lang=lang))
 
             # Clean up temp file
             try:
@@ -600,13 +670,13 @@ def evaluate_transcript_quality(
                 "verbatim", "NEEDS_REVIEW",
                 "Could not download media file for transcription."
             ))
-            checks.append(_check_speaker_ids(clean_transcript))
-            checks.append(_check_non_speech_events(clean_transcript))
+            checks.append(_check_speaker_ids(clean_transcript, lang=lang))
+            checks.append(_check_non_speech_events(clean_transcript, lang=lang))
 
     # ── Video-only checks (4, 5) ─────────────────────────────────────────
     elif media_type == "video_only":
         # Check 4: Visual content description
-        checks.append(_check_visual_content(clean_transcript))
+        checks.append(_check_visual_content(clean_transcript, lang=lang))
 
         # Check 5: Sequence (text-only, no audio timeline available)
         checks.append(_check_result(
