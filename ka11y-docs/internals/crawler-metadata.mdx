@@ -399,9 +399,11 @@ The `ElementContext` acts as the single source of truth for the Decision Engine.
 #### 2. `VisualContext`
 | Field | Type | Description |
 |-------|------|-------------|
-| `is_visible` | `bool` | Pre-filtered by computed style `display` and `visibility` |
+| `is_visible` | `bool` | Pre-filtered by computed style `display`, `visibility`, `opacity`, and `clip` |
 | `bounding_box` | `BoundingBox` | Actual rendered box on screen |
 | `computed_styles` | `Dict[str, str]` | Extracts `color`, `background-color`, `font-size`, `font-weight`, `opacity` |
+| `resolved_background_color` | `str` | Traverses the DOM tree upward to compute the true, solid painted background color, resolving `rgba(0,0,0,0)` issues |
+| `has_bg_image` | `bool` | True if the element utilizes a CSS background image |
 | `cv_classification` | `Optional[str]` | Image classification (e.g., `logo`, `decorative`, `icon`, `complex`) |
 | `ocr_text` | `Optional[str]` | Text detected within the image boundaries |
 | `visible_label_text` | `Optional[str]` | The raw text nodes visually associated with the element |
@@ -411,8 +413,9 @@ The `ElementContext` acts as the single source of truth for the Decision Engine.
 |-------|------|-------------|
 | `is_focusable`, `tab_index` | `bool`, `int` | Keyboard reachability |
 | `effective_clickable_bbox` | `BoundingBox` | Merges tiny native inputs with their wrapping `<label>` padding for accurate Target Size measurement |
-| `has_focus_ring` | `bool` | Computed dynamically by `InteractionStateRunner` triggering `.focus()` |
-| `focus_ring_thickness_px`, `focus_ring_contrast` | `float` | Computed deltas of `box-shadow` or `outline` |
+| `adjacent_spacing_px` | `float` | Exact pixel distance to the nearest interactive element, computed via spatial bounds check |
+| `has_focus_ring` | `bool` | Computed dynamically by `InteractionStateRunner` by extracting CSS deltas across main element and `::before`/`::after` pseudo-elements |
+| `focus_ring_thickness_px`, `focus_ring_contrast` | `float` | Computed deltas of `box-shadow`, `border`, or `background-color` |
 
 ---
 

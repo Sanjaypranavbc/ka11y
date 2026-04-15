@@ -118,6 +118,7 @@ Historically, Python WCAG rules followed an isolated **Crawler → Auditor** pat
 ┌───────────────────────────────────────┐
 │  1. Context Extraction (Playwright)   │
 │  • ElementContextExtractor            │
+│  • Pierces #shadow-root & <iframe>    │
 │  • Extracts DOM, CSS, ARIA, and BBox  │
 └──────────────────┬────────────────────┘
                    │
@@ -131,7 +132,7 @@ Historically, Python WCAG rules followed an isolated **Crawler → Auditor** pat
 ┌──────────────────▼────────────────────┐
 │  3. Interaction & State Simulation    │
 │  • InteractionStateRunner             │
-│  • Simulates focus, captures CSS delta│
+│  • Batched focus simulation & CSS diff│
 └──────────────────┬────────────────────┘
                    │
 ┌──────────────────▼────────────────────┐

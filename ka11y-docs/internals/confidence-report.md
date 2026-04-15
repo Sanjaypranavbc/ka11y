@@ -21,16 +21,16 @@
 
 | # | Rule | WCAG SC | Engine | Confidence | Status |
 |---|------|---------|--------|-----------|--------|
-| 1 | Alt Text | 1.1.1 | py-pipeline | **88%** | IMPROVED — full semantic relationship & DOM awareness |
-| 2 | Info & Relationships | 1.3.1 | py-pipeline | **85%** | IMPROVED — natively checks groups and tables |
-| 3 | Contrast (DOM + OCR) | 1.4.3 | py-pipeline | **85%** | IMPROVED — unified contrast engine + opacity tracking |
-| 4 | Images of Text | 1.4.5 | py-pipeline | **88%** | IMPROVED — contextual exemptions (logos, complex) |
-| 5 | Contrast Enhanced | 1.4.6 | py-pipeline | **85%** | IMPROVED — inherits unified contrast engine |
-| 6 | Non-text Contrast | 1.4.11 | py-pipeline | **80%** | IMPROVED — analyzes rendered boundaries & visual styles |
-| 7 | Focus Visible | 2.4.7 | py-pipeline | **88%** | IMPROVED — simulates keyboard focus and visual state deltas |
-| 8 | Focus Appearance | 2.4.13 | py-pipeline | **85%** | IMPROVED — calculates rendered focus ring thickness/contrast |
-| 9 | Label in Name | 2.5.3 | py-pipeline | **90%** | IMPROVED — rigorous substring and token matching |
-| 10| Target Size | 2.5.8 | py-pipeline | **85%** | IMPROVED — measures effective clickable area (wrappers + labels) |
+| 1 | Alt Text | 1.1.1 | py-pipeline | **90%** | RESOLVED — Captures CSS background images + functional bypass |
+| 2 | Info & Relationships | 1.3.1 | py-pipeline | **90%** | RESOLVED — Recursive fieldset + aria-controls/owns |
+| 3 | Contrast (DOM + OCR) | 1.4.3 | py-pipeline | **95%** | RESOLVED — Upward DOM traversal finds true painted background |
+| 4 | Images of Text | 1.4.5 | py-pipeline | **90%** | RESOLVED — Exact-match alt-text downgrades review to PASS |
+| 5 | Contrast Enhanced | 1.4.6 | py-pipeline | **95%** | RESOLVED — Inherits painted background resolver |
+| 6 | Non-text Contrast | 1.4.11 | py-pipeline | **85%** | IMPROVED — Analyzes rendered boundaries & visual styles |
+| 7 | Focus Visible | 2.4.7 | py-pipeline | **92%** | RESOLVED — Captures pseudo-element (::before/after) focus rings |
+| 8 | Focus Appearance | 2.4.13 | py-pipeline | **90%** | RESOLVED — Accepts pure contrast inversion as valid indicator |
+| 9 | Label in Name | 2.5.3 | py-pipeline | **92%** | RESOLVED — Rigorous substring and token matching |
+| 10| Target Size | 2.5.8 | py-pipeline | **90%** | RESOLVED — Spatial indexing calculates exact adjacent pixel spacing |
 | 11| Pause / Stop / Hide | 2.2.2 | py-static | **75%** | Stable — regex and heuristic boundaries |
 | 12| Reflow | 1.4.10 | py-rendered | **75%** | Stable |
 | 13| Text Spacing | 1.4.12 | py-rendered | **63%** | Needs stable selector matching |
@@ -49,6 +49,14 @@ To permanently resolve false positives caused by isolated, heuristic-based crawl
 3.  **SemanticRelationshipEngine:** Resolves ARIA pointers (e.g., `aria-describedby`) and native HTML group mechanics (e.g., `<fieldset>`, `<label>`).
 4.  **InteractionStateRunner:** Triggers live keyboard focus (`.focus()`) and computes the delta of rendered CSS properties (e.g., `box-shadow`, `outline`) to prove interactive states.
 5.  **ContrastEngine:** Evaluates WCAG 2.1 relative luminance and computes text thresholds dynamically based on rendered font-size and font-weight.
+
+### Advanced Pipeline Hardening (Phase 2)
+
+Following an internal audit, the pipeline was further hardened to reach enterprise-grade compliance:
+*   **Shadow DOM & Iframe Piercing:** The pipeline now recursively walks `#shadow-root` barriers and iterates over same-origin `page.frames` to evaluate custom Web Components and embedded widgets.
+*   **Background Color Resolver (1.4.3):** Transparent `rgba(..., 0)` backgrounds no longer trigger false reviews. The engine climbs the DOM tree visually until it hits a solid color, blending opacities along the way.
+*   **Spatial Indexing (2.5.8):** Target size spacing exceptions are now calculated dynamically via an O(N²) Chebyshev distance algorithm inside the browser, proving exactly how far apart interactive nodes are.
+*   **Batched Interaction State (2.4.7):** Instead of looping Playwright commands, focus states (including `::before` and `::after` pseudo-elements) are simulated across all elements simultaneously via an injected JS payload, removing performance bottlenecks.
 
 ### Key Rule Improvements via the Pipeline:
 
