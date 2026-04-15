@@ -73,23 +73,30 @@ class SemanticRelationshipEngine:
         Mutates the ElementContext list in place, attaching resolved semantic 
         relationships to each element's SemanticContext.
         """
-        for context in contexts:
-            if not context.element_id:
-                continue
-
+        for frame in page.frames:
             try:
-                relations = await page.evaluate(cls._RELATIONSHIP_JS, context.element_id)
-                if not relations:
+                if frame.url == "about:blank" and not await frame.locator("body").count():
                     continue
-
-                context.semantics.described_by_text = relations.get("described_by_text")
-                context.semantics.is_in_data_table = relations.get("is_in_data_table", False)
-                context.semantics.is_in_labeled_control = relations.get("is_in_labeled_control", False)
-                context.semantics.is_video_context = relations.get("is_video_context", False)
                 
-                group_name = relations.get("group_name")
-                if group_name and context.accessible_name:
-                    context.accessible_name.name = f"{group_name}: {context.accessible_name.name}"
+                # To minimize IPC calls, we could run the script for an array of IDs in the frame.
+                # However, we only care about contexts that actually exist in this frame. 
+                # Since we don't have frame IDs on contexts, we'll just try to evaluate for all contexts.
+                # A more optimized approach is to batch evaluate in JS.
+                for context in contexts:
+                    if not context.element_id:
+                        continue
+                    
+                    relations = await frame.evaluate(cls._RELATIONSHIP_JS, context.element_id)
+                    if not relations:
+                        continue
 
+                    context.semantics.described_by_text = relations.get("described_by_text")
+                    context.semantics.is_in_data_table = relations.get("is_in_data_table", False)
+                    context.semantics.is_in_labeled_control = relations.get("is_in_labeled_control", False)
+                    context.semantics.is_video_context = relations.get("is_video_context", False)
+                    
+                    group_name = relations.get("group_name")
+                    if group_name and context.accessible_name:
+                        context.accessible_name.name = f"{group_name}: {context.accessible_name.name}"
             except Exception:
                 pass

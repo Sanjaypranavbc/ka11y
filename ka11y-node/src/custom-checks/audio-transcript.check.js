@@ -17,7 +17,7 @@ async function run(page, context = {}) {
     getKeywordList('audio_transcript', 'transcript_keywords', sharedContext)
   ) || 'transcript|caption|text\\s+version|description';
 
-  const data = await page.evaluate((keywordPattern) => {
+  const data = await page.evaluate(async (keywordPattern) => {
     const transcriptRe = new RegExp(keywordPattern, 'i');
     const audioEls = Array.from(document.querySelectorAll('audio'));
     if (audioEls.length === 0) return { audioCount: 0, issues: [] };
@@ -26,9 +26,23 @@ async function run(page, context = {}) {
 
     for (const audio of audioEls) {
       // 1. <track> element inside <audio> (captions or descriptions)
-      const hasTrack = !!audio.querySelector(
-        'track[kind="captions"], track[kind="descriptions"], track[kind="subtitles"]'
-      );
+      const tracks = Array.from(audio.querySelectorAll('track[kind="captions"], track[kind="descriptions"], track[kind="subtitles"]'));
+      let hasValidTrack = false;
+      
+      for (const track of tracks) {
+         const src = track.getAttribute('src');
+         if (src) {
+             try {
+                 const response = await fetch(src, { method: 'HEAD', cache: 'no-cache' });
+                 if (response.ok) {
+                     hasValidTrack = true;
+                     break;
+                 }
+             } catch (e) {
+                 // Fetch might fail due to CORS or bad URL, if so, the track is unreliable.
+             }
+         }
+      }
 
       // 2. Nearby transcript link — search within closest semantic container
       const container =
@@ -61,7 +75,7 @@ async function run(page, context = {}) {
         return !!target && (target.textContent || '').trim().length > 0;
       });
 
-      if (!hasTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription) {
+      if (!hasValidTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription) {
         issues.push({
           html: audio.outerHTML.slice(0, 150),
           element_id: audio.id || null,

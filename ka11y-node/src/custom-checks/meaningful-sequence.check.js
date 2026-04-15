@@ -98,6 +98,16 @@ async function run(page, context = {}) {
         if (isRtlDoc || isRtlEl) continue; // correct usage for RTL — skip
       }
 
+      // Valid UI Pattern Exemption: If a flex container is reversed but ONLY contains 
+      // interactive elements (like a button group), it rarely breaks meaning.
+      if (isReversed) {
+         const allInteractive = children.every(ch => {
+             const t = ch.tagName.toLowerCase();
+             return ['button', 'a', 'input', 'select'].includes(t) || ch.hasAttribute('role');
+         });
+         if (allInteractive) continue; // Skip to PASS
+      }
+
       // Bug fix 2: detect CSS order property — use parseInt with radix 10
       // Note: parseInt('auto', 10) = NaN; we treat NaN as 0 (default order)
       const orders = children.map(ch => {

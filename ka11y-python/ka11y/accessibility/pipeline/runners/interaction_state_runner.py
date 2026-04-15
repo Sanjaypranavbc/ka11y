@@ -62,16 +62,22 @@ class InteractionStateRunner:
     async def batch_evaluate_focus(cls, page: Page, contexts: List[ElementContext]) -> None:
         """
         Executes a single JS payload to focus all interactive elements 
-        and updates their InteractionContext natively.
+        and updates their InteractionContext natively. Runs across all frames.
         """
-        try:
-            results = await page.evaluate(cls._BATCH_FOCUS_JS)
-            for ctx in contexts:
-                if ctx.interaction.is_focusable and ctx.element_id in results:
-                    delta = results[ctx.element_id]
-                    ctx.interaction.has_focus_ring = delta.get("has_visual_change", False)
-                    if ctx.interaction.has_focus_ring:
-                        ctx.interaction.focus_ring_thickness_px = 2.0  # Heuristic fallback
-                        ctx.interaction.focus_ring_contrast = 4.5      # Heuristic fallback
-        except Exception as e:
-            pass
+        combined_results = {}
+        for frame in page.frames:
+            try:
+                if frame.url == "about:blank" and not await frame.locator("body").count():
+                    continue
+                frame_results = await frame.evaluate(cls._BATCH_FOCUS_JS)
+                combined_results.update(frame_results)
+            except Exception:
+                pass
+                
+        for ctx in contexts:
+            if ctx.interaction.is_focusable and ctx.element_id in combined_results:
+                delta = combined_results[ctx.element_id]
+                ctx.interaction.has_focus_ring = delta.get("has_visual_change", False)
+                if ctx.interaction.has_focus_ring:
+                    ctx.interaction.focus_ring_thickness_px = 2.0  # Heuristic fallback
+                    ctx.interaction.focus_ring_contrast = 4.5      # Heuristic fallback

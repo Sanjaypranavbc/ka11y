@@ -176,64 +176,74 @@ class ElementContextExtractor:
 
     @classmethod
     async def extract_contexts(cls, page: Page) -> List[ElementContext]:
-        raw_data: List[Dict[str, Any]] = await page.evaluate(cls._UNIFIED_EXTRACTION_JS)
         contexts: List[ElementContext] = []
+        
+        for frame in page.frames:
+            try:
+                # We skip empty frames or about:blank
+                if frame.url == "about:blank" and not await frame.locator("body").count():
+                    continue
+                    
+                raw_data: List[Dict[str, Any]] = await frame.evaluate(cls._UNIFIED_EXTRACTION_JS)
+                
+                for data in raw_data:
+                    section_type = SectionAnalyzer.analyze(
+                        ancestor_tags=data['ancestor_tags'],
+                        ancestor_roles=data['ancestor_roles']
+                    )
 
-        for data in raw_data:
-            section_type = SectionAnalyzer.analyze(
-                ancestor_tags=data['ancestor_tags'],
-                ancestor_roles=data['ancestor_roles']
-            )
+                    semantics = SemanticContext(
+                        tag_name=data['tag_name'],
+                        role=data['role'],
+                        section_type=section_type,
+                        ancestor_tags=[t.lower() for t in data['ancestor_tags'] if t],
+                        ancestor_roles=[r.lower() for r in data['ancestor_roles'] if r],
+                        parent_tags=[t.lower() for t in data['ancestor_tags'][:2] if t],
+                        parent_roles=[r.lower() for r in data['ancestor_roles'][:2] if r],
+                        controls_elements=data.get('controls_elements', []),
+                        owns_elements=data.get('owns_elements', [])
+                    )
 
-            semantics = SemanticContext(
-                tag_name=data['tag_name'],
-                role=data['role'],
-                section_type=section_type,
-                ancestor_tags=[t.lower() for t in data['ancestor_tags'] if t],
-                ancestor_roles=[r.lower() for r in data['ancestor_roles'] if r],
-                parent_tags=[t.lower() for t in data['ancestor_tags'][:2] if t],
-                parent_roles=[r.lower() for r in data['ancestor_roles'][:2] if r],
-                controls_elements=data.get('controls_elements', []),
-                owns_elements=data.get('owns_elements', [])
-            )
+                    bbox = BoundingBox(**data['bbox'])
+                    visual = VisualContext(
+                        is_visible=True,
+                        opacity=float(data['computed_styles'].get('opacity', 1.0).replace(' ', '') or 1.0),
+                        bounding_box=bbox,
+                        computed_styles=data['computed_styles'],
+                        visible_label_text=data.get('visible_label_text'),
+                        src=data.get('src'),
+                        resolved_background_color=data.get('resolved_bg', 'rgb(255, 255, 255)'),
+                        has_bg_image=data.get('has_bg_image', False)
+                    )
 
-            bbox = BoundingBox(**data['bbox'])
-            visual = VisualContext(
-                is_visible=True,
-                opacity=float(data['computed_styles'].get('opacity', 1.0).replace(' ', '') or 1.0),
-                bounding_box=bbox,
-                computed_styles=data['computed_styles'],
-                visible_label_text=data.get('visible_label_text'),
-                src=data.get('src'),
-                resolved_background_color=data.get('resolved_bg', 'rgb(255, 255, 255)'),
-                has_bg_image=data.get('has_bg_image', False)
-            )
+                    interaction = InteractionContext(
+                        is_focusable=data['is_focusable'],
+                        tab_index=data['tab_index'],
+                        effective_clickable_bbox=bbox,
+                        clickable_area_px=bbox.area,
+                        adjacent_spacing_px=data.get('adjacent_spacing_px', 0.0)
+                    )
 
-            interaction = InteractionContext(
-                is_focusable=data['is_focusable'],
-                tab_index=data['tab_index'],
-                effective_clickable_bbox=bbox,
-                clickable_area_px=bbox.area,
-                adjacent_spacing_px=data.get('adjacent_spacing_px', 0.0)
-            )
+                    acc_name = None
+                    if data.get('raw_aria_label'):
+                        acc_name = AccessibleName(name=data['raw_aria_label'], source=AccessibleNameSource.ARIA_LABEL, is_visible=False)
+                    elif data.get('raw_alt') is not None:
+                        acc_name = AccessibleName(name=data['raw_alt'], source=AccessibleNameSource.ALT_ATTRIBUTE, is_visible=False)
+                    elif data.get('raw_title'):
+                        acc_name = AccessibleName(name=data['raw_title'], source=AccessibleNameSource.TITLE_ATTRIBUTE, is_visible=False)
+                    elif data.get('text_content'):
+                        acc_name = AccessibleName(name=data['text_content'].strip(), source=AccessibleNameSource.TEXT_CONTENT, is_visible=True)
 
-            acc_name = None
-            if data.get('raw_aria_label'):
-                acc_name = AccessibleName(name=data['raw_aria_label'], source=AccessibleNameSource.ARIA_LABEL, is_visible=False)
-            elif data.get('raw_alt') is not None:
-                acc_name = AccessibleName(name=data['raw_alt'], source=AccessibleNameSource.ALT_ATTRIBUTE, is_visible=False)
-            elif data.get('raw_title'):
-                acc_name = AccessibleName(name=data['raw_title'], source=AccessibleNameSource.TITLE_ATTRIBUTE, is_visible=False)
-            elif data.get('text_content'):
-                acc_name = AccessibleName(name=data['text_content'].strip(), source=AccessibleNameSource.TEXT_CONTENT, is_visible=True)
-
-            contexts.append(ElementContext(
-                element_id=data['element_id'],
-                html_snippet=data['html_snippet'],
-                semantics=semantics,
-                visual=visual,
-                interaction=interaction,
-                accessible_name=acc_name
-            ))
+                    contexts.append(ElementContext(
+                        element_id=data['element_id'],
+                        html_snippet=data['html_snippet'],
+                        semantics=semantics,
+                        visual=visual,
+                        interaction=interaction,
+                        accessible_name=acc_name
+                    ))
+            except Exception:
+                # Silently skip cross-origin frame evaluation errors or closed contexts
+                pass
 
         return contexts
