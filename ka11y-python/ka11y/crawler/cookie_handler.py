@@ -1,8 +1,101 @@
 import logging
 import re
-from playwright.async_api import Page
+from typing import Union
+
+from playwright.async_api import Frame, Page
 
 logger = logging.getLogger(__name__)
+
+CookieContext = Union[Page, Frame]
+
+
+_CLICK_TIMEOUT_MS = 1500
+_STABILIZE_DELAY_MS = 800
+
+_REJECT_PATTERN = re.compile(
+    r"^(reject|decline|no\s*thanks|continue\s*without|deny|reject\s*all|decline\s*all)$",
+    re.IGNORECASE,
+)
+_ACCEPT_PATTERN = re.compile(
+    r"^(accept|agree|allow|got\s*it|i\s*accept|accept\s*all|allow\s*all)$",
+    re.IGNORECASE,
+)
+
+_OVERLAY_SELECTORS = [
+    "#onetrust-consent-sdk",
+    "#onetrust-banner-sdk",
+    ".cc-window",
+    ".cookie-banner",
+    "[id*='cookie-banner']",
+    "[id*='cookiebanner']",
+    "[id*='consent-banner']",
+    "[id*='cookie']",
+    "[id*='consent']",
+    "[class*='cookie-banner']",
+    "[class*='cookiebanner']",
+    "[class*='consent-banner']",
+    "[class*='cookie']",
+    "[class*='consent']",
+    ".optanon-alert-box-wrapper",
+    ".onetrust-pc-dark-filter",
+    ".qc-cmp2-container",
+    ".didomi-popup-container",
+    "#CybotCookiebotDialog",
+]
+
+
+def _iter_cookie_contexts(page: Page) -> list[CookieContext]:
+    contexts: list[CookieContext] = [page]
+
+    def walk(frame: Frame) -> None:
+        for child in frame.child_frames:
+            contexts.append(child)
+            walk(child)
+
+    walk(page.main_frame)
+    return contexts
+
+
+async def _click_first_match(
+    context: CookieContext,
+    *,
+    pattern: re.Pattern[str],
+    explicit_selector: str,
+) -> bool:
+    candidates = [
+        context.get_by_role("button", name=pattern).first,
+        context.locator("button, a, input[type='button'], input[type='submit'], [role='button']").filter(
+            has_text=pattern
+        ).first,
+        context.locator(explicit_selector).first,
+    ]
+
+    for locator in candidates:
+        try:
+            if await locator.is_visible(timeout=500):
+                await locator.click(timeout=_CLICK_TIMEOUT_MS)
+                return True
+        except Exception:
+            continue
+    return False
+
+
+async def _cleanup_cookie_overlays(contexts: list[CookieContext]) -> bool:
+    removed_any = False
+    for context in contexts:
+        for selector in _OVERLAY_SELECTORS:
+            try:
+                for element in await context.locator(selector).all():
+                    try:
+                        if await element.is_visible(timeout=100):
+                            await element.evaluate("node => node.remove()")
+                            removed_any = True
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+    return removed_any
+
 
 async def handle_cookies(page: Page) -> str:
     """
@@ -11,120 +104,44 @@ async def handle_cookies(page: Page) -> str:
     removes overlay backdrops if neither worked but a banner is suspected.
     Returns: "rejected", "accepted", "removed", "none", or "error".
     """
-    # Use short timeouts for cookie banner checks
-    click_timeout = 1500
-    stabilize_delay = 800
-
-    # Compiled regexes for common buttons (case-insensitive)
-    reject_pattern = re.compile(
-        r"^(reject|decline|no\s*thanks|continue\s*without|deny|reject\s*all|decline\s*all)$", 
-        re.IGNORECASE
-    )
-    accept_pattern = re.compile(
-        r"^(accept|agree|allow|got\s*it|i\s*accept|accept\s*all|allow\s*all)$", 
-        re.IGNORECASE
-    )
-    
-    # Common backdrop/overlay classes to hide if clicking fails
-    overlay_selectors = [
-        "#onetrust-consent-sdk",
-        ".cc-window",
-        ".cookie-banner",
-        "[id*='cookie-banner']",
-        "[id*='cookiebanner']",
-        "[id*='consent-banner']",
-        "[class*='cookie-banner']",
-        "[class*='cookiebanner']",
-        "[class*='consent-banner']",
-        ".optanon-alert-box-wrapper",
-        "#CybotCookiebotDialog"
-    ]
-
     try:
-        # 1. Try rejecting first via common accessibility roles
-        try:
-            reject_btn = page.get_by_role("button", name=reject_pattern).first
-            if await reject_btn.is_visible(timeout=1000):
-                await reject_btn.click(timeout=click_timeout)
-                await page.wait_for_timeout(stabilize_delay)
-                logger.debug("[cookie_handler] Rejected cookies via ARIA role")
-                return "rejected"
-        except Exception:
-            pass
+        contexts = _iter_cookie_contexts(page)
 
-        # 2. Try rejecting via generic text fallback
-        try:
-            reject_btn = page.locator("button, a, [role='button']").filter(has_text=reject_pattern).first
-            if await reject_btn.is_visible(timeout=500):
-                await reject_btn.click(timeout=click_timeout)
-                await page.wait_for_timeout(stabilize_delay)
-                logger.debug("[cookie_handler] Rejected cookies via generic text")
-                return "rejected"
-        except Exception:
-            pass
-            
-        # 3. Try standard reject IDs/Classes
-        try:
-            reject_btn = page.locator("#onetrust-reject-all-handler, .cookie-reject, #W0wltc").first
-            if await reject_btn.is_visible(timeout=500):
-                await reject_btn.click(timeout=click_timeout)
-                await page.wait_for_timeout(stabilize_delay)
-                logger.debug("[cookie_handler] Rejected cookies via ID/Class")
-                return "rejected"
-        except Exception:
-            pass
+        rejected_any = False
+        for context in contexts:
+            rejected_any = await _click_first_match(
+                context,
+                pattern=_REJECT_PATTERN,
+                explicit_selector="#onetrust-reject-all-handler, .cookie-reject, #W0wltc",
+            ) or rejected_any
 
-        # 4. Try accepting via common accessibility roles
-        try:
-            accept_btn = page.get_by_role("button", name=accept_pattern).first
-            if await accept_btn.is_visible(timeout=500):
-                await accept_btn.click(timeout=click_timeout)
-                await page.wait_for_timeout(stabilize_delay)
-                logger.debug("[cookie_handler] Accepted cookies via ARIA role")
-                return "accepted"
-        except Exception:
-            pass
+        if rejected_any:
+            await page.wait_for_timeout(_STABILIZE_DELAY_MS)
+            await _cleanup_cookie_overlays(contexts)
+            logger.debug("[cookie_handler] Rejected cookies across available contexts")
+            return "rejected"
 
-        # 5. Try accepting via generic text fallback
-        try:
-            accept_btn = page.locator("button, a, [role='button']").filter(has_text=accept_pattern).first
-            if await accept_btn.is_visible(timeout=500):
-                await accept_btn.click(timeout=click_timeout)
-                await page.wait_for_timeout(stabilize_delay)
-                logger.debug("[cookie_handler] Accepted cookies via generic text")
-                return "accepted"
-        except Exception:
-            pass
+        accepted_any = False
+        for context in contexts:
+            accepted_any = await _click_first_match(
+                context,
+                pattern=_ACCEPT_PATTERN,
+                explicit_selector="#onetrust-accept-btn-handler, .cookie-accept, #L2AGLb",
+            ) or accepted_any
 
-        # 6. Try standard accept IDs/Classes
-        try:
-            accept_btn = page.locator("#onetrust-accept-btn-handler, .cookie-accept, #L2AGLb").first
-            if await accept_btn.is_visible(timeout=500):
-                await accept_btn.click(timeout=click_timeout)
-                await page.wait_for_timeout(stabilize_delay)
-                logger.debug("[cookie_handler] Accepted cookies via ID/Class")
-                return "accepted"
-        except Exception:
-            pass
+        if accepted_any:
+            await page.wait_for_timeout(_STABILIZE_DELAY_MS)
+            await _cleanup_cookie_overlays(contexts)
+            logger.debug("[cookie_handler] Accepted cookies across available contexts")
+            return "accepted"
 
-        # 7. Optionally remove blocking overlays if neither worked
-        removed_any = False
-        for selector in overlay_selectors:
-            try:
-                elements = await page.locator(selector).all()
-                for el in elements:
-                    if await el.is_visible(timeout=100):
-                        await el.evaluate("node => node.remove()")
-                        removed_any = True
-            except Exception:
-                pass
-                
+        removed_any = await _cleanup_cookie_overlays(contexts)
         if removed_any:
             logger.debug("[cookie_handler] Removed cookie overlays from DOM")
             return "removed"
-            
+
         return "none"
-        
+
     except Exception as e:
         logger.debug(f"[cookie_handler] Cookie handling error: {e}")
         return "error"

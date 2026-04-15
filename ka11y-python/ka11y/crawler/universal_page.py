@@ -250,6 +250,99 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         return texts.length ? texts.join(' ').slice(0, 1000) : null;
     }
 
+    function composedParent(el) {
+        if (!el) return null;
+        if (el.parentElement) return el.parentElement;
+        const root = el.getRootNode ? el.getRootNode() : null;
+        return root && root.host ? root.host : null;
+    }
+
+    function attributeSignalText(el) {
+        if (!el || !el.getAttribute) return '';
+        const className = typeof el.className === 'string'
+            ? el.className
+            : (el.className && typeof el.className.baseVal === 'string' ? el.className.baseVal : '');
+        return [
+            el.id || '',
+            className || '',
+            el.getAttribute('role') || '',
+            el.getAttribute('aria-label') || '',
+            el.getAttribute('title') || '',
+            el.getAttribute('data-testid') || '',
+            el.getAttribute('data-state') || '',
+            el.getAttribute('name') || '',
+        ].join(' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+    }
+
+    function textSignal(el) {
+        if (!el) return '';
+        return (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+    }
+
+    const COOKIE_ATTR_RE = /(?:cookie|consent|onetrust|cookiebot|optanon|usercentrics|trustarc|didomi|qc-cmp|privacy[-_ ](?:center|preference|preferences|choice|choices))/i;
+    const COOKIE_TEXT_RE = /(?:cookie|consent|accept\s+all|reject\s+all|decline|manage\s+(?:choices|preferences|settings)|privacy\s+choices|your\s+privacy\s+choices|cookie\s+settings|cookie\s+preferences)/i;
+
+    function isElementVisible(el) {
+        if (!el || !el.getBoundingClientRect) return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return false;
+
+        let cur = el;
+        let depth = 0;
+        while (cur && depth < 12) {
+            if (cur.nodeType === Node.ELEMENT_NODE) {
+                if (cur.hasAttribute && cur.hasAttribute('hidden')) return false;
+                const ariaHidden = ((cur.getAttribute && cur.getAttribute('aria-hidden')) || '').toLowerCase();
+                if (ariaHidden === 'true') return false;
+                const style = window.getComputedStyle(cur);
+                if (style.display === 'none' || style.visibility === 'hidden') return false;
+                if (parseFloat(style.opacity || '1') === 0) return false;
+            }
+            cur = composedParent(cur);
+            depth += 1;
+        }
+        return true;
+    }
+
+    function isConsentUi(el) {
+        let cur = el;
+        let depth = 0;
+        const selfText = textSignal(el);
+        const selfRole = ((el.getAttribute && el.getAttribute('role')) || '').toLowerCase();
+        const selfTag = (el.tagName || '').toLowerCase();
+        const selfLooksLikeConsentControl =
+            ['button', 'a', 'form', 'input', 'select', 'textarea'].includes(selfTag) ||
+            selfRole === 'button' ||
+            selfRole === 'dialog' ||
+            selfRole === 'alertdialog' ||
+            selfRole === 'banner';
+
+        if (COOKIE_TEXT_RE.test(selfText) && selfLooksLikeConsentControl) return true;
+
+        while (cur && depth < 6) {
+            if (cur.nodeType === Node.ELEMENT_NODE) {
+                if (COOKIE_ATTR_RE.test(attributeSignalText(cur))) return true;
+                if (depth > 0) {
+                    const role = ((cur.getAttribute && cur.getAttribute('role')) || '').toLowerCase();
+                    const tag = (cur.tagName || '').toLowerCase();
+                    if (
+                        COOKIE_TEXT_RE.test(textSignal(cur)) &&
+                        (role === 'dialog' || role === 'alertdialog' || role === 'banner' || tag === 'dialog')
+                    ) {
+                        return true;
+                    }
+                }
+            }
+            cur = composedParent(cur);
+            depth += 1;
+        }
+        return false;
+    }
+
+    function shouldIgnoreForSnapshot(el) {
+        return !isElementVisible(el) || isConsentUi(el);
+    }
+
     function metaFor(el) {
         return {
             page_url: pageUrl,
@@ -272,6 +365,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
 
         formList.forEach((form, formIdx) => {
             queryShadow(form, 'input:not([type="hidden"]),select,textarea').forEach(el => {
+                if (shouldIgnoreForSnapshot(el)) return;
                 const labelEl = explicitLabelFor(el);
                 const wrappingLabel = el.closest('label');
                 const labelText = labelEl
@@ -353,6 +447,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
     (function extractInteractive() {
         const seen = new WeakSet();
         function addInteractive(el) {
+            if (shouldIgnoreForSnapshot(el)) return;
             if (seen.has(el)) return;
             seen.add(el);
             const type = (el.type || '').toLowerCase() || null;
@@ -409,6 +504,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         }
 
         function addTarget(el) {
+            if (shouldIgnoreForSnapshot(el)) return;
             if (seen.has(el)) return;
             seen.add(el);
             const rect = el.getBoundingClientRect();
@@ -562,11 +658,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
 
         function isVisibleMoving(el) {
             if (!el || !el.getBoundingClientRect) return false;
-            const rect = el.getBoundingClientRect();
-            if (rect.width === 0 && rect.height === 0) return false;
-            const style = window.getComputedStyle(el);
-            if (style.display === 'none' || style.visibility === 'hidden') return false;
-            if (parseFloat(style.opacity || '1') === 0) return false;
+            if (shouldIgnoreForSnapshot(el)) return false;
             if (el.closest && el.closest('[hidden]')) return false;
             return true;
         }
@@ -863,6 +955,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         }
 
         queryShadow(document, 'audio, video').forEach(el => {
+            if (shouldIgnoreForSnapshot(el)) return;
             media.push({
                 ...metaFor(el),
                 element_index: media.length,
@@ -891,6 +984,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         let index = 0;
         const ignored = new Set(['html', 'head', 'body', 'script', 'style', 'img', 'svg', 'canvas']);
         queryShadow(document, '*').forEach(el => {
+            if (shouldIgnoreForSnapshot(el)) return;
             const tag = el.tagName.toLowerCase();
             if (ignored.has(tag)) return;
             const style = window.getComputedStyle(el);
@@ -976,6 +1070,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         }
 
         queryShadow(document, selector).forEach(el => {
+            if (shouldIgnoreForSnapshot(el)) return;
             if (el.tagName === 'INPUT' && (el.getAttribute('type') || '').toLowerCase() === 'hidden') return;
 
             const style = window.getComputedStyle(el);
