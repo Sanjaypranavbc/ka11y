@@ -1036,6 +1036,10 @@ async def _stage_sensory_audit_universal(
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
 
+from ka11y.accessibility.pipeline.pipeline_stage import _run_pipeline_stage
+
+# ... [code stays the same up to _run_python_stages]
+
 async def _run_python_stages(
     *,
     url: str,
@@ -1065,20 +1069,18 @@ async def _run_python_stages(
     Optional[Dict[str, Any]],
 ]:
     """
-    Run all Python audit stages concurrently (6 total).
+    Run all Python audit stages concurrently.
 
     Returns (all_findings, contrast_report, image_audit_report).
     """
 
-    # Each stage is wrapped with asyncio.wait_for so that a slow/unresponsive
-    # target cannot hold a Playwright browser instance indefinitely (D2).
     def _timed(coro):
         return asyncio.wait_for(coro, timeout=_STAGE_TIMEOUT_SECONDS)
 
     static_rules_enabled = any(
         (
             run_form_audit,
-            run_label_in_name_audit,
+            # run_label_in_name_audit, # Handled by pipeline
             run_media_audit,
             run_pause_stop_hide_audit,
             run_target_size_audit,
@@ -1086,7 +1088,8 @@ async def _run_python_stages(
             run_sensory_audit,
         )
     )
-    # 1. Run universal snapshot first (Single Source of Truth for Discovery)
+    
+    # 1. Run universal snapshot first
     snapshot = None
     discovered_urls = [url]
     if static_rules_enabled:
@@ -1101,8 +1104,6 @@ async def _run_python_stages(
         if not discovered_urls:
             discovered_urls = [url]
 
-    # 2. Run all other stages using the shared page inventory
-    # Wrap snapshot in a future for the universal stages that expect it
     snapshot_task = asyncio.Future()
     if snapshot:
         snapshot_task.set_result(snapshot)
@@ -1121,9 +1122,10 @@ async def _run_python_stages(
                 url, output_dir, run_form_audit, job_id, snapshot_task, step_logger
             )
         ),
+        # MUTED: _stage_label_in_name_universal is replaced by Pipeline 2.5.3
         _timed(
-            _stage_label_in_name_universal(
-                url, output_dir, run_label_in_name_audit, job_id, snapshot_task, step_logger
+            _run_pipeline_stage(
+                url, job_id, run_image_audit, run_label_in_name_audit
             )
         ),
         _timed(
