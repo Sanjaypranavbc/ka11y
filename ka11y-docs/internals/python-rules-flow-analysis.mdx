@@ -10,18 +10,19 @@ description: "End-to-end request flow and rule-by-rule execution details for the
 
 ---
 
-## Architecture & Request Flow
+## Architecture & Request Flow (Updated April 2026)
 
-### Current Production Path
+### The Unified Accessibility Pipeline
 
-The current production flow is the combined pipeline, not the older single-service `/api/v1/audit` model.
+To eliminate false positives caused by evaluating elements in a vacuum, the Python engine was re-architected. Instead of individual rule crawlers (e.g., `LabelInNameAuditor` or `TargetSizeAuditor`) running in isolation, the new architecture uses a **Centralized Context Pipeline**.
 
-- One combined request fans out into `ka11y-node` and `ka11y-python`.
-- `ka11y-python` now uses **one universal static crawl** for seven DOM rule families.
-- `AsyncImageCrawler` now uses an **optimized single-session queue** for image capture, sharing a browser/context and crawl policy.
-- `RenderedLayoutCrawler` still owns rendered, focus, hover, orientation, reflow, and resize scenarios.
-- Every crawler now shares a central **Navigation Resilience** layer (DNS preflight + backoff) and a **Crawl Policy** (normalization + budgets).
-- **Reporting:** Universal stages now hard-fail (mark as `error`) if the crawler extracts 0 pages, preventing false coverage reports.
+1.  **ElementContextExtractor:** A single, unified Playwright script extracts the entire DOM, including computed styles, ARIA attributes, and bounding boxes.
+2.  **Semantic Enrichment:**
+    *   **SectionAnalyzer:** Determines the macro-context (e.g., `HEADER`, `FORM_REGION`, `DATA_TABLE`).
+    *   **SemanticRelationshipEngine:** Resolves ARIA pointers (`aria-describedby`, `aria-labelledby`) and native HTML group mechanics (`<fieldset>`, `<label>`).
+3.  **Interaction Simulation:** The `InteractionStateRunner` natively simulates interactions (like `.focus()`) and captures the delta in rendered CSS properties (like `box-shadow` or `background-color`) to prove visible state changes.
+4.  **Decision Engine:** Evaluates the rich `ElementContext` against registered `WCAGPolicy` classes (e.g., `Policy111`, `Policy258`).
+5.  **Evidence Formatter:** Maps the internal pipeline `RuleVerdict` back to the legacy JSON schema expected by the frontend.
 
 ```mermaid
 flowchart TD
@@ -29,125 +30,119 @@ flowchart TD
     B --> C["ka11y-node: axe-core + custom checks"]
     B --> D["ka11y-python: _run_python_stages()"]
 
-    subgraph "Centralized Crawl Support"
-        CP["CrawlPolicy: budgets + normalization"]
-        NR["Navigation: DNS + retry + backoff"]
+    subgraph "Unified Context Pipeline"
+        UP1["ElementContextExtractor (DOM/CSS/BBox)"]
+        UP2["SemanticRelationshipEngine (ARIA/Groups)"]
+        UP3["InteractionStateRunner (Simulate Focus/Hover)"]
+        UP4["DecisionEngine (WCAG Policies)"]
+        UP5["EvidenceFormatter (JSON Output)"]
+        
+        UP1 --> UP2 --> UP3 --> UP4 --> UP5
     end
 
-    subgraph "Python Crawler Branches"
-        E["UniversalPageLoader (Source of Truth)"]
-        F["AsyncImageCrawler (Optimized Queue)"]
-        G["RenderedLayoutCrawler"]
+    subgraph "Legacy / Rendered Paths"
+        E["UniversalPageLoader (Text Spacing, PSH, Media)"]
+        F["AsyncImageCrawler (OCR generation)"]
+        G["RenderedLayoutCrawler (Reflow, Resize)"]
     end
 
-    CP & NR -.-> E & F & G
+    D --> UP1
     D --> E
     D --> F
     D --> G
 
-    E --> H["SnapshotNormalizer"]
-    H --> I["Existing Pydantic models"]
-    I --> J["Form / Label-in-Name / Pause-Stop-Hide / Target-Size / Text-Spacing / Media / Sensory auditors"]
-
-    F --> K["Classification + OCR + Contrast + Alt/Text audit"]
-    G --> L["Reflow / Resize Text / Orientation / Hover / Focus-Not-Obscured evaluators"]
-
     C --> M["Node findings"]
-    J --> N["Universal-static findings"]
-    K --> O["Image findings"]
-    L --> P["Rendered findings"]
+    E --> N["Static rule findings"]
+    UP5 --> O["Pipeline findings (1.1.1, 1.4.3, 2.5.3, 2.5.8...)"]
+    G --> P["Rendered findings"]
 
     M & N & O & P --> Q["Merge + dedup + level filter + warning enrichment"]
     Q --> R["combined_report.json + step logs"]
 ```
 
-### Custom Check Execution Model
-
-```mermaid
-flowchart TD
-    Index["Combined Request"] --> Static["Universal Static Auditors"]
-    Index --> Rendered["Rendered / Stateful Evaluators"]
-    Index --> Multi["Multimodal / CV Auditors"]
-
-    subgraph "Universal Static Path"
-        S1["UniversalPageLoader"]
-        S2["SnapshotNormalizer"]
-        S3["Existing auditors on normalized models"]
-    end
-
-    subgraph "Rendered Path"
-        R1["RenderedLayoutCrawler"]
-        R2["Viewport / CSS mutation / focus / hover"]
-        R3["Evaluator records -> findings"]
-    end
-
-    subgraph "Image Path"
-        M1["AsyncImageCrawler"]
-        M2["OCR budget + OCR extraction"]
-        M3["Alt / contrast / image-of-text validation"]
-    end
-```
-
-### Current Python Stage Map
-
-| Stage | Data source | Audit mode | Notes |
-|------|-------------|------------|------|
-| `form_audit` | Universal snapshot -> `FormInputData` | Static | Same-origin frames and open shadow roots supported through the universal crawl |
-| `label_in_name` | Universal snapshot -> `InteractiveElementData` | Static | Provenance carried through `selector`, `element_ref_id`, `frame_path` |
-| `pause_stop_hide` | Universal snapshot -> `MovingContentData` | Static | Supports `duration_known` and `applicability_exception=loading_indicator` |
-| `target_size` | Universal snapshot -> `TargetSizeData` | Static | Same-origin iframe and shadow-root coverage inherited from universal crawl |
-| `text_spacing` | Universal snapshot -> `TextSpacingData` | Static | Structural risk pass |
-| `media_audit` | Universal snapshot -> `MediaElementData` | Static | Transcript/nearby-link checks on normalized records |
-| `sensory_audit` | Universal snapshot -> `SensoryElementData` | Static | Language-aware, including JP/CJK handling |
-| `image_audit` | `AsyncImageCrawler` + OCR | Multimodal | OCR is now budgeted and logged for large pages |
-| `rendered_layout_audit` | `RenderedLayoutCrawler` | Rendered | Hover/focus path hardened against stale or invisible boxes |
-
-### Recent Hardening Additions
-
-| Area | Current behavior |
-|------|------------------|
-| Zero-coverage guard | Universal stages mark themselves `error` if `pages_crawled == 0` instead of emitting false passes |
-| Navigation Resilience | Centralized `navigate_with_resilience` (DNS preflight, backoff, retry) shared across all crawlers |
-| Crawl Policy | `CrawlPolicy` centralizes URL normalization, same-origin rules, and page/link budgets |
-| Image session queue | `AsyncImageCrawler` uses one browser/context for multi-page crawls instead of recursive launches |
-| Universal warnings | Cross-origin and failed-frame warnings are sampled into `warning_details` in `combined_report.json` |
-
-### Localization and Language Routing
-
-The combined request `lang` now feeds both stacks, but the Python output contract is still split by responsibility:
-
-- `criterion_name` is localized through the shared i18n loader
-- `suggested_fix` is localized through the same shared `rules.yml` + locale overlay path
-- `reason` is only localized when the emitting Python auditor/evaluator provides localized text
-
-Practical outcome today:
-
-- Japanese combined runs get JP-aware OCR and JP-aware sensory/text-spacing heuristics where implemented
-- OCR engines (PaddleOCR and EasyOCR) are properly loaded dynamically and cached *by language* across the process, preventing English jobs from poisoning the cache for Japanese jobs.
-- The WCAG 1.2.1 Media Auditor passes the `lang` parameter down to its transcript Quality Engine (Gate 5). This enables Japanese tokenization via spaCy, Japanese speaker identification patterns, and Japanese non-speech event keywords. Gate 3 also correctly evaluates Japanese alternative media keywords.
-- Python `reason` strings are still mixed: some newer or config-driven auditors localize, while several older converters remain English
-- Node output is more fully localized than Python output at the finding-text layer
-
----
-
-## Rule-by-Rule Analysis
+### Rule-by-Rule Analysis
 
 ---
 
 ### 1.1.1 — Non-text Content (Level A)
-**Check:** `alttext.py`
+**Engine:** Unified Pipeline (`Policy111`)
 
 #### Flowchart
 ```mermaid
 flowchart TD
-    START["Image Metadata + OCR"] --> CLASS{"Classification?"}
-    CLASS -- Decorative --o DEC["alt = empty?"]
-    CLASS -- Informative --o INF["Alt matches OCR?"]
-    CLASS -- Logo --o LOG["Alt contains 'logo'/'home'?"]
-    CLASS -- Icon --o ICO["Alt describes action/icon?"]
-    CLASS -- Button --o BTN["Alt describes action?"]
+    START["ElementContext (Semantics + Visual)"] --> EX{"Decorative or Presentation?"}
+    EX -- Yes --> PASS_DEC["Pass if no alt name"]
+    EX -- No --> FR{"Functional Redundancy?"}
     
-    DEC -- Yes --> PASS["PASS"]
+    FR -- "Inside labeled button/link" --> PASS_FR["PASS: Specific alt not required"]
+    FR -- "Independent image" --> NM{"Missing Accessible Name?"}
+    
+    NM -- Yes --> FAIL["FAIL: Missing alt text"]
+    NM -- No --> CLASS{"Image Classification"}
+    
+    CLASS -- Logo --> LOG["Validate 'logo' or 'brand' keywords"]
+    CLASS -- Icon --> ICO["Validate minimum length and word characters"]
+    CLASS -- Informative --> INF["Validate informative name against OCR text"]
+```
+
+**Key False Positive Protections:**
+- Uses `SemanticRelationshipEngine` to detect if an image is inside an already-labeled `<button>` or `<a>`. If so, it passes as functionally redundant.
+- Uses word-boundary regex (`\b`) to validate OCR text, preventing naive substring matches (e.g., passing "research" when OCR found "search").
+
+---
+
+### 1.3.1 — Info and Relationships (Level A)
+**Engine:** Unified Pipeline (`Policy131`)
+
+**Key False Positive Protections:**
+- Checks the macro-context (e.g., `DATA_TABLE`, `FORM_REGION`) provided by `SectionAnalyzer` before failing orphaned inputs.
+- Validates relationships through `aria-describedby` or parent `fieldset` resolution provided by `SemanticRelationshipEngine`.
+
+---
+
+### 1.4.3 & 1.4.6 — Contrast (Minimum & Enhanced) (Level AA / AAA)
+**Engine:** Unified Pipeline (`Policy143`, `Policy146`, `ContrastEngine`)
+
+**Key False Positive Protections:**
+- **Dynamic Thresholds:** Uses `getComputedStyle` to check `font-size` and `font-weight`. Automatically drops the requirement to `3.0:1` (AA) or `4.5:1` (AAA) for large text.
+- **Classification Exemptions:** Ignores images classified as `logo` or `decorative`, complying with WCAG exemptions.
+- **Transparent Backgrounds:** Correctly identifies `rgba(..., 0)` backgrounds and marks them as `NEEDS_REVIEW` instead of blindly failing a 1:1 ratio against the DOM body.
+
+---
+
+### 1.4.5 — Images of Text (Level AA)
+**Engine:** Unified Pipeline (`Policy145`)
+
+**Key False Positive Protections:**
+- **Contextual Exemptions:** Automatically bypasses elements classified as `logo`, `decorative`, `complex`, or `chart`. 
+- **Video Thumbnails:** Exempts elements residing inside a `video_context` wrapper (e.g., video posters with burned-in subtitles).
+- **Dynamic Reasons:** Fails with a snippet of the exact text detected by OCR, allowing developers to immediately verify the claim.
+
+---
+
+### 2.4.7 — Focus Visible (Level AA)
+**Engine:** Unified Pipeline (`Policy247`, `InteractionStateRunner`)
+
+**Key False Positive Protections:**
+- **Visual Delta Simulation:** Legacy engines failed elements that used `outline: none`. The new pipeline explicitly `.focus()`es the element and computes the delta in rendered CSS properties. If `box-shadow`, `background-color`, or `border-color` changes upon focus, it correctly passes the rule.
+
+---
+
+### 2.5.3 — Label in Name (Level A)
+**Engine:** Unified Pipeline (`Policy253`)
+
+**Key False Positive Protections:**
+- Evaluates the **Visible Label** (the raw text nodes visible to the user) against the computed **Accessible Name** (resolving `aria-label`, `aria-labelledby`, `alt`, etc.).
+- Normalizes punctuation and casing. Validates that the visible label is a contiguous substring of the accessible name, properly supporting legally compliant variations (e.g., Visible: "Submit", ARIA: "Submit Form").
+
+---
+
+### 2.5.8 — Target Size (Level AA)
+**Engine:** Unified Pipeline (`Policy258`)
+
+**Key False Positive Protections:**
+- **Effective Clickable Area:** Native `<input type="radio">` tags are often 12x12px, which fails the 24x24px rule. However, the `ElementContextExtractor` merges the bounding box of the input with its parent `<label>` or `<button>`. The rule evaluates this *effective* area, eliminating false positives on properly wrapped inputs.
+- **UA-Controlled:** Accurately exempts native inputs where CSS `appearance` has not been overridden.
     DEC -- No --> FAIL1["FAIL: 1.1.1 Decorative needs empty alt"]
     
     INF -- Match --> PASS

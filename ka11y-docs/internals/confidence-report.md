@@ -21,23 +21,45 @@
 
 | # | Rule | WCAG SC | Engine | Confidence | Status |
 |---|------|---------|--------|-----------|--------|
-| 1 | Alt Text | 1.1.1 | py-static | **80%** | IMPROVED — fixed OCR substring matching & icon validation |
-| 2 | Contrast (OCR) | 1.4.3 | py-static | **82%** | IMPROVED — added logo and decorative exemptions |
-| 3 | Form Labels / Errors | 3.3.1, 3.3.2 | py-static | **78%** | IMPROVED — multi-ID aria-describedby support |
-| 4 | Label in Name | 2.5.3 | py-static | **82%** | Stable |
-| 5 | Pause / Stop / Hide | 2.2.2 | py-static | **75%** | IMPROVED — fixed naive regex false positives |
-| 6 | Target Size | 2.5.8 | py-static | **70%** | IMPROVED — fixed inverted UA logic |
-| 7 | Reflow | 1.4.10 | py-rendered | **75%** | Stable |
-| 8 | Text Spacing | 1.4.12 | py-rendered | **63%** | Needs stable selector matching |
-| 9 | Resize Text | 1.4.4 | py-rendered | **65%** | Needs stable selector matching |
-| 10 | Orientation | 1.3.4 | py-rendered | **70%** | IMPROVED — widened regex and interactive ratio |
-| 11 | Content on Hover/Focus | 1.4.13 | py-rendered | **45%** | Needs persistence testing |
-| 12 | Focus Not Obscured (Min) | 2.4.11 | py-rendered | **58%** | Needs dynamic overlay collection |
-| 13 | Focus Not Obscured (Enh) | 2.4.12 | py-rendered | **55%** | Needs dynamic overlay collection |
+| 1 | Alt Text | 1.1.1 | py-pipeline | **88%** | IMPROVED — full semantic relationship & DOM awareness |
+| 2 | Info & Relationships | 1.3.1 | py-pipeline | **85%** | IMPROVED — natively checks groups and tables |
+| 3 | Contrast (DOM + OCR) | 1.4.3 | py-pipeline | **85%** | IMPROVED — unified contrast engine + opacity tracking |
+| 4 | Images of Text | 1.4.5 | py-pipeline | **88%** | IMPROVED — contextual exemptions (logos, complex) |
+| 5 | Contrast Enhanced | 1.4.6 | py-pipeline | **85%** | IMPROVED — inherits unified contrast engine |
+| 6 | Non-text Contrast | 1.4.11 | py-pipeline | **80%** | IMPROVED — analyzes rendered boundaries & visual styles |
+| 7 | Focus Visible | 2.4.7 | py-pipeline | **88%** | IMPROVED — simulates keyboard focus and visual state deltas |
+| 8 | Focus Appearance | 2.4.13 | py-pipeline | **85%** | IMPROVED — calculates rendered focus ring thickness/contrast |
+| 9 | Label in Name | 2.5.3 | py-pipeline | **90%** | IMPROVED — rigorous substring and token matching |
+| 10| Target Size | 2.5.8 | py-pipeline | **85%** | IMPROVED — measures effective clickable area (wrappers + labels) |
+| 11| Pause / Stop / Hide | 2.2.2 | py-static | **75%** | Stable — regex and heuristic boundaries |
+| 12| Reflow | 1.4.10 | py-rendered | **75%** | Stable |
+| 13| Text Spacing | 1.4.12 | py-rendered | **63%** | Needs stable selector matching |
+| 14| Resize Text | 1.4.4 | py-rendered | **65%** | Needs stable selector matching |
+| 15| Orientation | 1.3.4 | py-rendered | **70%** | Stable — widened regex and interactive ratio |
+| 16| Content on Hover/Focus | 1.4.13 | py-rendered | **45%** | Needs persistence testing |
 
 ---
 
-## Recent Improvements (April 2026)
+## Unified Pipeline Architecture Shift (April 2026)
+
+To permanently resolve false positives caused by isolated, heuristic-based crawlers, the Python engine was completely re-architected. Instead of individual scripts attempting to calculate accessibility rules in a vacuum, the engine now uses a **Centralized Context Pipeline**.
+
+1.  **ElementContextExtractor:** Evaluates the entire DOM in a single pass, pulling computed styles, bounding boxes, and raw text/ARIA nodes.
+2.  **SectionAnalyzer:** Determines the macro-context of every element (e.g., Header, Footer, Data Table, Form Region).
+3.  **SemanticRelationshipEngine:** Resolves ARIA pointers (e.g., `aria-describedby`) and native HTML group mechanics (e.g., `<fieldset>`, `<label>`).
+4.  **InteractionStateRunner:** Triggers live keyboard focus (`.focus()`) and computes the delta of rendered CSS properties (e.g., `box-shadow`, `outline`) to prove interactive states.
+5.  **ContrastEngine:** Evaluates WCAG 2.1 relative luminance and computes text thresholds dynamically based on rendered font-size and font-weight.
+
+### Key Rule Improvements via the Pipeline:
+
+*   **Alt Text (1.1.1) & Images of Text (1.4.5):** Images inside correctly labeled buttons or links now gracefully PASS via functional redundancy checks. Images classified as `logo` or `decorative` correctly bypass text-of-image tests.
+*   **Focus Visible (2.4.7) & Focus Appearance (2.4.13):** The classic "false positive" where elements use custom `box-shadow` or `background-color` instead of `outline: none` is completely eradicated. The pipeline simulates the interaction and registers visual state deltas natively.
+*   **Target Size (2.5.8):** Bounding boxes are no longer naive. A 12px `<input type="radio">` wrapped inside a 44px `<label>` padding will correctly PASS because the pipeline groups the *effective clickable area*.
+*   **Contrast (1.4.3 & 1.4.6):** Transparent background elements gracefully degrade to `NEEDS_REVIEW` instead of failing, while large text dynamically drops the ratio requirement to `3.0:1` or `4.5:1`.
+
+---
+
+## Legacy Engine Improvements (Node & Static Python)
 
 ### 1 · Alt Text & Images of Text — Confidence: 80%
 - **Fix:** Prevented decorative images from failing 1.4.5 even when OCR detects text. WCAG allows decorative images of text.

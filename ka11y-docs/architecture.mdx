@@ -20,12 +20,11 @@ Browser / CI
 │  │  Python stages  │         │  axe-core (Node)  │   │    │
 │  │  (concurrent)   │         │  POST /analyse-   │   │    │
 │  │                 │         │  url-flat         │   │    │
+│  │  unified_pipeline (1.1.1, 1.4.5, 2.5.3, etc)       │    │
 │  │  image_audit    │         └────────┬──────────┘   │    │
 │  │  form_audit     │                  │               │    │
-│  │  label_in_name  │◄─────────────────┘               │    │
-│  │  pause_stop_hide│    merged findings                │    │
-│  │  target_size    │                                   │    │
-│  │  text_spacing   │                                   │    │
+│  │  pause_stop_hide│◄─────────────────┘               │    │
+│  │  text_spacing   │    merged findings                │    │
 │  │  rendered_layout│                                   │    │
 │  └────────┬────────┘                                  │    │
 │           │                                           │    │
@@ -67,11 +66,10 @@ POST /combined/
       │         or fails        ──► _stage_error("axe_core", msg)
       │                             _jobs[id]["warnings"].append(...)
       │
+      ├─── unified_pipeline ────► _run_pipeline_stage (Contextual WCAG Rules)
       ├─── image_audit stage ───► _stage_start / _stage_complete / _stage_error
       ├─── form_audit stage
-      ├─── label_in_name stage
       ├─── pause_stop_hide stage
-      ├─── target_size stage
       ├─── text_spacing stage
       └─── rendered_layout_audit stage
               │
@@ -112,36 +110,49 @@ The Node task (axe-core) and the Python pipeline run concurrently. The Python pi
 
 ---
 
-## SSE subscriber bus
+## Unified Accessibility Pipeline (April 2026 Shift)
+
+Historically, Python WCAG rules followed an isolated **Crawler → Auditor** pattern. To drastically reduce false positives, the architecture shifted to a **Centralized Context Pipeline**. Instead of rules evaluating nodes in a vacuum, a central engine extracts comprehensive page state before running individual WCAG policies.
 
 ```
-_jobs:        Dict[job_id → job_dict]
-_subscribers: Dict[job_id → List[asyncio.Queue]]
+┌───────────────────────────────────────┐
+│  1. Context Extraction (Playwright)   │
+│  • ElementContextExtractor            │
+│  • Extracts DOM, CSS, ARIA, and BBox  │
+└──────────────────┬────────────────────┘
+                   │
+┌──────────────────▼────────────────────┐
+│  2. Semantic Enrichment (Python/JS)   │
+│  • SectionAnalyzer (Macro-context)    │
+│  • SemanticRelationshipEngine         │
+│  • Resolves ARIA & Native Groupings   │
+└──────────────────┬────────────────────┘
+                   │
+┌──────────────────▼────────────────────┐
+│  3. Interaction & State Simulation    │
+│  • InteractionStateRunner             │
+│  • Simulates focus, captures CSS delta│
+└──────────────────┬────────────────────┘
+                   │
+┌──────────────────▼────────────────────┐
+│  4. Decision Engine & Policies        │
+│  • RuleTargetRouter filters elements  │
+│  • Evaluates Policy111, Policy258, etc│
+└──────────────────┬────────────────────┘
+                   │
+┌──────────────────▼────────────────────┐
+│  5. Evidence Formatter (Adapter)      │
+│  • Maps rich verdicts to legacy JSON  │
+└───────────────────────────────────────┘
 ```
 
-When a client connects to `GET /combined/{job_id}/stream`:
-
-1. A new `asyncio.Queue` is created and appended to `_subscribers[job_id]`.
-2. The SSE generator yields messages from the queue.
-3. `_broadcast(job_id, event_type, data)` puts the same message into every queue in `_subscribers[job_id]`.
-4. When the job reaches a terminal state, `_close_subscribers(job_id)` puts `None` (sentinel) into every queue, and all open generators exit their loops.
-
-```
-stage_start  ──► _broadcast ──► Q1, Q2, … Qn  ──► EventSource clients
-stage_complete     (fan-out)
-stage_error
-job_complete
-job_failed
-": keepalive"  (every 25 s, per-generator)
-```
-
-Multiple browser tabs or CI clients can subscribe to the same job simultaneously.
+This ensures that rules like **2.5.8 (Target Size)** and **1.1.1 (Alt Text)** share the exact same computed styles, overlapping elements, and macro-section data (e.g., distinguishing an isolated input from one safely wrapped inside a `<fieldset>`).
 
 ---
 
-## Crawler → Auditor pipeline per stage
+## Legacy Crawler → Auditor pipeline per stage
 
-Every Python WCAG rule follows the same two-class pattern:
+For rules not yet migrated to the Unified Pipeline (e.g., complex rendered layouts like `1.4.10 Reflow` or `2.2.2 Pause/Stop/Hide`), the older two-class pattern is used:
 
 ```
 ┌───────────────────────────────┐
