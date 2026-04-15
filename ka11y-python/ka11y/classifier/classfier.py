@@ -594,8 +594,8 @@ class ClassifyAssets:
                 combined = f"{anc['cls']} {anc['id']}"
 
                 if anc["tag"] == "figure" and not figure_seen:
-                    logger.info("Ancestor <figure> (+2)")
-                    score += 2
+                    logger.info("Ancestor <figure> (+1)")
+                    score += 1
                     figure_seen = True
 
                 if any(kw in combined for kw in _CHART_PARENT_CLASSES):
@@ -653,7 +653,7 @@ class ClassifyAssets:
         except Exception:
             pass
 
-        # ── 6. Aspect-ratio heuristic (large landscape or tall portrait) ──
+        # ── 6. Aspect-ratio heuristic (extreme landscape or tall portrait) ──
         try:
             sz = await element.evaluate(
                 "el => ({ w: el.getBoundingClientRect().width,"
@@ -662,7 +662,7 @@ class ClassifyAssets:
             w, h = sz["w"], sz["h"]
             if w > 0 and h > 0:
                 ratio = w / h
-                if (w > 300 or h > 300) and (ratio > 1.3 or ratio < 0.6):
+                if (w > 400 or h > 400) and (ratio > 2.0 or ratio < 0.5):
                     logger.info(f"Aspect-ratio heuristic {ratio:.2f} {w}×{h} (+1)")
                     score += 1
         except Exception:

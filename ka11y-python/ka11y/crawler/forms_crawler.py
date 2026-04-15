@@ -119,35 +119,31 @@ class AsyncFormCrawler:
                 let errorAriaLive   = null;
 
                 if (describedby) {
-                    // Resolve ALL space-separated IDs; prefer the element that
-                    // has role="alert" or aria-live (the true error container).
-                    // Fall back to the first element that exists in the DOM.
                     const ids = describedby.trim().split(/\s+/);
-                    let firstMatch = null;
-                    let alertMatch = null;
+                    const gatheredTexts = [];
+                    
                     for (const eid of ids) {
                         const errEl = document.getElementById(eid);
                         if (!errEl) continue;
-                        const role    = errEl.getAttribute('role') || null;
-                        const live    = errEl.getAttribute('aria-live') || null;
-                        const isAlert = role === 'alert' || live === 'assertive' || live === 'polite';
-                        const candidate = {
-                            id:        eid,
-                            role:      role,
-                            text:      (errEl.innerText || errEl.textContent || '').trim(),
-                            hasAlert:  role === 'alert',
-                            ariaLive:  live,
-                        };
-                        if (!firstMatch) firstMatch = candidate;
-                        if (isAlert && !alertMatch) alertMatch = candidate;
+                        
+                        const role    = errEl.getAttribute('role') || '';
+                        const live    = errEl.getAttribute('aria-live') || '';
+                        const text    = (errEl.innerText || errEl.textContent || '').trim();
+                        
+                        if (text) gatheredTexts.push(text);
+                        
+                        if (role === 'alert' || live === 'assertive' || live === 'polite') {
+                            errorHasAlert = true;
+                            if (!errorElRole) errorElRole = role;
+                            if (!errorAriaLive) errorAriaLive = live;
+                        }
+                        
+                        // Keep the first ID as the primary reference for the report
+                        if (!errorElId) errorElId = eid;
                     }
-                    const chosen = alertMatch || firstMatch;
-                    if (chosen) {
-                        errorElId     = chosen.id;
-                        errorElRole   = chosen.role;
-                        errorElText   = chosen.text;
-                        errorHasAlert = chosen.hasAlert;
-                        errorAriaLive = chosen.ariaLive;
+                    
+                    if (gatheredTexts.length > 0) {
+                        errorElText = gatheredTexts.join(' | ');
                     }
                 }
 

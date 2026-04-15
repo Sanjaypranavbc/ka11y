@@ -140,7 +140,7 @@ def evaluate(
         )
     elif p_count > 0 and l_count > 0:
         ratio = min(p_count, l_count) / max(p_count, l_count)
-        if ratio < 0.5:
+        if ratio < 0.1:
             records.append(
                 RuleAuditRecord(
                     rule_key=_RULE_KEY,

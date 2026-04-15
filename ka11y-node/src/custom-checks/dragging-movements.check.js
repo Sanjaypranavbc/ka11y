@@ -46,14 +46,19 @@ async function run(page, context = {}) {
       });
     }
 
-    // 2. Inline ondragstart without draggable attribute
-    for (const el of document.querySelectorAll('[ondragstart]:not([draggable="true"])')) {
+    // 2. Inline ondragstart without draggable attribute, and custom drag events
+    for (const el of document.querySelectorAll('[ondragstart]:not([draggable="true"]), [onpointerdown], [ontouchstart]')) {
+      // For pointer/touch down, check if there's an associated move event on the element or window
+      // We heuristically flag elements that have BOTH down and move handlers inline.
+      const hasMove = el.hasAttribute('onpointermove') || el.hasAttribute('ontouchmove') || el.hasAttribute('ondrag');
+      if (!el.hasAttribute('ondragstart') && !hasMove) continue;
+
       const altInside   = !!el.querySelector(altSel);
       const altInParent = !!(el.parentElement && el.parentElement.querySelector(altSel));
       draggables.push({
         html: el.outerHTML.slice(0, 150),
         hasAlternative: altInside || altInParent,
-        source: 'inline-handler',
+        source: el.hasAttribute('ondragstart') ? 'inline-handler' : 'custom-pointer-drag',
       });
     }
 

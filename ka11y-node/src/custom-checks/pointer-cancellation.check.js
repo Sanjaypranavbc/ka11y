@@ -40,6 +40,12 @@ async function run(page, context = {}) {
 
       if (!downHandler) continue;
 
+      // Fix false positive: Native text inputs/textareas use mousedown/touchstart for drag-to-select or cursor placement.
+      const tag = el.tagName.toLowerCase();
+      if ((tag === 'input' && /^(text|email|password|search|tel|url|number)$/i.test(el.type || 'text')) || tag === 'textarea') {
+        continue;
+      }
+
       // Skip purely return-false or empty handlers — these are for drag init, not action execution
       const isTrivial = /^return\s+false\s*;?$/.test(downHandler.trim()) ||
                         downHandler.length < 5;

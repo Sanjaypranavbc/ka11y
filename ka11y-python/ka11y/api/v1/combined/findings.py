@@ -509,6 +509,12 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     for result in ocr_results:
         if not result.has_text:
             continue
+        
+        # WCAG 1.4.3 Exception: Logos and decorative images have no contrast requirement
+        classification = _infer_classification(result.original_path)
+        if classification in ("logo", "decorative"):
+            continue
+
         for det in result.detections:
             ci = det.contrast_info or {}
             col = det.color_info or {}
@@ -600,6 +606,12 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
     for result in ocr_results:
         if not result.has_text:
             continue
+
+        # WCAG 1.4.6 Exception: Logos and decorative images have no contrast requirement
+        classification = _infer_classification(result.original_path)
+        if classification in ("logo", "decorative"):
+            continue
+
         for det in result.detections:
             ci = det.contrast_info or {}
             col = det.color_info or {}
@@ -701,6 +713,10 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
         element_html = f'<img src="{src}"{alt_attr}>'
         element_id = r.get("src") or r.get("filename") or None
 
+        path = r.get("screenshot_path")
+        filename = r.get("filename")
+        detected_text = r.get("detected_text")
+
         if status_raw == "FAILED":
             findings.append(
                 _make_finding(
@@ -714,6 +730,9 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -730,6 +749,9 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -754,6 +776,10 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
         element_html = f'<img src="{src}"{alt_attr}>'
         element_id = r.get("src") or r.get("filename") or None
 
+        path = r.get("screenshot_path")
+        filename = r.get("filename")
+        detected_text = r.get("detected_text")
+
         if needs_review:
             findings.append(
                 _make_finding(
@@ -767,6 +793,9 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -783,6 +812,9 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )
@@ -798,6 +830,9 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
                     element_html=element_html,
                     element_id=element_id,
                     element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
                     page_url=r.get("url") or page_url,
                 )
             )

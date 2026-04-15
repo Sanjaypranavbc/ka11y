@@ -240,7 +240,7 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
     if not ocr_words:
         return True, "PASS [1.1.1] OCR tokens too short to match; alt is non-empty"
 
-    matched = [w for w in ocr_words if w in norm_alt]
+    matched = [w for w in ocr_words if re.search(rf'\b{re.escape(w)}\b', norm_alt, re.IGNORECASE)]
     if matched:
         return True, f"PASS [1.1.1] OCR word(s) found in alt: {matched}"
 
@@ -293,8 +293,8 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
     if has_qualifier or is_action:
         return True, f"PASS [1.1.1] Icon alt describes purpose: '{alt}'"
 
-    # Require at least 3 chars to filter out uninformative initials like "ab" or "XY"
-    if len(norm) >= 3 and not norm.isdigit():
+    # Require at least 4 chars to filter out uninformative initials like "ab", "ok", or "++"
+    if len(norm) >= 4 and not norm.isdigit() and re.search(r"[a-z]{2}|[^\x00-\x7F]", norm):
         return (
             True,
             f"PASS [1.1.1] Icon alt is non-empty: '{alt}' "
@@ -303,7 +303,7 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
 
     return (
         False,
-        f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose or is too short (min 3 chars)",
+        f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose or is too short (min 4 chars)",
     )
 
 
@@ -694,11 +694,22 @@ class AltTextAccessibilityAuditor:
                 effective_has_text,
             )
 
-            if text_flag and classification not in ("complex",) and sub_type not in ("charts",):
+            # Override PASS if OCR found text but classifier missed it,
+            # BUT only if the image is NOT decorative, complex, or a logo.
+            # Decorative images of text are ALLOWED by WCAG 1.4.5.
+            # Complex images/charts use text essentially.
+            if (
+                text_flag 
+                and classification not in ("complex", "decorative") 
+                and sub_type not in ("charts", "logos")
+                and not is_logo
+            ):
                 wcag_1_4_5_pass = False
+                detected_snippet = (detected_joined[:50] + "...") if len(detected_joined) > 50 else detected_joined
                 wcag_1_4_5_reason = (
-                        "FAIL [1.4.5] " + _1_4_5reason +
-                        " — OCR found text but classifier missed it"
+                        f"FAIL [1.4.5] Image contains text (\"{detected_snippet}\") "
+                        "but classifier marked as non-text. Replace with real CSS-styled text "
+                        "unless the presentation is essential."
                 )
 
             # ── WCAG 1.4.11 (Non-text Contrast) ─────────────────────────

@@ -117,9 +117,8 @@ class TargetSizeCrawler:
             if (tag !== 'INPUT' || !['checkbox', 'radio'].includes(type)) return false;
             const style = window.getComputedStyle(el);
             // UA-controlled when appearance has NOT been overridden to 'none'.
-            // 'auto', 'checkbox', 'radio', '' all mean the browser controls rendering.
-            const app = style.appearance || style.webkitAppearance || '';
-            return app !== 'none';
+            const app = (style.appearance || style.webkitAppearance || '').toLowerCase();
+            return app !== 'none' && app !== '';
         }
 
         function getAccessibleName(el) {
