@@ -1138,11 +1138,12 @@ async def _run_python_stages(
                 url, output_dir, run_pause_stop_hide_audit, job_id, snapshot_task, step_logger
             )
         ),
-        _timed(
-            _stage_target_size_universal(
-                url, output_dir, run_target_size_audit, job_id, snapshot_task, step_logger
-            )
-        ),
+        # MUTED: _stage_target_size_universal is replaced by Pipeline 2.5.8
+        # _timed(
+        #    _stage_target_size_universal(
+        #        url, output_dir, run_target_size_audit, job_id, snapshot_task, step_logger
+        #    )
+        # ),
         _timed(
             _stage_text_spacing_universal(
                 url, output_dir, run_text_spacing_audit, job_id, snapshot_task, step_logger
