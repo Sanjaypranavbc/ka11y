@@ -375,7 +375,48 @@ AccessibilityService
 
 ---
 
-## ka11y-python — Crawler Architecture
+## ka11y-python — Unified Pipeline (April 2026)
+
+To permanently resolve false positives, `ka11y-python` shifted from isolated single-purpose crawlers to a **Unified Context Pipeline** for core DOM rules (1.1.1, 1.3.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 2.4.7, 2.4.13, 2.5.3, 2.5.8).
+
+Instead of fragmented crawlers, `ElementContextExtractor` generates a single, deeply-nested `ElementContext` for every node on the page.
+
+### ElementContextExtractor → `ElementContext`
+
+The `ElementContext` acts as the single source of truth for the Decision Engine. It is composed of three primary sub-contexts:
+
+#### 1. `SemanticContext`
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag_name`, `role` | `str` | Native identity and ARIA role |
+| `section_type` | `SectionType` | Macro-context computed by `SectionAnalyzer` (e.g., `HEADER`, `FORM_REGION`, `DATA_TABLE`) |
+| `ancestor_tags`, `ancestor_roles` | `List[str]` | Ordered list of all ancestors (DOM tree hierarchy) |
+| `parent_tags`, `parent_roles` | `List[str]` | Immediate wrappers (used for quick grouping checks) |
+| `is_in_labeled_control` | `bool` | True if the element is inside a `<button>`, `<a>`, or `[role="button"]` that provides its own label |
+| `is_video_context` | `bool` | True if inside a video player (exempts thumbnails from 1.4.5) |
+| `described_by_text` | `Optional[str]` | Resolved text from all IDs listed in `aria-describedby` |
+
+#### 2. `VisualContext`
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_visible` | `bool` | Pre-filtered by computed style `display` and `visibility` |
+| `bounding_box` | `BoundingBox` | Actual rendered box on screen |
+| `computed_styles` | `Dict[str, str]` | Extracts `color`, `background-color`, `font-size`, `font-weight`, `opacity` |
+| `cv_classification` | `Optional[str]` | Image classification (e.g., `logo`, `decorative`, `icon`, `complex`) |
+| `ocr_text` | `Optional[str]` | Text detected within the image boundaries |
+| `visible_label_text` | `Optional[str]` | The raw text nodes visually associated with the element |
+
+#### 3. `InteractionContext`
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_focusable`, `tab_index` | `bool`, `int` | Keyboard reachability |
+| `effective_clickable_bbox` | `BoundingBox` | Merges tiny native inputs with their wrapping `<label>` padding for accurate Target Size measurement |
+| `has_focus_ring` | `bool` | Computed dynamically by `InteractionStateRunner` triggering `.focus()` |
+| `focus_ring_thickness_px`, `focus_ring_contrast` | `float` | Computed deltas of `box-shadow` or `outline` |
+
+---
+
+## ka11y-python — Legacy Crawler Architecture
 
 ka11y-python uses a **Universal Discovery** architecture for the combined audit pipeline:
 
@@ -684,16 +725,90 @@ The production universal path was re-validated against a curated 10-site public 
 
 <AccordionGroup>
 
-<Accordion title="1.1.1 — Non-text Content (AltTextAccessibilityAuditor)">
+<Accordion title="1.1.1 — Non-text Content (Unified Pipeline / Policy111)">
 
-**Crawler:** `AsyncImageCrawler`
+**Extractor:** `ElementContextExtractor`
 
 | Fields Used | Purpose |
 |------------|---------|
-| `alt`, `aria_label`, `aria_labelledby`, `aria_hidden`, `role` | Accessible name computation and presentational detection |
-| `classification`, `sub_type`, `is_functional`, `is_decorative` | Determines expected alt pattern |
-| `in_link`, `link_text`, `in_button`, `button_text` | Context-specific accessible name requirements |
-| OCR `detections` | Compares detected text to `alt` text |
+| `accessible_name` (resolved) | Primary compliance check (is it empty?) |
+| `visual.cv_classification` | Determines expected alt pattern (e.g. `logo` vs `decorative`) |
+| `semantics.is_in_labeled_control` | Detects functionally redundant images that can safely pass without specific alt text |
+| `visual.ocr_text` | Validates informative name relevance (word-boundary regex) |
+
+</Accordion>
+
+<Accordion title="1.3.1 — Info and Relationships (Unified Pipeline / Policy131)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `semantics.section_type` | Macro-context (e.g., skips fieldset warnings inside search `FORM_REGION`) |
+| `semantics.described_by_text` | Resolves complex accessible relationships for orphaned inputs |
+| `semantics.is_in_data_table` | Evaluates native structural relationship compliance |
+
+</Accordion>
+
+<Accordion title="1.4.3 & 1.4.6 — Contrast (Unified Pipeline / Policy143 / Policy146)">
+
+**Extractor:** `ElementContextExtractor` & `ContrastEngine`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `visual.computed_styles` | `color`, `background-color`, `font-size`, `font-weight` |
+| `visual.cv_classification` | Automatically exempts `logo` and `decorative` assets |
+| `semantics.is_disabled` | Automatically exempts inactive UI components |
+| `accessible_name` | Evaluated against thresholds dynamically via the `ContrastEngine` |
+
+</Accordion>
+
+<Accordion title="1.4.5 — Images of Text (Unified Pipeline / Policy145)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `visual.cv_classification` | Automatically exempts `logo`, `decorative`, `complex`, `chart` |
+| `semantics.is_video_context` | Exempts video thumbnails/posters (essential presentation) |
+| `visual.ocr_text` | Flags significant text blocks inside non-exempt images for manual review |
+
+</Accordion>
+
+<Accordion title="2.4.7 & 2.4.13 — Focus Visible & Appearance (Unified Pipeline / Policy247)">
+
+**Extractor:** `ElementContextExtractor` & `InteractionStateRunner`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `interaction.is_focusable` | Pre-filters non-interactive nodes |
+| `interaction.has_focus_ring` | Simulated dynamically by extracting the delta of `box-shadow`, `border`, or `background-color` post-focus |
+| `interaction.focus_ring_thickness_px` | Evaluated against `2.4.13` minimums |
+
+</Accordion>
+
+<Accordion title="2.5.3 — Label in Name (Unified Pipeline / Policy253)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `visual.visible_label_text` | Extracts the raw text visually associated with the element |
+| `accessible_name` | Computes the priority name (`aria-label`, `aria-labelledby`, etc.) |
+| `DecisionEngine Logic` | Compares the two normalized strings using contiguous substring logic, supporting legally compliant variations. |
+
+</Accordion>
+
+<Accordion title="2.5.8 — Target Size Minimum (Unified Pipeline / Policy258)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `interaction.effective_clickable_bbox` | Merges the target node with its clickable parent wrapper (e.g. `<label>` around an `<input>`) |
+| `interaction.adjacent_spacing_px` | Evaluated for WCAG exception 5 |
+| `semantics.parent_tags` | Evaluates inline link exceptions |
+| `semantics.controlled_by` | Evaluates User-Agent exceptions |
 
 </Accordion>
 
