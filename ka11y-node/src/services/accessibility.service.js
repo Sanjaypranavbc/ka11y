@@ -447,7 +447,19 @@ class AccessibilityService {
       );
 
       this._logger.info('[flat] Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page, { lang });
+      let customResults = [];
+      const customChecksTimeoutMs = 180000; // 3 minutes budget for custom checks
+      let timeoutId;
+      try {
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('Custom checks timed out')), customChecksTimeoutMs);
+        });
+        customResults = await Promise.race([runAll(page, { lang }), timeoutPromise]);
+      } catch (err) {
+        this._logger.warn(`[flat] Custom checks failed or timed out: ${err.message}`);
+      } finally {
+        clearTimeout(timeoutId);
+      }
       const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);
       const allowedLevels = _allowedLevels(level);
       const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
