@@ -1,12 +1,12 @@
 from .policy_1_4_3 import Policy143
-from ...models import TargetElement, RuleVerdict
+from ...models import ElementContext, RuleVerdict
 from ...runners.contrast_engine import ContrastEngine
 
 class Policy146(Policy143):
     rule_id = "python_1_4_6_contrast_enhanced"
     wcag_sc = "1.4.6"
 
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         # Re-use the entire 1.4.3 logic, just override the thresholds
         verdict = super().evaluate(element)
         if verdict.status == "not_applicable" or verdict.status == "needs_review":

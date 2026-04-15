@@ -1,12 +1,12 @@
 from .base_policy import WCAGPolicy
-from ...models import TargetElement, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 from ...config.thresholds import MIN_TARGET_SIZE_PX, MIN_TARGET_SPACING_PX
 
 class Policy258(WCAGPolicy):
     rule_id = "python_2_5_8_target_size"
     wcag_sc = "2.5.8"
 
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         if not element.interaction.is_focusable and element.semantics.tag_name not in ("button", "a", "input"):
             return self._not_applicable(element, "not_interactive", "Target size minimum only applies to interactive elements.")
             

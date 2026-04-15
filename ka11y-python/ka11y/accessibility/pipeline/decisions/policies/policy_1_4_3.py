@@ -1,6 +1,6 @@
 import re
 from .base_policy import WCAGPolicy
-from ...models import TargetElement, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 from ...runners.contrast_engine import ContrastEngine
 
 class Policy143(WCAGPolicy):
@@ -26,7 +26,7 @@ class Policy143(WCAGPolicy):
             return True
         return False
 
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         if not element.accessible_name and not element.visual.ocr_text and not element.visual.visible_label_text:
             return self._not_applicable(element, "no_text", "Element contains no text.")
 

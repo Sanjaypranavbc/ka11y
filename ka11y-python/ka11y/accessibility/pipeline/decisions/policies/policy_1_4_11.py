@@ -1,5 +1,5 @@
 from .base_policy import WCAGPolicy
-from ...models import TargetElement, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 from ...runners.contrast_engine import ContrastEngine
 
 class Policy1411(WCAGPolicy):
@@ -9,7 +9,7 @@ class Policy1411(WCAGPolicy):
     # Needs 3.0:1 contrast for boundaries
     THRESHOLD = 3.0
 
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         # Only applies to UI components
         is_ui_component = element.interaction.is_focusable or element.semantics.tag_name in ("input", "button", "select", "textarea")
         if not is_ui_component and element.visual.cv_classification != "icon":

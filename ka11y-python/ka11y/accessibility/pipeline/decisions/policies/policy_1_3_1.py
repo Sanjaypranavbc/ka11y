@@ -1,11 +1,11 @@
 from .base_policy import WCAGPolicy
-from ...models import TargetElement, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 
 class Policy131(WCAGPolicy):
     rule_id = "python_1_3_1_info_and_relationships"
     wcag_sc = "1.3.1"
 
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         """
         WCAG 1.3.1 applies to info and relationships. In this automated context, 
         we primarily check for orphaned form controls or tables without headers.

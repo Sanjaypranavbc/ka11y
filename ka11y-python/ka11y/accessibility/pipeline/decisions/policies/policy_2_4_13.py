@@ -1,12 +1,12 @@
 from .base_policy import WCAGPolicy
-from ...models import TargetElement, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 from ...config.thresholds import MIN_FOCUS_THICKNESS_PX, MIN_FOCUS_CONTRAST
 
 class Policy2413(WCAGPolicy):
     rule_id = "python_2_4_13_focus_appearance"
     wcag_sc = "2.4.13"
 
-    def evaluate(self, element: TargetElement) -> RuleVerdict:
+    def evaluate(self, element: ElementContext) -> RuleVerdict:
         if not element.interaction.is_focusable:
             return self._not_applicable(element, "not_focusable", "Element is not keyboard focusable.")
             
