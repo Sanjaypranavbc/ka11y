@@ -126,7 +126,7 @@ async def test_concurrent_broadcast_and_add_subscriber_no_race():
 
     new_q_task = asyncio.create_task(slow_add())
     await _broadcast(job_id, "ping", {"v": 1})
-    new_q = await new_q_task
+    await new_q_task
 
     # The existing subscriber must have received the message
     assert not q_existing.empty()

@@ -386,10 +386,10 @@ class OCRPreprocessing:
                                     f"{ratio_fb:.2f}:1 (minimum 3:1)"
                                 )
                             else:
-                                fg_rgb = contrast_info.get("foreground_color", (0, 0, 0))
                                 bg_rgb = contrast_info.get(
                                     "background_color", (255, 255, 255)
                                 )
+
                                 bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
                                 violations.append(f"Fails AA Normal vs BG {bg_hex}")
                     if violations:

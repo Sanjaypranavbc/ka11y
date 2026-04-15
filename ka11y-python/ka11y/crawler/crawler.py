@@ -798,12 +798,14 @@ class AsyncImageCrawler:
             captured_svgs = 0
             for svg in svg_els:
                 try:
-                    if not await self._is_visible(svg): continue
+                    if not await self._is_visible(svg):
+                        continue
                     svg_html = await svg.evaluate("el => el.outerHTML.slice(0,300)")
                     svg_hash = hashlib.md5(svg_html.encode()).hexdigest()[:12]
                     
                     is_icon_svg = await self.classifier.is_icon(svg, "", "")
-                    if not is_icon_svg: continue
+                    if not is_icon_svg:
+                        continue
 
                     sub_dir = "functional/icons"
                     save_dir = f"{self.output_dir}/{sub_dir}"
@@ -835,7 +837,8 @@ class AsyncImageCrawler:
                             filename=svg_file,
                         )
                     )
-                except Exception: pass
+                except Exception:
+                    pass
             
             console.print(f"  [green]✓ Captured {captured_svgs} SVGs[/green]")
 

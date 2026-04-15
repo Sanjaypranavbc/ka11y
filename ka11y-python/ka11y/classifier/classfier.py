@@ -242,9 +242,7 @@ class ClassifyAssets:
 
         logger.info(f"Context: {ctx}")
 
-        src_lower = src.lower()
         alt_str = alt_text if alt_text is not None else ""  # '' = explicit empty
-        alt_lower = alt_str.lower()
 
         # ─────────────────────────────────────────────────────────────
         # STEP 0 — explicitly hidden / presentational

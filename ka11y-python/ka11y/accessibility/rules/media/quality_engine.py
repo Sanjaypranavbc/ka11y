@@ -381,7 +381,6 @@ def _check_visual_content(dev_transcript: str, lang: str = "en") -> Dict[str, An
         token_count = len(tokens)
 
     verb_density = len(action_verbs) / max(token_count, 1)
-    adj_density = len(adjectives) / max(token_count, 1)
 
     return _check_result(
         "visual_content", "NEEDS_REVIEW",
