@@ -29,6 +29,7 @@ from ka11y.utils.crawler_settings import (
     get_max_warning_samples,
     select_ocr_candidate_paths,
 )
+from ka11y.accessibility.pipeline.pipeline_stage import _run_pipeline_stage
 from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import (
@@ -1036,7 +1037,6 @@ async def _stage_sensory_audit_universal(
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
 
-from ka11y.accessibility.pipeline.pipeline_stage import _run_pipeline_stage
 
 # ... [code stays the same up to _run_python_stages]
 
