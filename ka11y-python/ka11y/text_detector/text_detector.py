@@ -30,11 +30,9 @@ logger = setup_logger(name="KAC", tag="text_detector")
 logger.info("Logger initialized")
 
 try:
-    from ka11y.text_detector.paddleocrbase import OCRReader
+    from ka11y.text_detector.paddleocrbase import OCRReader, PaddleOCR
     # Verify it can actually be initialized (detects missing paddleocr lib)
-    _test_reader = OCRReader(source_directory="")
-    _ = _test_reader.reader
-    if _test_reader.reader is None:
+    if PaddleOCR is None:
          raise ImportError("PaddleOCR not functional")
 except (ImportError, RuntimeError):
     logger.info("PaddleOCR not available, falling back to EasyOCR")

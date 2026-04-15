@@ -150,6 +150,12 @@ class TestGate3LabeledAlternative:
         assert result is not None
         assert result[0] == "N/A"
 
+    def test_japanese_audio_alternative(self):
+        item = _make_item(nearby_text="代替音声はこちら")
+        result = _gate_3_is_labeled_alternative(item)
+        assert result is not None
+        assert result[0] == "N/A"
+
     def test_no_alternative_labels(self):
         """Normal media without alt labels — gate continues."""
         item = _make_item(aria_label="Episode 5 podcast", nearby_text="")
@@ -341,6 +347,14 @@ class TestQualityEngineTextChecks:
         result = _check_speaker_ids(transcript, whisper_segment_count=2)
         assert result["status"] == "NEEDS_REVIEW"
 
+    def test_speaker_ids_japanese(self):
+        from ka11y.accessibility.rules.media.quality_engine import _check_speaker_ids
+
+        transcript = "田中：おはようございます。\n【佐藤】おはようございます。"
+        result = _check_speaker_ids(transcript, whisper_segment_count=5, lang="ja")
+        assert result["status"] == "PASSED"
+        assert result["labels_found"] >= 2
+
     def test_non_speech_events_found(self):
         from ka11y.accessibility.rules.media.quality_engine import _check_non_speech_events
 
@@ -355,6 +369,14 @@ class TestQualityEngineTextChecks:
         transcript = "And the crowd goes wild (cheering) as the team scores."
         result = _check_non_speech_events(transcript)
         assert result["status"] == "PASSED"
+
+    def test_non_speech_events_japanese(self):
+        from ka11y.accessibility.rules.media.quality_engine import _check_non_speech_events
+
+        transcript = "本日はようこそ。【拍手】ありがとうございます。（笑い声）"
+        result = _check_non_speech_events(transcript, lang="ja")
+        assert result["status"] == "PASSED"
+        assert len(result["events_found"]) >= 2
 
     def test_non_speech_events_missing_fails(self):
         from ka11y.accessibility.rules.media.quality_engine import _check_non_speech_events

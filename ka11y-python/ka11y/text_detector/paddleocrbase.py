@@ -18,13 +18,13 @@ except ImportError:
 # rather than once per PaddleOCRReader instance. Double-checked locking
 # ensures thread safety without holding the lock on every readtext() call.
 # ---------------------------------------------------------------------------
-_reader: Optional[PaddleOCR] = None
+_readers: dict[str, PaddleOCR] = {}
 _reader_lock = threading.Lock()
 
 
 def get_ocr_reader(lang: str = "en") -> Optional[PaddleOCR]:
     """Return the shared PaddleOCR instance, initialising it on first call."""
-    global _reader
+    global _readers
     if PaddleOCR is None:
         return None
 
@@ -34,11 +34,11 @@ def get_ocr_reader(lang: str = "en") -> Optional[PaddleOCR]:
     if lang in ("ja", "jp"):
         paddle_lang = "japan"
 
-    if _reader is None:
+    if paddle_lang not in _readers:
         with _reader_lock:
-            if _reader is None:
-                _reader = PaddleOCR(lang=paddle_lang)
-    return _reader
+            if paddle_lang not in _readers:
+                _readers[paddle_lang] = PaddleOCR(lang=paddle_lang)
+    return _readers[paddle_lang]
 
 
 class OCRReader:

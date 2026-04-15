@@ -402,6 +402,7 @@ def _check_visual_content(dev_transcript: str, lang: str = "en") -> Dict[str, An
 def _check_sequence(
     whisper_segments: List[Dict[str, Any]],
     dev_transcript: str,
+    lang: str = "en",
 ) -> Dict[str, Any]:
     """
     Check 5: The alternative follows the correct sequence of the media.
@@ -436,7 +437,18 @@ def _check_sequence(
         whisper_quarters[quarter_idx] += " " + seg.get("text", "")
 
     # Divide dev transcript into 4 quarters by word count
-    dev_words = dev_transcript.split()
+    if lang == "ja":
+        nlp = _get_nlp("ja")
+        if nlp:
+            dev_words = [t.text for t in nlp(dev_transcript)]
+            whisper_quarter_words = [[t.text for t in nlp(wq)] for wq in whisper_quarters]
+        else:
+            dev_words = list(dev_transcript.replace(" ", ""))
+            whisper_quarter_words = [list(wq.replace(" ", "")) for wq in whisper_quarters]
+    else:
+        dev_words = dev_transcript.split()
+        whisper_quarter_words = [wq.split() for wq in whisper_quarters]
+
     quarter_size = max(len(dev_words) // 4, 1)
     dev_quarters = [
         " ".join(dev_words[i * quarter_size:(i + 1) * quarter_size])
@@ -446,8 +458,8 @@ def _check_sequence(
     # Compare each quarter pair
     quarter_scores = []
     for i in range(4):
-        w_words = set(whisper_quarters[i].lower().split())
-        d_words = set(dev_quarters[i].lower().split())
+        w_words = set(w.lower() for w in whisper_quarter_words[i])
+        d_words = set(d.lower() for d in dev_words[i * quarter_size:(i + 1) * quarter_size])
         if not w_words or not d_words:
             quarter_scores.append(0.0)
             continue
@@ -473,6 +485,7 @@ def _check_sequence(
             f"Content may be reordered.",
             quarter_scores=quarter_scores,
         )
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -647,7 +660,7 @@ def evaluate_transcript_quality(
 
                 # Check 5: Sequence
                 checks.append(_check_sequence(
-                    transcription["segments"], clean_transcript
+                    transcription["segments"], clean_transcript, lang=lang
                 ))
             else:
                 # Whisper failed — fall back to text-only checks
