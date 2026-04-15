@@ -270,6 +270,30 @@ Keep auditors pure when possible:
 - crawler extracts data
 - auditor decides pass/fail/needs review
 
+If you need to leave an intentional stub for a future branch inside a Python
+rule module, do not leave a raw `# TODO: not implemented` comment at the top of
+the file. Use the reusable decorator in:
+
+- `ka11y-python/ka11y/utils/not_implemented.py`
+
+Example:
+
+```python
+from ka11y.utils import not_implemented
+
+
+@not_implemented(reason="vision-model verification is reserved for a future release")
+def _future_multimodal_check(*, media_url: str, transcript_text: str) -> None:
+    pass
+```
+
+Why this is better:
+
+- the failure mode is explicit and consistent
+- the exception message includes the fully-qualified function name
+- the same pattern works for sync and async functions
+- future contributors can search for `@not_implemented` instead of chasing ad hoc comments
+
 ### Step 3: Convert auditor output into combined findings
 
 Edit:

@@ -1,4 +1,3 @@
-#TODO: Not implemented yet so ignore this file
 """
 ka11y/accessibility/rules/media/quality_engine.py
 ===================================================
@@ -39,8 +38,24 @@ from jiwer import wer as compute_wer
 from nltk.tokenize import word_tokenize
 
 from ka11y.config.logger import setup_logger
+from ka11y.utils import not_implemented
 
 logger = setup_logger(name="KAC", tag="quality_engine")
+
+
+@not_implemented(
+    reason=(
+        "vision-model verification for transcript-to-video equivalence is "
+        "reserved for a future implementation"
+    )
+)
+def _verify_visual_equivalence_with_vision_model(
+    *,
+    media_url: str,
+    transcript_text: str,
+    lang: str = "en",
+) -> Dict[str, Any]:
+    """Reserved hook for future multimodal verification of video-only content."""
 
 # ── Ensure required NLTK data is downloaded at import time ────────────────────
 try:
