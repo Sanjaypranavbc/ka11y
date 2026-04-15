@@ -117,6 +117,8 @@ combined リクエストの `lang` は Node と Python の両方に渡されま�
 現在の実務上の挙動:
 
 - 日本語監査では OCR や sensory / text-spacing 系の一部ヒューリスティックが `lang=ja` に追従する
+- OCR エンジン (PaddleOCR および EasyOCR) は動的に読み込まれ、プロセス全体で **言語ごとに** キャッシュされるため、英語ジョブが日本語ジョブのキャッシュを汚染することはありません。
+- WCAG 1.2.1 Media Auditor は、トランスクリプトの Quality Engine (Gate 5) に `lang` パラメータを伝達します。これにより、spaCy を使用した日本語のトークン化、日本語話者の識別パターン、および日本語の非音声イベントのキーワード判定が可能になります。Gate 3 も、日本語の代替メディアキーワードを正しく評価します。
 - Python の `reason` はまだ混在しており、古い converter は英語のままのものがある
 - finding テキスト全体の日本語化は、現時点では Python より Node の方が進んでいる
 

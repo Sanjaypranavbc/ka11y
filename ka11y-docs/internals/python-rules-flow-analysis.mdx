@@ -123,6 +123,8 @@ The combined request `lang` now feeds both stacks, but the Python output contrac
 Practical outcome today:
 
 - Japanese combined runs get JP-aware OCR and JP-aware sensory/text-spacing heuristics where implemented
+- OCR engines (PaddleOCR and EasyOCR) are properly loaded dynamically and cached *by language* across the process, preventing English jobs from poisoning the cache for Japanese jobs.
+- The WCAG 1.2.1 Media Auditor passes the `lang` parameter down to its transcript Quality Engine (Gate 5). This enables Japanese tokenization via spaCy, Japanese speaker identification patterns, and Japanese non-speech event keywords. Gate 3 also correctly evaluates Japanese alternative media keywords.
 - Python `reason` strings are still mixed: some newer or config-driven auditors localize, while several older converters remain English
 - Node output is more fully localized than Python output at the finding-text layer
 
