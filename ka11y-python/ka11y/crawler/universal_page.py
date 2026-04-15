@@ -1388,6 +1388,11 @@ class UniversalPageLoader:
 
         frames = await cls._collect_same_origin_frames(page, page_url=page_url, output=output)
         for frame, frame_path in frames:
+            if frame.is_detached():
+                # Silently skip detached frames if they were just transient/blank
+                if not frame.url or frame.url == "about:blank":
+                    continue
+
             try:
                 frame_data = await frame.evaluate(
                     _COMBINED_EXTRACT_JS,

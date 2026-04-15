@@ -768,7 +768,7 @@ def run_all_evaluators(
 
         if run_reflow:
             from ka11y.accessibility.rendered.evaluators import evaluate_reflow
-            records.extend(evaluate_reflow(_snap("baseline"), _snap("reflow_320")))
+            records.extend(evaluate_reflow(_snap("reflow_320")))
 
         if run_text_spacing:
             from ka11y.accessibility.rendered.evaluators import evaluate_text_spacing

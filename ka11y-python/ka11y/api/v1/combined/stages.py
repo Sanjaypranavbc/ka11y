@@ -139,7 +139,8 @@ async def _call_node_flat(
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings."""
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        # 300s timeout to allow for heavy custom checks on complex pages
+        async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(endpoint, json={"url": url, "level": wcag_level, "lang": lang})
             resp.raise_for_status()
             return resp.json().get("findings", [])
