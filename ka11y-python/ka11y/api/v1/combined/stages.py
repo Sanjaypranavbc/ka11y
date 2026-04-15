@@ -21,15 +21,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
-_STAGE_TIMEOUT_SECONDS = 600
-# Maximum seconds for the crawler pass only.  OCR always runs on whatever
-# images were saved before this deadline, so a slow/stuck target never
-# prevents contrast analysis from completing.
-# Button/icon screenshots are now capped at 5 s each (crawler.py), so 300 s
-# handles up to ~60 stuck elements before we cut over to OCR on partial images.
-_CRAWL_TIMEOUT_SECONDS = 300
-
 import httpx
 
 from ka11y.config.logger import setup_logger
@@ -62,6 +53,15 @@ from .findings import (
 )
 from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
 from .store import _jobs
+
+# Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
+_STAGE_TIMEOUT_SECONDS = 600
+# Maximum seconds for the crawler pass only.  OCR always runs on whatever
+# images were saved before this deadline, so a slow/stuck target never
+# prevents contrast analysis from completing.
+# Button/icon screenshots are now capped at 5 s each (crawler.py), so 300 s
+# handles up to ~60 stuck elements before we cut over to OCR on partial images.
+_CRAWL_TIMEOUT_SECONDS = 300
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -962,6 +962,7 @@ async def _stage_media_audit_universal(
     run_media_audit: bool,
     job_id: str,
     snapshot_task,
+    lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "media_audit")
@@ -973,7 +974,7 @@ async def _stage_media_audit_universal(
         from ka11y.accessibility.rules.media.media_auditor import MediaAuditor
 
         snapshot = await snapshot_task
-        auditor = MediaAuditor(output_dir=str(output_dir))
+        auditor = MediaAuditor(output_dir=str(output_dir), lang=lang)
         records = await asyncio.to_thread(
             auditor.generate_audit_report,
             [item.model_dump() for item in snapshot.media],
@@ -1158,7 +1159,7 @@ async def _run_python_stages(
         ),
         _timed(
             _stage_media_audit_universal(
-                url, output_dir, run_media_audit, job_id, snapshot_task, step_logger
+                url, output_dir, run_media_audit, job_id, snapshot_task, lang, step_logger
             )
         ),
         _timed(
