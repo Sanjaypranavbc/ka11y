@@ -76,7 +76,7 @@ class AsyncFormCrawler:
     """
 
     # JS injected into every page to extract form data
-    EXTRACT_JS = """() => {
+    EXTRACT_JS = r"""() => {
         function outerHTML(el, max=600) {
             return (el && el.outerHTML) ? el.outerHTML.slice(0, max) : '';
         }
