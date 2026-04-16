@@ -1593,14 +1593,7 @@ class UniversalPageLoader:
                 child_path = f"{path}.{index}"
                 child_url = child.url or ""
                 if child_url and not cls._is_same_origin(page_url, child_url):
-                    warning = await cls._build_frame_warning(
-                        code="cross_origin_frame_skipped",
-                        page_url=page_url,
-                        frame=child,
-                        frame_path=child_path,
-                        message="Skipped cross-origin frame during universal extraction",
-                    )
-                    output.warnings.append(warning)
+                    logger.info(f"Skipped cross-origin frame during universal extraction: {child_url}")
                     output.partial = True
                     continue
                 await walk(child, child_path)
