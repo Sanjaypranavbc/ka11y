@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
-from typing import Set
+from typing import Set, ClassVar
 from urllib.parse import urlparse, urlunparse
 
 class CrawlPolicy(BaseModel):
@@ -24,7 +24,7 @@ class CrawlPolicy(BaseModel):
     max_retries: int = 3
     
     # Common tracker/junk parameters to strip by default
-    TRACKER_PARAMS = {
+    TRACKER_PARAMS: ClassVar[Set[str]] = {
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
         "fbclid", "gclid", "_ga", "msclkid", "mc_cid", "mc_eid"
     }
