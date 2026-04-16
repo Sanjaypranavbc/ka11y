@@ -217,15 +217,15 @@ async def _stage_image_audit(
                 limit=max_ocr_images,
             )
             if skipped_ocr_paths:
-                warning = (
+                message = (
                     f"image_audit: OCR limited to {len(ocr_paths)} image(s); "
                     f"skipped {len(skipped_ocr_paths)} lower-priority screenshot(s)"
                 )
-                _jobs[job_id].setdefault("warnings", []).append(warning)
+                logger.info(message)
                 if step_logger:
                     step_logger.record(
                         step="image_audit",
-                        status="warning",
+                        status="info",
                         message="OCR budget applied",
                         context={
                             "selected_images": len(ocr_paths),
