@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 
-@dataclass
-class _Image:
+class _Image(BaseModel):
     screenshot_path: str
     classification: str = ""
     sub_type: str = ""

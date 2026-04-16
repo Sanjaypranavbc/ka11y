@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Optional
@@ -33,9 +33,9 @@ _DEFAULT_I18N_DIR = _SHARED_I18N_DIR if _SHARED_I18N_DIR.exists() else _LOCAL_I1
 I18N_DIR = Path(os.environ.get("KA11Y_I18N_DIR", str(_DEFAULT_I18N_DIR)))
 
 
-@dataclass(frozen=True)
-class RuleEntry:
+class RuleEntry(BaseModel):
     """A single WCAG success criterion entry."""
+    model_config = ConfigDict(frozen=True)
     id: str
     level: str                    # "A" | "AA" | "AAA"
     severity: Optional[str]       # "critical" | "high" | "medium" | "low" | None
