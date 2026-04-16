@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import dataclasses
 import hashlib
 import json
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
@@ -37,19 +36,18 @@ _SPA_SIGNALS = [
 ]
 
 
-@dataclass
-class PageSnapshot:
+class PageSnapshot(BaseModel):
     page_url: str
-    forms: List[Dict[str, Any]] = field(default_factory=list)
-    interactive: List[Dict[str, Any]] = field(default_factory=list)
-    target_sizes: List[Dict[str, Any]] = field(default_factory=list)
-    moving_content: List[Dict[str, Any]] = field(default_factory=list)
-    media: List[Dict[str, Any]] = field(default_factory=list)
-    text_spacing: List[Dict[str, Any]] = field(default_factory=list)
-    sensory: List[Dict[str, Any]] = field(default_factory=list)
-    warnings: List[Dict[str, Any]] = field(default_factory=list)
-    element_refs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    page_summaries: List[Dict[str, Any]] = field(default_factory=list)
+    forms: List[Dict[str, Any]] = Field(default_factory=list)
+    interactive: List[Dict[str, Any]] = Field(default_factory=list)
+    target_sizes: List[Dict[str, Any]] = Field(default_factory=list)
+    moving_content: List[Dict[str, Any]] = Field(default_factory=list)
+    media: List[Dict[str, Any]] = Field(default_factory=list)
+    text_spacing: List[Dict[str, Any]] = Field(default_factory=list)
+    sensory: List[Dict[str, Any]] = Field(default_factory=list)
+    warnings: List[Dict[str, Any]] = Field(default_factory=list)
+    element_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    page_summaries: List[Dict[str, Any]] = Field(default_factory=list)
     pages_crawled: int = 0
     partial: bool = False
     har_path: Optional[str] = None
@@ -1727,5 +1725,5 @@ class UniversalPageLoader:
     def save_snapshot(snapshot: PageSnapshot, output_dir: Path) -> str:
         path = output_dir / "universal_snapshot_raw.json"
         with path.open("w", encoding="utf-8") as fh:
-            json.dump(dataclasses.asdict(snapshot), fh, indent=2, ensure_ascii=False)
+            json.dump(snapshot.model_dump(), fh, indent=2, ensure_ascii=False)
         return str(path)
