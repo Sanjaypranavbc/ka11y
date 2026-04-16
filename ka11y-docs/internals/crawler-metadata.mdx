@@ -488,11 +488,20 @@ This is the current production order:
 | `interactive` | `InteractiveElementData` | `_stage_label_in_name_universal()` | `LabelInNameAuditor` | `_lin_to_findings()` | `2.5.3` |
 | `moving_content` | `MovingContentData` | `_stage_pause_stop_hide_universal()` | `PauseStopHideAuditor` | `_psh_to_findings()` | `2.2.2` |
 | `target_sizes` | `TargetSizeData` | `_stage_target_size_universal()` | `TargetSizeAuditor` | `_ts_to_findings()` | `2.5.8` |
-| `text_spacing` | `TextSpacingData` | `_stage_text_spacing_universal()` | `TextSpacingAuditor` | `_crawler_text_spacing_to_findings()` | `1.4.12` static risk pass |
+| `text_spacing` | `TextSpacingData` | `_stage_text_spacing_universal()` | `TextSpacingAuditor` | `_crawler_text_spacing_to_findings()` | `1.4.12` |
 | `media` | `MediaElementData` | `_stage_media_audit_universal()` | `MediaAuditor` | `_media_to_findings()` | `1.2.1` |
 | `sensory` | `SensoryElementData` | `_stage_sensory_audit_universal()` | `SensoryCharacteristicsAuditor` | `_sensory_to_findings()` | `1.3.3` |
 
-### Why normalization exists
+### PageSnapshot structure
+
+The raw snapshot emitted by `UniversalPageLoader` contains:
+
+- `page_url`: The starting URL.
+- `forms`, `interactive`, `target_sizes`, `moving_content`, `media`, `text_spacing`, `sensory`: Element-specific data buckets.
+- `warnings`: Extraction logs (cross-origin frames, timeouts, detaching).
+- `element_refs`: Global ID-to-element mapping for deduplication.
+- `page_summaries`: Rollup of counts per URL (useful for dashboard progress bars).
+- `pages_crawled`: Total count.
 
 The universal crawler does **not** send raw dicts straight into the auditors.
 
@@ -832,11 +841,12 @@ The production universal path was re-validated against a curated 10-site public 
 
 **Crawler:** normalized universal static snapshot → `SensoryElementData`
 
-| Fields Used | Purpose |
-|------------|---------|
-| `text`, `aria_label`, `aria_labelledby`, `placeholder`, `value` | Instruction text extraction |
-| `role`, `title`, `nearest_heading` | Context determination |
-| `lang` | Language-aware tokenization (EN spaCy vs CJK regex) |
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `text`, `aria_label`, `aria_labelledby`, `placeholder`, `value` | element text sources | Instruction text extraction |
+| `role`, `parent_tag`, `nearest_heading` | structure | Context determination |
+| `title`, `lang` | attributes | Tooltip text and language code |
+| `selector`, `element_ref_id`, `frame_path` | universal provenance | Provenance and evidence |
 
 **Japanese sensory word taxonomies:**
 

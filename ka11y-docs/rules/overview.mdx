@@ -9,6 +9,7 @@ description: "Coverage map — which rules are checked by axe-core vs Python aud
 |---------|-----------|-------|----------|--------|--------|-------|
 | **1.1.1** | Non-text Content | A | Partial | **Full** | Pipeline | Python adds OCR-backed text checks and image classification with full DOM context |
 | **1.3.1** | Info and Relationships | A | Partial | **Full** | Pipeline | Python natively checks fieldsets, labels, and ARIA groupings |
+| **1.3.3** | Sensory Characteristics | A | — | **Full** | Pipeline | Python NLP-backed instruction analysis (EN/JA) |
 | **1.3.4** | Orientation | AA | — | **Full** | Rendered | Portrait/landscape scenarios; rotate-overlay detection |
 | **1.3.5** | Identify Input Purpose | AA | ✓ | — | Static | axe-core only |
 | **1.4.1** | Use of Color | A | ✓ | — | Static | axe-core only |
@@ -48,6 +49,7 @@ Python auditors map each WCAG SC to a default severity level:
 | WCAG SC | Severity |
 |---------|---------|
 | 1.1.1 | `critical` |
+| 1.3.3 | `medium` |
 | 1.3.4 | `medium` |
 | 1.4.3 | `high` |
 | 1.4.5 | `medium` |

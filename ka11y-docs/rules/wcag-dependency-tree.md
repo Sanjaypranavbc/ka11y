@@ -17,10 +17,10 @@ Legend:
 ```
 4.1.1  Parsing                             (A)  [✓] axe-core
 └── 4.1.2  Name, Role, Value               (A)  [✓] axe-core
-    ├── 1.3.1  Info and Relationships       (A)  [✓] axe-core
+    ├── 1.3.1  Info and Relationships       (A)  [✓] axe-core + py-static
     │   ├── 1.3.2  Meaningful Sequence      (A)  [✓] axe-core
     │   │   └── 2.4.6  Headings and Labels (AA)  [✓] axe-core
-    │   └── 1.3.3  Sensory Characteristics  (A)  [✓] axe-core
+    │   └── 1.3.3  Sensory Characteristics  (A)  [✓] axe-core + py-static (NLP)
     ├── 3.1.1  Language of Page             (A)  [✓] axe-core
     │   └── 3.1.2  Language of Parts       (AA)  [✓] axe-core
     └── 4.1.3  Status Messages             (AA)  [✓] axe-core
@@ -41,7 +41,7 @@ Legend:
 │   └── 1.4.3  Contrast (Minimum)         (AA)  [✓] axe-core + py-static (OCR)
 │       ├── 1.4.6  Contrast (Enhanced)    (AAA) [✓] axe-core + py-static (OCR)
 │       └── 1.4.11  Non-text Contrast     (AA)  [✓] py-static (image buttons/icons)
-└── 1.3.3  Sensory Characteristics         (A)  [✓] axe-core
+└── 1.3.3  Sensory Characteristics         (A)  [✓] axe-core + py-static (NLP)
 ```
 
 **Why**: You can only audit contrast of text that exists. Embedded text in images
@@ -181,6 +181,7 @@ messages identify the field (`3.3.1`). Error suggestion (`3.3.3`) and prevention
 | 4.1.2 | 4.1.1 | 1.3.1, 3.1.1, 4.1.3 |
 | 1.3.1 | 4.1.2 | 1.3.2, 1.3.3, 2.4.6 |
 | 1.3.2 | 1.3.1 | 2.4.6 |
+| 1.3.3 | 1.3.1, 1.1.1 | — |
 | 1.1.1 | — | 1.4.5, 1.4.3, 1.3.3 |
 | 1.4.3 | 1.1.1, 1.4.5 | 1.4.6, 1.4.11 |
 | 1.4.5 | 1.1.1 | 1.4.3 |
