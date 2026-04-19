@@ -1,34 +1,60 @@
 'use strict';
 
+const {
+  getCheckConfig,
+  getNumberConfig,
+  getSharedRuleContext,
+  renderReasonTemplate,
+} = require('./sharedAssets');
+
 const SC = '3.1.6';
 const RULE_ID = 'custom-pronunciation';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/pronunciation';
+const MODE = 'static';
+const DESCRIPTION = 'Pronunciation of words must be determinable where meaning is ambiguous';
+const FALLBACK_DESCRIPTION = DESCRIPTION;
 
-// Minimum share of CJK characters in text before a page is considered to
-// benefit significantly from ruby annotation (≥ 5 % of visible characters).
-const CJK_RATIO_THRESHOLD = 0.05;
+const DEFAULT_CJK_RATIO_THRESHOLD = 0.05;
+const DEFAULT_RUBY_MIN_COVERAGE_PCT = 30;
+const DEFAULT_CJK_LANG_PREFIXES = ['ja', 'zh', 'zh-CN', 'zh-TW', 'zh-HK', 'ko', 'zh-hans', 'zh-hant', 'zh-cn', 'zh-tw'];
 
-// CJK Unified Ideographs + CJK Extension A/B + Katakana + Hiragana
-// Note: hiragana/katakana are phonetic but kanji in the CJK block benefit most.
-const CJK_RE = /[\u3400-\u9FFF\uF900-\uFAFF\u{20000}-\u{2A6DF}]/u;
-const KANJI_RE = /[\u4E00-\u9FFF\u3400-\u4DBF]/; // CJK Unified Ideographs (common kanji)
+const KANJI_RE = /[\u4E00-\u9FFF\u3400-\u4DBF]/;
 
-async function run(page) {
-  const data = await page.evaluate((cjkRatio, kanji) => {
-    // ── 1. Page language ──────────────────────────────────────────────────────
+function _getPronunciationConfig(context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const checkConfig = getCheckConfig('pronunciation', sharedContext);
+  const cjkLangPrefixes = Array.isArray(checkConfig.cjk_lang_prefixes)
+    ? checkConfig.cjk_lang_prefixes.map((value) => String(value || '').trim()).filter(Boolean)
+    : DEFAULT_CJK_LANG_PREFIXES;
+
+  return {
+    sharedContext,
+    cjkRatioThreshold: getNumberConfig('pronunciation', 'cjk_ratio_threshold', DEFAULT_CJK_RATIO_THRESHOLD, sharedContext),
+    rubyMinCoveragePct: getNumberConfig('pronunciation', 'ruby_min_coverage_pct', DEFAULT_RUBY_MIN_COVERAGE_PCT, sharedContext),
+    cjkLangPrefixes,
+  };
+}
+
+function _reason(reasonCode, params, context, fallback) {
+  return renderReasonTemplate('pronunciation', reasonCode, params, context, fallback);
+}
+
+async function run(page, context = {}) {
+  const { sharedContext, cjkRatioThreshold, rubyMinCoveragePct, cjkLangPrefixes } = _getPronunciationConfig(context);
+  const data = await page.evaluate((config) => {
+    const langPrefixes = Array.isArray(config.cjkLangPrefixes) ? config.cjkLangPrefixes : [];
+    const rubyMinCoveragePctLocal = Number(config.rubyMinCoveragePct) || 30;
+    const cjkRatioThresholdLocal = Number(config.cjkRatioThreshold) || 0.05;
+
     const htmlLang = (document.documentElement.getAttribute('lang') || '').toLowerCase();
-    // Only apply pronunciation check to pages declared as Japanese (or CJK).
-    // For non-CJK pages this check is not applicable → pass.
-    const isCjkPage = /^(ja|zh|ko|zh-hans|zh-hant|zh-tw|zh-cn)/.test(htmlLang);
+    const isCjkPage = langPrefixes.some(prefix => htmlLang.startsWith(String(prefix).toLowerCase()));
 
-    // ── 2. Check visible text CJK density (heuristic for unlabelled lang attr) ─
     const bodyText = (document.body && document.body.innerText) || '';
     const totalChars = bodyText.replace(/\s/g, '').length;
-    const cjkChars   = (bodyText.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []).length;
+    const cjkChars = (bodyText.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []).length;
     const cjkDensity = totalChars > 0 ? cjkChars / totalChars : 0;
-    const hasCjkContent = cjkDensity >= cjkRatio;
+    const hasCjkContent = cjkDensity >= cjkRatioThresholdLocal;
 
-    // If no CJK content and not a CJK-declared page → pass (not applicable)
     if (!isCjkPage && !hasCjkContent) {
       return {
         applicable: false,
@@ -38,16 +64,13 @@ async function run(page) {
         sampleKanji: [],
         htmlLang,
         cjkDensityPct: Math.round(cjkDensity * 100),
+        cjkSectionIssues: [],
       };
     }
 
-    // ── 3. Count <ruby> elements ──────────────────────────────────────────────
     const rubyEls = Array.from(document.querySelectorAll('ruby'));
     const rubyCount = rubyEls.length;
-
-    // ── 4. Sample kanji-heavy text nodes not wrapped in <ruby> ───────────────
-    // Walk all text nodes in the body, find ones with kanji not inside a <ruby>.
-    const kanjiRe = new RegExp(kanji);
+    const kanjiRe = new RegExp(config.kanjiSource);
     const walker = document.createTreeWalker(
       document.body || document.documentElement,
       NodeFilter.SHOW_TEXT,
@@ -64,16 +87,17 @@ async function run(page) {
       const text = (node.nodeValue || '').trim();
       if (!text || !kanjiRe.test(text)) continue;
 
-      // Count kanji chars in this text node
       const localKanji = (text.match(/[\u4E00-\u9FFF\u3400-\u4DBF]/g) || []).length;
       if (localKanji === 0) continue;
       kanjiCount += localKanji;
 
-      // Is this node inside a <ruby> element?
       let ancestor = node.parentElement;
       let insideRuby = false;
       while (ancestor && ancestor !== document.body) {
-        if (ancestor.tagName === 'RUBY') { insideRuby = true; break; }
+        if (ancestor.tagName === 'RUBY') {
+          insideRuby = true;
+          break;
+        }
         ancestor = ancestor.parentElement;
       }
 
@@ -84,11 +108,13 @@ async function run(page) {
       }
     }
 
-    // ── 5. Section-level CJK scan (even on non-CJK pages) ────────────────────
-    // Find sub-elements with explicit CJK lang attributes, check ruby coverage
     const cjkSectionIssues = [];
+
     if (!isCjkPage) {
-      const cjkSections = document.querySelectorAll('[lang^="ja"], [lang^="zh"], [lang^="ko"]');
+      const cjkSections = Array.from(document.querySelectorAll('[lang]')).filter(section => {
+        const sectionLang = (section.getAttribute('lang') || '').toLowerCase();
+        return langPrefixes.some(prefix => sectionLang.startsWith(String(prefix).toLowerCase()));
+      });
       for (const section of cjkSections) {
         const secRubyEls = Array.from(section.querySelectorAll('ruby'));
         const secText = (section.innerText || section.textContent || '').trim();
@@ -97,13 +123,15 @@ async function run(page) {
 
         let secKanjiWithRuby = 0;
         for (const rubyEl of secRubyEls) {
-          const rt = rubyEl.textContent || '';
-          const rubyKanji = (rt.match(/[\u4E00-\u9FFF\u3400-\u4DBF]/g) || []).length;
-          secKanjiWithRuby += rubyKanji;
+          const baseText = Array.from(rubyEl.childNodes)
+            .filter(nodeItem => nodeItem.nodeType === Node.TEXT_NODE || (nodeItem.nodeType === Node.ELEMENT_NODE && nodeItem.nodeName !== 'RT'))
+            .map(nodeItem => nodeItem.textContent || '')
+            .join('');
+          secKanjiWithRuby += (baseText.match(/[\u4E00-\u9FFF\u3400-\u4DBF]/g) || []).length;
         }
 
-        const secRubyPct = Math.round((secKanjiWithRuby / secKanji) * 100);
-        if (secRubyPct < 30) {
+        const secRubyPct = secKanji > 0 ? Math.round((secKanjiWithRuby / secKanji) * 100) : 0;
+        if (secRubyPct < rubyMinCoveragePctLocal) {
           cjkSectionIssues.push({
             lang: section.getAttribute('lang'),
             kanjiCount: secKanji,
@@ -124,35 +152,58 @@ async function run(page) {
       cjkDensityPct: Math.round(cjkDensity * 100),
       cjkSectionIssues,
     };
-  }, CJK_RATIO_THRESHOLD, KANJI_RE.source);
+  }, {
+    cjkRatioThreshold,
+    rubyMinCoveragePct,
+    cjkLangPrefixes,
+    kanjiSource: KANJI_RE.source,
+  });
 
-  // Not a CJK page — criterion not applicable at page level
-  // but check section-level CJK elements
   if (!data.applicable) {
     if (data.cjkSectionIssues && data.cjkSectionIssues.length > 0) {
       const sampleSections = data.cjkSectionIssues.slice(0, 3)
-        .map(s => `[lang="${s.lang}"] (${s.kanjiCount} kanji, ${s.rubyPct}% ruby coverage)`)
+        .map(section => `[lang="${section.lang}"] (${section.kanjiCount} kanji, ${section.rubyPct}% ruby coverage)`)
         .join('; ');
+
       return {
         successCriteriaId: SC,
         rules: [{
           ruleId: RULE_ID,
-          description: 'Pronunciation of words must be determinable where meaning is ambiguous',
+          description: DESCRIPTION,
           impact: 'moderate',
           status: 'incomplete',
-          reason: `Page language is "${data.htmlLang}" but ${data.cjkSectionIssues.length} section(s) with explicit CJK lang attributes have low ruby coverage (< 30%): ${sampleSections}. Add <ruby> annotations for kanji within these sections.`,
+          reason: _reason(
+            'section_low_ruby',
+            {
+              html_lang: data.htmlLang,
+              issue_count: data.cjkSectionIssues.length,
+              ruby_min_coverage_pct: rubyMinCoveragePct,
+              sample_sections: sampleSections,
+            },
+            sharedContext,
+            `Page language is "${data.htmlLang}" but ${data.cjkSectionIssues.length} section(s) with explicit CJK lang attributes have low ruby coverage (< ${rubyMinCoveragePct}%): ${sampleSections}.`,
+          ),
           helpUrl: HELP_URL,
         }],
       };
     }
+
     return {
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
-        description: 'Pronunciation of words must be determinable where meaning is ambiguous',
+        description: DESCRIPTION,
         impact: null,
         status: 'pass',
-        reason: `Page language is "${data.htmlLang}" with ${data.cjkDensityPct}% CJK characters — WCAG 3.1.6 Pronunciation is not applicable.`,
+        reason: _reason(
+          'not_applicable',
+          {
+            html_lang: data.htmlLang,
+            cjk_density_pct: data.cjkDensityPct,
+          },
+          sharedContext,
+          `Page language is "${data.htmlLang}" with ${data.cjkDensityPct}% CJK characters. WCAG 3.1.6 Pronunciation is not applicable.`,
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -160,16 +211,23 @@ async function run(page) {
 
   const { rubyCount, kanjiCount, kanjiWithRuby, sampleKanji, htmlLang, cjkDensityPct } = data;
 
-  // No kanji at all → pass
   if (kanjiCount === 0) {
     return {
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
-        description: 'Pronunciation of words must be determinable where meaning is ambiguous',
+        description: DESCRIPTION,
         impact: null,
         status: 'pass',
-        reason: `Page lang="${htmlLang}" (${cjkDensityPct}% CJK), but no kanji characters detected — no ruby annotation needed.`,
+        reason: _reason(
+          'no_kanji',
+          {
+            html_lang: htmlLang,
+            cjk_density_pct: cjkDensityPct,
+          },
+          sharedContext,
+          `Page lang="${htmlLang}" (${cjkDensityPct}% CJK), but no kanji characters were detected.`,
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -177,50 +235,83 @@ async function run(page) {
 
   const rubyPct = kanjiCount > 0 ? Math.round((kanjiWithRuby / kanjiCount) * 100) : 0;
 
-  // Good ruby coverage (≥ 30 % of kanji chars annotated) → pass
-  if (rubyCount > 0 && rubyPct >= 30) {
+  if (rubyCount > 0 && rubyPct >= rubyMinCoveragePct) {
     return {
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
-        description: 'Pronunciation of words must be determinable where meaning is ambiguous',
+        description: DESCRIPTION,
         impact: null,
-        status: 'incomplete',
-        reason: `${rubyCount} <ruby> element(s) found covering ~${rubyPct}% of kanji characters on this ${htmlLang} page. This is positive evidence, but SC 3.1.6 depends on whether ambiguous words have pronunciation support where needed, so manual verification is still required.`,
+        status: 'pass',
+        reason: _reason(
+          'pass_with_ruby',
+          {
+            ruby_count: rubyCount,
+            ruby_pct: rubyPct,
+            html_lang: htmlLang,
+          },
+          sharedContext,
+          `${rubyCount} <ruby> element(s) were found covering about ${rubyPct}% of kanji characters on this ${htmlLang} page.`,
+        ),
         helpUrl: HELP_URL,
       }],
     };
   }
 
-  // Ruby present but low coverage → needs_review
   if (rubyCount > 0) {
     return {
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
-        description: 'Pronunciation of words must be determinable where meaning is ambiguous',
+        description: DESCRIPTION,
         impact: 'moderate',
         status: 'incomplete',
-        reason: `${rubyCount} <ruby> element(s) found but only ~${rubyPct}% of kanji characters are annotated (${kanjiWithRuby}/${kanjiCount}). Consider adding furigana to difficult or ambiguous kanji, especially technical terms and proper nouns, and manually verify that ambiguous pronunciations are covered.`,
+        reason: _reason(
+          'low_ruby',
+          {
+            ruby_count: rubyCount,
+            ruby_pct: rubyPct,
+            kanji_with_ruby: kanjiWithRuby,
+            kanji_count: kanjiCount,
+          },
+          sharedContext,
+          `${rubyCount} <ruby> element(s) were found but only about ${rubyPct}% of kanji characters are annotated (${kanjiWithRuby}/${kanjiCount}).`,
+        ),
         helpUrl: HELP_URL,
       }],
     };
   }
 
-  // No ruby at all on a kanji-heavy page is not enough to auto-fail SC 3.1.6.
-  // The criterion is about ambiguous pronunciation, so surface this as manual review.
-  const sample = sampleKanji.slice(0, 3).map(s => `"${s}"`).join(', ');
+  const sampleText = sampleKanji.slice(0, 3).map(sample => `"${sample}"`).join(', ');
   return {
     successCriteriaId: SC,
     rules: [{
       ruleId: RULE_ID,
-      description: 'Pronunciation of words must be determinable where meaning is ambiguous',
+      description: DESCRIPTION,
       impact: 'moderate',
-      status: 'incomplete',
-      reason: `No <ruby> elements found on this ${htmlLang} page (${cjkDensityPct}% CJK, ${kanjiCount} kanji characters). This is not enough to auto-fail SC 3.1.6, but ambiguous terms may lack pronunciation support. Manually verify technical terms, proper nouns, and unusual readings. Sample kanji text: ${sample}.`,
+      status: 'fail',
+      reason: _reason(
+        'missing_ruby',
+        {
+          html_lang: htmlLang,
+          cjk_density_pct: cjkDensityPct,
+          kanji_count: kanjiCount,
+          sample_text: sampleText,
+        },
+        sharedContext,
+        `No <ruby> elements were found on this ${htmlLang} page (${cjkDensityPct}% CJK, ${kanjiCount} kanji characters). Sample text: ${sampleText}.`,
+      ),
       helpUrl: HELP_URL,
     }],
   };
 }
 
-module.exports = { run, SC, RULE_ID, HELP_URL };
+module.exports = {
+  DESCRIPTION,
+  FALLBACK_DESCRIPTION,
+  HELP_URL,
+  MODE,
+  RULE_ID,
+  SC,
+  run,
+};

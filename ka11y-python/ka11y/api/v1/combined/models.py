@@ -55,6 +55,7 @@ class CombinedRequest(BaseModel):
     run_hover_focus_content_audit: bool = True
     run_focus_not_obscured_min_audit: bool = True
     run_focus_not_obscured_enh_audit: bool = True
+    run_sensory_audit: bool = True
     lang: str = "en"
 
     @model_validator(mode="after")
@@ -81,6 +82,7 @@ class JobStatusResponse(BaseModel):
     status: str  # pending | running | completed | failed
     url: str
     submitted_at: str
+    lang: str
     completed_at: Optional[str] = None
     report_path: Optional[str] = None
     result: Optional[Dict[str, Any]] = None

@@ -1,16 +1,29 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '3.3.3';
 const RULE_ID = 'custom-error-suggestion';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/error-suggestion';
 
-// Patterns that indicate a message provides actual correction guidance
-const SUGGESTION_RE = /please\s+(enter|provide|use|select|check|make sure|ensure|type|choose|pick)|must\s+(be|contain|have|include|start|end|match|not|be\s+at\s+least|be\s+between)|should\s+(be|contain|include|not)|at\s+least\s+\d|at\s+most\s+\d|between\s+\d+\s+and\s+\d+|characters?\s+(long|minimum|maximum|required)|valid\s+(email|phone|date|format|url|number|value)|try\s+again|example:|入力してください|選択してください|確認してください|必要があります|以上|以下|文字以上|文字以下|文字以内|有効な(メール|電話|日付|形式|url|数値)|例[:：]/i;
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
 
-// Patterns that indicate a terse/uninformative error message
-const TERSE_RE = /^(invalid|error|required|failed|wrong|incorrect|bad\s+input|not\s+valid|this\s+field\s+is\s+required|無効|エラー|必須|失敗|不正|入力エラー)\.?$/i;
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const suggestionPattern = buildKeywordPattern(
+    getKeywordList('error_suggestion', 'suggestion_keywords', sharedContext)
+  ) || 'please\\s+enter|must\\s+be|should\\s+be|valid\\s+email|try\\s+again|example:';
+  const tersePattern = buildKeywordPattern(
+    getKeywordList('error_suggestion', 'terse_keywords', sharedContext)
+  ) || 'invalid|error|required|failed|wrong|incorrect|bad\\s+input|not\\s+valid';
 
-async function run(page) {
   const data = await page.evaluate(() => {
     const formCount = document.querySelectorAll('form').length;
 
@@ -94,7 +107,7 @@ async function run(page) {
         description: 'Error messages must suggest how to correct mistakes',
         impact: null,
         status: 'pass',
-        reason: 'No forms detected on this page.',
+        reason: _t(sharedContext, 'No forms detected on this page.', 'このページにフォームはありません。'),
         helpUrl: HELP_URL,
       }],
     };
@@ -108,7 +121,12 @@ async function run(page) {
         description: 'Error messages must suggest how to correct mistakes',
         impact: 'moderate',
         status: 'incomplete',
-        reason: `${formCount} form(s) found but no visible error messages detected. Submit with invalid data and verify error messages explain how to correct the input (e.g. "Please enter a valid email" not just "Invalid").`,
+        reason: _t(
+          sharedContext,
+          '{form_count} form(s) found but no visible error messages detected. Submit with invalid data and verify error messages explain how to correct the input (e.g. "Please enter a valid email" not just "Invalid").',
+          'フォームが {form_count} 件見つかりましたが、目視できるエラーメッセージは検出されませんでした。無効な値で送信し、エラーメッセージが修正方法を説明していることを確認してください（"Invalid" だけではなく、"有効なメールアドレスを入力してください" のような文言）。',
+          { form_count: formCount },
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -121,9 +139,11 @@ async function run(page) {
   // a format indicator (@, A–Z, 0–9), or specific correction words (only, format,
   // characters) are still useful guidance and must not be flagged.
   const SHORT_BUT_INFORMATIVE_RE = /\d|[@A-Za-z][-–—][A-Za-z0-9]|\b(only|format|characters?|digits?|letters?|symbols?|uppercase|lowercase|special)\b/i;
+  const suggestionRe = new RegExp(suggestionPattern, 'i');
+  const terseRe = new RegExp(`^(?:${tersePattern})\\.?$`, 'i');
   const errorsWithoutSuggestion = allErrors.filter(text =>
-    TERSE_RE.test(text) ||
-    (!SUGGESTION_RE.test(text) && text.length < 25 && !SHORT_BUT_INFORMATIVE_RE.test(text))
+    terseRe.test(text) ||
+    (!suggestionRe.test(text) && text.length < 25 && !SHORT_BUT_INFORMATIVE_RE.test(text))
   );
 
   if (errorsWithoutSuggestion.length > 0) {
@@ -134,7 +154,16 @@ async function run(page) {
         description: 'Error messages must suggest how to correct mistakes',
         impact: 'moderate',
         status: 'fail',
-        reason: `${errorsWithoutSuggestion.length} of ${allErrors.length} error message(s) appear to lack correction guidance: "${errorsWithoutSuggestion.slice(0, 3).join('", "')}". Provide specific instructions, not just "Invalid" or "Error".`,
+        reason: _t(
+          sharedContext,
+          '{missing_count} of {total_count} error message(s) appear to lack correction guidance: "{sample}". Provide specific instructions, not just "Invalid" or "Error".',
+          'エラーメッセージ {total_count} 件のうち {missing_count} 件は修正方法の案内が不足しているように見えます: "{sample}"。"Invalid" や "Error" だけではなく、具体的な修正手順を提示してください。',
+          {
+            missing_count: errorsWithoutSuggestion.length,
+            total_count: allErrors.length,
+            sample: errorsWithoutSuggestion.slice(0, 3).join('", "'),
+          },
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -147,7 +176,12 @@ async function run(page) {
       description: 'Error messages must suggest how to correct mistakes',
       impact: null,
       status: 'pass',
-      reason: `${allErrors.length} error message(s) checked — all appear to provide correction guidance.`,
+      reason: _t(
+        sharedContext,
+        '{total_count} error message(s) checked — all appear to provide correction guidance.',
+        'エラーメッセージ {total_count} 件を確認し、いずれも修正方法の案内が含まれているように見えます。',
+        { total_count: allErrors.length },
+      ),
       helpUrl: HELP_URL,
     }],
   };

@@ -1,13 +1,26 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.5.2';
 const RULE_ID = 'custom-pointer-cancellation';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/pointer-cancellation';
 
-// Patterns that indicate a meaningful action handler (not just style/UI feedback)
-const ACTION_PATTERN = /\b(submit|navigate|redirect|window\.location|document\.location|history\.(push|replace)|fetch|xhr|ajax|open\(|close\(|modal|dialog|toggle|show|hide|dispatch|emit|call|invoke|play|pause|remove|delete|add|insert|update|save|load|send|post|put|get)\b/i;
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
 
-async function run(page) {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const actionPattern = buildKeywordPattern(
+    getKeywordList('pointer_cancellation', 'action_keywords', sharedContext)
+  ) || 'submit|navigate|redirect|window\\.location|document\\.location|fetch|ajax|delete|save|send';
+
   const violations = await page.evaluate((actionPat) => {
     const results = [];
     const actionRe = new RegExp(actionPat, 'i');
@@ -26,6 +39,12 @@ async function run(page) {
       const downHandler  = (mousedown + ' ' + pointerdown + ' ' + pointermove + ' ' + touchstart).trim();
 
       if (!downHandler) continue;
+
+      // Fix false positive: Native text inputs/textareas use mousedown/touchstart for drag-to-select or cursor placement.
+      const tag = el.tagName.toLowerCase();
+      if ((tag === 'input' && /^(text|email|password|search|tel|url|number)$/i.test(el.type || 'text')) || tag === 'textarea') {
+        continue;
+      }
 
       // Skip purely return-false or empty handlers — these are for drag init, not action execution
       const isTrivial = /^return\s+false\s*;?$/.test(downHandler.trim()) ||
@@ -57,7 +76,7 @@ async function run(page) {
     }
 
     return { results, totalChecked: elements.length };
-  }, ACTION_PATTERN.source);
+  }, actionPattern);
 
   if (violations.results.length === 0) {
     return {
@@ -67,7 +86,7 @@ async function run(page) {
         description: 'Functionality that uses a single pointer must be cancellable',
         impact: null,
         status: 'pass',
-        reason: `${violations.totalChecked} element(s) with pointer-down handlers checked — all action-triggering handlers have a corresponding pointer-up or click event, allowing cancellation by moving the pointer away before release.`,
+        reason: _t(sharedContext, '{count} element(s) with pointer-down handlers checked — all action-triggering handlers have a corresponding pointer-up or click event, allowing cancellation by moving the pointer away before release.', 'ポインターダウンのハンドラーを持つ要素 {count} 件を確認しました。すべての動作トリガーに対応する pointer-up または click イベントがあり、指やポインターを離す前に外へ移動することでキャンセルできます。', { count: violations.totalChecked }),
         helpUrl: HELP_URL,
       }],
     };
@@ -82,7 +101,7 @@ async function run(page) {
       description: 'Functionality that uses a single pointer must be cancellable',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${violations2.length} of ${violations.totalChecked} element(s) have action-triggering pointer-down handlers without a matching pointer-up or click handler. Actions fire immediately on press with no way to cancel — add onpointerup/onclick or use the up-event for activation: ${violations2.slice(0, 3).map(v => `<${v.tagName}${v.id ? ` id="${v.id}"` : ''}>`).join(', ')}.`,
+      reason: _t(sharedContext, '{count} of {total_count} element(s) have action-triggering pointer-down handlers without a matching pointer-up or click handler. Actions fire immediately on press with no way to cancel — add onpointerup/onclick or use the up-event for activation: {sample}.', 'ポインターダウンのハンドラーを持つ要素 {total_count} 件のうち {count} 件では、対応する pointer-up または click ハンドラーがありません。押した瞬間に動作が実行され、キャンセル手段がないため、onpointerup/onclick を追加するか、離した時点で起動するように変更してください: {sample}。', { count: violations2.length, total_count: violations.totalChecked, sample: violations2.slice(0, 3).map(v => `<${v.tagName}${v.id ? ` id="${v.id}"` : ''}>`).join(', ') }),
       helpUrl: HELP_URL,
     }],
   };

@@ -13,12 +13,11 @@ extracted (text containers, interactive elements, fixed/sticky layers).
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, List
+from typing import List
 
 from playwright.async_api import Page
 
-from .models import ElementSnapshot, PageSnapshot, Rect
+from .models import ElementSnapshot, PageSnapshot
 from .geometry import rect_from_dict
 
 # Maximum number of elements to capture per snapshot (perf guard)

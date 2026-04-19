@@ -10,7 +10,12 @@ ka11y-docs/package.json
 *.html
 wcag_reports
 .ai/
-crawled_images/
-scripts/__pycache__/
+crawled_images
+mcp
+Scripts
 scripts
-__pycache__/
+ka11y-python/scripts/
+ka11y-python/scripts/live_stage_audit.py
+ka11y-python/scripts/live_stage_plan.example.yml
+*.json
+

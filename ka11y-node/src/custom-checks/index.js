@@ -2,6 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const { loadSharedConfig } = require('../utils/sharedConfigLoader');
+const { sanitizeLang } = require('./sharedAssets');
 
 const STATIC_ORDER = [
   'custom-html-parsing',
@@ -22,6 +24,7 @@ const STATIC_ORDER = [
   'custom-location',
   'custom-orientation',
   'custom-images-of-text',
+  'custom-pronunciation',
 ];
 
 const INTERACTIVE_ORDER = [
@@ -147,11 +150,6 @@ const CHECK_DEFINITIONS = _loadCheckDefinitions();
 const STATIC_CHECKS = CHECK_DEFINITIONS.filter(def => def.mode === 'static');
 const INTERACTIVE_CHECKS = CHECK_DEFINITIONS.filter(def => def.mode === 'interactive');
 
-function _selectChecks(checkDefs, criteriaId = null) {
-  if (!criteriaId) return checkDefs;
-  return checkDefs.filter(def => def && def.check && def.check.SC === criteriaId);
-}
-
 /**
  * Merge custom check results with axe mapResults() output.
  * Both arrays have shape: [{ successCriteriaId, rules: [...] }]
@@ -196,8 +194,16 @@ function _buildExecutionFailure(checkDef, reason) {
   };
 }
 
-async function _runChecks(checkDefs, page) {
-  const results = await Promise.allSettled(checkDefs.map(d => d.check.run(page)));
+function _buildContext(context = {}) {
+  return {
+    config: context && context.config ? context.config : loadSharedConfig(),
+    lang: sanitizeLang(context && context.lang ? context.lang : 'en'),
+  };
+}
+
+async function _runChecks(checkDefs, page, context = {}) {
+  const sharedContext = _buildContext(context);
+  const results = await Promise.allSettled(checkDefs.map(d => d.check.run(page, sharedContext)));
   return results
     .map((r, i) => {
       if (r.status === 'rejected') {
@@ -210,18 +216,18 @@ async function _runChecks(checkDefs, page) {
     .filter(r => r != null);
 }
 
-async function runStaticChecks(page, criteriaId = null) {
-  return _runChecks(_selectChecks(STATIC_CHECKS, criteriaId), page);
+async function runStaticChecks(page, context = {}) {
+  return _runChecks(STATIC_CHECKS, page, context);
 }
 
-async function runInteractiveChecks(page, criteriaId = null) {
+async function runInteractiveChecks(page, context = {}) {
   // Interactive checks must run sequentially (they mutate focus/keyboard/page state)
-  const selectedChecks = _selectChecks(INTERACTIVE_CHECKS, criteriaId);
+  const sharedContext = _buildContext(context);
   const results = [];
-  for (let i = 0; i < selectedChecks.length; i++) {
-    const checkDef = selectedChecks[i];
+  for (let i = 0; i < INTERACTIVE_CHECKS.length; i++) {
+    const checkDef = INTERACTIVE_CHECKS[i];
     try {
-      results.push(await checkDef.check.run(page));
+      results.push(await checkDef.check.run(page, sharedContext));
     } catch (err) {
       const name = _checkName(checkDef, i);
       console.warn(`[custom-checks] ${name} failed:`, err && err.message || err);
@@ -231,11 +237,11 @@ async function runInteractiveChecks(page, criteriaId = null) {
   return results;
 }
 
-async function runAll(page, criteriaId = null) {
+async function runAll(page, context = {}) {
   // Deterministic order: static first, then interactive.
   // Running both in parallel on the same page can cause state interference.
-  const staticR = await runStaticChecks(page, criteriaId);
-  const interactiveR = await runInteractiveChecks(page, criteriaId);
+  const staticR = await runStaticChecks(page, context);
+  const interactiveR = await runInteractiveChecks(page, context);
   return [...staticR, ...interactiveR];
 }
 

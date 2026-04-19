@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { AuditConfig, AuditResult, ContrastReport, StageInfo } from "@/types/audit";
+import { AuditConfig, AuditResult, ContrastReport, ImageAuditReport, StageInfo } from "@/types/audit";
 import { emptyAuditResult } from "@/data/sampleData";
 
 const IMG_TEXT_RE = /<img-text\b[^>]*>([\s\S]*?)<\/img-text>/i;
@@ -71,9 +71,9 @@ function flattenFinding(f: Record<string, unknown>) {
     (typeof f.selector === "string" ? (f.selector as string) : null) ||
     (typeof targetFromElement?.[0] === "string" ? (targetFromElement[0] as string) : null);
   const elementHtml = explicitHtml || htmlFromElement || "";
-  const imageText = extractImageText(elementHtml);
-  const imageSrc = extractImageSrc(elementHtml);
-  const imageReference = inferImageReference(reason, imageSrc, idFromElement);
+  const imageText = (typeof element?.image_text === "string" ? element.image_text : null) || extractImageText(elementHtml);
+  const imageSrc = (typeof element?.image_src === "string" ? element.image_src : null) || extractImageSrc(elementHtml);
+  const imageReference = (typeof element?.image_reference === "string" ? element.image_reference : null) || inferImageReference(reason, imageSrc, idFromElement);
 
   return {
     ...f,
@@ -96,6 +96,7 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
     status: "completed",
     url: (report.url as string) || (pollData.url as string) || config.url,
     generated_at: (report.generated_at as string) || new Date().toISOString(),
+    lang: (report.lang as string) || (pollData.lang as string) || config.lang,
     total:
       rawViolations.length + rawNeedsReview.length +
       ((report.passes as unknown[])?.length || 0),
@@ -107,6 +108,7 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
     passes: (((report.passes as Record<string, unknown>[]) || []).map(flattenFinding) as AuditResult["passes"]) || [],
     warnings: (report.warnings as string[]) || (pollData.warnings as string[]) || [],
     contrast_report: (report.contrast_report as ContrastReport) ?? null,
+    image_audit_report: (report.image_audit_report as ImageAuditReport) ?? null,
   };
 }
 
@@ -119,6 +121,7 @@ export function useAudit() {
   const [currentStage, setCurrentStage] = useState<string>("");
   const [stages, setStages] = useState<StageInfo[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [activeRun, setActiveRun] = useState<{ url: string; lang: string; submitted_at: string } | null>(null);
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sseRef = useRef<EventSource | null>(null);
@@ -164,16 +167,19 @@ export function useAudit() {
             setWarnings(pollData.warnings || []);
             setJobStatus("completed");
             setCurrentStage("");
+            setActiveRun(null);
           } else if (pollData.status === "failed") {
             stopPolling();
             setJobStatus("failed");
             setError(pollData.error || "Audit failed");
             setCurrentStage("");
+            setActiveRun(null);
           }
         } catch (e) {
           stopPolling();
           setJobStatus("failed");
           setError(e instanceof Error ? e.message : "Polling failed");
+          setActiveRun(null);
         }
       }, 3000);
     },
@@ -254,8 +260,12 @@ export function useAudit() {
             setResult(mapPollResult(pollData, config));
             setWarnings(pollData.warnings || []);
             setJobStatus("completed");
+            setActiveRun(null);
           })
-          .catch(() => setJobStatus("completed"));
+          .catch(() => {
+            setJobStatus("completed");
+            setActiveRun(null);
+          });
       });
 
       es.addEventListener("job_failed", (e) => {
@@ -266,6 +276,7 @@ export function useAudit() {
         setJobStatus("failed");
         setError(data.error || "Audit failed");
         setCurrentStage("");
+        setActiveRun(null);
       });
 
       es.onerror = () => {
@@ -293,6 +304,11 @@ export function useAudit() {
       stopPolling();
       closeSSE();
       configRef.current = config;
+      setActiveRun({
+        url: config.url,
+        lang: config.lang,
+        submitted_at: new Date().toISOString(),
+      });
 
       try {
         const res = await fetch(`/api/v1/combined/`, {
@@ -316,6 +332,8 @@ export function useAudit() {
             run_hover_focus_content_audit: config.run_hover_focus_content_audit,
             run_focus_not_obscured_min_audit: config.run_focus_not_obscured_min_audit,
             run_focus_not_obscured_enh_audit: config.run_focus_not_obscured_enh_audit,
+            run_media_audit: config.run_media_audit,
+            run_sensory_audit: config.run_sensory_audit,
           }),
         });
 
@@ -332,6 +350,7 @@ export function useAudit() {
       } catch (e) {
         setJobStatus("failed");
         setError(e instanceof Error ? e.message : "Failed to start audit");
+        setActiveRun(null);
       }
     },
     [stopPolling, closeSSE, connectSSE],
@@ -358,5 +377,6 @@ export function useAudit() {
     URL.revokeObjectURL(url);
   }, [result]);
 
-  return { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings };
+  return { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings, activeRun };
 }
+

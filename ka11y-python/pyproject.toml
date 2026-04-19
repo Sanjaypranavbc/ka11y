@@ -33,6 +33,7 @@ jiwer = ">=3.1.0,<4.0.0"
 nltk = ">=3.9.0,<4.0.0"
 pytest = "^9.0.2"
 pytest-html = ">=4.1.1,<5.0.0"
+spacy = "^3.8.4"
 
 [[tool.poetry.source]]
 name = "pytorch-cpu"

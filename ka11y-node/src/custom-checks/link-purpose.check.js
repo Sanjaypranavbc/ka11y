@@ -1,18 +1,30 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.4.9';
 const RULE_ID = 'custom-link-purpose';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/link-purpose-link-only';
 
-// Generic link text that conveys no purpose when read in isolation (AAA criterion).
-// Includes Japanese equivalents of "click here", "details", "more", etc.
-const GENERIC_LINK_RE = /^(click\s+here|here|read\s+more|more|learn\s+more|more\s+info(rmation)?|details|continue|go|link|this|see\s+more|view\s+more|find\s+out\s+more|click|tap|press\s+here|start|begin|open|show|hide|toggle|こちら|こちらへ|詳細|詳しくはこちら|詳細はこちら|もっと見る|続きを読む|続きはこちら|詳しく見る|もっと詳しく|開く|見る|確認する|ここをクリック|クリック|タップ|詳細を見る)\.?$/i;
+const MAX_LINKS = 2000;
 
-const MAX_LINKS = 100;
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
 
-async function run(page) {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const genericLinkPattern = buildKeywordPattern(
+    getKeywordList('link_purpose', 'generic_link_keywords', sharedContext)
+  );
+
   const data = await page.evaluate((maxLinks, genericRe) => {
-    const re = new RegExp(genericRe);
+    const re = new RegExp(`^(${genericRe})\\.?$`, 'i');
     const seen = new Set();
     const violations = [];
     let checkedCount = 0;
@@ -78,13 +90,15 @@ async function run(page) {
         violations.push({
           text: accessibleName.slice(0, 60),
           html: link.outerHTML.slice(0, 150),
-          id:   link.id || null,
+          element_id: link.id || null,
+          target: link.id ? [`a#${CSS.escape(link.id)}`] : ['a[href]'],
+          tag: 'A',
         });
       }
     }
 
     return { violations, checkedCount };
-  }, MAX_LINKS, GENERIC_LINK_RE.source);
+  }, MAX_LINKS, genericLinkPattern);
 
   if (data.violations.length === 0) {
     return {
@@ -95,8 +109,8 @@ async function run(page) {
         impact: null,
         status: 'pass',
         reason: data.checkedCount > 0
-          ? `${data.checkedCount} link(s) checked — none use generic text like "click here" or "read more" that would be ambiguous in isolation.`
-          : 'No links found to check.',
+          ? _t(sharedContext, '{count} link(s) checked — none use generic text like "click here" or "read more" that would be ambiguous in isolation.', 'リンク {count} 件を確認しましたが、単独で読むと意味が曖昧になる汎用的なリンク文言は検出されませんでした。', { count: data.checkedCount })
+          : _t(sharedContext, 'No links found to check.', '確認対象のリンクは見つかりませんでした。'),
         helpUrl: HELP_URL,
       }],
     };
@@ -111,10 +125,12 @@ async function run(page) {
       description: 'Link purpose must be determinable from link text alone',
       impact: 'moderate',
       status: 'fail',
-      reason: `${data.violations.length} link(s) use generic text that does not describe the destination when read alone: ${sample}. Replace with descriptive text or provide an aria-label with the full link purpose.`,
+      reason: _t(sharedContext, '{count} link(s) use generic text that does not describe the destination when read alone: {sample}. Replace with descriptive text or provide an aria-label with the full link purpose.', '単独で読むとリンク先の目的が分からない汎用的なリンク文言が {count} 件検出されました: {sample}。説明的なリンクテキストに置き換えるか、完全なリンク目的を示す aria-label を付与してください。', { count: data.violations.length, sample }),
+      elements: data.violations,
       helpUrl: HELP_URL,
     }],
   };
 }
 
 module.exports = { run, SC, RULE_ID, HELP_URL };
+

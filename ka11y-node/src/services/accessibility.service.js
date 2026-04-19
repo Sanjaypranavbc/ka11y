@@ -1,13 +1,9 @@
 'use strict';
 
-const axeCore = require('axe-core');
+const fs = require('fs');
+const path = require('path');
 const dns = require('dns').promises;
-const {
-  extractSuccessCriteriaId,
-  mapResults,
-  mapResultsFlat,
-  mapCustomResultsFlat,
-} = require('../utils/axeResultMapper');
+const { mapResults, mapResultsFlat, mapCustomResultsFlat } = require('../utils/axeResultMapper');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 
 // Bug 3 fix: expanded from narrow RFC-1918/loopback/link-local set to include all
@@ -81,6 +77,31 @@ function _installSsrfInterceptor(page) {
 }
 
 const MAX_CONCURRENT = parseInt(process.env.PUPPETEER_MAX_CONCURRENT) || 3;
+const AXE_LOCALE_DIR = path.join(path.dirname(require.resolve('axe-core/package.json')), 'locales');
+const AXE_LOCALE_ALIASES = {
+  de: 'de',
+  da: 'da',
+  el: 'el',
+  es: 'es',
+  eu: 'eu',
+  fr: 'fr',
+  he: 'he',
+  it: 'it',
+  ja: 'ja',
+  ko: 'ko',
+  nl: 'nl',
+  no: 'no_NB',
+  'no-nb': 'no_NB',
+  pl: 'pl',
+  pt: 'pt_PT',
+  'pt-pt': 'pt_PT',
+  'pt-br': 'pt_BR',
+  ru: 'ru',
+  zh: 'zh_CN',
+  'zh-cn': 'zh_CN',
+  'zh-tw': 'zh_TW',
+};
+const _axeLocaleCache = new Map();
 
 /**
  * Map a WCAG conformance level string to axe-core tag arrays.
@@ -102,49 +123,30 @@ function _allowedLevels(level) {
   return levels;
 }
 
-const _criterionRuleCache = new Map();
-
-function _criterionRuleIds(tags, criteriaId) {
-  const cacheKey = `${tags.join(',')}|${criteriaId}`;
-  if (_criterionRuleCache.has(cacheKey)) return _criterionRuleCache.get(cacheKey);
-
-  const ruleIds = axeCore.getRules(tags)
-    .filter(rule => extractSuccessCriteriaId(rule.tags || [], rule.ruleId) === criteriaId)
-    .map(rule => rule.ruleId)
-    .filter(ruleId => typeof ruleId === 'string' && ruleId.length > 0);
-
-  const uniqueRuleIds = [...new Set(ruleIds)].sort();
-  _criterionRuleCache.set(cacheKey, uniqueRuleIds);
-  return uniqueRuleIds;
+function _sanitizeLocaleLang(lang = 'en') {
+  return String(lang || 'en').replace(/[^a-zA-Z-]/g, '').toLowerCase();
 }
 
-function _resolveConfiguredRunOnly(runOnlyConfig, criteriaId = null) {
-  const baseRunOnly = (
-    runOnlyConfig &&
-    runOnlyConfig.type === 'tag' &&
-    Array.isArray(runOnlyConfig.values) &&
-    runOnlyConfig.values.length > 0
-  )
-    ? { type: 'tag', values: [...runOnlyConfig.values] }
-    : { type: 'tag', values: _tagsForLevel('AA') };
+function _loadAxeLocale(lang = 'en') {
+  const normalized = _sanitizeLocaleLang(lang);
+  if (!normalized || normalized === 'en') return null;
+  if (_axeLocaleCache.has(normalized)) return _axeLocaleCache.get(normalized);
 
-  if (!criteriaId) {
-    return { runOnly: baseRunOnly, skipAxe: false };
+  const localeId = AXE_LOCALE_ALIASES[normalized] || AXE_LOCALE_ALIASES[normalized.split('-')[0]];
+  if (!localeId) {
+    _axeLocaleCache.set(normalized, null);
+    return null;
   }
 
-  const ruleIds = _criterionRuleIds(baseRunOnly.values, criteriaId);
-  if (ruleIds.length === 0) {
-    return { runOnly: null, skipAxe: true };
+  const localePath = path.join(AXE_LOCALE_DIR, `${localeId}.json`);
+  try {
+    const locale = JSON.parse(fs.readFileSync(localePath, 'utf8'));
+    _axeLocaleCache.set(normalized, locale);
+    return locale;
+  } catch {
+    _axeLocaleCache.set(normalized, null);
+    return null;
   }
-
-  return {
-    runOnly: { type: 'rule', values: ruleIds },
-    skipAxe: false,
-  };
-}
-
-function _resolveRunOnly(level, criteriaId = null) {
-  return _resolveConfiguredRunOnly({ type: 'tag', values: _tagsForLevel(level) }, criteriaId);
 }
 
 /**
@@ -210,6 +212,18 @@ class AccessibilityService {
     }
   }
 
+  async _configureAxeLocale(page, lang = 'en', logPrefix = '') {
+    const locale = _loadAxeLocale(lang);
+    if (!locale) return;
+
+    const prefix = logPrefix ? `${logPrefix} ` : '';
+    await page.evaluate((localePayload) => {
+      // eslint-disable-next-line no-undef
+      axe.configure({ locale: localePayload });
+    }, locale);
+    this._logger.info(`${prefix}Configured axe-core locale: ${_sanitizeLocaleLang(lang)}`);
+  }
+
   /**
    * Analyzes HTML for accessibility issues.
    *
@@ -217,9 +231,8 @@ class AccessibilityService {
    * @param {string|null} [criteriaId]  - Optional WCAG SC filter (e.g. "1.1.1")
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
-  async analyze(html, criteriaId = null) {
-    const { timeoutMs, runOnly: configuredRunOnly } = this._config.axe;
-    const { runOnly, skipAxe } = _resolveConfiguredRunOnly(configuredRunOnly, criteriaId);
+  async analyze(html, criteriaId = null, lang = 'en') {
+    const { timeoutMs, runOnly } = this._config.axe;
     let browser = null;
 
     await this._acquireSlot();
@@ -228,6 +241,7 @@ class AccessibilityService {
       browser = await this._puppeteer.launch({
         headless:       this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
+        ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
         args:           this._config.browser.args,
       });
 
@@ -244,34 +258,30 @@ class AccessibilityService {
       this._logger.info('Loading HTML content into page...');
       await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
 
-      let axeResults = { violations: [], passes: [], incomplete: [] };
-      if (skipAxe) {
-        this._logger.info(`Skipping axe.run(); no axe-core rules match ${criteriaId}.`);
-      } else {
-        this._logger.info('Injecting axe-core...');
-        await this._injectAxe(page);
+      this._logger.info('Injecting axe-core...');
+      await this._injectAxe(page);
+      await this._configureAxeLocale(page, lang);
 
-        this._logger.info('Running axe.run() analysis...');
-        axeResults = await page.evaluate((runOptions) => {
-          return new Promise((resolve, reject) => {
-            // axe is available as a global after script injection
-            // eslint-disable-next-line no-undef
-            axe.run(document, { runOnly: runOptions }, (err, results) => {
-              if (err) reject(err);
-              else resolve(results);
-            });
+      this._logger.info('Running axe.run() analysis...');
+      const axeResults = await page.evaluate((runOptions) => {
+        return new Promise((resolve, reject) => {
+          // axe is available as a global after script injection
+          // eslint-disable-next-line no-undef
+          axe.run(document, { runOnly: runOptions }, (err, results) => {
+            if (err) reject(err);
+            else resolve(results);
           });
-        }, runOnly);
+        });
+      }, runOnly);
 
-        this._logger.info(
-          `axe.run() complete — violations: ${axeResults.violations.length}, ` +
-          `passes: ${axeResults.passes.length}, ` +
-          `incomplete: ${(axeResults.incomplete || []).length}`
-        );
-      }
+      this._logger.info(
+        `axe.run() complete — violations: ${axeResults.violations.length}, ` +
+        `passes: ${axeResults.passes.length}, ` +
+        `incomplete: ${(axeResults.incomplete || []).length}`
+      );
 
       this._logger.info('Running static custom checks...');
-      const customResults = await runStaticChecks(page, criteriaId);
+      const customResults = await runStaticChecks(page, { lang });
       const filteredCustom = criteriaId
         ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
         : customResults;
@@ -297,9 +307,8 @@ class AccessibilityService {
    * @param {string|null} [criteriaId]  - Optional WCAG SC filter (e.g. "1.1.1")
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
-  async analyseUrl(url, criteriaId = null) {
-    const { timeoutMs, runOnly: configuredRunOnly } = this._config.axe;
-    const { runOnly, skipAxe } = _resolveConfiguredRunOnly(configuredRunOnly, criteriaId);
+  async analyseUrl(url, criteriaId = null, lang = 'en') {
+    const { timeoutMs, runOnly } = this._config.axe;
     let browser = null;
 
     await _assertPublicUrl(url);
@@ -309,6 +318,7 @@ class AccessibilityService {
       browser = await this._puppeteer.launch({
         headless:       this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
+        ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
         args:           this._config.browser.args,
       });
 
@@ -332,33 +342,29 @@ class AccessibilityService {
       // before axe/custom checks run.
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
-      let axeResults = { violations: [], passes: [], incomplete: [] };
-      if (skipAxe) {
-        this._logger.info(`Skipping axe.run(); no axe-core rules match ${criteriaId}.`);
-      } else {
-        this._logger.info('Injecting axe-core...');
-        await this._injectAxe(page);
+      this._logger.info('Injecting axe-core...');
+      await this._injectAxe(page);
+      await this._configureAxeLocale(page, lang);
 
-        this._logger.info('Running axe.run() analysis...');
-        axeResults = await page.evaluate((runOptions) => {
-          return new Promise((resolve, reject) => {
-            // eslint-disable-next-line no-undef
-            axe.run(document, { runOnly: runOptions }, (err, results) => {
-              if (err) reject(err);
-              else resolve(results);
-            });
+      this._logger.info('Running axe.run() analysis...');
+      const axeResults = await page.evaluate((runOptions) => {
+        return new Promise((resolve, reject) => {
+          // eslint-disable-next-line no-undef
+          axe.run(document, { runOnly: runOptions }, (err, results) => {
+            if (err) reject(err);
+            else resolve(results);
           });
-        }, runOnly);
+        });
+      }, runOnly);
 
-        this._logger.info(
-          `axe.run() complete — violations: ${axeResults.violations.length}, ` +
-          `passes: ${axeResults.passes.length}, ` +
-          `incomplete: ${(axeResults.incomplete || []).length}`
-        );
-      }
+      this._logger.info(
+        `axe.run() complete — violations: ${axeResults.violations.length}, ` +
+        `passes: ${axeResults.passes.length}, ` +
+        `incomplete: ${(axeResults.incomplete || []).length}`
+      );
 
       this._logger.info('Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page, criteriaId);
+      const customResults = await runAll(page, { lang });
       const filteredCustom = criteriaId
         ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
         : customResults;
@@ -384,9 +390,9 @@ class AccessibilityService {
    * @param {string} url - Fully-qualified URL
    * @returns {Promise<Array<object>>} Flat findings array
    */
-  async analyseUrlFlat(url, level = 'AA', lang = 'en', criteriaId = null) {
+  async analyseUrlFlat(url, level = 'AA', lang = 'en') {
     const { timeoutMs } = this._config.axe;
-    const { runOnly, skipAxe } = _resolveRunOnly(level, criteriaId);
+    const runOnly = { type: 'tag', values: _tagsForLevel(level) };
     let browser = null;
 
     await _assertPublicUrl(url);
@@ -396,6 +402,7 @@ class AccessibilityService {
       browser = await this._puppeteer.launch({
         headless:       this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
+        ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
         args:           this._config.browser.args,
       });
 
@@ -418,41 +425,47 @@ class AccessibilityService {
       // Use networkidle2 for parity with audit runner requirements and better JS coverage.
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
-      let axeResults = { violations: [], passes: [], incomplete: [] };
-      if (skipAxe) {
-        this._logger.info(`[flat] Skipping axe.run(); no axe-core rules match ${criteriaId}.`);
-      } else {
-        this._logger.info('[flat] Injecting axe-core...');
-        await this._injectAxe(page, '[flat]');
+      this._logger.info('[flat] Injecting axe-core...');
+      await this._injectAxe(page, '[flat]');
+      await this._configureAxeLocale(page, lang, '[flat]');
 
-        this._logger.info('[flat] Running axe.run()...');
-        axeResults = await page.evaluate((runOptions) => {
-          return new Promise((resolve, reject) => {
-            // eslint-disable-next-line no-undef
-            axe.run(document, { runOnly: runOptions }, (err, results) => {
-              if (err) reject(err);
-              else resolve(results);
-            });
+      this._logger.info('[flat] Running axe.run()...');
+      const axeResults = await page.evaluate((runOptions) => {
+        return new Promise((resolve, reject) => {
+          // eslint-disable-next-line no-undef
+          axe.run(document, { runOnly: runOptions }, (err, results) => {
+            if (err) reject(err);
+            else resolve(results);
           });
-        }, runOnly);
+        });
+      }, runOnly);
 
-        this._logger.info(
-          `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +
-          `passes: ${axeResults.passes.length}, ` +
-          `incomplete: ${(axeResults.incomplete || []).length}`
-        );
-      }
+      this._logger.info(
+        `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +
+        `passes: ${axeResults.passes.length}, ` +
+        `incomplete: ${(axeResults.incomplete || []).length}`
+      );
 
       this._logger.info('[flat] Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page, criteriaId);
+      let customResults = [];
+      const customChecksTimeoutMs = 180000; // 3 minutes budget for custom checks
+      let timeoutId;
+      try {
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('Custom checks timed out')), customChecksTimeoutMs);
+        });
+        customResults = await Promise.race([runAll(page, { lang }), timeoutPromise]);
+      } catch (err) {
+        this._logger.warn(`[flat] Custom checks failed or timed out: ${err.message}`);
+      } finally {
+        clearTimeout(timeoutId);
+      }
       const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);
       const allowedLevels = _allowedLevels(level);
-      const customFindings = allCustomFindings.filter(
-        f => (!criteriaId || f.wcag_sc === criteriaId) && (!f.level || allowedLevels.has(f.level))
-      );
+      const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
       this._logger.info(`[flat] Custom checks complete — ${customFindings.length} finding(s).`);
 
-      const findings = [...mapResultsFlat(axeResults, url, lang, criteriaId), ...customFindings];
+      const findings = [...mapResultsFlat(axeResults, url, lang), ...customFindings];
       const ORDER = { fail: 0, needs_review: 1, pass: 2 };
       findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
       return findings;

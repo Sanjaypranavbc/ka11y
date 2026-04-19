@@ -1,19 +1,44 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderReasonTemplate,
+} = require('./sharedAssets');
+
 const SC = '3.3.4';
 const RULE_ID = 'custom-error-prevention';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/error-prevention-legal-financial-data';
 
-// Expanded financial/legal/destructive patterns — English + Japanese
-const FINANCIAL_PATTERNS = /\b(payment|checkout|purchase|buy\s+now|credit\s*card|debit\s*card|card\s*number|billing|invoice|subscribe|subscription|order|confirm\s+order|place\s+order|donate|donation|donat|fund|invest|transfer|wire\s+transfer|ach|withdraw|bank\s+account|routing\s+number)\b|購入|決済|お支払い|クレジットカード|デビットカード|カード番号|振込|送金|課金|サブスクリプション|定期購入|寄付|ご注文|注文確認|請求/i;
-const LEGAL_PATTERNS     = /\b(legal|terms\s*(of\s*(service|use))?|privacy\s*policy|agreement|consent|contract|liability|gdpr|hipaa|sign\s*here|e[- ]?sign|electronic\s*signature)\b|利用規約|プライバシーポリシー|個人情報|同意する|契約|署名|規約に同意|電子署名/i;
-const DESTRUCTIVE_PATTERNS = /\b(delete\s+(account|data|profile|content)|remove\s+(account|data)|close\s+account|shut\s+down|deactivate|cancel\s+(account|subscription|membership)|unsubscribe|permanently\s+(delete|remove)|irreversible|purge|wipe|terminate)\b|削除する|退会|アカウント削除|アカウントを削除|解約|キャンセル|データ消去|永久削除|取り消せない|元に戻せない/i;
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const financialPattern = buildKeywordPattern(
+    getKeywordList('error_prevention', 'financial_keywords', sharedContext)
+  ) || 'payment|checkout|purchase|order';
+  const legalPattern = buildKeywordPattern(
+    getKeywordList('error_prevention', 'legal_keywords', sharedContext)
+  ) || 'legal|terms|privacy|contract|consent';
+  const destructivePattern = buildKeywordPattern(
+    getKeywordList('error_prevention', 'destructive_keywords', sharedContext)
+  ) || 'delete|remove|cancel|unsubscribe';
+  const reviewPattern = buildKeywordPattern(
+    getKeywordList('error_prevention', 'review_keywords', sharedContext)
+  ) || 'review|confirm|verify|summary';
+  const reviewButtonPattern = buildKeywordPattern(
+    getKeywordList('error_prevention', 'review_button_keywords', sharedContext)
+  ) || 'review|preview|continue|next|edit';
+  const stepPattern = buildKeywordPattern(
+    getKeywordList('error_prevention', 'step_keywords', sharedContext)
+  ) || 'step|wizard|progress';
 
-async function run(page) {
-  const data = await page.evaluate((financialSrc, legalSrc, destructiveSrc) => {
-    const financialRe   = new RegExp(financialSrc, 'i');
-    const legalRe       = new RegExp(legalSrc, 'i');
-    const destructiveRe = new RegExp(destructiveSrc, 'i');
+  const data = await page.evaluate((patterns) => {
+    const financialRe = new RegExp(patterns.financialPattern, 'i');
+    const legalRe = new RegExp(patterns.legalPattern, 'i');
+    const destructiveRe = new RegExp(patterns.destructivePattern, 'i');
+    const reviewRe = new RegExp(patterns.reviewPattern, 'i');
+    const reviewButtonRe = new RegExp(patterns.reviewButtonPattern, 'i');
+    const stepRe = new RegExp(patterns.stepPattern, 'i');
 
     function isVisible(el) {
       const cs = window.getComputedStyle(el);
@@ -44,7 +69,7 @@ async function run(page) {
       const category = isDestructive ? 'destructive' : isFinancial ? 'financial' : 'legal';
 
       // Safeguard 1: Review/confirm step text present
-      const hasReviewText = /\b(review|confirm|verify|check\s+your|summary|order\s+summary|please\s+review|are\s+you\s+sure)\b/i.test(focusedText);
+      const hasReviewText = reviewRe.test(focusedText);
 
       // Safeguard 2: Required confirmation checkbox (must be visible)
       const confirmCheckboxCandidates = [
@@ -58,13 +83,16 @@ async function run(page) {
       const buttons = Array.from(form.querySelectorAll('button, input[type="submit"], input[type="button"]')).filter(isVisible);
       const hasReviewButton = buttons.some(b => {
         const label = ((b.textContent || '') + (b.getAttribute('value') || '')).trim();
-        return /\b(review|preview|continue|next|proceed|back|edit)\b/i.test(label);
+        return reviewButtonRe.test(label);
       });
 
       // Bug fix: Safeguard 4: Multi-step indicator (step/wizard UI)
       const hasMultiStepIndicator = !!(
         form.querySelector('[class*="step"],[class*="wizard"],[class*="progress"],[aria-label*="step" i]') ||
-        document.querySelector('[class*="stepper"],[class*="multi-step"]')
+        document.querySelector('[class*="stepper"],[class*="multi-step"]') ||
+        Array.from(document.querySelectorAll('[class], [aria-label]')).some(el =>
+          stepRe.test(el.getAttribute('class') || '') || stepRe.test(el.getAttribute('aria-label') || '')
+        )
       );
 
       const hasSafeguard = hasReviewText || hasConfirmCheckbox || hasReviewButton || hasMultiStepIndicator;
@@ -72,12 +100,22 @@ async function run(page) {
       riskForms.push({
         category,
         hasSafeguard,
-        formId: form.id || null,
+        element_id: form.id || null,
+        html: form.outerHTML.slice(0, 150),
+        target: form.id ? [`form#${CSS.escape(form.id)}`] : ['form'],
+        tag: 'FORM',
       });
     }
 
     return riskForms;
-  }, FINANCIAL_PATTERNS.source, LEGAL_PATTERNS.source, DESTRUCTIVE_PATTERNS.source);
+  }, {
+    destructivePattern,
+    financialPattern,
+    legalPattern,
+    reviewButtonPattern,
+    reviewPattern,
+    stepPattern,
+  });
 
   if (data.length === 0) {
     return {
@@ -87,7 +125,13 @@ async function run(page) {
         description: 'Legal, financial, and data submissions must be reversible, checked, or confirmed',
         impact: null,
         status: 'pass',
-        reason: 'No legal, financial, or destructive action forms detected.',
+        reason: renderReasonTemplate(
+          'error_prevention',
+          'no_risk',
+          {},
+          sharedContext,
+          'No legal, financial, or destructive action forms detected.',
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -97,18 +141,28 @@ async function run(page) {
 
   if (unsafeForms.length > 0) {
     const categories = [...new Set(unsafeForms.map(f => f.category))];
-    const formRefs = unsafeForms.slice(0, 3)
-      .map(f => f.formId ? `form#${f.formId}` : `<form> (${f.category})`).join(', ');
     return {
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
-        description: 'Legal, financial, and data submissions must be reversible, checked, or confirmed',
-        impact: 'serious',
-        status: 'fail',
-        reason: `${unsafeForms.length} of ${data.length} ${categories.join('/')} form(s) have no review step, confirmation checkbox, multi-step indicator, or preview mechanism: ${formRefs}. Add a confirm/review step so users can verify before final submission.`,
-        helpUrl: HELP_URL,
-      }],
+      description: 'Legal, financial, and data submissions must be reversible, checked, or confirmed',
+      impact: 'serious',
+      status: 'fail',
+      reason: renderReasonTemplate(
+        'error_prevention',
+        'unsafe',
+        {
+          unsafe_count: unsafeForms.length,
+          total_count: data.length,
+          category_list: categories.join('/'),
+          form_refs: '',
+        },
+        sharedContext,
+        `${unsafeForms.length} of ${data.length} ${categories.join('/')} form(s) have no review step, confirmation checkbox, multi-step indicator, or preview mechanism.`,
+      ),
+      elements: unsafeForms,
+      helpUrl: HELP_URL,
+    }],
     };
   }
 
@@ -120,7 +174,16 @@ async function run(page) {
       description: 'Legal, financial, and data submissions must be reversible, checked, or confirmed',
       impact: null,
       status: 'pass',
-      reason: `${data.length} high-risk form(s) detected — all have a review/confirm safeguard: ${safeForms}.`,
+      reason: renderReasonTemplate(
+        'error_prevention',
+        'safe',
+        {
+          total_count: data.length,
+          safe_refs: safeForms,
+        },
+        sharedContext,
+        `${data.length} high-risk form(s) detected — all have a review/confirm safeguard: ${safeForms}.`,
+      ),
       helpUrl: HELP_URL,
     }],
   };

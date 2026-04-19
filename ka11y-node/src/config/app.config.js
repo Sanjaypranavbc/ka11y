@@ -1,5 +1,13 @@
 'use strict';
 
+const { getSharedConfigValue } = require('../utils/sharedConfigLoader');
+
+function _envBool(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
+}
+
 /**
  * Centralised application configuration.
  * All process.env reads happen here — nowhere else in the codebase.
@@ -23,6 +31,10 @@ const config = {
   browser: {
     headless: 'shell',
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    ignoreHTTPSErrors: _envBool(
+      'PUPPETEER_IGNORE_HTTPS_ERRORS',
+      Boolean(getSharedConfigValue(['browser', 'ignore_https_errors'], true)),
+    ),
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',

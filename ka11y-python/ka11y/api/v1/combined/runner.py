@@ -10,6 +10,7 @@ builds the final report, and updates the job store.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import time
@@ -21,6 +22,7 @@ from urllib.parse import quote, urlparse
 from ka11y.config.logger import setup_logger
 from ka11y.preprocessor.text_helper_models import _json_serializer
 from ka11y.utils.config_loader import load_config
+from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import _lang_ctx
 from .models import CombinedRequest
@@ -39,9 +41,10 @@ def _merge_findings(
     Merge axe-core and Python findings with deduplication.
 
     Dedup key: (wcag_sc, status, element_signature)
-      - element_signature prefers a stable selector/target, then element_id,
-        then the first 120 chars of element.html
-        normalised to lower-case so minor HTML differences don't create dupes.
+      - element_signature prefers page-aware selectors/targets first so
+        Python and node findings can still meet on the same live element.
+      - fallback HTML signatures are hashed and namespaced by page/frame/tag
+        to avoid merging unrelated repeated components by truncated markup.
       - Findings with no element info are never deduplicated (always kept).
 
     Override rule: when both axe-core and Python fire on the same key, the
@@ -52,17 +55,43 @@ def _merge_findings(
     merged: dict = {}  # key -> finding dict
     no_key: list = []  # findings with no dedup key (keep all)
 
+    def _normalize_target_sig(target: Any) -> str:
+        if isinstance(target, str):
+            targets = [target]
+        elif isinstance(target, list):
+            targets = [item for item in target if isinstance(item, str)]
+        else:
+            targets = []
+        cleaned = [" ".join(item.split()).strip().lower() for item in targets if item.strip()]
+        if not cleaned:
+            return ""
+        return "||".join(dict.fromkeys(cleaned))
+
+    def _normalize_html_sig(html: str) -> str:
+        collapsed = " ".join(html.split()).strip().lower()
+        if not collapsed:
+            return ""
+        return hashlib.sha1(collapsed[:400].encode("utf-8")).hexdigest()[:16]
+
     def _sig(f: Dict) -> tuple:
         el = f.get("element") or {}
-        target = el.get("target") or []
-        target_sig = ""
-        if isinstance(target, list) and target:
-            first = target[0]
-            if isinstance(first, str):
-                target_sig = first.strip().lower()
-        el_id = (el.get("element_id") or "").strip()
-        el_html = (el.get("html") or "").strip()[:120].lower()
-        ident = target_sig or el_id or el_html
+        page_url = (el.get("page_url") or "").strip().lower()
+        frame_path = (el.get("frame_path") or "").strip().lower()
+        selector = " ".join(str(el.get("selector") or "").split()).strip().lower()
+        target_sig = _normalize_target_sig(el.get("target"))
+        ref_id = (el.get("element_ref_id") or "").strip().lower()
+        tag = (el.get("tag") or "").strip().lower()
+        el_id = (el.get("element_id") or "").strip().lower()
+        html_sig = _normalize_html_sig(str(el.get("html") or ""))
+
+        page_scope = "|".join(part for part in (page_url, frame_path) if part)
+        ident = (
+            (f"sel:{page_scope}|{selector}" if selector else "")
+            or (f"target:{page_scope}|{target_sig}" if target_sig else "")
+            or (f"ref:{page_scope}|{ref_id}" if ref_id else "")
+            or (f"id:{page_scope}|{tag}|{el_id}" if el_id else "")
+            or (f"html:{page_scope}|{tag}|{html_sig}" if html_sig else "")
+        )
         return (f.get("wcag_sc", ""), f.get("status", ""), ident)
 
     for f in python_findings:
@@ -97,7 +126,6 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
     """
     _jobs[job_id]["status"] = "running"
     url = str(payload.url)
-    filter_rule = filter_rule or payload.success_criteria_id
     _lang_ctx.set(payload.lang)  # Inherited by all child tasks via context copy
 
     config = load_config()
@@ -109,18 +137,25 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     _jobs[job_id]["output_dir"] = str(output_dir)
+    step_logger = ExecutionStepLogger(
+        output_dir=output_dir,
+        name="combined_execution_steps",
+        job_id=job_id,
+    )
+    _jobs[job_id]["step_log_path"] = str(step_logger.jsonl_path)
+    _jobs[job_id]["step_summary_path"] = str(step_logger.summary_path)
 
     try:
+        step_logger.record(
+            step="combined_job",
+            status="running",
+            message="Combined audit job started",
+            context={"url": url, "lang": payload.lang, "wcag_level": payload.wcag_level},
+        )
         # Fire axe-core and all Python stages concurrently
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
-            _call_node_flat(
-                url,
-                node_base_url,
-                payload.wcag_level,
-                payload.lang,
-                success_criteria_id=filter_rule,
-            )
+            _call_node_flat(url, node_base_url, payload.wcag_level, payload.lang)
         )
         python_task = asyncio.create_task(
             _run_python_stages(
@@ -141,9 +176,10 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 run_hover_focus_content_audit=payload.run_hover_focus_content_audit,
                 run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
+                run_sensory_audit= payload.run_sensory_audit,
                 lang=payload.lang,
                 job_id=job_id,
-                success_criteria_id=filter_rule,
+                step_logger=step_logger,
             )
         )
 
@@ -158,15 +194,22 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
         else:
             node_findings = node_result
             _stage_complete(job_id, "axe_core", len(node_findings))
+            step_logger.record(
+                step="axe_core_summary",
+                status="completed",
+                message="axe-core results recorded",
+                context={"finding_count": len(node_findings)},
+            )
 
         # ── Resolve Python result ─────────────────────────────────────────────
         python_findings: List[Dict] = []
         contrast_report: Optional[Dict[str, Any]] = None
+        image_audit_report: Optional[Dict[str, Any]] = None
 
         if isinstance(python_result, Exception):
             pass  # all stages failed — warnings already recorded
-        elif isinstance(python_result, tuple) and len(python_result) == 2:
-            python_findings, contrast_report = python_result
+        elif isinstance(python_result, tuple) and len(python_result) == 3:
+            python_findings, contrast_report, image_audit_report = python_result
         else:
             # Unexpected return type — degrade gracefully rather than raising
             logger.warning(
@@ -197,16 +240,36 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             key=lambda f: {"fail": 0, "needs_review": 1, "pass": 2}.get(f["status"], 3)
         )
 
-        report = _build_report(url, all_findings, contrast_report=contrast_report)
+        report = _build_report(
+            url,
+            all_findings,
+            lang=payload.lang,
+            contrast_report=contrast_report,
+            image_audit_report=image_audit_report,
+        )
         report["warnings"] = _jobs[job_id].get("warnings", [])
+        report["warning_details"] = _jobs[job_id].get("warning_details", [])
 
-        # Inject image_url into each contrast-report image for the frontend
-        if report.get("contrast_report"):
-            for img in report["contrast_report"].get("images", []):
-                img["image_url"] = (
-                    f"/api/v1/combined/{job_id}/image"
-                    f"?path={quote(img['path'], safe='')}"
-                )
+        # Inject image_url into image-backed reports for frontend rendering.
+        for report_key in ("contrast_report", "image_audit_report"):
+            if report.get(report_key):
+                for img in report[report_key].get("images", []):
+                    if img.get("path"):
+                        img["image_url"] = (
+                            f"/api/v1/combined/{job_id}/image"
+                            f"?path={quote(img['path'], safe='')}"
+                        )
+                        
+        for array_key in ("violations", "needs_review", "passes"):
+            for finding in report.get(array_key, []):
+                element = finding.get("element")
+                if element and isinstance(element, dict):
+                    src = element.get("image_src")
+                    if src and not src.startswith("/api/v1/") and not src.startswith(("http://", "https://", "data:")):
+                        element["image_src"] = (
+                            f"/api/v1/combined/{job_id}/image"
+                            f"?path={quote(src, safe='')}"
+                        )
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
@@ -231,6 +294,17 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             f"{(contrast_report or {}).get('summary', {}).get('total_regions_analysed', 0)} | "
             f"report → {report_path}"
         )
+        step_logger.finalize(
+            status="completed",
+            message="Combined audit job completed",
+            context={
+                "report_path": str(report_path),
+                "violations": report["summary"]["violations"],
+                "needs_review": report["summary"]["needs_review"],
+                "passes": report["summary"]["passes"],
+                "warnings": len(report.get("warnings", [])),
+            },
+        )
 
         await _broadcast(
             job_id,
@@ -247,6 +321,11 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 "error": str(exc),
                 "current_stage": None,
             }
+        )
+        step_logger.finalize(
+            status="error",
+            message="Combined audit job failed",
+            context={"error": str(exc)},
         )
         await _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
 

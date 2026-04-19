@@ -98,25 +98,77 @@ export function FindingElementCell({
     copyText(parts);
   };
 
-  // Short label for the button — show tag name or a trimmed snippet
-  const buttonLabel = snippet.length > 40 ? snippet.slice(0, 40) + "…" : snippet;
+  const preview = (
+    <div className="space-y-1 min-w-[16rem] max-w-[24rem]">
+      {reference && (
+        <div className="flex items-start gap-1.5">
+          <Badge variant="outline" className="h-4 px-1.5 text-[9px] shrink-0">
+            {t("table.imageRef")}
+          </Badge>
+          <span className="text-[10px] font-medium leading-snug break-all">{reference}</span>
+        </div>
+      )}
+
+      {ocrText && (
+        <div className="flex items-start gap-1.5">
+          <Badge variant="outline" className="h-4 px-1.5 text-[9px] shrink-0">
+            {t("table.imageText")}
+          </Badge>
+          <span className="text-[10px] text-muted-foreground leading-snug break-words max-h-16 overflow-hidden">
+            {ocrText}
+          </span>
+        </div>
+      )}
+
+      <code className="block rounded bg-muted px-1.5 py-1 text-[10px] text-muted-foreground whitespace-pre-wrap break-all max-h-24 overflow-hidden">
+        {snippet}
+      </code>
+
+      {selector && (
+        <code className="block rounded bg-muted/60 px-1.5 py-1 text-[10px] text-muted-foreground whitespace-pre-wrap break-all max-h-16 overflow-hidden">
+          {selector}
+        </code>
+      )}
+
+      {source && source.startsWith("/api/v1/") ? (
+        <div className="mt-2 mb-2 rounded-md overflow-hidden border bg-muted/30">
+          <img src={source} alt="Violation element" className="max-h-32 w-auto object-contain" loading="lazy" />
+        </div>
+      ) : source && source !== reference ? (
+        <div className="flex items-start gap-1.5">
+          <Badge variant="outline" className="h-4 px-1.5 text-[9px] shrink-0">
+            {t("table.imageSrc")}
+          </Badge>
+          <span className="text-[10px] text-muted-foreground leading-snug break-all max-h-12 overflow-hidden">
+            {source}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <>
       {hasDetails ? (
-        <Button
+        <button
           type="button"
-          variant="outline"
-          size="sm"
           onClick={() => setOpen(true)}
-          className="h-7 gap-1.5 text-[11px] font-medium max-w-[14rem] truncate"
+          className="w-full rounded-lg border border-border/70 bg-background/70 p-2 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={t("modal.fullView")}
         >
-          <Expand className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">{buttonLabel || t("modal.fullView")}</span>
-        </Button>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {t("table.element")}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary">
+              <Expand className="h-3 w-3" aria-hidden="true" />
+              {t("modal.fullView")}
+            </span>
+          </div>
+          {preview}
+        </button>
       ) : (
-        <span className="text-xs text-muted-foreground">—</span>
+        preview
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -189,52 +241,30 @@ export function FindingElementCell({
               </section>
             )}
 
-            {(reference || source) && (
+            {reference && (
               <section className="space-y-2">
                 <h4 className="text-sm font-medium text-foreground">{t("table.imageRef")}</h4>
-
-                {/* Image filename / reference */}
-                {reference && (
-                  <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs leading-relaxed break-all">
-                    {reference}
-                  </div>
-                )}
-
-                {/* Source URL */}
-                {source && (
-                  <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs leading-relaxed break-all">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mr-2">
-                      {t("table.imageSrc")}
-                    </span>
-                    {source}
-                  </div>
-                )}
-
-                {/* Actual image preview */}
-                {source && (
-                  <div className="rounded-md border bg-muted/30 overflow-hidden">
-                    <img
-                      src={source}
-                      alt={reference || "Audited element image"}
-                      className="w-full max-h-72 object-contain bg-muted/20 p-2"
-                      loading="lazy"
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        target.style.display = "none";
-                        const fallback = target.nextElementSibling as HTMLElement | null;
-                        if (fallback) fallback.style.display = "flex";
-                      }}
-                    />
-                    <div
-                      className="hidden items-center justify-center h-24 text-xs text-muted-foreground gap-2"
-                    >
-                      <span>⚠ Image could not be loaded from source</span>
-                    </div>
-                  </div>
-                )}
+                <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs leading-relaxed break-all">
+                  {reference}
+                </div>
               </section>
             )}
 
+            {source && source.startsWith("/api/v1/") ? (
+              <section className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">{t("table.imageSrc")}</h4>
+                <div className="rounded-md border bg-muted/20 overflow-hidden flex justify-center p-2">
+                  <img src={source} alt="Violation element expanded" className="max-h-96 w-auto object-contain" loading="lazy" />
+                </div>
+              </section>
+            ) : source ? (
+              <section className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">{t("table.imageSrc")}</h4>
+                <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs leading-relaxed break-all">
+                  {source}
+                </div>
+              </section>
+            ) : null}
 
             {ocrText && (
               <section className="space-y-2">

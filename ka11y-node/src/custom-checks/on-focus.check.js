@@ -1,11 +1,15 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '3.2.1';
 const RULE_ID = 'custom-on-focus';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
-const MAX_ELEMENTS = 60;
+const MAX_ELEMENTS = 2000;
 const SETTLE_MS = 100;
-const NAV_STATE_KEY = '__ka11yOnFocusNavState';
 
 // Includes form controls (input, select, textarea) — they can carry onfocus handlers
 const SELECTOR = [
@@ -23,77 +27,42 @@ function urlPathAndSearch(url) {
   try { const u = new URL(url); return u.pathname + u.search; } catch { return url; }
 }
 
-async function installNavInstrumentation(page) {
-  await page.evaluate((stateKey) => {
-    const existing = window[stateKey];
-    if (existing && existing.originalPush && existing.originalReplace) {
-      existing.count = 0;
-      return;
-    }
-
-    const originalPush = history.pushState.bind(history);
-    const originalReplace = history.replaceState.bind(history);
-    window[stateKey] = {
-      count: 0,
-      originalPush,
-      originalReplace,
-    };
-
-    history.pushState = function(...args) {
-      window[stateKey].count++;
-      return originalPush(...args);
-    };
-    history.replaceState = function(...args) {
-      window[stateKey].count++;
-      return originalReplace(...args);
-    };
-  }, NAV_STATE_KEY);
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
 }
 
-async function readAndResetNavInstrumentation(page) {
-  return page.evaluate((stateKey) => {
-    const state = window[stateKey];
-    const changed = !!(state && state.count > 0);
-    if (state) state.count = 0;
-    return changed;
-  }, NAV_STATE_KEY).catch(() => false);
-}
-
-async function uninstallNavInstrumentation(page) {
-  await page.evaluate((stateKey) => {
-    const state = window[stateKey];
-    if (!state) return;
-    if (state.originalPush) history.pushState = state.originalPush;
-    if (state.originalReplace) history.replaceState = state.originalReplace;
-    delete window[stateKey];
-  }, NAV_STATE_KEY).catch(() => {});
-}
-
-async function run(page) {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const violations = [];
   let navigationDetected = false;
+  const initialUrl = page.url();
 
   const onNavigated = () => { navigationDetected = true; };
   page.on('framenavigated', onNavigated);
 
   try {
-    await installNavInstrumentation(page);
+    // Inject SPA navigation detection via pushState/replaceState interception
+    await page.evaluate(() => {
+      window.__navChanges = 0;
+      const orig = history.pushState.bind(history);
+      history.pushState = function(...args) { window.__navChanges++; return orig(...args); };
+      const origReplace = history.replaceState.bind(history);
+      history.replaceState = function(...args) { window.__navChanges++; return origReplace(...args); };
+    });
 
     const focusable = await page.evaluate((sel, max) => {
+      // Deduplicate: [tabindex] may overlap with a, button, etc.
       const seen = new Set();
       const results = [];
-      const idCounts = {};
-      for (const el of document.querySelectorAll('[id]')) {
-        idCounts[el.id] = (idCounts[el.id] || 0) + 1;
-      }
       for (const el of document.querySelectorAll(sel)) {
         if (seen.has(el)) continue;
         seen.add(el);
         results.push({
           tagName: el.tagName.toLowerCase(),
           id: el.id || null,
-          stableSel: el.id && idCounts[el.id] === 1 ? `#${CSS.escape(el.id)}` : null,
           html: el.outerHTML.slice(0, 150),
+          target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+          tag: el.tagName.toUpperCase(),
         });
         if (results.length >= max) break;
       }
@@ -104,18 +73,25 @@ async function run(page) {
       navigationDetected = false;
       const urlBefore = page.url();
 
-      await page.evaluate((sel, idx, stableSel) => {
-        const all = Array.from(document.querySelectorAll(sel));
-        const el = stableSel
-          ? (document.querySelector(stableSel) || all[idx])
-          : all[idx];
+      await page.evaluate((sel, idx) => {
+        // Re-query each time — prior focus interactions may have altered DOM
+        const uniqueEls = [];
+        const seen = new Set();
+        for (const el of document.querySelectorAll(sel)) {
+          if (!seen.has(el)) { seen.add(el); uniqueEls.push(el); }
+        }
+        const el = uniqueEls[idx];
         if (el) el.focus({ preventScroll: true });
-      }, SELECTOR, i, focusable[i].stableSel || null);
+      }, SELECTOR, i);
 
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      const spaNavChanged = await readAndResetNavInstrumentation(page);
+      const spaNavChanged = await page.evaluate(() => window.__navChanges > 0).catch(() => false);
+      if (spaNavChanged) {
+        // Reset counter for next iteration
+        await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
+      }
 
       // Only flag pathname/search changes — hash-only changes (skip-links, anchor navigation)
       // are not a WCAG 3.2.1 context change.
@@ -123,16 +99,17 @@ async function run(page) {
         violations.push(focusable[i]);
         break; // page may have navigated; unsafe to continue testing other elements
       }
+      // Reset SPA counter for next element
+      await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
     }
   } finally {
     page.off('framenavigated', onNavigated);
-    await uninstallNavInstrumentation(page);
   }
 
   if (violations.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Focusing an element must not trigger a context change', impact: null, status: 'pass', reason: 'No unexpected context changes detected on focus.', helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Focusing an element must not trigger a context change', impact: null, status: 'pass', reason: _t(sharedContext, 'No unexpected context changes detected on focus.', 'フォーカス時に予期しないコンテキスト変更は検出されませんでした。'), helpUrl: HELP_URL }],
     };
   }
 
@@ -143,7 +120,15 @@ async function run(page) {
       description: 'Focusing an element must not trigger a context change',
       impact: 'serious',
       status: 'fail',
-      reason: `Focusing <${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}> triggered an unexpected navigation or context change. Testing stopped at the first violation — additional elements may be affected. Review all focusable elements for focus-triggered navigation.`,
+      reason: _t(sharedContext, 'Focusing {element} triggered an unexpected navigation or context change. Testing stopped at the first violation — additional elements may be affected. Review all focusable elements for focus-triggered navigation.', '{element} にフォーカスした際、予期しないナビゲーションまたはコンテキスト変更が発生しました。最初の違反でテストを停止しているため、他の要素にも影響がある可能性があります。フォーカスで遷移が起きないか、すべてのフォーカス可能要素を確認してください。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` }),
+      elements: [
+        {
+          html: violations[0].html,
+          element_id: violations[0].id,
+          target: violations[0].target,
+          tag: violations[0].tag,
+        }
+      ],
       helpUrl: HELP_URL,
     }],
   };

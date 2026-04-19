@@ -1,17 +1,41 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.4.8';
 const RULE_ID = 'custom-location';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/location';
 
-async function run(page) {
-  const data = await page.evaluate(() => {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const breadcrumbPattern = buildKeywordPattern(
+    getKeywordList('location', 'breadcrumb_keywords', sharedContext)
+  ) || 'breadcrumb|パンくず';
+  const sitemapPattern = buildKeywordPattern(
+    getKeywordList('location', 'sitemap_keywords', sharedContext)
+  ) || 'sitemap|site\\s*map';
+
+  const data = await page.evaluate((patterns) => {
+    const breadcrumbRe = new RegExp(patterns.breadcrumbPattern, 'i');
+    const sitemapRe = new RegExp(patterns.sitemapPattern, 'i');
     // 1. Breadcrumb navigation — explicit aria-label or class patterns
     const hasBreadcrumb = !!(
-      document.querySelector('[aria-label*="breadcrumb" i]') ||
-      document.querySelector('[aria-label*="パンくず" i]') ||
       document.querySelector('[class*="breadcrumb" i]') ||
-      document.querySelector('[class*="パンくず" i], [id*="パンくず" i]') ||
+      document.querySelector('[class*="pan-kuzu" i], [class*="panku-zu" i], [id*="pan-kuzu" i], [id*="panku-zu" i]') ||
+      Array.from(document.querySelectorAll('[class], [id], [aria-label]')).some(el =>
+        breadcrumbRe.test(el.getAttribute('class') || '') ||
+        breadcrumbRe.test(el.getAttribute('id') || '') ||
+        breadcrumbRe.test(el.getAttribute('aria-label') || '')
+      ) ||
       document.querySelector('[itemtype*="BreadcrumbList"]') ||
       document.querySelector('nav [aria-current="page"]') // current page in nav = location indicator
     );
@@ -29,8 +53,12 @@ async function run(page) {
 
     // 4. Sitemap or location landmark (rare but valid)
     const hasSiteMap = !!(
-      document.querySelector('a[href*="sitemap" i], a[href*="site-map" i], a[href*="サイトマップ" i]') ||
-      document.querySelector('[aria-label*="site map" i], [aria-label*="sitemap" i], [aria-label*="サイトマップ" i]')
+      document.querySelector('a[href*="sitemap" i], a[href*="site-map" i], a[href*="site map" i]') ||
+      Array.from(document.querySelectorAll('a, [aria-label]')).some(el =>
+        sitemapRe.test(el.textContent || '') ||
+        sitemapRe.test(el.getAttribute('href') || '') ||
+        sitemapRe.test(el.getAttribute('aria-label') || '')
+      )
     );
 
     // 5. aria-current="step" — indicates current step in a multi-step process
@@ -58,7 +86,7 @@ async function run(page) {
       hasVisibleLocationIndicator,
       hasWeakLocationIndicator,
     };
-  });
+  }, { breadcrumbPattern, sitemapPattern });
 
   if (data.hasVisibleLocationIndicator) {
     const mechanisms = [
@@ -75,7 +103,7 @@ async function run(page) {
         description: 'Users must be able to determine their location within a set of web pages',
         impact: null,
         status: 'pass',
-        reason: `Location indicator(s) detected: ${mechanisms}.`,
+        reason: _t(sharedContext, 'Location indicator(s) detected: {mechanisms}.', '現在位置を示す手段が検出されました: {mechanisms}。', { mechanisms }),
         helpUrl: HELP_URL,
       }],
     };
@@ -107,7 +135,7 @@ async function run(page) {
       description: 'Users must be able to determine their location within a set of web pages',
       impact: 'moderate',
       status: 'incomplete',
-      reason: 'No location indicator detected (no breadcrumb, no aria-current="page" in navigation, no active nav item, no sitemap link). If this is a multi-page site, provide a breadcrumb or highlight the current page in navigation.',
+      reason: _t(sharedContext, 'No location indicator detected (no breadcrumb, no aria-current="page" in navigation, no active nav item, no sitemap link). If this is a multi-page site, provide a breadcrumb or highlight the current page in navigation.', '現在位置を示す手段は検出されませんでした（パンくず、ナビゲーション内の aria-current="page"、アクティブなナビ項目、サイトマップリンクなし）。複数ページのサイトであれば、パンくずを提供するか、ナビゲーションで現在ページを明示してください。'),
       helpUrl: HELP_URL,
     }],
   };

@@ -32,6 +32,7 @@ export const translations = {
     "sidebar.wcagLevelNote":  "`1.4.6 Contrast (Enhanced)` is AAA. Selecting `AA` or `A` hides higher-level findings.",
     "sidebar.runAudit":       "Run Audit",
     "sidebar.running":        "Running…",
+    "sidebar.auditLanguage":  "Audit Language",
     "sidebar.footer":         "WCAG 2.1 A / AA / AAA · axe-core + Python",
 
     // ── Audit toggles ────────────────────────────────────────────────────────
@@ -39,6 +40,8 @@ export const translations = {
     "toggle.imageAudit":      "Image Audit",
     "toggle.formAudit":       "Form Audit",
     "toggle.labelInName":     "Label in Name",
+    "toggle.mediaAudit":      "Media Audit",
+    "toggle.sensoryAudit":    "Sensory Audit",
     "toggle.pauseStop":       "Pause/Stop",
     "toggle.targetSize":      "Target Size",
     "toggle.resizeText":      "Resize Text",
@@ -60,6 +63,8 @@ export const translations = {
     "stage.image_audit":           "Image audit",
     "stage.form_audit":            "Form audit",
     "stage.label_in_name":         "Label in name",
+    "stage.media_audit":           "Media audit",
+    "stage.sensory_audit":         "Sensory audit",
     "stage.pause_stop_hide":       "Moving content",
     "stage.target_size":           "Target size",
     "stage.text_spacing":          "Text spacing",
@@ -70,6 +75,8 @@ export const translations = {
     "stageFull.image_audit":           "Image alt-text (1.1.1)",
     "stageFull.form_audit":            "Form fields (3.3.1 / 3.3.2)",
     "stageFull.label_in_name":         "Label in name (2.5.3)",
+    "stageFull.media_audit":           "Media audit (1.2.1)",
+    "stageFull.sensory_audit":         "Sensory characteristics (1.3.3)",
     "stageFull.pause_stop_hide":       "Moving content (2.2.2)",
     "stageFull.target_size":           "Target size (2.5.8)",
     "stageFull.text_spacing":          "Text spacing (1.4.12)",
@@ -94,6 +101,7 @@ export const translations = {
     "header.light":           "Light",
     "header.dark":            "Dark",
     "header.export":          "Export",
+    "header.reportLanguage":  "Report language",
 
     // ── Dashboard ────────────────────────────────────────────────────────────
     "dashboard.totalFindings":     "Total Findings",
@@ -222,6 +230,7 @@ export const translations = {
     "sidebar.wcagLevelNote":  "「1.4.6 コントラスト（強化）」はAAA。AAまたはAを選択すると上位レベルの検出が非表示になります。",
     "sidebar.runAudit":       "監査実行",
     "sidebar.running":        "実行中…",
+    "sidebar.auditLanguage":  "監査言語",
     "sidebar.footer":         "WCAG 2.1 A / AA / AAA · axe-core + Python",
 
     // ── Audit toggles ────────────────────────────────────────────────────────
@@ -229,6 +238,8 @@ export const translations = {
     "toggle.imageAudit":      "画像監査",
     "toggle.formAudit":       "フォーム監査",
     "toggle.labelInName":     "名前内のラベル",
+    "toggle.mediaAudit":      "メディア監査",
+    "toggle.sensoryAudit":    "感覚的特徴監査",
     "toggle.pauseStop":       "一時停止/停止",
     "toggle.targetSize":      "ターゲットサイズ",
     "toggle.resizeText":      "テキストリサイズ",
@@ -250,6 +261,8 @@ export const translations = {
     "stage.image_audit":           "画像監査",
     "stage.form_audit":            "フォーム監査",
     "stage.label_in_name":         "名前内のラベル",
+    "stage.media_audit":           "メディア監査",
+    "stage.sensory_audit":         "感覚的特徴監査",
     "stage.pause_stop_hide":       "動くコンテンツ",
     "stage.target_size":           "ターゲットサイズ",
     "stage.text_spacing":          "テキスト間隔",
@@ -260,6 +273,8 @@ export const translations = {
     "stageFull.image_audit":           "画像代替テキスト (1.1.1)",
     "stageFull.form_audit":            "フォームフィールド (3.3.1 / 3.3.2)",
     "stageFull.label_in_name":         "名前内のラベル (2.5.3)",
+    "stageFull.media_audit":           "メディア監査 (1.2.1)",
+    "stageFull.sensory_audit":         "感覚的特徴 (1.3.3)",
     "stageFull.pause_stop_hide":       "動くコンテンツ (2.2.2)",
     "stageFull.target_size":           "ターゲットサイズ (2.5.8)",
     "stageFull.text_spacing":          "テキスト間隔 (1.4.12)",
@@ -284,6 +299,7 @@ export const translations = {
     "header.light":           "ライト",
     "header.dark":            "ダーク",
     "header.export":          "エクスポート",
+    "header.reportLanguage":  "レポート言語",
 
     // ── Dashboard ────────────────────────────────────────────────────────────
     "dashboard.totalFindings":     "総検出数",

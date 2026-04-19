@@ -29,7 +29,7 @@ BODY_LIMIT=10mb
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `NODE_BASE_URL` | `http://localhost:3000` | Yes (in Docker) | Base URL of the ka11y-node service |
+| `NODE_BASE_URL` | `http://localhost:3000` | Yes (in Docker) | Base URL used by ka11y-python to reach the ka11y-node service |
 | `PYTHONUNBUFFERED` | — | Recommended | Set to `"1"` for real-time log output in Docker |
 
 ### Example `.env` (Python)
@@ -43,6 +43,19 @@ PYTHONUNBUFFERED=1
   In Docker Compose the Python container resolves `node` by Docker's internal DNS — use `http://node:3000`. For local development outside Docker use `http://localhost:3000`.
 </Note>
 
+### Environment Matrix & Connectivity
+
+| Scenario | `NODE_BASE_URL` (Python) | Browser/Frontend |
+|----------|--------------------------|-------------------|
+| **Full Docker Compose** | `http://node:3000` | Calls `/api/*` (proxied to Python) |
+| **Host-run Python + Node** | `http://localhost:3000` | Calls `http://localhost:8000/api/*` |
+| **Hybrid (Container Python)** | `http://host.docker.internal:3000` | Calls `/api/*` |
+
+<Warning>
+  `node:3000` is a Docker-internal hostname. The browser cannot resolve it. Always ensure the frontend calls only the Python API origin (or a proxy).
+</Warning>
+
+
 ---
 
 ## ka11y-frontend
@@ -53,8 +66,10 @@ Build-time Vite variables can be set in `.env.local`:
 
 ```bash
 # ka11y-frontend-sdk/.env.local (development only)
-VITE_API_BASE=/api/v1   # default — matches nginx proxy prefix
+VITE_API_URL=http://localhost:8000
 ```
+
+That value is only used by the Vite dev server proxy. The production nginx container ignores it and proxies `/api/*` to `python:8000` internally.
 
 ---
 

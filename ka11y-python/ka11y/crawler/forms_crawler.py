@@ -6,9 +6,7 @@ Extracts inputs, labels, error message containers, and ARIA attributes
 needed for WCAG 3.3.1 / 3.3.2 auditing.
 """
 
-import asyncio
 import json
-import time
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -16,11 +14,7 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.config.logger import setup_logger
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
-from ka11y.crawler.universal_page import navigate_with_retry
-
-logger = setup_logger(name="KAC", tag="forms_crawler")
+from ka11y.crawler.context_factory import new_crawler_context
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pydantic models
@@ -63,6 +57,10 @@ class FormInputData(BaseModel):
     error_has_role_alert: bool = False  # role="alert" present
     error_has_aria_live: Optional[str] = None  # aria-live value if set
 
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
+
     html: str = ""
 
 
@@ -78,7 +76,7 @@ class AsyncFormCrawler:
     """
 
     # JS injected into every page to extract form data
-    EXTRACT_JS = """() => {
+    EXTRACT_JS = r"""() => {
         function outerHTML(el, max=600) {
             return (el && el.outerHTML) ? el.outerHTML.slice(0, max) : '';
         }
@@ -121,35 +119,31 @@ class AsyncFormCrawler:
                 let errorAriaLive   = null;
 
                 if (describedby) {
-                    // Resolve ALL space-separated IDs; prefer the element that
-                    // has role="alert" or aria-live (the true error container).
-                    // Fall back to the first element that exists in the DOM.
                     const ids = describedby.trim().split(/\s+/);
-                    let firstMatch = null;
-                    let alertMatch = null;
+                    const gatheredTexts = [];
+                    
                     for (const eid of ids) {
                         const errEl = document.getElementById(eid);
                         if (!errEl) continue;
-                        const role    = errEl.getAttribute('role') || null;
-                        const live    = errEl.getAttribute('aria-live') || null;
-                        const isAlert = role === 'alert' || live === 'assertive' || live === 'polite';
-                        const candidate = {
-                            id:        eid,
-                            role:      role,
-                            text:      (errEl.innerText || errEl.textContent || '').trim(),
-                            hasAlert:  role === 'alert',
-                            ariaLive:  live,
-                        };
-                        if (!firstMatch) firstMatch = candidate;
-                        if (isAlert && !alertMatch) alertMatch = candidate;
+                        
+                        const role    = errEl.getAttribute('role') || '';
+                        const live    = errEl.getAttribute('aria-live') || '';
+                        const text    = (errEl.innerText || errEl.textContent || '').trim();
+                        
+                        if (text) gatheredTexts.push(text);
+                        
+                        if (role === 'alert' || live === 'assertive' || live === 'polite') {
+                            errorHasAlert = true;
+                            if (!errorElRole) errorElRole = role;
+                            if (!errorAriaLive) errorAriaLive = live;
+                        }
+                        
+                        // Keep the first ID as the primary reference for the report
+                        if (!errorElId) errorElId = eid;
                     }
-                    const chosen = alertMatch || firstMatch;
-                    if (chosen) {
-                        errorElId     = chosen.id;
-                        errorElRole   = chosen.role;
-                        errorElText   = chosen.text;
-                        errorHasAlert = chosen.hasAlert;
-                        errorAriaLive = chosen.ariaLive;
+                    
+                    if (gatheredTexts.length > 0) {
+                        errorElText = gatheredTexts.join(' | ');
                     }
                 }
 
@@ -201,7 +195,8 @@ class AsyncFormCrawler:
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
-            context = await browser.new_context(
+            context = await new_crawler_context(
+                browser,
                 viewport={"width": 1440, "height": 900},
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -209,7 +204,6 @@ class AsyncFormCrawler:
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
-            await install_ssrf_guard(context)  # Bug 1 fix
             try:
                 await self._crawl_page(context, self.base_url, depth=0)
             finally:
@@ -225,7 +219,11 @@ class AsyncFormCrawler:
 
         page = await context.new_page()
         try:
-            await navigate_with_retry(page, url)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            except Exception:
+                # If even domcontentloaded times out, try with no wait condition
+                await page.goto(url, wait_until="commit", timeout=15_000)
             await page.wait_for_timeout(2000)  # let JS render forms
 
             raw: list = await page.evaluate(self.EXTRACT_JS)
@@ -246,22 +244,9 @@ class AsyncFormCrawler:
                         await self._crawl_page(context, href, depth + 1)
 
         except Exception as exc:
-            logger.error(f"[forms_crawler] Error on {url}: {exc}")
+            print(f"[FormCrawler] Error on {url}: {exc}")
         finally:
             await page.close()
-
-    @classmethod
-    def from_snapshot(cls, snapshot_forms: list, page_url: str, output_dir: str) -> "AsyncFormCrawler":
-        """Populate from a pre-crawled PageSnapshot instead of launching a browser."""
-        instance = cls.__new__(cls)
-        instance.base_url = page_url
-        instance.output_dir = Path(output_dir)
-        instance.max_depth = 0
-        instance.visited = {page_url}
-        instance.output_dir.mkdir(parents=True, exist_ok=True)
-        from ka11y.crawler.forms_crawler import FormInputData
-        instance.results = [FormInputData(page_url=page_url, **item) for item in snapshot_forms]
-        return instance
 
     def save_raw_json(self) -> str:
         path = self.output_dir / "forms_raw.json"

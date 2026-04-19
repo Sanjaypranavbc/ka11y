@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -48,6 +48,8 @@ const TOGGLE_ITEMS: { key: keyof AuditConfig; labelKey: TranslationKey }[] = [
   { key: "run_image_audit",                  labelKey: "toggle.imageAudit"      },
   { key: "run_form_audit",                   labelKey: "toggle.formAudit"       },
   { key: "run_label_in_name_audit",          labelKey: "toggle.labelInName"     },
+  { key: "run_media_audit",                  labelKey: "toggle.mediaAudit"      },
+  { key: "run_sensory_audit",                labelKey: "toggle.sensoryAudit"    },
   { key: "run_pause_stop_hide_audit",        labelKey: "toggle.pauseStop"       },
   { key: "run_target_size_audit",            labelKey: "toggle.targetSize"      },
   { key: "run_resize_text_audit",            labelKey: "toggle.resizeText"      },
@@ -67,18 +69,20 @@ const STATUS_KEYS: Record<string, TranslationKey> = {
 };
 
 export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, currentStage, open, onClose }: AuditSidebarProps) {
-  const { t, lang } = useLanguage();
+  const { t, lang: uiLang } = useLanguage();
   const [config, setConfig] = useState<AuditConfig>({
     url: localStorage.getItem("ka11y_last_url") ?? "",
     max_depth: 0,
     wcag_level: "AAA",
-    lang: "en",
+    lang: uiLang,
     run_ocr: true,
     run_image_audit: true,
     run_form_audit: true,
     run_label_in_name_audit: true,
     run_pause_stop_hide_audit: true,
     run_target_size_audit: true,
+    run_media_audit: true,
+    run_sensory_audit: true,
     run_resize_text_audit: true,
     run_reflow_audit: true,
     run_text_spacing_audit: true,
@@ -87,6 +91,10 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
     run_focus_not_obscured_min_audit: true,
     run_focus_not_obscured_enh_audit: true,
   });
+
+  useEffect(() => {
+    setConfig((c) => ({ ...c, lang: uiLang }));
+  }, [uiLang]);
 
   const isRunning = jobStatus === "pending" || jobStatus === "running";
 
@@ -155,7 +163,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
         <Separator className="bg-[hsl(var(--sidebar-border))]" />
 
         {/* Audit Controls */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 border-sidebar-border">
           <p className="text-[9px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
             {t("sidebar.newAudit")}
           </p>
@@ -208,10 +216,9 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-                {t("sidebar.wcagLevelNote")}
-              </p>
             </div>
+
+
           </div>
 
           {/* Toggles */}
@@ -236,7 +243,11 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
 
           {/* Run button */}
           <Button
-            onClick={() => { localStorage.setItem("ka11y_last_url", config.url); onRunAudit({ ...config, lang }); }}
+            onClick={() => {
+              localStorage.setItem("ka11y_last_url", config.url);
+              localStorage.setItem("ka11y_last_lang", config.lang);
+              onRunAudit(config);
+            }}
             disabled={isRunning || !config.url}
             className={cn(
               "w-full h-9 text-xs font-semibold tracking-wider uppercase bg-primary text-primary-foreground hover:bg-primary/90 border-0",

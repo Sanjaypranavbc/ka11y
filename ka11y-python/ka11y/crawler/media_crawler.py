@@ -28,14 +28,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
-from ka11y.crawler.universal_page import navigate_with_retry
+from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="media_crawler")
@@ -87,6 +86,10 @@ class MediaElementData(BaseModel):
     # <details> blocks near the media element — common pattern for
     # collapsible transcript sections.
     nearby_details: List[Dict[str, str]] = []  # [{"summary": "...", "content": "..."}]
+
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
 
 
 
@@ -279,7 +282,8 @@ class AsyncMediaCrawler:
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
-            context = await browser.new_context(
+            context = await new_crawler_context(
+                browser,
                 viewport={"width": 1440, "height": 900},
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -287,8 +291,6 @@ class AsyncMediaCrawler:
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
-            # SSRF protection — same guard used by all other crawlers
-            await install_ssrf_guard(context)
 
             try:
                 await self._crawl_page(context, self.base_url, depth=0)
@@ -301,19 +303,6 @@ class AsyncMediaCrawler:
             f"on {self.base_url}"
         )
         return self.results
-
-    @classmethod
-    def from_snapshot(cls, snapshot_media: list, page_url: str, output_dir: str) -> "AsyncMediaCrawler":
-        """Populate from a pre-crawled PageSnapshot instead of launching a browser."""
-        instance = cls.__new__(cls)
-        instance.base_url = page_url
-        instance.output_dir = Path(output_dir)
-        instance.max_depth = 0
-        instance._visited = {page_url}
-        instance.output_dir.mkdir(parents=True, exist_ok=True)
-        from ka11y.crawler.media_crawler import MediaElementData
-        instance.results = [MediaElementData(page_url=page_url, **item) for item in snapshot_media]
-        return instance
 
     def save_raw_json(self) -> str:
         """Persist raw crawler results to media_raw.json for debugging."""
@@ -333,7 +322,15 @@ class AsyncMediaCrawler:
 
         page = await context.new_page()
         try:
-            await navigate_with_retry(page, url)
+            # Retry pattern — same as MovingContentCrawler
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            except Exception:
+                try:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                except Exception:
+                    await page.goto(url, wait_until="commit", timeout=15_000)
+
             # Wait for JS-driven media players to initialise
             await page.wait_for_timeout(2000)
 

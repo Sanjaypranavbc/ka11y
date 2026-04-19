@@ -17,7 +17,6 @@ from __future__ import annotations
 from typing import List
 
 from ..models import ElementSnapshot, PageSnapshot, RuleAuditRecord
-from ..heuristics import find_clipped_text_elements
 
 _RULE_KEY = "wcag_1_4_4"
 

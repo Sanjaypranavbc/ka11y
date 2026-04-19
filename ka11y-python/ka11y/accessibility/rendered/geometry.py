@@ -7,7 +7,7 @@ All functions operate on plain dicts / Rect objects — no Playwright dependency
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 from .models import Rect
 

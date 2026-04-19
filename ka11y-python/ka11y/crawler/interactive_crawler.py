@@ -20,11 +20,7 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.config.logger import setup_logger
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
-from ka11y.crawler.universal_page import navigate_with_retry
-
-logger = setup_logger(name="KAC", tag="interactive_crawler")
+from ka11y.crawler.context_factory import new_crawler_context
 
 
 class InteractiveElementData(BaseModel):
@@ -51,6 +47,10 @@ class InteractiveElementData(BaseModel):
 
     # Final computed accessible name (AccName-1.1 approximation)
     accessible_name: Optional[str] = None
+
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
 
     html_snippet: str = ""
 
@@ -241,7 +241,8 @@ class InteractiveElementCrawler:
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
-            context = await browser.new_context(
+            context = await new_crawler_context(
+                browser,
                 viewport={"width": 1440, "height": 900},
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -249,7 +250,6 @@ class InteractiveElementCrawler:
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
-            await install_ssrf_guard(context)  # Bug 1 fix
             try:
                 await self._crawl_page(context, self.base_url, depth=0)
             finally:
@@ -264,7 +264,10 @@ class InteractiveElementCrawler:
 
         page = await context.new_page()
         try:
-            await navigate_with_retry(page, url)
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            except Exception:
+                await page.goto(url, wait_until="commit", timeout=15_000)
             await page.wait_for_timeout(2000)
 
             raw: list = await page.evaluate(self.EXTRACT_JS)
@@ -283,22 +286,9 @@ class InteractiveElementCrawler:
                     ):
                         await self._crawl_page(context, href, depth + 1)
         except Exception as exc:
-            logger.error(f"[interactive_crawler] Error on {url}: {exc}")
+            print(f"[InteractiveCrawler] Error on {url}: {exc}")
         finally:
             await page.close()
-
-    @classmethod
-    def from_snapshot(cls, snapshot_interactive: list, page_url: str, output_dir: str) -> "InteractiveElementCrawler":
-        """Populate from a pre-crawled PageSnapshot instead of launching a browser."""
-        instance = cls.__new__(cls)
-        instance.base_url = page_url
-        instance.output_dir = Path(output_dir)
-        instance.max_depth = 0
-        instance.visited = {page_url}
-        instance.output_dir.mkdir(parents=True, exist_ok=True)
-        from ka11y.crawler.interactive_crawler import InteractiveElementData
-        instance.results = [InteractiveElementData(page_url=page_url, **item) for item in snapshot_interactive]
-        return instance
 
     def save_raw_json(self) -> str:
         path = self.output_dir / "interactive_elements_raw.json"

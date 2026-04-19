@@ -54,6 +54,18 @@ _TRANSCRIPT_LINK_KEYWORDS = [
     "show transcript",
     "full transcript",
     "download transcript",
+    # Japanese equivalents
+    "書き起こし",
+    "文字起こし",
+    "トランスクリプト",
+    "字幕",
+    "キャプション",
+    "テキスト版",
+    "音声テキスト",
+    "音声解説",
+    "音声ガイド",
+    "説明文",
+    "代替テキスト",
 ]
 
 # Keywords that indicate the media element is a labeled alternative for text.
@@ -65,6 +77,13 @@ _MEDIA_ALT_KEYWORDS = [
     "video version",
     "video alternative",
     "alternative for",
+    # Japanese equivalents
+    "音声版",
+    "動画版",
+    "代替音声",
+    "音声代替",
+    "テキストの音声化",
+    "読み上げ",
 ]
 
 # Track kinds that count as a text alternative.
@@ -324,12 +343,16 @@ class MediaAuditor:
         "transcript_type",
         "transcript_url_or_text",
         "quality_report",
+        "selector",
+        "element_ref_id",
+        "frame_path",
         "html_snippet",
     ]
 
-    def __init__(self, output_dir: str) -> None:
+    def __init__(self, output_dir: str, lang: str = "en") -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.lang = lang
 
     def generate_audit_report(
         self,
@@ -377,6 +400,9 @@ class MediaAuditor:
             "transcript_type": None,
             "transcript_url_or_text": None,
             "quality_report": None,
+            "selector": item.get("selector"),
+            "element_ref_id": item.get("element_ref_id"),
+            "frame_path": item.get("frame_path"),
         }
 
         # ── Gate 1: Is it prerecorded? ────────────────────────────────────
@@ -564,6 +590,8 @@ class MediaAuditor:
                 transcript_text=transcript_info.get("url_or_text") or "",
                 transcript_type=transcript_info.get("type") or "link",
                 media_type=media_type,
+                output_dir=str(self.output_dir),
+                lang=self.lang,
             )
         except Exception as exc:
             logger.warning(

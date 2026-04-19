@@ -1,6 +1,7 @@
 'use strict';
 
 const { run } = require('../../src/custom-checks/multiple-ways.check');
+const { getKeywordList } = require('../../src/custom-checks/sharedAssets');
 
 function makePage(data) {
   return { evaluate: jest.fn().mockResolvedValue(data) };
@@ -39,13 +40,9 @@ describe('multiple-ways.check (WCAG 2.4.5)', () => {
     expect(result.rules[0].ruleId).toBe('custom-multiple-ways');
   });
 
-  test('includes Japanese navigation keywords in source heuristics', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/multiple-ways.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('検索');
-    expect(src).toContain('サイトマップ');
-    expect(src).toContain('目次');
+  test('loads Japanese navigation keywords from shared universal config', () => {
+    expect(getKeywordList('multiple_ways', 'search_keywords')).toContain('検索');
+    expect(getKeywordList('multiple_ways', 'sitemap_keywords')).toContain('サイトマップ');
+    expect(getKeywordList('multiple_ways', 'toc_keywords')).toContain('目次');
   });
 });

@@ -1,13 +1,23 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '1.4.1';
 const RULE_ID = 'custom-use-of-color';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/use-of-color';
 
 // Maximum links to sample (performance guard)
-const MAX_LINKS = 150;
+const MAX_LINKS = 2000;
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const data = await page.evaluate((maxLinks) => {
     /**
      * Returns true if two color strings are visually distinct.
@@ -125,8 +135,9 @@ async function run(page) {
         if (colorDiffers) {
           violations.push({
             html: link.outerHTML.slice(0, 150),
-            id:   link.id || null,
-            text: linkText.slice(0, 60),
+            element_id: link.id || null,
+            target: link.id ? [`a#${CSS.escape(link.id)}`] : ['a[href]'],
+            tag: 'A',
           });
         }
       }
@@ -146,14 +157,12 @@ async function run(page) {
         impact: null,
         status: 'pass',
         reason: data.checkedCount > 0
-          ? `${data.checkedCount} inline link(s) checked — all have a non-color visual cue (underline, border, background, or font weight).`
-          : 'No inline text links found to check.',
+          ? _t(sharedContext, '{count} inline link(s) checked — all have a non-color visual cue (underline, border, background, or font weight).', 'インラインリンク {count} 件を確認しましたが、すべてに色以外の視覚的手がかり（下線、境界線、背景、文字の太さなど）がありました。', { count: data.checkedCount })
+          : _t(sharedContext, 'No inline text links found to check.', '確認対象のインラインテキストリンクは見つかりませんでした。'),
         helpUrl: HELP_URL,
       }],
     };
   }
-
-  const sample = data.violations.slice(0, 3).map(v => `"${v.text}"`).join(', ');
 
   return {
     successCriteriaId: SC,
@@ -162,7 +171,8 @@ async function run(page) {
       description: 'Color must not be the only visual means of conveying information',
       impact: 'serious',
       status: 'fail',
-      reason: `${data.violations.length} inline link(s) appear to be distinguished from surrounding text by colour alone (no underline, border, background, or font-weight difference): ${sample}. Add a non-color visual cue such as underline or border-bottom.`,
+      reason: _t(sharedContext, '{count} inline link(s) appear to be distinguished from surrounding text by colour alone (no underline, border, background, or font-weight difference). Add a non-color visual cue such as underline or border-bottom.', '周囲のテキストとの差が色だけになっているように見えるインラインリンクが {count} 件検出されました（下線、境界線、背景、文字の太さの違いなし）。下線や border-bottom など、色以外の視覚的手がかりを追加してください。', { count: data.violations.length }),
+      elements: data.violations,
       helpUrl: HELP_URL,
     }],
   };

@@ -14,7 +14,7 @@ apply deterministic checks where possible; unknowns are flagged as NEEDS_REVIEW.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import List
 
 from ..models import HoverInteractionResult, RuleAuditRecord
 

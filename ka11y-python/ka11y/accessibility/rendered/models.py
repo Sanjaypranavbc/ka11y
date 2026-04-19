@@ -183,6 +183,7 @@ class RuleAuditRecord(BaseModel):
     violation: str = ""
     html_snippet: str = ""
     element_id: Optional[str] = None
+    selector: Optional[str] = None
     tag: str = ""
     page_url: str = ""
 
@@ -193,6 +194,7 @@ class RuleAuditRecord(BaseModel):
             f"{self.rule_key}_violation": self.violation,
             "html_snippet": self.html_snippet,
             "element_id": self.element_id,
+            "selector": self.selector,
             "tag": self.tag,
             "page_url": self.page_url,
         }

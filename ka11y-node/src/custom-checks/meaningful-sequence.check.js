@@ -1,12 +1,63 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '1.3.2';
 const RULE_ID = 'custom-meaningful-sequence';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/meaningful-sequence';
 // MAX_CONTAINERS limits how many flex/grid containers are inspected (not total elements).
-const MAX_CONTAINERS = 500;
+const MAX_CONTAINERS = 2000;
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+function _formatViolationDetail(violation, context) {
+  if (violation && typeof violation.reason === 'string' && violation.reason.trim()) {
+    return violation.reason;
+  }
+
+  const orders = Array.isArray(violation && violation.orders)
+    ? violation.orders.join(', ')
+    : '';
+
+  switch (violation && violation.reasonCode) {
+    case 'grid-explicit-placement':
+      return _t(
+        context,
+        'Grid container has children with explicit grid-column-start or grid-row-start, potentially reordering visual presentation from DOM order',
+        'Grid コンテナ内で grid-column-start または grid-row-start が明示されている子要素があり、DOM 順序と異なる視覚順になる可能性があります。',
+      );
+    case 'mixed-floats':
+      return _t(
+        context,
+        'Container has mixed floated (left/right) and non-floated siblings, which may reorder visual presentation from DOM order',
+        'float 指定された兄弟要素（left/right）と非 float 要素が混在しており、DOM 順序と異なる視覚順になる可能性があります。',
+      );
+    case 'flex-direction-reverse':
+      return _t(
+        context,
+        'flex-direction: {flexDir} reverses DOM order visually',
+        'flex-direction: {flexDir} により DOM 順序が視覚的に反転しています。',
+        { flexDir: violation && violation.flexDir },
+      );
+    case 'css-order-reorders':
+      return _t(
+        context,
+        'CSS order property reorders children from DOM sequence (orders: [{orders}])',
+        'CSS の order プロパティにより子要素が DOM 順序から並び替えられています（order: [{orders}]）。',
+        { orders },
+      );
+    default:
+      return '';
+  }
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const violations = await page.evaluate((maxC) => {
     const results = [];
     let containerCount = 0;
@@ -47,6 +98,16 @@ async function run(page) {
         if (isRtlDoc || isRtlEl) continue; // correct usage for RTL — skip
       }
 
+      // Valid UI Pattern Exemption: If a flex container is reversed but ONLY contains 
+      // interactive elements (like a button group), it rarely breaks meaning.
+      if (isReversed) {
+         const allInteractive = children.every(ch => {
+             const t = ch.tagName.toLowerCase();
+             return ['button', 'a', 'input', 'select'].includes(t) || ch.hasAttribute('role');
+         });
+         if (allInteractive) continue; // Skip to PASS
+      }
+
       // Bug fix 2: detect CSS order property — use parseInt with radix 10
       // Note: parseInt('auto', 10) = NaN; we treat NaN as 0 (default order)
       const orders = children.map(ch => {
@@ -73,12 +134,14 @@ async function run(page) {
         if (hasGridPlacement) {
           results.push({
             tagName: el.tagName.toLowerCase(),
-            id: el.id || null,
+            element_id: el.id || null,
+            target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+            tag: el.tagName.toUpperCase(),
             display,
             flexDir: null,
             orders: null,
-            reason: 'Grid container has children with explicit grid-column-start or grid-row-start, potentially reordering visual presentation from DOM order',
-            html: el.outerHTML.slice(0, 200),
+            reasonCode: 'grid-explicit-placement',
+            html: el.outerHTML.slice(0, 150),
           });
           continue;
         }
@@ -92,12 +155,14 @@ async function run(page) {
         if (hasFloated && hasNonFloated) {
           results.push({
             tagName: el.tagName.toLowerCase(),
-            id: el.id || null,
+            element_id: el.id || null,
+            target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+            tag: el.tagName.toUpperCase(),
             display,
             flexDir: null,
             orders: null,
-            reason: 'Container has mixed floated (left/right) and non-floated siblings, which may reorder visual presentation from DOM order',
-            html: el.outerHTML.slice(0, 200),
+            reasonCode: 'mixed-floats',
+            html: el.outerHTML.slice(0, 150),
           });
           continue;
         }
@@ -107,14 +172,14 @@ async function run(page) {
 
       results.push({
         tagName: el.tagName.toLowerCase(),
-        id: el.id || null,
+        element_id: el.id || null,
+        target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
         display,
         flexDir: flexDir || null,
         orders: hasExplicitOrder ? orders : null,
-        reason: isReversed
-          ? `flex-direction: ${flexDir} reverses DOM order visually`
-          : `CSS order property reorders children from DOM sequence (orders: [${orders.join(', ')}])`,
-        html: el.outerHTML.slice(0, 200),
+        reasonCode: isReversed ? 'flex-direction-reverse' : 'css-order-reorders',
+        html: el.outerHTML.slice(0, 150),
       });
     }
 
@@ -124,11 +189,15 @@ async function run(page) {
   if (violations.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Reading and navigation order must be programmatically determinable', impact: null, status: 'pass', reason: `Up to ${MAX_CONTAINERS} flex/grid containers inspected — no CSS reordering (flex-direction reverse or order property) found that diverges from DOM order.`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Reading and navigation order must be programmatically determinable', impact: null, status: 'pass', reason: _t(sharedContext, 'Up to {count} flex/grid containers inspected — no CSS reordering (flex-direction reverse or order property) found that diverges from DOM order.', '最大 {count} 件の flex/grid コンテナを確認しましたが、DOM 順序と食い違う CSS による並び替え（flex-direction の反転や order プロパティ）は検出されませんでした。', { count: MAX_CONTAINERS }), helpUrl: HELP_URL }],
     };
   }
 
-  const sample = violations.slice(0, 3).map(v => v.reason).join('; ');
+  const sample = violations
+    .slice(0, 3)
+    .map(v => _formatViolationDetail(v, sharedContext))
+    .filter(Boolean)
+    .join('; ');
 
   return {
     successCriteriaId: SC,
@@ -137,7 +206,8 @@ async function run(page) {
       description: 'Reading and navigation order must be programmatically determinable',
       impact: 'moderate',
       status: 'incomplete',
-      reason: `${violations.length} flex/grid container(s) visually reorder content relative to DOM order. Verify the DOM order matches the intended reading sequence. Details: ${sample}.`,
+      reason: _t(sharedContext, '{count} flex/grid container(s) visually reorder content relative to DOM order. Verify the DOM order matches the intended reading sequence. Details: {sample}.', 'flex/grid コンテナ {count} 件で、DOM 順序に対して視覚的な並び替えが行われています。DOM 順序が意図した読み上げ・閲覧順と一致しているか確認してください。詳細: {sample}。', { count: violations.length, sample }),
+      elements: violations,
       helpUrl: HELP_URL,
     }],
   };

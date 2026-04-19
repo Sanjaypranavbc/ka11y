@@ -25,7 +25,7 @@ This builds and starts four services:
 
 | Container | Port | Purpose |
 |-----------|------|---------|
-| `ka11y-node` | 3000 | axe-core + custom Node checks / Puppeteer engine |
+| `ka11y-node` | 3000 | axe-core / Puppeteer engine |
 | `ka11y-python` | 8000 | FastAPI + Python auditors |
 | `ka11y-frontend` | 8080 | React dashboard (nginx) |
 | `ka11y-docs` | 3001 | Mintlify documentation site |
@@ -40,9 +40,16 @@ This builds and starts four services:
 
 Open **http://localhost:8080**, enter a URL in the sidebar, and click **Run Audit**.
 
-The dashboard streams live stage progress as each auditor completes. When the job finishes, violations, needs-review items, and passes are shown across the four tabs. Those findings include raw axe-core results, ka11y-node custom checks, and Python auditor output.
+The dashboard streams live stage progress as each auditor completes. When the job finishes, violations, needs-review items, and passes are shown across the four tabs.
 
-Dashboard rule/result language defaults to **EN** (including Japanese websites). To get Japanese localized results, use the **EN / JA** switcher in the top-right header, select **JA**, then start the audit. The request is submitted with `lang: "ja"`, which localizes WCAG names, suggested fixes, and catalogue-backed fallback reasons.
+Dashboard rule/result language defaults to **EN** (including Japanese websites). To get Japanese-localized results, use the **EN / JA** switcher in the top-right header, select **JA**, then start the audit. The next submitted job uses `lang: "ja"`.
+
+Important details:
+
+- Switching **EN / JA** changes the **next audit submission language** and the UI chrome language. It does **not** retroactively relocalize an already-completed report.
+- Node findings localize `criterion_name`, `reason`, and `suggested_fix` for Japanese.
+- Python findings localize `criterion_name` and `suggested_fix` through shared i18n. Python `reason` strings are localized when the underlying auditor emits localized text; some older Python auditors still emit English reasons.
+- The current combined API response does not echo `lang` yet, so clients should treat the submitted request language as the source of truth for the job they just started.
 
 ---
 
@@ -81,7 +88,7 @@ curl http://localhost:8000/api/v1/combined/$JOB | jq '.result.summary'
 
 ### Japanese results
 
-To get Japanese localized rule names, suggested fixes, and catalogue-backed fallback reasons in results, set `"lang": "ja"` when submitting the job. If you omit `lang`, results stay in English by default:
+To get Japanese localized rule names and suggested fixes in results, set `"lang": "ja"` when submitting the job. If you omit `lang`, results stay in English by default:
 
 ```bash
 JOB=$(curl -s -X POST http://localhost:8000/api/v1/combined/ \
@@ -93,6 +100,14 @@ JOB=$(curl -s -X POST http://localhost:8000/api/v1/combined/ \
     "max_depth": 0
   }' | jq -r '.job_id')
 ```
+
+This localizes:
+
+- Node / axe-core mapped output
+- Node custom-rule `reason` and `suggested_fix` strings
+- Python `criterion_name` and `suggested_fix` values
+
+Python `reason` localization still depends on the individual auditor implementation.
 
 ### Japanese-site coverage report (English output)
 
@@ -164,7 +179,11 @@ NODE_BASE_URL=http://localhost:3000 poetry run uvicorn ka11y.main:app --reload
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NODE_BASE_URL` | `http://localhost:3000` | Base URL of the ka11y-node service |
+| `NODE_BASE_URL` | `http://localhost:3000` | Base URL used by **ka11y-python** to reach **ka11y-node** |
 | `PYTHONUNBUFFERED` | `1` | Ensure live log output in Docker |
 
 See [Environment Reference](/deployment/environment) for all options.
+
+<Note>
+  The browser/frontend does **not** call `node:3000` directly. Frontend requests stay on `/api/*`, nginx or Vite proxies them to Python, and Python calls Node using `NODE_BASE_URL`.
+</Note>

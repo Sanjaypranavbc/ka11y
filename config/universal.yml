@@ -1,0 +1,755 @@
+version: 1
+
+input:
+  url: "https://www.kao.com/global/en/"
+  max_depth: 0
+  output_dir: "crawled_images"
+
+directories:
+  - "informative"
+  - "decorative"
+  - "functional"
+  - "functional/buttons"
+  - "functional/icons"
+  - "functional/logos"
+  - "functional/images"
+  - "complex"
+  - "complex/charts"
+  - "complex/emojis"
+
+ocr:
+  base_folder: "text_detected"
+  contrast_folder: "contrast"
+  categories:
+    button_text: "button_text"
+    informational_text: "informational_text"
+    logo_text: "logo_text"
+    with_text: "with_text"
+
+browser:
+  ignore_https_errors: true
+
+language:
+  supported:
+    - "en"
+    - "ja"
+
+checks:
+  pronunciation:
+    cjk_ratio_threshold: 0.05
+    ruby_min_coverage_pct: 30
+    cjk_lang_prefixes:
+      - "ja"
+      - "zh"
+      - "zh-CN"
+      - "zh-TW"
+      - "zh-HK"
+      - "ko"
+      - "zh-hans"
+      - "zh-hant"
+      - "zh-cn"
+      - "zh-tw"
+    reason_templates:
+      section_low_ruby:
+        en: 'Page language is "{html_lang}" but {issue_count} section(s) with explicit CJK lang attributes have low ruby coverage (< {ruby_min_coverage_pct}%): {sample_sections}. Add <ruby> annotations for kanji within these sections.'
+        ja: 'ページ言語は "{html_lang}" ですが、明示的な CJK の lang 属性を持つ {issue_count} 件のセクションでルビ率が低すぎます（{ruby_min_coverage_pct}% 未満）: {sample_sections}。これらのセクション内の漢字に <ruby> 注釈を追加してください。'
+      not_applicable:
+        en: 'Page language is "{html_lang}" with {cjk_density_pct}% CJK characters. WCAG 3.1.6 Pronunciation is not applicable.'
+        ja: 'ページ言語は "{html_lang}" で、CJK 文字率は {cjk_density_pct}% です。WCAG 3.1.6 の発音はこのページでは適用対象外です。'
+      no_kanji:
+        en: 'Page lang="{html_lang}" ({cjk_density_pct}% CJK), but no kanji characters were detected, so ruby annotation is not needed.'
+        ja: 'ページの lang="{html_lang}" で CJK 文字率は {cjk_density_pct}% ですが、漢字が検出されなかったためルビ注釈は不要です。'
+      pass_with_ruby:
+        en: '{ruby_count} <ruby> element(s) were found, covering about {ruby_pct}% of kanji characters on this {html_lang} page.'
+        ja: '{html_lang} ページで {ruby_count} 件の <ruby> 要素が見つかり、漢字の約 {ruby_pct}% をカバーしています。'
+      low_ruby:
+        en: '{ruby_count} <ruby> element(s) were found, but only about {ruby_pct}% of kanji characters are annotated ({kanji_with_ruby}/{kanji_count}). Add furigana for ambiguous or specialist kanji.'
+        ja: '{ruby_count} 件の <ruby> 要素が見つかりましたが、注釈されている漢字は約 {ruby_pct}% のみです（{kanji_with_ruby}/{kanji_count}）。あいまいな漢字や専門用語にふりがなを追加してください。'
+      missing_ruby:
+        en: 'No <ruby> elements were found on this {html_lang} page ({cjk_density_pct}% CJK, {kanji_count} kanji characters). Add ruby/furigana for difficult or ambiguous kanji. Sample text: {sample_text}.'
+        ja: '{html_lang} ページで <ruby> 要素が見つかりませんでした（CJK {cjk_density_pct}%、漢字 {kanji_count} 文字）。難読またはあいまいな漢字にルビやふりがなを追加してください。例: {sample_text}。'
+
+  audio_transcript:
+    transcript_keywords:
+      en:
+        - "transcript"
+        - "caption"
+        - "text version"
+        - "read"
+        - "description"
+        - "audio text"
+        - "audio description"
+        - "audio guide"
+        - "alternative text"
+      ja:
+        - "文字起こし"
+        - "書き起こし"
+        - "トランスクリプト"
+        - "字幕"
+        - "キャプション"
+        - "テキスト版"
+        - "音声テキスト"
+        - "説明文"
+        - "音声解説"
+        - "音声ガイド"
+        - "代替テキスト"
+    reason_templates:
+      no_audio:
+        en: 'No <audio> elements found on this page.'
+        ja: 'このページに <audio> 要素はありません。'
+      pass_detected:
+        en: '{audio_count} <audio> element(s) were checked and all appear to have a text alternative.'
+        ja: '{audio_count} 件の <audio> 要素を確認し、すべてにテキスト代替があるように見えます。'
+      missing_transcript:
+        en: '{issue_count} of {audio_count} <audio> element(s) have no detectable text alternative (no <track>, transcript link, <figcaption>, or aria-describedby): {element_list}.'
+        ja: '{audio_count} 件の <audio> 要素のうち {issue_count} 件で検出可能なテキスト代替が見つかりませんでした（<track>、書き起こしリンク、<figcaption>、aria-describedby なし）: {element_list}。'
+
+  multiple_ways:
+    search_keywords:
+      en:
+        - "search"
+        - "recherche"
+        - "buscar"
+        - "suche"
+        - "cerca"
+        - "zoeken"
+        - "sök"
+        - "搜索"
+        - "搜尋"
+        - "검색"
+      ja:
+        - "検索"
+    sitemap_keywords:
+      en:
+        - "sitemap"
+        - "site map"
+      ja:
+        - "サイトマップ"
+    toc_keywords:
+      en:
+        - "table of contents"
+      ja:
+        - "目次"
+    breadcrumb_keywords:
+      en:
+        - "breadcrumb"
+      ja:
+        - "パンくず"
+    reason_templates:
+      pass:
+        en: 'Multiple navigation mechanisms were found: {found_list}.'
+        ja: '複数のナビゲーション手段が見つかりました: {found_list}。'
+      insufficient:
+        en: 'Only {ways} navigation mechanism(s) were detected{found_suffix}. At least 2 are required. Consider adding: {missing_list}.'
+        ja: '検出されたナビゲーション手段は {ways} 件のみです{found_suffix}。少なくとも 2 件必要です。追加候補: {missing_list}。'
+
+  consistent_help:
+    help_keywords:
+      en:
+        - "help"
+        - "contact us"
+        - "support"
+        - "faq"
+        - "frequently asked"
+        - "live chat"
+        - "customer service"
+        - "get help"
+        - "need help"
+        - "assistance"
+        - "helpdesk"
+        - "help centre"
+        - "help center"
+        - "accessibility"
+      ja:
+        - "ヘルプ"
+        - "お問い合わせ"
+        - "問い合わせ"
+        - "サポート"
+        - "よくある質問"
+        - "チャット"
+        - "カスタマーサービス"
+        - "サポートセンター"
+        - "ヘルプセンター"
+        - "ご相談"
+        - "助け"
+        - "フリーダイヤル"
+        - "0120"
+    chat_keywords:
+      en:
+        - "live chat"
+      ja:
+        - "チャット"
+    reason_templates:
+      missing_help:
+        en: 'No help, contact, or support links/widgets were detected on this page. If this is part of a multi-page site, ensure help mechanisms appear consistently.'
+        ja: 'このページではヘルプ・問い合わせ・サポートのリンクやウィジェットが検出されませんでした。複数ページのサイトであれば、支援手段を一貫した位置に配置してください。'
+      pass:
+        en: '{help_link_count} help link(s){extras_suffix} detected{location_suffix}. Verify placement is consistent across the site.'
+        ja: '{help_link_count} 件のヘルプリンク{extras_suffix} を検出しました{location_suffix}。サイト全体で配置が一貫していることを確認してください。'
+
+  error_prevention:
+    financial_keywords:
+      en:
+        - "payment"
+        - "checkout"
+        - "purchase"
+        - "buy now"
+        - "credit card"
+        - "debit card"
+        - "card number"
+        - "billing"
+        - "invoice"
+        - "subscribe"
+        - "subscription"
+        - "order"
+        - "confirm order"
+        - "place order"
+        - "donate"
+        - "donation"
+        - "fund"
+        - "invest"
+        - "transfer"
+        - "wire transfer"
+        - "ach"
+        - "withdraw"
+        - "bank account"
+        - "routing number"
+      ja:
+        - "購入"
+        - "決済"
+        - "お支払い"
+        - "クレジットカード"
+        - "デビットカード"
+        - "カード番号"
+        - "振込"
+        - "送金"
+        - "課金"
+        - "サブスクリプション"
+        - "定期購入"
+        - "寄付"
+        - "ご注文"
+        - "注文確認"
+        - "請求"
+    legal_keywords:
+      en:
+        - "legal"
+        - "terms of service"
+        - "terms of use"
+        - "privacy policy"
+        - "agreement"
+        - "consent"
+        - "contract"
+        - "liability"
+        - "gdpr"
+        - "hipaa"
+        - "sign here"
+        - "e-sign"
+        - "electronic signature"
+      ja:
+        - "利用規約"
+        - "プライバシーポリシー"
+        - "個人情報"
+        - "同意する"
+        - "契約"
+        - "署名"
+        - "規約に同意"
+        - "電子署名"
+    destructive_keywords:
+      en:
+        - "delete account"
+        - "delete data"
+        - "delete profile"
+        - "remove account"
+        - "remove data"
+        - "close account"
+        - "deactivate"
+        - "cancel account"
+        - "cancel subscription"
+        - "unsubscribe"
+        - "permanently delete"
+        - "irreversible"
+        - "purge"
+        - "wipe"
+        - "terminate"
+      ja:
+        - "削除する"
+        - "退会"
+        - "アカウント削除"
+        - "アカウントを削除"
+        - "解約"
+        - "キャンセル"
+        - "データ消去"
+        - "永久削除"
+        - "取り消せない"
+        - "元に戻せない"
+    review_keywords:
+      en:
+        - "review"
+        - "confirm"
+        - "verify"
+        - "check your"
+        - "summary"
+        - "order summary"
+        - "please review"
+        - "are you sure"
+      ja:
+        - "確認"
+        - "確認画面"
+        - "内容確認"
+        - "注文確認"
+        - "見直し"
+        - "本当に"
+    review_button_keywords:
+      en:
+        - "review"
+        - "preview"
+        - "continue"
+        - "next"
+        - "proceed"
+        - "back"
+        - "edit"
+      ja:
+        - "確認"
+        - "プレビュー"
+        - "続行"
+        - "次へ"
+        - "進む"
+        - "戻る"
+        - "編集"
+    step_keywords:
+      en:
+        - "step"
+        - "wizard"
+        - "progress"
+      ja:
+        - "ステップ"
+        - "進行"
+        - "確認"
+    reason_templates:
+      no_risk:
+        en: 'No legal, financial, or destructive action forms were detected.'
+        ja: '法的・金融的・破壊的操作に該当するフォームは検出されませんでした。'
+      unsafe:
+        en: '{unsafe_count} of {total_count} {category_list} form(s) have no review step, confirmation checkbox, multi-step indicator, or preview mechanism: {form_refs}.'
+        ja: '{total_count} 件の高リスクフォームのうち {unsafe_count} 件の {category_list} フォームで、確認ステップ・確認チェックボックス・多段階表示・プレビュー機構が見つかりませんでした: {form_refs}。'
+      safe:
+        en: '{total_count} high-risk form(s) were detected and all have a review or confirmation safeguard: {safe_refs}.'
+        ja: '{total_count} 件の高リスクフォームが検出され、すべてに確認または見直しの保護策がありました: {safe_refs}。'
+
+  error_suggestion:
+    suggestion_keywords:
+      en:
+        - "please enter"
+        - "please provide"
+        - "please use"
+        - "please select"
+        - "please check"
+        - "make sure"
+        - "ensure"
+        - "must be"
+        - "should be"
+        - "at least"
+        - "at most"
+        - "between"
+        - "valid email"
+        - "valid phone"
+        - "valid date"
+        - "valid format"
+        - "valid url"
+        - "valid number"
+        - "try again"
+        - "example:"
+      ja:
+        - "入力してください"
+        - "選択してください"
+        - "確認してください"
+        - "必要があります"
+        - "以上"
+        - "以下"
+        - "文字以上"
+        - "文字以下"
+        - "文字以内"
+        - "有効なメール"
+        - "有効な電話"
+        - "有効な日付"
+        - "有効な形式"
+        - "有効なurl"
+        - "有効な数値"
+        - "例："
+        - "例:"
+        - "お願いします"
+        - "しなければなりません"
+        - "べきです"
+        - "試してください"
+        - "やり直してください"
+        - "提供してください"
+        - "修正してください"
+        - "が必要です"
+        - "ください"
+    terse_keywords:
+      en:
+        - "invalid"
+        - "error"
+        - "required"
+        - "failed"
+        - "wrong"
+        - "incorrect"
+        - "bad input"
+        - "not valid"
+        - "this field is required"
+      ja:
+        - "無効"
+        - "エラー"
+        - "必須"
+        - "失敗"
+        - "不正"
+        - "入力エラー"
+
+  location:
+    breadcrumb_keywords:
+      en:
+        - "breadcrumb"
+      ja:
+        - "パンくず"
+    sitemap_keywords:
+      en:
+        - "sitemap"
+        - "site map"
+      ja:
+        - "サイトマップ"
+
+  pointer_cancellation:
+    action_keywords:
+      en:
+        - "submit"
+        - "navigate"
+        - "redirect"
+        - "window.location"
+        - "document.location"
+        - "history.push"
+        - "history.replace"
+        - "fetch"
+        - "xhr"
+        - "ajax"
+        - "open("
+        - "close("
+        - "modal"
+        - "dialog"
+        - "toggle"
+        - "show"
+        - "hide"
+        - "dispatch"
+        - "emit"
+        - "call"
+        - "invoke"
+        - "play"
+        - "pause"
+        - "remove"
+        - "delete"
+        - "add"
+        - "insert"
+        - "update"
+        - "save"
+        - "load"
+        - "send"
+        - "post"
+        - "put"
+        - "get"
+      ja:
+        - "送信"
+        - "購入"
+        - "削除"
+        - "確認"
+        - "登録"
+        - "申込"
+        - "注文"
+        - "クリック"
+
+crawler:
+  include_data_uris: false
+  include_invisible: false
+  scroll_passes: 3
+  language:
+    cjk_langs:
+      - "ja"
+      - "zh"
+      - "zh-CN"
+      - "zh-TW"
+      - "zh-HK"
+      - "ko"
+  reporting:
+    max_warning_samples: 3
+  performance:
+    max_focus_steps: 100
+    max_hover_candidates: 12
+    max_ocr_images_per_run: 60
+
+crawl_browser:
+  width: 1920
+  height: 1080
+
+  accessible_auth:
+    login_form_keywords:
+      en:
+        - "log\\s*in"
+        - "sign\\s*in"
+        - "login"
+        - "signin"
+        - "authenticate"
+        - "username"
+        - "email\\s+address"
+        - "create\\s+account"
+        - "register"
+        - "forgot\\s+password"
+      ja:
+        - "ログイン"
+        - "サインイン"
+        - "認証"
+        - "ユーザー名"
+        - "メールアドレス"
+        - "アカウント作成"
+        - "新規登録"
+        - "会員登録"
+        - "パスワード"
+        - "パスワードを忘れ"
+        - "パスワード再設定"
+    captcha_alt_keywords:
+      en:
+        - "audio"
+        - "can.?t\\s+read"
+        - "different\\s+image"
+        - "refresh\\s+captcha"
+        - "alternative"
+        - "try\\s+another"
+      ja:
+        - "音声"
+        - "読み取れない"
+        - "別の画像"
+        - "画像を更新"
+        - "別の方法"
+        - "別の認証"
+    cognitive_test_keywords:
+      en:
+        - "what\\s+is\\s+\\d+\\s*[\\+\\-\\*×÷]\\s*\\d+"
+        - "solve\\s+the\\s+(puzzle|equation|problem)"
+        - "enter\\s+the\\s+(word|text|code|letters?|numbers?)\\s+(you\\s+see|shown|above|below|in\\s+the\\s+(image|picture))"
+        - "answer\\s+the\\s+(question|challenge)"
+        - "what\\s+(color|colour|shape)\\s+is"
+        - "\\d+\\s*[\\+\\-\\*×÷]\\s*\\d+"
+      ja:
+        - "計算"
+        - "問題を解"
+        - "パズル"
+        - "クイズ"
+        - "画像に表示"
+        - "表示された文字"
+        - "見える文字"
+        - "質問に答"
+        - "何色"
+        - "どの色"
+        - "どの形"
+
+  status_messages:
+    search_result_keywords:
+      en:
+        - "result"
+      ja:
+        - "結果"
+    counter_badge_keywords:
+      en:
+        - "count"
+        - "counter"
+        - "notification"
+        - "unread"
+      ja:
+        - "新着"
+        - "件"
+        - "通知"
+        - "未読"
+    cart_keywords:
+      en:
+        - "cart"
+        - "basket"
+      ja:
+        - "カート"
+        - "買い物かご"
+    notification_class_keywords:
+      en:
+        - "notification"
+        - "toast"
+        - "snackbar"
+        - "flash"
+        - "alert"
+        - "banner"
+      ja:
+        - "notification"
+        - "toast"
+        - "snackbar"
+        - "flash"
+        - "alert"
+        - "banner"
+
+  link_purpose:
+    generic_link_keywords:
+      en:
+        - "click\\s+here"
+        - "here"
+        - "read\\s+more"
+        - "more"
+        - "learn\\s+more"
+        - "more\\s+info(rmation)?"
+        - "details"
+        - "continue"
+        - "go"
+        - "link"
+        - "this"
+        - "see\\s+more"
+        - "view\\s+more"
+        - "find\\s+out\\s+more"
+        - "click"
+        - "tap"
+        - "press\\s+here"
+        - "start"
+        - "begin"
+        - "open"
+        - "show"
+        - "hide"
+        - "toggle"
+      ja:
+        - "こちら"
+        - "こちらへ"
+        - "詳細"
+        - "詳しくはこちら"
+        - "詳細はこちら"
+        - "もっと見る"
+        - "続きを読む"
+        - "もっと読む"
+        - "続きはこちら"
+        - "詳しく見る"
+        - "もっと詳しく"
+        - "開く"
+        - "見る"
+        - "確認する"
+        - "ここをクリック"
+        - "クリック"
+        - "タップ"
+        - "詳細を見る"
+        - "さらに"
+        - "リンク"
+
+  images_of_text:
+    text_keywords:
+      en:
+        - "text"
+        - "word"
+        - "message"
+        - "letter"
+        - "title"
+        - "heading"
+        - "quote"
+        - "banner"
+        - "sign"
+        - "button"
+      ja:
+        - "文字"
+        - "テキスト"
+        - "メッセージ"
+        - "手紙"
+        - "タイトル"
+        - "見出し"
+        - "引用"
+        - "バナー"
+        - "サイン"
+        - "ボタン"
+    logo_keywords:
+      en:
+        - "logo"
+        - "brand"
+        - "trademark"
+        - "mark"
+        - "logotype"
+      ja:
+        - "ロゴ"
+        - "ブランド"
+        - "商標"
+        - "マーク"
+        - "ロゴタイプ"
+
+  redundant_entry:
+    address_keywords:
+      en:
+        - "address"
+        - "zip"
+        - "postal"
+        - "street"
+        - "city"
+        - "state"
+        - "province"
+        - "country"
+      ja:
+        - "住所"
+        - "郵便番号"
+        - "都道府県"
+        - "市区町村"
+        - "番地"
+    name_keywords:
+      en:
+        - "name"
+        - "first\\s*name"
+        - "last\\s*name"
+        - "full\\s*name"
+      ja:
+        - "名前"
+        - "氏名"
+        - "姓"
+        - "名"
+        - "ふりがな"
+        - "フリガナ"
+    contact_keywords:
+      en:
+        - "email"
+        - "e-mail"
+        - "phone"
+        - "telephone"
+        - "mobile"
+        - "cell"
+      ja:
+        - "メール"
+        - "アドレス"
+        - "電話"
+        - "携帯"
+        - "スマホ"
+    shipping_billing_keywords:
+      en:
+        - "shipping"
+        - "billing"
+        - "delivery"
+        - "payment"
+      ja:
+        - "配送"
+        - "請求"
+        - "お届け先"
+        - "支払"
+    confirmation_keywords:
+      en:
+        - "confirm"
+        - "verify"
+        - "re-enter"
+        - "again"
+      ja:
+        - "確認"
+        - "再入力"
+        - "もう一度"
+    reuse_control_keywords:
+      en:
+        - "same\\s+as"
+        - "use\\s+previous"
+        - "copy\\s+from"
+        - "reuse"
+      ja:
+        - "同じ"
+        - "上記と同じ"
+        - "コピーする"
+        - "使用する"
+        - "反映する"
+

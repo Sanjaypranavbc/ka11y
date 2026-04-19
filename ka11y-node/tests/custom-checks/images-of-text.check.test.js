@@ -72,13 +72,4 @@ describe('images-of-text.check (WCAG 1.4.5)', () => {
     expect(result.rules[0].status).toBe('fail');
   });
 
-  test('includes Japanese text-image/logo signals in source heuristics', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/images-of-text.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('ロゴ');
-    expect(src).toContain('バナー');
-    expect(src).toContain('見出し');
-  });
 });

@@ -5,7 +5,6 @@ Unit tests for rendered-layout evaluators using synthetic PageSnapshot
 and FocusStep objects — no browser needed.
 """
 
-import pytest
 
 from ka11y.accessibility.rendered.models import (
     ElementSnapshot,

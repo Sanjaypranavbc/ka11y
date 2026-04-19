@@ -129,6 +129,15 @@ describe('mapCustomResultsFlat', () => {
       expect(findings[0].criterion_name).toBe('Non-text Content');
       expect(findings[0].level).toBe('A');
     });
+
+    test('lang=ja localizes criterion_name for known SC codes', () => {
+      const findings = mapCustomResultsFlat([{
+        successCriteriaId: '1.1.1',
+        rules: [{ ruleId: 'custom-alt', status: 'fail', reason: 'bad' }],
+      }], 'https://example.com', 'ja');
+      expect(findings[0].criterion_name).toBe('非テキストコンテンツ');
+      expect(findings[0].suggested_fix).toContain('alt');
+    });
   });
 });
 
@@ -187,6 +196,52 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
     expect(findings[0].suggested_fix).toContain('Move <aside> elements');
   });
 
+  test('best-practice axe rule localizes criterion_name and suggested_fix for lang=ja', () => {
+    const axeResults = makeAxeResults({
+      violations: [{
+        id:     'landmark-complementary-is-top-level',
+        tags:   ['cat.semantics', 'best-practice'],
+        impact: 'moderate',
+        nodes:  [{
+          html: '<aside>Related links</aside>',
+          target: ['aside'],
+          failureSummary: '次のすべてを修正します: 補足ランドマークが別のランドマーク内にあります。',
+        }],
+        help:   '補足ランドマークはトップレベルである必要があります。',
+        helpUrl: 'https://dequeuniversity.com/rules/axe/4.11/landmark-complementary-is-top-level',
+        description: 'Complementary landmarks should not be nested.',
+      }],
+    });
+
+    const findings = mapResultsFlat(axeResults, 'https://example.com', 'ja');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].criterion_name).toBe('トップレベルの補足ランドマーク');
+    expect(findings[0].suggested_fix).toContain('aside 要素');
+    expect(findings[0].reason).toBe('補足ランドマークが別のランドマーク内にあります。');
+  });
+
+  test('lang=ja strips the localized axe failure-summary prefix', () => {
+    const axeResults = makeAxeResults({
+      violations: [{
+        id: 'image-alt',
+        tags: ['wcag111'],
+        impact: 'serious',
+        nodes: [{
+          html: '<img src="logo.png">',
+          target: ['img'],
+          failureSummary: '次のすべてを修正します: 画像に代替テキストがありません。',
+        }],
+        help: '画像には代替テキストが必要です。',
+        helpUrl: 'https://example.com/image-alt',
+        description: 'Images must have alternative text',
+      }],
+    });
+
+    const findings = mapResultsFlat(axeResults, 'https://example.com', 'ja');
+    expect(findings).toHaveLength(1);
+    expect(findings[0].reason).toBe('画像に代替テキストがありません。');
+  });
+
   test('AAA criteria like 1.4.6 resolve to names and levels', () => {
     const axeResults = makeAxeResults({
       violations: [{
@@ -230,6 +285,7 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
       element_id: 'hero',
       tag: 'IMG',
       target: ['#hero'],
+      selector: '#hero',
       page_url: 'https://example.com',
     });
     expect(findings[1].element).toEqual({
@@ -237,6 +293,7 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
       element_id: null,
       tag: 'IMG',
       target: ['header img.logo'],
+      selector: 'header img.logo',
       page_url: 'https://example.com',
     });
   });
@@ -302,6 +359,9 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: 'save',
       tag: 'BUTTON',
       target: ['#save'],
+      selector: '#save',
+      source: null,
+      media_query: null,
       page_url: 'https://example.com',
     });
     expect(findings[1].element).toEqual({
@@ -309,6 +369,9 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: null,
       tag: 'a',
       target: ['.cta'],
+      selector: '.cta',
+      source: null,
+      media_query: null,
       page_url: 'https://example.com',
     });
   });
@@ -332,6 +395,9 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: 'podcast-player',
       tag: 'AUDIO',
       target: [],
+      selector: null,
+      source: null,
+      media_query: null,
       page_url: 'https://example.com',
     });
   });
@@ -355,6 +421,39 @@ describe('mapCustomResultsFlat element mapping', () => {
       element_id: null,
       tag: 'HTML',
       target: ['html'],
+      selector: null,
+      source: null,
+      media_query: null,
+      page_url: 'https://example.com',
+    });
+  });
+
+  test('preserves selector-based structured evidence from custom checks', () => {
+    const findings = mapCustomResultsFlat([
+      {
+        successCriteriaId: '1.3.4',
+        rules: [{
+          ruleId: 'custom-orientation-meta-viewport',
+          status: 'fail',
+          reason: 'Viewport locks orientation.',
+          selector: 'meta[name="viewport"]',
+          target: 'meta[name="viewport"]',
+          snippet: '<meta name="viewport" content="orientation=portrait">',
+          source: 'https://example.com/app.css',
+          mediaQuery: '(orientation: portrait)',
+        }],
+      },
+    ], 'https://example.com');
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0].selector).toBe('meta[name="viewport"]');
+    expect(findings[0].element_selector).toBe('meta[name="viewport"]');
+    expect(findings[0].element).toMatchObject({
+      html: '<meta name="viewport" content="orientation=portrait">',
+      selector: 'meta[name="viewport"]',
+      target: ['meta[name="viewport"]'],
+      source: 'https://example.com/app.css',
+      media_query: '(orientation: portrait)',
       page_url: 'https://example.com',
     });
   });

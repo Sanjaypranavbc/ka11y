@@ -74,6 +74,42 @@ export interface ContrastReport {
   images: ContrastImageDetail[];
 }
 
+export interface ImageAuditImageDetail {
+  filename: string;
+  path: string;
+  image_url: string;
+  src?: string | null;
+  url?: string | null;
+  alt_text?: string | null;
+  title?: string | null;
+  classification: ImageClassification;
+  sub_type?: string | null;
+  overall_status: "PASSED" | "FAILED" | string;
+  has_ocr_text: boolean;
+  detected_text: string;
+  contrast_violations_count: number;
+  wcag_1_1_1_status: string;
+  wcag_4_1_2_status: string;
+  wcag_1_4_5_status: string;
+  wcag_1_4_11_status: string;
+  wcag_1_1_1_reason: string;
+  wcag_4_1_2_reason: string;
+  wcag_1_4_5_reason: string;
+  wcag_1_4_11_reason: string;
+}
+
+export interface ImageAuditReport {
+  summary: {
+    total_images: number;
+    passed: number;
+    failed: number;
+    with_ocr_text: number;
+    with_contrast_violations: number;
+    by_classification: Record<string, { passed: number; failed: number; total: number }>;
+  };
+  images: ImageAuditImageDetail[];
+}
+
 export interface AuditPass extends AuditElementInfo {
   rule_id: string;
   wcag_sc: string | null;
@@ -98,6 +134,7 @@ export interface AuditResult {
   status: "pending" | "running" | "completed" | "failed";
   url: string;
   generated_at: string;
+  lang?: string;
   total: number;
   violations_count: number;
   needs_review_count: number;
@@ -110,6 +147,7 @@ export interface AuditResult {
   current_stage?: string | null;
   stages?: StageInfo[];
   contrast_report?: ContrastReport | null;
+  image_audit_report?: ImageAuditReport | null;
 }
 
 export interface AuditConfig {
@@ -123,6 +161,8 @@ export interface AuditConfig {
   run_label_in_name_audit: boolean;
   run_pause_stop_hide_audit: boolean;
   run_target_size_audit: boolean;
+  run_media_audit: boolean;
+  run_sensory_audit: boolean;
   // Rendered-layout checks (Playwright)
   run_resize_text_audit: boolean;
   run_reflow_audit: boolean;

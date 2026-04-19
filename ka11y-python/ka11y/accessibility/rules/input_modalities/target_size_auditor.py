@@ -159,6 +159,9 @@ class TargetSizeAuditor:
         "wcag_2_5_8_status",
         "wcag_2_5_8_violation",
         "overall_status",
+        "selector",
+        "element_ref_id",
+        "frame_path",
         # Raw element
         "html_snippet",
     ]
@@ -205,6 +208,9 @@ class TargetSizeAuditor:
                     if status == "FAILED"
                     else ("PASSED" if status == "PASSED" else "N/A")
                 ),
+                "selector": item.selector or "",
+                "element_ref_id": item.element_ref_id or "",
+                "frame_path": item.frame_path or "",
                 "html_snippet": item.html_snippet[:400],
             }
             records.append(record)

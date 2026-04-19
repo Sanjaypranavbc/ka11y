@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Optional
@@ -25,22 +25,17 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # Allow Docker override via env var.
-# In the monorepo we prefer the shared repo-level i18n/ directory so frontend,
-# Python, and Node all read the same catalogue. If the service is deployed on
-# its own, fall back to the local ka11y-python/i18n/ copy.
+# Prefer the repo-shared i18n directory, then fall back to the service-local copy.
+_REPO_ROOT = Path(__file__).parents[3]
+_SHARED_I18N_DIR = _REPO_ROOT / "i18n"
 _LOCAL_I18N_DIR = Path(__file__).parents[2] / "i18n"
-_SHARED_I18N_DIR = Path(__file__).parents[3] / "i18n"
-_DEFAULT_I18N_DIR = (
-    _SHARED_I18N_DIR
-    if (_SHARED_I18N_DIR / "rules.yml").exists()
-    else _LOCAL_I18N_DIR
-)
+_DEFAULT_I18N_DIR = _SHARED_I18N_DIR if _SHARED_I18N_DIR.exists() else _LOCAL_I18N_DIR
 I18N_DIR = Path(os.environ.get("KA11Y_I18N_DIR", str(_DEFAULT_I18N_DIR)))
 
 
-@dataclass(frozen=True)
-class RuleEntry:
+class RuleEntry(BaseModel):
     """A single WCAG success criterion entry."""
+    model_config = ConfigDict(frozen=True)
     id: str
     level: str                    # "A" | "AA" | "AAA"
     severity: Optional[str]       # "critical" | "high" | "medium" | "low" | None
@@ -130,11 +125,6 @@ def load_rules(lang: str = "en") -> Dict[str, RuleEntry]:
 def get_wcag_names(lang: str = "en") -> Dict[str, str]:
     """Return {sc_id: name} for the given language."""
     return {sc_id: r.name for sc_id, r in load_rules(lang).items()}
-
-
-def get_wcag_descriptions(lang: str = "en") -> Dict[str, str]:
-    """Return {sc_id: description} for the given language."""
-    return {sc_id: r.description for sc_id, r in load_rules(lang).items()}
 
 
 def get_wcag_levels() -> Dict[str, str]:

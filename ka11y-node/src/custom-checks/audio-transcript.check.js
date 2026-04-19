@@ -1,23 +1,48 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderReasonTemplate,
+} = require('./sharedAssets');
+
 const SC = '1.2.1';
 const RULE_ID = 'custom-audio-transcript';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/audio-only-and-video-only-prerecorded';
 
-async function run(page) {
-  const data = await page.evaluate(() => {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const transcriptPattern = buildKeywordPattern(
+    getKeywordList('audio_transcript', 'transcript_keywords', sharedContext)
+  ) || 'transcript|caption|text\\s+version|description';
+
+  const data = await page.evaluate(async (keywordPattern) => {
+    const transcriptRe = new RegExp(keywordPattern, 'i');
     const audioEls = Array.from(document.querySelectorAll('audio'));
-    if (audioEls.length === 0) return { audioCount: 0, issues: [], trackOnlyCount: 0 };
+    if (audioEls.length === 0) return { audioCount: 0, issues: [] };
 
     const issues = [];
-    let trackOnlyCount = 0;
 
     for (const audio of audioEls) {
-      // <track> can help with captions/subtitles, but for audio-only content it does not
-      // replace the transcript requirement under SC 1.2.1.
-      const hasTrack = !!audio.querySelector(
-        'track[kind="captions"], track[kind="descriptions"], track[kind="subtitles"]'
-      );
+      // 1. <track> element inside <audio> (captions or descriptions)
+      const tracks = Array.from(audio.querySelectorAll('track[kind="captions"], track[kind="descriptions"], track[kind="subtitles"]'));
+      let hasValidTrack = false;
+      
+      for (const track of tracks) {
+         const src = track.getAttribute('src');
+         if (src) {
+             try {
+                 const response = await fetch(src, { method: 'HEAD', cache: 'no-cache' });
+                 if (response.ok) {
+                     hasValidTrack = true;
+                     break;
+                 }
+             } catch (e) {
+                 // Fetch might fail due to CORS or bad URL, if so, the track is unreliable.
+             }
+         }
+      }
 
       // 2. Nearby transcript link — search within closest semantic container
       const container =
@@ -26,7 +51,7 @@ async function run(page) {
       const transcriptLinks = container
         ? Array.from(container.querySelectorAll('a[href]')).filter(a => {
             const combined = ((a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '')).toLowerCase();
-            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト|説明文/i.test(combined);
+            return transcriptRe.test(combined);
           })
         : [];
 
@@ -39,7 +64,7 @@ async function run(page) {
             const text = (det.textContent || '').toLowerCase();
             const summary = (det.querySelector('summary') || {}).textContent || '';
             const combined = text + ' ' + summary.toLowerCase();
-            return /transcript|caption|text\s+version|read|description|audio\s+text|文字起こし|書き起こし|トランスクリプト|字幕|キャプション|テキスト版|音声テキスト/i.test(combined);
+            return transcriptRe.test(combined);
           })
         : false;
 
@@ -50,26 +75,18 @@ async function run(page) {
         return !!target && (target.textContent || '').trim().length > 0;
       });
 
-      const hasTranscriptEvidence =
-        transcriptLinks.length > 0 ||
-        hasFigCaption ||
-        hasDetailsTranscript ||
-        hasAriaDescription;
-
-      if (hasTrack && !hasTranscriptEvidence) trackOnlyCount++;
-
-      if (!hasTranscriptEvidence) {
+      if (!hasValidTrack && transcriptLinks.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription) {
         issues.push({
           html: audio.outerHTML.slice(0, 150),
-          id: audio.id || null,
-          src: (audio.getAttribute('src') || audio.querySelector('source')?.getAttribute('src') || '').slice(0, 80),
-          hasTrack,
+          element_id: audio.id || null,
+          target: audio.id ? [`audio#${CSS.escape(audio.id)}`] : ['audio'],
+          tag: 'AUDIO',
         });
       }
     }
 
-    return { audioCount: audioEls.length, issues, trackOnlyCount };
-  });
+    return { audioCount: audioEls.length, issues };
+  }, transcriptPattern);
 
   if (data.audioCount === 0) {
     return {
@@ -79,7 +96,13 @@ async function run(page) {
         description: 'Audio-only prerecorded content must have a text alternative',
         impact: null,
         status: 'pass',
-        reason: 'No <audio> elements found on this page.',
+        reason: renderReasonTemplate(
+          'audio_transcript',
+          'no_audio',
+          {},
+          sharedContext,
+          'No <audio> elements found on this page.',
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -93,16 +116,17 @@ async function run(page) {
         description: 'Audio-only prerecorded content must have a text alternative',
         impact: null,
         status: 'pass',
-        reason: `${data.audioCount} <audio> element(s) checked — all appear to have transcript evidence (nearby transcript link, figcaption, transcript details, or aria-describedby text).`,
+        reason: renderReasonTemplate(
+          'audio_transcript',
+          'pass_detected',
+          { audio_count: data.audioCount },
+          sharedContext,
+          `${data.audioCount} <audio> element(s) checked — all appear to have a text alternative.`,
+        ),
         helpUrl: HELP_URL,
       }],
     };
   }
-
-  const elementList = data.issues
-    .slice(0, 3)
-    .map(i => i.id ? `<audio id="${i.id}">` : (i.src ? `<audio src="${i.src}">` : i.html.slice(0, 60)))
-    .join(', ');
 
   return {
     successCriteriaId: SC,
@@ -111,7 +135,18 @@ async function run(page) {
       description: 'Audio-only prerecorded content must have a text alternative',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable transcript evidence (no nearby transcript link, no <figcaption>, no transcript details block, no aria-describedby text).${data.trackOnlyCount > 0 ? ` ${data.trackOnlyCount} rely only on <track> elements, which do not replace a full transcript for audio-only content.` : ''} Provide a full text transcript adjacent to each: ${elementList}.`,
+      reason: renderReasonTemplate(
+        'audio_transcript',
+        'missing_transcript',
+        {
+          issue_count: data.issues.length,
+          audio_count: data.audioCount,
+          element_list: '',
+        },
+        sharedContext,
+        `${data.issues.length} of ${data.audioCount} <audio> element(s) have no detectable text alternative.`,
+      ),
+      elements: data.issues,
       helpUrl: HELP_URL,
     }],
   };

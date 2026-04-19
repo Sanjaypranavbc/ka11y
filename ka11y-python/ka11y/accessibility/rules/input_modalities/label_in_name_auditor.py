@@ -181,6 +181,9 @@ class LabelInNameAuditor:
         "wcag_2_5_3_status",
         "wcag_2_5_3_violation",
         "overall_status",
+        "selector",
+        "element_ref_id",
+        "frame_path",
         # Raw element
         "html_snippet",
     ]
@@ -220,6 +223,9 @@ class LabelInNameAuditor:
                     if status == "FAILED"
                     else ("PASSED" if status == "PASSED" else "N/A")
                 ),
+                "selector": el.selector or "",
+                "element_ref_id": el.element_ref_id or "",
+                "frame_path": el.frame_path or "",
                 "html_snippet": el.html_snippet[:400],
             }
             records.append(record)

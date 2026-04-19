@@ -13,13 +13,15 @@ from typing import Any, Dict, List, Optional
 def _build_report(
     url: str,
     all_findings: List[Dict],
+    lang: str = "en",
     contrast_report: Optional[Dict[str, Any]] = None,
+    image_audit_report: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Merge axe + Python flat findings into the final combined report.
 
-    The `contrast_report` key surfaces the full structured contrast analysis
-    (summary, flat table, and per-image detail) alongside the flat findings.
+    The image-related report keys surface both OCR contrast analysis and the
+    broader image-audit result set alongside the flat findings.
     """
     violations = [f for f in all_findings if f["status"] == "fail"]
     needs_review = [f for f in all_findings if f["status"] == "needs_review"]
@@ -53,6 +55,7 @@ def _build_report(
     return {
         "url": url,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "lang": lang,
         "summary": {
             "total_findings": len(all_findings),
             "violations": len(violations),
@@ -67,4 +70,5 @@ def _build_report(
         "needs_review": needs_review,
         "passes": passes,
         "contrast_report": contrast_report,
+        "image_audit_report": image_audit_report,
     }

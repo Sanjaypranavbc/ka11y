@@ -12,8 +12,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .geometry import (
     document_has_horizontal_scroll,
-    has_horizontal_scroll,
-    is_fixed_or_sticky,
     overlap_ratio,
     text_container_overflows,
 )
@@ -21,8 +19,9 @@ from .models import ElementSnapshot, PageSnapshot, Rect
 
 # Regex for rotate-device gatekeeper overlay text
 _ROTATE_RE = re.compile(
-    r"rotate\s+(your\s+)?device|landscape\s+only|portrait\s+only|"
-    r"please\s+rotate|turn\s+your\s+phone|works\s+best\s+in\s+(landscape|portrait)",
+    r"rotate\s+(your\s+)?(device|phone|screen|tablet)|landscape\s+only|portrait\s+only|"
+    r"please\s+(use\s+)?(landscape|portrait)|turn\s+(your\s+)?(device|phone|screen|tablet)|"
+    r"works\s+best\s+in\s+(landscape|portrait)",
     re.IGNORECASE,
 )
 

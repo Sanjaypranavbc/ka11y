@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 interface DashboardHeaderProps {
   url: string;
   generatedAt: string;
+  reportLang?: string;
+  activeRun?: { url: string; lang: string; submitted_at: string } | null;
   onExportJSON: () => void;
   onToggleSidebar: () => void;
   isDarkMode: boolean;
@@ -16,6 +18,8 @@ interface DashboardHeaderProps {
 export function DashboardHeader({
   url,
   generatedAt,
+  reportLang,
+  activeRun,
   onExportJSON,
   onToggleSidebar,
   isDarkMode,
@@ -23,7 +27,11 @@ export function DashboardHeader({
 }: DashboardHeaderProps) {
   const { t, lang, setLang } = useLanguage();
 
-  const ts = generatedAt ? new Date(generatedAt).toLocaleString(undefined, {
+  const displayUrl = activeRun?.url || url;
+  const displayTime = activeRun?.submitted_at || generatedAt;
+  const isRunning = !!activeRun;
+
+  const ts = displayTime ? new Date(displayTime).toLocaleString(undefined, {
     month: "short", day: "numeric", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   }) : null;
@@ -46,9 +54,26 @@ export function DashboardHeader({
           <span className="hidden sm:inline text-[9px] font-semibold tracking-[0.16em] uppercase text-muted-foreground shrink-0">
             {t("header.target")}
           </span>
-          <span className="text-xs font-mono text-foreground truncate max-w-[48vw] sm:max-w-[38vw]">{url}</span>
-          <ExternalLink className="hidden sm:block h-2.5 w-2.5 text-muted-foreground/50 shrink-0" aria-hidden="true" />
+          <span className={cn(
+            "text-xs font-mono truncate max-w-[48vw] sm:max-w-[38vw]",
+            isRunning ? "text-primary animate-pulse" : "text-foreground"
+          )}>
+            {displayUrl}
+          </span>
+          {!isRunning && <ExternalLink className="hidden sm:block h-2.5 w-2.5 text-muted-foreground/50 shrink-0" aria-hidden="true" />}
         </div>
+
+        {/* Report Language Badge */}
+        {(reportLang || activeRun?.lang) && (
+          <div className="flex items-center gap-1 ml-1 px-1.5 py-0.5 rounded bg-muted border border-border">
+            <span className="text-[8px] font-bold uppercase text-muted-foreground leading-none">
+              {t("header.reportLanguage")}
+            </span>
+            <span className="text-[9px] font-black uppercase text-foreground leading-none">
+              {activeRun?.lang || reportLang}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
@@ -58,11 +83,11 @@ export function DashboardHeader({
           </span>
         )}
 
-        {/* Language switcher */}
+        {/* UI Language switcher */}
         <div
           className="flex rounded-md overflow-hidden border border-border text-[10px] font-semibold"
           role="group"
-          aria-label="Language"
+          aria-label="UI Language"
         >
           {(["en", "ja"] as Lang[]).map((code) => (
             <button
@@ -97,6 +122,7 @@ export function DashboardHeader({
           variant="outline"
           size="sm"
           onClick={onExportJSON}
+          disabled={isRunning || !url}
           className="h-7 text-[10px] font-mono tracking-wider uppercase border-border text-muted-foreground hover:text-foreground hover:border-primary/50 px-2 sm:px-3"
         >
           <Download className="h-3 w-3 sm:mr-1.5" aria-hidden="true" />

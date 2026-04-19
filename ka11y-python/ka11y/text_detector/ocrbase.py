@@ -8,24 +8,26 @@ import easyocr
 # process rather than once per OCRReader instance. Double-checked locking
 # ensures thread safety without holding the lock on every readtext() call.
 # ---------------------------------------------------------------------------
-_reader: Optional[easyocr.Reader] = None
+_readers: dict[str, easyocr.Reader] = {}
 _reader_lock = threading.Lock()
 
 
 def get_ocr_reader(lang: str = "en") -> easyocr.Reader:
     """Return the shared EasyOCR Reader, initialising it on first call."""
-    global _reader
+    global _readers
     # Map supported languages to EasyOCR codes.
     # For Japanese, we need both 'en' and 'ja' to handle mixed text.
     langs = ["en"]
     if lang in ("ja", "jp"):
         langs.append("ja")
 
-    if _reader is None:
+    cache_key = "_".join(langs)
+
+    if cache_key not in _readers:
         with _reader_lock:
-            if _reader is None:
-                _reader = easyocr.Reader(langs, gpu=False, verbose=False)
-    return _reader
+            if cache_key not in _readers:
+                _readers[cache_key] = easyocr.Reader(langs, gpu=False, verbose=False)
+    return _readers[cache_key]
 
 
 class OCRReader:

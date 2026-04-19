@@ -98,6 +98,7 @@
       "pages": [
         "internals/combined-package",
         "internals/python-rules-flow-analysis",
+        "internals/crawler-metadata",
         "internals/data-models",
         "internals/sse-events",
         "internals/output-format",
