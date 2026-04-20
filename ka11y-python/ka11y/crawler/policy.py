@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Set
+from pydantic import BaseModel, Field
+from typing import Set, ClassVar
 from urllib.parse import urlparse, urlunparse
 
-@dataclass
-class CrawlPolicy:
+class CrawlPolicy(BaseModel):
     max_depth: int = 0
     max_pages: int = 10
     max_links_per_page: int = 50
@@ -17,15 +16,15 @@ class CrawlPolicy:
     strip_trailing_slash: bool = True
     
     # Query parameters
-    query_allow_list: Set[str] = field(default_factory=set)
-    query_deny_list: Set[str] = field(default_factory=set)
+    query_allow_list: Set[str] = Field(default_factory=set)
+    query_deny_list: Set[str] = Field(default_factory=set)
     canonical_query: bool = True # Sort query params and remove trackers
     
     # Retry budget
     max_retries: int = 3
     
     # Common tracker/junk parameters to strip by default
-    TRACKER_PARAMS = {
+    TRACKER_PARAMS: ClassVar[Set[str]] = {
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
         "fbclid", "gclid", "_ga", "msclkid", "mc_cid", "mc_eid"
     }

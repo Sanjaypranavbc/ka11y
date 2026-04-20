@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import dataclasses
 import hashlib
 import json
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
@@ -37,19 +36,18 @@ _SPA_SIGNALS = [
 ]
 
 
-@dataclass
-class PageSnapshot:
+class PageSnapshot(BaseModel):
     page_url: str
-    forms: List[Dict[str, Any]] = field(default_factory=list)
-    interactive: List[Dict[str, Any]] = field(default_factory=list)
-    target_sizes: List[Dict[str, Any]] = field(default_factory=list)
-    moving_content: List[Dict[str, Any]] = field(default_factory=list)
-    media: List[Dict[str, Any]] = field(default_factory=list)
-    text_spacing: List[Dict[str, Any]] = field(default_factory=list)
-    sensory: List[Dict[str, Any]] = field(default_factory=list)
-    warnings: List[Dict[str, Any]] = field(default_factory=list)
-    element_refs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    page_summaries: List[Dict[str, Any]] = field(default_factory=list)
+    forms: List[Dict[str, Any]] = Field(default_factory=list)
+    interactive: List[Dict[str, Any]] = Field(default_factory=list)
+    target_sizes: List[Dict[str, Any]] = Field(default_factory=list)
+    moving_content: List[Dict[str, Any]] = Field(default_factory=list)
+    media: List[Dict[str, Any]] = Field(default_factory=list)
+    text_spacing: List[Dict[str, Any]] = Field(default_factory=list)
+    sensory: List[Dict[str, Any]] = Field(default_factory=list)
+    warnings: List[Dict[str, Any]] = Field(default_factory=list)
+    element_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    page_summaries: List[Dict[str, Any]] = Field(default_factory=list)
     pages_crawled: int = 0
     partial: bool = False
     har_path: Optional[str] = None
@@ -343,12 +341,22 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         return !isElementVisible(el) || isConsentUi(el);
     }
 
+    if (!window._ka11yIdCounter) window._ka11yIdCounter = 1;
+    function getKa11yId(el) {
+        if (!el || !el.getAttribute || !el.setAttribute) return null;
+        if (!el.getAttribute('data-ka11y-id')) {
+            el.setAttribute('data-ka11y-id', 'k-' + (window._ka11yIdCounter++));
+        }
+        return el.getAttribute('data-ka11y-id');
+    }
+
     function metaFor(el) {
         return {
             page_url: pageUrl,
             document_url: documentUrl,
             frame_path: framePath,
             selector: buildSelector(el),
+            element_ref_id: getKa11yId(el) || undefined,
         };
     }
 
@@ -1339,8 +1347,12 @@ class UniversalPageLoader:
                 )
 
             await cls._prepare_page(page, url, step_logger=step_logger)
-            extracted = await cls._extract_page(page, page_url=url, output=output)
-            links = await cls._extract_links(page, root_url)
+
+            # Chunked extraction to combat virtualized DOMs (Infinite scroll)
+            await cls._extract_page_chunked(page, page_url=url, output=output)
+
+            # Links extraction can just use the final state
+            links = await cls._extract_links(page, root_url=url)
             
             # Limit links per page
             if len(links) > policy.max_links_per_page:
@@ -1443,17 +1455,6 @@ class UniversalPageLoader:
         except Exception:
             logger.debug(f"[universal] DOM stability pre-check failed for {url}")
 
-        try:
-            await page.evaluate(_LAZY_LOAD_TRIGGER_JS)
-            await page.wait_for_timeout(_POST_SCROLL_WAIT_MS)
-        except Exception:
-            logger.debug(f"[universal] lazy-load trigger failed for {url}")
-
-        try:
-            await page.evaluate(_DOM_STABILITY_JS, _DOM_STABILITY_MS)
-        except Exception:
-            logger.debug(f"[universal] DOM stability post-check failed for {url}")
-
         if step_logger:
             step_logger.record(
                 step="universal_page_ready",
@@ -1463,12 +1464,63 @@ class UniversalPageLoader:
             )
 
     @classmethod
+    async def _extract_page_chunked(
+        cls,
+        page: Page,
+        *,
+        page_url: str,
+        output: PageSnapshot,
+    ) -> None:
+        """Extracts DOM in chunks by scrolling to bypass Virtualized DOMs."""
+        seen_refs = set()
+        
+        # Read max scroll passes from config (fallback to 4)
+        max_passes = 4
+        
+        # Trigger initial lazy-load setup without scrolling
+        initial_lazy_js = """async () => {
+            document.querySelectorAll('[data-src],[data-lazy-src],[data-original],[loading="lazy"]').forEach(el => {
+                ['lazyload', 'lazyloaded', 'lazy-load'].forEach(evt => el.dispatchEvent(new Event(evt, { bubbles: true })));
+                if (el.dataset.src) el.src = el.dataset.src;
+                if (el.dataset.lazySrc) el.src = el.dataset.lazySrc;
+                if (el.dataset.original) el.src = el.dataset.original;
+            });
+        }"""
+        try:
+            await page.evaluate(initial_lazy_js)
+        except Exception:
+            pass
+
+        for i in range(max_passes):
+            # 1. Wait for stability before extracting
+            try:
+                await page.evaluate(_DOM_STABILITY_JS, _DOM_STABILITY_MS)
+            except Exception:
+                pass
+                
+            # 2. Extract current viewport/DOM chunk
+            await cls._extract_page(page, page_url=page_url, output=output, seen_refs=seen_refs)
+            
+            # 3. Check if we hit the bottom of the page
+            is_at_bottom = await page.evaluate("() => { const h = document.documentElement; return (window.innerHeight + window.scrollY) >= (h.scrollHeight - 100); }")
+            if is_at_bottom:
+                break
+                
+            # 4. Scroll down
+            await page.evaluate("window.scrollBy(0, window.innerHeight * 1.5)")
+            await page.wait_for_timeout(_POST_SCROLL_WAIT_MS)
+            
+        # Reset scroll position to top
+        await page.evaluate("window.scrollTo(0, 0)")
+
+    @classmethod
     async def _extract_page(
         cls,
         page: Page,
         *,
         page_url: str,
         output: PageSnapshot,
+        seen_refs: set[str] | None = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         combined = {
             "forms": [],
@@ -1517,6 +1569,7 @@ class UniversalPageLoader:
                     page_url=page_url,
                     frame_path=frame_path,
                     records=records,
+                    seen_refs=seen_refs,
                 )
                 combined[key].extend(records)
 
@@ -1531,6 +1584,7 @@ class UniversalPageLoader:
         page_url: str,
         frame_path: str,
         records: List[Dict[str, Any]],
+        seen_refs: set[str] | None = None,
     ) -> None:
         bucket: List[Dict[str, Any]] = getattr(output, category)
         for idx, record in enumerate(records):
@@ -1547,6 +1601,13 @@ class UniversalPageLoader:
                 html=entry.get("html") or entry.get("html_snippet") or "",
                 index=idx,
             )
+            
+            # Deduplication for virtualized DOMs (Infinite scroll chunking)
+            if seen_refs is not None:
+                if ref_id in seen_refs:
+                    continue
+                seen_refs.add(ref_id)
+                
             entry["element_ref_id"] = ref_id
             bucket.append(entry)
             output.element_refs[ref_id] = {
@@ -1720,5 +1781,5 @@ class UniversalPageLoader:
     def save_snapshot(snapshot: PageSnapshot, output_dir: Path) -> str:
         path = output_dir / "universal_snapshot_raw.json"
         with path.open("w", encoding="utf-8") as fh:
-            json.dump(dataclasses.asdict(snapshot), fh, indent=2, ensure_ascii=False)
+            json.dump(snapshot.model_dump(), fh, indent=2, ensure_ascii=False)
         return str(path)

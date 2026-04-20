@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Type
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.forms_crawler import FormInputData
@@ -21,19 +20,18 @@ from ka11y.utils.step_logger import ExecutionStepLogger
 logger = setup_logger(name="KAC", tag="snapshot_normalizer")
 
 
-@dataclass
-class NormalizedPageSnapshot:
+class NormalizedPageSnapshot(BaseModel):
     page_url: str
-    forms: List[FormInputData] = field(default_factory=list)
-    interactive: List[InteractiveElementData] = field(default_factory=list)
-    target_sizes: List[TargetSizeData] = field(default_factory=list)
-    moving_content: List[MovingContentData] = field(default_factory=list)
-    media: List[MediaElementData] = field(default_factory=list)
-    text_spacing: List[TextSpacingData] = field(default_factory=list)
-    sensory: List[SensoryElementData] = field(default_factory=list)
-    warnings: List[Dict[str, Any]] = field(default_factory=list)
-    element_refs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    page_summaries: List[Dict[str, Any]] = field(default_factory=list)
+    forms: List[FormInputData] = Field(default_factory=list)
+    interactive: List[InteractiveElementData] = Field(default_factory=list)
+    target_sizes: List[TargetSizeData] = Field(default_factory=list)
+    moving_content: List[MovingContentData] = Field(default_factory=list)
+    media: List[MediaElementData] = Field(default_factory=list)
+    text_spacing: List[TextSpacingData] = Field(default_factory=list)
+    sensory: List[SensoryElementData] = Field(default_factory=list)
+    warnings: List[Dict[str, Any]] = Field(default_factory=list)
+    element_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    page_summaries: List[Dict[str, Any]] = Field(default_factory=list)
     partial: bool = False
     pages_crawled: int = 0
     har_path: str | None = None
