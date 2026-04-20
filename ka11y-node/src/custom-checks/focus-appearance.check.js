@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.4.13';
 const RULE_ID = 'custom-focus-appearance';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance';
@@ -9,10 +14,49 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance';
 // 2. Contrast ratio between focused and unfocused states ≥ 3:1
 const MIN_CONTRAST = 3.0;
 const MIN_OUTLINE_WIDTH_PX = 2; // Sufficient for area requirement on typical elements
-const MAX_ELEMENTS = 30;
+const MAX_ELEMENTS = 2000;
 const SETTLE_MS = 80;
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+function _formatIssue(issue, context) {
+  if (!issue) return '';
+
+  if (typeof issue === 'string') {
+    return issue;
+  }
+
+  switch (issue.code) {
+    case 'no-indicator':
+      return _t(context, 'no-indicator', 'フォーカスインジケーターなし');
+    case 'outline-too-thin':
+      return _t(
+        context,
+        'outline-width {outlineWidth} < {minWidth}px (area requirement)',
+        'アウトライン幅 {outlineWidth} が {minWidth}px 未満です（面積要件）。',
+        issue,
+      );
+    case 'low-contrast':
+      return _t(
+        context,
+        'focus indicator contrast < {contrast}:1 against background',
+        'フォーカスインジケーターのコントラストが背景に対して {contrast}:1 未満です。',
+        issue,
+      );
+    default:
+      return '';
+  }
+}
+
+function _formatIssueList(issues, context) {
+  if (!Array.isArray(issues) || issues.length === 0) return '';
+  return issues.map(issue => _formatIssue(issue, context)).filter(Boolean).join('; ');
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   // Snapshot element styles before/after focus in separate evaluate calls
   // to allow the browser to settle between focus state changes.
 
@@ -48,7 +92,9 @@ async function run(page) {
       items.push({
         idx:       items.length,
         stableSel,
-        tag:       el.tagName.toLowerCase(),
+        tag:       el.tagName.toUpperCase(),
+        tagName:   el.tagName.toLowerCase(),
+        target:    stableSel ? [stableSel] : [el.tagName.toLowerCase()],
         id:        el.id || null,
         html:      el.outerHTML.slice(0, 150),
       });
@@ -149,8 +195,7 @@ async function run(page) {
       // No visible indicator at all — this is a fail
       violations.push({
         ...el,
-        issue: 'no-indicator',
-        detail: 'No visible focus indicator (outline, box-shadow, or border change) detected.',
+        issues: [{ code: 'no-indicator' }],
       });
       continue;
     }
@@ -158,18 +203,29 @@ async function run(page) {
     // ── Check 2: Area requirement proxy ──────────────────────────────────────
     // For outline: width ≥ MIN_OUTLINE_WIDTH_PX.
     // For box-shadow: spread radius ≥ MIN_OUTLINE_WIDTH_PX (B4: was always true when no outline).
+    // For border change: border-width ≥ MIN_OUTLINE_WIDTH_PX counts as area met.
     let meetsAreaReq;
     if (hasVisibleOutline) {
-      meetsAreaReq = outlineWidthPx >= MIN_OUTLINE_WIDTH_PX;
+      const outlineWidth = outlineWidthPx;
+      const spreadRadius = 0; // not relevant here
+      const borderWidth = parseFloat(focused.borderWidth) || 0;
+      const borderChangedForArea = focused.borderWidth !== unfocused.borderWidth;
+      const areaMet = outlineWidth >= MIN_OUTLINE_WIDTH_PX || spreadRadius >= MIN_OUTLINE_WIDTH_PX || (borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX);
+      meetsAreaReq = areaMet;
     } else if (boxShadowAdded) {
       // Extract spread radius (4th px-length) from box-shadow first layer
       const firstLayer = (focused.boxShadow || '').split(',')[0];
       const pxVals = (firstLayer.match(/-?[\d.]+px/g) || []).map(parseFloat);
-      const spreadPx = pxVals.length >= 4 ? Math.abs(pxVals[3]) : 0;
-      meetsAreaReq = spreadPx >= MIN_OUTLINE_WIDTH_PX;
+      const spreadRadius = pxVals.length >= 4 ? Math.abs(pxVals[3]) : 0;
+      const borderWidth = parseFloat(focused.borderWidth) || 0;
+      const borderChangedForArea = focused.borderWidth !== unfocused.borderWidth;
+      const areaMet = outlineWidthPx >= MIN_OUTLINE_WIDTH_PX || spreadRadius >= MIN_OUTLINE_WIDTH_PX || (borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX);
+      meetsAreaReq = areaMet;
     } else {
-      // border-based indicators assumed to meet area requirement
-      meetsAreaReq = true;
+      // border-based indicators: check if border width meets the minimum
+      const borderWidth = parseFloat(focused.borderWidth) || 0;
+      const borderChangedForArea = focused.borderWidth !== unfocused.borderWidth;
+      meetsAreaReq = borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX;
     }
 
     // ── Check 3: Contrast ≥ 3:1 between focused indicator and adjacent area ──
@@ -194,12 +250,22 @@ async function run(page) {
 
     if (!meetsAreaReq || !meetsContrast) {
       const issues = [];
-      if (!meetsAreaReq) issues.push(`outline-width ${focused.outlineWidth} < ${MIN_OUTLINE_WIDTH_PX}px (area requirement)`);
-      if (!meetsContrast) issues.push(`focus indicator contrast < ${MIN_CONTRAST}:1 against background`);
+      if (!meetsAreaReq) {
+        issues.push({
+          code: 'outline-too-thin',
+          outlineWidth: focused.outlineWidth,
+          minWidth: MIN_OUTLINE_WIDTH_PX,
+        });
+      }
+      if (!meetsContrast) {
+        issues.push({
+          code: 'low-contrast',
+          contrast: MIN_CONTRAST,
+        });
+      }
       violations.push({
         ...el,
-        issue: issues.join('; '),
-        detail: `Focus indicator found but does not meet WCAG 2.4.13: ${issues.join('; ')}.`,
+        issues,
       });
     } else {
       passes.push(el);
@@ -214,13 +280,16 @@ async function run(page) {
         description: 'Focus indicators must have sufficient area and contrast',
         impact: null,
         status: 'pass',
-        reason: `${passes.length} focusable element(s) sampled — all have a focus indicator meeting minimum area (≥${MIN_OUTLINE_WIDTH_PX}px outline) and contrast (≥${MIN_CONTRAST}:1) requirements.`,
+        reason: _t(sharedContext, '{count} focusable element(s) sampled — all have a focus indicator meeting minimum area (≥{outline_px}px outline) and contrast (≥{contrast}:1) requirements.', 'フォーカス可能要素 {count} 件をサンプリングし、いずれも最小面積（アウトライン {outline_px}px 以上）とコントラスト（{contrast}:1 以上）の要件を満たすフォーカスインジケーターがありました。', { count: passes.length, outline_px: MIN_OUTLINE_WIDTH_PX, contrast: MIN_CONTRAST }),
         helpUrl: HELP_URL,
       }],
     };
   }
 
-  const sample = violations.slice(0, 3).map(v => `<${v.tag}${v.id ? ` id="${v.id}"` : ''}> (${v.issue})`).join('; ');
+  const sample = violations
+    .slice(0, 3)
+    .map((v) => `<${v.tag}${v.id ? ` id="${v.id}"` : ''}> (${_formatIssueList(v.issues, sharedContext)})`)
+    .join('; ');
 
   return {
     successCriteriaId: SC,
@@ -229,7 +298,13 @@ async function run(page) {
       description: 'Focus indicators must have sufficient area and contrast',
       impact: 'serious',
       status: 'fail',
-      reason: `${violations.length} focusable element(s) have focus indicators that do not fully meet WCAG 2.4.13: ${sample}. Ensure outline-width ≥ ${MIN_OUTLINE_WIDTH_PX}px and contrast ≥ ${MIN_CONTRAST}:1 between the indicator colour and adjacent background.`,
+      reason: _t(sharedContext, '{count} focusable element(s) have focus indicators that do not fully meet WCAG 2.4.13: {sample}. Ensure outline-width ≥ {outline_px}px and contrast ≥ {contrast}:1 between the indicator colour and adjacent background.', 'フォーカス可能要素 {count} 件のフォーカスインジケーターが WCAG 2.4.13 を十分に満たしていません: {sample}。インジケーターのアウトライン幅を {outline_px}px 以上にし、隣接背景とのコントラストを {contrast}:1 以上にしてください。', { count: violations.length, sample, outline_px: MIN_OUTLINE_WIDTH_PX, contrast: MIN_CONTRAST }),
+      elements: violations.map(v => ({
+        html: v.html,
+        element_id: v.id || null,
+        target: v.target,
+        tag: v.tag,
+      })),
       helpUrl: HELP_URL,
     }],
   };

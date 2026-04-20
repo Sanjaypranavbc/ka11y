@@ -191,7 +191,7 @@ def test_crawler_text_spacing_passed():
         "wcag_1_4_12_violation": "",
         "html_snippet": "",
         "element_id": None,
-        "tag": "p",
+        "tag": None,
     }]
     findings = _crawler_text_spacing_to_findings(records, PAGE_URL)
     assert len(findings) == 1

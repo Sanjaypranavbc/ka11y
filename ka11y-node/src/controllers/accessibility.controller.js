@@ -49,6 +49,11 @@ class AccessibilityController {
    *                   When provided, only rules mapped to that criterion are returned.
    *                   Omit or set to null to return all rules.
    *                 example: "1.1.1"
+   *               lang:
+   *                 type: string
+   *                 nullable: true
+   *                 description: Optional output language code for localized metadata and custom-rule reasons.
+   *                 example: "ja"
    *           examples:
    *             image_with_alt:
    *               summary: Image with alt text (passes image-alt)
@@ -149,7 +154,7 @@ class AccessibilityController {
    *               message: Protocol error — browser context was destroyed
    */
   async analyze(req, res) {
-    const { html, successCriteriaId } = req.body;
+    const { html, successCriteriaId, lang = 'en' } = req.body;
 
     if (!html || typeof html !== 'string') {
       this._logger.warn('analyze rejected: html field missing or not a string');
@@ -162,8 +167,9 @@ class AccessibilityController {
 
     try {
       const filter = successCriteriaId ?? null;
-      this._logger.info(`analyze start successCriteriaId=${filter ?? 'none'} htmlLength=${html.length}`);
-      const results = await this._service.analyze(html, filter);
+      const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
+      this._logger.info(`analyze start successCriteriaId=${filter ?? 'none'} lang=${safeLang} htmlLength=${html.length}`);
+      const results = await this._service.analyze(html, filter, safeLang);
       this._logger.info(`analyze done results=${results.length}`);
       res.json({ results });
     } catch (err) {
@@ -203,6 +209,11 @@ class AccessibilityController {
    *                   Optional WCAG Success Criterion filter (e.g. "1.1.1").
    *                   Omit or set to null to return all rules.
    *                 example: "1.1.1"
+   *               lang:
+   *                 type: string
+   *                 nullable: true
+   *                 description: Optional output language code for localized metadata and custom-rule reasons.
+   *                 example: "ja"
    *           examples:
    *             basic_url:
    *               summary: Analyse a public URL
@@ -297,13 +308,17 @@ class AccessibilityController {
         this._logger.warn(`analyseUrlFlat rejected (SSRF guard): ${err.message}`);
         return res.status(400).json({ error: 'Invalid URL', message: err.message });
       }
+      if (/ERR_CERT_/i.test(err.message || '')) {
+        this._logger.warn(`analyseUrlFlat rejected (TLS certificate): ${err.message}`);
+        return res.status(502).json({ error: 'Target TLS certificate invalid', message: err.message });
+      }
       this._logger.error(`analyseUrlFlat failed: ${err.message}`);
       res.status(500).json({ error: 'URL flat analysis failed', message: err.message });
     }
   }
 
   async analyseUrl(req, res) {
-    const { url, successCriteriaId } = req.body;
+    const { url, successCriteriaId, lang = 'en' } = req.body;
 
     if (!url || typeof url !== 'string') {
       this._logger.warn('analyseUrl rejected: url field missing or not a string');
@@ -329,8 +344,9 @@ class AccessibilityController {
 
     try {
       const filter = successCriteriaId ?? null;
-      this._logger.info(`analyseUrl start url=${url} successCriteriaId=${filter ?? 'none'}`);
-      const results = await this._service.analyseUrl(url, filter);
+      const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
+      this._logger.info(`analyseUrl start url=${url} successCriteriaId=${filter ?? 'none'} lang=${safeLang}`);
+      const results = await this._service.analyseUrl(url, filter, safeLang);
       this._logger.info(`analyseUrl done results=${results.length}`);
       res.json({ url, results });
     } catch (err) {
@@ -338,9 +354,62 @@ class AccessibilityController {
         this._logger.warn(`analyseUrl rejected (SSRF guard): ${err.message}`);
         return res.status(400).json({ error: 'Invalid URL', message: err.message });
       }
+      if (/ERR_CERT_/i.test(err.message || '')) {
+        this._logger.warn(`analyseUrl rejected (TLS certificate): ${err.message}`);
+        return res.status(502).json({ error: 'Target TLS certificate invalid', message: err.message });
+      }
       this._logger.error(`analyseUrl failed: ${err.message}`);
       res.status(500).json({
         error:   'URL accessibility analysis failed',
+        message: err.message,
+      });
+    }
+  }
+
+  async analyseRuleUrl(req, res) {
+    const { successCriteriaId } = req.params;
+    const { url, lang = 'en' } = req.body;
+
+    if (!/^\d+\.\d+\.\d+$/.test(successCriteriaId || '')) {
+      return res.status(400).json({ error: 'successCriteriaId must match format X.Y.Z (e.g. "1.1.1")' });
+    }
+
+    if (!url || typeof url !== 'string') {
+      this._logger.warn('analyseRuleUrl rejected: url field missing or not a string');
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      this._logger.warn(`analyseRuleUrl rejected: invalid URL "${url}"`);
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      this._logger.warn(`analyseRuleUrl rejected: unsupported protocol "${parsedUrl.protocol}"`);
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    try {
+      const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
+      this._logger.info(`analyseRuleUrl start url=${url} successCriteriaId=${successCriteriaId} lang=${safeLang}`);
+      const results = await this._service.analyseUrl(url, successCriteriaId, safeLang);
+      this._logger.info(`analyseRuleUrl done results=${results.length}`);
+      res.json({ url, successCriteriaId, results });
+    } catch (err) {
+      if (err instanceof SsrfGuardError) {
+        this._logger.warn(`analyseRuleUrl rejected (SSRF guard): ${err.message}`);
+        return res.status(400).json({ error: 'Invalid URL', message: err.message });
+      }
+      if (/ERR_CERT_/i.test(err.message || '')) {
+        this._logger.warn(`analyseRuleUrl rejected (TLS certificate): ${err.message}`);
+        return res.status(502).json({ error: 'Target TLS certificate invalid', message: err.message });
+      }
+      this._logger.error(`analyseRuleUrl failed: ${err.message}`);
+      res.status(500).json({
+        error: 'URL accessibility analysis failed',
         message: err.message,
       });
     }

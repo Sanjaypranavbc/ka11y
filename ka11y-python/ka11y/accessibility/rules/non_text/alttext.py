@@ -33,7 +33,6 @@ from __future__ import annotations
 import re
 import csv
 from pathlib import Path
-from typing import List, Optional
 from datetime import datetime
 
 from ka11y.config.logger import setup_logger
@@ -91,100 +90,33 @@ _SOCIAL_BRAND_NAMES: set[str] = {
     "threads",
 }
 
+# Logo/Home/Action keywords in multiple languages
+_LOGO_WORDS: set[str] = {"logo", "ロゴ", "標榜"}
+_HOME_WORDS: set[str] = {"home", "ホーム", "トップ"}
+
 # Acceptable action/purpose words for buttons
 _BUTTON_ACTION_WORDS: set[str] = {
-    "menu",
-    "close",
-    "open",
-    "search",
-    "back",
-    "forward",
-    "next",
-    "prev",
-    "previous",
-    "submit",
-    "send",
-    "cancel",
-    "confirm",
-    "ok",
-    "yes",
-    "no",
-    "save",
-    "delete",
-    "edit",
-    "add",
-    "remove",
-    "upload",
-    "download",
-    "share",
-    "print",
-    "copy",
-    "paste",
-    "cut",
-    "undo",
-    "redo",
-    "refresh",
-    "reload",
-    "home",
-    "settings",
-    "help",
-    "info",
-    "more",
-    "less",
-    "expand",
-    "collapse",
-    "toggle",
-    "play",
-    "pause",
-    "stop",
-    "mute",
-    "unmute",
-    "fullscreen",
-    "exit fullscreen",
-    "zoom in",
-    "zoom out",
-    "like",
-    "dislike",
-    "comment",
-    "reply",
-    "follow",
-    "unfollow",
-    "subscribe",
-    "unsubscribe",
-    "login",
-    "logout",
-    "sign in",
-    "sign out",
-    "sign up",
-    "register",
-    "checkout",
-    "cart",
-    "bag",
-    "wishlist",
-    "filter",
-    "sort",
-    "view",
-    "hide",
-    "show",
-    "skip",
-    "navigate",
-    "go to",
-    "load more",
-    "read more",
-    "see more",
-    "see all",
-    "cookies settings",
-    "accept all cookies",
-    "reject all",
-    "accept cookies",
-    "decline cookies",
-    "manage cookies",
-    "cookie preferences",
-    "previous slide",
-    "next slide",
-    "go to slide",
-    "new window",
-    "opens in new tab",
+    "menu", "close", "open", "search", "back", "forward", "next", "prev", "previous",
+    "submit", "send", "cancel", "confirm", "ok", "yes", "no", "save", "delete",
+    "edit", "add", "remove", "upload", "download", "share", "print", "copy",
+    "paste", "cut", "undo", "redo", "refresh", "reload", "home", "settings",
+    "help", "info", "more", "less", "expand", "collapse", "toggle", "play",
+    "pause", "stop", "mute", "unmute", "fullscreen", "exit fullscreen",
+    "zoom in", "zoom out", "like", "dislike", "comment", "reply", "follow",
+    "unfollow", "subscribe", "unsubscribe", "login", "logout", "sign in",
+    "sign out", "sign up", "register", "checkout", "cart", "bag", "wishlist",
+    "filter", "sort", "view", "hide", "show", "skip", "navigate", "go to",
+    "load more", "read more", "see more", "see all", "cookies settings",
+    "accept all cookies", "reject all", "accept cookies", "decline cookies",
+    "manage cookies", "cookie preferences", "previous slide", "next slide",
+    "go to slide", "new window", "opens in new tab",
+    # Japanese actions
+    "メニュー", "閉じる", "開く", "検索", "戻る", "進む", "次へ", "前へ",
+    "送信", "キャンセル", "確定", "保存", "削除", "編集", "追加", "削除",
+    "共有", "印刷", "コピー", "貼り付け", "切り取り", "元に戻す", "やり直し",
+    "更新", "ホーム", "設定", "ヘルプ", "詳細", "表示", "非表示",
+    "再生", "一時停止", "停止", "消音", "音量", "ログイン", "ログアウト",
+    "登録", "カート", "お気に入り", "絞り込み", "並べ替え",
 }
 
 # Report CSV columns (order preserved)
@@ -308,7 +240,7 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
     if not ocr_words:
         return True, "PASS [1.1.1] OCR tokens too short to match; alt is non-empty"
 
-    matched = [w for w in ocr_words if w in norm_alt]
+    matched = [w for w in ocr_words if re.search(rf'\b{re.escape(w)}\b', norm_alt, re.IGNORECASE)]
     if matched:
         return True, f"PASS [1.1.1] OCR word(s) found in alt: {matched}"
 
@@ -327,14 +259,12 @@ def _check_1_1_1_logo(alt: str) -> tuple[bool, str]:
         return False, "FAIL [1.1.1] Logo has empty/missing alt text"
 
     norm = _norm(alt)
-    if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
-        return True, f"PASS [1.1.1] Logo alt includes 'logo'/'home': '{alt}'"
+    if any(w in norm for w in _LOGO_WORDS) or any(w in norm for w in _HOME_WORDS):
+        return True, f"PASS [1.1.1] Logo alt includes logo/home keyword: '{alt}'"
 
     return (
         False,
-        f"FAIL [1.1.1] Logo alt must include the word 'logo' "
-        f"(e.g. 'Kao logo'). Found: '{alt}'. "
-        f"Screen readers need 'logo' to announce the image purpose.",
+        f"FAIL [1.1.1] Logo alt must include 'logo' or 'home' (or local equivalents). Found: '{alt}'",
     )
 
 
@@ -363,8 +293,8 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
     if has_qualifier or is_action:
         return True, f"PASS [1.1.1] Icon alt describes purpose: '{alt}'"
 
-    # Require at least 3 chars to filter out uninformative initials like "ab" or "XY"
-    if len(norm) >= 3 and not norm.isdigit():
+    # Require at least 4 chars to filter out uninformative initials like "ab", "ok", or "++"
+    if len(norm) >= 4 and not norm.isdigit() and re.search(r"[a-z]{2}|[^\x00-\x7F]", norm):
         return (
             True,
             f"PASS [1.1.1] Icon alt is non-empty: '{alt}' "
@@ -373,7 +303,7 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
 
     return (
         False,
-        f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose or is too short (min 3 chars)",
+        f"FAIL [1.1.1] Icon alt '{alt}' does not describe purpose or is too short (min 4 chars)",
     )
 
 
@@ -434,11 +364,11 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
     norm = _norm(name)
 
     if sub_type == "logos":
-        if re.search(r"\blogo\b", norm) or re.search(r"\bhome\b", norm):
-            return True, f"PASS [4.1.2] Logo accessible name includes 'logo': '{name}'"
+        if any(w in norm for w in _LOGO_WORDS) or any(w in norm for w in _HOME_WORDS):
+            return True, f"PASS [4.1.2] Logo accessible name includes keyword: '{name}'"
         return (
             False,
-            f"FAIL [4.1.2] Logo accessible name '{name}' must include 'logo'.",
+            f"FAIL [4.1.2] Logo accessible name '{name}' must include 'logo' or 'home'.",
         )
 
     if sub_type == "icons" and norm in _SOCIAL_BRAND_NAMES:
@@ -764,11 +694,22 @@ class AltTextAccessibilityAuditor:
                 effective_has_text,
             )
 
-            if text_flag:
+            # Override PASS if OCR found text but classifier missed it,
+            # BUT only if the image is NOT decorative, complex, or a logo.
+            # Decorative images of text are ALLOWED by WCAG 1.4.5.
+            # Complex images/charts use text essentially.
+            if (
+                text_flag 
+                and classification not in ("complex", "decorative") 
+                and sub_type not in ("charts", "logos")
+                and not is_logo
+            ):
                 wcag_1_4_5_pass = False
+                detected_snippet = (detected_joined[:50] + "...") if len(detected_joined) > 50 else detected_joined
                 wcag_1_4_5_reason = (
-                        "FAIL [1.4.5] " + _1_4_5reason +
-                        " — OCR found text but classifier missed it"
+                        f"FAIL [1.4.5] Image contains text (\"{detected_snippet}\") "
+                        "but classifier marked as non-text. Replace with real CSS-styled text "
+                        "unless the presentation is essential."
                 )
 
             # ── WCAG 1.4.11 (Non-text Contrast) ─────────────────────────

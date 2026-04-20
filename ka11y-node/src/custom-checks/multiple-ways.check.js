@@ -1,27 +1,50 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderReasonTemplate,
+} = require('./sharedAssets');
+
 const SC = '2.4.5';
 const RULE_ID = 'custom-multiple-ways';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/multiple-ways';
 
-async function run(page) {
-  const data = await page.evaluate(() => {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const searchPattern = buildKeywordPattern(
+    getKeywordList('multiple_ways', 'search_keywords', sharedContext)
+  ) || 'search';
+  const sitemapPattern = buildKeywordPattern(
+    getKeywordList('multiple_ways', 'sitemap_keywords', sharedContext)
+  ) || 'sitemap|site\\s*map';
+  const tocPattern = buildKeywordPattern(
+    getKeywordList('multiple_ways', 'toc_keywords', sharedContext)
+  ) || 'table\\s+of\\s+contents?';
+  const breadcrumbPattern = buildKeywordPattern(
+    getKeywordList('multiple_ways', 'breadcrumb_keywords', sharedContext)
+  ) || 'breadcrumb';
+
+  const data = await page.evaluate((patterns) => {
+    const searchRe = new RegExp(patterns.searchPattern, 'i');
+    const sitemapRe = new RegExp(patterns.sitemapPattern, 'i');
+    const tocRe = new RegExp(patterns.tocPattern, 'i');
+    const breadcrumbRe = new RegExp(patterns.breadcrumbPattern, 'i');
     const hasSearch = !!(
       document.querySelector('input[type="search"]') ||
       document.querySelector('[role="search"]') ||
-      document.querySelector('[aria-label*="search" i]') ||
-      document.querySelector('[aria-label*="検索" i]') ||
-      document.querySelector('[placeholder*="search" i]') ||
-      document.querySelector('[placeholder*="検索" i]') ||
+      Array.from(document.querySelectorAll('[aria-label]')).some(el => searchRe.test(el.getAttribute('aria-label') || '')) ||
+      Array.from(document.querySelectorAll('[placeholder]')).some(el => searchRe.test(el.getAttribute('placeholder') || '')) ||
       Array.from(document.querySelectorAll('form')).some(f =>
-        /search|検索/i.test(f.action || '') || /search|検索/i.test(f.getAttribute('aria-label') || '')
+        searchRe.test(f.action || '') || searchRe.test(f.getAttribute('aria-label') || '')
       )
     );
 
     const hasSitemap = !!(
-      document.querySelector('a[href*="sitemap"], a[href*="site-map"], a[href*="サイトマップ"]') ||
+      document.querySelector('a[href*="sitemap"], a[href*="site-map"], a[href*="site map"]') ||
       Array.from(document.querySelectorAll('a')).some(a =>
-        /site.?map|サイトマップ/i.test(a.textContent || '') || /site.?map|サイトマップ/i.test(a.href || '')
+        sitemapRe.test(a.textContent || '') || sitemapRe.test(a.href || '')
       )
     );
 
@@ -30,20 +53,38 @@ async function run(page) {
 
     // Additional navigation mechanisms per WCAG 2.4.5 technique list
     const hasBreadcrumb = !!(
-      document.querySelector('[aria-label*="breadcrumb" i], [aria-label*="パンくず" i], [class*="breadcrumb" i], [id*="breadcrumb" i], [class*="パンくず" i], [id*="パンくず" i]') ||
-      document.querySelector('nav[aria-label*="breadcrumb" i]') ||
+      Array.from(document.querySelectorAll('[class], [id], [aria-label]')).some(el =>
+        breadcrumbRe.test(el.getAttribute('class') || '') ||
+        breadcrumbRe.test(el.getAttribute('id') || '') ||
+        breadcrumbRe.test(el.getAttribute('aria-label') || '')
+      ) ||
+      Array.from(document.querySelectorAll('[aria-label]')).some(el => breadcrumbRe.test(el.getAttribute('aria-label') || '')) ||
+      Array.from(document.querySelectorAll('nav[aria-label], [role="navigation"][aria-label]')).some(el =>
+        breadcrumbRe.test(el.getAttribute('aria-label') || '')
+      ) ||
       // Schema.org breadcrumb structured data
       document.querySelector('[itemtype*="BreadcrumbList"]')
     );
 
     const hasTableOfContents = !!(
-      document.querySelector('[aria-label*="table of contents" i], [aria-label*="目次" i], [id*="toc" i], [class*="toc" i], [id*="目次" i], [class*="目次" i]') ||
+      document.querySelector('[id*="toc" i], [class*="toc" i]') ||
+      Array.from(document.querySelectorAll('[class], [id], [aria-label]')).some(el =>
+        tocRe.test(el.getAttribute('class') || '') ||
+        tocRe.test(el.getAttribute('id') || '') ||
+        tocRe.test(el.getAttribute('aria-label') || '')
+      ) ||
+      Array.from(document.querySelectorAll('[aria-label]')).some(el => tocRe.test(el.getAttribute('aria-label') || '')) ||
       Array.from(document.querySelectorAll('a')).some(a =>
-        /table\s+of\s+content|目次/i.test(a.textContent || '')
+        tocRe.test(a.textContent || '')
       )
     );
 
     return { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents };
+  }, {
+    searchPattern,
+    sitemapPattern,
+    tocPattern,
+    breadcrumbPattern,
   });
 
   const { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents } = data;
@@ -63,7 +104,20 @@ async function run(page) {
     ].filter(Boolean);
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'More than one way must be available to locate a page', impact: null, status: 'pass', reason: `Multiple navigation mechanisms found: ${list.join(', ')}.`, helpUrl: HELP_URL }],
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'More than one way must be available to locate a page',
+        impact: null,
+        status: 'pass',
+        reason: renderReasonTemplate(
+          'multiple_ways',
+          'pass',
+          { found_list: list.join(', ') },
+          sharedContext,
+          `Multiple navigation mechanisms found: ${list.join(', ')}.`,
+        ),
+        helpUrl: HELP_URL,
+      }],
     };
   }
 
@@ -89,7 +143,17 @@ async function run(page) {
       description: 'More than one way must be available to locate a page',
       impact: 'moderate',
       status: 'incomplete',
-      reason: `Only ${ways} navigation mechanism(s) detected${found.length ? ': ' + found.join(', ') : ''}. At least 2 are required — consider adding: ${missing.slice(0, 3).join(', ')}.`,
+      reason: renderReasonTemplate(
+        'multiple_ways',
+        'insufficient',
+        {
+          ways,
+          found_suffix: found.length ? `: ${found.join(', ')}` : '',
+          missing_list: missing.slice(0, 3).join(', '),
+        },
+        sharedContext,
+        `Only ${ways} navigation mechanism(s) detected${found.length ? ': ' + found.join(', ') : ''}. At least 2 are required — consider adding: ${missing.slice(0, 3).join(', ')}.`,
+      ),
       helpUrl: HELP_URL,
     }],
   };

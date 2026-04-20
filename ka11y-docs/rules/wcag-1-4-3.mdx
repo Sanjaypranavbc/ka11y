@@ -12,7 +12,7 @@ description: "WCAG 1.4.3 — text-in-image contrast check via OCR and per-region
 WCAG 1.4.3 requires that text has sufficient contrast against its background. ka11y audits **text embedded inside images** — content that axe-core cannot reach because it is rendered pixel-by-pixel rather than as DOM text nodes.
 
 The pipeline:
-1. EasyOCR detects text regions within each crawled image
+1. PaddleOCR detects text regions within each crawled image when available, with EasyOCR as the runtime fallback
 2. Each region's foreground and background colours are sampled
 3. The WCAG contrast ratio is computed and checked against the AA thresholds
 4. Regions that fail are aggregated into a `ContrastReport` attached to the audit result
@@ -28,11 +28,11 @@ The same OCR pipeline also feeds **WCAG 1.4.6 Contrast (Enhanced)** at AAA. Thos
 
 ## OCR pipeline
 
-```
+```text
 Downloaded images
       │
       ▼
-OCRPreprocessing  ── EasyOCR ──▶  detected text regions
+OCRPreprocessing  ── OCR engine ──▶  detected text regions
                                          │
                                          ▼
                               TextClassification
@@ -49,6 +49,8 @@ OCRPreprocessing  ── EasyOCR ──▶  detected text regions
 ```
 
 Each detected region produces one finding in `violations`, `passes`, or `needs_review`. If the OCR pipeline cannot determine compliance (for example because contrast metadata is missing), ka11y emits `needs_review` instead of silently dropping the detection.
+
+For `lang: "ja"` requests, OCR runs with Japanese-aware recognition for mixed Japanese/Latin text in images. The report schema does not change.
 
 ## Output: ContrastReport
 
@@ -71,56 +73,66 @@ interface ContrastImageDetail {
   path:                      string;   // absolute server-side filesystem path
   image_url:                 string;   // ready-to-use URL: GET /api/v1/combined/{job_id}/image?path=...
   contrast_violations_count: number;
+  classification:            string;
   detections:                ContrastDetection[];
 }
 
 interface ContrastDetection {
-  text:          string;
-  contrast:      number;               // computed ratio, e.g. 3.2
-  wcag_violations: string[];           // e.g. ["aa_normal"] when failing
-  compliance: {
-    aa_normal: boolean;                // true = passes 4.5:1 normal text
-    aa_large:  boolean;                // true = passes 3:1 large text
-    aaa_normal?: boolean;
-    aaa_large?:  boolean;
-  };
-  image_path:    string;
-  bounding_box?: number[];             // [x, y, w, h] pixel coordinates
+  text:                string;
+  confidence:          number;
+  bbox:                number[][];
+  foreground?:         object | null;
+  background_palette:  object[];
+  contrast_checks:     object[];
+  wcag_violations:     string[];
+  ratio:               number | null;  // computed ratio, e.g. 3.2
+  AA_passes:           boolean | null;
+  AAA_passes:          boolean | null;
 }
 ```
+
+`contrast_report` is OCR-only. If you disable OCR but keep image auditing enabled, the job still returns `image_audit_report` for image inventory and `1.1.1`/`1.4.5` style checks that do not require OCR output.
 
 ## `_contrast_to_findings` logic
 
 The internal `_contrast_to_findings` function in `ka11y/api/v1/combined/findings.py` converts the contrast table into the standard `Finding` schema:
 
 ```python
-for row in contrast_table:
-    compliance = row.get("compliance", {})
-    aa_normal   = compliance.get("aa_normal")   # True | False | None
+for result in ocr_results:
+    for det in result.detections:
+        dom = (det.color_info or {}).get("dominant_contrast") or {}
+        compliance = dom.get("compliance") or {}
+        aa_normal = compliance.get("AA_passes")   # True | False | None
+        ratio = compliance.get("contrast_ratio")
 
-    if aa_normal is False:
-        status   = "fail"
-        severity = "high"
-    elif aa_normal is True:
-        status   = "pass"
-        severity = None
-    else:
-        continue   # insufficient data — skip
+        if aa_normal is False:
+            status = "fail"
+            severity = "high"
+        elif aa_normal is True:
+            status = "pass"
+            severity = None
+        else:
+            status = "needs_review"
 
-    finding = {
-        "source":         "python",
-        "rule_id":        "python_1_4_3_contrast",
-        "wcag_sc":        "1.4.3",
-        "criterion_name": "Contrast (Minimum)",
-        "level":          "AA",
-        "severity":       severity,
-        "status":         status,
-        "reason":         f"Text '{row['text']}' — contrast ratio {row['contrast']:.2f}:1",
-        "suggested_fix":  "Increase contrast to at least 4.5:1 for normal text or 3:1 for large text." if status == "fail" else None,
-        "help_url":       None,
-        "element":        { "html": row["text"], "element_id": None, "tag": "img", "page_url": image_path },
-    }
+        finding = {
+            "source":         "python",
+            "rule_id":        "python_1_4_3_contrast",
+            "wcag_sc":        "1.4.3",
+            "criterion_name": "Contrast (Minimum)",
+            "level":          "AA",
+            "severity":       severity,
+            "status":         status,
+            "reason":         f"Observed ratio: {ratio}",
+            "suggested_fix":  "Increase contrast to at least 4.5:1 for normal text or 3:1 for large text." if status == "fail" else None,
+            "help_url":       None,
+            "element":        { "tag": "img", "page_url": page_url },
+        }
 ```
+
+Localization note:
+
+- `criterion_name` and `suggested_fix` localize through shared i18n for both Node and Python report consumers
+- the current Python `1.4.3` `reason` strings are still emitted by the contrast converter in English
 
 ## Common violations
 

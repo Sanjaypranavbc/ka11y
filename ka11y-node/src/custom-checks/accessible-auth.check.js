@@ -1,21 +1,49 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '3.3.8';
 const RULE_ID = 'custom-accessible-auth';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/accessible-authentication-minimum';
 
-async function run(page) {
-  const data = await page.evaluate(() => {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  
+  const loginFormPattern = buildKeywordPattern(
+    getKeywordList('accessible_auth', 'login_form_keywords', sharedContext)
+  );
+
+  const captchaAltPattern = buildKeywordPattern(
+    getKeywordList('accessible_auth', 'captcha_alt_keywords', sharedContext)
+  );
+
+  const cognitiveTestPattern = buildKeywordPattern(
+    getKeywordList('accessible_auth', 'cognitive_test_keywords', sharedContext)
+  );
+
+  const data = await page.evaluate((loginFormReStr, captchaAltReStr, cognitiveTestReStr) => {
+    const loginFormRe = new RegExp(`\\b(${loginFormReStr})\\b|${loginFormReStr}`, 'i');
+    const captchaAltRe = new RegExp(captchaAltReStr, 'i');
+    const cognitiveTestRe = new RegExp(cognitiveTestReStr, 'i');
+
     const forms = Array.from(document.querySelectorAll('form'));
     const authForms = forms.filter(form => {
       const hasPassword = !!form.querySelector('input[type="password"]');
       const text = (form.textContent || '').toLowerCase();
-      const isLoginLike =
-        /\b(log\s*in|sign\s*in|login|signin|authenticate|username|email\s+address|create\s+account|register|forgot\s+password)\b|ログイン|サインイン|認証|ユーザー名|メールアドレス|アカウント作成|新規登録|会員登録|パスワード|パスワードを忘れ|パスワード再設定/.test(text);
+      const isLoginLike = loginFormRe.test(text);
       return hasPassword || isLoginLike;
     });
 
-    if (authForms.length === 0) return { hasAuthForm: false };
+    if (authForms.length === 0) return { hasAuthForm: false, authFormCount: 0, issues: [] };
 
     const issues = [];
 
@@ -36,7 +64,9 @@ async function run(page) {
         document.querySelector('[class*="h-captcha" i], [data-hcaptcha-widget-id]') ||
         document.querySelector('[data-sitekey][class*="hcaptcha" i]')
       );
-      const hasAnyCaptcha = hasCaptchaImg || hasReCaptcha;
+      // Cloudflare Turnstile
+      const hasTurnstile = !!document.querySelector('.cf-turnstile, [data-cf-turnstile]');
+      const hasAnyCaptcha = hasCaptchaImg || hasReCaptcha || hasTurnstile;
 
       // Bug fix: Expanded audio alternative detection
       const hasCaptchaAlt = !!(
@@ -49,7 +79,7 @@ async function run(page) {
         Array.from(document.querySelectorAll('a, button')).some(el => {
           const text = (el.textContent || '').trim().toLowerCase();
           const label = (el.getAttribute('aria-label') || '').toLowerCase();
-          return /audio|音声|can.?t\s+read|読み取れない|different\s+image|別の画像|refresh\s+captcha|画像を更新|alternative|別の方法|try\s+another|別の認証/i.test(text + label);
+          return captchaAltRe.test(text + label);
         })
       );
 
@@ -72,31 +102,53 @@ async function run(page) {
 
       // 3. Cognitive function tests (expanded patterns)
       const formText = (form.textContent || '').toLowerCase();
-      const hasCognitiveTest =
-        /what\s+is\s+\d+\s*[\+\-\*×÷]\s*\d+|solve\s+the\s+(puzzle|equation|problem)|enter\s+the\s+(word|text|code|letters?|numbers?)\s+(you\s+see|shown|above|below|in\s+the\s+(image|picture))|answer\s+the\s+(question|challenge)|what\s+(color|colour|shape)\s+is|\d+\s*[\+\-\*×÷]\s*\d+|計算|問題を解|パズル|クイズ|画像に表示|表示された文字|見える文字|質問に答|何色|どの色|どの形/i.test(formText);
+      const hasCognitiveTest = cognitiveTestRe.test(formText);
 
-      if (hasAnyCaptcha && !hasCaptchaAlt) {
+      // Passkey/WebAuthn alternative detection
+      const hasPasskeyOption = Array.from(document.querySelectorAll('button, a')).some(el =>
+        /passkey|webauthn|biometric|fingerprint|face\s*id/i.test(el.textContent + (el.getAttribute('aria-label') || ''))
+      );
+
+      let formHasIssue = false;
+
+      if (hasAnyCaptcha && !hasCaptchaAlt && !hasPasskeyOption) {
         issues.push({
           type: 'captcha-no-alternative',
-          detail: `CAPTCHA detected (${hasReCaptcha ? 'reCAPTCHA/hCaptcha' : 'image CAPTCHA'}) without a detectable audio or accessible alternative.`,
+          provider: hasTurnstile ? 'Cloudflare Turnstile' : hasReCaptcha ? 'reCAPTCHA/hCaptcha' : 'image CAPTCHA',
+          html: form.outerHTML.slice(0, 150),
+          element_id: form.id || null,
+          target: form.id ? [`form#${CSS.escape(form.id)}`] : ['form'],
+          tag: 'FORM',
         });
+        formHasIssue = true;
       }
-      if (blocksCopyPaste) {
-        issues.push({
-          type: 'paste-blocked',
-          detail: 'Password field has inline onpaste/oncopy handler that blocks pasting, preventing use of password managers.',
-        });
-      }
-      if (hasCognitiveTest) {
-        issues.push({
-          type: 'cognitive-test',
-          detail: 'Authentication appears to require solving a cognitive puzzle (math, riddle, or visual challenge) without a detectable accessible alternative.',
-        });
+      // If a passkey/WebAuthn option is available it provides an accessible authentication
+      // alternative — skip paste-blocking and cognitive-test issues for this form.
+      if (!hasPasskeyOption) {
+        if (blocksCopyPaste) {
+          issues.push({
+            type: 'paste-blocked',
+            html: form.outerHTML.slice(0, 150),
+            element_id: form.id || null,
+            target: form.id ? [`form#${CSS.escape(form.id)}`] : ['form'],
+            tag: 'FORM',
+          });
+          formHasIssue = true;
+        }
+        if (hasCognitiveTest && !formHasIssue) {
+          issues.push({
+            type: 'cognitive-test',
+            html: form.outerHTML.slice(0, 150),
+            element_id: form.id || null,
+            target: form.id ? [`form#${CSS.escape(form.id)}`] : ['form'],
+            tag: 'FORM',
+          });
+        }
       }
     }
 
     return { hasAuthForm: true, authFormCount: authForms.length, issues };
-  });
+  }, loginFormPattern, captchaAltPattern, cognitiveTestPattern);
 
   if (!data.hasAuthForm) {
     return {
@@ -106,14 +158,25 @@ async function run(page) {
         description: 'Authentication must not rely solely on cognitive function tests',
         impact: null,
         status: 'pass',
-        reason: 'No authentication forms detected on this page.',
+        reason: _t(sharedContext, 'No authentication forms detected on this page.', 'このページでは認証フォームは検出されませんでした。'),
         helpUrl: HELP_URL,
       }],
     };
   }
 
   if (data.issues.length > 0) {
-    const issueTexts = data.issues.map(i => i.detail).join(' ');
+    const issueTexts = data.issues.map((issue) => {
+      switch (issue.type) {
+        case 'captcha-no-alternative':
+          return _t(sharedContext, 'CAPTCHA detected ({provider}) without a detectable audio or accessible alternative.', 'CAPTCHA（{provider}）が検出されましたが、判別可能な音声またはアクセシブルな代替手段が見つかりません。', { provider: issue.provider || 'CAPTCHA' });
+        case 'paste-blocked':
+          return _t(sharedContext, 'Password field blocks pasting, preventing the use of password managers.', 'パスワード欄で貼り付けが禁止されており、パスワードマネージャーを利用できません。');
+        case 'cognitive-test':
+          return _t(sharedContext, 'Authentication appears to require solving a cognitive puzzle (math, riddle, or visual challenge) without a detectable accessible alternative.', '認証時に計算・なぞなぞ・視覚的チャレンジなどの認知課題が必要なように見えますが、判別可能なアクセシブルな代替手段が見つかりません。');
+        default:
+          return _t(sharedContext, 'Authentication issue detected.', '認証に関する問題が検出されました。');
+      }
+    }).join(' ');
     return {
       successCriteriaId: SC,
       rules: [{
@@ -121,7 +184,8 @@ async function run(page) {
         description: 'Authentication must not rely solely on cognitive function tests',
         impact: 'serious',
         status: 'fail',
-        reason: `${data.authFormCount} authentication form(s) found with issues: ${issueTexts}`,
+        reason: _t(sharedContext, '{count} authentication form(s) found with issues: {issues}', '問題のある認証フォームが {count} 件見つかりました: {issues}', { count: data.authFormCount, issues: issueTexts }),
+        elements: data.issues,
         helpUrl: HELP_URL,
       }],
     };
@@ -134,7 +198,7 @@ async function run(page) {
       description: 'Authentication must not rely solely on cognitive function tests',
       impact: null,
       status: 'pass',
-      reason: `${data.authFormCount} authentication form(s) found — no CAPTCHA-without-alternative, paste-blocking, or cognitive-test issues detected.`,
+      reason: _t(sharedContext, '{count} authentication form(s) found — no CAPTCHA-without-alternative, paste-blocking, or cognitive-test issues detected.', '認証フォームが {count} 件見つかりましたが、代替手段のない CAPTCHA、貼り付け禁止、認知課題の問題は検出されませんでした。', { count: data.authFormCount }),
       helpUrl: HELP_URL,
     }],
   };

@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { FindingElementCell } from "./FindingElementCell";
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   formatCriterionId,
   formatCriterionName,
-  formatElementSnippet,
   formatElementTag,
   formatLevel,
 } from "@/lib/audit-format";
@@ -65,6 +65,9 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
           p.reason.toLowerCase().includes(q) ||
           (p.element_html || "").toLowerCase().includes(q) ||
           (p.element_selector || "").toLowerCase().includes(q) ||
+          (p.image_reference || "").toLowerCase().includes(q) ||
+          (p.image_text || "").toLowerCase().includes(q) ||
+          (p.image_src || "").toLowerCase().includes(q) ||
           (p.element_tag || "").toLowerCase().includes(q) ||
           (p.element_id || "").toLowerCase().includes(q)
         );
@@ -201,7 +204,7 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                       <TableHead className="text-xs">{t("table.criterion")}</TableHead>
                       <TableHead className="text-xs">{t("table.level")}</TableHead>
                       <TableHead className="text-xs">{t("table.tag")}</TableHead>
-                      <TableHead className="text-xs">{t("table.element")}</TableHead>
+                      <TableHead className="text-xs min-w-[18rem]">{t("table.element")}</TableHead>
                       <TableHead className="text-xs">{t("table.reason")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -221,16 +224,17 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                         <TableCell><Badge variant="outline" className="text-[10px]">{formatLevel(p.level)}</Badge></TableCell>
                         <TableCell className="font-mono text-xs">{formatElementTag(p.element_tag)}</TableCell>
                         <TableCell>
-                          <div className="space-y-1 max-w-[220px]">
-                            <code className="text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded truncate block">
-                              {formatElementSnippet(p.element_html)}
-                            </code>
-                            {p.element_selector && (
-                              <code className="text-[10px] text-muted-foreground/80 bg-muted/60 px-1 py-0.5 rounded truncate block">
-                                {p.element_selector}
-                              </code>
-                            )}
-                          </div>
+                          <FindingElementCell
+                            elementHtml={p.element_html}
+                            elementSelector={p.element_selector}
+                            imageReference={p.image_reference}
+                            imageSrc={p.image_src}
+                            imageText={p.image_text}
+                            ruleId={p.rule_id}
+                            wcagSc={p.wcag_sc}
+                            criterionName={p.criterion_name}
+                            reason={p.reason}
+                          />
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground max-w-xs">
                           <Tooltip>

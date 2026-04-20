@@ -1,0 +1,160 @@
+runs:
+  - id: baseline_example_full
+    url: https://example.com/
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack baseline run with all combined-stage defaults enabled.
+    expected_features:
+      - baseline_dom
+      - all_rules_true
+    expectations:
+      min_counts:
+        interactive: 1
+        target_sizes: 1
+      max_snapshot_warnings: 0
+
+  - id: w3schools_bootstrap_forms_full
+    url: https://www.w3schools.com/bootstrap/bootstrap_forms.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack forms and labels validation with all stages enabled.
+    expected_features:
+      - forms
+      - labels
+      - all_rules_true
+    expectations:
+      min_counts:
+        forms: 6
+        interactive: 15
+        target_sizes: 15
+
+  - id: w3schools_forms_full
+    url: https://www.w3schools.com/html/html_forms.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Dense public form page with all stages enabled.
+    expected_features:
+      - forms
+      - validation_examples
+      - all_rules_true
+    expectations:
+      min_counts:
+        forms: 10
+        interactive: 20
+        target_sizes: 20
+
+  - id: w3schools_iframe_full
+    url: https://www.w3schools.com/html/html_iframe.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack iframe and cross-origin-limitation validation.
+    expected_features:
+      - same_origin_iframe
+      - cross_origin_warnings
+      - all_rules_true
+    expectations:
+      min_counts:
+        interactive: 20
+      min_non_main_frame_records: 100
+      required_warning_codes:
+        - cross_origin_frame_skipped
+
+  - id: w3schools_video_full
+    url: https://www.w3schools.com/html/html5_video.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack native media validation.
+    expected_features:
+      - media
+      - video
+      - all_rules_true
+    expectations:
+      min_counts:
+        media: 1
+        interactive: 10
+        target_sizes: 10
+
+  - id: w3schools_bootstrap_carousel_full
+    url: https://www.w3schools.com/bootstrap/bootstrap_carousel.asp
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack autoplay carousel validation.
+    expected_features:
+      - moving_content
+      - carousel
+      - all_rules_true
+    expectations:
+      min_counts:
+        moving_content: 1
+        interactive: 20
+
+  - id: shoelace_button_full
+    url: https://shoelace.style/components/button
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack shadow DOM interactive validation.
+    expected_features:
+      - shadow_dom
+      - interactive_components
+      - all_rules_true
+    expectations:
+      min_counts:
+        interactive: 50
+        target_sizes: 50
+      min_shadow_selectors: 50
+
+  - id: shoelace_input_full
+    url: https://shoelace.style/components/input
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack shadow-contained form control validation.
+    expected_features:
+      - shadow_dom
+      - forms
+      - all_rules_true
+    expectations:
+      min_counts:
+        forms: 5
+        interactive: 20
+      min_shadow_selectors: 20
+
+  - id: shoelace_spinner_full
+    url: https://shoelace.style/components/spinner
+    lang: en
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack loading-indicator exception validation.
+    expected_features:
+      - shadow_dom
+      - loading_indicator_exception
+      - all_rules_true
+    expectations:
+      min_counts:
+        moving_content: 1
+      min_shadow_selectors: 5
+      min_loading_indicator_exceptions: 1
+      expect_zero_wcag_sc:
+        - 2.2.2
+
+  - id: mdn_japanese_full
+    url: https://developer.mozilla.org/ja/docs/Web/HTML/Reference/Global_attributes/lang
+    lang: ja
+    wcag_level: AAA
+    max_depth: 0
+    notes: Full-stack Japanese pipeline validation with all stages enabled.
+    expected_features:
+      - japanese
+      - cjk
+      - all_rules_true
+    expectations:
+      min_counts:
+        interactive: 20
+        target_sizes: 20

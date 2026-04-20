@@ -1,521 +1,468 @@
 ---
 title: "Adding a New WCAG Rule"
-description: "End-to-end walkthrough for implementing a new WCAG success criterion in ka11y-python"
+description: "Intern-friendly guide for adding a rule in ka11y on the Node side, Python side, and shared language files"
 ---
 
-This guide walks through adding a completely new WCAG rule. We will implement **WCAG 3.1.1 Language of Page** as a worked example — detecting whether the `<html>` element carries a valid `lang` attribute.
+This guide is for the real ka11y repo, not a toy example. Use it when you need to add a new WCAG rule, extend an existing one, or add language support for that rule.
 
-By the end you will have:
-- A new **Crawler** that extracts the raw element data
-- A new **Auditor** that applies the WCAG logic
-- A new **finding converter** wired into `ka11y/api/v1/combined/findings.py`
-- A new **stage** that appears in the SSE stream and the job status
+The short version:
 
-<Note>
-  The worked example is simplified for clarity. Your crawler and auditor may be more complex — follow the same structural pattern.
-</Note>
+- Put shared WCAG metadata in `i18n/`
+- Put language-specific Node behavior keywords and reason templates in `config/universal.yml`
+- Put DOM-only checks in `ka11y-node/src/custom-checks/`
+- Put crawler + auditor stages in `ka11y-python/ka11y/`
+- If the rule should appear as an optional stage, update both Python request models and frontend audit config
 
----
+## 1. Pick the correct path first
 
-## Overview: the files you touch
+Do this before you write code.
 
-| # | File | What you add |
-|---|------|-------------|
-| 1 | `ka11y/crawler/<name>_crawler.py` | **New file** — Playwright extraction |
-| 2 | `ka11y/accessibility/rules/<category>/<name>_auditor.py` | **New file** — WCAG logic |
-| 3 | `ka11y/api/v1/combined/findings.py` | Finding converter + registry entry |
-| 4 | `ka11y/api/v1/combined/constants.py` | Severity / suggested fix / WCAG metadata |
-| 5 | `ka11y/api/v1/combined/stages.py` | Stage coroutine + `_run_python_stages()` wiring |
-| 6 | `ka11y/api/v1/combined/models.py` | Request toggle in `CombinedRequest` |
-| 7 | *(optional)* `ka11y/api/v1/dependencies.py` | FastAPI `Depends()` provider |
-| 8 | *(optional)* `ka11y/api/v1/pipeline.py` | Wire into sequential pipeline |
+| If your rule needs... | Start here | Why |
+| --- | --- | --- |
+| Fast DOM checks on the live page, simple heuristics, or interactive browser actions | `ka11y-node/src/custom-checks/` | Node custom checks already run beside axe-core |
+| OCR, image analysis, crawler snapshots, or Python-only auditors | `ka11y-python/ka11y/` | Those stages already live in the Python pipeline |
+| Both a live browser check and a crawler/auditor check | both Node and Python | Some rules need a quick DOM signal plus a richer Python report |
+| Only translated WCAG labels and suggested fixes | `i18n/rules.yml` and `i18n/locales/<lang>.yml` | Both Node and Python read these files |
 
----
+Practical rule of thumb:
 
-## Step 1 — Create the Crawler
+- Start with Node if the rule can be answered from the current DOM and should come back quickly.
+- Start with Python if you need crawling, OCR, rendered geometry, screenshots, or multi-page state.
+- Do not create both unless you have a clear reason.
 
-The crawler uses Playwright to navigate the page and extract raw data. It must implement:
+## 2. Shared files you almost always touch
 
-- `async def crawl() -> List[Dict]` — returns one dict per detected element
-- `def save_raw_json()` — persists results for debugging
+These files are the shared source of truth:
 
-**Create** `ka11y/crawler/lang_crawler.py`:
+| File | What belongs here |
+| --- | --- |
+| `i18n/rules.yml` | WCAG ID, level, severity, English name, English description, English suggested fix |
+| `i18n/locales/ja.yml` | Japanese `name`, `description`, `suggested_fix` |
+| `config/universal.yml` | Node check keywords, thresholds, and localized reason templates |
 
-```python
-"""
-ka11y/crawler/lang_crawler.py
-==============================
-Crawls the <html> element's lang attribute (WCAG 3.1.1).
-"""
+Important:
 
-from __future__ import annotations
-import json
-from pathlib import Path
-from typing import Any, Dict, List
+- `i18n/rules.yml` is shared by Node and Python.
+- `i18n/locales/ja.yml` is only for shared WCAG metadata text, not DOM detection keywords.
+- `config/universal.yml` is where Node custom checks should read EN/JA keyword lists and reason templates.
+- Do not hardcode new English/Japanese keyword regexes inside JS unless there is no other option.
 
-from playwright.async_api import async_playwright
+## 3. Node rule workflow
 
-from ka11y.config.logger import setup_logger
+Use this path for `ka11y-node/src/custom-checks/<rule>.check.js`.
 
-logger = setup_logger(name="KAC", tag="lang_crawler")
+### Step 1: Add the WCAG entry
 
+Edit `i18n/rules.yml` and add the success criterion if it is not already there.
 
-class LangCrawler:
-    """Extract the <html lang> value from a URL."""
+Add:
 
-    def __init__(self, *, base_url: str, output_dir: str, max_depth: int = 0) -> None:
-        self.base_url   = base_url
-        self.output_dir = Path(output_dir)
-        self.max_depth  = max_depth
-        self._results: List[Dict[str, Any]] = []
+- `level`
+- `severity`
+- English `name`
+- English `description`
+- English `suggested_fix`
 
-    # ── Public API ────────────────────────────────────────────────────────────
+Then add the Japanese translation in `i18n/locales/ja.yml`.
 
-    async def crawl(self) -> List[Dict[str, Any]]:
-        """Navigate to base_url and extract html[lang]."""
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            page    = await browser.new_page()
-            await page.goto(self.base_url, wait_until="domcontentloaded", timeout=30_000)
+Student note:
 
-            lang_value: str = await page.evaluate(
-                "() => document.documentElement.getAttribute('lang') || ''"
-            )
-            page_title: str = await page.evaluate("() => document.title")
-            await browser.close()
+- You usually do **not** edit Node-specific metadata files for this.
+- `ka11y-node/src/utils/rulesLoader.js` and `ka11y-python/ka11y/i18n/loader.py` already read the shared YAML.
 
-        record = {
-            "page_url":    self.base_url,
-            "page_title":  page_title,
-            "lang_value":  lang_value.strip(),
-            "html_snippet": f'<html lang="{lang_value}">' if lang_value else "<html>",
-            "element_id":  None,
-            "tag":         "HTML",
-        }
-        self._results = [record]
-        logger.info(f"[lang_crawler] lang='{lang_value}' for {self.base_url}")
-        return self._results
+### Step 2: Add behavior config and language assets
 
-    def save_raw_json(self) -> None:
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        path = self.output_dir / "lang_raw.json"
-        path.write_text(
-            __import__("json").dumps(self._results, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        logger.info(f"[lang_crawler] saved {path}")
+Edit `config/universal.yml`.
+
+This is the right place for:
+
+- keyword lists such as `en` and `ja`
+- thresholds like counts, ratios, or limits
+- localized reason templates
+
+Example shape:
+
+```yml
+checks:
+  my_new_rule:
+    trigger_keywords:
+      en:
+        - "example"
+      ja:
+        - "例"
+    min_ratio: 0.5
+    reason_templates:
+      fail:
+        en: "{count} element(s) failed."
+        ja: "{count} 件の要素が失敗しました。"
+      pass:
+        en: "No issues found."
+        ja: "問題は見つかりませんでした。"
 ```
 
-### Crawler design rules
+### Step 3: Create the check file
 
-<AccordionGroup>
-  <Accordion title="Always use headless=True">
-    The crawler is run inside Docker with no display. Never pass `headless=False`.
-  </Accordion>
-  <Accordion title="Close the browser in every code path">
-    Use `async with async_playwright()` so the browser is always closed even on exception. Otherwise Playwright leaks zombie processes.
-  </Accordion>
-  <Accordion title="One dict per detected element">
-    Return one dict for each element you want to audit. If you're auditing the `<html>` element there's only one. If you're auditing form fields there may be dozens.
-  </Accordion>
-  <Accordion title="Required keys in every dict">
-    `html_snippet` (str), `element_id` (str | None), `tag` (str). The auditor and finding converter rely on these.
-  </Accordion>
-  <Accordion title="save_raw_json() is mandatory">
-    Even if you never look at it, the combined pipeline calls `save_raw_json()` on every crawler. Omitting it causes an `AttributeError`.
-  </Accordion>
-</AccordionGroup>
+Create `ka11y-node/src/custom-checks/<rule>.check.js`.
 
----
+Export these constants:
 
-## Step 2 — Create the Auditor
+- `SC`
+- `RULE_ID`
+- `HELP_URL`
+- `MODE` if the check is interactive
 
-The auditor receives the list of dicts from the crawler and applies WCAG logic. It must implement:
+Usually the file starts like this:
 
-- `generate_audit_report(items: List[Dict]) -> List[Dict]` — returns one record per item with `<rule>_status` and `<rule>_violation`
+```js
+'use strict';
 
-**Create** `ka11y/accessibility/rules/language/lang_auditor.py`:
+const {
+  getSharedRuleContext,
+  getKeywordList,
+  renderReasonTemplate,
+} = require('./sharedAssets');
 
-```python
-"""
-ka11y/accessibility/rules/language/lang_auditor.py
-===================================================
-WCAG 3.1.1 — Language of Page (Level A).
-
-Rule: The <html> element must carry a non-empty, valid BCP-47 lang attribute.
-"""
-
-from __future__ import annotations
-import re
-from pathlib import Path
-from typing import Any, Dict, List
-
-from ka11y.config.logger import setup_logger
-
-logger = setup_logger(name="KAC", tag="lang_auditor")
-
-# Loose BCP-47 primary-language sub-tag pattern (e.g. "en", "fr", "zh-Hant")
-_BCP47_RE = re.compile(r"^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{1,8})*$")
-
-
-class LangAuditor:
-    """Audits WCAG 3.1.1 — Language of Page."""
-
-    def __init__(self, output_dir: str = "output") -> None:
-        self.output_dir = Path(output_dir)
-
-    def generate_audit_report(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Evaluate each item from LangCrawler.
-
-        Output record keys
-        ------------------
-        wcag_3_1_1_status    "FAILED" | "PASSED" | "N/A"
-        wcag_3_1_1_violation  str  (reason for failure)
-        html_snippet          str
-        element_id            str | None
-        tag                   str
-        """
-        results: List[Dict[str, Any]] = []
-
-        for item in items:
-            lang  = item.get("lang_value", "").strip()
-            rec   = {**item}   # copy all keys from crawler output
-
-            if not lang:
-                rec["wcag_3_1_1_status"]    = "FAILED"
-                rec["wcag_3_1_1_violation"] = (
-                    "The <html> element is missing a lang attribute. "
-                    "Add lang='en' (or the appropriate BCP-47 language tag)."
-                )
-            elif not _BCP47_RE.match(lang):
-                rec["wcag_3_1_1_status"]    = "FAILED"
-                rec["wcag_3_1_1_violation"] = (
-                    f"lang='{lang}' is not a valid BCP-47 language tag. "
-                    "Use a primary sub-tag such as 'en', 'fr', or 'zh-Hant'."
-                )
-            else:
-                rec["wcag_3_1_1_status"]    = "PASSED"
-                rec["wcag_3_1_1_violation"] = ""
-
-            results.append(rec)
-
-        self._save_csv(results)
-        return results
-
-    # ── Internal helpers ──────────────────────────────────────────────────────
-
-    def _save_csv(self, results: List[Dict[str, Any]]) -> None:
-        import csv
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        path = self.output_dir / "audit_lang_report.csv"
-        if not results:
-            return
-        with open(path, "w", newline="", encoding="utf-8") as fh:
-            writer = csv.DictWriter(fh, fieldnames=list(results[0].keys()))
-            writer.writeheader()
-            writer.writerows(results)
-        logger.info(f"[lang_auditor] saved {path}")
+const SC = '1.2.1';
+const RULE_ID = 'custom-my-new-rule';
+const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/...';
+const MODE = 'static';
 ```
 
-Also create the `__init__.py`:
+Use the helpers in `ka11y-node/src/custom-checks/sharedAssets.js`:
 
-```python
-# ka11y/accessibility/rules/language/__init__.py
-```
+- `getSharedRuleContext(context)`
+- `getKeywordList(checkKey, assetKey, context)`
+- `getCheckConfig(checkKey, context)`
+- `renderReasonTemplate(checkKey, reasonCode, params, context, fallback)`
 
-### Auditor design rules
+### Step 4: Return structured `elements`
 
-<AccordionGroup>
-  <Accordion title="Choose raw status values to match the converter you are wiring">
-    For most static auditors, use `FAILED`, `PASSED`, and `N/A`. Rendered-layout converters also accept `NEEDS_REVIEW`, and a few specialized converters map `INCOMPLETE` or `INFO` to `needs_review`. If you introduce a new status value, update the converter logic explicitly instead of assuming it will be picked up automatically.
-  </Accordion>
-  <Accordion title="Never import Playwright">
-    Auditors must be pure Python — no browser, no network. This keeps them unit-testable and fast.
-  </Accordion>
-  <Accordion title="N/A is for exception cases">
-    Use `"N/A"` when a rule genuinely does not apply to an element (e.g. target-size exceptions for inline links). The finding converter must explicitly `continue` on N/A.
-  </Accordion>
-  <Accordion title="Include html_snippet, element_id, and tag in every output record">
-    Copy these from the input dict using `{**item}`. The finding converter reads them to populate the `element` object.
-  </Accordion>
-</AccordionGroup>
+This is the most important rule for coverage.
 
----
+If your check finds 20 bad links, 20 bad forms, or 20 bad focus targets, return 20 elements. Do **not** only write a nice summary sentence and hope the mapper will recover the nodes later.
 
-## Step 3 — Add the finding converter
+Recommended shape:
 
-Open `ka11y/api/v1/combined/constants.py` and `ka11y/api/v1/combined/findings.py` and add two things:
-
-### 3a — Register severity and suggested fix
-
-In `_PYTHON_SEVERITY` add:
-```python
-_PYTHON_SEVERITY: Dict[str, str] = {
-    # … existing entries …
-    "3.1.1": "critical",   # ← add this
-}
-```
-
-In `_SUGGESTED_FIX` add:
-```python
-_SUGGESTED_FIX: Dict[str, str] = {
-    # … existing entries …
-    "3.1.1": "Add a lang attribute to <html>: <html lang='en'>.",   # ← add this
-}
-```
-
-<Note>
-  Both dicts already contain many entries. Check if your WCAG SC is already present before adding — do not duplicate.
-</Note>
-
-### 3b — Add the converter function
-
-Place it alongside the other converters (`_alt_text_to_findings`, `_form_to_findings`, etc.) in `findings.py`:
-
-```python
-def _lang_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
-    """Convert LangAuditor records → flat finding dicts (WCAG 3.1.1)."""
-    findings = []
-    for r in records:
-        status_raw = r.get("wcag_3_1_1_status", "")
-        if status_raw == "N/A":
-            continue
-        if status_raw == "FAILED":
-            findings.append(_make_finding(
-                source="python",
-                rule_id="python_3_1_1_lang",
-                wcag_sc="3.1.1",
-                status="fail",
-                reason=r.get("wcag_3_1_1_violation") or "Page is missing a valid lang attribute.",
-                severity=_PYTHON_SEVERITY["3.1.1"],
-                element_html=r.get("html_snippet", ""),
-                element_id=r.get("element_id"),
-                element_tag=r.get("tag", "HTML"),
-                page_url=page_url,
-            ))
-        elif status_raw == "PASSED":
-            findings.append(_make_finding(
-                source="python",
-                rule_id="python_3_1_1_lang",
-                wcag_sc="3.1.1",
-                status="pass",
-                reason="Page has a valid lang attribute.",
-                severity=None,
-                page_url=page_url,
-            ))
-    return findings
-```
-
-Register it in the appropriate converter registry near the bottom of `findings.py` so the combined stage picks it up automatically. Today those registries are `IMAGE_AUDIT_RECORD_CONVERTERS` and `OCR_RESULT_CONVERTERS`; rendered-layout rules are wired through their explicit `_..._to_findings()` calls in `stages.py`.
-
----
-
-## Step 4 — Wire the stage into `_run_python_stages()`
-
-### 4a — Add the toggle to `CombinedRequest`
-
-```python
-class CombinedRequest(BaseModel):
-    url: HttpUrl
-    # … existing fields …
-    run_lang_audit: bool = True   # ← add this
-```
-
-### 4b — Add imports
-
-At the top of `ka11y/api/v1/combined/stages.py`:
-
-```python
-from ka11y.crawler.lang_crawler import LangCrawler
-from ka11y.accessibility.rules.language.lang_auditor import LangAuditor
-```
-
-### 4c — Add the stage coroutine and gather entry
-
-Inside `stages.py`, add a new stage coroutine following the existing `_stage_xxx(...)` pattern:
-
-```python
-async def _stage_lang_audit(
-    url: str,
-    output_dir: Path,
-    max_depth: int,
-    run_lang_audit: bool,
-    job_id: str,
-) -> List[Dict]:
-    _stage_start(job_id, "lang_audit")
-    if not run_lang_audit:
-        _stage_complete(job_id, "lang_audit", 0)
-        return []
-
-    try:
-        lang_crawler = LangCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth,
-        )
-        lang_items = await lang_crawler.crawl()
-        await asyncio.to_thread(lang_crawler.save_raw_json)
-
-        lang_auditor = LangAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(lang_auditor.generate_audit_report, lang_items)
-        findings = _lang_to_findings(records, url)
-
-        _stage_complete(job_id, "lang_audit", len(findings))
-        return findings
-    except Exception as _exc:
-        _stage_error_and_warn(job_id, "lang_audit", _exc)
-        return []
-```
-
-Then add `_timed(_stage_lang_audit(...))` to the `asyncio.gather(...)` call inside `_run_python_stages()`.
-
-### 4d — Pass the toggle through `_run_job()`
-
-In `_run_job()`, add `run_lang_audit=payload.run_lang_audit` to the `_run_python_stages()` call:
-
-```python
-python_task = asyncio.create_task(
-    _run_python_stages(
-        # … existing kwargs …
-        run_lang_audit=payload.run_lang_audit,  # ← add this
-        job_id=job_id,
-    )
-)
-```
-
-And update the `_run_python_stages` signature in `stages.py`:
-
-```python
-async def _run_python_stages(
-    *,
-    # … existing params …
-    run_lang_audit: bool,
-    job_id: str,
-) -> List[Dict[str, Any]]:
-```
-
----
-
-## Step 5 — Update the SSE stage label (frontend)
-
-Open the stage label map used by the frontend and add an entry for the new stage:
-
-```typescript
-const STAGE_LABELS: Record<string, string> = {
-  // … existing entries …
-  lang_audit: "Language of page (3.1.1)",   // ← add this
+```js
+return {
+  successCriteriaId: SC,
+  rules: [{
+    ruleId: RULE_ID,
+    description: 'My rule description',
+    impact: 'serious',
+    status: 'fail',
+    reason: renderReasonTemplate(
+      'my_new_rule',
+      'fail',
+      { count: violations.length },
+      sharedContext,
+      `${violations.length} element(s) failed.`,
+    ),
+    helpUrl: HELP_URL,
+    elements: violations.map((item) => ({
+      html: item.html,
+      element_id: item.id || null,
+      tag: item.tag || null,
+      selector: item.selector || null,
+      target: item.selector ? [item.selector] : [],
+    })),
+  }],
 };
 ```
 
-Also update `AuditSidebar.tsx`:
+Why this matters:
 
-```typescript
-const STAGE_LABELS: Record<string, string> = {
-  // … existing entries …
-  lang_audit: "Language audit",
-};
-```
+- `ka11y-node/src/utils/axeResultMapper.js` only preserves full flat coverage when `elements` is present.
+- If you only return `reason`, the mapper can only guess a few nodes from text, which is lossy.
 
----
+### Step 5: Decide whether it is static or interactive
 
-## Step 6 — Add a unit test
+- Static checks inspect the DOM without mutating browser state.
+- Interactive checks focus, type, hover, click, or otherwise change browser state.
 
-Create `tests/test_lang_auditor.py`:
+If the check is interactive:
 
-```python
-import pytest
-from ka11y.accessibility.rules.language.lang_auditor import LangAuditor
+- export `MODE = 'interactive'`
+- keep it deterministic
+- avoid "stop after first violation" unless the page genuinely becomes unsafe to continue
+- if you must stop early, say so in the reason and treat the result as partial coverage in future cleanup
 
-AUDITOR = LangAuditor(output_dir="/tmp/ka11y_test")
+### Step 6: Add or update loading order if needed
 
+Node auto-loads every `*.check.js` file from `ka11y-node/src/custom-checks/`, so you usually do **not** need a manual registry entry.
 
-def _item(lang: str) -> dict:
-    return {
-        "page_url": "https://example.com",
-        "lang_value": lang,
-        "html_snippet": f"<html lang='{lang}'>",
-        "element_id": None,
-        "tag": "HTML",
-    }
+But if you want clean deterministic ordering, update:
 
+- `ka11y-node/src/custom-checks/index.js`
 
-def test_valid_lang_passes():
-    results = AUDITOR.generate_audit_report([_item("en")])
-    assert results[0]["wcag_3_1_1_status"] == "PASSED"
+Specifically:
 
+- `STATIC_ORDER` for static checks
+- `INTERACTIVE_ORDER` for interactive checks
 
-def test_missing_lang_fails():
-    results = AUDITOR.generate_audit_report([_item("")])
-    assert results[0]["wcag_3_1_1_status"] == "FAILED"
-    assert "missing" in results[0]["wcag_3_1_1_violation"].lower()
+### Step 7: Write tests
 
+Add a test file:
 
-def test_invalid_lang_fails():
-    results = AUDITOR.generate_audit_report([_item("english")])
-    assert results[0]["wcag_3_1_1_status"] == "FAILED"
+- `ka11y-node/tests/custom-checks/<rule>.check.test.js`
 
+Common things to test:
 
-def test_subtag_lang_passes():
-    results = AUDITOR.generate_audit_report([_item("zh-Hant")])
-    assert results[0]["wcag_3_1_1_status"] == "PASSED"
-```
+- English path
+- Japanese path
+- pass case
+- fail case
+- `elements` array is returned for each failing node
+- no hardcoded assumptions about page size or sample order
 
-Run tests:
+If your rule relies on flat element mapping, also update or add coverage in:
+
+- `ka11y-node/tests/utils/axeResultMapper.custom-flat.test.js`
+
+### Step 8: Verify locally
+
+Typical commands:
 
 ```bash
-cd ka11y-python
-poetry run pytest tests/test_lang_auditor.py -v
+cd ka11y-node
+npm test -- --runInBand tests/custom-checks/<rule>.check.test.js
 ```
 
----
+If the rule affects mapper behavior:
 
-## Checklist
+```bash
+cd ka11y-node
+npm test -- --runInBand tests/utils/axeResultMapper.custom-flat.test.js
+```
 
-<Steps>
-  <Step title="Crawler created">
-    `ka11y/crawler/lang_crawler.py` — implements `crawl()` and `save_raw_json()`.
-  </Step>
-  <Step title="Auditor created">
-    `ka11y/accessibility/rules/language/lang_auditor.py` — records carry `wcag_3_1_1_status` and `wcag_3_1_1_violation`.
-  </Step>
-  <Step title="Severity registered">
-    `_PYTHON_SEVERITY["3.1.1"]` set in `combined/constants.py`.
-  </Step>
-  <Step title="Suggested fix registered">
-    `_SUGGESTED_FIX["3.1.1"]` set in `combined/constants.py`.
-  </Step>
-  <Step title="Finding converter added">
-    `_lang_to_findings()` plus registry entry in `combined/findings.py`.
-  </Step>
-  <Step title="Toggle added to CombinedRequest">
-    `run_lang_audit: bool = True` in `CombinedRequest`.
-  </Step>
-  <Step title="Stage wired into _run_python_stages()">
-    Stage block follows the `_stage_start / try / _stage_complete / except _stage_error_and_warn` pattern.
-  </Step>
-  <Step title="Frontend stage label added">
-    `STAGE_LABELS["lang_audit"]` in `Index.tsx` and `AuditSidebar.tsx`.
-  </Step>
-  <Step title="Unit tests written and passing">
-    Covers PASSED, FAILED, and N/A (if applicable).
-  </Step>
-</Steps>
+## 4. Python rule workflow
 
----
+Use this path when the rule needs crawlers, auditors, OCR, rendered layout, or richer post-processing.
 
-## Quick reference: naming conventions
+### Step 1: Decide whether you actually need a new crawler
 
-| Concept | Pattern | Example |
-|---------|---------|---------|
-| Crawler class | `XxxCrawler` | `LangCrawler` |
-| Crawler file | `xxx_crawler.py` | `lang_crawler.py` |
-| Auditor class | `XxxAuditor` | `LangAuditor` |
-| Auditor file | `xxx_auditor.py` | `lang_auditor.py` |
-| Auditor package | `ka11y/accessibility/rules/<category>/` | `language/` |
-| Status key | `wcag_X_X_X_status` | `wcag_3_1_1_status` |
-| Violation key | `wcag_X_X_X_violation` | `wcag_3_1_1_violation` |
-| Rule ID | `python_X_X_X_<name>` | `python_3_1_1_lang` |
-| Stage name | snake_case short description | `lang_audit` |
-| Request toggle | `run_<stage_name>: bool = True` | `run_lang_audit` |
-| Finding converter | `_xxx_to_findings(records, page_url)` | `_lang_to_findings` |
-| Raw JSON file | `<stage>_raw.json` | `lang_raw.json` |
-| CSV report | `audit_<stage>_report.csv` | `audit_lang_report.csv` |
+Before you create a new crawler, check whether the data already exists in:
+
+- `ka11y-python/ka11y/crawler/universal_page.py`
+- `ka11y-python/ka11y/crawler/snapshot_normalizer.py`
+- `ka11y-python/ka11y/crawler/rendered_layout_crawler.py`
+- `ka11y-python/ka11y/crawler/crawler.py` for image/OCR work
+
+Best practice:
+
+- If a static DOM field can be added to the universal snapshot, do that.
+- Only create a brand-new crawler when the rule truly needs a separate extraction flow.
+
+### Step 2: Add or update the auditor
+
+Auditors live under:
+
+- `ka11y-python/ka11y/accessibility/rules/`
+
+Examples:
+
+- `forms/form_auditor.py`
+- `input_modalities/label_in_name_auditor.py`
+- `media/media_auditor.py`
+
+Keep auditors pure when possible:
+
+- crawler extracts data
+- auditor decides pass/fail/needs review
+
+If you need to leave an intentional stub for a future branch inside a Python
+rule module, do not leave a raw `# TODO: not implemented` comment at the top of
+the file. Use the reusable decorator in:
+
+- `ka11y-python/ka11y/utils/not_implemented.py`
+
+Example:
+
+```python
+from ka11y.utils import not_implemented
+
+
+@not_implemented(reason="vision-model verification is reserved for a future release")
+def _future_multimodal_check(*, media_url: str, transcript_text: str) -> None:
+    pass
+```
+
+Why this is better:
+
+- the failure mode is explicit and consistent
+- the exception message includes the fully-qualified function name
+- the same pattern works for sync and async functions
+- future contributors can search for `@not_implemented` instead of chasing ad hoc comments
+
+### Step 3: Convert auditor output into combined findings
+
+Edit:
+
+- `ka11y-python/ka11y/api/v1/combined/findings.py`
+
+Add:
+
+- a converter function like `_my_rule_to_findings(...)`
+- `_make_finding(...)` calls for each output record
+
+Student note:
+
+- Shared WCAG names and suggested fixes already come from `i18n/`.
+- You do not normally edit a separate constants table for new metadata anymore.
+
+### Step 4: Wire the stage into the combined pipeline
+
+Edit:
+
+- `ka11y-python/ka11y/api/v1/combined/stages.py`
+
+You will usually:
+
+- add a new `_stage_<name>(...)`
+- call the crawler
+- call the auditor
+- convert records to findings
+- return findings from `_run_python_stages(...)`
+
+If the stage should be optional, also add a boolean request flag in:
+
+- `ka11y-python/ka11y/api/v1/combined/models.py`
+
+### Step 5: If the rule needs a frontend toggle, update the frontend too
+
+If users should be able to turn the rule on/off from the dashboard, update:
+
+- `ka11y-frontend-sdk/src/types/audit.ts`
+- `ka11y-frontend-sdk/src/components/audit/AuditSidebar.tsx`
+- `ka11y-frontend-sdk/src/hooks/useAudit.ts`
+
+That keeps the request body, sidebar toggle, and TypeScript types in sync with Python.
+
+### Step 6: Write tests
+
+Common Python test locations:
+
+- `ka11y-python/tests/test_combined_findings.py`
+- `ka11y-python/tests/test_runner.py`
+- a rule-specific test file such as `test_form_auditor.py`
+- a crawler-specific test if extraction logic changed
+
+Typical command:
+
+```bash
+pytest ka11y-python/tests -q
+```
+
+If you only changed one area, run the smallest relevant test file first.
+
+## 5. How language support works
+
+There are three different language layers in ka11y. Keep them separate in your head.
+
+### Shared WCAG metadata
+
+Files:
+
+- `i18n/rules.yml`
+- `i18n/locales/ja.yml`
+
+Used for:
+
+- criterion name
+- criterion description
+- suggested fix
+- severity and level
+
+Read by:
+
+- Node: `ka11y-node/src/utils/rulesLoader.js`
+- Python: `ka11y-python/ka11y/i18n/loader.py`
+
+### Node rule behavior and localized reasons
+
+File:
+
+- `config/universal.yml`
+
+Used for:
+
+- EN/JA keyword lists
+- thresholds
+- reason templates
+
+Read by:
+
+- `ka11y-node/src/custom-checks/sharedAssets.js`
+
+Important:
+
+- New Node rules should read behavior from config.
+- Do not spread English/Japanese regexes across many check files.
+
+### Python reasons
+
+Current state:
+
+- Python localizes WCAG names and suggested fixes automatically.
+- Python `reason` strings still depend on the individual auditor or converter implementation.
+
+That means:
+
+- if you want localized Python `reason` text, you still need to code that path deliberately
+- do not assume Python will automatically read your Node reason templates
+
+### Frontend UI language vs audit language
+
+These are currently different concepts.
+
+UI language files:
+
+- `ka11y-frontend-sdk/src/i18n/translations.ts`
+- `ka11y-frontend-sdk/src/i18n/LanguageContext.tsx`
+
+Audit language files:
+
+- `ka11y-frontend-sdk/src/types/audit.ts`
+- `ka11y-frontend-sdk/src/components/audit/AuditSidebar.tsx`
+- `ka11y-frontend-sdk/src/hooks/useAudit.ts`
+
+Important student warning:
+
+- Changing UI language does not automatically mean the audit/report language changes too.
+- When you touch language features, check both paths.
+
+## 6. Adding a brand-new language later
+
+If you add a language beyond English and Japanese, check all of these:
+
+1. Add `i18n/locales/<lang>.yml`
+2. Add Node behavior keywords and templates in `config/universal.yml`
+3. If frontend UI should support it, extend:
+   - `ka11y-frontend-sdk/src/i18n/translations.ts`
+   - `ka11y-frontend-sdk/src/i18n/LanguageContext.tsx`
+   - `ka11y-frontend-sdk/src/types/audit.ts`
+   - language buttons in the header and sidebar
+4. If axe-core supports that locale, review:
+   - `ka11y-node/src/services/accessibility.service.js`
+   - specifically `AXE_LOCALE_ALIASES`
+
+## 7. Common mistakes to avoid
+
+- Do not hardcode English/Japanese regexes in every Node rule.
+- Do not return only a summary `reason` when the rule knows the actual elements.
+- Do not create a new Python crawler before checking the universal snapshot path.
+- Do not add a Python toggle without updating the frontend request type.
+- Do not assume UI language and audit language are the same setting.
+
+## 8. Definition of done
+
+Before you call the rule finished, check this list:
+
+- WCAG metadata exists in `i18n/rules.yml`
+- Japanese metadata exists in `i18n/locales/ja.yml` if the rule should support `ja`
+- Node behavior config exists in `config/universal.yml` if this is a Node custom check
+- failing Node checks return structured `elements`
+- Python findings include real element data when available
+- tests cover English and Japanese behavior
+- optional stage toggles are wired end-to-end
+- the report looks correct in the frontend, not just in raw JSON

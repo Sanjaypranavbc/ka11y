@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.5.7';
 const RULE_ID = 'custom-dragging-movements';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/dragging-movements';
@@ -10,12 +15,20 @@ const DND_LIBRARY_MARKERS = [
   '.sortable-item',             // Sortable.js
   '.ui-draggable',              // jQuery UI
   '[data-sortable]',            // generic sortable
+  '[data-interact]',            // Interact.js
+  '.gu-transit',                // Dragula
+  '[data-drag-handle]',         // generic drag handle
 ];
 
 // Selectors that indicate a single-pointer alternative to drag
 const ALT_SELECTOR = 'button, [role="button"], a[href], input[type="button"], input[type="submit"]';
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const data = await page.evaluate((libraryMarkers, altSel) => {
     const draggables = [];
 
@@ -33,14 +46,19 @@ async function run(page) {
       });
     }
 
-    // 2. Inline ondragstart without draggable attribute
-    for (const el of document.querySelectorAll('[ondragstart]:not([draggable="true"])')) {
+    // 2. Inline ondragstart without draggable attribute, and custom drag events
+    for (const el of document.querySelectorAll('[ondragstart]:not([draggable="true"]), [onpointerdown], [ontouchstart]')) {
+      // For pointer/touch down, check if there's an associated move event on the element or window
+      // We heuristically flag elements that have BOTH down and move handlers inline.
+      const hasMove = el.hasAttribute('onpointermove') || el.hasAttribute('ontouchmove') || el.hasAttribute('ondrag');
+      if (!el.hasAttribute('ondragstart') && !hasMove) continue;
+
       const altInside   = !!el.querySelector(altSel);
       const altInParent = !!(el.parentElement && el.parentElement.querySelector(altSel));
       draggables.push({
         html: el.outerHTML.slice(0, 150),
         hasAlternative: altInside || altInParent,
-        source: 'inline-handler',
+        source: el.hasAttribute('ondragstart') ? 'inline-handler' : 'custom-pointer-drag',
       });
     }
 
@@ -87,7 +105,11 @@ async function run(page) {
         description: 'All functionality that uses dragging movements must have a single-pointer alternative',
         impact: null,
         status: 'pass',
-        reason: 'No drag-and-drop functionality detected.',
+        reason: _t(
+          sharedContext,
+          'No drag-and-drop functionality detected.',
+          'ドラッグアンドドロップ機能は検出されませんでした。'
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -105,7 +127,12 @@ async function run(page) {
         description: 'All functionality that uses dragging movements must have a single-pointer alternative',
         impact: null,
         status: 'pass',
-        reason: `${totalCount} draggable element(s) detected — each appears to have a single-pointer alternative nearby.`,
+        reason: _t(
+          sharedContext,
+          '{total_count} draggable element(s) detected — each appears to have a single-pointer alternative nearby.',
+          'ドラッグ可能な要素が {total_count} 件検出され、いずれも近くに単一ポインターで操作できる代替手段があるように見えます。',
+          { total_count: totalCount },
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -120,7 +147,17 @@ async function run(page) {
       description: 'All functionality that uses dragging movements must have a single-pointer alternative',
       impact: 'serious',
       status: 'incomplete',
-      reason: `${totalCount} draggable element(s) detected${hasLibraryDnd ? ` (incl. ${libraryCount} from D&D library)` : ''}. ${totalMissing} appear to lack a nearby single-pointer alternative (button/link). Verify each drag action has an accessible equivalent: ${sample || 'D&D library elements present — verify alternatives exist'}.`,
+      reason: _t(
+        sharedContext,
+        '{total_count} draggable element(s) detected{library_suffix}. {missing_count} appear to lack a nearby single-pointer alternative (button/link). Verify each drag action has an accessible equivalent: {sample}.',
+        'ドラッグ可能な要素が {total_count} 件検出されました{library_suffix}。このうち {missing_count} 件は近くに単一ポインターで操作できる代替手段（ボタンやリンク）がないように見えます。各ドラッグ操作にアクセシブルな同等手段があることを確認してください: {sample}。',
+        {
+          total_count: totalCount,
+          library_suffix: hasLibraryDnd ? ` (including ${libraryCount} from D&D library)` : '',
+          missing_count: totalMissing,
+          sample: sample || 'D&D library elements present — verify alternatives exist',
+        },
+      ),
       helpUrl: HELP_URL,
     }],
   };

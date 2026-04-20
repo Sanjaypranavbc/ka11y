@@ -76,6 +76,9 @@ class ElementSnapshot(BaseModel):
     # Whether text is likely clipped
     text_clipped: bool = False
 
+    # CSS transform (used to detect JS-based orientation-lock hacks)
+    transform: str = "none"
+
 
 # ── Page snapshot ─────────────────────────────────────────────────────────────
 
@@ -93,6 +96,11 @@ class PageSnapshot(BaseModel):
     body_scroll_height: float = 0.0
 
     has_horizontal_scroll: bool = False
+
+    # Orientation-specific page-level signals
+    body_overflow_x: str = "visible"   # computed style of document.body
+    body_transform: str = "none"        # CSS transform on document.body
+    screen_orientation: str = "unknown" # screen.orientation.type from browser
 
     elements: List[ElementSnapshot] = Field(default_factory=list)
 
@@ -175,6 +183,7 @@ class RuleAuditRecord(BaseModel):
     violation: str = ""
     html_snippet: str = ""
     element_id: Optional[str] = None
+    selector: Optional[str] = None
     tag: str = ""
     page_url: str = ""
 
@@ -185,6 +194,7 @@ class RuleAuditRecord(BaseModel):
             f"{self.rule_key}_violation": self.violation,
             "html_snippet": self.html_snippet,
             "element_id": self.element_id,
+            "selector": self.selector,
             "tag": self.tag,
             "page_url": self.page_url,
         }

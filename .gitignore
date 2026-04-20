@@ -1,12 +1,21 @@
-
+*.xml
 .idea
 .idea/
 output
-.ai
-output/
-crawled_images/
-# Ignore Claude Files For Good Cause
 .claude
 *.xlsx
-WCAG_Solution_Document.md
+ka11y-docs/node_modules/
+ka11y-docs/package-lock.json
+ka11y-docs/package.json
+*.html
+wcag_reports
+.ai/
+crawled_images
+mcp
+Scripts
 scripts
+ka11y-python/scripts/
+ka11y-python/scripts/live_stage_audit.py
+ka11y-python/scripts/live_stage_plan.example.yml
+*.json
+

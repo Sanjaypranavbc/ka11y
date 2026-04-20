@@ -1,6 +1,6 @@
 # ka11y-node — Rule-by-Rule Analysis
 
-> Generated: 2026-04-01
+> Generated: 2026-04-10
 > Scope: `/src/custom-checks/` (24 checks) + axe-core integration
 > Node: Express + Puppeteer + axe-core
 
@@ -56,6 +56,124 @@ Custom Checks Index
 
 ---
 
+## Language, Japanese Sites, and Config Readiness
+
+### Current State (verified)
+
+| Layer | Current behavior | Status |
+|------|------------------|--------|
+| Request language | `/analyse-url-flat` accepts `lang`, validates it, and passes it to the flat result mappers | ✅ |
+| Localized rule copy | `rulesLoader.js` merges `i18n/rules.yml` with `i18n/locales/<lang>.yml`; `ja.yml` exists | ✅ |
+| Japanese finding text | Rule names, descriptions, and suggested fixes can already be returned in Japanese | ✅ |
+| Custom-check behavior | Many checks still embed JP/CJK words, patterns, and thresholds directly in JS | ❌ |
+| Cross-repo consistency with `ka11y-python` | No shared config contract for behavioral language assets | ❌ |
+
+Verified examples of hardcoded JP/CJK behavior in checks:
+
+- `audio-transcript.check.js` embeds transcript keywords in English + Japanese
+- `pointer-cancellation.check.js` embeds Japanese action terms such as `送信`, `購入`, `削除`
+- `multiple-ways.check.js` embeds multilingual search terms including Japanese
+- `link-purpose.check.js` includes Japanese equivalents of vague link text
+- `consistent-help.check.js` includes Japanese chat/support widget heuristics
+- `error-prevention.check.js` and `redundant-entry.check.js` embed Japanese commerce/process terms
+- `pronunciation.check.js` hardcodes CJK language prefixes and the CJK density threshold
+
+### Required Production Direction
+
+Japanese support in `ka11y-node` must be split into two explicit layers:
+
+1. `i18n/locales/ja.yml`
+   Keeps localized rule metadata and suggested fixes.
+2. `i18n/check-assets/ja.yml`
+   Holds Japanese/CJK detection behavior for custom checks.
+
+### Proposed Flow
+
+```
+HTTP POST /api/v1/analyse-url-flat (lang="ja")
+               │
+               ├── getRules("ja")
+               │      -> localized rule names / descriptions / fixes
+               │
+               ├── getCheckAssets("ja")
+               │      -> transcript keywords / action verbs / search terms /
+               │         support-widget labels / commerce patterns / CJK thresholds
+               │
+               └── runAll(page, { lang: "ja", assets })
+                        ├── static checks use assets inside page.evaluate(...)
+                        └── interactive checks use assets in JS + post-processing
+```
+
+### Suggested Config Files
+
+| File | Purpose |
+|------|---------|
+| `i18n/check-assets/en.yml` | Default behavior assets for custom checks |
+| `i18n/check-assets/ja.yml` | Japanese/CJK-specific behavior assets |
+| `src/utils/checkAssetsLoader.js` | Cache and merge check assets by language |
+| `src/custom-checks/index.js` | Pass `{ lang, assets }` into each custom check |
+| `src/services/accessibility.service.js` | Load assets once per request and pass them to `runAll()` |
+
+### Suggested Asset Shape
+
+```yaml
+media:
+  transcript_keywords:
+    - "書き起こし"
+    - "文字起こし"
+    - "トランスクリプト"
+    - "字幕"
+    - "キャプション"
+
+interaction:
+  action_verbs:
+    - "送信"
+    - "購入"
+    - "削除"
+    - "確認"
+    - "登録"
+    - "注文"
+
+navigation:
+  search_terms:
+    - "検索"
+
+support:
+  help_widget_labels:
+    - "チャット"
+    - "お問い合わせ"
+    - "サポート"
+    - "ヘルプ"
+
+commerce:
+  high_risk_terms:
+    - "購入"
+    - "決済"
+    - "お支払い"
+    - "請求"
+    - "注文確認"
+
+cjk:
+  lang_prefixes: ["ja", "ja-JP", "zh", "zh-TW", "zh-CN", "ko"]
+  ratio_threshold: 0.05
+  ruby_coverage_threshold: 0.30
+```
+
+### Japanese Edge Cases The Node Plan Must Keep
+
+| Edge case | Required behavior |
+|----------|-------------------|
+| Pure Japanese page with `lang="ja"` | Use Japanese assets immediately |
+| Mixed EN/JA page with explicit `lang="ja"` sections | Run CJK-sensitive checks at section level, not only page level |
+| Unlabelled Japanese page | Fall back to CJK-density heuristics |
+| Full-width punctuation / kana / kanji | Normalize safely before keyword matching |
+| Japanese support widgets | Use JP labels for help-widget detection |
+| Japanese transcript links / `<details>` transcripts | Match JP transcript keywords from config |
+| Kana-only or mixed-script content | Avoid assuming all pronunciation issues are kanji-only |
+| Threshold drift between node and python | Keep shared asset keys and values aligned |
+
+---
+
 ## Rule-by-Rule Analysis
 
 ---
@@ -90,15 +208,16 @@ any issues ──► INCOMPLETE (manual verification needed)
 | `<track kind="captions">` inside audio | Direct DOM query |
 | Transcript hyperlink in parent container | Link text regex match |
 | `<figcaption>` in wrapping `<figure>` | DOM ancestor walk |
+| `<details>` transcript block in nearby container | Summary/text regex match |
 | `aria-describedby` → text element | ID lookup |
 
 #### Cases Missed / False Negative Risks
 | Case | Why missed |
 |------|-----------|
-| `<details><summary>Transcript</summary>…</details>` adjacent to audio | Not in transcript link pattern |
 | Third-party embeds (Spotify, SoundCloud iframes) | Not `<audio>` in DOM |
 | Transcript on separate linked page (PDF, external URL) | Link detected but content unverified |
 | Dynamically rendered transcripts (AJAX/button-reveal) | Not present at page load |
+| Transcript patterns inside shadow DOM | Check uses document-scoped selectors only |
 
 ---
 
@@ -703,6 +822,7 @@ coverage = 0 → FAIL
 - `<ruby>` / `<rt>` element presence
 - Kanji coverage percentage calculation
 - CJK density heuristic for unlabeled pages
+- Explicit section-level CJK `lang` scan on non-CJK pages
 
 #### Cases Missed
 | Case | Why |
@@ -710,7 +830,9 @@ coverage = 0 → FAIL
 | Ruby on wrong reading order | Position not verified |
 | Proper nouns needing ruby more than common kanji | Priority not differentiated |
 | Kanji in `<img alt>` | Not in text nodes |
-| Page-level lang vs section-level CJK content | Section-level CJK in English page skipped |
+| Mixed CJK subsection without explicit `lang` inside mostly Latin page | Section scan depends on explicit `lang`, otherwise falls back to page/body heuristic |
+| Kana-only ambiguous terms or non-kanji pronunciation issues | Check is ruby/kanji-centric |
+| CJK thresholds per language/site | Thresholds are hardcoded, not config-driven |
 
 ---
 
@@ -1124,6 +1246,20 @@ Detect dynamic content contexts:
 **File:** `src/custom-checks/use-of-color.check.js`, line 95
 **Issue:** When `ancestor` is null, the `hasBgChange` fallback only checks for `'rgba(0, 0, 0, 0)'` and `'transparent'`. Some browsers normalize alpha-zero colors differently (e.g. `rgba(0,0,0,0)` without spaces). The existing `colorsDiffer` function already handles this correctly via digit extraction, but the fallback path bypasses it.
 **Fix:** Replaced the string comparison with a proper `colorsDiffer` call against the transparent sentinel.
+
+---
+
+## Japanese / Config Gap Summary
+
+| Area | Already supported | Still missing for production |
+|------|-------------------|------------------------------|
+| Japanese output copy | `i18n/locales/ja.yml` | — |
+| `lang="ja"` request handling | request param and result mapping | passing language assets into custom checks |
+| Japanese transcript detection | hardcoded in `audio-transcript.check.js` | move keywords to config |
+| Japanese pointer/action heuristics | hardcoded in `pointer-cancellation.check.js` | move verbs to config |
+| Japanese commerce/process heuristics | hardcoded in `error-prevention.check.js` and `redundant-entry.check.js` | move patterns to config |
+| Japanese support/search heuristics | partially hardcoded in `consistent-help.check.js`, `multiple-ways.check.js`, `link-purpose.check.js` | move terms to config |
+| Japanese/CJK thresholds | hardcoded in `pronunciation.check.js` | move thresholds and lang prefixes to config |
 
 ---
 

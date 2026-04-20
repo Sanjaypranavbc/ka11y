@@ -4,12 +4,10 @@ import os
 import json
 import shutil
 import sys
-import logging
 import csv
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
-import cv2
 from ka11y.preprocessor import extract_color
 from ka11y.accessibility.rules.non_text import contrast_analyser
 from ka11y.preprocessor.text_helper_models import (
@@ -32,11 +30,9 @@ logger = setup_logger(name="KAC", tag="text_detector")
 logger.info("Logger initialized")
 
 try:
-    from ka11y.text_detector.paddleocrbase import OCRReader
+    from ka11y.text_detector.paddleocrbase import OCRReader, PaddleOCR
     # Verify it can actually be initialized (detects missing paddleocr lib)
-    _test_reader = OCRReader(source_directory="")
-    _ = _test_reader.reader
-    if _test_reader.reader is None:
+    if PaddleOCR is None:
          raise ImportError("PaddleOCR not functional")
 except (ImportError, RuntimeError):
     logger.info("PaddleOCR not available, falling back to EasyOCR")
@@ -45,8 +41,15 @@ except (ImportError, RuntimeError):
 
 
 class OCRPreprocessing:
-    def __init__(self, source_directory: str, output_directory: Optional[str] = None, lang: str = "en"):
+    def __init__(
+        self,
+        source_directory: str,
+        output_directory: Optional[str] = None,
+        lang: str = "en",
+        include_paths: Optional[List[str]] = None,
+    ):
         self.source_directory = source_directory
+        self.include_paths = [str(Path(path).resolve()) for path in (include_paths or []) if path]
 
         if output_directory is None:
             self.base_output_dir = source_directory
@@ -192,6 +195,25 @@ class OCRPreprocessing:
     #         traceback.print_exc()
     #
     #     return result
+
+    def is_valid_text(self, bbox, text, conf):
+        if conf < 0.6:
+            return False
+        if len(text.strip()) <= 1:
+            return False
+        if not any(c.isalnum() for c in text):
+            return False
+
+        (tl, tr, br, bl) = bbox
+        width = tr[0] - tl[0]
+        height = bl[1] - tl[1]
+
+        if width * height < 500:
+            return False
+
+        return True
+
+
     def detect_text_in_image(self, image_path: str) -> TextDetectionResult:
         """Use EasyOCR to detect text and run contrast analysis"""
         logger.info(f"Processing: {image_path}")
@@ -219,6 +241,9 @@ class OCRPreprocessing:
                 device_pixel_ratio = config.get("device_pixel_ratio", 1.0)
 
                 for bbox, text, conf in detections:
+                    if not self.is_valid_text(bbox, text, conf):
+                        continue
+
                     clean_bbox = [(int(p[0]), int(p[1])) for p in bbox]
 
                     # ✅ NEW: clamp bbox to image bounds
@@ -345,9 +370,7 @@ class OCRPreprocessing:
                         and not contrast_info.get("needs_review")
                     ):
                         ratio_fb = contrast_info.get("contrast_ratio", 0)
-                        # ✅ F15: pass is_ui_component so check_wcag_compliance
-                        # applies the 3:1 threshold instead of 4.5:1 for
-                        # button/icon images.
+
                         compliance_fb = contrast_analyser.check_wcag_compliance(
                             ratio_fb,
                             font_size_px=font_size_px,
@@ -361,10 +384,10 @@ class OCRPreprocessing:
                                     f"{ratio_fb:.2f}:1 (minimum 3:1)"
                                 )
                             else:
-                                fg_rgb = contrast_info.get("foreground_color", (0, 0, 0))
                                 bg_rgb = contrast_info.get(
                                     "background_color", (255, 255, 255)
                                 )
+
                                 bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
                                 violations.append(f"Fails AA Normal vs BG {bg_hex}")
                     if violations:
@@ -409,15 +432,23 @@ class OCRPreprocessing:
         logger.info(f"Scanning directory: {self.source_directory}")
 
         image_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-        image_files = []
-        for root, dirs, files in os.walk(self.source_directory):
-            # Avoid scanning our own output directories if they are inside source
-            if "text_detected" in root or "contrast" in root:
-                continue
+        if self.include_paths:
+            image_files = [
+                path
+                for path in self.include_paths
+                if Path(path).suffix.lower() in image_extensions and Path(path).exists()
+            ]
+            logger.info(f"OCR candidate allowlist active: {len(image_files)} file(s)")
+        else:
+            image_files = []
+            for root, dirs, files in os.walk(self.source_directory):
+                # Avoid scanning our own output directories if they are inside source
+                if "text_detected" in root or "contrast" in root:
+                    continue
 
-            for file in files:
-                if Path(file).suffix.lower() in image_extensions:
-                    image_files.append(os.path.join(root, file))
+                for file in files:
+                    if Path(file).suffix.lower() in image_extensions:
+                        image_files.append(os.path.join(root, file))
 
         for idx, image_path in enumerate(image_files, 1):
             result = self.detect_text_in_image(image_path)
@@ -432,7 +463,7 @@ class OCRPreprocessing:
                         f"  ⚠ {result.contrast_violations_count} contrast violations detected!"
                     )
             else:
-                print(f"  . No text")
+                print("  . No text")
 
 
 class TextClassification:
@@ -524,11 +555,11 @@ class TextClassification:
         self._generate_contrast_markdown(md_file, images_with_violations)
 
         print(f"\n{'=' * 60}")
-        print(f"SCAN COMPLETE")
+        print("SCAN COMPLETE")
         print(f"Total images: {len(self.results)}")
         print(f"With text: {images_with_text}")
         print(f"Contrast violations: {images_with_violations}")
-        print(f"Reports saved to:")
+        print("Reports saved to:")
         print(f"  - {json_file}")
         print(f"  - {csv_file}")
         print(f"  - {contrast_json}")

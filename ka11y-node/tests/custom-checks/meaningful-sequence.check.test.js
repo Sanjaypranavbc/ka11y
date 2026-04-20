@@ -39,4 +39,14 @@ describe('meaningful-sequence.check (WCAG 1.3.2)', () => {
     const result = await run(page);
     expect(result.rules[0].ruleId).toBe('custom-meaningful-sequence');
   });
+
+  test('Japanese reason localizes structured reorder details', async () => {
+    const page = makePage([
+      { tagName: 'div', id: null, display: 'flex', reasonCode: 'mixed-floats', html: '' },
+    ]);
+    const result = await run(page, { lang: 'ja' });
+    expect(result.rules[0].status).toBe('incomplete');
+    expect(result.rules[0].reason).toContain('float 指定された兄弟要素');
+    expect(result.rules[0].reason).not.toContain('Container has mixed floated');
+  });
 });

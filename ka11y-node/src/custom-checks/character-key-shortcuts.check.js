@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.1.4';
 const RULE_ID = 'custom-character-key-shortcuts';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts';
@@ -11,7 +16,12 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/character-key-shor
 // but intentionally exclude the 0-9 digit range (ASCII codes 48-57).
 const PRINTABLE_CHAR_RE = /^[a-zA-Z!-/:-@[-`{-~]$/; // letters + symbols, NOT digits
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const data = await page.evaluate((printableRe) => {
     const violations = [];
     const re = new RegExp(printableRe);
@@ -65,9 +75,10 @@ async function run(page) {
     // do not appear as HTML attributes (common in vanilla JS and light frameworks).
     const KEY_RE_SRC = /(?:\.key|\.code)\s*(?:\.toLowerCase\s*\(\s*\))?\s*===?\s*['"][a-zA-Z!-/:-@[\-`{-~]['"]|keyCode\s*===?\s*(?:6[5-9]|[7-8]\d|90)/;
     const LISTEN_RE = /addEventListener\s*\(\s*['"]key(?:down|press|up)['"]/;
+    const docListenerRe = /document\s*\.\s*addEventListener\s*\(\s*['"]key(?:down|press|up)['"]/;
     for (const script of document.querySelectorAll('script:not([src])')) {
       const src = script.textContent || '';
-      if (!LISTEN_RE.test(src)) continue;
+      if (!LISTEN_RE.test(src) && !docListenerRe.test(src)) continue;
       const keyIdx = src.search(KEY_RE_SRC);
       if (keyIdx < 0) continue;
       const modIdx = src.search(/ctrlKey|altKey|metaKey/);
@@ -94,7 +105,15 @@ async function run(page) {
         description: 'Single character key shortcuts must be remappable or disableable',
         impact: null,
         status: 'pass',
-        reason: `${data.totalAccesskeys} accesskey attribute(s), ${data.totalHandlers} inline key handler(s), and inline script addEventListener calls checked — none use unguarded single character shortcuts (letters/symbols without Ctrl/Alt/Meta modifier).`,
+        reason: _t(
+          sharedContext,
+          '{accesskey_count} accesskey attribute(s), {handler_count} inline key handler(s), and inline script addEventListener calls checked — none use unguarded single character shortcuts (letters/symbols without Ctrl/Alt/Meta modifier).',
+          'accesskey 属性 {accesskey_count} 件、インラインのキーイベントハンドラー {handler_count} 件、およびインライン script の addEventListener 呼び出しを確認しましたが、修飾キーなしで発火する単一文字ショートカットは検出されませんでした。',
+          {
+            accesskey_count: data.totalAccesskeys,
+            handler_count: data.totalHandlers,
+          },
+        ),
         helpUrl: HELP_URL,
       }],
     };
@@ -113,7 +132,17 @@ async function run(page) {
       description: 'Single character key shortcuts must be remappable or disableable',
       impact: 'moderate',
       status: 'incomplete',
-      reason: `${accesskeyCount} accesskey shortcut(s), ${handlerCount} inline key handler(s), and ${scriptListenCount} script addEventListener call(s) detected that may activate on a single character key without a modifier. Verify each can be turned off, remapped, or is only active on focus: ${sample}.`,
+      reason: _t(
+        sharedContext,
+        '{accesskey_count} accesskey shortcut(s), {handler_count} inline key handler(s), and {script_listener_count} script addEventListener call(s) detected that may activate on a single character key without a modifier. Verify each can be turned off, remapped, or is only active on focus: {sample}.',
+        '修飾キーなしの単一文字キーで発火する可能性がある accesskey ショートカット {accesskey_count} 件、インラインのキーイベントハンドラー {handler_count} 件、script の addEventListener 呼び出し {script_listener_count} 件が検出されました。各ショートカットが無効化・再割り当て可能であるか、またはフォーカス時のみ有効であるか確認してください: {sample}。',
+        {
+          accesskey_count: accesskeyCount,
+          handler_count: handlerCount,
+          script_listener_count: scriptListenCount,
+          sample,
+        },
+      ),
       helpUrl: HELP_URL,
     }],
   };

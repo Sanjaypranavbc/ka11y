@@ -96,7 +96,7 @@ const Index = () => {
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() =>
     typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false
   );
-  const { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings } =
+  const { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings, activeRun } =
     useAudit();
 
   const isLoading = jobStatus === "pending" || jobStatus === "running";
@@ -153,6 +153,8 @@ const Index = () => {
         <DashboardHeader
           url={result.url}
           generatedAt={result.generated_at}
+          reportLang={result.lang}
+          activeRun={activeRun}
           onExportJSON={exportJSON}
           onToggleSidebar={() => setSidebarOpen(true)}
           isDarkMode={isDarkMode}
@@ -218,7 +220,12 @@ const Index = () => {
               {activeTab === "violations"          && <ViolationsTab violations={result.violations} pageSize={maxRows} />}
               {activeTab === "needs-review"        && <NeedsReviewTab items={result.needs_review} pageSize={maxRows} />}
               {activeTab === "passes"              && <PassesTab passes={result.passes} pageSize={maxRows} />}
-              {activeTab === "image-visualisation" && <ImageVisualisationTab contrastReport={result.contrast_report} />}
+              {activeTab === "image-visualisation" && (
+                <ImageVisualisationTab
+                  contrastReport={result.contrast_report}
+                  imageAuditReport={result.image_audit_report}
+                />
+              )}
               {activeTab === "settings"            && (
                 <SettingsTab
                   maxRows={maxRows}

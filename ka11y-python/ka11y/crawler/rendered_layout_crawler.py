@@ -27,7 +27,6 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
 
 from playwright.async_api import (
     Browser,
@@ -38,27 +37,21 @@ from playwright.async_api import (
 )
 
 from ka11y.config.logger import setup_logger
-from ka11y.accessibility.rendered.evidence import capture_screenshot, save_raw_json
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.context_factory import new_crawler_context
+from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.accessibility.rendered.geometry import rect_from_dict
 from ka11y.accessibility.rendered.heuristics import compute_obscuration
 from ka11y.accessibility.rendered.models import (
     FocusStep,
     HoverInteractionResult,
     PageSnapshot,
-    Rect,
-    RuleAuditRecord,
 )
 from ka11y.accessibility.rendered.snapshot_collector import collect_snapshot
 from ka11y.accessibility.rendered.stabilizer import stabilize
-from ka11y.accessibility.rendered.evaluators import (
-    resize_text as ev_resize,
-    reflow as ev_reflow,
-    text_spacing as ev_text_spacing,
-    orientation as ev_orientation,
-    hover_focus_content as ev_hover,
-    focus_not_obscured_minimum as ev_fnom,
-    focus_not_obscured_enhanced as ev_fnoe,
+from ka11y.utils.crawler_settings import (
+    build_text_spacing_cjk_selector_css,
+    get_max_focus_steps,
+    get_max_hover_candidates,
 )
 
 logger = setup_logger(name="KAC", tag="rendered_layout")
@@ -70,8 +63,8 @@ _REFLOW_W, _REFLOW_H = 320, 640
 _PORTRAIT_W, _PORTRAIT_H = 390, 844
 _LANDSCAPE_W, _LANDSCAPE_H = 844, 390
 
-_MAX_FOCUS_STEPS = 100
-_MAX_HOVER_CANDIDATES = 20
+_MAX_FOCUS_STEPS = get_max_focus_steps()
+_MAX_HOVER_CANDIDATES = get_max_hover_candidates()
 _PAGE_TIMEOUT_MS = 30_000
 
 # ── CSS for text-spacing scenario (WCAG 1.4.12) ───────────────────────────────
@@ -85,7 +78,7 @@ _TEXT_SPACING_CSS = """
 p, li, dt, dd, blockquote {
     margin-bottom: 2em !important;
 }
-"""
+""" + build_text_spacing_cjk_selector_css()
 
 # ── CSS for text-resize scenario (WCAG 1.4.4) ─────────────────────────────────
 
@@ -127,6 +120,39 @@ _OVERLAY_JS = """
 
 _HOVER_CANDIDATES_JS = """
 () => {
+    function safeSelector(el) {
+        try {
+            if (el.id) return `#${CSS.escape(el.id)}`;
+            const parts = [];
+            let cur = el;
+            while (cur && cur.nodeType === 1 && parts.length < 6) {
+                let part = cur.tagName.toLowerCase();
+                if (cur.classList && cur.classList.length > 0) {
+                    part += [...cur.classList]
+                        .slice(0, 2)
+                        .map(cls => `.${CSS.escape(cls)}`)
+                        .join('');
+                }
+                const parent = cur.parentElement;
+                if (parent) {
+                    const sameTag = [...parent.children].filter(child => child.tagName === cur.tagName);
+                    if (sameTag.length > 1) {
+                        part += `:nth-of-type(${sameTag.indexOf(cur) + 1})`;
+                    }
+                }
+                parts.unshift(part);
+                const selector = parts.join(' > ');
+                try {
+                    if (document.querySelector(selector) === el) return selector;
+                } catch (e) {}
+                cur = parent;
+            }
+            return parts.join(' > ');
+        } catch (e) {
+            return '';
+        }
+    }
+
     const candidates = [];
     const triggers = document.querySelectorAll(
         '[aria-expanded], [data-tooltip], [title]:not(html):not(head), ' +
@@ -134,8 +160,10 @@ _HOVER_CANDIDATES_JS = """
     );
     let idx = 0;
     for (const el of triggers) {
+        try {
         if (idx >= 20) break;
         const rect = el.getBoundingClientRect();
+        if (!rect || !Number.isFinite(rect.width) || !Number.isFinite(rect.height)) continue;
         if (rect.width === 0 || rect.height === 0) continue;
         const cs = window.getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden') continue;
@@ -144,12 +172,16 @@ _HOVER_CANDIDATES_JS = """
         candidates.push({
             tag: el.tagName.toLowerCase(),
             id: el.id || null,
+            selector: safeSelector(el),
             html: html,
             rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height,
                     top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left },
             index: idx,
         });
         idx++;
+        } catch (e) {
+            continue;
+        }
     }
     return candidates;
 }
@@ -190,33 +222,49 @@ class RenderedLayoutCrawler:
         self.base_url = base_url
         self.output_dir = Path(output_dir)
         self.max_depth = max_depth
+        self.max_focus_steps = _MAX_FOCUS_STEPS
+        self.max_hover_candidates = _MAX_HOVER_CANDIDATES
         self._raw_results: Dict[str, Any] = {}
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    async def crawl(self) -> Dict[str, Any]:
+    async def crawl(self, discovered_urls: List[str] | None = None) -> List[Dict[str, Any]]:
         """
-        Run all rendering scenarios and return a dict keyed by scenario name,
-        containing the raw data consumed by each evaluator.
+        Run all rendering scenarios and return a list of dicts (one per page),
+        each containing the raw data consumed by evaluators.
         """
+        urls = discovered_urls if discovered_urls else [self.base_url]
+        all_results = []
+
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
             try:
-                results = await self._run_all_scenarios(browser)
+                for url in urls:
+                    logger.info(f"[rendered] starting scenarios for {url}")
+                    # Temporarily override base_url for the scenario runners
+                    original_base = self.base_url
+                    self.base_url = url
+                    try:
+                        page_results = await self._run_all_scenarios(browser)
+                        page_results["page_url"] = url
+                        all_results.append(page_results)
+                    finally:
+                        self.base_url = original_base
             finally:
                 await browser.close()
 
-        self._raw_results = results
-        return results
+        self._raw_results_list = all_results
+        return all_results
 
     def save_raw_json(self) -> None:
         """Save raw scenario results as JSON files for debugging."""
-        for name, data in self._raw_results.items():
-            save_raw_json(self.output_dir, f"scenario_{name}", data)
-        save_raw_json(self.output_dir, "rendered_layout_raw", self._raw_results)
+        path = self.output_dir / "rendered_layout_raw_all.json"
+        with path.open("w", encoding="utf-8") as fh:
+            json.dump(self._raw_results_list, fh, indent=2, ensure_ascii=False)
+        logger.info(f"[rendered] saved raw results for {len(self._raw_results_list)} pages to {path}")
 
     # ── Internal scenario runner ───────────────────────────────────────────────
 
@@ -289,11 +337,10 @@ class RenderedLayoutCrawler:
     async def _make_context(
         self, browser: Browser, width: int, height: int
     ) -> BrowserContext:
-        ctx = await browser.new_context(
+        ctx = await new_crawler_context(
+            browser,
             viewport={"width": width, "height": height},
-            ignore_https_errors=True,
         )
-        await install_ssrf_guard(ctx)  # Bug 1 fix
         return ctx
 
     async def _load_and_stabilize(self, page: Page) -> None:
@@ -305,6 +352,14 @@ class RenderedLayoutCrawler:
             )
         except PlaywrightTimeout:
             logger.warning(f"[rendered] goto timeout for {self.base_url}")
+            
+        # ── Cookie Handling ──
+        try:
+            cookie_state = await handle_cookies(page)
+            logger.debug(f"[rendered] Cookie handling state for {self.base_url}: {cookie_state}")
+        except Exception as e:
+            logger.debug(f"[rendered] Cookie handling exception for {self.base_url}: {e}")
+            
         await stabilize(page)
 
     async def _snapshot_at_viewport(
@@ -403,7 +458,7 @@ class RenderedLayoutCrawler:
             # Collect fixed/sticky overlays once
             overlays = await page.evaluate(_OVERLAY_JS)
 
-            for step_idx in range(_MAX_FOCUS_STEPS):
+            for step_idx in range(self.max_focus_steps):
                 await page.keyboard.press("Tab")
                 await asyncio.sleep(0.05)
 
@@ -457,7 +512,7 @@ class RenderedLayoutCrawler:
 
             candidates = await page.evaluate(_HOVER_CANDIDATES_JS)
 
-            for cand in candidates[:_MAX_HOVER_CANDIDATES]:
+            for cand in candidates[: self.max_hover_candidates]:
                 result = await self._test_hover_candidate(page, cand)
                 if result is not None:
                     results.append(result)
@@ -477,11 +532,15 @@ class RenderedLayoutCrawler:
         """Test one hover candidate for 1.4.13 behaviour."""
         tag = cand.get("tag", "")
         cand_id = cand.get("id")
+        selector = cand.get("selector", "")
         html = cand.get("html", "")
-        rect_d = cand.get("rect", {})
+        resolved_rect = await self._resolve_hover_candidate_box(page, cand)
+        if not resolved_rect:
+            logger.debug(f"[rendered] skipping hover candidate with no visible box: {selector or cand_id or tag}")
+            return None
 
-        cx = float(rect_d.get("x", 0)) + float(rect_d.get("width", 1)) / 2
-        cy = float(rect_d.get("y", 0)) + float(rect_d.get("height", 1)) / 2
+        cx = float(resolved_rect.get("x", 0)) + float(resolved_rect.get("width", 1)) / 2
+        cy = float(resolved_rect.get("y", 0)) + float(resolved_rect.get("height", 1)) / 2
 
         try:
             # Collect baseline visible regions count
@@ -505,9 +564,9 @@ class RenderedLayoutCrawler:
             if not popup_appeared:
                 # Try focus trigger
                 try:
-                    await page.focus(
-                        cand.get("selector", "") or f"#{cand_id}" if cand_id else tag
-                    )
+                    focus_selector = selector or (f"#{cand_id}" if cand_id else "")
+                    if focus_selector:
+                        await page.locator(focus_selector).first.focus()
                     await asyncio.sleep(0.2)
                     after_focus = await page.evaluate(
                         '() => document.querySelectorAll(\'[aria-expanded="true"], '
@@ -587,12 +646,54 @@ class RenderedLayoutCrawler:
             logger.debug(f"[rendered] hover test failed for {tag}: {exc}")
             return None
 
+    async def _resolve_hover_candidate_box(
+        self,
+        page: Page,
+        cand: Dict[str, Any],
+    ) -> Optional[Dict[str, float]]:
+        rect_d = cand.get("rect") or {}
+        try:
+            width = float(rect_d.get("width", 0))
+            height = float(rect_d.get("height", 0))
+            x = float(rect_d.get("x", 0))
+            y = float(rect_d.get("y", 0))
+            if width > 0 and height > 0:
+                return {"x": x, "y": y, "width": width, "height": height}
+        except (TypeError, ValueError):
+            pass
+
+        selector = str(cand.get("selector", "") or "").strip()
+        if not selector:
+            return None
+
+        try:
+            locator = page.locator(selector).first
+            await locator.scroll_into_view_if_needed(timeout=2_000)
+            box = await locator.bounding_box()
+            if not box:
+                return None
+            width = float(box.get("width", 0))
+            height = float(box.get("height", 0))
+            if width <= 0 or height <= 0:
+                return None
+            return {
+                "x": float(box.get("x", 0)),
+                "y": float(box.get("y", 0)),
+                "width": width,
+                "height": height,
+            }
+        except Exception as exc:
+            logger.debug(
+                f"[rendered] failed to resolve hover candidate box for {selector}: {exc}"
+            )
+            return None
+
 
 # ── Evaluator orchestration ───────────────────────────────────────────────────
 
 
 def run_all_evaluators(
-    raw: Dict[str, Any],
+    raw_list: List[Dict[str, Any]],
     page_url: str,
     run_resize_text: bool = True,
     run_reflow: bool = True,
@@ -611,74 +712,79 @@ def run_all_evaluators(
         FocusStep,
         HoverInteractionResult,
     )
+    
+    all_findings = []
 
-    def _snap(key: str) -> PageSnapshot:
-        d = raw.get(key, {})
-        try:
-            return PageSnapshot.model_validate(d)
-        except Exception:
-            return PageSnapshot(
-                scenario=key,
-                page_url=page_url,
-                viewport_width=1280,
-                viewport_height=720,
-            )
-
-    def _focus_steps() -> List[FocusStep]:
-        steps = []
-        for d in raw.get("focus_scan", []):
+    for raw in raw_list:
+        current_url = raw.get("page_url", page_url)
+        
+        def _snap(key: str) -> PageSnapshot:
+            d = raw.get(key, {})
             try:
-                steps.append(FocusStep.model_validate(d))
+                return PageSnapshot.model_validate(d)
             except Exception:
-                pass
-        return steps
+                return PageSnapshot(
+                    scenario=key,
+                    page_url=current_url,
+                    viewport_width=1280,
+                    viewport_height=720,
+                )
 
-    def _hover_results() -> List[HoverInteractionResult]:
-        results = []
-        for d in raw.get("hover_scan", []):
-            try:
-                results.append(HoverInteractionResult.model_validate(d))
-            except Exception:
-                pass
-        return results
+        def _focus_steps() -> List[FocusStep]:
+            steps = []
+            for d in raw.get("focus_scan", []):
+                try:
+                    steps.append(FocusStep.model_validate(d))
+                except Exception:
+                    pass
+            return steps
 
-    all_records: List[RuleAuditRecord] = []
+        def _hover_results() -> List[HoverInteractionResult]:
+            results = []
+            for d in raw.get("hover_scan", []):
+                try:
+                    results.append(HoverInteractionResult.model_validate(d))
+                except Exception:
+                    pass
+            return results
 
-    if run_reflow:
-        all_records.extend(ev_reflow.evaluate(_snap("reflow_320")))
+        records = []
+        if run_resize_text:
+            from ka11y.accessibility.rendered.evaluators import evaluate_resize_text
+            records.extend(evaluate_resize_text(_snap("baseline"), _snap("resize_text_200")))
 
-    if run_text_spacing:
-        all_records.extend(
-            ev_text_spacing.evaluate(
-                _snap("text_spacing_baseline"),
-                _snap("text_spacing_override"),
+        if run_reflow:
+            from ka11y.accessibility.rendered.evaluators import evaluate_reflow
+            records.extend(evaluate_reflow(_snap("reflow_320")))
+
+        if run_text_spacing:
+            from ka11y.accessibility.rendered.evaluators import evaluate_text_spacing
+            records.extend(
+                evaluate_text_spacing(
+                    _snap("text_spacing_baseline"), _snap("text_spacing_override")
+                )
             )
-        )
 
-    if run_resize_text:
-        all_records.extend(
-            ev_resize.evaluate(
-                _snap("baseline"),
-                _snap("resize_text_200"),
+        if run_orientation:
+            from ka11y.accessibility.rendered.evaluators import evaluate_orientation
+            records.extend(
+                evaluate_orientation(
+                    _snap("orientation_portrait"), _snap("orientation_landscape")
+                )
             )
-        )
 
-    if run_orientation:
-        all_records.extend(
-            ev_orientation.evaluate(
-                _snap("orientation_portrait"),
-                _snap("orientation_landscape"),
-            )
-        )
+        if run_hover_focus_content:
+            from ka11y.accessibility.rendered.evaluators import evaluate_hover_focus_content
+            records.extend(evaluate_hover_focus_content(_hover_results()))
 
-    if run_hover_focus_content:
-        all_records.extend(ev_hover.evaluate(_hover_results()))
+        if run_focus_not_obscured_min:
+            from ka11y.accessibility.rendered.evaluators import evaluate_focus_not_obscured_min
+            records.extend(evaluate_focus_not_obscured_min(_focus_steps()))
 
-    focus_steps = _focus_steps()
-    if run_focus_not_obscured_min:
-        all_records.extend(ev_fnom.evaluate(focus_steps))
+        if run_focus_not_obscured_enh:
+            from ka11y.accessibility.rendered.evaluators import evaluate_focus_not_obscured_enh
+            records.extend(evaluate_focus_not_obscured_enh(_focus_steps()))
+            
+        all_findings.extend([r.model_dump() for r in records])
 
-    if run_focus_not_obscured_enh:
-        all_records.extend(ev_fnoe.evaluate(focus_steps))
-
-    return [r.to_dict() for r in all_records]
+    return all_findings

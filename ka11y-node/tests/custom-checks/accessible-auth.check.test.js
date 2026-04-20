@@ -42,7 +42,7 @@ describe('accessible-auth.check (WCAG 3.3.8)', () => {
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('fail');
-    expect(result.rules[0].reason).toContain('paste');
+    expect(result.rules[0].reason).toContain('blocks past');
   });
 
   test('fails for cognitive test without alternative', async () => {
@@ -67,13 +67,15 @@ describe('accessible-auth.check (WCAG 3.3.8)', () => {
     expect(result.rules[0].reason).toContain('no CAPTCHA');
   });
 
-  test('includes Japanese auth/CAPTCHA patterns in source heuristics', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/accessible-auth.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('ログイン');
-    expect(src).toContain('音声');
-    expect(src).toContain('パスワード再設定');
+  test('localizes reasons to Japanese when lang=ja', async () => {
+    const page = makePage({
+      hasAuthForm: true,
+      authFormCount: 1,
+      issues: [{ type: 'captcha-no-alternative', provider: 'reCAPTCHA/hCaptcha' }],
+    });
+    const result = await run(page, { lang: 'ja' });
+    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].reason).toContain('問題のある認証フォーム');
+    expect(result.rules[0].reason).toContain('アクセシブルな代替手段');
   });
 });

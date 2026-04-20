@@ -1,0 +1,90 @@
+---
+title: "1.3.3 Sensory Characteristics"
+description: "WCAG 1.3.3 — Ensuring instructions do not rely solely on sensory cues like shape, color, or sound"
+---
+
+<Info>
+  **Level A** · Auditor: `SensoryCharacteristicsAuditor` · File: `ka11y/accessibility/rules/non_text/sensory_auditor.py`
+</Info>
+
+## What it checks
+
+WCAG 1.3.3 requires that instructions for understanding and operating content do not rely solely on sensory characteristics such as shape, color, size, visual location, orientation, or sound. 
+
+ka11y uses a sophisticated NLP-backed auditor (spaCy) to identify instructional sentences and determine if they contain "sensory-only" references without a corresponding non-sensory identifier (like a text label).
+
+## How it works
+
+The `SensoryCharacteristicsAuditor` follows a multi-stage pipeline:
+
+1.  **Instruction Detection**: Identifies imperative commands (e.g., "Click the round button") or declarative guidance (e.g., "Required fields are marked in red").
+2.  **Sensory Word Extraction**: Searches for words belonging to 8 sensory categories:
+    *   **Color**: red, blue, green, highlighted...
+    *   **Shape**: round, square, circular...
+    *   **Size**: big, small, tiny...
+    *   **Position**: left, right, top, below...
+    *   **Orientation**: horizontal, vertical, clockwise...
+    *   **Sound**: beep, chime, bell...
+    *   **Brightness**: bright, dark, dim...
+    *   **Texture**: rough, smooth, patterned...
+3.  **Meaningful Label Check**: Strips sensory words and generic UI nouns (button, icon, etc.) to see if any unique identifiers remain. If a sentence contains a quoted string (e.g., Click the red "Submit" button), it is marked as **PASSED** because the quote provides a non-sensory way to identify the target.
+
+## Multi-language Support
+
+The auditor has full native support for **English** and **Japanese**.
+
+| Feature | English Implementation | Japanese Implementation |
+|---------|------------------------|-------------------------|
+| **NLP Engine** | `en_core_web_sm` | `ja_core_news_sm` |
+| **Sentence Splitting** | Regex `[.!?]` | Regex `[。！？]` |
+| **Word Boundaries** | Uses `\b` word boundaries | CJK-safe regex (no `\b`) |
+| **Quotation Marks** | `" "`, `“ ”`, `‘ ’` | `「 」`, `『 』` |
+| **Taxonomy** | Standard EN sensory words | Full Japanese sensory word taxonomy |
+
+### Japanese Sensory Taxonomy (Example)
+
+| Category | Japanese Keywords |
+|----------|-----------------|
+| **Color** | 赤, 青, 緑, 黄色, 白, 黒, ピンク, 紫 |
+| **Shape** | 丸, 四角, 円形, 三角, 長方形 |
+| **Size** | 大きい, 小さい, 大きな, 小さな |
+| **Position** | 左, 右, 上, 下, 中央, 前, 後 |
+| **Orientation** | 横向き, 縦向き, 水平, 垂直 |
+| **Sound** | 音, 鳴る, 聞こえる |
+
+## Output
+
+**CSV file:** `audit_sensory_report.csv`
+
+Columns: `page_url`, `element_tag`, `element_id`, `sentence`, `sensory_categories`, `wcag_1_3_3_status`, `wcag_1_3_3_violation`, `overall_status`, `selector`, `element_ref_id`, `frame_path`, `html_snippet`
+
+Status values: `PASSED` · `FAILED`
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Color only | "Click the **red** button to continue." |
+| Shape only | "Select the **square** icon." |
+| Position only | "Refer to the instructions on the **right**." |
+| Sound only | "Wait for the **beep** before typing." |
+
+## Suggested fix
+
+Always pair sensory characteristics with a text label or a unique non-sensory identifier.
+
+```html
+<!-- FAILED -->
+<p>Required fields are marked in red.</p>
+
+<!-- PASSED -->
+<p>Required fields are marked in red and indicated with an asterisk (*).</p>
+
+<!-- FAILED -->
+<button class="round-btn">○</button>
+<p>Click the round button.</p>
+
+<!-- PASSED -->
+<button class="round-btn" aria-label="Submit">○</button>
+<p>Click the round "Submit" button.</p>
+```

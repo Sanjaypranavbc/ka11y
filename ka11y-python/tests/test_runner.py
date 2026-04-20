@@ -9,9 +9,8 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -184,10 +183,11 @@ async def test_python_result_valid_tuple_works_correctly():
         {"status": "fail", "wcag": "1.1.1", "level": "A", "description": "Missing alt"}
     ]
     contrast_report = {"summary": {"total_regions_analysed": 0}, "images": []}
+    image_audit_report = {"images": []}
 
     with patch(
         "ka11y.api.v1.combined.runner._run_python_stages",
-        new=AsyncMock(return_value=(python_findings, contrast_report)),
+        new=AsyncMock(return_value=(python_findings, contrast_report, image_audit_report)),
     ), patch(
         "ka11y.api.v1.combined.runner._call_node_flat",
         new=AsyncMock(return_value=[]),

@@ -6,10 +6,8 @@ Covers: _check_258 helper, TargetSizeAuditor.generate_audit_report, TargetSizeAu
 import csv
 from pathlib import Path
 
-import pytest
 
 from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
-    MIN_PX,
     TargetSizeAuditor,
     _check_258,
 )
@@ -215,7 +213,8 @@ class TestTargetSizeAuditorReport:
             "required_offset_x_px", "required_offset_y_px",
             "nearest_target_gap_x_px", "nearest_target_gap_y_px",
             "passes_size", "wcag_2_5_8_status", "wcag_2_5_8_violation",
-            "overall_status", "html_snippet",
+            "overall_status", "selector", "element_ref_id", "frame_path",
+            "html_snippet",
         ]
         assert cols == expected
 

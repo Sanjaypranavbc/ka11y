@@ -1,6 +1,7 @@
 'use strict';
 
 const { run } = require('../../src/custom-checks/audio-transcript.check');
+const { getKeywordList } = require('../../src/custom-checks/sharedAssets');
 
 function makePage(data) {
   return { evaluate: jest.fn().mockResolvedValue(data) };
@@ -54,13 +55,10 @@ describe('audio-transcript.check (WCAG 1.2.1)', () => {
     expect(result.rules[0].impact).toBeNull();
   });
 
-  test('includes Japanese transcript keywords in source heuristics', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/audio-transcript.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('文字起こし');
-    expect(src).toContain('トランスクリプト');
-    expect(src).toContain('字幕');
+  test('loads Japanese transcript keywords from shared universal config', () => {
+    const keywords = getKeywordList('audio_transcript', 'transcript_keywords');
+    expect(keywords).toContain('文字起こし');
+    expect(keywords).toContain('トランスクリプト');
+    expect(keywords).toContain('字幕');
   });
 });

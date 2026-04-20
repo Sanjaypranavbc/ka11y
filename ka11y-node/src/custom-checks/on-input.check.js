@@ -1,9 +1,14 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '3.2.2';
 const RULE_ID = 'custom-on-input';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
-const MAX_INPUTS = 30;
+const MAX_INPUTS = 2000;
 const SETTLE_MS = 120;
 
 // Safe test values per input type — use syntactically valid values to avoid
@@ -17,13 +22,21 @@ const TYPE_CHAR = {
 
 // Selector now includes checkbox and radio — toggling these is a common source of
 // on-input context changes (B8: they were previously excluded from testing).
+// Also includes contenteditable elements which can receive user input.
 const SELECTOR = [
   'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled])',
   'textarea:not([disabled])',
   'select:not([disabled])',
+  '[contenteditable="true"]',
+  '[contenteditable=""]',
 ].join(', ');
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   const violations = [];
   let navigationDetected = false;
   const initialUrl = page.url();
@@ -32,6 +45,15 @@ async function run(page) {
   page.on('framenavigated', onNavigated);
 
   try {
+    // Inject SPA navigation detection via pushState/replaceState interception
+    await page.evaluate(() => {
+      window.__navChanges = 0;
+      const orig = history.pushState.bind(history);
+      history.pushState = function(...args) { window.__navChanges++; return orig(...args); };
+      const origReplace = history.replaceState.bind(history);
+      history.replaceState = function(...args) { window.__navChanges++; return origReplace(...args); };
+    });
+
     const inputs = await page.evaluate((sel, max) => {
       return Array.from(document.querySelectorAll(sel)).slice(0, max).map((el, i) => ({
         index: i,
@@ -41,10 +63,12 @@ async function run(page) {
         isSelect: el.tagName.toLowerCase() === 'select',
         isCheckboxOrRadio: ['checkbox', 'radio'].includes((el.getAttribute('type') || '').toLowerCase()),
         html: el.outerHTML.slice(0, 150),
+        target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
       }));
     }, SELECTOR, MAX_INPUTS);
 
-    for (const inputInfo of inputs) {
+    for (const inputInfo of (inputs || [])) {
       navigationDetected = false;
       const urlBefore = page.url();
 
@@ -75,10 +99,17 @@ async function run(page) {
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      if (navigationDetected || currentUrl !== urlBefore) {
+      const spaNavChanged = await page.evaluate(() => window.__navChanges > 0).catch(() => false);
+      if (spaNavChanged) {
+        await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
+      }
+
+      if (navigationDetected || spaNavChanged || currentUrl !== urlBefore) {
         violations.push(inputInfo);
         break; // page may have navigated; can't continue safely
       }
+      // Reset SPA counter for next element
+      await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
 
       // Clean up: restore original state
       if (!inputInfo.isSelect && !inputInfo.isCheckboxOrRadio) {
@@ -100,7 +131,7 @@ async function run(page) {
   if (violations.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Changing an input value must not trigger a context change', impact: null, status: 'pass', reason: 'No unexpected context changes detected on input.', helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Changing an input value must not trigger a context change', impact: null, status: 'pass', reason: _t(sharedContext, 'No unexpected context changes detected on input.', '入力値の変更による予期しないコンテキスト変更は検出されませんでした。'), helpUrl: HELP_URL }],
     };
   }
 
@@ -111,7 +142,15 @@ async function run(page) {
       description: 'Changing an input value must not trigger a context change',
       impact: 'serious',
       status: 'fail',
-      reason: `Changing <${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}> triggered an unexpected navigation or context change.`,
+      reason: _t(sharedContext, 'Changing {element} triggered an unexpected navigation or context change.', '{element} の値を変更した際、予期しないナビゲーションまたはコンテキスト変更が発生しました。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` }),
+      elements: [
+        {
+          html: violations[0].html,
+          element_id: violations[0].id,
+          target: violations[0].target,
+          tag: violations[0].tag,
+        }
+      ],
       helpUrl: HELP_URL,
     }],
   };

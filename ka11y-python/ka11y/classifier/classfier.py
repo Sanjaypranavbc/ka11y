@@ -3,12 +3,10 @@ import hashlib
 import aiohttp
 from pydantic import BaseModel
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich import box
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.models import ImageData
+
+
 
 console = Console(force_terminal=True)
 logger = setup_logger(name="KAC", tag="classify_assets")
@@ -244,9 +242,7 @@ class ClassifyAssets:
 
         logger.info(f"Context: {ctx}")
 
-        src_lower = src.lower()
         alt_str = alt_text if alt_text is not None else ""  # '' = explicit empty
-        alt_lower = alt_str.lower()
 
         # ─────────────────────────────────────────────────────────────
         # STEP 0 — explicitly hidden / presentational
@@ -410,7 +406,7 @@ class ClassifyAssets:
         c.classification = "informative"
         c.sub_type = sub
         logger.info(f"[STEP 4] informative/{sub}")
-        self._rich_result(f"STEP 4 · informative", "informative", sub, "green")
+        self._rich_result("STEP 4 · informative", "informative", sub, "green")
         return c.model_dump()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -598,8 +594,8 @@ class ClassifyAssets:
                 combined = f"{anc['cls']} {anc['id']}"
 
                 if anc["tag"] == "figure" and not figure_seen:
-                    logger.info("Ancestor <figure> (+2)")
-                    score += 2
+                    logger.info("Ancestor <figure> (+1)")
+                    score += 1
                     figure_seen = True
 
                 if any(kw in combined for kw in _CHART_PARENT_CLASSES):
@@ -657,7 +653,7 @@ class ClassifyAssets:
         except Exception:
             pass
 
-        # ── 6. Aspect-ratio heuristic (large landscape or tall portrait) ──
+        # ── 6. Aspect-ratio heuristic (extreme landscape or tall portrait) ──
         try:
             sz = await element.evaluate(
                 "el => ({ w: el.getBoundingClientRect().width,"
@@ -666,7 +662,7 @@ class ClassifyAssets:
             w, h = sz["w"], sz["h"]
             if w > 0 and h > 0:
                 ratio = w / h
-                if (w > 300 or h > 300) and (ratio > 1.3 or ratio < 0.6):
+                if (w > 400 or h > 400) and (ratio > 2.0 or ratio < 0.5):
                     logger.info(f"Aspect-ratio heuristic {ratio:.2f} {w}×{h} (+1)")
                     score += 1
         except Exception:

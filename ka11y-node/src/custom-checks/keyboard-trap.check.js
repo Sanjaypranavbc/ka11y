@@ -1,5 +1,10 @@
 'use strict';
 
+const {
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '2.1.2';
 const RULE_ID = 'custom-keyboard-trap';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/no-keyboard-trap';
@@ -11,7 +16,36 @@ const CYCLE_WINDOW = 4;
 // Settle delay: allow focus event handlers and page mutations to complete before reading state
 const SETTLE_MS = 60;
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+function _formatTrapDetail(detail, context) {
+  if (!detail || typeof detail !== 'object') return '';
+
+  if (detail.type === 'arrow-key-trap') {
+    return _t(
+      context,
+      'arrow-key trap in [role="{role}"]',
+      '[role="{role}"] 内で矢印キー操作のトラップの可能性',
+      { role: detail.role },
+    );
+  }
+
+  if (detail.type === 'iframe-tab-trap') {
+    return _t(
+      context,
+      'Tab trap in iframe ({frameUrl})',
+      'iframe 内で Tab トラップの可能性 ({frameUrl})',
+      { frameUrl: detail.frameUrl },
+    );
+  }
+
+  return '';
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   // Focus the page body to start from a known position
   await page.evaluate(() => { try { document.body.focus(); } catch (_) {} });
 
@@ -145,10 +179,144 @@ async function run(page) {
     }
   }
 
+  // ── Arrow key trap detection in ARIA widgets ──────────────────────────────
+  const arrowTrapRoles = ['tree', 'grid', 'listbox', 'menu', 'tablist', 'radiogroup'];
+  const arrowTrapFindings = [];
+
   if (!trapHtml) {
+    for (const role of arrowTrapRoles) {
+      const widgets = await page.evaluate((r) => {
+        return Array.from(document.querySelectorAll(`[role="${r}"]`)).slice(0, 3).map(el => ({
+          id: el.id || null,
+          html: el.outerHTML.slice(0, 100),
+          selector: el.id ? `#${el.id}` : null,
+          role: r,
+        }));
+      }, role);
+
+      for (const widget of (widgets || [])) {
+        // Focus the widget
+        await page.evaluate((sel, r) => {
+          const el = sel
+            ? document.querySelector(sel)
+            : document.querySelector(`[role="${r}"]`);
+          if (el) el.focus({ preventScroll: true });
+        }, widget.selector, role);
+        await new Promise(res => setTimeout(res, SETTLE_MS));
+
+        const before = await page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el) return null;
+          const allEls = Array.from(document.querySelectorAll('*'));
+          return `${allEls.indexOf(el)}:${el.tagName}`;
+        });
+
+        // Press ArrowDown twice
+        await page.keyboard.press('ArrowDown');
+        await new Promise(res => setTimeout(res, SETTLE_MS));
+        await page.keyboard.press('ArrowDown');
+        await new Promise(res => setTimeout(res, SETTLE_MS));
+
+        const after = await page.evaluate(() => {
+          const el = document.activeElement;
+          if (!el) return null;
+          const allEls = Array.from(document.querySelectorAll('*'));
+          return `${allEls.indexOf(el)}:${el.tagName}`;
+        });
+
+        if (before && after && before === after) {
+          arrowTrapFindings.push({ type: 'arrow-key-trap', role, html: widget.html });
+        }
+      }
+    }
+  }
+
+  // ── Same-origin iframe Tab trap detection ─────────────────────────────────
+  const iframeTrapFindings = [];
+
+  if (!trapHtml) {
+    const frames = (typeof page.frames === 'function' ? page.frames() : []).filter(f => typeof page.mainFrame === 'function' ? f !== page.mainFrame() : true);
+    for (const frame of frames) {
+      try {
+        // Try a basic Tab-trap detection in the frame (forward only, 30 iterations)
+        const frameRecentKeys = [];
+        let frameTrapHtml = null;
+
+        await frame.evaluate(() => {
+          try { document.body.focus(); } catch (_) {}
+        });
+
+        for (let i = 0; i < 30; i++) {
+          await page.keyboard.press('Tab');
+          await new Promise(res => setTimeout(res, SETTLE_MS));
+
+          const frameActive = await frame.evaluate(() => {
+            const el = document.activeElement;
+            if (!el || el === document.body || el === document.documentElement) return null;
+            const allEls = Array.from(document.querySelectorAll('*'));
+            const pos = allEls.indexOf(el);
+            const stable = el.id || el.getAttribute('name') || '';
+            return { key: stable ? `${el.tagName}:${stable}` : `${pos}:${el.tagName}`, html: el.outerHTML.slice(0, 100) };
+          }).catch(() => null);
+
+          if (!frameActive) break;
+
+          frameRecentKeys.push(frameActive.key);
+          if (frameRecentKeys.length > CYCLE_WINDOW) frameRecentKeys.shift();
+
+          const fn = frameRecentKeys.length;
+          const frameStuck = fn >= 3 && frameRecentKeys.every(k => k === frameRecentKeys[0]);
+          const frameCycle = fn >= 4 &&
+            frameRecentKeys[fn - 1] === frameRecentKeys[fn - 3] &&
+            frameRecentKeys[fn - 2] === frameRecentKeys[fn - 4] &&
+            frameRecentKeys[fn - 1] !== frameRecentKeys[fn - 2];
+
+          if (frameStuck || frameCycle) {
+            frameTrapHtml = frameActive.html;
+            break;
+          }
+        }
+
+        if (frameTrapHtml) {
+          iframeTrapFindings.push({
+            type: 'iframe-tab-trap',
+            html: frameTrapHtml,
+            frameUrl: frame.url(),
+          });
+        }
+      } catch (_) {
+        // Cross-origin frame — skip
+      }
+    }
+  }
+
+  if (!trapHtml && arrowTrapFindings.length === 0 && iframeTrapFindings.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Keyboard focus must not be trapped in a component', impact: null, status: 'pass', reason: 'No keyboard focus traps detected during Tab navigation.', helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Keyboard focus must not be trapped in a component', impact: null, status: 'pass', reason: _t(sharedContext, 'No keyboard focus traps detected during Tab navigation.', 'Tab ナビゲーション中にキーボードフォーカストラップは検出されませんでした。'), helpUrl: HELP_URL }],
+    };
+  }
+
+  if (!trapHtml) {
+    const arrowDetail = arrowTrapFindings
+      .map(f => _formatTrapDetail(f, sharedContext))
+      .filter(Boolean)
+      .join('; ');
+    const iframeDetail = iframeTrapFindings
+      .map(f => _formatTrapDetail({ ...f, frameUrl: f.frameUrl.slice(0, 60) }, sharedContext))
+      .filter(Boolean)
+      .join('; ');
+    const allDetail = [arrowDetail, iframeDetail].filter(Boolean).join('; ');
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'Keyboard focus must not be trapped in a component',
+        impact: 'serious',
+        status: 'incomplete',
+        reason: _t(sharedContext, 'Potential keyboard traps detected: {detail}. Verify arrow key navigation and escape paths are available.', 'キーボードトラップの可能性が検出されました: {detail}。矢印キーでの移動や Escape による離脱経路があるか確認してください。', { detail: allDetail }),
+        helpUrl: HELP_URL,
+      }],
     };
   }
 
@@ -159,7 +327,7 @@ async function run(page) {
       description: 'Keyboard focus must not be trapped in a component',
       impact: 'critical',
       status: 'fail',
-      reason: `Keyboard focus appears trapped in: ${trapHtml.slice(0, 120)}. Tab key could not escape the component even after pressing Escape.`,
+      reason: _t(sharedContext, 'Keyboard focus appears trapped in: {snippet}. Tab key could not escape the component even after pressing Escape.', 'キーボードフォーカスが次の要素内に閉じ込められているように見えます: {snippet}。Escape を押した後でも Tab キーでそのコンポーネントから抜け出せませんでした。', { snippet: trapHtml.slice(0, 120) }),
       helpUrl: HELP_URL,
     }],
   };

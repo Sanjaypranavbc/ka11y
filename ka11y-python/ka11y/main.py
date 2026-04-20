@@ -6,17 +6,18 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-load_dotenv()
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse
-from ka11y.config.logger import setup_logger
-from ka11y.utils.config_loader import load_config
+
 from ka11y.api.router import router
 from ka11y.api.v1.combined import _evict_old_jobs
+from ka11y.config.logger import setup_logger
+from ka11y.utils.config_loader import load_config
+
+load_dotenv()
 
 
 class _RateLimitMiddleware(BaseHTTPMiddleware):

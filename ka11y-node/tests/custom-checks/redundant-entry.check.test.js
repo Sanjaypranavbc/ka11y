@@ -79,9 +79,10 @@ describe('redundant-entry.check (WCAG 3.3.7)', () => {
     expect(result.rules[0].reason).toContain('high-confidence redundant-entry issue');
     expect(Array.isArray(result.rules[0].elements)).toBe(true);
     expect(result.rules[0].elements[0]).toMatchObject({
-      selector: 'input[name="email"]',
-      tagName: 'INPUT',
+      target: ['input[name="email"]'],
+      tag: 'INPUT',
       html: '<input name="email">',
+
     });
   });
 
@@ -113,13 +114,13 @@ describe('redundant-entry.check (WCAG 3.3.7)', () => {
     expect(Array.isArray(result.rules[0].elements)).toBe(true);
     expect(result.rules[0].elements).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        selector: 'input[name="zip"]',
-        tagName: 'INPUT',
+        target: ['input[name="zip"]'],
+        tag: 'INPUT',
         html: '<input name="zip">',
       }),
       expect.objectContaining({
-        selector: 'input[name="postal_code"]',
-        tagName: 'INPUT',
+        target: ['input[name="postal_code"]'],
+        tag: 'INPUT',
         html: '<input name="postal_code">',
       }),
     ]));
@@ -268,13 +269,14 @@ describe('redundant-entry.check (WCAG 3.3.7)', () => {
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].elements).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        selector: 'input[name="email"]',
-        tagName: 'INPUT',
+        target: ['input[name="email"]'],
+        tag: 'INPUT',
       }),
       expect.objectContaining({
-        selector: 'input[name="contact_email"]',
-        tagName: 'INPUT',
+        target: ['input[name="contact_email"]'],
+        tag: 'INPUT',
       }),
     ]));
+
   });
 });

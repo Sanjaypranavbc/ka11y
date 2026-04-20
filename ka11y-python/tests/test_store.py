@@ -18,7 +18,7 @@ from ka11y.api.v1.combined.store import (
     _broadcast,
     _close_subscribers,
     _subscribers,
-    _subscribers_lock,
+    _get_subscribers_lock,
 )
 
 
@@ -30,7 +30,7 @@ from ka11y.api.v1.combined.store import (
 async def _add_subscriber(job_id: str) -> asyncio.Queue:
     """Simulate the route handler adding a subscriber under the lock."""
     q: asyncio.Queue = asyncio.Queue()
-    async with _subscribers_lock:
+    async with _get_subscribers_lock():
         _subscribers.setdefault(job_id, []).append(q)
     return q
 
@@ -126,7 +126,7 @@ async def test_concurrent_broadcast_and_add_subscriber_no_race():
 
     new_q_task = asyncio.create_task(slow_add())
     await _broadcast(job_id, "ping", {"v": 1})
-    new_q = await new_q_task
+    await new_q_task
 
     # The existing subscriber must have received the message
     assert not q_existing.empty()

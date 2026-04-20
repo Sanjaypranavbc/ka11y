@@ -1,11 +1,45 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '4.1.3';
 const RULE_ID = 'custom-status-messages';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/status-messages';
 
-async function run(page) {
-  const data = await page.evaluate(() => {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+
+  const searchResultPattern = buildKeywordPattern(
+    getKeywordList('status_messages', 'search_result_keywords', sharedContext)
+  );
+
+  const counterBadgePattern = buildKeywordPattern(
+    getKeywordList('status_messages', 'counter_badge_keywords', sharedContext)
+  );
+
+  const cartPattern = buildKeywordPattern(
+    getKeywordList('status_messages', 'cart_keywords', sharedContext)
+  );
+
+  const notificationClassPattern = buildKeywordPattern(
+    getKeywordList('status_messages', 'notification_class_keywords', sharedContext)
+  );
+
+  const data = await page.evaluate((searchResultReStr, counterBadgeReStr, cartReStr, notificationClassReStr) => {
+    const searchResultRe = new RegExp(searchResultReStr, 'i');
+    const counterBadgeRe = new RegExp(`\\b(${counterBadgeReStr})\\b|${counterBadgeReStr}`, 'i');
+    const cartRe = new RegExp(cartReStr, 'i');
+    const notificationClassRe = new RegExp(notificationClassReStr, 'i');
+
     const liveRegions = Array.from(document.querySelectorAll(
       '[aria-live], [role="status"], [role="alert"], [role="log"], [role="timer"], [role="marquee"]'
     ));
@@ -24,37 +58,41 @@ async function run(page) {
 
     // Bug fix: detect other dynamic-content contexts beyond forms
     // that would need status messages (search results, cart, notifications)
-    const hasSearchResults = !!(
-      document.querySelector('[role="region"][aria-label*="result" i]') ||
-      document.querySelector('[role="region"][aria-label*="結果" i]') ||
-      document.querySelector('[aria-live][id*="result" i]') ||
-      document.querySelector('[id*="search-result" i], [class*="search-result" i], [id*="検索結果" i], [class*="検索結果" i]')
-    );
-    // B14: '[class*="badge" i]' was too broad — it matched Bootstrap decorative labels
-    // ("New", "Pro", "Beta") and other non-counter badge components, causing false
-    // positives. Only count a badge as a dynamic counter if it contains a number or
-    // an aria-label that explicitly signals counter behaviour.
+    const searchResultEls = Array.from(document.querySelectorAll('[role="region"], [aria-live], [id], [class]')).filter(el => {
+      const label = el.getAttribute('aria-label') || '';
+      const idStr = el.id || '';
+      const classStr = typeof el.className === 'string' ? el.className : '';
+      return searchResultRe.test(label) || searchResultRe.test(idStr) || searchResultRe.test(classStr);
+    });
+    const hasSearchResults = searchResultEls.length > 0;
+
+    // B14: '[class*="badge" i]' was too broad
     const badgeEls = Array.from(document.querySelectorAll('[class*="badge" i]'));
-    const hasCounterBadge = badgeEls.some(el => {
+    const counterBadgeEls = badgeEls.filter(el => {
       const text = (el.textContent || '').trim();
       const label = (el.getAttribute('aria-label') || '').toLowerCase();
-      return /^\d+\+?$/.test(text) ||
-             /\b(count|counter|notification|unread|新着|件|通知|未読)\b/i.test(label);
+      return /^\d+\+?$/.test(text) || counterBadgeRe.test(label);
     });
-    const hasCartOrCounter = !!(
-      document.querySelector('[aria-label*="cart" i], [aria-label*="basket" i], [aria-label*="カート" i], [aria-label*="買い物かご" i]') ||
-      document.querySelector('[class*="cart-count" i]') ||
-      hasCounterBadge
-    );
+    const hasCounterBadge = counterBadgeEls.length > 0;
+
+    const cartOrCounterEls = Array.from(document.querySelectorAll('[aria-label], [class]')).filter(el => {
+      const label = el.getAttribute('aria-label') || '';
+      const classStr = typeof el.className === 'string' ? el.className : '';
+      return cartRe.test(label) || cartRe.test(classStr);
+    });
+    const combinedCartEls = [...new Set([...cartOrCounterEls, ...counterBadgeEls])];
+    const hasCartOrCounter = combinedCartEls.length > 0;
+
     // FP fix: detect visual notification patterns only when they are NOT already
-    // contained within an existing live region. If the notification element is already
-    // inside a [role="status"], [role="alert"], or [aria-live] ancestor, it already
-    // has a live region and should not trigger "needs live regions".
-    const notificationCandidates = Array.from(document.querySelectorAll(
-      '[class*="notification" i], [class*="toast" i], [class*="snackbar" i], [class*="flash" i], ' +
-      '[class*="alert" i]:not([role]), [class*="banner" i]:not([role])'
-    ));
-    const hasNotificationArea = notificationCandidates.some(el => {
+    // contained within an existing live region.
+    const notificationCandidates = Array.from(document.querySelectorAll('[class]')).filter(el => {
+      const classStr = typeof el.className === 'string' ? el.className : '';
+      return classStr.trim().length > 0 &&
+             notificationClassRe.test(classStr) &&
+             !(/alert|banner/i.test(classStr) && el.hasAttribute('role'));
+    });
+
+    const notificationAreaEls = notificationCandidates.filter(el => {
       // Walk up ancestors to check if this element is already inside a live region
       let node = el;
       while (node && node !== document.body) {
@@ -68,8 +106,19 @@ async function run(page) {
       }
       return true; // notification element has no live region ancestor
     });
+    const hasNotificationArea = notificationAreaEls.length > 0;
 
     const needsLiveRegions = formCount > 0 || hasSearchResults || hasCartOrCounter || hasNotificationArea;
+
+    const contextElements = [];
+    for (const el of [...forms, ...searchResultEls, ...combinedCartEls, ...notificationAreaEls]) {
+      contextElements.push({
+        html: el.outerHTML.slice(0, 150),
+        element_id: el.id || null,
+        target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
+      });
+    }
 
     // Probe: check whether any live region already has text content at page-load time.
     // An empty live region (no content) has never been used yet — flag it as a signal
@@ -80,23 +129,82 @@ async function run(page) {
       el => (el.textContent || '').trim().length > 0
     );
 
+    // aria-atomic check: [role="alert"] or [aria-live="assertive"] missing aria-atomic="true"
+    const alertsWithoutAtomic = Array.from(document.querySelectorAll(
+      '[role="alert"], [aria-live="assertive"]'
+    )).filter(el => el.getAttribute('aria-atomic') !== 'true').map(el => ({
+      html: el.outerHTML.slice(0, 150),
+      element_id: el.id || null,
+      target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+      tag: el.tagName.toUpperCase(),
+    }));
+
+    // Inline validation without live region ancestor
+    const invalidWithoutLiveRegion = Array.from(document.querySelectorAll('[aria-invalid]')).filter(el => {
+      let node = el.parentElement;
+      while (node && node !== document.body) {
+        const role = node.getAttribute('role');
+        const ariaLive = node.getAttribute('aria-live');
+        if (ariaLive || role === 'status' || role === 'alert' || role === 'log') return false;
+        node = node.parentElement;
+      }
+      return true;
+    }).map(el => ({
+      html: el.outerHTML.slice(0, 150),
+      element_id: el.id || null,
+      target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+      tag: el.tagName.toUpperCase(),
+    }));
+
     return {
       liveRegionCount: liveRegions.length,
       formCount,
       hasAlerts,
       hasPolite,
+      hasSearchResults,
+      hasCartOrCounter,
+      hasNotificationArea,
       needsLiveRegions,
       anyLiveRegionHasContent,
-      dynamicContexts: [
-        formCount > 0 && `${formCount} form(s)`,
-        hasSearchResults && 'search results',
-        hasCartOrCounter && 'cart/counter',
-        hasNotificationArea && 'notification area',
-      ].filter(Boolean),
+      alertsWithoutAtomic,
+      invalidWithoutLiveRegion,
+      contextElements,
     };
-  });
+  }, searchResultPattern, counterBadgePattern, cartPattern, notificationClassPattern);
 
-  const { liveRegionCount, formCount, hasAlerts, hasPolite, needsLiveRegions, anyLiveRegionHasContent, dynamicContexts } = data;
+  const { liveRegionCount, formCount, hasAlerts, hasPolite, hasSearchResults, hasCartOrCounter, hasNotificationArea, needsLiveRegions, anyLiveRegionHasContent, alertsWithoutAtomic = [], invalidWithoutLiveRegion = [], contextElements = [] } = data;
+  const dynamicContexts = [
+    formCount > 0 && _t(sharedContext, '{count} form(s)', 'フォーム {count} 件', { count: formCount }),
+    hasSearchResults && _t(sharedContext, 'search results', '検索結果'),
+    hasCartOrCounter && _t(sharedContext, 'cart/counter', 'カート/カウンター'),
+    hasNotificationArea && _t(sharedContext, 'notification area', '通知領域'),
+  ].filter(Boolean);
+
+  // Build extra INCOMPLETE rules for aria-atomic and inline validation issues
+  const extraRules = [];
+  if (alertsWithoutAtomic.length > 0) {
+    extraRules.push({
+      ruleId: `${RULE_ID}-atomic`,
+      description: 'Status messages must be programmatically determinable',
+      impact: null,
+      status: 'incomplete',
+      reason: _t(sharedContext, '{count} [role="alert"] or [aria-live="assertive"] element(s) are missing aria-atomic="true". Without aria-atomic, only changed portions may be announced rather than the full message.', '[role="alert"] または [aria-live="assertive"] 要素 {count} 件に aria-atomic="true" がありません。aria-atomic がないと、完全なメッセージではなく変更部分だけが読み上げられる可能性があります。', { count: alertsWithoutAtomic.length }),
+      elements: alertsWithoutAtomic,
+      helpUrl: HELP_URL,
+    });
+  }
+  if (invalidWithoutLiveRegion.length > 0) {
+    extraRules.push({
+      ruleId: `${RULE_ID}-inline-validation`,
+      description: 'Status messages must be programmatically determinable',
+      impact: null,
+      status: 'incomplete',
+      reason: _t(sharedContext, '{count} [aria-invalid] element(s) have no live region ancestor (aria-live, role="status/alert/log"). Inline validation errors may not be announced to screen reader users.', '[aria-invalid] 要素 {count} 件にライブリージョンの祖先（aria-live、role="status/alert/log"）がありません。インラインの入力検証エラーがスクリーンリーダー利用者に通知されない可能性があります。', { count: invalidWithoutLiveRegion.length }),
+      elements: invalidWithoutLiveRegion,
+      helpUrl: HELP_URL,
+    });
+  }
+
 
   // Page has dynamic contexts but no live regions at all → clear fail
   if (needsLiveRegions && liveRegionCount === 0) {
@@ -107,9 +215,10 @@ async function run(page) {
         description: 'Status messages must be programmatically determinable',
         impact: 'serious',
         status: 'fail',
-        reason: `Dynamic content contexts detected (${dynamicContexts.join(', ')}) but no ARIA live regions found. Validation errors and status updates will not be announced to screen readers.`,
+        reason: _t(sharedContext, 'Dynamic content contexts detected ({contexts}) but no ARIA live regions found. Validation errors and status updates will not be announced to screen readers.', '動的コンテンツの文脈（{contexts}）が検出されましたが、ARIA ライブリージョンが見つかりません。入力エラーや状態更新がスクリーンリーダーに通知されません。', { contexts: dynamicContexts.join(', ') }),
+        elements: contextElements,
         helpUrl: HELP_URL,
-      }],
+      }, ...extraRules],
     };
   }
 
@@ -118,11 +227,11 @@ async function run(page) {
   // all-empty live regions may be structural placeholders that are never written to.
   if (needsLiveRegions && liveRegionCount > 0) {
     const contentNote = anyLiveRegionHasContent
-      ? 'At least one live region contains text at page load.'
-      : 'All live regions are empty at page load — confirm they are populated on status updates at runtime.';
+      ? _t(sharedContext, 'At least one live region contains text at page load.', '少なくとも 1 つのライブリージョンには、ページ読み込み時点でテキストが含まれています。')
+      : _t(sharedContext, 'All live regions are empty at page load — confirm they are populated on status updates at runtime.', 'ページ読み込み時点では、すべてのライブリージョンが空です。実行時の状態更新で内容が設定されることを確認してください。');
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}) alongside dynamic contexts (${dynamicContexts.join(', ')}). ${contentNote} Verify live regions are correctly wired to each status update.`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'incomplete', reason: _t(sharedContext, '{count} ARIA live region(s) found (assertive: {has_alerts}, polite: {has_polite}) alongside dynamic contexts ({contexts}). {content_note} Verify live regions are correctly wired to each status update.', 'ARIA ライブリージョンが {count} 件見つかりました（assertive: {has_alerts}, polite: {has_polite}）。動的コンテンツの文脈（{contexts}）も検出されています。{content_note} 各ステータス更新に対して、ライブリージョンが正しく接続されていることを確認してください。', { count: liveRegionCount, has_alerts: hasAlerts, has_polite: hasPolite, contexts: dynamicContexts.join(', '), content_note: contentNote }), elements: contextElements, helpUrl: HELP_URL }, ...extraRules],
     };
   }
 
@@ -130,14 +239,14 @@ async function run(page) {
   if (liveRegionCount > 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'pass', reason: `${liveRegionCount} ARIA live region(s) found (assertive: ${hasAlerts}, polite: ${hasPolite}).`, helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: null, status: 'pass', reason: _t(sharedContext, '{count} ARIA live region(s) found (assertive: {has_alerts}, polite: {has_polite}).', 'ARIA ライブリージョンが {count} 件見つかりました（assertive: {has_alerts}, polite: {has_polite}）。', { count: liveRegionCount, has_alerts: hasAlerts, has_polite: hasPolite }), helpUrl: HELP_URL }, ...extraRules],
     };
   }
 
   // No dynamic contexts and no live regions — not enough info, mark incomplete
   return {
     successCriteriaId: SC,
-    rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: 'moderate', status: 'incomplete', reason: 'No ARIA live regions detected. If this page displays status updates (alerts, notifications, form feedback), verify they use role="status", role="alert", or aria-live.', helpUrl: HELP_URL }],
+    rules: [{ ruleId: RULE_ID, description: 'Status messages must be programmatically determinable', impact: 'moderate', status: 'incomplete', reason: _t(sharedContext, 'No ARIA live regions detected. If this page displays status updates (alerts, notifications, form feedback), verify they use role="status", role="alert", or aria-live.', 'ARIA ライブリージョンは検出されませんでした。このページでステータス更新（アラート、通知、フォームのフィードバックなど）を表示する場合は、role="status"、role="alert"、または aria-live を使用していることを確認してください。'), helpUrl: HELP_URL }, ...extraRules],
   };
 }
 

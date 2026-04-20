@@ -17,12 +17,19 @@ const fs   = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 
-// Allow Docker override via env var; default resolves to ka11y-node/i18n/
-const I18N_DIR = process.env.KA11Y_I18N_DIR
-  || path.resolve(__dirname, '../../i18n');
+const SHARED_I18N_DIR = path.resolve(__dirname, '../../../i18n');
+const LOCAL_I18N_DIR = path.resolve(__dirname, '../../i18n');
+const DEFAULT_I18N_DIR = fs.existsSync(path.join(SHARED_I18N_DIR, 'rules.yml'))
+  ? SHARED_I18N_DIR
+  : LOCAL_I18N_DIR;
+
+// Allow Docker override via env var; default resolves to the repo-shared i18n directory.
+const I18N_DIR = process.env.KA11Y_I18N_DIR || DEFAULT_I18N_DIR;
 
 /** @type {Map<string, Record<string, object>>} */
 const _cache = new Map();
+/** @type {Map<string, object>} */
+const _localeCache = new Map();
 
 /**
  * Safely parse a YAML file. Returns {} on any error so callers never crash.
@@ -52,18 +59,19 @@ function _loadYaml(filePath) {
  * @returns {Record<string, { level: string, severity: string|null, name: string, description: string, suggested_fix: string }>}
  */
 function getRules(lang = 'en') {
-  if (_cache.has(lang)) return _cache.get(lang);
+  const safeLang = String(lang || 'en').replace(/[^a-zA-Z-]/g, '').slice(0, 10) || 'en';
+  if (_cache.has(safeLang)) return _cache.get(safeLang);
 
   const basePath = path.join(I18N_DIR, 'rules.yml');
   const base     = _loadYaml(basePath);
   const baseRules = base.rules || {};
 
-  if (lang === 'en') {
+  if (safeLang === 'en') {
     _cache.set('en', baseRules);
     return baseRules;
   }
 
-  const localePath = path.join(I18N_DIR, 'locales', `${lang}.yml`);
+  const localePath = path.join(I18N_DIR, 'locales', `${safeLang}.yml`);
   const locale     = _loadYaml(localePath);
   const localeRules = locale.rules || {};
 
@@ -80,8 +88,28 @@ function getRules(lang = 'en') {
     };
   }
 
-  _cache.set(lang, merged);
+  _cache.set(safeLang, merged);
   return merged;
+}
+
+function getLocaleData(lang = 'en') {
+  const safeLang = String(lang || 'en').replace(/[^a-zA-Z-]/g, '').slice(0, 10) || 'en';
+  if (_localeCache.has(safeLang)) return _localeCache.get(safeLang);
+  if (safeLang === 'en') {
+    const empty = {};
+    _localeCache.set(safeLang, empty);
+    return empty;
+  }
+
+  const localePath = path.join(I18N_DIR, 'locales', `${safeLang}.yml`);
+  const locale = _loadYaml(localePath);
+  _localeCache.set(safeLang, locale);
+  return locale;
+}
+
+function getAxeRuleLocales(lang = 'en') {
+  const locale = getLocaleData(lang);
+  return locale && typeof locale.axe_rules === 'object' ? locale.axe_rules : {};
 }
 
 /**
@@ -105,4 +133,4 @@ function getRulesArray(lang = 'en') {
     });
 }
 
-module.exports = { getRules, getRulesArray };
+module.exports = { getRules, getRulesArray, getAxeRuleLocales, getLocaleData };

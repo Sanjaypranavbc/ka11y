@@ -1,196 +1,331 @@
 ---
 title: "Crawlers Reference"
-description: "How each Playwright crawler extracts raw data from a page"
+description: "Practical guide for extending ka11y crawlers without creating unnecessary new crawl paths"
 ---
 
-All crawlers share the same contract:
+This guide explains which crawler file to edit when you add a new Python rule or extend an existing one.
 
-```python
-async def crawl() -> List[Dict[str, Any]]
-def save_raw_json() -> None
-```
+The most important idea:
 
-They navigate the page using Playwright Chromium in headless mode, inject JavaScript to extract element metadata, and return a flat list of dicts. They never apply WCAG logic — that is the auditor's responsibility.
+- Most new rules should **not** start by creating a brand-new crawler.
+- First check whether the universal snapshot, rendered layout crawler, or image crawler already gives you the data you need.
 
----
+## 1. The crawler decision tree
 
-## AsyncImageCrawler
+Use this table first.
 
-**File**: `ka11y/crawler/crawler.py`
-**Crawls**: `<img>`, `<svg>`, `<button>`, background images, font icons (`<i>`, `<span>`)
+| If you need... | Edit this first | Why |
+| --- | --- | --- |
+| More static DOM data from the page | `ka11y-python/ka11y/crawler/universal_page.py` | This is the main static extraction path |
+| Cleaner static records for auditors | `ka11y-python/ka11y/crawler/snapshot_normalizer.py` | Normalize once, reuse in many rules |
+| Hover/focus/reflow/orientation/rendered geometry data | `ka11y-python/ka11y/crawler/rendered_layout_crawler.py` | Rendered-layout rules already depend on it |
+| OCR, screenshots, image metadata, contrast inputs | `ka11y-python/ka11y/crawler/crawler.py` | This is the image/OCR crawler path |
+| A truly different extraction workflow | create a new crawler under `ka11y-python/ka11y/crawler/` | Only do this if the existing three paths cannot support the rule |
 
-### What it extracts per element
+## 2. Current crawler architecture
 
-| Field | Description |
-|-------|-------------|
-| `src` | Image src (resolved absolute URL) |
-| `alt` | `alt` attribute value |
-| `aria_label` | `aria-label` |
-| `aria_labelledby` | Referenced label text (resolved) |
-| `aria_describedby` | Referenced description text |
-| `aria_hidden` | `aria-hidden` attribute |
-| `role` | `role` attribute |
-| `natural_width/height` | Intrinsic image dimensions |
-| `rendered_width/height` | `getBoundingClientRect()` dimensions |
-| `in_button` | Whether the image is inside a `<button>` |
-| `in_link` | Whether the image is inside an `<a>` |
-| `link_href` | Parent link's `href` |
-| `nearest_heading` | Text of the nearest ancestor heading |
-| `surrounding_text` | 50 chars of surrounding text |
-| `classification` | Result of `ClassifyAssets` cascade |
+Think of the Python side as three main extraction families:
 
-### Screenshot behaviour
+### Universal static path
 
-After classification, the crawler screenshots each image to the appropriate category folder:
+Main files:
 
-```
-output_dir/
-├── decorative/
-├── informative/
-│   ├── succinct_information/
-│   └── logos/
-├── functional/
-│   ├── buttons/
-│   ├── icons/
-│   ├── logos/
-│   └── images/
-└── complex/
-    └── charts/
-```
+- `ka11y-python/ka11y/crawler/universal_page.py`
+- `ka11y-python/ka11y/crawler/snapshot_normalizer.py`
+- `ka11y-python/ka11y/crawler/cookie_handler.py`
 
-### Image classification cascade
+Use this for:
 
-`ClassifyAssets` (in `ka11y/classifier/classfier.py`) runs a deterministic cascade:
+- forms
+- media
+- target size inputs
+- sensory characteristics
+- text spacing source data
+- general static DOM inspection
 
-| Step | Condition | Category |
-|------|-----------|----------|
-| 0 | `aria-hidden` or `role=presentation` | `decorative/presentational` |
-| 1a | Inside `<button>` | `functional/buttons` |
-| 1b | Logo keyword + inside real link | `functional/logos` |
-| 1c | Chart keyword or parent chart class | `complex/charts` |
-| 1d | Icon keyword + clickable | `functional/icons` |
-| 1e | Inside real link or has click handler | `functional/images` |
-| 2 | Standalone logo keyword | `informative/logos` |
-| 3 | Standalone icon → has alt → `informative/icons`, no alt → `decorative/decorative` |
-| 4 | alt present → `informative`, alt="" → `decorative`, alt absent → `decorative/missing_alt` |
+**Page Preparation & Cookie Handling:**
+The `universal_page.py` crawler is responsible for navigating to the target URL and preparing the DOM for deterministic extraction. This includes:
+- Waiting for Single Page Application (SPA) hydration.
+- Automatically handling cookie consent banners via `handle_cookies()` (prioritizes rejecting cookies to minimize personalization/layout noise, falls back to accepting or visually removing blocking overlays).
+- Verifying DOM stability (`_DOM_STABILITY_JS`) to ensure no layout shifts occur during extraction.
 
----
+Best practice:
 
-## AsyncFormCrawler
+- If a new static rule needs one extra field, add that field here once.
+- Then let multiple auditors reuse it.
 
-**File**: `ka11y/crawler/forms_crawler.py`
-**Crawls**: All form fields (`<input>`, `<textarea>`, `<select>`) inside `<form>` elements and implicit forms
+### Rendered layout path
 
-### What it extracts per field
+Main file:
 
-| Field | Description |
-|-------|-------------|
-| `tag` | `INPUT`, `TEXTAREA`, or `SELECT` |
-| `type` | Input type (`text`, `email`, `password`, etc.) |
-| `element_id` / `element_name` | `id` or `name` attribute |
-| `placeholder` | `placeholder` attribute |
-| `aria_label` | Direct `aria-label` |
-| `aria_labelledby` | Referenced label text |
-| `label_text` | Text of associated `<label for="...">` |
-| `wrapping_label_text` | Text of wrapping `<label>` |
-| `required` | `required` attribute present |
-| `aria_required` | `aria-required="true"` |
-| `autocomplete` | `autocomplete` attribute value |
-| `aria_describedby` | Referenced description element |
-| `error_role` | Role of the describedby element |
-| `error_aria_live` | `aria-live` value on error element |
-| `html_snippet` | Outer HTML (truncated to 600 chars) |
+- `ka11y-python/ka11y/crawler/rendered_layout_crawler.py`
 
-### JavaScript extraction
+Use this for:
 
-The crawler injects a single `EXTRACT_JS` script that traverses all forms and implicit forms, resolves label associations, and returns the complete field metadata in one `page.evaluate()` call.
+- focus-not-obscured
+- hover/focus content
+- resize text
+- reflow
+- orientation
+- rendered text spacing
 
----
+Best practice:
 
-## InteractiveElementCrawler
+- Only use this path if the rule depends on actual layout after rendering.
+- If plain DOM data is enough, stay on the universal snapshot path.
 
-**File**: `ka11y/crawler/interactive_crawler.py`
-**Crawls**: `<button>`, `<a>`, `<input type="submit/button/reset/image">`, elements with `role` in `{button, link, menuitem, tab, option, treeitem, gridcell}`
+### Image/OCR path
 
-### What it extracts per element
+Main file:
 
-| Field | Description |
-|-------|-------------|
-| `tag` | Element tag name |
-| `role` | ARIA role (explicit or implicit) |
-| `visible_label` | Visible text content (stripped) |
-| `aria_label` | `aria-label` attribute |
-| `aria_labelledby` | Referenced label text (resolved) |
-| `title` | `title` attribute |
-| `accessible_name` | Computed accessible name (AccName 1.1 algorithm) |
-| `element_id` | `id` attribute |
-| `input_type` | For `<input>`, the `type` attribute |
+- `ka11y-python/ka11y/crawler/crawler.py`
 
-### Accessible name computation
+Use this for:
 
-The crawler computes `accessible_name` client-side following a simplified AccName 1.1 priority order:
+- OCR
+- image classification
+- contrast extraction
+- screenshot-backed image rules
 
-1. `aria-labelledby` (resolved text)
-2. `aria-label`
-3. `value` (for `<input type="submit/button">`)
-4. `alt` (for `<input type="image">`)
-5. Element text content
-6. `title`
+Best practice:
 
-This mirrors the computation a browser or assistive technology would perform.
+- Keep image crawling and OCR concerns here.
+- Do not duplicate image traversal logic in a random new crawler.
 
----
+## 3. The default workflow for a new Python rule
 
-## MovingContentCrawler
+For most rules, follow this order.
 
-**File**: `ka11y/crawler/moving_content_crawler.py`
-**Crawls**: Auto-playing video, animated GIFs, CSS/WAAPI animations, JavaScript carousels, `<marquee>`, `<blink>`
+### Step 1: Decide which crawler family owns the data
 
-### Detection strategies
+Ask:
 
-| Type | Detection method |
-|------|-----------------|
-| `video_autoplay` | `<video>` with `autoplay` attribute |
-| `animated_gif` | `<img>` whose `src` ends in `.gif` |
-| `css_animation` | `document.getAnimations()` — running WAAPI or CSS animations with `iteration: Infinity` |
-| `carousel_autoplay` | Class/data-attribute detection for Bootstrap, Swiper, Slick, Owl, Flickity, Glide, Splide |
-| `marquee` | `<marquee>` elements |
-| `blink` | `<blink>` elements |
+- Is this just DOM data from the page source?
+- Does it need rendered size, focus state, or viewport interaction?
+- Does it need screenshots, OCR, or downloaded images?
 
-### Why this goes beyond axe-core
+Pick one crawler family, not all three.
 
-axe-core only flags `<blink>` and `<marquee>`. It does not detect:
-- CSS animations with infinite loops
-- JavaScript carousel libraries
-- `<video autoplay>`
-- Animated GIFs
+### Step 2: Extend extraction only where needed
 
-The `axe_would_catch` boolean in each record lets you filter down to novel detections.
+Examples:
 
----
+- Add a new static field in `universal_page.py`
+- Normalize it in `snapshot_normalizer.py`
+- Add one new rendered measurement in `rendered_layout_crawler.py`
+- Add one new image metadata field in `crawler.py`
 
-## TargetSizeCrawler
+Student rule:
 
-**File**: `ka11y/crawler/target_size_crawler.py`
-**Crawls**: All interactive elements: `<button>`, `<a>`, `<input>`, `<select>`, `<textarea>`, ARIA role equivalents
+- If you can add one field to an existing record, do that.
+- Do not create a separate crawler just to extract one more attribute.
 
-### What it extracts per element
+### Step 3: Keep WCAG judgment out of the crawler
 
-| Field | Description |
-|-------|-------------|
-| `rendered_width_px` | `getBoundingClientRect().width` |
-| `rendered_height_px` | `getBoundingClientRect().height` |
-| `padding_top/right/bottom/left` | Computed padding from `getComputedStyle` |
-| `is_inline_exception` | `<a>` in inline context (WCAG 2.5.8 exception 1) |
-| `is_ua_controlled_exception` | Native checkbox/radio with `appearance: auto` (exception 4) |
-| `is_offset_exception` | Undersized target has sufficient spacing (exception 5) |
-| `required_offset_x_px` / `required_offset_y_px` | Required clear area around target based on size deficit |
-| `nearest_target_gap_x_px` / `nearest_target_gap_y_px` | Nearest neighboring target gap along each axis |
+Crawler job:
 
-### Exception detection
+- navigate
+- extract
+- normalize
+- save raw/debug artifacts
 
-**Exception 1 — Inline**: An `<a>` element is inline when its `display` is `inline` and it is not the sole interactive element on its line. The crawler approximates this by checking `getComputedStyle().display === 'inline'`.
+Auditor job:
 
-**Exception 4 — UA-controlled**: A `<input type="checkbox">` or `<input type="radio">` where `getComputedStyle().appearance` is `auto` or `checkbox`/`radio` (the browser controls the size).
+- decide pass/fail/needs review
+- write reasons
+- return auditor records
 
-**Exception 5 — Offset**: For undersized targets, the crawler computes required offset `((24 - width)/2, (24 - height)/2)`, inflates the target bounds by that amount, and marks `is_offset_exception=true` when no neighboring target intersects the inflated box.
+Combined converter job:
+
+- turn auditor records into frontend-friendly findings
+
+This separation keeps the code easier to test.
+
+### Step 4: Wire the stage into the combined pipeline
+
+Most crawler changes eventually connect back through:
+
+- `ka11y-python/ka11y/api/v1/combined/stages.py`
+- `ka11y-python/ka11y/api/v1/combined/findings.py`
+
+If the stage is optional, also edit:
+
+- `ka11y-python/ka11y/api/v1/combined/models.py`
+- `ka11y-frontend-sdk/src/types/audit.ts`
+- `ka11y-frontend-sdk/src/components/audit/AuditSidebar.tsx`
+- `ka11y-frontend-sdk/src/hooks/useAudit.ts`
+
+## 4. Exact file-by-file guidance
+
+### When you should edit `universal_page.py`
+
+Edit `ka11y-python/ka11y/crawler/universal_page.py` when:
+
+- the rule needs more static element attributes
+- the rule needs more page-level metadata
+- the rule should reuse the same discovered page inventory as other static rules
+
+Usually also review:
+
+- `ka11y-python/ka11y/crawler/snapshot_normalizer.py`
+- the rule-specific auditor that consumes the normalized snapshot
+
+Examples of good additions:
+
+- extra label/source metadata
+- frame or selector provenance
+- clearer element role/type normalization
+
+### When you should edit `snapshot_normalizer.py`
+
+Edit `ka11y-python/ka11y/crawler/snapshot_normalizer.py` when:
+
+- the raw snapshot already has the data
+- auditors need a cleaner, more stable structure
+- you want one normalization fix to benefit many rules
+
+Good use cases:
+
+- consistent selectors
+- normalized tags and role names
+- page/frame provenance
+- deduped element representations
+
+### When you should edit `rendered_layout_crawler.py`
+
+Edit `ka11y-python/ka11y/crawler/rendered_layout_crawler.py` when:
+
+- the rule depends on rendered geometry
+- the rule needs hover/focus state capture
+- the rule depends on viewport changes or visual obstruction
+
+Good use cases:
+
+- bounding boxes
+- overlap/obscuration checks
+- hover-triggered content
+- zoom/reflow measurements
+
+### When you should edit `crawler.py`
+
+Edit `ka11y-python/ka11y/crawler/crawler.py` when:
+
+- the rule depends on screenshots or downloaded assets
+- OCR or contrast analysis must see extra image metadata
+- image prioritization or budgeting should change
+
+Good use cases:
+
+- better image candidate selection
+- extra screenshot metadata
+- OCR budget rules
+- image classification signals
+
+## 5. When a brand-new crawler is justified
+
+Create a new crawler only if all of these are true:
+
+1. The rule cannot be answered from the universal snapshot.
+2. The rendered crawler is the wrong abstraction.
+3. The image crawler is also unrelated.
+4. Reusing an existing crawler would make the code more confusing, not less.
+
+If that happens:
+
+- create a new file in `ka11y-python/ka11y/crawler/`
+- copy the closest existing crawler style instead of inventing a new architecture
+- wire it from `ka11y-python/ka11y/api/v1/combined/stages.py`
+- convert its output in `ka11y-python/ka11y/api/v1/combined/findings.py`
+- add focused tests before growing the feature further
+
+Important honesty note:
+
+- The crawler classes in this repo are not all identical.
+- `UniversalPageLoader`, `RenderedLayoutCrawler`, and `AsyncImageCrawler` do not share one perfect common interface yet.
+- Because of that, copy the closest existing pattern for your problem instead of forcing a fake abstraction.
+
+## 6. Data you should preserve for good finding quality
+
+Whether you extend an existing crawler or add a new one, keep element provenance whenever possible.
+
+Useful fields include:
+
+- `html_snippet`
+- `selector`
+- `element_id`
+- `tag`
+- `page_url`
+- `frame_path`
+- `element_ref_id`
+
+Why this matters:
+
+- Python findings merge better with Node findings when selectors and page/frame scope are preserved.
+- Frontend element views are much more useful when they show a real HTML snippet instead of a vague summary.
+
+## 7. Language and crawler behavior
+
+The crawler layer itself is mostly language-neutral, but language still matters in some places.
+
+### Where `lang` is already used
+
+- `ka11y-python/ka11y/api/v1/combined/models.py`
+- `ka11y-python/ka11y/api/v1/combined/stages.py`
+- OCR path in `crawler.py` through the image audit stage
+
+### What this means in practice
+
+- OCR can behave differently for English and Japanese content
+- shared WCAG names and suggested fixes can change language
+- Node custom checks also receive the same `lang` value from the combined pipeline
+
+### Where to put language-specific crawler settings
+
+If the setting is shared behavior, prefer:
+
+- `config/universal.yml`
+
+Examples:
+
+- language lists such as CJK language prefixes
+- OCR budgets or crawler limits
+- shared thresholds used by multiple services
+
+Avoid:
+
+- scattering English/Japanese keyword logic across several crawler files
+
+## 8. Tests you should update
+
+When crawler behavior changes, look at:
+
+- `ka11y-python/tests/test_runner.py`
+- `ka11y-python/tests/test_combined_findings.py`
+- `ka11y-python/tests/test_image_audit_stage.py`
+- `ka11y-python/tests/test_rendered_converters.py`
+- `ka11y-python/tests/test_rendered_evaluators.py`
+- `ka11y-python/tests/test_crawler_settings.py`
+
+If your change is universal-snapshot-heavy, also consider adding a focused regression test near the closest existing rule test.
+
+## 9. Common crawler mistakes
+
+- Creating a new crawler for data that could have been one more field in the universal snapshot
+- Re-crawling pages separately for each rule
+- Mixing WCAG pass/fail logic into extraction code
+- Dropping selector or page provenance that later makes findings impossible to merge
+- Adding language-specific heuristics in many files instead of central config
+
+## 10. A good student workflow
+
+If you are not sure where to start, use this sequence:
+
+1. Find the closest existing rule.
+2. Trace which crawler family feeds that rule.
+3. Extend extraction in the smallest possible place.
+4. Add or update the auditor.
+5. Wire the converter and combined stage.
+6. Add tests.
+7. Run a small local check before touching more files.
+
+That path is slower at the beginning, but it prevents duplicate crawler architecture and broken pipeline wiring later.

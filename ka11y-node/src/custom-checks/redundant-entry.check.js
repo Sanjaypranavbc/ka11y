@@ -1,5 +1,12 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '3.3.7';
 const RULE_ID = 'custom-redundant-entry';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/redundant-entry';
@@ -57,6 +64,10 @@ const PERSONAL_KEYWORDS = [
   [/\b(country)\b|国/, 'country'],
   [/\b(company|organization|organisation|business)\b|会社|法人/, 'organization'],
 ];
+
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
 
 function summarizeGroups(groups) {
   return groups.slice(0, 3).map((group) => {
@@ -137,9 +148,10 @@ function _selectorToElement(selector) {
 
   return {
     selector: sel,
-    tagName: tag ? tag.toUpperCase() : null,
-    id,
-    html: clampString(html, 200),
+    tag: tag ? tag.toUpperCase() : null,
+    element_id: id,
+    target: [sel],
+    html: clampString(html, 150),
   };
 }
 
@@ -155,7 +167,7 @@ function _elementsFromGroups(groups, max = 8) {
     for (const selector of selectors) {
       const element = _selectorToElement(selector);
       if (!element) continue;
-      const dedupeKey = `${element.selector}|${element.tagName || ''}|${element.id || ''}`;
+      const dedupeKey = `${element.selector}|${element.tag || ''}|${element.element_id || ''}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
       out.push(element);
@@ -217,6 +229,68 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
   const confirmRe = new RegExp(confirmSrc, 'i');
   const reuseRe = new RegExp(reuseSrc, 'i');
   const keywordMap = keywordPairs.map(([src, key]) => [new RegExp(src, 'i'), key]);
+
+  // ---- helpers redefined here so they survive page.evaluate serialization ----
+  const PROCESS_HINT_RE_LOCAL = /\b(checkout|payment|billing|shipping|delivery|register|registration|signup|sign[\s-]?up|create\s+account|profile|account|application|apply|booking|reservation|purchase|order|quote|enquiry|inquiry|contact|subscribe|newsletter|support|feedback|survey)\b|申込|申し込み|登録|購入|注文|配送|請求|支払い|予約|問い合わせ/i;
+  const EXPLICIT_DISTINCT_PURPOSE_RE_LOCAL = /\b(newsletter|subscribe|marketing|promotions?|quote|support|feedback|survey|job\s+application|careers?)\b|ニュースレター|購読|見積|サポート|フィードバック|応募/i;
+
+  function _unique(arr) { return Array.from(new Set(arr)); }
+  function _intersectCount(a, b) {
+    const setB = new Set(b);
+    let count = 0;
+    for (const v of a) { if (setB.has(v)) count++; }
+    return count;
+  }
+  function _jaccardSimilarity(a, b) {
+    const ua = _unique(a);
+    const ub = _unique(b);
+    if (!ua.length && !ub.length) return 1;
+    const intersection = _intersectCount(ua, ub);
+    const union = new Set([...ua, ...ub]).size || 1;
+    return intersection / union;
+  }
+  function _tokenizeText(text) {
+    return String(text || '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s_-]+/gu, ' ')
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+  function _mergeTextParts(parts, max = 1200) {
+    return parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+  function _clampString(s, max = 500) {
+    return String(s || '').replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+  function _processTypeMatches(text) {
+    const value = String(text || '').toLowerCase();
+    const matches = [];
+    if (/\b(newsletter|subscribe)\b|ニュースレター|購読/i.test(value)) matches.push('subscribe');
+    if (/\b(contact|enquiry|inquiry|quote|support|feedback)\b|問い合わせ|見積|サポート|フィードバック/i.test(value)) matches.push('contact');
+    if (/\b(checkout|payment|billing|shipping|delivery|order|purchase)\b|購入|注文|配送|請求|支払い/i.test(value)) matches.push('checkout');
+    if (/\b(register|registration|signup|sign[\s-]?up|account|profile)\b|登録|アカウント|プロフィール/i.test(value)) matches.push('account');
+    if (/\b(application|apply|careers?|job)\b|応募/i.test(value)) matches.push('application');
+    if (/\b(booking|reservation)\b|予約/i.test(value)) matches.push('booking');
+    return _unique(matches);
+  }
+  function _inferProcessTypeFromTexts(formText, fieldText) {
+    const formMatches = _processTypeMatches(formText);
+    const fieldMatches = _processTypeMatches(fieldText);
+    if (formMatches.length === 1) return formMatches[0];
+    if (fieldMatches.length === 1) return fieldMatches[0];
+    const merged = _mergeTextParts([formText || '', fieldText || ''], 1200).toLowerCase();
+    const mergedMatches = _processTypeMatches(merged);
+    return mergedMatches[0] || (PROCESS_HINT_RE_LOCAL.test(merged) ? 'generic-process' : 'unknown');
+  }
+  // Aliases so all existing call sites inside this function resolve to local defs
+  const mergeTextParts = _mergeTextParts;
+  const clampString = _clampString;
+  const unique = _unique;
+  const tokenizeText = _tokenizeText;
+  const jaccardSimilarity = _jaccardSimilarity;
+  const inferProcessTypeFromTexts = _inferProcessTypeFromTexts;
+  const EXPLICIT_DISTINCT_PURPOSE_RE = EXPLICIT_DISTINCT_PURPOSE_RE_LOCAL;
+  // ---- end helpers ----
 
   function isActuallyVisible(el) {
     try {
@@ -624,6 +698,7 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
 
     if (type === 'password') continue;
     if (el.closest('[hidden], [aria-hidden="true"], [inert]')) continue;
+    if (el.hasAttribute('readonly') || el.getAttribute('aria-readonly') === 'true') continue;
 
     const context = contextText(el);
     const sectionText = getSectionScopeText(el);
@@ -990,7 +1065,8 @@ function mergeFrameData(main, frameDataList) {
   return merged;
 }
 
-async function run(page) {
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
   await page.waitForLoadState?.('domcontentloaded').catch(() => {});
   await page.waitForNetworkIdle?.({ timeout: 3000 }).catch(() => {});
   await page.waitForSelector('input, select, textarea', { timeout: 5000 }).catch(() => {});
@@ -1044,14 +1120,14 @@ async function run(page) {
   }
 
   if (data.formCount === 0) {
-    return buildResult('pass', null, 'No forms detected on this page.');
+    return buildResult('pass', null, _t(sharedContext, 'No forms detected on this page.', 'このページにフォームはありません。'));
   }
 
   if (data.repeatedGroups.length === 0) {
     return buildResult(
       'pass',
       null,
-      `${data.candidateCount} personal-data field(s) checked — no repeated required personal-data fields were detected in a way that suggests redundant re-entry.`
+      _t(sharedContext, '{count} personal-data field(s) checked — no repeated required personal-data fields were detected in a way that suggests redundant re-entry.', '個人情報フィールド {count} 件を確認しましたが、冗長な再入力を示唆する必須の繰り返し入力は検出されませんでした。', { count: data.candidateCount })
     );
   }
 
@@ -1061,7 +1137,7 @@ async function run(page) {
     return buildResult(
       'fail',
       'moderate',
-      `${data.highConfidenceGroups.length} high-confidence redundant-entry issue(s) detected: required personal data appears to be entered again with no detectable reuse/prefill mechanism. Examples: ${sample}.`,
+      _t(sharedContext, '{count} high-confidence redundant-entry issue(s) detected: required personal data appears to be entered again with no detectable reuse/prefill mechanism. Examples: {sample}.', '高信頼度の冗長再入力の問題が {count} 件検出されました。必須の個人情報が、再利用または事前入力の仕組みなしに再度入力されているように見えます。例: {sample}。', { count: data.highConfidenceGroups.length, sample }),
       {},
       elements
     );
@@ -1073,7 +1149,7 @@ async function run(page) {
     return buildResult(
       'incomplete',
       'moderate',
-      `${data.reviewGroups.length} repeated required personal-data group(s) detected that need manual verification for SC 3.3.7. Confirm whether previously entered values are auto-populated or selectable in the real process flow. Examples: ${sample}.`,
+      _t(sharedContext, 'Repeated required personal-data group(s) detected ({count}) that need manual verification for SC 3.3.7. Confirm whether previously entered values are auto-populated or selectable in the real process flow. Examples: {sample}.', 'SC 3.3.7 について手動確認が必要な、必須の個人情報の繰り返し入力グループが {count} 件検出されました。実際の処理フローで、以前入力した値が自動入力または選択可能か確認してください。例: {sample}。', { count: data.reviewGroups.length, sample }),
       {},
       elements
     );
@@ -1082,7 +1158,7 @@ async function run(page) {
   return buildResult(
     'pass',
     null,
-    `${data.repeatedGroups.length} repeated personal-data group(s) detected, and reuse or prefill mechanisms were also detected.`
+    _t(sharedContext, '{count} repeated personal-data group(s) detected, and reuse or prefill mechanisms were also detected.', '繰り返し入力される個人情報グループが {count} 件検出されましたが、再利用または事前入力の仕組みも検出されました。', { count: data.repeatedGroups.length })
   );
 }
 

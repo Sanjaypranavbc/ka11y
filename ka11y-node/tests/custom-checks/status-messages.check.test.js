@@ -9,7 +9,17 @@ function makePage(data) {
 describe('status-messages.check (WCAG 4.1.3)', () => {
   test('passes when live regions exist and no unprotected dynamic contexts', async () => {
     // needsLiveRegions is falsy → all dynamic contexts are covered by live regions
-    const page = makePage({ liveRegionCount: 2, formCount: 1, hasAlerts: true, hasPolite: true, needsLiveRegions: false, dynamicContexts: [] });
+    const page = makePage({
+      liveRegionCount: 2,
+      formCount: 1,
+      hasAlerts: true,
+      hasPolite: true,
+      hasSearchResults: false,
+      hasCartOrCounter: false,
+      hasNotificationArea: false,
+      needsLiveRegions: false,
+      dynamicContexts: [],
+    });
     const result = await run(page);
     expect(result.successCriteriaId).toBe('4.1.3');
     expect(result.rules[0].status).toBe('pass');
@@ -18,6 +28,7 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
   test('fails when forms exist but no live regions', async () => {
     const page = makePage({
       liveRegionCount: 0, formCount: 2, hasAlerts: false, hasPolite: false,
+      hasSearchResults: false, hasCartOrCounter: false, hasNotificationArea: false,
       needsLiveRegions: true, dynamicContexts: ['2 form(s)'],
     });
     const result = await run(page);
@@ -29,6 +40,7 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
   test('fails when notification area exists but no live regions', async () => {
     const page = makePage({
       liveRegionCount: 0, formCount: 0, hasAlerts: false, hasPolite: false,
+      hasSearchResults: false, hasCartOrCounter: false, hasNotificationArea: true,
       needsLiveRegions: true, dynamicContexts: ['notification area'],
     });
     const result = await run(page);
@@ -39,6 +51,7 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
   test('incomplete when no forms and no live regions', async () => {
     const page = makePage({
       liveRegionCount: 0, formCount: 0, hasAlerts: false, hasPolite: false,
+      hasSearchResults: false, hasCartOrCounter: false, hasNotificationArea: false,
       needsLiveRegions: false, dynamicContexts: [],
     });
     const result = await run(page);
@@ -46,7 +59,17 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
   });
 
   test('ruleId is custom-status-messages', async () => {
-    const page = makePage({ liveRegionCount: 1, formCount: 0, hasAlerts: false, hasPolite: true, needsLiveRegions: false, dynamicContexts: [] });
+    const page = makePage({
+      liveRegionCount: 1,
+      formCount: 0,
+      hasAlerts: false,
+      hasPolite: true,
+      hasSearchResults: false,
+      hasCartOrCounter: false,
+      hasNotificationArea: false,
+      needsLiveRegions: false,
+      dynamicContexts: [],
+    });
     const result = await run(page);
     expect(result.rules[0].ruleId).toBe('custom-status-messages');
   });
@@ -61,6 +84,9 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
         formCount: 0,
         hasAlerts: false,
         hasPolite: true,
+        hasSearchResults: false,
+        hasCartOrCounter: false,
+        hasNotificationArea: false,
         needsLiveRegions: false,  // notification area IS inside a live region → not a problem
         dynamicContexts: [],
       });
@@ -77,6 +103,9 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
         formCount: 0,
         hasAlerts: false,
         hasPolite: true,
+        hasSearchResults: false,
+        hasCartOrCounter: false,
+        hasNotificationArea: true,
         needsLiveRegions: true,
         dynamicContexts: ['notification area'],
       });
@@ -91,6 +120,9 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
         formCount: 0,
         hasAlerts: false,
         hasPolite: false,
+        hasSearchResults: false,
+        hasCartOrCounter: false,
+        hasNotificationArea: true,
         needsLiveRegions: true,
         dynamicContexts: ['notification area'],
       });
@@ -110,13 +142,20 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
     });
   });
 
-  test('includes Japanese dynamic-context keywords in source heuristics', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/status-messages.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('検索結果');
-    expect(src).toContain('未読');
-    expect(src).toContain('カート');
+  test('localizes reasons to Japanese when lang=ja', async () => {
+    const page = makePage({
+      liveRegionCount: 0,
+      formCount: 0,
+      hasAlerts: false,
+      hasPolite: false,
+      hasSearchResults: true,
+      hasCartOrCounter: false,
+      hasNotificationArea: false,
+      needsLiveRegions: true,
+    });
+    const result = await run(page, { lang: 'ja' });
+    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].reason).toContain('動的コンテンツ');
+    expect(result.rules[0].reason).toContain('検索結果');
   });
 });

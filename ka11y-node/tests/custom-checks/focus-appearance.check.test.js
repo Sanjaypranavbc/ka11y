@@ -74,8 +74,8 @@ const SAMPLE_ELEMENTS = [
  * run() awaits multiple setTimeouts internally; we use runAllTimersAsync() to
  * advance them without blocking the async flow.
  */
-async function runWithTimers(page) {
-  const resultPromise = run(page);
+async function runWithTimers(page, context = {}) {
+  const resultPromise = run(page, context);
   await jest.runAllTimersAsync();
   return resultPromise;
 }
@@ -143,6 +143,17 @@ describe('focus-appearance.check (WCAG 2.4.13)', () => {
     const result = await runWithTimers(page);
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('contrast');
+  });
+
+  test('Japanese reason localizes focus issue details', async () => {
+    const page = makePage(
+      SAMPLE_ELEMENTS,
+      [[STYLES.noOutline, STYLES.outline1px]],
+    );
+    const result = await runWithTimers(page, { lang: 'ja' });
+    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].reason).toContain('アウトライン幅');
+    expect(result.rules[0].reason).not.toContain('area requirement');
   });
 
   test('fail reason includes element tag and issue description', async () => {

@@ -1,49 +1,69 @@
 ---
 title: "Configuration"
-description: "YAML config file and environment variables for ka11y-python"
+description: "Shared YAML config, i18n assets, and runtime overrides for ka11y"
 ---
 
-## Config file
+## Current Config Layers
 
-ka11y-python reads `ka11y/config/config.yml` at startup via `ka11y/utils/config_loader.py`.
+The runtime now has six practical configuration layers:
+
+| Layer | Source | What it controls |
+|------|--------|------------------|
+| Shared runtime config | `config/universal.yml` | cross-service browser defaults, language families, and shared custom-check assets |
+| Shared WCAG i18n | `i18n/rules.yml` + `i18n/locales/*.yml` | localized WCAG names, descriptions, and suggested fixes for Node and Python |
+| Local fallback config | `ka11y-python/ka11y/config/config.yml` | standalone defaults if the repo-root shared config is missing |
+| Environment | shell / Docker env vars | service wiring and explicit overrides such as `NODE_BASE_URL`, `KA11Y_I18N_DIR`, `PUPPETEER_IGNORE_HTTPS_ERRORS` |
+| API request payload | `POST /api/v1/combined/` body | per-job behavior such as `lang`, `max_depth`, and `run_*` stage toggles |
+| Live test plan YAML | `ka11y-python/scripts/live_stage_plan.*.yml` | test harness inputs for real-site validation, not runtime defaults |
+
+### What is implemented today
+
+- Node and Python both default to the repo-root `config/universal.yml`
+- Node and Python both default to the repo-root `i18n/`
+- shared `browser.ignore_https_errors` controls Playwright/Puppeteer TLS handling
+- migrated Node custom checks load EN/JA keywords and selected reason templates from the shared config
+- per-request `lang` still controls output localization and per-job behavior
+- Node now localizes custom-rule `reason` detail fragments as well as top-level `suggested_fix`
+- Python combined finding builders localize `criterion_name` and `suggested_fix` from shared i18n
+
+### What is not implemented yet
+
+- runtime-resolved `site-profiles/*.yml`
+- a universal `reason_code` / `reason_params` contract for every custom rule
+- full migration of every language-specific heuristic out of older Python/Node rule code
+
+## Shared Config File
+
+Both services now prefer the repo-root `config/universal.yml` at startup. Python falls back to `ka11y-python/ka11y/config/config.yml` only when the shared file is absent.
 
 ```yaml
-# ka11y/config/config.yml
+# config/universal.yml
 
-input:
-  url:        "https://example.com"   # Default URL for CLI / standalone runs
-  max_depth:  0                        # 0 = single page; >0 = recursive crawl depth
-  output_dir: "crawled_images"         # Base output directory (relative to CWD)
+browser:
+  ignore_https_errors: true
 
-directories:
-  - "informative"
-  - "decorative"
-  - "functional"
-  - "functional/buttons"
-  - "functional/icons"
-  - "functional/logos"
-  - "functional/images"
-  - "complex"
-  - "complex/charts"
-  - "complex/emojis"
+language:
+  supported: ["en", "ja"]
 
-ocr:
-  base_folder:     "text_detected"
-  contrast_folder: "contrast"
-  categories:
-    button_text:        "button_text"
-    informational_text: "informational_text"
-    logo_text:          "logo_text"
-    with_text:          "with_text"
+checks:
+  pronunciation:
+    cjk_ratio_threshold: 0.05
+    ruby_min_coverage_pct: 30
+    cjk_lang_prefixes: ["ja", "zh", "zh-CN", "zh-TW", "zh-HK", "ko"]
+
+  audio_transcript:
+    transcript_keywords:
+      en: ["transcript", "caption", "text version"]
+      ja: ["文字起こし", "トランスクリプト", "字幕"]
+
+  multiple_ways:
+    search_keywords:
+      en: ["search", "site map", "table of contents"]
+      ja: ["検索", "サイトマップ", "目次"]
 
 crawler:
-  include_data_uris: false   # Include base64 data: URIs in image crawl
-  include_invisible: false   # Include elements with visibility:hidden / display:none
-  scroll_passes:     3       # Number of scroll passes to trigger lazy-loaded content
-
-crawl_browser:
-  width:  1920               # Playwright viewport width (CSS px)
-  height: 1080               # Playwright viewport height (CSS px)
+  language:
+    cjk_langs: ["ja", "zh", "zh-CN", "zh-TW", "zh-HK", "ko"]
 ```
 
 ### Loading the config
@@ -51,98 +71,91 @@ crawl_browser:
 ```python
 from ka11y.utils.config_loader import load_config
 
-config = load_config()                           # Default path
+config = load_config()                           # Prefers repo-root config/universal.yml
 config = load_config("path/to/config.yml")       # Custom path
 ```
 
-The `load_config()` function uses `yaml.safe_load` — no Python execution in the YAML file.
+Node reads the same file through `ka11y-node/src/utils/sharedConfigLoader.js`.
 
----
+### Shared i18n
 
-## Environment variables
+`i18n/rules.yml` stays the source of truth for WCAG metadata, and `i18n/locales/<lang>.yml` overlays localized `name`, `description`, and `suggested_fix`.
 
-Set these in your shell, `.env` file, or `docker-compose.yml` `environment:` block.
+That shared i18n is now used by:
+
+- Python combined finding builders
+- Node flat result mapping
+- Node WCAG metadata helpers
+
+## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NODE_BASE_URL` | `http://localhost:3000` | Base URL of the ka11y-node service |
-| `PYTHONUNBUFFERED` | — | Set to `"1"` in Docker to get real-time log output |
+| `KA11Y_I18N_DIR` | repo-root `i18n/` | Override shared WCAG metadata path |
+| `PUPPETEER_IGNORE_HTTPS_ERRORS` | shared config default | Explicit Node override for TLS handling |
+| `PYTHONUNBUFFERED` | — | Set to `1` in Docker for real-time log output |
 
-### NODE_BASE_URL
+## Config Reference by Section
 
-The Python service calls the Node/axe-core engine at `${NODE_BASE_URL}/api/v1/axe`.
+### `browser`
 
-```bash
-# Local dev (Node running on host)
-NODE_BASE_URL=http://localhost:3000
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `ignore_https_errors` | bool | `true` | Shared default for Node Puppeteer and Python Playwright contexts. Intended for controlled crawling environments and graceful handling of bad TLS on target sites. |
 
-# Docker Compose (uses Docker internal DNS)
-NODE_BASE_URL=http://node:3000
-```
+### `checks`
 
----
+This section now holds shared rule thresholds, keyword lists, and selected localized reason templates.
 
-## Config reference by section
-
-### `input`
-
-Used only when running the pipeline directly (not through the API). API requests supply these values in the request body.
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `url` | string | Target URL |
-| `max_depth` | int | Crawl depth (0 = single page) |
-| `output_dir` | string | Base directory for output files |
-
-### `directories`
-
-Sub-directories created under `output_dir` for storing classified images. Matches the image classifier's output categories.
-
-### `ocr`
-
-Controls where OCR intermediate files are stored.
+Current live examples:
 
 | Key | Description |
 |-----|-------------|
-| `base_folder` | Sub-directory for detected text images |
-| `contrast_folder` | Sub-directory for contrast-adjusted images |
-| `categories.*` | Maps classification names to folder names |
+| `checks.pronunciation.cjk_ratio_threshold` | CJK density threshold before ruby/furigana checks apply |
+| `checks.pronunciation.ruby_min_coverage_pct` | Minimum ruby coverage percentage before a page passes |
+| `checks.*.*_keywords` | Shared EN/JA term lists used by migrated Node custom checks |
+| `checks.*.reason_templates` | Localized reason strings for the migrated Node custom checks |
 
 ### `crawler`
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `include_data_uris` | bool | `false` | When `true`, images encoded as `data:` URIs are crawled |
-| `include_invisible` | bool | `false` | When `true`, off-screen and hidden elements are included |
-| `scroll_passes` | int | `3` | Playwright scrolls the page this many times to trigger lazy-load |
+| `crawler.language.cjk_langs` | list[str] | `["ja", "zh", "zh-CN", "zh-TW", "zh-HK", "ko"]` | Shared CJK language family used by rendered and static language-aware behavior |
+| `crawler.reporting.max_warning_samples` | int | `3` | Cap for warning samples surfaced into combined results |
+| `crawler.performance.max_focus_steps` | int | `100` | Limit for rendered focus traversal |
+| `crawler.performance.max_hover_candidates` | int | `12` | Limit for rendered hover probes |
+| `crawler.performance.max_ocr_images_per_run` | int | `60` | OCR budget cap on heavy pages |
 
-### `crawl_browser`
+## Combined API Request Config
 
-Playwright viewport dimensions. Use `1920×1080` (desktop) or `375×812` (mobile) to test at different breakpoints.
+For the combined endpoint, the request body remains the real per-audit override layer.
 
----
+Important fields:
 
-## Adding a new config key
+| Field | Effect |
+|------|--------|
+| `url` | target page |
+| `max_depth` | same-origin crawl depth |
+| `wcag_level` | post-merge WCAG filtering |
+| `lang` | localized output language plus custom-rule reason localization where supported |
+| `run_*` booleans | stage enable/disable switches |
 
-1. Add the key to `ka11y/config/config.yml`.
-2. Import `config` in your module:
-   ```python
-   from ka11y.utils.config_loader import config
-   value = config["your_section"]["your_key"]
-   ```
-3. Add a sensible default — `config_loader.py` uses `yaml.safe_load` and will return `None` for missing keys unless you guard with `.get()`.
+## Language and Japanese Behavior Today
 
----
+Japanese behavior is no longer purely hardcoded:
 
-## Logger
+- `lang: "ja"` localizes shared WCAG metadata in Node and Python
+- `config/universal.yml` now supplies EN/JA keyword lists and thresholds for migrated Node checks
+- Node `reason` strings are localized for axe findings and migrated custom rules
+- Python `suggested_fix` values are localized through shared i18n, but Python `reason` strings still depend on the emitting auditor
+- some Python-side auditors still keep language-specific logic or English reason text in source code
 
-Configured in `ka11y/config/logger.py`. Each module creates a tagged logger:
+So the system is now partly request-configured and partly shared-config-driven, with the remaining Python code-driven heuristics still being migrated.
 
-```python
-from ka11y.config.logger import setup_logger
+## Adding a New Shared Config Key
 
-logger = setup_logger(name="KAC", tag="my_module")
-logger.info("Starting up")
-```
-
-The `tag` appears in log output to identify the source module.
+1. Add the key to `config/universal.yml`.
+2. Read it from Python via `load_config()` or `ka11y.utils.crawler_settings`.
+3. Read it from Node via `sharedConfigLoader` or the custom-check shared-assets helper.
+4. Add a test in both services if the key changes cross-service behavior.

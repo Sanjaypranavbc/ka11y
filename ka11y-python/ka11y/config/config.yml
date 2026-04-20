@@ -26,10 +26,27 @@ ocr:
     logo_text: "logo_text"
     with_text: "with_text"
 
+browser:
+  ignore_https_errors: true
+
 crawler:
   include_data_uris: false
   include_invisible: false
   scroll_passes: 3
+  language:
+    cjk_langs:
+      - "ja"
+      - "zh"
+      - "zh-CN"
+      - "zh-TW"
+      - "zh-HK"
+      - "ko"
+  reporting:
+    max_warning_samples: 3
+  performance:
+    max_focus_steps: 100
+    max_hover_candidates: 12
+    max_ocr_images_per_run: 60
 
 
 crawl_browser:

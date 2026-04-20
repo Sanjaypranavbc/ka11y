@@ -11,13 +11,12 @@ Exemptions: data tables, SVG charts/maps, code editors → NEEDS_REVIEW.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import List
 
 from ..models import PageSnapshot, RuleAuditRecord
 from ..heuristics import (
     detect_page_horizontal_scroll,
     elements_with_horizontal_overflow,
-    find_fixed_sticky_overlays,
 )
 
 _RULE_KEY = "wcag_1_4_10"

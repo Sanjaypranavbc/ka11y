@@ -10,7 +10,6 @@ Focus:
   • Text-heavy elements
 """
 
-import asyncio
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -18,7 +17,7 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.context_factory import new_crawler_context
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data Model
@@ -42,6 +41,10 @@ class TextSpacingData(BaseModel):
 
     has_fixed_height: bool
     has_overflow_hidden: bool
+
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
 
     html_snippet: str
     is_clipped: bool
@@ -140,8 +143,10 @@ class AsyncTextSpacingCrawler:
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
-            context = await browser.new_context(viewport={"width": 1440, "height": 900})
-            await install_ssrf_guard(context)  # Bug 1 fix
+            context = await new_crawler_context(
+                browser,
+                viewport={"width": 1440, "height": 900},
+            )
 
             try:
                 await self._crawl_page(context, self.base_url, 0)

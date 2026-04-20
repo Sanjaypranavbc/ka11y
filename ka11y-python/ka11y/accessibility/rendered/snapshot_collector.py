@@ -13,12 +13,11 @@ extracted (text containers, interactive elements, fixed/sticky layers).
 
 from __future__ import annotations
 
-import json
-from typing import Any, Dict, List
+from typing import List
 
 from playwright.async_api import Page
 
-from .models import ElementSnapshot, PageSnapshot, Rect
+from .models import ElementSnapshot, PageSnapshot
 from .geometry import rect_from_dict
 
 # Maximum number of elements to capture per snapshot (perf guard)
@@ -38,6 +37,15 @@ _COLLECT_JS = """
     );
     const bodyScrollW = document.body ? document.body.scrollWidth : 0;
     const bodyScrollH = document.body ? document.body.scrollHeight : 0;
+
+    // Body-level computed styles (used for orientation-lock heuristics)
+    const bodyCS = document.body ? window.getComputedStyle(document.body) : null;
+    const bodyOverflowX = bodyCS ? (bodyCS.overflowX || 'visible') : 'visible';
+    const bodyTransform  = bodyCS ? (bodyCS.transform  || 'none')   : 'none';
+    const screenOrientation =
+        (typeof screen !== 'undefined' && screen.orientation && screen.orientation.type)
+            ? screen.orientation.type
+            : 'unknown';
 
     // Selector for relevant elements
     const candidates = document.querySelectorAll(
@@ -69,6 +77,7 @@ _COLLECT_JS = """
         const zIndex = parseInt(cs.zIndex) || 0;
         const fontSize = cs.fontSize || '';
         const lineHeight = cs.lineHeight || '';
+        const transform  = cs.transform  || 'none';
 
         const isFixedOrSticky = position === 'fixed' || position === 'sticky';
         const isFocusable = (
@@ -122,6 +131,7 @@ _COLLECT_JS = """
             z_index: zIndex,
             font_size: fontSize,
             line_height: lineHeight,
+            transform: transform,
             visible: display !== 'none' && visibility !== 'hidden' && opacity > 0,
             focusable: isFocusable,
             fixed_or_sticky: isFixedOrSticky,
@@ -138,6 +148,9 @@ _COLLECT_JS = """
         body_scroll_width: bodyScrollW,
         body_scroll_height: bodyScrollH,
         has_horizontal_scroll: docScrollW > vw + 5,
+        body_overflow_x: bodyOverflowX,
+        body_transform: bodyTransform,
+        screen_orientation: screenOrientation,
         elements: results,
     };
 }
@@ -190,6 +203,7 @@ async def collect_snapshot(
                 z_index=int(item.get("z_index", 0)),
                 font_size=item.get("font_size", ""),
                 line_height=item.get("line_height", ""),
+                transform=item.get("transform", "none"),
                 visible=bool(item.get("visible", True)),
                 focusable=bool(item.get("focusable", False)),
                 fixed_or_sticky=bool(item.get("fixed_or_sticky", False)),
@@ -210,6 +224,9 @@ async def collect_snapshot(
         body_scroll_width=float(raw.get("body_scroll_width", 0)),
         body_scroll_height=float(raw.get("body_scroll_height", 0)),
         has_horizontal_scroll=bool(raw.get("has_horizontal_scroll", False)),
+        body_overflow_x=raw.get("body_overflow_x", "visible"),
+        body_transform=raw.get("body_transform", "none"),
+        screen_orientation=raw.get("screen_orientation", "unknown"),
         elements=elements,
         raw=raw,
     )

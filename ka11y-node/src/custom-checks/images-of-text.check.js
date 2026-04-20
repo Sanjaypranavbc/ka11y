@@ -1,27 +1,38 @@
 'use strict';
 
+const {
+  buildKeywordPattern,
+  getKeywordList,
+  getSharedRuleContext,
+  renderLocalizedText,
+} = require('./sharedAssets');
+
 const SC = '1.4.5';
 const RULE_ID = 'custom-images-of-text';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/images-of-text';
 
 // Logo/brand images are exempt from 1.4.5 (WCAG exception: logotypes)
-const LOGO_PATTERN = /\b(logo|brand|wordmark|logotype|favicon)\b|ロゴ|ブランド/i;
-
-// Patterns in alt, src path, or class/id that strongly suggest the image contains text
-// rather than being a photo, diagram, or decorative graphic.
-const TEXT_IMG_ALT_PATTERN = /^[\w\s,.:;!?'"()\-]{20,}$|"[^"]{10,}"|[A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+/;
-const TEXT_IMG_SRC_PATTERN = /\/(banner|headline|text|quote|caption|ad|promo|slide|card|cta|announcement|copy|slogan|tagline|infographic|poster|flyer|screenshot|バナー|見出し|テキスト|引用|キャプション|広告|プロモ|カード|お知らせ|コピー|スローガン|ポスター|フライヤー|スクリーンショット)\b/i;
-const TEXT_IMG_CLASS_PATTERN = /\b(banner|text-image|headline|quote|caption|promo|screenshot|infographic)\b|バナー|見出し|テキスト|キャプション|プロモ|インフォグラフィック/i;
-
-// Minimum alt-text word count that suggests a meaningful textual description (image with text)
 const MIN_WORDS_FOR_TEXT_IMAGE = 5;
 
-async function run(page) {
+function _t(context, en, ja, params = {}) {
+  return renderLocalizedText({ en, ja }, params, context, en);
+}
+
+async function run(page, context = {}) {
+  const sharedContext = getSharedRuleContext(context);
+  const logoPattern = buildKeywordPattern(
+    getKeywordList('images_of_text', 'logo_keywords', sharedContext)
+  );
+
+  const textKeywordPattern = buildKeywordPattern(
+    getKeywordList('images_of_text', 'text_keywords', sharedContext)
+  );
+
   const data = await page.evaluate((params) => {
-    const { logoPattern, srcPattern, classPattern, minWords } = params;
+    const { logoPattern, textKeywordPattern, minWords } = params;
     const logoRe   = new RegExp(logoPattern, 'i');
-    const srcRe    = new RegExp(srcPattern,  'i');
-    const classRe  = new RegExp(classPattern,'i');
+    const srcRe    = new RegExp(textKeywordPattern,  'i');
+    const classRe  = new RegExp(textKeywordPattern,'i');
 
     const violations    = [];
     const needsReview   = [];
@@ -63,15 +74,19 @@ async function run(page) {
         violations.push({
           src:  src.slice(-80),
           alt:  alt.slice(0, 100),
-          html: img.outerHTML.slice(0, 200),
-          id:   img.id || null,
+          html: img.outerHTML.slice(0, 150),
+          element_id: img.id || null,
+          target: img.id ? [`img#${CSS.escape(img.id)}`] : ['img[src]'],
+          tag: 'IMG',
         });
       } else if (score === 2) {
         needsReview.push({
           src:  src.slice(-80),
           alt:  alt.slice(0, 100),
-          html: img.outerHTML.slice(0, 200),
-          id:   img.id || null,
+          html: img.outerHTML.slice(0, 150),
+          element_id: img.id || null,
+          target: img.id ? [`img#${CSS.escape(img.id)}`] : ['img[src]'],
+          tag: 'IMG',
         });
       }
     }
@@ -90,22 +105,39 @@ async function run(page) {
       bgTextViolations.push({
         src:  cs.backgroundImage.slice(0, 80),
         text: text.slice(0, 60),
-        html: el.outerHTML.slice(0, 200),
-        id:   el.id || null,
+        html: el.outerHTML.slice(0, 150),
+        element_id: el.id || null,
+        target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
       });
     }
 
-    return { violations, needsReview, bgTextViolations, checkedCount };
+    // SVG <text> elements used as images
+    const svgTextViolations = [];
+    for (const svg of document.querySelectorAll('svg')) {
+      const textEls = svg.querySelectorAll('text');
+      if (textEls.length > 0 && svg.closest('a, button, [role="img"], figure')) {
+        svgTextViolations.push({
+          type: 'svg-text-image',
+          html: svg.outerHTML.slice(0, 150),
+          element_id: svg.id || null,
+          target: svg.id ? [`svg#${CSS.escape(svg.id)}`] : ['svg'],
+          tag: 'SVG',
+        });
+      }
+    }
+
+    return { violations, needsReview, bgTextViolations, svgTextViolations, checkedCount };
   }, {
-    logoPattern:  LOGO_PATTERN.source,
-    srcPattern:   TEXT_IMG_SRC_PATTERN.source,
-    classPattern: TEXT_IMG_CLASS_PATTERN.source,
-    minWords:     MIN_WORDS_FOR_TEXT_IMAGE,
+    logoPattern,
+    textKeywordPattern,
+    minWords: MIN_WORDS_FOR_TEXT_IMAGE,
   });
 
   const allViolations = [
     ...(data.violations      || []),
     ...(data.bgTextViolations|| []),
+    ...(data.svgTextViolations|| []),
   ];
   const reviews = data.needsReview || [];
 
@@ -118,8 +150,8 @@ async function run(page) {
         impact:      null,
         status:      'pass',
         reason:      data.checkedCount > 0
-          ? `${data.checkedCount} image(s) checked — no images detected as likely containing non-essential text. (OCR-level verification available via the Python pipeline.)`
-          : 'No candidate images detected for 1.4.5 text-image check.',
+          ? _t(sharedContext, '{count} image(s) checked — no images detected as likely containing non-essential text. (OCR-level verification available via the Python pipeline.)', '画像 {count} 件を確認しましたが、本質的でないテキストを含む可能性が高い画像は検出されませんでした。（OCR レベルの検証は Python パイプラインで利用できます。）', { count: data.checkedCount })
+          : _t(sharedContext, 'No candidate images detected for 1.4.5 text-image check.', '1.4.5 の画像内テキスト確認の対象となる画像は検出されませんでした。'),
         helpUrl: HELP_URL,
       }],
     };
@@ -127,7 +159,9 @@ async function run(page) {
 
   if (allViolations.length > 0) {
     const sample = allViolations.slice(0, 3)
-      .map(v => `<img src="…${v.src}" alt="${v.alt}">`)
+      .map(v => v.type === 'svg-text-image'
+        ? `<svg with text> ${v.html.slice(0, 60)}`
+        : `<img src="…${v.src}" alt="${v.alt}">`)
       .join('; ');
     return {
       successCriteriaId: SC,
@@ -136,7 +170,8 @@ async function run(page) {
         description: 'Images should not contain text unless the visual presentation is essential',
         impact:      'moderate',
         status:      'fail',
-        reason:      `${allViolations.length} image(s) appear to contain non-essential text based on src path and alt-text heuristics: ${sample}. Use real HTML/CSS text instead of text baked into images.`,
+        reason:      _t(sharedContext, '{count} image(s) appear to contain non-essential text based on src path and alt-text heuristics: {sample}. Use real HTML/CSS text instead of text baked into images.', 'src パスと alt テキストのヒューリスティクスに基づき、本質的でないテキストを含む可能性がある画像が {count} 件検出されました: {sample}。画像に埋め込んだ文字ではなく、実際の HTML/CSS テキストを使用してください。', { count: allViolations.length, sample }),
+        elements: allViolations,
         helpUrl: HELP_URL,
       }],
     };
@@ -153,7 +188,8 @@ async function run(page) {
       description: 'Images should not contain text unless the visual presentation is essential',
       impact:      'minor',
       status:      'incomplete',
-      reason:      `${reviews.length} image(s) may contain text — manual or OCR verification recommended: ${sample}.`,
+      reason:      _t(sharedContext, '{count} image(s) may contain text — manual or OCR verification recommended: {sample}.', 'テキストを含む可能性がある画像が {count} 件あります。目視または OCR による確認を推奨します: {sample}。', { count: reviews.length, sample }),
+      elements: reviews,
       helpUrl: HELP_URL,
     }],
   };

@@ -24,7 +24,7 @@ from PIL import Image
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.context_factory import new_crawler_context
 
 from ka11y.config.logger import setup_logger
 
@@ -50,7 +50,9 @@ class MovingContentData(BaseModel):
     # Moving-content properties
     loops: bool = False
     duration_seconds: Optional[float] = None  # -1 means infinite
+    duration_known: bool = True
     starts_automatically: bool = True
+    applicability_exception: Optional[str] = None
 
     # Pause / Stop / Hide mechanism
     has_video_controls: bool = False  # <video controls> attribute present
@@ -59,6 +61,10 @@ class MovingContentData(BaseModel):
 
     # axe-core would already flag this element
     axe_would_catch: bool = False
+
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
 
     html_snippet: str = ""
 
@@ -92,6 +98,55 @@ class MovingContentCrawler:
 
     EXTRACT_JS = r"""() => {
         const results = [];
+        const STATUS_ATTR_RE = /(^|[\s:_-])(spinner|loading|loader|progress|busy|skeleton|shimmer|throbber|preload|placeholder|buffer)([\s:_-]|$)/i;
+        const STATUS_TEXT_RE = /(loading|please wait|working|processing|buffering|syncing|saving|uploading|読み込み|読み込み中|ロード中|処理中|進行中|お待ちください|同期中|保存中|アップロード中|通信中|送信中)/i;
+        const STATUS_ROLE_SET = new Set(['progressbar', 'status']);
+        const STATUS_TAG_SET = new Set(['progress', 'sl-spinner', 'sl-progress-ring', 'sl-progress-bar']);
+
+        function textLikeValue(el, includeText = true) {
+            if (!el) return '';
+            const className = typeof el.className === 'string'
+                ? el.className
+                : (el.className && typeof el.className.baseVal === 'string' ? el.className.baseVal : '');
+            const parts = [
+                el.id || '',
+                className || '',
+                el.getAttribute ? (el.getAttribute('aria-label') || '') : '',
+                el.getAttribute ? (el.getAttribute('title') || '') : '',
+                el.getAttribute ? (el.getAttribute('data-testid') || '') : '',
+                el.getAttribute ? (el.getAttribute('data-state') || '') : '',
+                el.getAttribute ? (el.getAttribute('name') || '') : '',
+            ];
+            if (includeText) {
+                parts.push(el.innerText || el.textContent || '');
+            }
+            return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+        }
+
+        function hasLoadingStatusSignal(el, includeText = true) {
+            if (!el || !el.tagName) return false;
+            const localName = (el.localName || '').toLowerCase();
+            const role = ((el.getAttribute && el.getAttribute('role')) || '').toLowerCase();
+            const ariaBusy = ((el.getAttribute && el.getAttribute('aria-busy')) || '').toLowerCase();
+
+            if (STATUS_TAG_SET.has(localName)) return true;
+            if (STATUS_ROLE_SET.has(role)) return true;
+            if (ariaBusy === 'true') return true;
+
+            const signalValue = textLikeValue(el, includeText);
+            return STATUS_ATTR_RE.test(signalValue) || STATUS_TEXT_RE.test(signalValue);
+        }
+
+        function loadingStatusExceptionFor(el) {
+            let current = el;
+            let depth = 0;
+            while (current && depth < 8) {
+                if (hasLoadingStatusSignal(current, depth === 0)) return 'loading_indicator';
+                current = current.parentElement;
+                depth += 1;
+            }
+            return null;
+        }
 
         /* ── helper: look for a pause/stop button near an element (2 levels up) ── */
         function nearbyPauseButton(el) {
@@ -108,7 +163,7 @@ class MovingContentCrawler:
                         btn.getAttribute('title') || ''
                     ).toLowerCase();
                     // Only pause/stop controls (EN/JP) — a plain "play" link is not a pause mechanism
-                    if (/pause|stop|一時停止|停止|止める/.test(txt)) return true;
+                    if (/(^|\s)(pause|stop)(\s|$)|一時停止|停止|止める/i.test(txt)) return true;
                 }
             }
             return false;
@@ -127,6 +182,7 @@ class MovingContentCrawler:
             const hasControls = el.hasAttribute('controls');
             const hasPauseBtn = nearbyPauseButton(el);
             const loops       = el.hasAttribute('loop');
+            const applicabilityException = loadingStatusExceptionFor(el);
 
             // Resolve src: prefer currentSrc, then src attribute, then first <source> child
             const src = el.currentSrc ||
@@ -146,6 +202,7 @@ class MovingContentCrawler:
                 loops:                      loops,
                 duration_seconds:           loops ? -1 : (vidDuration || null),
                 starts_automatically:       true,
+                applicability_exception:    applicabilityException,
                 has_video_controls:         hasControls,
                 has_pause_button:           hasPauseBtn,
                 has_mechanism:              hasControls || hasPauseBtn,
@@ -160,6 +217,7 @@ class MovingContentCrawler:
             if (!src.endsWith('.gif')) return;
 
             const hasPauseBtn = nearbyPauseButton(el);
+            const applicabilityException = loadingStatusExceptionFor(el);
             results.push({
                 element_index:              results.length,
                 content_type:               'animated_gif',
@@ -172,6 +230,7 @@ class MovingContentCrawler:
                 loops:                      true,
                 duration_seconds:           -1,
                 starts_automatically:       true,
+                applicability_exception:    applicabilityException,
                 has_video_controls:         false,
                 has_pause_button:           hasPauseBtn,
                 has_mechanism:              hasPauseBtn,
@@ -210,6 +269,7 @@ class MovingContentCrawler:
                 const isPaused    = anim.playState === 'paused';
                 const hasPauseBtn = nearbyPauseButton(el);
                 const hasMechanism = hasPauseBtn || isPaused;
+                const applicabilityException = loadingStatusExceptionFor(el);
 
                 // Check if page honours prefers-reduced-motion for this element;
                 // if so, the page provides a system-level mechanism.
@@ -230,6 +290,7 @@ class MovingContentCrawler:
                     loops:                      isInfin,
                     duration_seconds:           isInfin ? -1 : totalMs / 1000,
                     starts_automatically:       true,
+                    applicability_exception:    applicabilityException,
                     has_video_controls:         false,
                     has_pause_button:           hasPauseBtn,
                     has_mechanism:              hasMechanism,
@@ -331,11 +392,11 @@ class MovingContentCrawler:
                     btn.getAttribute('aria-label') ||
                     btn.getAttribute('title') || ''
                 ).toLowerCase();
-                if (/pause|stop|一時停止|停止|止める/.test(txt)) return true;
+                if (/(^|\s)(pause|stop)(\s|$)|一時停止|停止|止める/i.test(txt)) return true;
             }
             // Also check aria-label on any child element
             if (el.querySelector) {
-                if (el.querySelector('[aria-label*="pause" i],[aria-label*="stop" i],[aria-label*="一時停止" i],[aria-label*="停止" i]')) return true;
+                if (el.querySelector('[aria-label~="pause" i],[aria-label~="stop" i],[aria-label*="一時停止" i],[aria-label*="停止" i]')) return true;
             }
             return false;
         }
@@ -365,6 +426,7 @@ class MovingContentCrawler:
                 if (!carouselIsAutoplay(el)) return;
 
                 const hasPauseBtn = carouselHasPauseButton(el);
+                const applicabilityException = loadingStatusExceptionFor(el);
 
                 results.push({
                     element_index:              results.length,
@@ -378,6 +440,7 @@ class MovingContentCrawler:
                     loops:                      true,
                     duration_seconds:           -1,
                     starts_automatically:       true,
+                    applicability_exception:    applicabilityException,
                     has_video_controls:         false,
                     has_pause_button:           hasPauseBtn,
                     has_mechanism:              hasPauseBtn,
@@ -415,6 +478,7 @@ class MovingContentCrawler:
             if (!isAutoplay) return;
 
             const hasPauseBtn = nearbyPauseButton(el);
+            const applicabilityException = loadingStatusExceptionFor(el);
             results.push({
                 element_index:              results.length,
                 content_type:              'video_autoplay',
@@ -427,6 +491,7 @@ class MovingContentCrawler:
                 loops:                     false,
                 duration_seconds:          null,
                 starts_automatically:      true,
+                applicability_exception:   applicabilityException,
                 has_video_controls:        false,
                 has_pause_button:          hasPauseBtn,
                 has_mechanism:             hasPauseBtn,
@@ -474,6 +539,7 @@ class MovingContentCrawler:
                     if (!hasAutoplayAttr) return;
 
                     const hasPauseBtn = carouselHasPauseButton(el);
+                    const applicabilityException = loadingStatusExceptionFor(el);
                     results.push({
                         element_index:              results.length,
                         content_type:              'carousel_autoplay',
@@ -486,6 +552,7 @@ class MovingContentCrawler:
                         loops:                     true,
                         duration_seconds:          -1,
                         starts_automatically:      true,
+                        applicability_exception:   applicabilityException,
                         has_video_controls:        false,
                         has_pause_button:          hasPauseBtn,
                         has_mechanism:             hasPauseBtn,
@@ -498,6 +565,7 @@ class MovingContentCrawler:
 
         /* ── 7. <marquee> and <blink> (deprecated; axe-core also flags) ── */
         document.querySelectorAll('marquee').forEach(el => {
+            const applicabilityException = loadingStatusExceptionFor(el);
             results.push({
                 element_index:              results.length,
                 content_type:               'marquee_element',
@@ -510,6 +578,7 @@ class MovingContentCrawler:
                 loops:                      true,
                 duration_seconds:           -1,
                 starts_automatically:       true,
+                applicability_exception:    applicabilityException,
                 has_video_controls:         false,
                 has_pause_button:           false,
                 has_mechanism:              false,
@@ -518,6 +587,7 @@ class MovingContentCrawler:
             });
         });
         document.querySelectorAll('blink').forEach(el => {
+            const applicabilityException = loadingStatusExceptionFor(el);
             results.push({
                 element_index:             results.length,
                 content_type:              'blink_element',
@@ -530,6 +600,7 @@ class MovingContentCrawler:
                 loops:                      true,
                 duration_seconds:           -1,
                 starts_automatically:       true,
+                applicability_exception:    applicabilityException,
                 has_video_controls:         false,
                 has_pause_button:           false,
                 has_mechanism:              false,
@@ -555,7 +626,8 @@ class MovingContentCrawler:
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
-            context = await browser.new_context(
+            context = await new_crawler_context(
+                browser,
                 viewport={"width": 1440, "height": 900},
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -563,7 +635,6 @@ class MovingContentCrawler:
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
-            await install_ssrf_guard(context)  # Bug 1 fix
             try:
                 await self._crawl_page(context, self.base_url, depth=0)
             finally:

@@ -35,7 +35,7 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.crawler._ssrf_guard import install_ssrf_guard
+from ka11y.crawler.context_factory import new_crawler_context
 
 
 class TargetSizeData(BaseModel):
@@ -72,6 +72,10 @@ class TargetSizeData(BaseModel):
 
     # Pre-computed pass/fail for size (width ≥ 24 AND height ≥ 24)
     passes_size: bool = True
+
+    selector: Optional[str] = None
+    element_ref_id: Optional[str] = None
+    frame_path: Optional[str] = None
 
     html_snippet: str = ""
 
@@ -113,9 +117,8 @@ class TargetSizeCrawler:
             if (tag !== 'INPUT' || !['checkbox', 'radio'].includes(type)) return false;
             const style = window.getComputedStyle(el);
             // UA-controlled when appearance has NOT been overridden to 'none'.
-            // 'auto', 'checkbox', 'radio', '' all mean the browser controls rendering.
-            const app = style.appearance || style.webkitAppearance || '';
-            return app !== 'none';
+            const app = (style.appearance || style.webkitAppearance || '').toLowerCase();
+            return app !== 'none' && app !== '';
         }
 
         function getAccessibleName(el) {
@@ -281,7 +284,8 @@ class TargetSizeCrawler:
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
-            context = await browser.new_context(
+            context = await new_crawler_context(
+                browser,
                 viewport={"width": 1440, "height": 900},
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -289,7 +293,6 @@ class TargetSizeCrawler:
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
             )
-            await install_ssrf_guard(context)  # Bug 1 fix
             try:
                 await self._crawl_page(context, self.base_url, depth=0)
             finally:
