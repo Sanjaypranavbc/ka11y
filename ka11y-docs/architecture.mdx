@@ -1,241 +1,413 @@
 ---
-title: "Architecture"
-description: "Job lifecycle, parallel execution model, SSE bus, and stage pipeline"
+title: "System Architecture"
+description: "Complete technical architecture of the ka11y platform — service topology, audit pipeline, WCAG coverage, and data flows"
 ---
 
-## System overview
+## Platform overview
 
-```
-Browser / CI
-    │
-    ▼ POST /api/v1/combined/
-┌────────────────────────────────────────────────────────────┐
-│  ka11y-python  (FastAPI, port 8000)                        │
-│                                                            │
-│  ┌─────────────┐   asyncio.gather(return_exceptions=True)  │
-│  │  _run_job   │──────────────────────────────────────┐    │
-│  └─────────────┘                                      │    │
-│         │                                             │    │
-│  ┌──────▼──────────┐         ┌───────────────────┐   │    │
-│  │  Python stages  │         │  axe-core (Node)  │   │    │
-│  │  (concurrent)   │         │  POST /analyse-   │   │    │
-│  │                 │         │  url-flat         │   │    │
-│  │  unified_pipeline (1.1.1, 1.4.5, 2.5.3, etc)       │    │
-│  │  image_audit    │         └────────┬──────────┘   │    │
-│  │  form_audit     │                  │               │    │
-│  │  pause_stop_hide│◄─────────────────┘               │    │
-│  │  text_spacing   │    merged findings                │    │
-│  │  rendered_layout│                                   │    │
-│  └────────┬────────┘                                  │    │
-│           │                                           │    │
-│  ┌────────▼────────────────────────────────────────┐  │    │
-│  │  _build_report — sort, aggregate, write JSON    │  │    │
-│  └────────────────────────────────────────────────┘  │    │
-│           │                                           │    │
-│  ┌────────▼────────────────────────────────────────┐  │    │
-│  │  SSE subscriber bus — broadcasts events to      │  │    │
-│  │  all connected EventSource clients              │  │    │
-│  └────────────────────────────────────────────────┘  │    │
-└────────────────────────────────────────────────────────────┘
-         │ GET /api/v1/combined/{job_id}/stream
-    ┌────▼──────────┐
-    │  React frontend│  (EventSource — live stage cards)
-    └───────────────┘
+ka11y is a **three-service platform** that automates WCAG 2.0 / 2.1 / 2.2 accessibility auditing for any live web URL. A React dashboard consumes the results in real time.
+
+```mermaid
+graph TD
+    Client(["Client / CI Pipeline"])
+    Frontend(["ka11y Frontend SDK\nReact · Vite · Tailwind\n:5173"])
+    Python(["ka11y-python\nFastAPI · Playwright · OCR\n:8000"])
+    Node(["ka11y-node\nExpress · axe-core · Puppeteer\n:3000"])
+    Target(["Target Website"])
+    Shared[("Shared Resources\ni18n / rules.yml\nconfig / universal.yml")]
+
+    Client -->|"POST /api/v1/combined/"| Python
+    Client -->|"GET /combined/{id}/stream (SSE)"| Python
+    Frontend -->|"POST /api/v1/combined/"| Python
+    Frontend -->|"SSE stream — live stage updates"| Python
+    Python -->|"POST /api/v1/analyse-url-flat"| Node
+    Python -->|"Playwright crawl"| Target
+    Node -->|"Puppeteer crawl + axe-core inject"| Target
+    Python -.->|"reads"| Shared
+    Node -.->|"reads"| Shared
 ```
 
 ---
 
-## Job lifecycle
+## Service responsibilities
 
-```
-POST /combined/
-      │
-      ▼
-  status: "pending"
-  job dict written to _jobs{}
-  asyncio.create_task(_run_job)
-  202 returned immediately
-      │
-      ▼
-  status: "running"
-  _stage_start("axe_core") broadcast
-  asyncio.create_task(node) + asyncio.create_task(python stages)
-  asyncio.gather(return_exceptions=True)
-      │
-      ├─── node task completes ──► _stage_complete("axe_core", n)
-      │         or fails        ──► _stage_error("axe_core", msg)
-      │                             _jobs[id]["warnings"].append(...)
-      │
-      ├─── unified_pipeline ────► _run_pipeline_stage (Contextual WCAG Rules)
-      ├─── image_audit stage ───► _stage_start / _stage_complete / _stage_error
-      ├─── form_audit stage
-      ├─── pause_stop_hide stage
-      ├─── text_spacing stage
-      └─── rendered_layout_audit stage
-              │
-              ▼
-        merge findings
-        _build_report()
-        write combined_report.json
-              │
-              ▼
-        status: "completed"   ←── job_complete SSE event broadcast
-          or
-        status: "failed"      ←── job_failed  SSE event broadcast
-              │
-              ▼
-        _close_subscribers()  — sentinel None sent to all queues
-```
+<CardGroup cols={3}>
+  <Card title="ka11y-python" icon="python">
+    **Port 8000 · FastAPI**
 
-<Note>
-  The job only transitions to `"failed"` if **both** the Node task and the Python pipeline return zero findings. A Node crash with successful Python stages still produces a `"completed"` job.
-</Note>
+    Core orchestration engine. Runs background audit jobs, crawls pages with Playwright, performs OCR + contrast analysis, and merges findings from the Node engine into a unified report.
+  </Card>
+  <Card title="ka11y-node" icon="node-js">
+    **Port 3000 · Express**
+
+    DOM accessibility engine. Injects axe-core into live pages via Puppeteer and runs 24 custom WCAG checks not covered by axe-core (focus traps, keyboard shortcuts, pointer cancellation, etc.).
+  </Card>
+  <Card title="ka11y-frontend-sdk" icon="react">
+    **Port 5173 · React + Vite**
+
+    Audit dashboard. Submits audit jobs, streams real-time stage progress via SSE, and renders violations, needs-review items, passes, contrast reports, and image visualisations.
+  </Card>
+</CardGroup>
 
 ---
 
-## Parallel execution model
+## Audit request flow
 
-```python
-# combined/runner.py — _run_job()
-node_task   = asyncio.create_task(_call_node_flat(...))
-python_task = asyncio.create_task(_run_python_stages(...))
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client / Frontend
+    participant P as ka11y-python :8000
+    participant N as ka11y-node :3000
+    participant W as Target Website
 
-node_result, python_result = await asyncio.gather(
-    node_task, python_task,
-    return_exceptions=True   # ← neither task cancels the other on failure
-)
+    C->>P: POST /api/v1/combined/ { url, wcag_level, options }
+    P-->>C: 202 Accepted { job_id, status: "pending" }
+    C->>P: GET /combined/{job_id}/stream (SSE open)
+
+    Note over P: asyncio.create_task(_run_job)
+    P-->>C: SSE: job_state { status: "running" }
+
+    par Python pipeline stages (concurrent)
+        P->>W: Playwright crawl — images, forms, layout
+        W-->>P: DOM snapshot + screenshots
+        P->>P: OCR + contrast analysis
+        P->>P: WCAG auditors (1.1.1, 1.4.3, 2.5.3, 2.5.8 …)
+        P-->>C: SSE: stage_start / stage_complete per stage
+    and axe-core stage
+        P->>N: POST /api/v1/analyse-url-flat { url, level }
+        N->>W: Puppeteer.goto() + axe-core.run() + custom checks
+        W-->>N: DOM
+        N-->>P: flat findings array (100+ axe rules + 24 custom)
+        P-->>C: SSE: stage_complete "axe_core"
+    end
+
+    P->>P: _build_report() — deduplicate + merge findings
+    P-->>C: SSE: job_complete { report }
+    C->>P: GET /combined/{job_id} — fetch full report JSON
 ```
-
-The Node task (axe-core) and the Python pipeline run concurrently. The Python pipeline itself now runs its Python stages concurrently via `asyncio.gather(...)`, with per-stage timeouts and graceful degradation.
 
 ---
 
-## Unified Accessibility Pipeline (April 2026 Shift)
+## ka11y-python internals
 
-Historically, Python WCAG rules followed an isolated **Crawler → Auditor** pattern. To drastically reduce false positives, the architecture shifted to a **Centralized Context Pipeline**. Instead of rules evaluating nodes in a vacuum, a central engine extracts comprehensive page state before running individual WCAG policies.
+### Job lifecycle
 
+```mermaid
+graph TD
+    A["POST /api/v1/combined/"] --> B["Validate URL\nSSRF guard"]
+    B --> C["Create job in _jobs store\nstatus: pending"]
+    C --> D["202 Accepted → job_id"]
+    C --> E["asyncio.create_task(_run_job)"]
+    E --> F["status: running\nSSE: job_state"]
+
+    F --> G["asyncio.gather (return_exceptions=True)"]
+    G --> H["_call_node_flat()\naxe-core engine"]
+    G --> I["_run_python_stages()\nconcurrent WCAG stages"]
+
+    H --> J{Node OK?}
+    J -->|Yes| K["axe findings merged"]
+    J -->|No| L["Warning logged\npython-only continues"]
+
+    I --> M["Stage 1: Image crawl + OCR + audit"]
+    I --> N["Stage 2: Form crawl + audit"]
+    I --> O["Stage 3: Interactive / Label-in-Name"]
+    I --> P["Stage 4: Pause/Stop/Hide"]
+    I --> Q["Stage 5: Target Size"]
+    I --> R["Stage 6: Text Spacing"]
+    I --> S["Stage 7–13: Rendered layout\nReflow, Resize, Orientation…"]
+
+    K --> T["_build_report()"]
+    L --> T
+    M --> T
+    N --> T
+    O --> T
+    P --> T
+    Q --> T
+    R --> T
+    S --> T
+
+    T --> U["Write combined_report.json"]
+    U --> V{Any findings?}
+    V -->|Yes| W["status: completed\nSSE: job_complete"]
+    V -->|No| X["status: failed\nSSE: job_failed"]
+    W --> Y["TTL eviction after 1 hour"]
+    X --> Y
 ```
-┌───────────────────────────────────────┐
-│  1. Context Extraction (Playwright)   │
-│  • ElementContextExtractor            │
-│  • Pierces #shadow-root & <iframe>    │
-│  • Extracts DOM, CSS, ARIA, and BBox  │
-└──────────────────┬────────────────────┘
-                   │
-┌──────────────────▼────────────────────┐
-│  2. Semantic Enrichment (Python/JS)   │
-│  • SectionAnalyzer (Macro-context)    │
-│  • SemanticRelationshipEngine         │
-│  • Resolves ARIA & Native Groupings   │
-└──────────────────┬────────────────────┘
-                   │
-┌──────────────────▼────────────────────┐
-│  3. Interaction & State Simulation    │
-│  • InteractionStateRunner             │
-│  • Batched focus simulation & CSS diff│
-└──────────────────┬────────────────────┘
-                   │
-┌──────────────────▼────────────────────┐
-│  4. Decision Engine & Policies        │
-│  • RuleTargetRouter filters elements  │
-│  • Evaluates Policy111, Policy258, etc│
-└──────────────────┬────────────────────┘
-                   │
-┌──────────────────▼────────────────────┐
-│  5. Evidence Formatter (Adapter)      │
-│  • Maps rich verdicts to legacy JSON  │
-└───────────────────────────────────────┘
+
+### Crawler → Auditor pattern (legacy stages)
+
+For stages not in the Unified Pipeline, each rule follows a strict two-class separation:
+
+```mermaid
+graph LR
+    CR["Crawler\nPlaywright"] -->|"List[RawData]\nXxx_raw.json"| AU["Auditor\nPure Python"]
+    AU -->|"List[Dict]\nstatus + violation fields"| FC["Finding Converter\n_xxx_to_findings()"]
+    FC -->|"Flat finding shape"| RE["_build_report()"]
 ```
 
-This ensures that rules like **2.5.8 (Target Size)** and **1.1.1 (Alt Text)** share the exact same computed styles, overlapping elements, and macro-section data (e.g., distinguishing an isolated input from one safely wrapped inside a `<fieldset>`).
+The auditor never touches Playwright — it only processes the JSON the crawler writes. This keeps auditors fully unit-testable without a browser.
+
+### Unified Accessibility Pipeline (primary path)
+
+For rules that require shared DOM context (1.1.1, 2.5.3, 2.5.8, 1.4.5, etc.), a centralised five-stage pipeline eliminates false positives by giving all rules the same computed page state:
+
+```mermaid
+graph TD
+    E1["1 · Context Extraction\nElementContextExtractor\nPierces shadow-root + iframes\nDOM · CSS · ARIA · BBox"]
+    E2["2 · Semantic Enrichment\nSectionAnalyzer · SemanticRelationshipEngine\nResolves ARIA + native groupings"]
+    E3["3 · Interaction Simulation\nInteractionStateRunner\nBatched focus + CSS diff"]
+    E4["4 · Decision Engine\nRuleTargetRouter\nPolicy111 · Policy258 · Policy253…"]
+    E5["5 · Evidence Formatter\nMaps rich verdicts to flat finding JSON"]
+
+    E1 --> E2 --> E3 --> E4 --> E5
+```
 
 ---
 
-## Legacy Crawler → Auditor pipeline per stage
+## ka11y-node internals
 
-For rules not yet migrated to the Unified Pipeline (e.g., complex rendered layouts like `1.4.10 Reflow` or `2.2.2 Pause/Stop/Hide`), the older two-class pattern is used:
+### Request flow
 
-```
-┌───────────────────────────────┐
-│  Crawler (Playwright)         │
-│  • Navigates the URL          │
-│  • Extracts raw element data  │
-│  • Returns List[XxxData]      │
-│  • Saves xxx_raw.json         │
-└──────────────┬────────────────┘
-               │ List[Dict]
-               ▼
-┌───────────────────────────────┐
-│  Auditor (pure Python)        │
-│  • Applies WCAG rules         │
-│  • Returns List[Dict] with    │
-│    <rule>_status + _violation │
-│  • Writes audit_xxx.csv       │
-└──────────────┬────────────────┘
-               │ List[Dict]
-               ▼
-┌───────────────────────────────┐
-│  Finding converter            │
-│  _xxx_to_findings()           │
-│  • Maps to flat finding shape │
-│  • Calls _make_finding()      │
-└───────────────────────────────┘
+```mermaid
+graph TD
+    REQ["HTTP Request"] --> MW["Middleware\nSecurity headers · CORS\nBody parser · Logger"]
+    MW --> RT["Route"]
+
+    RT --> AC["AccessibilityController"]
+    RT --> RC["RulesController"]
+    RT --> RG["RulesGuideController"]
+    RT --> HC["HealthController"]
+
+    AC --> AS["AccessibilityService"]
+    AS --> PU["Puppeteer.launch()\nmax 3 concurrent slots"]
+    PU --> AX["axe-core.run()\n100+ WCAG rules\n30 s timeout"]
+    PU --> CC["Custom checks runner\nindex.js"]
+
+    CC --> SC["Static checks × 19\nParallel execution"]
+    CC --> IC["Interactive checks × 5\nSequential execution"]
+
+    AX --> MR["mergeWithAxe()\nmap to SC format"]
+    SC --> MR
+    IC --> MR
+    MR --> RS["Response JSON"]
 ```
 
-The auditor never touches Playwright — it only processes the JSON the crawler emits. This means auditors are fully unit-testable without a browser.
+### Custom checks (24 rules beyond axe-core)
+
+| Check | WCAG SC | Mode |
+|---|---|---|
+| custom-focus-visible | 2.4.7 | Interactive |
+| custom-focus-appearance | 2.4.7 | Interactive |
+| custom-keyboard-trap | 2.1.2 | Interactive |
+| custom-on-focus | 3.2.1 | Interactive |
+| custom-on-input | 3.2.2 | Interactive |
+| custom-html-parsing | 4.1.1 | Static |
+| custom-status-messages | 4.1.3 | Static |
+| custom-character-key-shortcuts | 2.1.4 | Static |
+| custom-pointer-cancellation | 2.5.2 | Static |
+| custom-dragging-movements | 2.5.7 | Static |
+| custom-consistent-help | 3.2.6 | Static |
+| custom-error-suggestion | 3.3.5 | Static |
+| custom-error-prevention | 3.3.4 | Static |
+| custom-redundant-entry | 3.3.7 | Static |
+| custom-accessible-auth | 3.3.8 | Static |
+| custom-use-of-color | 1.4.1 | Static |
+| custom-audio-transcript | 1.2.1 | Static |
+| custom-multiple-ways | 2.4.5 | Static |
+| custom-meaningful-sequence | 1.3.2 | Static |
+| custom-link-purpose | 2.4.9 | Static |
+| custom-location | 2.4.8 | Static |
+| custom-orientation | 1.3.4 | Static |
+| custom-images-of-text | 1.4.5 | Static |
+| custom-pronunciation | 3.1.6 | Static |
 
 ---
 
-## Finding shape
+## WCAG coverage map
 
-Every finding — regardless of source (axe or Python) or WCAG criterion — has the same flat structure:
+```mermaid
+graph LR
+    subgraph Python ["ka11y-python — 18 criteria"]
+        P1["1.1.1 Non-text Content\nAlt text · OCR · Classification"]
+        P2["1.2.1 Audio/Video-only\nMedia transcripts"]
+        P3["1.3.3 Sensory Characteristics"]
+        P4["1.3.4 Orientation"]
+        P5["1.4.3 Contrast Minimum\nOCR-based pixel analysis"]
+        P6["1.4.4 Resize Text\nPlaywright viewport scale"]
+        P7["1.4.5 Images of Text"]
+        P8["1.4.6 Contrast Enhanced AAA"]
+        P9["1.4.10 Reflow · 320 px"]
+        P10["1.4.12 Text Spacing"]
+        P11["1.4.13 Hover/Focus Content"]
+        P12["2.2.2 Pause Stop Hide"]
+        P13["2.4.11 Focus Not Obscured Min"]
+        P14["2.4.12 Focus Not Obscured Enh"]
+        P15["2.5.3 Label in Name"]
+        P16["2.5.8 Target Size Min"]
+        P17["3.3.1 Error Identification"]
+        P18["3.3.2 Labels or Instructions"]
+    end
+
+    subgraph Node ["ka11y-node — 100+ axe rules + 24 custom"]
+        N1["1.1.1 · 1.2.x · 1.3.x image-alt…"]
+        N2["1.4.1 Use of Colour"]
+        N3["2.1.2 Keyboard Trap"]
+        N4["2.1.4 Character Key Shortcuts"]
+        N5["2.4.5 Multiple Ways"]
+        N6["2.4.7 Focus Visible"]
+        N7["2.4.8 Location"]
+        N8["2.4.9 Link Purpose"]
+        N9["2.5.2 Pointer Cancellation"]
+        N10["2.5.7 Dragging Movements"]
+        N11["3.1.6 Pronunciation"]
+        N12["3.2.1 On Focus · 3.2.2 On Input"]
+        N13["3.2.6 Consistent Help"]
+        N14["3.3.4 Error Prevention"]
+        N15["3.3.5 Error Suggestion"]
+        N16["3.3.7 Redundant Entry"]
+        N17["3.3.8 Accessible Auth"]
+        N18["4.1.1 HTML Parsing"]
+        N19["4.1.3 Status Messages"]
+    end
+```
+
+---
+
+## Finding schema
+
+Every finding — from any source — uses the same flat structure. This enables uniform display in the dashboard regardless of which engine produced it.
 
 ```json
 {
-  "source":         "python",
+  "source":         "python | axe_core",
   "rule_id":        "python_1_1_1_alt",
   "wcag_sc":        "1.1.1",
   "criterion_name": "Non-text Content",
-  "level":          "A",
-  "severity":       "critical",
-  "status":         "fail",
+  "level":          "A | AA | AAA",
+  "severity":       "critical | high | medium | low | null",
+  "status":         "fail | needs_review | pass",
   "reason":         "Image is missing alt attribute.",
   "suggested_fix":  "Add a descriptive alt attribute…",
-  "help_url":       null,
   "element": {
-    "html":       "<img src=\"/banner.jpg\" class=\"hero\">",
-    "element_id": null,
-    "tag":        "IMG",
-    "page_url":   "https://example.com/"
+    "html":      "<img src=\"/banner.jpg\" class=\"hero\">",
+    "tag":       "IMG",
+    "selector":  "main > section:nth-child(2) > img",
+    "page_url":  "https://example.com/"
   }
 }
 ```
 
-Pass findings have `severity: null`, `suggested_fix: null`, and `element: null`.
-
-See [Output Format](/internals/output-format) for the full field reference.
+Pass findings carry `severity: null`, `suggested_fix: null`, and `element: null`.
 
 ---
 
-## Output directory layout
+## Deduplication model
 
-Each job writes its artefacts to a timestamped directory:
+When both engines report the same violation, Python findings take precedence. The dedup key is:
+
+```
+(wcag_sc, status, element_signature)
+```
+
+where `element_signature` resolves in priority order:
+
+1. Page-aware CSS selector
+2. `target` array (axe-core format)
+3. `ref_id` / `element_id`
+4. SHA-256 of `html` snippet
+
+This prevents double-counting while preserving the richer Python evidence wherever available.
+
+---
+
+## Security controls
+
+Both services implement SSRF protection independently to prevent audit requests from reaching internal infrastructure:
+
+```mermaid
+graph LR
+    URL["User-supplied URL"] --> DNS["DNS resolution"]
+    DNS --> IP["Resolved IP addresses"]
+    IP --> CHK{Private / reserved?}
+    CHK -->|"RFC 1918 · loopback · link-local\nTEST-NET · multicast · IPv6 equiv"| BLK["400 Bad Request"]
+    CHK -->|Public IP| PLA["Playwright / Puppeteer request"]
+    PLA --> RD{Redirect target}
+    RD -->|"Private IP"| ABT["Request aborted"]
+    RD -->|"Public IP"| OK["Crawl proceeds"]
+```
+
+---
+
+## Output directory structure
+
+Each job writes artefacts to a timestamped, domain-keyed directory:
 
 ```
 crawled_images/
-└── example_com_0317_1430_combined/
-    ├── combined_report.json          # Final merged report
-    ├── images_report.json            # Image crawler summary
-    ├── audit_report.csv              # Image auditor results (1.1.1 / 4.1.2 / 1.4.5 / 1.4.11)
-    ├── text_detected/                # EasyOCR artefacts and classifications
-    │   ├── text_detection_report.json
-    │   └── contrast/
-    ├── forms_raw.json                # Raw form field data
-    ├── audit_form_report.csv         # Form auditor findings
+└── example_com_0421_1430_combined/
+    ├── combined_report.json          ← Final merged report (all findings)
+    ├── images_report.json            ← Image crawler metadata
+    ├── audit_report.csv              ← 1.1.1 / 4.1.2 / 1.4.5 / 1.4.11
+    ├── text_detected/
+    │   ├── text_detection_report.json  ← OCR + contrast results
+    │   └── contrast/                   ← Per-image contrast artefacts
+    ├── forms_raw.json
+    ├── audit_form_report.csv          ← 3.3.1 / 3.3.2
     ├── interactive_elements_raw.json
-    ├── audit_label_in_name_report.csv
+    ├── audit_label_in_name_report.csv ← 2.5.3
     ├── moving_content_raw.json
-    ├── audit_pause_stop_hide_report.csv
+    ├── audit_pause_stop_hide_report.csv ← 2.2.2
     ├── target_size_raw.json
-    └── audit_target_size_report.csv
+    └── audit_target_size_report.csv   ← 2.5.8
 ```
+
+---
+
+## Technology stack
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Python API | FastAPI 0.115 + uvicorn | Async HTTP server, SSE streaming |
+| Browser automation (Python) | Playwright + Chromium | Live page crawling, screenshot, interaction simulation |
+| OCR engine | EasyOCR / PaddleOCR | Text detection in images for contrast analysis |
+| Node API | Express 4 | HTTP server for DOM checks |
+| Browser automation (Node) | Puppeteer + Chromium | Live URL crawling, axe-core injection |
+| DOM accessibility engine | axe-core 4.11 | 100+ automated WCAG rule checks |
+| Frontend | React 18 + Vite + Tailwind + shadcn/ui | Audit dashboard with real-time SSE updates |
+| i18n | Custom YAML loader | Multi-language WCAG rule descriptions (en, ja, …) |
+| Containerisation | Docker (multi-stage) | Isolated deployments per service |
+
+---
+
+## API surface summary
+
+### ka11y-python (:8000)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/v1/combined/` | Submit async audit job → `job_id` |
+| `GET` | `/api/v1/combined/{job_id}` | Poll job status + fetch report |
+| `GET` | `/api/v1/combined/{job_id}/stream` | SSE — real-time stage events |
+| `GET` | `/api/v1/combined/{job_id}/image` | Serve image artefacts |
+| `POST` | `/api/v1/crawl/` | Legacy single-pass crawl |
+| `POST` | `/api/v1/pipeline/` | Full 13-stage pipeline |
+| `POST` | `/api/v1/{rule_id}/run` | Run single WCAG rule audit |
+| `POST` | `/api/v1/{rule_id}/analyse-url` | Single-page rule check |
+| `GET` | `/api/v1/health` | Python service health |
+| `GET` | `/api/v1/system/health` | Combined Python + Node health |
+
+### ka11y-node (:3000)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/v1/analyze-accessibility` | Audit raw HTML string |
+| `POST` | `/api/v1/analyse-url` | Crawl URL + full accessibility audit |
+| `POST` | `/api/v1/analyse-url-flat` | Crawl URL + flat findings array |
+| `POST` | `/api/v1/rules/:sc/analyse-url` | Audit URL for one WCAG SC |
+| `GET` | `/api/v1/rules` | List axe-core rules by SC |
+| `GET` | `/api/v1/rules/wcag` | WCAG rule definitions (i18n) |
+| `GET` | `/api/v1/rules-guide` | Testing guidance for all rules |
+| `GET` | `/api/v1/rules-guide/:ruleId` | Testing guidance for one rule |
+| `GET` | `/api/v1/health` | Node service health |
+| `GET` | `/api-docs` | Swagger UI |
