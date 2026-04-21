@@ -53,6 +53,7 @@
       "pages": [
         "introduction",
         "quickstart",
+        "how-it-works",
         "architecture"
       ]
     },
