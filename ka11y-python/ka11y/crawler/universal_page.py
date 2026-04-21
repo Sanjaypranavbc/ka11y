@@ -1359,17 +1359,28 @@ class UniversalPageLoader:
                 logger.info(f"[universal] capping links from {len(links)} to {policy.max_links_per_page}")
                 links = links[:policy.max_links_per_page]
 
+            def _count_for_url(collection: list) -> int:
+                return len([r for r in collection if r.get("page_url") == url])
+
+            page_forms        = _count_for_url(output.forms)
+            page_interactive  = _count_for_url(output.interactive)
+            page_target_sizes = _count_for_url(output.target_sizes)
+            page_moving       = _count_for_url(output.moving_content)
+            page_media        = _count_for_url(output.media)
+            page_text_spacing = _count_for_url(output.text_spacing)
+            page_sensory      = _count_for_url(output.sensory)
+
             output.page_summaries.append(
                 {
                     "page_url": url,
                     "depth": depth,
-                    "forms": len(extracted.get("forms", [])),
-                    "interactive": len(extracted.get("interactive", [])),
-                    "target_sizes": len(extracted.get("target_sizes", [])),
-                    "moving_content": len(extracted.get("moving_content", [])),
-                    "media": len(extracted.get("media", [])),
-                    "text_spacing": len(extracted.get("text_spacing", [])),
-                    "sensory": len(extracted.get("sensory", [])),
+                    "forms": page_forms,
+                    "interactive": page_interactive,
+                    "target_sizes": page_target_sizes,
+                    "moving_content": page_moving,
+                    "media": page_media,
+                    "text_spacing": page_text_spacing,
+                    "sensory": page_sensory,
                     "links_found": len(links),
                 }
             )
@@ -1384,13 +1395,13 @@ class UniversalPageLoader:
                     context={
                         "url": url,
                         "depth": depth,
-                        "forms": len(extracted.get("forms", [])),
-                        "interactive": len(extracted.get("interactive", [])),
-                        "target_sizes": len(extracted.get("target_sizes", [])),
-                        "moving_content": len(extracted.get("moving_content", [])),
-                        "media": len(extracted.get("media", [])),
-                        "text_spacing": len(extracted.get("text_spacing", [])),
-                        "sensory": len(extracted.get("sensory", [])),
+                        "forms": page_forms,
+                        "interactive": page_interactive,
+                        "target_sizes": page_target_sizes,
+                        "moving_content": page_moving,
+                        "media": page_media,
+                        "text_spacing": page_text_spacing,
+                        "sensory": page_sensory,
                         "links_found": len(links),
                         "warnings": page_warning_count,
                     },
