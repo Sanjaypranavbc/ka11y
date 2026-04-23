@@ -35,9 +35,23 @@ _subscribers_lock: asyncio.Lock | None = None
 
 
 def _get_subscribers_lock() -> asyncio.Lock:
-    """Return the subscribers lock, creating it lazily inside the running loop."""
+    """Return the subscribers lock, creating it lazily inside the running loop.
+
+    Each asyncio.Lock is bound to the event loop that creates it. We recreate
+    the lock whenever the running loop changes (e.g. after a hot-reload or a
+    new pytest-asyncio session spawns a fresh loop), so the lock is always
+    compatible with the current loop's scheduler.
+    """
     global _subscribers_lock
-    if _subscribers_lock is None:
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+
+    if _subscribers_lock is None or (
+        running_loop is not None
+        and getattr(_subscribers_lock, "_loop", None) is not running_loop
+    ):
         _subscribers_lock = asyncio.Lock()
     return _subscribers_lock
 

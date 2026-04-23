@@ -95,3 +95,11 @@ No popups detected → PASSED
 | `level` | `AA` |
 | `severity` | `medium` |
 | `status` | `fail` \| `needs_review` \| `pass` |
+
+## Known limitations
+
+- **300 ms settle** may capture tooltips mid-transition; very fast fade-ins are measured before final paint.
+- **Escape-to-dismiss** is scanned but stuck-open popups after Escape aren't reliably flagged (no post-Escape snapshot comparison).
+- **Animation state** — if the popup relies on opacity/transform transitions rather than `display:none`, hover-off reliability can be miscategorised.
+
+See [Technique coverage for 1.4.13](/rules/coverage-matrix#1-4-13-content-on-hover-or-focus).

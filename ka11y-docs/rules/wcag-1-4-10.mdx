@@ -73,3 +73,10 @@ img, video, iframe {
 | `level` | `AA` |
 | `severity` | `high` |
 | `status` | `fail` \| `needs_review` \| `pass` |
+
+## Known limitations
+
+- **False positives on intentionally horizontally-scrollable regions** — wide data tables, code blocks, and horizontal carousels have no allow-list.
+- **CSS-level inspection missing** — C32/C34 (flex/grid responsive patterns) are not verified at stylesheet level, only via rendered-layout diff.
+
+See [Technique coverage for 1.4.10](/rules/coverage-matrix#1-4-10-reflow).

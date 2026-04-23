@@ -84,12 +84,15 @@ class CrawlPolicy(BaseModel):
     def is_allowed(self, url: str, base_url: str) -> bool:
         parsed = urlparse(url)
         base = urlparse(base_url)
-        
+
         if self.same_origin:
+            parsed_host = parsed.hostname
+            base_host = base.hostname
+            if not parsed_host or not base_host:
+                return False
             if self.include_subdomains:
-                # Basic subdomain check
-                return parsed.hostname.endswith(base.hostname)
+                return parsed_host == base_host or parsed_host.endswith(f".{base_host}")
             else:
-                return parsed.hostname == base.hostname
-        
+                return parsed_host == base_host
+
         return True

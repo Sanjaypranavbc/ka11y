@@ -76,3 +76,11 @@ Use semantic HTML elements and explicit ARIA relationships.
   <label><input type="radio" name="ship" value="exp"> Express</label>
 </fieldset>
 ```
+
+## Known limitations
+
+- **Heading hierarchy checks** live in axe-core; the Python pipeline does not validate H1→H2→H3 skip patterns beyond what axe reports.
+- **Table header inference** — only axe's detection; no heuristic for `<div role="table">` ARIA grids.
+- **F92 `role="presentation"` on structural elements** is axe-covered only.
+
+See [Technique coverage for 1.3.1](/rules/coverage-matrix#1-3-1-info-and-relationships).

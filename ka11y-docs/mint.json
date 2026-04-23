@@ -70,6 +70,7 @@
       "group": "WCAG Rules",
       "pages": [
         "rules/overview",
+        "rules/coverage-matrix",
         "rules/wcag-1-1-1",
         "rules/wcag-1-4-3",
         "rules/wcag-1-4-4",
@@ -102,7 +103,8 @@
         "internals/data-models",
         "internals/sse-events",
         "internals/output-format",
-        "internals/config"
+        "internals/config",
+        "internals/japanese-language-support"
       ]
     },
     {

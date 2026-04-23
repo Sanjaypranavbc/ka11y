@@ -114,3 +114,13 @@ Localization in the combined finding arrays works like this:
 <img src="chart.png" alt="Q1 revenue chart" aria-describedby="chart-desc">
 <p id="chart-desc">Bar chart showing Q1 revenue of £2.4M, up 12% from Q4…</p>
 ```
+
+## Known limitations
+
+- **3-character OCR floor** rejects valid 2-letter labels ("UI", "Go", "OK") — review short alts manually.
+- **Literal OCR matching** — semantic synonyms (alt "Look up" vs OCR "Search") fail the content-equivalence check.
+- **CSS `background-image` backgrounds** are invisible to the crawler — hero images set via CSS are not audited.
+- **Classifier dependency** — a logo mis-labelled as `informative` bypasses the logo-keyword gate.
+- **`<object>` / `<embed>` fallback content** is not traversed.
+
+See [Technique coverage for 1.1.1](/rules/coverage-matrix#1-1-1-non-text-content) for the full W3C technique map.

@@ -193,9 +193,19 @@ class AccessibilityService {
       { timeout: 2_000 }
     );
 
+    const INJECT_TIMEOUT_MS = 10_000;
     const tryInject = async () => {
-      await page.addScriptTag({ path: this._axeCorePath });
-      await waitForAxe();
+      const injectWithTimeout = (fn) =>
+        Promise.race([
+          fn(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('axe injection timed out')), INJECT_TIMEOUT_MS)
+          ),
+        ]);
+      await injectWithTimeout(async () => {
+        await page.addScriptTag({ path: this._axeCorePath });
+        await waitForAxe();
+      });
     };
 
     try {

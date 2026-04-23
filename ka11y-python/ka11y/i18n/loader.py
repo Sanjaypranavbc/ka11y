@@ -114,7 +114,8 @@ def load_rules(lang: str = "en") -> Dict[str, RuleEntry]:
         print(rules["1.1.1"].suggested_fix)  # "Add a descriptive alt attribute..."
     """
     # Sanitise lang to prevent path traversal
-    safe_lang = "".join(c for c in lang if c.isalpha() or c == "-")[:10] or "en"
+    import re as _re
+    safe_lang = _re.sub(r"[^a-zA-Z\-]", "", str(lang or "en"))[:10].strip("-") or "en"
     return _load_rules_cached(safe_lang)
 
 

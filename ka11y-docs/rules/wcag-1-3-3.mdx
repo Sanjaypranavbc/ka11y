@@ -88,3 +88,11 @@ Always pair sensory characteristics with a text label or a unique non-sensory id
 <button class="round-btn" aria-label="Submit">○</button>
 <p>Click the round "Submit" button.</p>
 ```
+
+## Known limitations
+
+- **Vocabulary exhaustion** — `SENSORY_WORDS` is a finite list; novel sensory adjectives ("translucent", "neon") escape detection.
+- **Japanese (CJK)** — word-boundary detection uses a content-character fallback; leftover structural tokens can yield false passes.
+- **Semantic disconnect** — validates instruction *phrasing* only, not whether the real button has a visible non-sensory label.
+
+See [Technique coverage for 1.3.3](/rules/coverage-matrix#1-3-3-sensory-characteristics).

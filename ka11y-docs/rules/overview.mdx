@@ -1,44 +1,82 @@
 ---
 title: "WCAG Rules Overview"
-description: "Coverage map — which rules are checked by axe-core vs Python auditors"
+description: "Coverage map — which rules are checked by axe-core, Python auditors, and Node custom checks"
 ---
+
+<Info>
+  For a per-technique breakdown of what each rule detects vs. misses, see [WCAG Technique Coverage Matrix](/rules/coverage-matrix).
+</Info>
 
 ## Coverage matrix
 
-| WCAG SC | Criterion | Level | axe-core | Python | Engine | Notes |
-|---------|-----------|-------|----------|--------|--------|-------|
-| **1.1.1** | Non-text Content | A | Partial | **Full** | Pipeline | Python adds OCR-backed text checks and image classification with full DOM context |
-| **1.3.1** | Info and Relationships | A | Partial | **Full** | Pipeline | Python natively checks fieldsets, labels, and ARIA groupings |
-| **1.3.3** | Sensory Characteristics | A | — | **Full** | Pipeline | Python NLP-backed instruction analysis (EN/JA) |
-| **1.3.4** | Orientation | AA | — | **Full** | Rendered | Portrait/landscape scenarios; rotate-overlay detection |
-| **1.3.5** | Identify Input Purpose | AA | ✓ | — | Static | axe-core only |
-| **1.4.1** | Use of Color | A | ✓ | — | Static | axe-core only |
-| **1.4.3** | Contrast (Minimum) | AA | Partial | **Full** | Pipeline | Unified engine calculates rendered contrast and tracks opacity |
-| **1.4.5** | Images of Text | AA | — | Partial | Pipeline | Python flags embedded text in non-exempt images; logos and complex charts use exemptions |
-| **1.4.6** | Contrast (Enhanced) | AAA | Partial | **Full** | Pipeline | Inherits unified contrast engine with AAA thresholds |
-| **1.4.4** | Resize Text | AA | — | **Full** | Rendered | 200% font-size simulation; clipped-text detection |
-| **1.4.10** | Reflow | AA | — | **Full** | Rendered | 320 px viewport; horizontal-scroll detection |
-| **1.4.11** | Non-text Contrast | AA | — | Partial | Pipeline | Analyzes rendered boundaries & visual styles |
-| **1.4.12** | Text Spacing | AA | — | **Full** | Rendered | CSS spacing overrides; clipped-text diff |
-| **1.4.13** | Content on Hover or Focus | AA | — | **Full** | Rendered | Hover/focus popup dismissible/hoverable/persistent checks |
-| **2.1.1** | Keyboard | A | ✓ | — | Static | axe-core only |
-| **2.2.2** | Pause, Stop, Hide | A | Partial | **Full** | Static | Python detects CSS animations, carousels, GIFs |
-| **2.4.1** | Bypass Blocks | A | ✓ | — | Static | axe-core only |
-| **2.4.2** | Page Titled | A | ✓ | — | Static | axe-core only |
-| **2.4.3** | Focus Order | A | ✓ | — | Static | axe-core only |
-| **2.4.4** | Link Purpose | A | ✓ | — | Static | axe-core only |
-| **2.4.7** | Focus Visible | AA | Partial | **Full** | Pipeline | Python simulates keyboard focus and visual state deltas (box-shadow, outline) |
-| **2.4.11** | Focus Not Obscured (Min) | AA | — | **Full** | Rendered | Keyboard traversal; full-obscuration detection |
-| **2.4.12** | Focus Not Obscured (Enh) | AAA | — | **Full** | Rendered | Same traversal; stricter partial-obscuration check |
-| **2.4.13** | Focus Appearance | AAA | — | **Full** | Pipeline | Calculates rendered focus ring thickness/contrast |
-| **2.5.3** | Label in Name | A | ✓ | **Full** | Pipeline | Rigorous substring and token matching against visual text |
-| **2.5.8** | Target Size (Minimum) | AA | — | **Full** | Pipeline | Measures effective clickable area (wrappers + labels) |
-| **3.1.1** | Language of Page | A | ✓ | — | Static | axe-core only |
-| **3.3.1** | Error Identification | A | Partial | **Full** | Static | Python checks aria-live/role=alert linkage |
-| **3.3.2** | Labels or Instructions | A | Partial | **Full** | Static | Python checks autocomplete, placeholder-only |
-| **4.1.1** | Parsing | A | ✓ | — | Static | axe-core only |
-| **4.1.2** | Name, Role, Value | A | ✓ | Partial | Static | Python adds functional image accessible-name checks for logos, icons, and button-like images |
-| **4.1.3** | Status Messages | AA | ✓ | — | Static | axe-core only |
+Legend: **Full** = primary detection engine. **Partial** = detects some patterns but has known gaps. **—** = not covered.
+
+| WCAG SC | Criterion | Level | axe-core | Python | Node custom | Engine | Notes |
+|---------|-----------|-------|----------|--------|-------------|--------|-------|
+| **1.1.1** | Non-text Content | A | Partial | **Full** | — | Pipeline | OCR-backed text + image classification |
+| **1.2.1** | Audio/Video-only (Prerecorded) | A | — | Partial | Partial | Static | Transcript detection; no equivalence check |
+| **1.3.1** | Info and Relationships | A | Partial | **Full** | — | Pipeline | Fieldsets, labels, ARIA groupings |
+| **1.3.2** | Meaningful Sequence | A | — | — | Partial | Static | Flex/grid order + float detection |
+| **1.3.3** | Sensory Characteristics | A | — | **Full** | — | Pipeline | NLP-backed instruction analysis (EN/JA) |
+| **1.3.4** | Orientation | AA | — | **Full** | Partial | Rendered | Portrait/landscape; rotate-overlay detection |
+| **1.3.5** | Identify Input Purpose | AA | ✓ | — | — | Static | axe-core only |
+| **1.4.1** | Use of Color | A | ✓ | — | Partial | Static | Node check covers inline links only |
+| **1.4.3** | Contrast (Minimum) | AA | Partial | **Full** | — | Pipeline | Unified contrast engine + opacity tracking |
+| **1.4.4** | Resize Text | AA | — | **Full** | — | Rendered | 200% font-size simulation |
+| **1.4.5** | Images of Text | AA | — | Partial | Partial | Pipeline | Defense-in-depth between node heuristic + Python OCR |
+| **1.4.6** | Contrast (Enhanced) | AAA | Partial | **Full** | — | Pipeline | AAA thresholds |
+| **1.4.10** | Reflow | AA | — | **Full** | — | Rendered | 320 px viewport |
+| **1.4.11** | Non-text Contrast | AA | — | Partial | — | Pipeline | Default-state only |
+| **1.4.12** | Text Spacing | AA | — | **Full** | — | Rendered | CSS spacing overrides + clipping diff |
+| **1.4.13** | Content on Hover or Focus | AA | — | **Full** | — | Rendered | Dismissible/hoverable/persistent checks |
+| **2.1.1** | Keyboard | A | ✓ | — | — | Static | axe-core only |
+| **2.1.2** | No Keyboard Trap | A | — | — | Partial | Interactive | Forward-Tab only; no Shift+Tab / Escape |
+| **2.1.4** | Character Key Shortcuts | A | — | — | Partial | Static | Inline handler scan only |
+| **2.2.2** | Pause, Stop, Hide | A | Partial | **Full** | — | Static | CSS animations, carousels, GIFs |
+| **2.4.1** | Bypass Blocks | A | ✓ | — | — | Static | axe-core only |
+| **2.4.2** | Page Titled | A | ✓ | — | — | Static | axe-core only |
+| **2.4.3** | Focus Order | A | ✓ | — | — | Static | axe-core only |
+| **2.4.4** | Link Purpose (In Context) | A | ✓ | — | — | Static | axe-core only |
+| **2.4.5** | Multiple Ways | AA | — | — | Partial | Static | Single-page scope |
+| **2.4.7** | Focus Visible | AA | Partial | **Full** | Partial | Interactive | Python policy + Node interactive verification |
+| **2.4.8** | Location | AAA | — | — | Partial | Static | Breadcrumbs + aria-current |
+| **2.4.9** | Link Purpose (Link Only) | AAA | — | — | Partial | Static | Keyword-based generic-text detection |
+| **2.4.11** | Focus Not Obscured (Min) | AA | — | **Full** | — | Rendered | |
+| **2.4.12** | Focus Not Obscured (Enh) | AAA | — | **Full** | — | Rendered | |
+| **2.4.13** | Focus Appearance | AAA | — | **Full** | Partial | Pipeline | Rendered ring thickness + contrast |
+| **2.5.2** | Pointer Cancellation | A | — | — | Partial | Static | Inline handler pattern scan |
+| **2.5.3** | Label in Name | A | ✓ | **Full** | — | Pipeline | NFC-normalised substring match |
+| **2.5.7** | Dragging Movements | AA | — | — | Partial | Static | Library-based drag detection |
+| **2.5.8** | Target Size (Minimum) | AA | — | **Full** | — | Pipeline | 24×24 + inline/UA/offset exceptions |
+| **3.1.1** | Language of Page | A | ✓ | — | — | Static | axe-core only |
+| **3.1.6** | Pronunciation | AAA | — | — | Partial | Static | `<ruby>` + glossary detection |
+| **3.2.1** | On Focus | A | — | — | Partial | Static | Inline handler scan |
+| **3.2.2** | On Input | A | — | — | Partial | Static | Inline handler scan |
+| **3.2.6** | Consistent Help | A | — | — | Partial | Static | Single-page scope |
+| **3.3.1** | Error Identification | A | Partial | **Full** | — | Static | aria-live/role=alert linkage |
+| **3.3.2** | Labels or Instructions | A | Partial | **Full** | — | Static | autocomplete + placeholder-only |
+| **3.3.3** | Error Suggestion | AA | — | — | Partial | Static | Keyword heuristic |
+| **3.3.4** | Error Prevention (Legal/Financial) | AA | — | — | Partial | Static | Confirm/review/undo heuristic |
+| **3.3.7** | Redundant Entry | A | — | — | Partial | Static | Single-page scope |
+| **3.3.8** | Accessible Authentication (Min) | AA | — | — | Partial | Static | CAPTCHA + alt-auth detection |
+| **4.1.1** | Parsing (obsolete in 2.2) | — | ✓ | — | Partial | Static | Duplicate IDs + malformed nesting |
+| **4.1.2** | Name, Role, Value | A | ✓ | Partial | — | Static | Functional image accessible-name |
+| **4.1.3** | Status Messages | AA | ✓ | — | Partial | Static | aria-live region presence |
+
+### Unimplemented (A / AA)
+
+| SC | Level | Status |
+|---|---|---|
+| 1.2.2 Captions (Prerecorded) | A | Not implemented — automatable |
+| 1.2.3 Audio Description or Media Alt | A | Not implemented — automatable |
+| 1.2.4 Captions (Live) | AA | Not implemented — automatable |
+| 1.2.5 Audio Description (Prerecorded) | AA | Not implemented — automatable |
+| 1.4.2 Audio Control | A | Not implemented — automatable |
+| 2.2.1 Timing Adjustable | A | Not implemented — partial automatability |
+| 2.3.1 Three Flashes or Below | A | Not implemented — requires video-frame analysis |
+| 3.1.2 Language of Parts | AA | Not implemented — requires language-ID |
+| 3.2.3 Consistent Navigation | AA | Not implemented — requires multi-page crawl |
+| 3.2.4 Consistent Identification | AA | Not implemented — requires multi-page crawl |
 
 ---
 
@@ -69,6 +107,26 @@ Python auditors map each WCAG SC to a default severity level:
 | 4.1.2 | `high` |
 
 axe-core assigns its own severity values (`critical`, `serious`, `moderate`, `minor`) which are mapped to the ka11y schema (`critical`, `high`, `medium`, `low`) in `axeResultMapper.js`.
+
+---
+
+## Language support
+
+ka11y targets **English and Japanese** as primary audit languages. Finding text (criterion names, reasons, suggested fixes) is fully localised via the shared `i18n/rules.yml` + locale overlay system.
+
+NLP-backed rule quality differs between languages:
+
+| Rule category | EN | JA |
+|---|---|---|
+| NLP text analysis (1.3.3, 2.4.9, 3.3.3) | Strong | Partial |
+| Keyword pattern matching (Node checks) | Strong | Partial |
+| OCR-based image checks | Strong | Partial |
+| DOM-structural checks (contrast, forms, ARIA) | Strong | Strong |
+| Rendered layout checks | Strong | Strong |
+
+Japanese audits produce valid findings but with a higher false-positive/false-negative rate in NLP-dependent rules. The primary causes are spaCy `ja_core_news_sm` tokenization accuracy on web-register text, CJK word-boundary handling, and incomplete Japanese sensory/generic-phrase vocabulary.
+
+See [WCAG Technique Coverage Matrix — Language Support](/rules/coverage-matrix#language-support-limitations) and [Japanese Language Support](/internals/japanese-language-support) for the full gap analysis and recommended fixes.
 
 ---
 
