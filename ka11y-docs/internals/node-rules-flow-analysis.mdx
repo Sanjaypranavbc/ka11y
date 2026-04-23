@@ -4,7 +4,8 @@ description: "End-to-end request flow and rule-by-rule execution details for the
 ---
 
 > Generated: 2026-04-08
-> Scope: `ka11y-node/src/custom-checks/` (24 custom WCAG checks) + `ka11y-node/src/services/`
+> Updated: 2026-04-23 — added 4 new static checks (1.2.2, 1.2.3, 1.4.2, background-image-content)
+> Scope: `ka11y-node/src/custom-checks/` (28 custom WCAG checks) + `ka11y-node/src/services/`
 > Stack: Node.js + Express + Puppeteer + axe-core
 
 > Update 2026-04-13: custom checks now receive shared rule context (`lang` + shared config) from the service layer. Migrated checks read EN/JA heuristics and selected reason templates from `config/universal.yml` instead of hardcoded JS lists.
@@ -48,8 +49,8 @@ flowchart TD
     SVC --> STAT["runStaticChecks(page)"]
     SVC --> INTER["runInteractiveChecks(page)"]
 
-    subgraph "Static Checks (Parallel)"
-        S1["HTML Parsing / Parsing"]
+    subgraph "Static Checks (Parallel) — 23 checks"
+        S1["HTML Parsing"]
         S2["Status Messages"]
         S3["Multiple Ways"]
         S4["Meaningful Sequence"]
@@ -63,14 +64,18 @@ flowchart TD
         S12["Accessible Auth"]
         S13["Use of Color"]
         S14["Audio Transcript"]
-        S15["Link Purpose"]
-        S16["Location"]
-        S17["Orientation (Static)"]
-        S18["Images of Text"]
-        S19["Pronunciation"]
+        S15["Captions Prerecorded ★"]
+        S16["Audio Description ★"]
+        S17["Audio Control ★"]
+        S18["Link Purpose"]
+        S19["Location"]
+        S20["Orientation (Static)"]
+        S21["Images of Text"]
+        S22["Background Image Content ★"]
+        S23["Pronunciation"]
     end
 
-    subgraph "Interactive Checks (Sequential)"
+    subgraph "Interactive Checks (Sequential) — 5 checks"
         I1["Focus Visible"]
         I2["Focus Appearance"]
         I3["On Focus"]
@@ -78,7 +83,7 @@ flowchart TD
         I5["Keyboard Trap"]
     end
 
-    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19
+    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21 & S22 & S23
     INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
 

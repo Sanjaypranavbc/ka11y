@@ -290,10 +290,100 @@ async function run(page, context = {}) {
     }
   }
 
-  if (!trapHtml && arrowTrapFindings.length === 0 && iframeTrapFindings.length === 0) {
+  // ── F85 modal-without-escape detection ──────────────────────────────────
+  // Focus visible dialogs and check whether Escape returns focus outside.
+  // Open-but-focus-scoped modals that can't be escape-closed are flagged.
+  const modalFindings = [];
+
+  if (!trapHtml) {
+    const dialogs = await page.evaluate(() => {
+      const SEL = 'dialog[open], [role="dialog"], [role="alertdialog"], [aria-modal="true"]';
+      return Array.from(document.querySelectorAll(SEL))
+        .filter(el => {
+          const cs = window.getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        })
+        .slice(0, 5)
+        .map(el => ({
+          id: el.id || null,
+          html: el.outerHTML.slice(0, 150),
+          selector: el.id ? `#${el.id}` : null,
+          hasCloseBtn: !!el.querySelector(
+            'button[aria-label*="close" i], button[aria-label*="閉じる"], [aria-label*="close" i][role="button"], button.close, .modal-close'
+          ),
+        }));
+    });
+
+    for (const dlg of (dialogs || [])) {
+      // Focus the dialog (or first focusable within).
+      await page.evaluate((sel) => {
+        const root = sel ? document.querySelector(sel) : null;
+        const target = root
+          ? (root.querySelector('[autofocus], button, [href], input, [tabindex]:not([tabindex="-1"])') || root)
+          : null;
+        if (target && typeof target.focus === 'function') {
+          target.focus({ preventScroll: true });
+        }
+      }, dlg.selector);
+      await new Promise(r => setTimeout(r, SETTLE_MS));
+
+      // Press Escape and see if focus leaves the dialog.
+      await page.keyboard.press('Escape');
+      await new Promise(r => setTimeout(r, SETTLE_MS + 40));
+
+      const stillInside = await page.evaluate((sel) => {
+        const root = sel ? document.querySelector(sel) : null;
+        if (!root) return false; // dialog gone → Escape closed it, good.
+        // If dialog still visible AND focus is inside it, the modal is a trap.
+        const cs = window.getComputedStyle(root);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        const rect = root.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return false;
+        const active = document.activeElement;
+        return !!active && root.contains(active);
+      }, dlg.selector);
+
+      if (stillInside) {
+        modalFindings.push({
+          type: 'modal-no-escape',
+          html: dlg.html,
+          hasCloseBtn: dlg.hasCloseBtn,
+        });
+      }
+    }
+  }
+
+  if (
+    !trapHtml
+    && arrowTrapFindings.length === 0
+    && iframeTrapFindings.length === 0
+    && modalFindings.length === 0
+  ) {
     return {
       successCriteriaId: SC,
       rules: [{ ruleId: RULE_ID, description: 'Keyboard focus must not be trapped in a component', impact: null, status: 'pass', reason: _t(sharedContext, 'No keyboard focus traps detected during Tab navigation.', 'Tab ナビゲーション中にキーボードフォーカストラップは検出されませんでした。'), helpUrl: HELP_URL }],
+    };
+  }
+
+  if (modalFindings.length > 0) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'Keyboard focus must not be trapped in a component',
+        impact: 'serious',
+        status: 'fail',
+        reason: _t(
+          sharedContext,
+          '{count} modal dialog(s) do not release keyboard focus when Escape is pressed (F85). Keyboard-only users cannot exit.',
+          '{count} 件のモーダルダイアログで Escape キーを押してもフォーカスが解放されません（F85）。キーボード操作のみのユーザーは抜け出せません。',
+          { count: modalFindings.length },
+        ),
+        elements: modalFindings.map(m => ({ html: m.html, tag: 'DIALOG' })),
+        helpUrl: HELP_URL,
+      }],
     };
   }
 
