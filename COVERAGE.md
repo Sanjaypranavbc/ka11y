@@ -4,10 +4,10 @@
 
 This report combines direct source inspection of `ka11y-node` and `ka11y-python` with **empirical validation against 7 real production websites** (W3Schools, IRS.gov, BBC, Amazon, Stack Overflow, Wikipedia, NHS UK) run on 2026-03-26. Coverage is counted only from criteria actually emitted by the current pipelines, not from metadata catalogs alone.
 
-- `ka11y-node` emits **47** unique WCAG 2.2 success criteria at maximum (`AAA`) scope.
+- `ka11y-node` emits **48** unique WCAG 2.2 success criteria at maximum (`AAA`) scope.
 - `ka11y-python` emits **18** unique WCAG 2.2 success criteria through `combined/findings.py` and `combined/stages.py`.
-- The combined project emits **53 / 87** WCAG 2.2 success criteria, which is **60.9%** overall coverage.
-- Coverage is strong in Level A (**80.6%**) and AA (**84.6%**); Level AAA remains narrow: **6 / 30** criteria (**20.0%**).
+- The combined project emits **54 / 87** WCAG 2.2 success criteria, which is **62.1%** overall coverage.
+- Coverage is strong in Level A (**83.9%**) and AA (**84.6%**); Level AAA remains narrow: **6 / 30** criteria (**20.0%**).
 - **6 bugs fixed** in this release: icon/button alt-text false positives, form 3.3.2 required-field false negative, focus-visible transparent-outline regex gaps, error-prevention false positives, and two pre-existing test mock mismatches.
 - Separate Japanese-site coverage output is now supported via `scripts/wcag_audit_runner.py --include-japanese`, with report text kept in English for cross-team readability.
 
@@ -15,7 +15,7 @@ This report combines direct source inspection of `ka11y-node` and `ka11y-python`
 
 | Evidence source | Status | Notes |
 | --- | --- | --- |
-| Node test suite | Verified | **173** tests passed (27 suites) |
+| Node test suite | Verified | **193** tests passed (29 suites) |
 | Python test suite | Verified | **529** tests passed |
 | Real-website empirical test | Verified | 7 production sites tested 2026-03-26; **38 SCs** observed firing |
 | Bug fixes validated | Verified | 6 false-positive / false-negative fixes; all existing tests still pass |
@@ -37,10 +37,10 @@ This report combines direct source inspection of `ka11y-node` and `ka11y-python`
 
 | Level | Total SC | Node | Python | Overlap | Combined covered | Missing | Combined coverage |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| A | 31 | 24 | 6 | 5 | 25 | 6 | **80.6%** |
+| A | 31 | 25 | 6 | 5 | 26 | 5 | **83.9%** |
 | AA | 26 | 18 | 10 | 6 | 22 | 4 | **84.6%** |
 | AAA | 30 | 5 | 2 | 1 | 6 | 24 | **20.0%** |
-| **Total** | **87** | **47** | **18** | **12** | **53** | **34** | **60.9%** |
+| **Total** | **87** | **48** | **18** | **12** | **54** | **33** | **62.1%** |
 
 _Note: overlap now includes `1.4.6` and `4.1.2` in addition to `1.4.5`, and Node coverage now includes `3.1.6`._
 
@@ -48,7 +48,7 @@ _Note: overlap now includes `1.4.6` and `4.1.2` in addition to `1.4.5`, and Node
 
 | Principle | Total SC | Node | Python | Combined | Combined coverage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Perceivable | 29 | 14 | 10 | 17 | **58.6%** |
+| Perceivable | 29 | 15 | 10 | 18 | **62.1%** |
 | Operable | 34 | 20 | 5 | 22 | **64.7%** |
 | Understandable | 21 | 10 | 2 | 11 | **52.4%** |
 | Robust | 3 | 3 | 1 | 3 | **100.0%** |
@@ -58,12 +58,12 @@ _Note: overlap now includes `1.4.6` and `4.1.2` in addition to `1.4.5`, and Node
 | Category | Count | Criteria |
 | --- | ---: | --- |
 | Overlap between Node and Python | 12 | `1.1.1`, `1.3.4`, `1.4.3`, `1.4.4`, `1.4.5`, `1.4.6`, `1.4.12`, `2.2.2`, `2.5.3`, `2.5.8`, `3.3.2`, `4.1.2` |
-| Node-only coverage | 35 | `1.2.1`, `1.2.2`, `1.3.1`, `1.3.2`, `1.3.5`, `1.4.1`, `1.4.2`, `2.1.1`, `2.1.2`, `2.1.4`, `2.2.1`, `2.2.4`, `2.4.1`, `2.4.2`, `2.4.3`, `2.4.4`, `2.4.5`, `2.4.6`, `2.4.7`, `2.4.8`, `2.4.9`, `2.4.13`, `2.5.2`, `2.5.7`, `3.1.1`, `3.1.2`, `3.1.6`, `3.2.1`, `3.2.2`, `3.2.6`, `3.3.3`, `3.3.4`, `3.3.8`, `4.1.1`, `4.1.3` |
+| Node-only coverage | 36 | `1.2.1`, `1.2.2`, `1.2.3`, `1.3.1`, `1.3.2`, `1.3.5`, `1.4.1`, `1.4.2`, `2.1.1`, `2.1.2`, `2.1.4`, `2.2.1`, `2.2.4`, `2.4.1`, `2.4.2`, `2.4.3`, `2.4.4`, `2.4.5`, `2.4.6`, `2.4.7`, `2.4.8`, `2.4.9`, `2.4.13`, `2.5.2`, `2.5.7`, `3.1.1`, `3.1.2`, `3.1.6`, `3.2.1`, `3.2.2`, `3.2.6`, `3.3.3`, `3.3.4`, `3.3.8`, `4.1.1`, `4.1.3` |
 | Python-only coverage | 6 | `1.4.10`, `1.4.11`, `1.4.13`, `2.4.11`, `2.4.12`, `3.3.1` |
 
 ## Empirical Validation — 7 Real Production Websites (2026-03-26)
 
-Tests ran via `POST /api/v1/analyse-url-flat` (Node service, axe-core + 22 custom checks).
+Tests ran via `POST /api/v1/analyse-url-flat` (Node service, axe-core + 28 custom checks).
 
 | Site | Total | Fail | Pass | Needs Review | Notable WCAG failures |
 | --- | ---: | ---: | ---: | ---: | --- |
@@ -131,10 +131,10 @@ _18 Python-pipeline SC outputs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, a
 
 | Level | High | Medium | Low | Covered |
 | --- | ---: | ---: | ---: | ---: |
-| A | 13 | 9 | 3 | 25 |
+| A | 13 | 10 | 3 | 26 |
 | AA | 10 | 11 | 1 | 22 |
 | AAA | 2 | 2 | 2 | 6 |
-| Total | 25 | 22 | 6 | 53 |
+| Total | 25 | 23 | 6 | 54 |
 
 ## Bug Fixes Applied (2026-03-26)
 
@@ -154,7 +154,7 @@ _18 Python-pipeline SC outputs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, a
 | --- | ---: | --- |
 | Direct axe WCAG-tagged rules | 26 | Backed by numeric `wcag***` tags in local `axe-core 4.11.1` |
 | Fallback-mapped best-practice rules | 8 | `2.4.3` and `2.4.6` are fallback-only; rest overlap direct coverage |
-| Custom Node checks | 23 | 23 files in `src/custom-checks/*.check.js` |
+| Custom Node checks | 28 | 28 files in `src/custom-checks/*.check.js` (23 static + 5 interactive) |
 | Pure best-practice rules not counted | 8 | `aria-text`, `empty-table-header`, `frame-tested`, `hidden-content`, `label-title-only`, `landmark-complementary-is-top-level`, `landmark-main-is-top-level`, `scope-attr-valid` |
 
 ## Python Coverage Composition
@@ -189,7 +189,7 @@ _18 Python-pipeline SC outputs (1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1, a
 
 | Level | Missing count | Missing criteria |
 | --- | ---: | --- |
-| A | 6 | `1.2.3` Audio Description or Media Alternative (Prerecorded), `1.3.3` Sensory Characteristics, `2.3.1` Three Flashes or Below Threshold, `2.5.1` Pointer Gestures, `2.5.4` Motion Actuation, `3.3.7` Redundant Entry |
+| A | 5 | `1.3.3` Sensory Characteristics, `2.3.1` Three Flashes or Below Threshold, `2.5.1` Pointer Gestures, `2.5.4` Motion Actuation, `3.3.7` Redundant Entry |
 | AA | 4 | `1.2.4` Captions (Live), `1.2.5` Audio Description (Prerecorded), `3.2.3` Consistent Navigation, `3.2.4` Consistent Identification |
 | AAA | 24 | `1.2.6` Sign Language (Prerecorded), `1.2.7` Extended Audio Description (Prerecorded), `1.2.8` Media Alternative (Prerecorded), `1.2.9` Audio-only (Live), `1.3.6` Identify Purpose, `1.4.7` Low or No Background Audio, `1.4.8` Visual Presentation, `1.4.9` Images of Text (No Exception), `2.1.3` Keyboard (No Exception), `2.2.3` No Timing, `2.2.5` Re-authenticating, `2.2.6` Timeouts, `2.3.2` Three Flashes, `2.3.3` Animation from Interactions, `2.4.10` Section Headings, `2.5.5` Target Size, `2.5.6` Concurrent Input Mechanisms, `3.1.3` Unusual Words, `3.1.4` Abbreviations, `3.1.5` Reading Level, `3.2.5` Change on Request, `3.3.5` Help, `3.3.6` Error Prevention (All), `3.3.9` Accessible Authentication (Enhanced) |
 

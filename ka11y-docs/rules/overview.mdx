@@ -15,12 +15,15 @@ Legend: **Full** = primary detection engine. **Partial** = detects some patterns
 |---------|-----------|-------|----------|--------|-------------|--------|-------|
 | **1.1.1** | Non-text Content | A | Partial | **Full** | — | Pipeline | OCR-backed text + image classification |
 | **1.2.1** | Audio/Video-only (Prerecorded) | A | — | Partial | Partial | Static | Transcript detection; no equivalence check |
+| **1.2.2** | Captions (Prerecorded) | A | — | — | Partial | Static | Flags `<video>` without `<track kind="captions">`; cross-origin embeds emit INCOMPLETE |
+| **1.2.3** | Audio Description or Media Alt | A | — | — | Partial | Static | Detects `<track kind="descriptions">`, sibling description audio, or container transcript link |
 | **1.3.1** | Info and Relationships | A | Partial | **Full** | — | Pipeline | Fieldsets, labels, ARIA groupings |
 | **1.3.2** | Meaningful Sequence | A | — | — | Partial | Static | Flex/grid order + float detection |
 | **1.3.3** | Sensory Characteristics | A | — | **Full** | — | Pipeline | NLP-backed instruction analysis (EN/JA) |
 | **1.3.4** | Orientation | AA | — | **Full** | Partial | Rendered | Portrait/landscape; rotate-overlay detection |
 | **1.3.5** | Identify Input Purpose | AA | ✓ | — | — | Static | axe-core only |
 | **1.4.1** | Use of Color | A | ✓ | — | Partial | Static | Node check covers inline links only |
+| **1.4.2** | Audio Control | A | — | — | Partial | Static | Flags unmuted autoplay media without native or external controls |
 | **1.4.3** | Contrast (Minimum) | AA | Partial | **Full** | — | Pipeline | Unified contrast engine + opacity tracking |
 | **1.4.4** | Resize Text | AA | — | **Full** | — | Rendered | 200% font-size simulation |
 | **1.4.5** | Images of Text | AA | — | Partial | Partial | Pipeline | Defense-in-depth between node heuristic + Python OCR |
@@ -67,16 +70,13 @@ Legend: **Full** = primary detection engine. **Partial** = detects some patterns
 
 | SC | Level | Status |
 |---|---|---|
-| 1.2.2 Captions (Prerecorded) | A | Not implemented — automatable |
-| 1.2.3 Audio Description or Media Alt | A | Not implemented — automatable |
 | 1.2.4 Captions (Live) | AA | Not implemented — automatable |
-| 1.2.5 Audio Description (Prerecorded) | AA | Not implemented — automatable |
-| 1.4.2 Audio Control | A | Not implemented — automatable |
+| 1.2.5 Audio Description (Prerecorded) | AA | Partially covered by the new 1.2.3 check — deeper verification pending |
 | 2.2.1 Timing Adjustable | A | Not implemented — partial automatability |
 | 2.3.1 Three Flashes or Below | A | Not implemented — requires video-frame analysis |
 | 3.1.2 Language of Parts | AA | Not implemented — requires language-ID |
-| 3.2.3 Consistent Navigation | AA | Not implemented — requires multi-page crawl |
-| 3.2.4 Consistent Identification | AA | Not implemented — requires multi-page crawl |
+| 3.2.3 Consistent Navigation | AA | Deferred — requires multi-page crawl |
+| 3.2.4 Consistent Identification | AA | Deferred — requires multi-page crawl |
 
 ---
 

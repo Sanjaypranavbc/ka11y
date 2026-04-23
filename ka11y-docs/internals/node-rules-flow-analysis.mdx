@@ -145,6 +145,158 @@ flowchart TD
 
 ---
 
+### 1.2.2 — Captions (Prerecorded) ★ New (Level A)
+**Check:** `captions-prerecorded.check.js`
+
+#### Flowchart
+```mermaid
+flowchart TD
+    VID["video elements"] --> LIVE{"Looks live? data-live / hls / stream"}
+    LIVE -- Yes --> SKIP["Skip (live content — SC 1.2.4 scope)"]
+    LIVE -- No --> MUTED{"muted?"}
+    MUTED -- Yes --> SKIP
+    MUTED -- No --> CROSS{"Cross-origin iframe (YouTube/Vimeo)?"}
+    CROSS -- Yes --> INC1["INCOMPLETE: Cannot inspect cross-origin captions"]
+    CROSS -- No --> TRACK{"track kind=captions/subtitles with src + srclang?"}
+    TRACK -- Yes --> PASS["PASS"]
+    TRACK -- No --> ARIA{"aria-describedby → text alternative?"}
+    ARIA -- Yes --> PASS
+    ARIA -- No --> DET{"nearby details with transcript keywords?"}
+    DET -- Yes --> PASS
+    DET -- No --> FAIL["FAIL: 1.2.2 No captions found"]
+```
+
+#### Cases Covered
+| Case | Detection |
+|------|-----------|
+| VTT / SRT caption track | `<track kind="captions">` or `kind="subtitles"` with `src` + `srclang` |
+| ARIA text alternative | `aria-describedby` pointing to a valid text block |
+| Collapsed transcript | `<details>` with caption/transcript keyword in text |
+| Live content exemption | `data-live="true"`, HLS URL, `/stream/` in src — excluded |
+| Cross-origin video players | Flagged INCOMPLETE (YouTube/Vimeo iframe — cannot inspect) |
+
+#### Cases Missed
+| Case | Why |
+|------|-----|
+| Cross-origin iframe captions | Same-origin restriction on iframe DOM access |
+| Captions injected by JS after load | Static DOM snapshot only |
+| Third-party caption overlays (Rev.com etc.) | External script; no DOM marker |
+
+---
+
+### 1.2.3 — Audio Description or Media Alternative ★ New (Level A)
+**Check:** `audio-description.check.js`
+
+#### Flowchart
+```mermaid
+flowchart TD
+    VID["video elements"] --> MUTED{"muted?"}
+    MUTED -- Yes --> SKIP["Skip (no audio track)"]
+    MUTED -- No --> DESC{"track kind=descriptions with src + srclang?"}
+    DESC -- Yes --> PASS["PASS"]
+    DESC -- No --> ALT{"Second audio element labeled as description?"}
+    ALT -- Yes --> PASS
+    ALT -- No --> TXT{"Nearby alt-text link or details block?"}
+    TXT -- Yes --> PASS
+    TXT -- No --> FAIL["FAIL: 1.2.3 No audio description or text alternative"]
+```
+
+#### Detection signals (in priority order)
+| Signal | What is checked |
+|--------|----------------|
+| `<track kind="descriptions">` | Must have valid `src` + `srclang` attribute |
+| Second `<audio>` / `<source>` | `data-kind` or `title` attribute contains "description" or "audio-desc" |
+| Nearby text alternative | `<a>` with ALT_KEYWORDS in text, or `<details>` with transcript/description keyword |
+
+ALT_KEYWORDS: `transcript`, `text version`, `full-text alternative`, `audio description`, `descriptive transcript`, `書き起こし`, `文字起こし`, `音声解説`, `音声ガイド`, `代替テキスト`
+
+#### Cases Missed
+| Case | Why |
+|------|-----|
+| Description on a separate page | External link resolution not followed |
+| Audio description via third-party player | No DOM marker |
+| Video-only content (1.2.1 scope) | Muted videos exempt from 1.2.3 |
+
+---
+
+### 1.4.2 — Audio Control ★ New (Level A)
+**Check:** `audio-control.check.js`
+
+#### Flowchart
+```mermaid
+flowchart TD
+    MEDIA["audio + video elements"] --> AUTO{"autoplay attribute or data-autoplay?"}
+    AUTO -- No --> PASS["PASS"]
+    AUTO -- Yes --> MUTED{"muted?"}
+    MUTED -- Yes --> PASS
+    MUTED -- No --> DUR{"Duration known and <= 3 s?"}
+    DUR -- Yes --> PASS
+    DUR -- No --> CTRL{"native controls attribute?"}
+    CTRL -- Yes --> PASS
+    CTRL -- No --> EXT{"Nearby pause/stop/mute/volume button?"}
+    EXT -- Yes --> PASS
+    EXT -- No --> FAIL["FAIL: 1.4.2 Autoplaying audio with no control"]
+```
+
+#### Exemption logic
+| Exemption | Condition |
+|-----------|-----------|
+| Muted autoplay | `media.muted === true` — no audible audio |
+| Short duration | `data-duration` or `media.duration` ≤ 3 seconds |
+| Native controls | `controls` attribute present on the element |
+| External control | Button/role="button" in nearest `figure/article/section` with pause/stop/mute/volume label — also matches JP: `一時停止`, `停止`, `音量`, `消音` |
+
+#### Cases Missed
+| Case | Why |
+|------|-----|
+| Autoplay triggered by JS after load | Attribute absent at snapshot time |
+| Volume slider without text label | Control text pattern only — unlabeled sliders pass |
+| Background music via Web Audio API | Not a `<audio>` / `<video>` element |
+
+---
+
+### 1.1.1 — Background Image Content ★ New supplemental (Level A)
+**Check:** `background-image-content.check.js`
+**SC:** 1.1.1 (also emits supplementary 1.4.5 hints)
+
+This check is **supplemental to axe-core's 1.1.1 coverage**. It specifically targets CSS `background-image` URLs — a category that axe-core does not inspect.
+
+#### Flowchart
+```mermaid
+flowchart TD
+    ALL["All elements (max 400)"] --> BG{"background-image: url(...) set?"}
+    BG -- No / gradient-only --> SKIP["Skip"]
+    BG -- Yes --> DECOR{"URL matches decorative pattern? gradient/pattern/texture/noise/divider"}
+    DECOR -- Yes --> SKIP
+    DECOR -- No --> SIZE{"Element >= 24×24 px and visible?"}
+    SIZE -- No --> SKIP
+    SIZE -- Yes --> NAME{"aria-label / title / role=img + alt present?"}
+    NAME -- Yes --> PASS["PASS"]
+    NAME -- No --> TEXT{"URL matches text-hint? banner/headline/title/hero/cta/promo"}
+    TEXT -- Yes --> FAIL["FAIL: 1.1.1 Text-hint background image lacks text alternative"]
+    TEXT -- No --> NEARBY{"Nearby heading / figcaption / aria-labelledby?"}
+    NEARBY -- Yes --> PASS
+    NEARBY -- No --> INC["INCOMPLETE: Background image — manual review needed"]
+```
+
+#### Cases Covered
+| Case | Detection |
+|------|-----------|
+| Hero / banner images | URL keyword matching: `banner`, `headline`, `title`, `hero`, `cta`, `promo`, `masthead` |
+| Decorative pattern exemption | URL keyword: `gradient`, `pattern`, `noise`, `texture`, `overlay`, `fade`, `divider` |
+| ARIA text alternative | `aria-label`, `title`, `role="img"` + `aria-label` combo |
+| Nearby semantic label | Adjacent heading, `<figcaption>`, or `aria-labelledby` reference |
+| Inline data URIs | Always skipped — can't inspect content |
+
+#### Cases Missed
+| Case | Why |
+|------|-----|
+| Background images without keyword hints in URL | URL heuristic only — no pixel analysis |
+| SVG data URIs with text | Skipped as data: URI |
+| Images loaded via CSS custom property (`--bg-url`) | Computed style fallback doesn't resolve vars in all browsers |
+
+---
+
 ### 1.3.2 — Meaningful Sequence (Level A)
 **Check:** `meaningful-sequence.check.js`
 

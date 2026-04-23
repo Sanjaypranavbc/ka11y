@@ -6,6 +6,25 @@
 
 ---
 
+## Sprint changes — 2026-04-23
+
+Priority sprint items from the previous review addressed in this pass:
+
+| Item | Status | Files changed |
+|---|---|---|
+| **§3.1 Silent image-capture failures** | Fixed | `ka11y-python/ka11y/crawler/models.py` (+`capture_status`, `capture_error` fields) · `crawler/crawler.py` (`_safe_screenshot_status` returns `(ok, status, err)`; failed captures still register as `ImageData`) · `accessibility/rules/non_text/alttext.py` (short-circuits to INCOMPLETE status) · `api/v1/combined/findings.py` (new `_capture_incomplete_finding`; 1.1.1 + 4.1.2 converters emit `status="incomplete"`) |
+| **1.2.2 Captions (Prerecorded)** | Implemented | New `ka11y-node/src/custom-checks/captions-prerecorded.check.js`; flags `<video>` without `<track kind="captions">` and raises INCOMPLETE for cross-origin embeds (YouTube / Vimeo / Wistia). |
+| **1.2.3 Audio Description** | Implemented | New `audio-description.check.js`; detects `<track kind="descriptions">`, alternate description audio, and nearby full-text transcript links. EN + JA keyword coverage inline. |
+| **1.4.2 Audio Control** | Implemented | New `audio-control.check.js`; flags unmuted autoplay media without controls or an external pause control within the same figure/region. |
+| **CSS `background-image` scan (1.1.1 / 1.4.5)** | Implemented | New `background-image-content.check.js`; walks non-decorative background images, emits INCOMPLETE for elements without an accessible name and a separate 1.4.5 INCOMPLETE when the URL carries text-hint keywords (`banner`/`headline`/`hero`/`cta`). |
+| **2.1.2 Shift+Tab + Escape** | Extended | `keyboard-trap.check.js` already had Shift+Tab + cycle-Escape verification; this pass added **F85 modal-without-escape** detection — focuses every visible `dialog[open]` / `[role="dialog"]` / `[aria-modal="true"]`, presses Escape, and FAILs if focus remains inside. |
+| **Japanese support** | Verified | Auditing confirmed `config/universal.yml` already carries EN+JA keyword lists across 30+ categories; `sensory_auditor.py` has `SENSORY_WORDS_JA`, `GENERIC_UI_NOUNS_JA`, `STOP_WORDS_JA` with particles (は/が/を/に) and `_detect_lang` overrides `<html lang="en">` when body text is CJK. New checks ship with inline EN+JA copy. |
+| **Multi-page crawling (2.4.5 / 3.2.3 / 3.2.4 / 3.2.6)** | Deferred | Explicitly out of scope this sprint — requires a new crawl queue + cross-page dedup layer. Documented as future work. |
+
+Test results after changes: `ka11y-python` 616/618 passing (2 pre-existing failures unrelated to this pass), `ka11y-node` 226/226 passing.
+
+---
+
 ## Legend
 
 | Column | Meaning |
@@ -367,14 +386,22 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 # Section 2 — Node Custom Checks (ka11y-node)
 
 ## 1.2.1 Audio/Video-only (Prerecorded) — `audio-transcript.check.js`
-**Logic:** Finds `<audio>` + `<video>` with no audio track; looks for nearby transcript `<a>` within 2 DOM-ancestor levels + keyword match.
+**Logic:** Finds `<audio>` elements lacking `<track>` alternatives; searches for a transcript link within a `figure/article/section/[role=region]` ancestor using a locale-aware keyword list (`config/universal.yml → audio_transcript.transcript_keywords`). Also accepts `<figcaption>`, `<details>` with transcript text, and `aria-describedby` fallbacks.
 
-**Technique coverage:** G158 transcript for audio-only — Partial. G159 transcript for video-only — Partial. G166 synchronized alternatives — Missed (that's 1.2.2/1.2.3).
+### Technique coverage
 
-**Limitations:**
-1. **Transcript on separate page:** Only checks same-page links; cross-page transcript destinations (PDF, `/transcripts/...`) not verified.
-2. **Keyword-only match:** Mis-triggers on non-transcript links containing "text" or "subtitles".
-3. **No content equivalence check:** Doesn't verify transcript actually matches audio.
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| G158 Transcript for audio-only | Sufficient | Partial | Detects presence; doesn't verify content equivalence. |
+| G159 Alternative for video-only | Sufficient | Partial | Same as above. |
+| H96 `<track>` element | Sufficient | **Covered** | Track `src` is HEAD-fetched to confirm reachability. |
+| G166 Synchronized alternatives | Sufficient | Missed — belongs to 1.2.2 / 1.2.3 | Now handled by the new `audio-description.check.js`. |
+| F30 Text alternative is filename | Failure | Missed — automatable | Filename-only transcript links should be flagged. |
+
+### Known limitations
+1. **Cross-page transcripts** — only same-page links are checked; PDF/`/transcripts/` destinations are not fetched or verified.
+2. **Keyword-only match** — mis-triggers on non-transcript links containing "text" / "subtitles" in other contexts.
+3. **Content equivalence** — transcript text isn't compared against audio content.
 
 ---
 
@@ -404,26 +431,44 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ## 1.4.1 Use of Color — `use-of-color.check.js`
 **Logic:** Finds links inside `p/li/td/th/blockquote/article>p/dd/section>p/svg`. For each, computes ancestor baseline style and checks at least one non-colour cue: text-decoration, border-bottom, outline, font-style, background-color, ≥100-unit font-weight delta.
 
-**Technique coverage:** G14 Information not by colour alone — Partial. G182 Additional cue beyond colour — **Covered**. G205 Not colour alone on text — Partial. F13 Information by colour alone (charts/forms) — Missed. F73 Link via colour only — **Covered** for inline block links. F81 Required fields by colour only — Missed (not audited despite 3.3.2 coverage).
+### Technique coverage
 
-**Limitations:**
-1. **Strict container scope:** Misses nested block containers not matching selectors.
-2. **Hover-state blind:** Static DOM only; hover-underline-only patterns pass erroneously.
-3. **100-unit font-weight threshold:** Imperceptible in thin typefaces.
-4. **No form/chart/legend coverage:** Rule limited to prose links.
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| G14 Information not by colour alone | Sufficient | Partial | Links in prose are covered; non-link colour-coded information is not. |
+| G182 Additional non-colour cue | Sufficient | **Covered** | Six different cue categories inspected. |
+| G205 Text colour + additional cue | Sufficient | Partial | Only inline-link block containers are scanned. |
+| C15 Using CSS to change the presentation | Sufficient | **Covered** |
+| F13 Information by colour alone (charts/forms/maps) | Failure | Missed — automatable | Not yet extended to chart legends or form field colour-coding. |
+| F73 Link distinguished by colour only | Failure | **Covered** | Core path. |
+| F81 Required fields by colour only | Failure | Missed — automatable | Despite 3.3.2 coverage, no cross-check with colour usage. |
+
+### Known limitations
+1. **Strict container scope** — misses nested block containers that don't match the fixed selector list.
+2. **Hover-state blind** — static DOM only; hover-underline-only patterns pass falsely.
+3. **100-unit font-weight threshold** — imperceptible in thin typefaces.
+4. **No form / chart / legend coverage** — rule is limited to prose links.
 
 ---
 
 ## 2.1.2 No Keyboard Trap — `keyboard-trap.check.js`
-**Logic:** Press Tab up to 200 times. Track last 4 focused-element keys via CYCLE_WINDOW (id/name-derived stable key). If same key repeats 3× consecutively OR pattern A,B,A,B → flag trap. Additionally detects arrow-key-trap on listbox/radiogroup and iframe tab-traps.
+**Logic:** (1) Forward Tab up to 200 times, track last 4 focused keys via `CYCLE_WINDOW`, flag stuck / A-B-A-B cycles. (2) Shift+Tab reverse traversal with the same heuristic. (3) Escape verification after each suspected trap. (4) Arrow-key-trap scan for `role=tree/grid/listbox/menu/tablist/radiogroup`. (5) Same-origin iframe Tab trap. (6) **New (2026-04-23):** focuses every visible `dialog[open]` / `[role="dialog"]` / `[aria-modal="true"]`, presses Escape, fails if focus remains inside (F85).
 
-**Technique coverage:** G21 No keyboard trap — **Covered**. F10 Combination of two non-exiting controls — Partial. F85 Dialog that traps focus without close — Missed (doesn't detect escape-to-close failure).
+### Technique coverage
 
-**Limitations:**
-1. **200-tab ceiling:** Very long pages with 200+ elements yield false negatives.
-2. **Shift+Tab not tested:** Only forward traversal.
-3. **Modal escape not verified:** Doesn't press Escape to detect escape-dismissal.
-4. **Stable-key falls back to DOM position** when element lacks id/name — re-layouts between tabs can produce noisy keys.
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| G21 No keyboard trap | Sufficient | **Covered** | Forward + reverse Tab cycles. |
+| F10 Two non-exiting controls | Failure | **Covered** | Two-element cycle pattern. |
+| F85 Modal traps focus without close | Failure | **Covered** | Added in this sprint. |
+| F58 Script that blocks keyboard events | Failure | Missed — automatable | No `preventDefault()` inspection on key handlers. |
+| F60 Pop-up that cannot be closed | Failure | Partial | Covered via F85 for modals; non-modal pop-ups not tested. |
+
+### Known limitations
+1. **200-tab ceiling** — very long pages with >200 focusable elements may miss a trap beyond the ceiling.
+2. **Stable-key fallback** — when an element lacks `id` / `name`, the key is derived from DOM position; layout shifts between tabs can produce noisy cycle detections.
+3. **Escape-only dismissal** — pop-ups that require a specific close button but not Escape are detected only when they are modal (role=dialog).
+4. **Scripted keypress suppression** (F58) — not inspected.
 
 ---
 
@@ -612,13 +657,97 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 4.1.3 Status Messages — `status-messages.check.js`
-**Logic:** Finds `role="status"`, `role="alert"`, `aria-live="polite|assertive"` regions and reports counts. Flags atomic attribute missing, inline-validation messages without live-region.
+**Logic:** Enumerates `role="status"` / `role="alert"` / `aria-live="polite"|"assertive"` regions, counts them, and inspects form inline-validation containers (`.error`, `[aria-invalid=true]`) for missing live-region association. Emits separate rule IDs for `custom-status-messages-atomic` (missing `aria-atomic`) and `custom-status-messages-inline-validation`.
 
-**Technique coverage:** G199 Programmatically determined status message — Partial. ARIA19 aria-live announcements — **Covered**. ARIA22 status — **Covered**.
+### Technique coverage
 
-**Limitations:**
-1. **Snapshot-only:** Cannot validate that status appears dynamically when event occurs.
-2. **Atomic/relevant interaction:** Doesn't check `aria-atomic`/`aria-relevant` semantics.
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| ARIA19 `aria-live` | Sufficient | **Covered** | Counts polite + assertive. |
+| ARIA22 `role="status"` | Sufficient | **Covered** |
+| ARIA23 `role="log"` | Sufficient | Partial | Role is detected but not validated against 4.1.3 applicability. |
+| G199 Programmatically determined status | Sufficient | Partial | Presence-based; not dynamic-announcement verified. |
+| F114 Text that is a status but cannot be programmatically determined | Failure | Missed — automatable | Toast notification containers without any ARIA are not heuristically detected. |
+
+### Known limitations
+1. **Snapshot-only** — the page is scanned once. Cannot verify that a message actually becomes announced when an event happens.
+2. **`aria-atomic` / `aria-relevant`** — only `aria-atomic` emit is checked; `aria-relevant` semantics (additions vs. removals vs. text) are ignored.
+3. **Toast libraries** — container classes from react-toastify, sonner, react-hot-toast are not matched heuristically.
+
+---
+
+# Section 2b — Node Checks Added in 2026-04-23 Sprint
+
+## 1.2.2 Captions (Prerecorded) — `captions-prerecorded.check.js`
+**Logic:** For every visible `<video>`, inspect `<track kind="captions"|"subtitles">` children with a non-empty `srclang`. Skip muted / live-hint videos. Additionally enumerate cross-origin embeds (`youtube.com/embed`, `player.vimeo.com`, `wistia`) and emit INCOMPLETE because CC state isn't inspectable across origins.
+
+### Technique coverage
+
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| G93 Open / closed captions | Sufficient | Partial | Detects presence of a `<track>` + `srclang`; doesn't verify content. |
+| H95 `<track>` element with captions kind | Sufficient | **Covered** |
+| G87 Closed captions | Sufficient | Partial | Third-party players require manual review. |
+| F75 Video without captions | Failure | **Covered** | Flags missing captions on first-party `<video>`. |
+
+### Known limitations
+1. **Cross-origin embeds** — YouTube / Vimeo caption tracks are controlled by the hosting platform and aren't DOM-observable; always emitted as INCOMPLETE.
+2. **Live / muted detection** is heuristic (attribute + src substring / `.muted`); misclassification possible.
+
+---
+
+## 1.2.3 Audio Description — `audio-description.check.js`
+**Logic:** For every `<video>`, check for a `<track kind="descriptions">` with `srclang`, a sibling `<audio>` / `<source>` whose `data-kind` / `title` contains "description", or a container transcript/details link matching the multi-locale `ALT_KEYWORDS` regex (EN + JA).
+
+### Technique coverage
+
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| G78 Second user-selectable audio track | Sufficient | Partial | Element-sibling detection; no switch-control verification. |
+| G173 Audio-described version of video | Sufficient | Partial | |
+| H96 `<track>` element with descriptions kind | Sufficient | **Covered** |
+| G8 Full text alternative | Sufficient | Partial | Nearby `<details>` / transcript link recognised. |
+
+### Known limitations
+1. **Audio description quality** not verified — only track presence.
+2. **Dubbed extended audio description tracks** (for 1.2.7) aren't distinguished from 1.2.3.
+
+---
+
+## 1.4.2 Audio Control — `audio-control.check.js`
+**Logic:** Enumerates `<audio>` / `<video>` elements with `autoplay` (attribute or `data-autoplay`). Skip when `muted`. If duration is unknown or > 3 s AND there is neither a `controls` attribute nor an external pause/stop/mute/volume button in the figure/article/section/`[role=region]` container → FAIL.
+
+### Technique coverage
+
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| G60 Playing a sound that turns off automatically within 3 s | Sufficient | Partial | Requires `data-duration` or `.duration`; NaN-duration treated as > 3 s. |
+| G170 Providing a control near the beginning | Sufficient | **Covered** | Native `controls` or external button with pause/stop/mute/volume text. |
+| G171 Playing sound only on request | Sufficient | Partial | Inferred via autoplay/muted attrs. |
+| F23 Autoplay > 3 s without controls | Failure | **Covered** |
+
+### Known limitations
+1. **Web Audio API** sounds (scripted playback outside `<audio>`/`<video>`) are invisible.
+2. **Background music in iframes** — cross-origin media cannot be introspected.
+3. **Duration detection** — if `duration` hasn't loaded and no `data-duration` hint exists, the check pessimistically assumes > 3 s. May false-flag very short SFX.
+
+---
+
+## 1.1.1 / 1.4.5 CSS Background Images — `background-image-content.check.js`
+**Logic:** Scans every DOM element's `computedStyle.backgroundImage`. Skips gradients, `data:` URIs, URLs matching decorative-hint patterns (`gradient`/`pattern`/`noise`/`texture`/`overlay`/`mask`/`fade`/`blur`/`dot`/`divider`), and elements < 24×24 px. Emits two rules: the primary 1.1.1 INCOMPLETE for non-decorative background images on elements without an accessible name; a secondary `-text-image` rule targeting 1.4.5 when the URL contains text-hint keywords (`banner`/`headline`/`hero`/`cta`/`promo`/`callout`/`masthead`/`heading`/`text`).
+
+### Technique coverage
+
+| Technique | Type | SC | Status | Notes |
+|---|---|---|---|---|
+| F3 CSS background used for meaningful image | Failure | 1.1.1 | **Covered (incomplete)** | New — previously invisible to the pipeline. |
+| C22 Use CSS to control text presentation | Sufficient | 1.4.5 | Partial | Keyword-based candidate detection. |
+| G140 Separate text and decorative image | Sufficient | 1.4.5 | Missed — judgment |
+
+### Known limitations
+1. **Intent classification is URL-keyword based** — a genuine decorative image with "banner" in its filename will raise a false positive.
+2. **Background size / position** not interpreted — an image cropped by `background-position` to a non-text region may still be flagged.
+3. **Inline `<style>` vs stylesheet origin** not distinguished — can't tell whether the background is author-set or injected by a third-party script.
 
 ---
 
@@ -726,26 +855,34 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 
 # Section 4 — Unimplemented SCs (Automatable Gaps)
 
-| SC | Priority | Why it's detectable | Est. effort |
-|---|---|---|---|
-| **1.2.2 Captions (Prerecorded)** | High | Presence of `<track kind="captions">` on `<video>` | S |
-| **1.2.3 Audio Description** | High | Presence of `<track kind="descriptions">` or second audio | S |
-| **1.2.4 Captions (Live)** | Medium | `<track kind="captions">` on live `<video>` | M |
-| **1.2.5 Audio Description (Prerecorded)** | Medium | Second audio track or `descriptions` track | M |
-| **1.4.2 Audio Control** | Medium | `<audio autoplay>` + no controls, >3 s inferred | S |
-| **2.2.1 Timing Adjustable** | Medium | `<meta http-equiv="refresh">` + session-timeout detection | M |
-| **2.3.1 Three Flashes** | Low | Frame-differential analysis of GIF/video — heavy | L |
-| **3.1.2 Language of Parts** | Medium | Mixed-language text vs `lang=` attribute | M |
-| **3.2.3 Consistent Navigation** | High (multi-page) | Requires crawler across pages | L |
-| **3.2.4 Consistent Identification** | High (multi-page) | Cross-page element-function identity | L |
+| SC | Priority | Why it's detectable | Est. effort | Status |
+|---|---|---|---|---|
+| 1.2.2 Captions (Prerecorded) | High | Presence of `<track kind="captions">` on `<video>` | S | **Shipped 2026-04-23** |
+| 1.2.3 Audio Description | High | Presence of `<track kind="descriptions">` or second audio | S | **Shipped 2026-04-23** |
+| 1.4.2 Audio Control | Medium | `<audio autoplay>` + no controls, >3 s inferred | S | **Shipped 2026-04-23** |
+| 1.2.4 Captions (Live) | Medium | `<track kind="captions">` on live `<video>` | M | Pending |
+| 1.2.5 Audio Description (Prerecorded) | Medium | Second audio track or `descriptions` track | M | Partially covered by 1.2.3 check |
+| 2.2.1 Timing Adjustable | Medium | `<meta http-equiv="refresh">` + session-timeout detection | M | Pending |
+| 2.3.1 Three Flashes | Low | Frame-differential analysis of GIF/video — heavy | L | Pending |
+| 3.1.2 Language of Parts | Medium | Mixed-language text vs `lang=` attribute | M | Pending |
+| 3.2.3 Consistent Navigation | High (multi-page) | Requires crawler across pages | L | **Deferred — needs multi-page crawler** |
+| 3.2.4 Consistent Identification | High (multi-page) | Cross-page element-function identity | L | **Deferred — needs multi-page crawler** |
 
 ---
 
-## Priority sprint list (suggested)
+## Priority sprint list
 
-1. **Fix silent capture failures** (§3.1) — masks *all* visual-rule false negatives.
-2. **Close 1.2.2 / 1.2.3 / 1.4.2** — cheap wins, fill big-name level-A/AA gaps.
-3. **Add CSS `background-image` scan to 1.1.1 / 1.4.5** — currently invisible category.
-4. **Add Shift+Tab traversal + Escape-to-close** to 2.1.2 keyboard-trap check.
-5. **Formalise per-finding `capture_status`** to distinguish failure from pass.
-6. **Multi-page coordination** for 2.4.5, 3.2.3, 3.2.4, 3.2.6 — requires crawler expansion.
+**Completed 2026-04-23 sprint:**
+1. ✅ Silent capture failures (§3.1) — `capture_status` now propagates end-to-end and emits INCOMPLETE.
+2. ✅ 1.2.2 / 1.2.3 / 1.4.2 — three new node checks registered with fallback metadata and localised copy.
+3. ✅ CSS `background-image` scan — new `background-image-content.check.js` targeting 1.1.1 + 1.4.5.
+4. ✅ 2.1.2 keyboard-trap — Shift+Tab + Escape verification + F85 modal-without-escape detection.
+5. ✅ Per-finding `capture_status` — distinct `incomplete` status with reason & error context.
+6. ✅ Japanese support verification — confirmed existing infrastructure (EN+JA keyword lists across 30+ categories, `SENSORY_WORDS_JA`, `_detect_lang` CJK heuristic); new checks ship with inline JA translations.
+
+**Next sprint (proposed):**
+1. Multi-page crawling for 2.4.5 / 3.2.3 / 3.2.4 / 3.2.6 — largest remaining gap, requires new crawl queue.
+2. 1.2.4 Captions (Live) — extend `captions-prerecorded` to detect `is-live` / HLS / WebRTC sources.
+3. 3.1.2 Language of Parts — per-text-node language detection via `fasttext-langid`.
+4. Toast-library heuristic for 4.1.3 — whitelist react-toastify, sonner, react-hot-toast class patterns.
+5. Extend `capture_status` plumbing to OCR/contrast (1.4.3 / 1.4.5 / 1.4.11 converters currently still trust OCR silently).
