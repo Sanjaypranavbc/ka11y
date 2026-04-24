@@ -83,13 +83,22 @@ def _merge_findings(
         tag = (el.get("tag") or "").strip().lower()
         el_id = (el.get("element_id") or "").strip().lower()
         html_sig = _normalize_html_sig(str(el.get("html") or ""))
+        # image_src: Python image findings use the src URL as element_id, but axe
+        # findings for the same <img> use CSS selectors.  Provide a stable cross-service
+        # dedup key by normalising the image src when present (§3.2 fix).
+        image_src = (el.get("image_src") or f.get("element", {}).get("image_src") or "").strip().lower()
+        # Strip the el_id if it looks like a URL — use image_src path instead so it
+        # doesn't collide with a DOM element-id on a different element.
+        el_id_is_url = el_id.startswith(("http://", "https://", "//", "/"))
+        stable_el_id = el_id if not el_id_is_url else ""
 
         page_scope = "|".join(part for part in (page_url, frame_path) if part)
         ident = (
             (f"sel:{page_scope}|{selector}" if selector else "")
             or (f"target:{page_scope}|{target_sig}" if target_sig else "")
             or (f"ref:{page_scope}|{ref_id}" if ref_id else "")
-            or (f"id:{page_scope}|{tag}|{el_id}" if el_id else "")
+            or (f"id:{page_scope}|{tag}|{stable_el_id}" if stable_el_id else "")
+            or (f"img:{page_scope}|{image_src}" if image_src else "")
             or (f"html:{page_scope}|{tag}|{html_sig}" if html_sig else "")
         )
         return (f.get("wcag_sc", ""), f.get("status", ""), ident)

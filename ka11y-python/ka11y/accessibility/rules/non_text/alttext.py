@@ -234,10 +234,14 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
             "(manual review recommended)",
         )
 
-    norm_ocr = _norm(" ".join(detected_texts))
-    # Include 2-letter uppercase abbreviations (UI, OK, AI, etc.) in addition to
-    # words of 3+ characters to avoid false negatives on short but meaningful tokens.
-    ocr_words = [w for w in norm_ocr.split() if len(w) >= 3 or (len(w) == 2 and w.isupper())]
+    raw_ocr = " ".join(detected_texts)
+    norm_ocr = _norm(raw_ocr)
+    ocr_words = [w for w in norm_ocr.split() if len(w) >= 3]
+    # Also include 2-letter uppercase abbreviations from the original OCR text
+    # (e.g. "UI", "AI", "OK") which are lost by _norm's lowercasing.
+    abbr_words = [w.lower() for w in re.findall(r'\b[A-Z]{2}\b', raw_ocr)
+                  if w.lower() not in ocr_words]
+    ocr_words = ocr_words + abbr_words
 
     if not ocr_words:
         return True, "PASS [1.1.1] OCR tokens too short to match; alt is non-empty"
