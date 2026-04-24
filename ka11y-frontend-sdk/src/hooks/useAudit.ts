@@ -1,5 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { AuditConfig, AuditResult, ContrastReport, ImageAuditReport, StageInfo } from "@/types/audit";
+import {
+  AuditConfig,
+  AuditResult,
+  ContrastReport,
+  ImageAuditReport,
+  JobFailure,
+  JobPlan,
+  StageInfo,
+  StageProgressInfo,
+} from "@/types/audit";
 import { emptyAuditResult } from "@/data/sampleData";
 
 const IMG_TEXT_RE = /<img-text\b[^>]*>([\s\S]*?)<\/img-text>/i;
@@ -118,8 +127,11 @@ export function useAudit() {
     "idle" | "pending" | "running" | "completed" | "failed"
   >("idle");
   const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<JobFailure | null>(null);
   const [currentStage, setCurrentStage] = useState<string>("");
   const [stages, setStages] = useState<StageInfo[]>([]);
+  const [plan, setPlan] = useState<JobPlan | null>(null);
+  const [stageProgress, setStageProgress] = useState<StageProgressInfo | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [activeRun, setActiveRun] = useState<{ url: string; lang: string; submitted_at: string } | null>(null);
 
@@ -199,15 +211,44 @@ export function useAudit() {
         catch { return null; }
       }
 
+      es.addEventListener("job_plan", (e) => {
+        const data = safeParse(e.data); if (!data) return;
+        setPlan({
+          stages: (data.stages as JobPlan["stages"]) || [],
+          total: (data.total as number) || 0,
+          weight_total: (data.weight_total as number) || 1,
+          started_at: (data.started_at as string) || new Date().toISOString(),
+        });
+      });
+
       es.addEventListener("stage_start", (e) => {
         const data = safeParse(e.data); if (!data) return;
         setCurrentStage(data.stage_name as string);
+        setStageProgress(null);
         setStages((prev) => {
-          if (prev.find((s) => s.name === data.stage_name)) return prev;
+          const existing = prev.find((s) => s.name === data.stage_name);
+          if (existing) return prev;
           return [
             ...prev,
-            { name: data.stage_name as string, status: "running", started_at: data.started_at as string },
+            {
+              name: data.stage_name as string,
+              status: "running",
+              started_at: data.started_at as string,
+              index: data.index as number | undefined,
+              total: data.total as number | undefined,
+              weight: data.weight as number | undefined,
+            },
           ];
+        });
+      });
+
+      es.addEventListener("stage_progress", (e) => {
+        const data = safeParse(e.data); if (!data) return;
+        setStageProgress({
+          stage_name: data.stage_name as string,
+          current: data.current as number,
+          total: data.total as number,
+          phase: data.phase as string | undefined,
         });
       });
 
@@ -225,6 +266,8 @@ export function useAudit() {
               : s,
           ),
         );
+        // Clear inner progress when the owning stage completes.
+        setStageProgress((p) => (p && p.stage_name === data.stage_name ? null : p));
       });
 
       es.addEventListener("stage_error", (e) => {
@@ -236,6 +279,7 @@ export function useAudit() {
               : s,
           ),
         );
+        setStageProgress((p) => (p && p.stage_name === data.stage_name ? null : p));
       });
 
       // Sent to late-connecting clients with current running state
@@ -274,8 +318,16 @@ export function useAudit() {
         sseRef.current = null;
         stopPolling();
         setJobStatus("failed");
-        setError(data.error || "Audit failed");
+        const errStr = (data.error as string) || "Audit failed";
+        setError(errStr);
+        setFailure({
+          error: errStr,
+          stage: data.stage as string | undefined,
+          location: data.location as string | undefined,
+          traceback: data.traceback as string | undefined,
+        });
         setCurrentStage("");
+        setStageProgress(null);
         setActiveRun(null);
       });
 

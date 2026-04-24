@@ -53,7 +53,12 @@ from .findings import (
     _ts_to_findings,
     _sensory_to_findings,
 )
-from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
+from .stage_events import (
+    _stage_complete,
+    _stage_error_and_warn,
+    _stage_start,
+    emit_stage_progress,
+)
 from .store import _jobs
 
 # Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
@@ -211,6 +216,15 @@ async def _stage_image_audit(
         findings: List[Dict] = []
         ocr_paths: List[str] = []
 
+        # Emit a crawl-phase completion marker so the bar settles before OCR begins.
+        emit_stage_progress(
+            job_id,
+            "image_audit",
+            current=len(image_crawler.images_data),
+            total=len(image_crawler.images_data),
+            phase="crawl",
+        )
+
         if run_ocr:
             max_ocr_images = get_max_ocr_images_per_run()
             ocr_paths, skipped_ocr_paths = select_ocr_candidate_paths(
@@ -240,7 +254,15 @@ async def _stage_image_audit(
                 lang=lang,
                 include_paths=ocr_paths,
             )
+            emit_stage_progress(
+                job_id, "image_audit",
+                current=0, total=len(ocr_paths), phase="ocr",
+            )
             await asyncio.to_thread(detector.scan_directory)
+            emit_stage_progress(
+                job_id, "image_audit",
+                current=len(ocr_paths), total=len(ocr_paths), phase="ocr",
+            )
 
             saver = TextClassification(source_directory=image_crawler.output_dir)
             saver.results = detector.results
@@ -257,11 +279,21 @@ async def _stage_image_audit(
 
         if run_image_audit:
             auditor = AltTextAccessibilityAuditor()
+            emit_stage_progress(
+                job_id, "image_audit",
+                current=0, total=len(image_crawler.images_data), phase="alt_audit",
+            )
             records = await asyncio.to_thread(
                 auditor.generate_audit_report,
                 images_data=image_crawler.images_data,
                 ocr_results=ocr_results,
                 output_dir=image_crawler.output_dir,
+            )
+            emit_stage_progress(
+                job_id, "image_audit",
+                current=len(image_crawler.images_data),
+                total=len(image_crawler.images_data),
+                phase="alt_audit",
             )
             image_audit_report = _build_image_audit_report(records)
             for _, converter in IMAGE_AUDIT_RECORD_CONVERTERS:

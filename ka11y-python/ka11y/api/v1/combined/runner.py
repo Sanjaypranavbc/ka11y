@@ -28,7 +28,12 @@ from ka11y.utils.step_logger import ExecutionStepLogger
 from .findings import _lang_ctx
 from .models import CombinedRequest
 from .report import _build_report
-from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
+from .stage_events import (
+    _stage_complete,
+    _stage_error_and_warn,
+    _stage_start,
+    emit_job_plan,
+)
 from .stages import _allowed_levels, _call_node_flat, _run_python_stages
 from .store import _broadcast, _close_subscribers, _jobs
 
@@ -162,6 +167,37 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             message="Combined audit job started",
             context={"url": url, "lang": payload.lang, "wcag_level": payload.wcag_level},
         )
+
+        # Announce the stage plan to SSE subscribers so the progress bar can render.
+        active_stages: list[str] = ["axe_core"]
+        if payload.run_ocr or payload.run_image_audit:
+            active_stages.append("image_audit")
+        # pipeline stage always runs; it handles 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
+        active_stages.append("pipeline")
+        if payload.run_form_audit:
+            active_stages.append("form_audit")
+        if payload.run_pause_stop_hide_audit:
+            active_stages.append("pause_stop_hide")
+        if payload.run_text_spacing_audit:
+            active_stages.append("text_spacing")
+        if any(
+            (
+                payload.run_resize_text_audit,
+                payload.run_reflow_audit,
+                payload.run_text_spacing_audit,
+                payload.run_orientation_audit,
+                payload.run_hover_focus_content_audit,
+                payload.run_focus_not_obscured_min_audit,
+                payload.run_focus_not_obscured_enh_audit,
+            )
+        ):
+            active_stages.append("rendered_layout_audit")
+        if payload.run_media_audit:
+            active_stages.append("media_audit")
+        if payload.run_sensory_audit:
+            active_stages.append("sensory_audit")
+        emit_job_plan(job_id, active_stages)
+
         # Fire axe-core and all Python stages concurrently
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
