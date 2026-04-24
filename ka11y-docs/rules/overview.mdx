@@ -124,7 +124,7 @@ NLP-backed rule quality differs between languages:
 | DOM-structural checks (contrast, forms, ARIA) | Strong | Strong |
 | Rendered layout checks | Strong | Strong |
 
-Japanese audits produce valid findings but with a higher false-positive/false-negative rate in NLP-dependent rules. The primary causes are spaCy `ja_core_news_sm` tokenization accuracy on web-register text, CJK word-boundary handling, and incomplete Japanese sensory/generic-phrase vocabulary.
+Japanese audits produce valid findings but with a higher false-positive/false-negative rate in NLP-dependent rules. The 2026-04-24 sprint upgraded the Japanese spaCy pipeline to prefer `ja_core_news_lg` (94%+ POS accuracy) and added SudachiPy morpheme-level POS filtering in the sensory auditor — both with graceful fallbacks if the optional packages are not installed. Install `poetry install -E japanese` + `python -m spacy download ja_core_news_lg` to activate.
 
 See [WCAG Technique Coverage Matrix — Language Support](/rules/coverage-matrix#language-support-limitations) and [Japanese Language Support](/internals/japanese-language-support) for the full gap analysis and recommended fixes.
 
