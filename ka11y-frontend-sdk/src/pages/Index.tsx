@@ -10,74 +10,13 @@ import { ImageVisualisationTab } from "@/components/audit/ImageVisualisationTab"
 import { SettingsTab, ThemePreference } from "@/components/audit/SettingsTab";
 import { WcagRulesTab } from "@/components/audit/WcagRulesTab";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TabValue, StageInfo } from "@/types/audit";
-import { AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { TabValue } from "@/types/audit";
+import { AlertTriangle } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
-import { TranslationKey } from "@/i18n/translations";
+import { AuditProgress } from "@/components/audit/AuditProgress";
 
 const MAX_ROWS_STORAGE_KEY = "ka11y_max_rows";
 const THEME_STORAGE_KEY = "ka11y_theme";
-
-function StageProgress({ stages, currentStage }: { stages: StageInfo[]; currentStage: string }) {
-  const { t } = useLanguage();
-  return (
-    <div className="rounded border border-border bg-card p-4 space-y-2.5">
-      <p className="text-[9px] font-semibold tracking-[0.18em] uppercase text-muted-foreground">
-        {t("progress.title")}
-      </p>
-      <div className="space-y-1.5">
-        {stages.length === 0 ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" aria-hidden="true" />
-            <span>{t("progress.initialising")}</span>
-          </div>
-        ) : (
-          stages.map((stage) => (
-            <div key={stage.name} className="flex items-center gap-2 text-xs min-w-0">
-              {stage.status === "running" && (
-                <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" aria-hidden="true" />
-              )}
-              {stage.status === "completed" && (
-                <CheckCircle className="h-3 w-3 text-success shrink-0" aria-hidden="true" />
-              )}
-              {stage.status === "error" && (
-                <XCircle className="h-3 w-3 text-destructive shrink-0" aria-hidden="true" />
-              )}
-              <span
-                className={cn(
-                  "font-mono truncate",
-                  stage.status === "running"   && "text-primary font-medium",
-                  stage.status === "completed" && "text-muted-foreground",
-                  stage.status === "error"     && "text-destructive",
-                )}
-              >
-                {t((`stageFull.${stage.name}`) as TranslationKey) || stage.name}
-              </span>
-              {stage.status === "completed" && stage.findings_count !== undefined && (
-                <span className="text-muted-foreground ml-auto font-mono hidden sm:inline">
-                  {stage.findings_count} {t("progress.findings")}
-                </span>
-              )}
-              {stage.status === "error" && stage.error && (
-                <span className="text-destructive/70 text-[10px] ml-auto truncate max-w-[140px]" title={stage.error}>
-                  {stage.error}
-                </span>
-              )}
-            </div>
-          ))
-        )}
-        {/* Show next pending stage hint */}
-        {currentStage && stages.every((s) => s.status !== "running") && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" aria-hidden="true" />
-            <span className="font-mono">{t((`stageFull.${currentStage}`) as TranslationKey) || currentStage}</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 const Index = () => {
   const { t } = useLanguage();
@@ -96,8 +35,20 @@ const Index = () => {
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() =>
     typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false
   );
-  const { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings, activeRun } =
-    useAudit();
+  const {
+    result,
+    jobStatus,
+    error,
+    failure,
+    runAudit,
+    exportJSON,
+    currentStage,
+    stages,
+    plan,
+    stageProgress,
+    warnings,
+    activeRun,
+  } = useAudit();
 
   const isLoading = jobStatus === "pending" || jobStatus === "running";
 
@@ -167,7 +118,14 @@ const Index = () => {
             <WcagRulesTab />
           ) : isLoading ? (
             <div className="p-3 sm:p-5 space-y-3">
-              <StageProgress stages={stages} currentStage={currentStage} />
+              <AuditProgress
+                plan={plan}
+                stages={stages}
+                currentStage={currentStage}
+                stageProgress={stageProgress}
+                failure={failure}
+                jobStatus={jobStatus}
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {[...Array(4)].map((_, i) => (
                   <Skeleton key={i} className="h-24" />
