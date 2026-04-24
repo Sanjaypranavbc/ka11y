@@ -391,7 +391,7 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
         status_raw = r.get("wcag_1_1_1_status", "")
-        if status_raw not in ("FAILED", "PASSED"):
+        if status_raw not in ("FAILED", "PASSED", "INCOMPLETE"):
             continue
 
         reason = r.get("wcag_1_1_1_reason") or ""
@@ -405,7 +405,25 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         filename = r.get("filename")
         detected_text = r.get("detected_text")
 
-        if status_raw == "FAILED":
+        if status_raw == "INCOMPLETE":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_1_1_alt",
+                    wcag_sc="1.1.1",
+                    status="needs_review",
+                    reason=reason or "Image capture failed — alt text could not be verified by OCR.",
+                    severity=_PYTHON_SEVERITY["1.1.1"],
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
+                    page_url=r.get("url") or page_url,
+                )
+            )
+        elif status_raw == "FAILED":
             findings.append(
                 _make_finding(
                     source="python",
@@ -449,7 +467,7 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
     sev = _PYTHON_SEVERITY.get("4.1.2")
     for r in records:
         status_raw = r.get("wcag_4_1_2_status", "")
-        if status_raw == "N/A":
+        if status_raw in ("N/A", ""):
             continue
 
         reason = r.get("wcag_4_1_2_reason") or ""
@@ -463,7 +481,25 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
         filename = r.get("filename")
         detected_text = r.get("detected_text")
 
-        if status_raw == "FAILED":
+        if status_raw == "INCOMPLETE":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_4_1_2_name_role_value",
+                    wcag_sc="4.1.2",
+                    status="needs_review",
+                    reason=reason or "Functional image capture failed — accessible name could not be verified.",
+                    severity=sev,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
+                    page_url=r.get("url") or page_url,
+                )
+            )
+        elif status_raw == "FAILED":
             findings.append(
                 _make_finding(
                     source="python",
@@ -717,7 +753,25 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
         filename = r.get("filename")
         detected_text = r.get("detected_text")
 
-        if status_raw == "FAILED":
+        if status_raw == "INCOMPLETE":
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id="python_1_4_5_images_of_text",
+                    wcag_sc="1.4.5",
+                    status="needs_review",
+                    reason=reason or "Image capture failed — OCR could not determine if image contains text.",
+                    severity=sev,
+                    element_html=element_html,
+                    element_id=element_id,
+                    element_tag="img",
+                    image_src=path,
+                    image_reference=filename,
+                    image_text=detected_text,
+                    page_url=r.get("url") or page_url,
+                )
+            )
+        elif status_raw == "FAILED":
             findings.append(
                 _make_finding(
                     source="python",
@@ -1322,6 +1376,53 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     reason="Prerecorded media has an equivalent text alternative.",
                     severity=None,
                     **_record_element_kwargs(r, page_url),
+                )
+            )
+    return findings
+
+
+def _contrast_capture_failed_to_findings(
+    images_data: list, page_url: str
+) -> List[Dict]:
+    """
+    Emit WCAG 1.4.3 and 1.4.6 needs_review findings for images whose screenshot
+    capture failed so OCR could not run.  Called after the OCR result converters
+    so the finding appears alongside normal contrast findings.
+    """
+    findings: List[Dict] = []
+    for img in images_data:
+        capture_status = getattr(img, "capture_status", "ok") or "ok"
+        if capture_status == "ok":
+            continue
+        src = getattr(img, "src", "") or ""
+        filename = getattr(img, "filename", "") or ""
+        url = getattr(img, "url", "") or page_url
+        capture_error = getattr(img, "capture_error", None)
+        reason = (
+            f'Screenshot capture failed (status: {capture_status}'
+            + (f', error: {capture_error}' if capture_error else '')
+            + ') — contrast analysis could not run. Manual review required.'
+        )
+        element_html = f'<img src="{src}">'
+        for wcag_sc, rule_id, sev in [
+            ("1.4.3", "python_1_4_3_contrast", _PYTHON_SEVERITY.get("1.4.3")),
+            ("1.4.6", "python_1_4_6_contrast_enhanced", _PYTHON_SEVERITY.get("1.4.6")),
+        ]:
+            findings.append(
+                _make_finding(
+                    source="python",
+                    rule_id=rule_id,
+                    wcag_sc=wcag_sc,
+                    status="needs_review",
+                    reason=reason,
+                    severity=sev,
+                    element_html=element_html,
+                    element_id=src or filename or None,
+                    element_tag="img",
+                    image_src="",
+                    image_reference=filename,
+                    image_text=None,
+                    page_url=url,
                 )
             )
     return findings

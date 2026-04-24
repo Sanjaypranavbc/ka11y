@@ -6,7 +6,21 @@
 
 ---
 
-## Sprint changes — 2026-04-24
+## Sprint changes — 2026-04-24 (pass 2)
+
+Three critical sprint items completed in this pass:
+
+| Item | Status | Files changed |
+|---|---|---|
+| **3.1.2 Language of Parts** | Implemented | `ka11y-node/src/custom-checks/language-of-parts.check.js` (new — empty lang=, invalid BCP47, unannotated CJK on non-CJK pages); registered in `index.js` STATIC_ORDER |
+| **`capture_status` → OCR/contrast converters** | Implemented | `ka11y-python/ka11y/crawler/models.py` (+`capture_status`, `capture_error` on `ImageData`); `crawler/crawler.py` (failed captures register as `ImageData` with `capture_status="failed"`); `alttext.py` (short-circuit to INCOMPLETE); `findings.py` (`_alt_text_to_findings`, `_name_role_value_to_findings`, `_images_of_text_to_findings` handle INCOMPLETE; new `_contrast_capture_failed_to_findings` for 1.4.3 / 1.4.6); `stages.py` + `__init__.py` wired |
+| **Japanese NLP quality** | Implemented | `sensory_auditor.py`: `_get_nlp()` now tries `ja_core_news_lg` before `ja_core_news_sm`; `_has_meaningful_label_text_ja()` uses SudachiPy morpheme-level POS filtering with graceful try/except fallback; `pyproject.toml` adds `sudachipy`/`sudachidict-core` as optional `[japanese]` extras |
+
+Tests after changes: `ka11y-python` 618/618, `ka11y-node` 233/233.
+
+---
+
+## Sprint changes — 2026-04-24 (pass 1)
 
 Priority gap-closure items addressed in this pass:
 
@@ -116,7 +130,7 @@ Technique IDs use WCAG 2.2 numbering: `G*` (general), `H*` (HTML), `C*` (CSS), `
 | 2.5.7 Dragging Movements | AA | — | `dragging-movements.check.js` | Partial |
 | 2.5.8 Target Size (Minimum) | AA | `target_size_auditor.py` | — | Strong |
 | 3.1.1 Language of Page | A | — | axe-core | axe-covered |
-| 3.1.2 Language of Parts | AA | — | — | **Not implemented** |
+| 3.1.2 Language of Parts | AA | — | `language-of-parts.check.js` | Partial (empty lang, invalid BCP47, unannotated CJK) |
 | 3.1.6 Pronunciation | AAA | — | `pronunciation.check.js` | Partial |
 | 3.2.1 On Focus | A | — | `on-focus.check.js` | Partial |
 | 3.2.2 On Input | A | — | `on-input.check.js` | Partial |

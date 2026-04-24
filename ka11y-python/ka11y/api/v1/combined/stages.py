@@ -37,6 +37,7 @@ from .findings import (
     OCR_RESULT_CONVERTERS,
     _build_contrast_report,
     _build_image_audit_report,
+    _contrast_capture_failed_to_findings,
     _crawler_text_spacing_to_findings,
     _focus_not_obscured_enh_to_findings,
     _focus_not_obscured_min_to_findings,
@@ -249,6 +250,10 @@ async def _stage_image_audit(
             contrast_report = _build_contrast_report(ocr_results)
             for _, converter in OCR_RESULT_CONVERTERS:
                 findings.extend(converter(ocr_results, url))
+            # 1.4.3/1.4.6 needs_review for images that failed screenshot capture
+            findings.extend(
+                _contrast_capture_failed_to_findings(image_crawler.images_data, url)
+            )
 
         if run_image_audit:
             auditor = AltTextAccessibilityAuditor()

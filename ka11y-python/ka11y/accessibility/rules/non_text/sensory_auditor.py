@@ -453,8 +453,8 @@ def _get_nlp(lang: str = "en"):
     Load and cache a spaCy model for the given language.
 
     English  — en_core_web_sm  (parser disabled; sentencizer added)
-    Japanese — ja_core_news_sm (parser KEPT for tokenisation; sentencizer added
-               only if no senter/sentencizer pipe already present)
+    Japanese — ja_core_news_lg preferred (94%+ POS accuracy on web text),
+               falls back to ja_core_news_sm; parser kept for tokenisation
     Others   — {lang}_core_news_sm with parser disabled
     """
     lang_key = (lang or "en")[:2]
@@ -466,25 +466,33 @@ def _get_nlp(lang: str = "en"):
         import spacy  # type: ignore
 
         if lang_key == "en":
-            model_name = "en_core_web_sm"
             disable = ["ner", "parser"]
+            try:
+                nlp = spacy.load("en_core_web_sm", disable=disable)
+            except OSError:
+                nlp = None
         elif lang_key == "ja":
-            # Japanese model needs tok2vec + morphologizer + parser for word
-            # segmentation (no spaces between words).
-            model_name = "ja_core_news_sm"
+            # Japanese needs tok2vec + morphologizer + parser for word segmentation.
+            # Prefer the large model (higher POS accuracy); fall back to small.
             disable = ["ner"]
+            for model_name in ("ja_core_news_lg", "ja_core_news_sm"):
+                try:
+                    nlp = spacy.load(model_name, disable=disable)
+                    break
+                except OSError:
+                    continue
         else:
-            model_name = f"{lang_key}_core_news_sm"
             disable = ["ner", "parser"]
+            try:
+                nlp = spacy.load(f"{lang_key}_core_news_sm", disable=disable)
+            except OSError:
+                nlp = None
 
-        try:
-            nlp = spacy.load(model_name, disable=disable)
+        if nlp is not None:
             # Add a sentencizer only when no sentence-boundary component exists
             has_senter = any(p in nlp.pipe_names for p in ("sentencizer", "senter"))
             if not has_senter:
                 nlp.add_pipe("sentencizer")
-        except OSError:
-            nlp = None
     except ImportError:
         nlp = None
 
@@ -659,22 +667,47 @@ def _remaining_label_words(text: str) -> List[str]:
 
 def _has_meaningful_label_text_ja(text: str) -> bool:
     """
-    Japanese: strip sensory, generic UI, stop-word, and instruction tokens;
-    return True when CJK content words remain (= a specific identifier exists).
+    Japanese: return True when a non-sensory, non-generic identifier exists.
 
-    Example (PASS):  「送信」ボタンをクリック  → 送信 remains after stripping
+    Tries SudachiPy morpheme-level POS filtering first (more accurate);
+    falls back to the regex-strip approach when SudachiPy is unavailable.
+
+    Example (PASS):  「送信」ボタンをクリック  → 送信 remains
     Example (FAIL):  赤いボタンをクリックして  → nothing meaningful remains
     """
-    # Quoted content is always a meaningful label (「確認」, 『ホーム』, …)
     if _QUOTED_RE.search(text):
         return True
+
+    try:
+        import sudachipy  # type: ignore
+
+        tokenizer_obj = sudachipy.Dictionary().create()
+        morphemes = tokenizer_obj.tokenize(text)
+        for m in morphemes:
+            pos0 = m.part_of_speech()[0]
+            if pos0 not in ("名詞", "動詞", "形容詞", "形容動詞"):
+                continue
+            surface = m.surface()
+            if _SENSORY_JA_RE.search(surface):
+                continue
+            if _GENERIC_JA_RE.search(surface):
+                continue
+            if _STOP_WORDS_JA_RE.search(surface):
+                continue
+            if _INSTRUCTION_STRIP_JA.search(surface):
+                continue
+            if _CJK_CHAR_RE.search(surface) or re.search(r"[a-zA-Z]{3,}", surface):
+                return True
+        return False
+    except Exception:
+        pass
+
+    # Regex fallback when SudachiPy is not installed
     stripped = _SENSORY_JA_RE.sub("", text)
     stripped = _GENERIC_JA_RE.sub("", stripped)
     stripped = _STOP_WORDS_JA_RE.sub("", stripped)
-    stripped = _INSTRUCTION_STRIP_JA.sub("", stripped)  # conservative strip
-    # Remove punctuation and whitespace
+    stripped = _INSTRUCTION_STRIP_JA.sub("", stripped)
     stripped = re.sub(r"[\s。、！？・「」『』（）【】〔〕…—\-～＝＋]+", "", stripped)
-    # Meaningful if CJK content words remain, or Latin word ≥3 chars
     return bool(_CJK_CHAR_RE.search(stripped)) or bool(re.search(r"[a-zA-Z]{3,}", stripped))
 
 
