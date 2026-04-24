@@ -64,7 +64,7 @@ It captures screenshots of images, runs OCR (optical character recognition) to r
 
 ### Engine 2 — Node (Code analysis)
 
-The Node engine also visits your URL with a real browser (Puppeteer), but instead of looking at visual output it **inspects the page's code and DOM**. It injects the industry-standard axe-core library (used by Deque, Microsoft, Google, and others), which runs over 100 automated WCAG rule checks against the page structure. On top of axe-core, ka11y adds 24 of its own custom checks for rules axe-core doesn't cover.
+The Node engine also visits your URL with a real browser (Puppeteer), but instead of looking at visual output it **inspects the page's code and DOM**. It injects the industry-standard axe-core library (used by Deque, Microsoft, Google, and others), which runs over 100 automated WCAG rule checks against the page structure. On top of axe-core, ka11y adds 28 of its own custom checks for rules axe-core doesn't cover — including media captions, audio-only transcripts, and a CSS `background-image` content scan that flags meaningful backgrounds with no accessible name.
 
 > Think of this engine as a technical auditor who reads the source code — checking whether screen readers can understand the page, whether the keyboard can navigate every element, and whether the HTML structure is semantically correct.
 
@@ -101,7 +101,11 @@ The Node engine also visits your URL with a real browser (Puppeteer), but instea
 | 3.3.8 Accessible Authentication | Login does not require solving a cognitive puzzle | AA |
 | 2.4.5 Multiple Ways | Pages can be reached by more than one navigation path | AA |
 | 1.3.2 Meaningful Sequence | Reading order matches the visual layout | A |
-| + 9 more | Covering pronunciation, orientation, images of text, audio transcripts | A–AAA |
+| 1.2.2 Captions (Prerecorded) | `<track kind="captions">` is present on prerecorded video | A |
+| 1.2.3 / 1.2.5 Audio Description | Prerecorded video carries audio description or an alternative media track | A / AA |
+| 1.4.2 Audio Control | Auto-playing audio longer than 3 seconds can be paused or muted | A |
+| 1.1.1 / 1.4.5 Background image content | CSS `background-image` backgrounds carrying meaningful content or text have an accessible name (filename heuristic) | A / AA |
+| + more | Covering pronunciation, orientation, images of text, audio transcripts | A–AAA |
 
 ---
 
@@ -218,7 +222,7 @@ sequenceDiagram
 |---|---|---|
 | **Technology** | Playwright (Chromium) | Puppeteer + axe-core |
 | **Approach** | Visual / rendered analysis | DOM / code analysis |
-| **WCAG criteria covered** | 18 | 100+ (axe) + 24 custom |
+| **WCAG criteria covered** | 18 | 100+ (axe) + 28 custom |
 | **Contrast checking** | Pixel-accurate OCR measurement | Heuristic CSS estimation |
 | **Form analysis** | Label presence, error messaging | Semantic correctness |
 | **Keyboard testing** | Target size, focus obscured | Keyboard trap, focus visible, shortcuts |

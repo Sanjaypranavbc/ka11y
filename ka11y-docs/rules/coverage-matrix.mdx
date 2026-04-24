@@ -22,7 +22,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 ---
 
 ## 1.1.1 Non-text Content
-**Engine:** `ka11y-python` pipeline (`policy_1_1_1.py` + `alttext.py` + OCR + image classifier).
+**Engine:** `ka11y-python` pipeline (`policy_1_1_1.py` + `alttext.py` + OCR + image classifier) plus `ka11y-node` `background-image-content.check.js` for CSS background images.
 
 | Technique | Kind | Status |
 |---|---|---|
@@ -32,7 +32,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | H36 `alt` on `<input type="image">` | Sufficient | Partial |
 | H53 `<object>` fallback content | Sufficient | Missed — automatable |
 | H2 Adjacent text + image | Sufficient | Missed — automatable |
-| F3 CSS background-image carrying information | Failure | Missed — automatable |
+| F3 CSS background-image carrying information | Failure | Partial (Node `custom-background-image-content`) |
 | F20 `alt=""` on informative | Failure | Covered |
 | F30 Filename / placeholder alt | Failure | Covered |
 | F38 / F39 Decorative mis-marked | Failure | Covered |
@@ -42,7 +42,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 **Known limitations**
 - 3-character OCR token floor causes false negatives on valid 2-letter labels (e.g. "UI").
 - OCR matching is literal — semantic synonyms (alt "Look up" vs OCR "Search") fail.
-- CSS `background-image` backgrounds are invisible to the crawler.
+- CSS `background-image` detection is **filename-heuristic only** — it does not OCR the background pixels. Backgrounds whose filenames do not contain decoration or text keywords pass through the "needs review" bucket; real image content is not analysed.
 - Classifier misclassification propagates: a logo labelled as `informative` bypasses logo-keyword enforcement.
 
 ---
@@ -172,7 +172,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 ---
 
 ## 1.4.5 Images of Text
-**Engine:** `ka11y-python` pipeline + `ka11y-node/images-of-text.check.js`.
+**Engine:** `ka11y-python` pipeline + `ka11y-node/images-of-text.check.js` + `ka11y-node/background-image-content.check.js` (secondary finding `custom-background-image-content-text-image`).
 
 | Technique | Kind | Status |
 |---|---|---|
@@ -183,7 +183,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 
 **Known limitations**
 - Wordmark logos vs styled text images boundary is classifier-dependent.
-- CSS `background-image` backgrounds carrying text are invisible in the node heuristic.
+- CSS background images carrying text are flagged **only when the filename matches text-indicating keywords** (`banner`, `headline`, `title`, `hero`, `cta`, `promo`, `callout`, `masthead`, `heading`, `text`). Images with neutral filenames that still contain rendered text will not be caught.
 
 ---
 
