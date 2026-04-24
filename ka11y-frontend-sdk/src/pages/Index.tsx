@@ -139,15 +139,25 @@ const Index = () => {
             </div>
 
           ) : jobStatus === "failed" ? (
-            /* ── Error ─────────────────────────────────────────────── */
-            <div className="flex items-center justify-center h-full">
-              <div role="alert" className="text-center space-y-3">
-                <AlertTriangle className="h-12 w-12 text-destructive mx-auto" aria-hidden="true" />
-                <h2 className="text-lg font-semibold text-foreground">{t("state.auditFailed")}</h2>
-                <p className="text-sm text-muted-foreground max-w-md">
-                  {error || t("state.unknownError")}
-                </p>
+            /* ── Error: reuse AuditProgress so the user sees which stage failed,
+                 the full traceback accordion, and the partial stage timeline. */
+            <div className="p-3 sm:p-5 space-y-3">
+              <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="font-semibold">{t("state.auditFailed")}</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-muted-foreground truncate">
+                  {failure?.error || error || t("state.unknownError")}
+                </span>
               </div>
+              <AuditProgress
+                plan={plan}
+                stages={stages}
+                currentStage={currentStage}
+                stageProgress={stageProgress}
+                failure={failure}
+                jobStatus={jobStatus}
+              />
             </div>
 
           ) : jobStatus === "idle" ? (
