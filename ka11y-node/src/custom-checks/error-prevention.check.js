@@ -31,6 +31,9 @@ async function run(page, context = {}) {
   const stepPattern = buildKeywordPattern(
     getKeywordList('error_prevention', 'step_keywords', sharedContext)
   ) || 'step|wizard|progress';
+  const undoPattern = buildKeywordPattern(
+    getKeywordList('error_prevention', 'undo_keywords', sharedContext)
+  ) || 'undo|revert|restore|cancel within|take back|取り消し|元に戻す|復元';
 
   const data = await page.evaluate((patterns) => {
     const financialRe = new RegExp(patterns.financialPattern, 'i');
@@ -39,6 +42,7 @@ async function run(page, context = {}) {
     const reviewRe = new RegExp(patterns.reviewPattern, 'i');
     const reviewButtonRe = new RegExp(patterns.reviewButtonPattern, 'i');
     const stepRe = new RegExp(patterns.stepPattern, 'i');
+    const undoRe = new RegExp(patterns.undoPattern, 'i');
 
     function isVisible(el) {
       const cs = window.getComputedStyle(el);
@@ -95,11 +99,20 @@ async function run(page, context = {}) {
         )
       );
 
-      const hasSafeguard = hasReviewText || hasConfirmCheckbox || hasReviewButton || hasMultiStepIndicator;
+      // Safeguard 5: explicit undo/revert window indication (G164)
+      const hasUndoButton = buttons.some(b => {
+        const label = ((b.textContent || '') + (b.getAttribute('value') || '')).trim();
+        return undoRe.test(label);
+      });
+      const hasUndoNotice = undoRe.test((form.textContent || '').slice(0, 3000));
+      const hasUndoWindow = hasUndoButton || hasUndoNotice;
+
+      const hasSafeguard = hasReviewText || hasConfirmCheckbox || hasReviewButton || hasMultiStepIndicator || hasUndoWindow;
 
       riskForms.push({
         category,
         hasSafeguard,
+        hasUndoWindow,
         element_id: form.id || null,
         html: form.outerHTML.slice(0, 150),
         target: form.id ? [`form#${CSS.escape(form.id)}`] : ['form'],
@@ -115,6 +128,7 @@ async function run(page, context = {}) {
     reviewButtonPattern,
     reviewPattern,
     stepPattern,
+    undoPattern,
   });
 
   if (data.length === 0) {
@@ -158,7 +172,7 @@ async function run(page, context = {}) {
           form_refs: '',
         },
         sharedContext,
-        `${unsafeForms.length} of ${data.length} ${categories.join('/')} form(s) have no review step, confirmation checkbox, multi-step indicator, or preview mechanism.`,
+        `${unsafeForms.length} of ${data.length} ${categories.join('/')} form(s) have no review step, confirmation checkbox, multi-step indicator, preview mechanism, or undo/revert window.`,
       ),
       elements: unsafeForms,
       helpUrl: HELP_URL,

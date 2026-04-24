@@ -642,7 +642,7 @@ _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-de
 | Suite | Tests | Status |
 |---|---:|---|
 | `ka11y-python` (pytest) | 618 | 601 passing, 17 failing locally (15 due missing `nltk`, 2 assertion failures) |
-| `ka11y-node` (jest) | 226 | All passing |
+| `ka11y-node` (jest) | 233 | All passing |
 | Custom-check files | 28 | All registered and emitting |
 | Real-world site validation | 7 sites | Verified 2026-03-26 |
 

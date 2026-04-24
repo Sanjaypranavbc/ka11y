@@ -34,6 +34,20 @@ async function run(page, context = {}) {
       return ca.some((v, i) => Math.abs(v - cb[i]) > 15);
     }
 
+    function parseRgb(s) {
+      const m = (s || '').match(/\d+/g);
+      if (!m || m.length < 3) return null;
+      return m.slice(0, 3).map(Number);
+    }
+
+    function looksColorSignal(s) {
+      const rgb = parseRgb(s);
+      if (!rgb) return false;
+      const [r, g, b] = rgb;
+      // Strong red/orange emphasis is commonly used to indicate required/error.
+      return (r >= 160 && g <= 130 && b <= 130) || (r >= 170 && g >= 90 && g <= 170 && b <= 110);
+    }
+
     /**
      * Walk up the DOM to find the first ancestor that is NOT an <a>, collecting
      * its computed text color, background, fontWeight, and fontStyle — used to
@@ -77,6 +91,7 @@ async function run(page, context = {}) {
 
     const seen = new Set();
     const violations = [];
+    const nonLinkViolations = [];
     const checked = [];
 
     for (const link of document.querySelectorAll(SELECTORS)) {
@@ -145,10 +160,79 @@ async function run(page, context = {}) {
       checked.push(link.id || linkText.slice(0, 30));
     }
 
-    return { violations, checkedCount: checked.length };
+    // F81 heuristic: required fields indicated by color-only cues (no textual marker).
+    // We only flag when a visual color signal is present and no explicit "required"/"必須"/"*".
+    const formControls = Array.from(document.querySelectorAll(
+      'input:not([type="hidden"]), select, textarea'
+    ));
+    const requiredRe = /\b(required|mandatory)\b|必須|必須項目|\*/i;
+
+    for (const control of formControls) {
+      const isRequired = control.hasAttribute('required') || control.getAttribute('aria-required') === 'true';
+      if (!isRequired) continue;
+
+      const id = control.getAttribute('id');
+      const label = (id && document.querySelector(`label[for="${CSS.escape(id)}"]`)) || control.closest('label');
+      const labelText = ((label && label.textContent) || '').trim();
+      const ariaLabel = (control.getAttribute('aria-label') || '').trim();
+      const hasTextCue = requiredRe.test(labelText) || requiredRe.test(ariaLabel);
+      if (hasTextCue) continue;
+
+      const controlStyle = window.getComputedStyle(control);
+      const labelStyle = label ? window.getComputedStyle(label) : null;
+      const form = control.closest('form');
+      const formStyle = form ? window.getComputedStyle(form) : window.getComputedStyle(document.body);
+
+      const hasColorSignal =
+        looksColorSignal(controlStyle.borderColor) ||
+        looksColorSignal(controlStyle.outlineColor) ||
+        (labelStyle && looksColorSignal(labelStyle.color)) ||
+        colorsDiffer(controlStyle.borderColor, formStyle.color) ||
+        (labelStyle && colorsDiffer(labelStyle.color, formStyle.color));
+
+      if (!hasColorSignal) continue;
+
+      nonLinkViolations.push({
+        type: 'required-color-only',
+        html: control.outerHTML.slice(0, 150),
+        element_id: control.id || null,
+        target: control.id
+          ? [`${control.tagName.toLowerCase()}#${CSS.escape(control.id)}`]
+          : [control.tagName.toLowerCase()],
+        tag: control.tagName.toUpperCase(),
+      });
+    }
+
+    // F13 heuristic: instructional copy that references color as the sole discriminator.
+    const colorWordRe = /\b(red|green|blue|yellow|orange|purple|grey|gray)\b|赤|青|緑|黄色|オレンジ|紫|グレー/i;
+    const stateWordRe = /\b(required|error|invalid|valid|pass|fail|warning|status|selected|disabled|enabled)\b|必須|エラー|無効|有効|成功|失敗|警告|選択/i;
+    const nonColorCueRe = /\b(icon|symbol|shape|asterisk|underline|bold|pattern)\b|アイコン|記号|形|下線|太字|アスタリスク/i;
+    for (const el of Array.from(document.querySelectorAll('p, li, label, legend, figcaption, th, td')).slice(0, 1200)) {
+      const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text.length < 8 || text.length > 240) continue;
+      if (!colorWordRe.test(text) || !stateWordRe.test(text)) continue;
+      if (nonColorCueRe.test(text)) continue;
+      nonLinkViolations.push({
+        type: 'color-instruction-only',
+        html: el.outerHTML.slice(0, 150),
+        element_id: el.id || null,
+        target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
+      });
+    }
+
+    return {
+      violations,
+      checkedCount: checked.length,
+      nonLinkViolations,
+      requiredFieldCheckedCount: formControls.filter(c => c.hasAttribute('required') || c.getAttribute('aria-required') === 'true').length,
+    };
   }, MAX_LINKS);
 
-  if (data.violations.length === 0) {
+  const linkViolations = data.violations || [];
+  const nonLinkViolations = data.nonLinkViolations || [];
+
+  if (linkViolations.length === 0 && nonLinkViolations.length === 0) {
     return {
       successCriteriaId: SC,
       rules: [{
@@ -158,7 +242,22 @@ async function run(page, context = {}) {
         status: 'pass',
         reason: data.checkedCount > 0
           ? _t(sharedContext, '{count} inline link(s) checked — all have a non-color visual cue (underline, border, background, or font weight).', 'インラインリンク {count} 件を確認しましたが、すべてに色以外の視覚的手がかり（下線、境界線、背景、文字の太さなど）がありました。', { count: data.checkedCount })
-          : _t(sharedContext, 'No inline text links found to check.', '確認対象のインラインテキストリンクは見つかりませんでした。'),
+          : _t(sharedContext, 'No inline text links found to check. Required-field color indicators were also sampled and no color-only pattern was detected.', '確認対象のインラインテキストリンクは見つかりませんでした。必須フィールドの色表示も確認し、色のみのパターンは検出されませんでした。'),
+        helpUrl: HELP_URL,
+      }],
+    };
+  }
+
+  if (linkViolations.length === 0 && nonLinkViolations.length > 0) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'Color must not be the only visual means of conveying information',
+        impact: 'moderate',
+        status: 'incomplete',
+        reason: _t(sharedContext, '{count} potential non-link color-only indicator(s) detected (for example required fields or color-only instructions). Verify equivalent non-color cues such as text labels, symbols, or patterns.', 'リンク以外で色だけに依存している可能性がある箇所が {count} 件検出されました（例: 必須項目や色だけの指示文）。テキストラベル、記号、パターンなどの色以外の手がかりがあるか確認してください。', { count: nonLinkViolations.length }),
+        elements: nonLinkViolations.slice(0, 50),
         helpUrl: HELP_URL,
       }],
     };
@@ -171,8 +270,8 @@ async function run(page, context = {}) {
       description: 'Color must not be the only visual means of conveying information',
       impact: 'serious',
       status: 'fail',
-      reason: _t(sharedContext, '{count} inline link(s) appear to be distinguished from surrounding text by colour alone (no underline, border, background, or font-weight difference). Add a non-color visual cue such as underline or border-bottom.', '周囲のテキストとの差が色だけになっているように見えるインラインリンクが {count} 件検出されました（下線、境界線、背景、文字の太さの違いなし）。下線や border-bottom など、色以外の視覚的手がかりを追加してください。', { count: data.violations.length }),
-      elements: data.violations,
+      reason: _t(sharedContext, '{count} inline link(s) appear to be distinguished from surrounding text by colour alone (no underline, border, background, or font-weight difference). Add a non-color visual cue such as underline or border-bottom. Additional potential non-link color-only patterns: {extra_count}.', '周囲のテキストとの差が色だけになっているように見えるインラインリンクが {count} 件検出されました（下線、境界線、背景、文字の太さの違いなし）。下線や border-bottom など、色以外の視覚的手がかりを追加してください。リンク以外でも色だけに依存している可能性がある箇所: {extra_count} 件。', { count: linkViolations.length, extra_count: nonLinkViolations.length }),
+      elements: [...linkViolations, ...nonLinkViolations].slice(0, 80),
       helpUrl: HELP_URL,
     }],
   };
