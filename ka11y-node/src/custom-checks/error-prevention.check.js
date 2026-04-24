@@ -180,7 +180,7 @@ async function run(page, context = {}) {
     };
   }
 
-  const safeForms = data.map(f => f.formId ? `form#${f.formId}` : `<form> (${f.category})`).join(', ');
+  const safeForms = data.map(f => f.element_id ? `form#${f.element_id}` : `<form> (${f.category})`).join(', ');
   return {
     successCriteriaId: SC,
     rules: [{

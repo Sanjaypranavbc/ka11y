@@ -1332,9 +1332,9 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
 # Register image-audit rules here so new raw status keys are wired to the
 # combined result model in one place.
 IMAGE_AUDIT_RECORD_CONVERTERS = (
-    # ("wcag_1_1_1_status", _alt_text_to_findings), # MUTED: Handled by Pipeline
+    ("wcag_1_1_1_status", _alt_text_to_findings),
     ("wcag_4_1_2_status", _name_role_value_to_findings),
-    # ("wcag_1_4_5_status", _images_of_text_to_findings), # MUTED: Handled by Pipeline
+    ("wcag_1_4_5_status", _images_of_text_to_findings),
     ("wcag_1_4_11_status", _non_text_contrast_to_findings),
 )
 

@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import csv
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
@@ -532,10 +533,17 @@ def _sentence_text(sent: Any) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _normalize_text(text: str) -> str:
+    """NFKC-normalize text so that half-width katakana (ｶﾀｶﾅ) is converted
+    to full-width (カタカナ) before any NLP matching step."""
+    return unicodedata.normalize("NFKC", text)
+
+
 def _iter_text_sources(element: SensoryElementData) -> List[str]:
     """
     Collect all text fields from an element, deduplicated, in priority order:
       visible text → aria-label → title tooltip → placeholder → value
+    Text is NFKC-normalized so half-width katakana matches Japanese keyword lists.
     """
     sources: List[str] = []
     for raw in (
@@ -545,7 +553,7 @@ def _iter_text_sources(element: SensoryElementData) -> List[str]:
         getattr(element, "placeholder", None),
         getattr(element, "value", None),
     ):
-        text = (raw or "").strip()
+        text = _normalize_text((raw or "").strip())
         if text and text not in sources:
             sources.append(text)
     return sources

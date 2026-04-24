@@ -235,7 +235,9 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
         )
 
     norm_ocr = _norm(" ".join(detected_texts))
-    ocr_words = [w for w in norm_ocr.split() if len(w) >= 3]
+    # Include 2-letter uppercase abbreviations (UI, OK, AI, etc.) in addition to
+    # words of 3+ characters to avoid false negatives on short but meaningful tokens.
+    ocr_words = [w for w in norm_ocr.split() if len(w) >= 3 or (len(w) == 2 and w.isupper())]
 
     if not ocr_words:
         return True, "PASS [1.1.1] OCR tokens too short to match; alt is non-empty"
