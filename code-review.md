@@ -1,8 +1,25 @@
 # ka11y Code Review — WCAG Technique Coverage & Limitations
 
-**Date:** April 23, 2026
+**Date:** April 24, 2026
 **Scope:** Full audit of implemented rules in `ka11y-python/` and `ka11y-node/`, cross-referenced against W3C WCAG 2.2 Techniques (Sufficient + Failure).
 **Goal:** Identify what each rule *actually* detects vs. what the WCAG SC requires, so gaps can be closed or documented.
+
+---
+
+## Sprint changes — 2026-04-24
+
+Priority gap-closure items addressed in this pass:
+
+| Item | Status | Files changed |
+|---|---|---|
+| **1.2.1 F30 filename-only transcript links** | Implemented (heuristic) | `ka11y-node/src/custom-checks/audio-transcript.check.js` (+filename-only label detection) |
+| **1.4.1 F81/F13 non-link colour-only cues** | Implemented (heuristic) | `use-of-color.check.js` (required-field colour-only + colour-only instructional text scan) |
+| **2.1.2 F58/F60 extension** | Implemented (partial heuristic) | `keyboard-trap.check.js` (scripted `preventDefault()` key suppression + non-modal Escape dismissibility probe) |
+| **2.4.5 G125/G126** | Implemented (heuristic) | `multiple-ways.check.js` (related-links sections + page-index lists) |
+| **2.4.8 G127 ToC signal** | Implemented | `location.check.js` (ToC/location indicator detection) |
+| **3.3.4 G164 undo window** | Implemented (heuristic) | `error-prevention.check.js` (+undo/revert safeguard detection) |
+| **4.1.3 F114 toast-without-ARIA** | Implemented (heuristic) | `status-messages.check.js` (+toast library patterns + dedicated toast incomplete rule) |
+| **Config keyword expansion (EN+JA)** | Implemented | `config/universal.yml` (`multiple_ways.*`, `location.toc_keywords`, `error_prevention.undo_keywords`) |
 
 ---
 
@@ -21,7 +38,7 @@ Priority sprint items from the previous review addressed in this pass:
 | **Japanese support** | Verified | Auditing confirmed `config/universal.yml` already carries EN+JA keyword lists across 30+ categories; `sensory_auditor.py` has `SENSORY_WORDS_JA`, `GENERIC_UI_NOUNS_JA`, `STOP_WORDS_JA` with particles (は/が/を/に) and `_detect_lang` overrides `<html lang="en">` when body text is CJK. New checks ship with inline EN+JA copy. |
 | **Multi-page crawling (2.4.5 / 3.2.3 / 3.2.4 / 3.2.6)** | Deferred | Explicitly out of scope this sprint — requires a new crawl queue + cross-page dedup layer. Documented as future work. |
 
-Test results after changes: `ka11y-python` 616/618 passing (2 pre-existing failures unrelated to this pass), `ka11y-node` 226/226 passing.
+Test results after changes: `ka11y-python` 616/618 passing (2 pre-existing failures unrelated to this pass), `ka11y-node` 233/233 passing.
 
 ---
 
@@ -43,10 +60,10 @@ Technique IDs use WCAG 2.2 numbering: `G*` (general), `H*` (HTML), `C*` (CSS), `
 
 | SC | Level | ka11y-python | ka11y-node | Status |
 |---|---|---|---|---|
-| 1.1.1 Non-text Content | A | Full pipeline | axe-core only | Strong |
+| 1.1.1 Non-text Content | A | Full pipeline | axe-core + `background-image-content.check.js` | Strong |
 | 1.2.1 Audio/Video-only (Prerecorded) | A | `media_auditor.py` | `audio-transcript.check.js` | Partial |
-| 1.2.2 Captions (Prerecorded) | A | — | axe-core only | **Gap** |
-| 1.2.3 Audio Description or Media Alt | A | — | axe-core only | **Gap** |
+| 1.2.2 Captions (Prerecorded) | A | — | `captions-prerecorded.check.js` | Partial |
+| 1.2.3 Audio Description or Media Alt | A | — | `audio-description.check.js` | Partial |
 | 1.2.4 Captions (Live) | AA | — | — | **Not implemented** |
 | 1.2.5 Audio Description (Prerecorded) | AA | — | — | **Not implemented** |
 | 1.3.1 Info and Relationships | A | `policy_1_3_1` | axe-core | Partial |
@@ -54,8 +71,8 @@ Technique IDs use WCAG 2.2 numbering: `G*` (general), `H*` (HTML), `C*` (CSS), `
 | 1.3.3 Sensory Characteristics | A | `sensory_auditor.py` | — | Partial (NLP-bounded) |
 | 1.3.4 Orientation | AA | rendered evaluator | `orientation.check.js` | Strong |
 | 1.3.5 Identify Input Purpose | AA | — | axe-core only | Partial |
-| 1.4.1 Use of Color | A | — | `use-of-color.check.js` | Partial (links only) |
-| 1.4.2 Audio Control | A | — | — | **Not implemented** |
+| 1.4.1 Use of Color | A | — | `use-of-color.check.js` | Partial (links + non-link heuristics) |
+| 1.4.2 Audio Control | A | — | `audio-control.check.js` | Partial |
 | 1.4.3 Contrast (Minimum) | AA | `contrast_analyser.py` | axe-core | Strong |
 | 1.4.4 Resize Text | AA | rendered evaluator | — | Partial |
 | 1.4.5 Images of Text | AA | pipeline + policy | `images-of-text.check.js` | Partial |
@@ -396,12 +413,13 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 | G159 Alternative for video-only | Sufficient | Partial | Same as above. |
 | H96 `<track>` element | Sufficient | **Covered** | Track `src` is HEAD-fetched to confirm reachability. |
 | G166 Synchronized alternatives | Sufficient | Missed — belongs to 1.2.2 / 1.2.3 | Now handled by the new `audio-description.check.js`. |
-| F30 Text alternative is filename | Failure | Missed — automatable | Filename-only transcript links should be flagged. |
+| F30 Text alternative is filename | Failure | Partial | Filename-only transcript labels/links are now flagged heuristically; content quality still requires review. |
 
 ### Known limitations
 1. **Cross-page transcripts** — only same-page links are checked; PDF/`/transcripts/` destinations are not fetched or verified.
 2. **Keyword-only match** — mis-triggers on non-transcript links containing "text" / "subtitles" in other contexts.
-3. **Content equivalence** — transcript text isn't compared against audio content.
+3. **Filename heuristic scope** — generic labels such as "Download transcript" pass even if destination quality is poor.
+4. **Content equivalence** — transcript text isn't compared against audio content.
 
 ---
 
@@ -429,7 +447,7 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 1.4.1 Use of Color — `use-of-color.check.js`
-**Logic:** Finds links inside `p/li/td/th/blockquote/article>p/dd/section>p/svg`. For each, computes ancestor baseline style and checks at least one non-colour cue: text-decoration, border-bottom, outline, font-style, background-color, ≥100-unit font-weight delta.
+**Logic:** Finds links inside `p/li/td/th/blockquote/article>p/dd/section>p/svg`. For each, computes ancestor baseline style and checks at least one non-colour cue: text-decoration, border-bottom, outline, font-style, background-color, ≥100-unit font-weight delta. Extended with heuristics for required-form controls that appear colour-coded without textual required markers, plus colour-only instructional text patterns.
 
 ### Technique coverage
 
@@ -439,20 +457,20 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 | G182 Additional non-colour cue | Sufficient | **Covered** | Six different cue categories inspected. |
 | G205 Text colour + additional cue | Sufficient | Partial | Only inline-link block containers are scanned. |
 | C15 Using CSS to change the presentation | Sufficient | **Covered** |
-| F13 Information by colour alone (charts/forms/maps) | Failure | Missed — automatable | Not yet extended to chart legends or form field colour-coding. |
+| F13 Information by colour alone (charts/forms/maps) | Failure | Partial | Adds heuristic detection for colour-only instructional text; chart/map semantics still need broader modelling. |
 | F73 Link distinguished by colour only | Failure | **Covered** | Core path. |
-| F81 Required fields by colour only | Failure | Missed — automatable | Despite 3.3.2 coverage, no cross-check with colour usage. |
+| F81 Required fields by colour only | Failure | Partial | Required controls now include a colour-only signal heuristic when no textual required cue is present. |
 
 ### Known limitations
 1. **Strict container scope** — misses nested block containers that don't match the fixed selector list.
 2. **Hover-state blind** — static DOM only; hover-underline-only patterns pass falsely.
 3. **100-unit font-weight threshold** — imperceptible in thin typefaces.
-4. **No form / chart / legend coverage** — rule is limited to prose links.
+4. **Chart/legend semantics** — dedicated legend-to-series linkage is still not modelled; current non-link checks are heuristic.
 
 ---
 
 ## 2.1.2 No Keyboard Trap — `keyboard-trap.check.js`
-**Logic:** (1) Forward Tab up to 200 times, track last 4 focused keys via `CYCLE_WINDOW`, flag stuck / A-B-A-B cycles. (2) Shift+Tab reverse traversal with the same heuristic. (3) Escape verification after each suspected trap. (4) Arrow-key-trap scan for `role=tree/grid/listbox/menu/tablist/radiogroup`. (5) Same-origin iframe Tab trap. (6) **New (2026-04-23):** focuses every visible `dialog[open]` / `[role="dialog"]` / `[aria-modal="true"]`, presses Escape, fails if focus remains inside (F85).
+**Logic:** (1) Forward Tab up to 200 times, track last 4 focused keys via `CYCLE_WINDOW`, flag stuck / A-B-A-B cycles. (2) Shift+Tab reverse traversal with the same heuristic. (3) Escape verification after each suspected trap. (4) Arrow-key-trap scan for `role=tree/grid/listbox/menu/tablist/radiogroup`. (5) Same-origin iframe Tab trap. (6) Modal-without-escape probe for visible `dialog[open]` / `[role="dialog"]` / `[aria-modal="true"]` (F85). (7) Heuristic scripted key suppression scan (`preventDefault` on Tab/Escape/Arrow) for F58 risk. (8) Non-modal popup Escape-dismissal/close-affordance probe for F60 risk.
 
 ### Technique coverage
 
@@ -461,14 +479,14 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 | G21 No keyboard trap | Sufficient | **Covered** | Forward + reverse Tab cycles. |
 | F10 Two non-exiting controls | Failure | **Covered** | Two-element cycle pattern. |
 | F85 Modal traps focus without close | Failure | **Covered** | Added in this sprint. |
-| F58 Script that blocks keyboard events | Failure | Missed — automatable | No `preventDefault()` inspection on key handlers. |
-| F60 Pop-up that cannot be closed | Failure | Partial | Covered via F85 for modals; non-modal pop-ups not tested. |
+| F58 Script that blocks keyboard events | Failure | Partial | Inline/script key handlers that suppress Tab/Escape/Arrow via `preventDefault()` are now flagged heuristically. |
+| F60 Pop-up that cannot be closed | Failure | Partial | Non-modal popup candidates are now probed for Escape dismissibility + close affordance; framework internals may still evade detection. |
 
 ### Known limitations
 1. **200-tab ceiling** — very long pages with >200 focusable elements may miss a trap beyond the ceiling.
 2. **Stable-key fallback** — when an element lacks `id` / `name`, the key is derived from DOM position; layout shifts between tabs can produce noisy cycle detections.
-3. **Escape-only dismissal** — pop-ups that require a specific close button but not Escape are detected only when they are modal (role=dialog).
-4. **Scripted keypress suppression** (F58) — not inspected.
+3. **Escape-only dismissal** — some components intentionally use close-button-only flows; non-modal findings remain heuristic.
+4. **Script coverage limit** — external bundled handlers are only pattern-detected when inline snippets are observable.
 
 ---
 
@@ -485,9 +503,9 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 2.4.5 Multiple Ways — `multiple-ways.check.js`
-**Logic:** Counts presence of at least 2 of: site search, sitemap link, nav with ≥3 links, breadcrumb.
+**Logic:** Counts presence of at least 2 of: site search, sitemap link, nav landmarks, breadcrumb, table-of-contents signals, related-links sections, or page-index/list-of-pages signals.
 
-**Technique coverage:** G63 Sitemap — Partial. G64 ToC — Missed. G125 Related-pages links — Missed. G126 List of links to all pages — Missed. G161 Search — **Covered**. G185 Link to sitemap — **Covered**.
+**Technique coverage:** G63 Sitemap — Partial. G64 ToC — Partial. G125 Related-pages links — Partial. G126 List of links to all pages — Partial. G161 Search — **Covered**. G185 Link to sitemap — **Covered**.
 
 **Limitations:**
 1. **Single-page scope:** True "multiple ways" is a site-level property; single-URL evaluation cannot confirm.
@@ -508,9 +526,9 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 2.4.8 Location — `location.check.js`
-**Logic:** Presence of breadcrumb nav, `<title>`-reflecting-page-position, or aria-current="page".
+**Logic:** Presence of breadcrumb nav, `aria-current` location markers, active nav state, sitemap link, or table-of-contents location aids.
 
-**Technique coverage:** G65 Breadcrumb — **Covered**. G63 Sitemap — Partial. G127 ToC — Missed. G128 Indication of current location — **Covered**.
+**Technique coverage:** G65 Breadcrumb — **Covered**. G63 Sitemap — Partial. G127 ToC — Partial. G128 Indication of current location — **Covered**.
 
 **Limitations:**
 1. **AAA-only criterion** — often intentionally skipped.
@@ -611,9 +629,9 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 3.3.4 Error Prevention (Legal/Financial) — `error-prevention.check.js`
-**Logic:** Classify forms as financial/legal/destructive via keyword scan of submit button + headings + form meta. Then require at least one of: confirm step, review page, irreversibility warning.
+**Logic:** Classify forms as financial/legal/destructive via keyword scan of submit button + headings + form meta. Then require at least one safeguard: confirm step, review page, irreversibility warning, multi-step indicator, or explicit undo/revert window.
 
-**Technique coverage:** G98 Reversible — Partial. G99 Checked — Partial. G155 Confirmation — Partial. G164 Undo window — Missed.
+**Technique coverage:** G98 Reversible — Partial. G99 Checked — Partial. G155 Confirmation — Partial. G164 Undo window — Partial.
 
 **Limitations:**
 1. **Keyword classification:** False positives ("privacy policy" in footer) and false negatives (crypto/web3 transactions).
@@ -657,7 +675,7 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 4.1.3 Status Messages — `status-messages.check.js`
-**Logic:** Enumerates `role="status"` / `role="alert"` / `aria-live="polite"|"assertive"` regions, counts them, and inspects form inline-validation containers (`.error`, `[aria-invalid=true]`) for missing live-region association. Emits separate rule IDs for `custom-status-messages-atomic` (missing `aria-atomic`) and `custom-status-messages-inline-validation`.
+**Logic:** Enumerates `role="status"` / `role="alert"` / `aria-live="polite"|"assertive"` regions, counts them, and inspects form inline-validation containers (`.error`, `[aria-invalid=true]`) for missing live-region association. Emits separate rule IDs for `custom-status-messages-atomic` (missing `aria-atomic`), `custom-status-messages-inline-validation`, and `custom-status-messages-toast` (toast/notification containers without ARIA live semantics).
 
 ### Technique coverage
 
@@ -667,12 +685,12 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 | ARIA22 `role="status"` | Sufficient | **Covered** |
 | ARIA23 `role="log"` | Sufficient | Partial | Role is detected but not validated against 4.1.3 applicability. |
 | G199 Programmatically determined status | Sufficient | Partial | Presence-based; not dynamic-announcement verified. |
-| F114 Text that is a status but cannot be programmatically determined | Failure | Missed — automatable | Toast notification containers without any ARIA are not heuristically detected. |
+| F114 Text that is a status but cannot be programmatically determined | Failure | Partial | Adds toast/notification heuristics for missing ARIA live semantics (`custom-status-messages-toast`). |
 
 ### Known limitations
 1. **Snapshot-only** — the page is scanned once. Cannot verify that a message actually becomes announced when an event happens.
 2. **`aria-atomic` / `aria-relevant`** — only `aria-atomic` emit is checked; `aria-relevant` semantics (additions vs. removals vs. text) are ignored.
-3. **Toast libraries** — container classes from react-toastify, sonner, react-hot-toast are not matched heuristically.
+3. **Toast libraries** — common classes (`react-toastify`, `sonner`, `react-hot-toast`) are heuristically matched, but dynamic runtime containers can still evade static snapshot detection.
 
 ---
 

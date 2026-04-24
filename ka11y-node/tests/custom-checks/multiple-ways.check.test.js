@@ -40,6 +40,13 @@ describe('multiple-ways.check (WCAG 2.4.5)', () => {
     expect(result.rules[0].ruleId).toBe('custom-multiple-ways');
   });
 
+  test('passes with related links section + nav (G125)', async () => {
+    const page = makePage({ hasSearch: false, hasSitemap: false, navCount: 1, hasRelatedLinks: true, hasPageIndexList: false });
+    const result = await run(page);
+    expect(result.rules[0].status).toBe('pass');
+    expect(result.rules[0].reason).toContain('related links');
+  });
+
   test('loads Japanese navigation keywords from shared universal config', () => {
     expect(getKeywordList('multiple_ways', 'search_keywords')).toContain('検索');
     expect(getKeywordList('multiple_ways', 'sitemap_keywords')).toContain('サイトマップ');
