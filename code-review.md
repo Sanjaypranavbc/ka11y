@@ -898,9 +898,16 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 5. ✅ Per-finding `capture_status` — distinct `incomplete` status with reason & error context.
 6. ✅ Japanese support verification — confirmed existing infrastructure (EN+JA keyword lists across 30+ categories, `SENSORY_WORDS_JA`, `_detect_lang` CJK heuristic); new checks ship with inline JA translations.
 
+**Completed 2026-04-24 sprint:**
+1. ✅ 1.2.1 F30 — filename-only transcript-link heuristic in `audio-transcript.check.js`.
+2. ✅ 1.4.1 F13/F81 — non-link colour-only heuristics in `use-of-color.check.js`.
+3. ✅ 2.1.2 F58/F60 — scripted key suppression and non-modal popup dismissibility probes in `keyboard-trap.check.js`.
+4. ✅ 2.4.5 G125/G126 and 2.4.8 G127 — related-links/page-index/ToC signals in `multiple-ways.check.js` and `location.check.js`.
+5. ✅ 3.3.4 G164 — undo/revert safeguard heuristic in `error-prevention.check.js`.
+6. ✅ 4.1.3 F114 — toast-without-ARIA heuristic via `custom-status-messages-toast`.
+
 **Next sprint (proposed):**
 1. Multi-page crawling for 2.4.5 / 3.2.3 / 3.2.4 / 3.2.6 — largest remaining gap, requires new crawl queue.
 2. 1.2.4 Captions (Live) — extend `captions-prerecorded` to detect `is-live` / HLS / WebRTC sources.
 3. 3.1.2 Language of Parts — per-text-node language detection via `fasttext-langid`.
-4. Toast-library heuristic for 4.1.3 — whitelist react-toastify, sonner, react-hot-toast class patterns.
-5. Extend `capture_status` plumbing to OCR/contrast (1.4.3 / 1.4.5 / 1.4.11 converters currently still trust OCR silently).
+4. Extend `capture_status` plumbing to OCR/contrast (1.4.3 / 1.4.5 / 1.4.11 converters currently still trust OCR silently).
