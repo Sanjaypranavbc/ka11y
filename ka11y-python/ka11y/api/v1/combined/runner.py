@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -86,7 +87,7 @@ def _merge_findings(
         # image_src: Python image findings use the src URL as element_id, but axe
         # findings for the same <img> use CSS selectors.  Provide a stable cross-service
         # dedup key by normalising the image src when present (§3.2 fix).
-        image_src = (el.get("image_src") or f.get("element", {}).get("image_src") or "").strip().lower()
+        image_src = (el.get("image_src") or "").strip().lower()
         # Strip the el_id if it looks like a URL — use image_src path instead so it
         # doesn't collide with a DOM element-id on a different element.
         el_id_is_url = el_id.startswith(("http://", "https://", "//", "/"))
@@ -322,21 +323,46 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
         )
 
     except Exception as exc:
-        logger.error(f"[combined] job {job_id} failed: {exc}")
+        tb = traceback.format_exc()
+        origin = traceback.extract_tb(exc.__traceback__)[-1] if exc.__traceback__ else None
+        where = f"{origin.filename}:{origin.lineno} in {origin.name}()" if origin else "unknown"
+        err_type = type(exc).__name__
+        current_stage = _jobs[job_id].get("current_stage") or "post_processing"
+        logger.error(
+            f"[combined] job {job_id} failed during stage '{current_stage}' "
+            f"({err_type}: {exc}) at {where}\n{tb}"
+        )
         _jobs[job_id].update(
             {
                 "status": "failed",
                 "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error": str(exc),
+                "error": f"{err_type}: {exc}",
+                "error_stage": current_stage,
+                "error_location": where,
+                "error_traceback": tb,
                 "current_stage": None,
             }
         )
         step_logger.finalize(
             status="error",
             message="Combined audit job failed",
-            context={"error": str(exc)},
+            context={
+                "error_type": err_type,
+                "error": str(exc),
+                "stage": current_stage,
+                "location": where,
+            },
         )
-        await _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
+        await _broadcast(
+            job_id,
+            "job_failed",
+            {
+                "job_id": job_id,
+                "error": f"{err_type}: {exc}",
+                "stage": current_stage,
+                "location": where,
+            },
+        )
 
     finally:
         # Stage-event broadcasts are scheduled via loop.create_task() and are not

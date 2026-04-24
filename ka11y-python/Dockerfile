@@ -25,7 +25,17 @@ COPY ka11y/ ./ka11y/
 COPY i18n/   ./i18n/
 
 RUN pip install --no-cache-dir --upgrade poetry
-RUN poetry install --only main
+
+# Japanese NLP support (sudachipy + sudachidict + spaCy ja_core_news_lg).
+# Toggle off at build time for a smaller EN-only image:
+#   docker build --build-arg INSTALL_JAPANESE=0 .
+ARG INSTALL_JAPANESE=1
+RUN if [ "$INSTALL_JAPANESE" = "1" ]; then \
+        poetry install --only main -E japanese && \
+        poetry run python -m spacy download ja_core_news_lg; \
+    else \
+        poetry install --only main; \
+    fi
 
 # Install Playwright's Chromium browser + all system dependencies
 RUN poetry run playwright install chromium --with-deps
