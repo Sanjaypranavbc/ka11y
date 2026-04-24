@@ -102,7 +102,7 @@ PaddleOCR and EasyOCR are used for alt-text validation against image content. Ja
 | Issue | Impact |
 |---|---|
 | Vertical text (縦組み / tategumi) | OCR reads columns left-to-right; characters are merged or swapped |
-| Half-width katakana (`ｶﾀｶﾅ`) | Treated as ASCII symbols; not matched against JA keyword patterns |
+| Half-width katakana (`ｶﾀｶﾅ`) | ✅ Now normalized via NFKC before keyword matching (see Priority 5 below); OCR recognition of half-width glyphs as distinct characters remains an engine limitation |
 | Fonts below 12 pt | Misread rate increases substantially; small kanji strokes are dropped |
 | Mixed kanji + kana + ASCII | Model confidence drops below threshold; region is skipped |
 
@@ -224,22 +224,28 @@ SENSORY_WORDS = SENSORY_WORDS_EN | SENSORY_WORDS_JA
 
 ---
 
-### Priority 5 — Half-width katakana normalization
+### Priority 5 — Half-width katakana normalization ✅ Implemented (2026-04-24)
 
-Add NFKC normalization as the first step in all text-processing paths (both Python and Node):
+NFKC normalization is now applied as the first step in all text-processing paths in both engines:
+
+**Python** (`sensory_auditor.py`) — `_normalize_text()` calls `unicodedata.normalize("NFKC", text)` and is invoked at the top of `_iter_text_sources()` before any spaCy or keyword processing:
 
 ```python
-# Python
 import unicodedata
-text = unicodedata.normalize("NFKC", text)
+
+def _normalize_text(text: str) -> str:
+    return unicodedata.normalize("NFKC", text)
 ```
+
+**Node** (`sharedAssets.js`) — `normalizeText()` calls `text.normalize('NFKC')` and is applied inside `_normalizeStringList()`, so every keyword entry in every check's config list is normalized at pattern-build time:
 
 ```javascript
-// Node
-text = text.normalize("NFKC");
+function normalizeText(text) {
+  return typeof text === 'string' ? text.normalize('NFKC') : text;
+}
 ```
 
-This converts `ｶﾀｶﾅ` → `カタカナ`, `Ａ` → `A`, and `１` → `1`, ensuring half-width variants match keyword patterns and OCR patterns consistently.
+This converts `ｶﾀｶﾅ` → `カタカナ`, `Ａ` → `A`, and `１` → `1`, ensuring half-width variants match keyword patterns and OCR patterns consistently across both engines.
 
 ---
 

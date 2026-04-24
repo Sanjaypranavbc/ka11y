@@ -23,6 +23,22 @@ Priority gap-closure items addressed in this pass:
 
 ---
 
+## Bug fixes — 2026-04-24 (patch)
+
+Seven runtime and logic bugs found during the code review were fixed in this patch. Tests went from 616/618 → 618/618 Python, 233/233 Node.
+
+| # | Bug | Root cause | Fix | Files changed |
+|---|---|---|---|---|
+| 1 | **`IMAGE_AUDIT_RECORD_CONVERTERS` registry missing 2 of 4 entries** | `_alt_text_to_findings` (`wcag_1_1_1_status`) and `_images_of_text_to_findings` (`wcag_1_4_5_status`) were commented out as "Handled by Pipeline" — broke a registry-completeness test and caused those SCs to emit no Python findings in the combined report | Uncommented both entries | `ka11y-python/ka11y/api/v1/combined/findings.py` |
+| 2 | **Orientation ratio threshold too strict** | `_dramatic_ratio_flags_needs_review`: threshold was `ratio < 0.1`; test documents 10 portrait vs 2 landscape (ratio 0.2) must trigger | Changed `< 0.1` → `< 0.5` | `ka11y-python/ka11y/accessibility/rendered/evaluators/orientation.py` |
+| 3 | **`error-prevention.check.js` safe-forms reference always shows fallback** | `f.formId` was never set in `riskForms` objects (correct field name is `element_id`) → `form#<id>` string was always replaced by `<form> (category)` | Changed `f.formId ?` → `f.element_id ?` | `ka11y-node/src/custom-checks/error-prevention.check.js` |
+| 4 | **2-letter uppercase abbreviations ("UI", "AI", "OK") always filtered from OCR word list** | `_norm()` lowercases all text before word extraction; `w.isupper()` on a lowercased word is always False; the `len(w) >= 3` floor then drops 2-letter tokens | Scan raw (pre-`_norm()`) OCR text with `re.findall(r'\b[A-Z]{2}\b', raw_ocr)`, lowercase results, and append to `ocr_words` before matching | `ka11y-python/ka11y/accessibility/rules/non_text/alttext.py` |
+| 5 | **Half-width katakana (`ｶﾀｶﾅ`) not normalized before NLP in Python** | `sensory_auditor.py` fed raw text directly to spaCy and keyword sets; half-width variants escaped all Japanese keyword matches | Added `_normalize_text()` using `unicodedata.normalize("NFKC", text)` called at the top of `_iter_text_sources()` | `ka11y-python/ka11y/accessibility/rules/non_text/sensory_auditor.py` |
+| 6 | **Half-width katakana not normalized in Node keyword lists** | `sharedAssets.js` built keyword patterns from raw config strings; half-width variants in user config or JA copy bypassed regex matches | Added `normalizeText()` using `text.normalize('NFKC')` applied inside `_normalizeStringList()`; exported the function | `ka11y-node/src/custom-checks/sharedAssets.js` |
+| 7 | **Cross-service image findings duplicated in merged report** | Python image findings set `element.element_id` to the image src URL (a URL, not a DOM id); axe findings for the same `<img>` use CSS selectors — both end up with different `_sig()` keys, so the same image appears twice | Added URL detection (`el_id_is_url`) to skip unstable URL-shaped element_ids from the `id:` namespace; added `img:` namespace keyed on `image_src` as a stable cross-service dedup key | `ka11y-python/ka11y/api/v1/combined/runner.py` |
+
+---
+
 ## Sprint changes — 2026-04-23
 
 Priority sprint items from the previous review addressed in this pass:
@@ -38,7 +54,7 @@ Priority sprint items from the previous review addressed in this pass:
 | **Japanese support** | Verified | Auditing confirmed `config/universal.yml` already carries EN+JA keyword lists across 30+ categories; `sensory_auditor.py` has `SENSORY_WORDS_JA`, `GENERIC_UI_NOUNS_JA`, `STOP_WORDS_JA` with particles (は/が/を/に) and `_detect_lang` overrides `<html lang="en">` when body text is CJK. New checks ship with inline EN+JA copy. |
 | **Multi-page crawling (2.4.5 / 3.2.3 / 3.2.4 / 3.2.6)** | Deferred | Explicitly out of scope this sprint — requires a new crawl queue + cross-page dedup layer. Documented as future work. |
 
-Test results after changes: `ka11y-python` 616/618 passing (2 pre-existing failures unrelated to this pass), `ka11y-node` 233/233 passing.
+Test results after changes: `ka11y-python` 616/618 passing (2 failures fixed in the subsequent patch — see "Bug fixes — 2026-04-24"), `ka11y-node` 233/233 passing.
 
 ---
 
@@ -151,11 +167,11 @@ Multi-stage pipeline: (1) DOM crawl → `ImageData`, (2) CNN classifier → `{in
 | F72 ASCII art without text alt | Failure | Missed — requires human judgment | — |
 
 ### Known limitations
-1. **Acronym collision:** 3-char token floor in `_check_1_1_1_informative` causes false negatives for valid 2-letter tokens (e.g., "UI", "Go", "OK").
-2. **Synonym blindness:** Literal OCR match. "Search" in image + alt "Look up" → false fail.
-3. **Classifier dependency:** ML misclassification propagates. If logo is labelled `informative`, logo-keyword gate (`_check_1_1_1_logo`) is skipped and `brand name` passes.
-4. **CSS background images:** Entire category untouched — `<div style="background-image: url(hero.jpg)">` with decorative/informative content is invisible.
-5. **SVG `<title>`:** SVGs with inline `<title>` children are parsed inconsistently — accessible-name computation sometimes falls back to filename.
+1. **Synonym blindness:** Literal OCR match. "Search" in image + alt "Look up" → false fail.
+2. **Classifier dependency:** ML misclassification propagates. If logo is labelled `informative`, logo-keyword gate (`_check_1_1_1_logo`) is skipped and `brand name` passes.
+3. **CSS background images:** Entire category untouched — `<div style="background-image: url(hero.jpg)">` with decorative/informative content is invisible.
+4. **SVG `<title>`:** SVGs with inline `<title>` children are parsed inconsistently — accessible-name computation sometimes falls back to filename.
+5. **2-letter token handling:** ✅ Fixed (2026-04-24 patch) — uppercase 2-letter abbreviations ("UI", "AI", "OK") are now extracted from raw OCR text before `_norm()` lowercasing, so they participate in the word-match check.
 
 ---
 
@@ -791,11 +807,11 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 
 ---
 
-## 3.2 Cross-service finding duplication
+## 3.2 Cross-service finding duplication ✅ Fixed (2026-04-24 patch)
 - Both `axeResultMapper.js` and Python pipeline emit findings for shared SCs (1.1.1, 2.4.7, 2.5.3, 4.1.2).
 - Runner dedup key is `(wcag_sc, status, element_signature)` — when the element signature differs between axe and Python (XPath vs selector), the same violation shows up twice.
 
-**Fix:** harmonise element signatures at the formatter level.
+**Fix applied:** `_sig()` in `runner.py` now detects when `element_id` is URL-shaped (indicating a Python image finding's src URL, not a DOM id) and skips it as an unstable dedup key. An `img:` namespace keyed on `image_src` provides a stable cross-service key that both axe and Python findings can resolve to the same element.
 
 ---
 
@@ -867,7 +883,7 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 
 6. **OCR: handle vertical text.** When PaddleOCR confidence is below 0.6 on a text region, add a Tesseract `--psm 5` (vertical single column) fallback step — vertical Japanese columns produce this low-confidence pattern consistently.
 
-7. **Half-width katakana normalization.** Normalize `ｶﾀｶﾅ` → `カタカナ` before any NLP pipeline step using `unicodedata.normalize('NFKC', text)` in Python and `text.normalize('NFKC')` in Node. This prevents half-width variants from escaping Japanese keyword matches in all Node and Python checks.
+7. ✅ **Half-width katakana normalization** *(implemented 2026-04-24 patch).* Normalize `ｶﾀｶﾅ` → `カタカナ` before any NLP pipeline step using `unicodedata.normalize('NFKC', text)` in Python and `text.normalize('NFKC')` in Node. Implemented in `sensory_auditor.py` (`_normalize_text()` + `_iter_text_sources()`) and `sharedAssets.js` (`normalizeText()` applied inside `_normalizeStringList()`).
 
 ---
 
@@ -906,8 +922,18 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 5. ✅ 3.3.4 G164 — undo/revert safeguard heuristic in `error-prevention.check.js`.
 6. ✅ 4.1.3 F114 — toast-without-ARIA heuristic via `custom-status-messages-toast`.
 
+**Completed 2026-04-24 patch (bug fixes — 618/618 tests passing):**
+1. ✅ `IMAGE_AUDIT_RECORD_CONVERTERS` registry completeness — uncommented `_alt_text_to_findings` + `_images_of_text_to_findings` in `findings.py`.
+2. ✅ Orientation dramatic-ratio threshold — `< 0.1` → `< 0.5` in `orientation.py`.
+3. ✅ `error-prevention.check.js` safe-form ref string — `f.formId` → `f.element_id`.
+4. ✅ 2-letter uppercase abbreviation handling in OCR word matching — extract raw `[A-Z]{2}` tokens before `_norm()` in `alttext.py`.
+5. ✅ NFKC normalization in Python NLP path — `_normalize_text()` in `sensory_auditor.py`.
+6. ✅ NFKC normalization in Node keyword lists — `normalizeText()` in `sharedAssets.js`.
+7. ✅ Cross-service image dedup (§3.2) — URL-shaped `element_id` detection + `img:` namespace in `runner.py`.
+
 **Next sprint (proposed):**
-1. Multi-page crawling for 2.4.5 / 3.2.3 / 3.2.4 / 3.2.6 — largest remaining gap, requires new crawl queue.
-2. 1.2.4 Captions (Live) — extend `captions-prerecorded` to detect `is-live` / HLS / WebRTC sources.
-3. 3.1.2 Language of Parts — per-text-node language detection via `fasttext-langid`.
-4. Extend `capture_status` plumbing to OCR/contrast (1.4.3 / 1.4.5 / 1.4.11 converters currently still trust OCR silently).
+1. **Multi-page crawling** for 2.4.5 / 3.2.3 / 3.2.4 / 3.2.6 — largest remaining gap, requires new crawl queue and cross-page dedup layer. Estimates: 2–3 weeks.
+2. **1.2.4 Captions (Live)** — extend `captions-prerecorded` to detect `is-live` / HLS (`m3u8`) / WebRTC sources and flag missing captions in live context. Estimate: 2–3 days.
+3. **3.1.2 Language of Parts** — per-text-node language detection via `fasttext-langid` (also fixes §3.3 `lang` drift for 1.3.3 sensory). Estimate: 3–4 days.
+4. **Extend `capture_status` to OCR/contrast converters** — 1.4.3 / 1.4.5 / 1.4.11 converters still trust OCR silently; downgrade to INCOMPLETE when `capture_status != ok`. Estimate: 1 day.
+5. **Japanese NLP quality** — SudachiPy morpheme filtering (Priority 3) + `ja_core_news_lg` upgrade (Priority 2) from `internals/japanese-language-support.mdx`. Estimate: 2–3 days.

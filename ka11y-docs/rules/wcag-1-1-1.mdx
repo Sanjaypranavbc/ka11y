@@ -117,10 +117,10 @@ Localization in the combined finding arrays works like this:
 
 ## Known limitations
 
-- **3-character OCR floor** rejects valid 2-letter labels ("UI", "Go", "OK") — review short alts manually.
 - **Literal OCR matching** — semantic synonyms (alt "Look up" vs OCR "Search") fail the content-equivalence check.
 - **Classifier dependency** — a logo mis-labelled as `informative` bypasses the logo-keyword gate.
 - **`<object>` / `<embed>` fallback content** is not traversed.
+- **2-letter token coverage** — uppercase abbreviations (e.g. "UI", "AI", "OK") are now extracted directly from the raw OCR output before lowercasing, so they are included in the word-match check. Single-character tokens are still excluded.
 
 ## CSS background images (supplementary check)
 
