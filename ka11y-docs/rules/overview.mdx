@@ -52,6 +52,7 @@ Legend: **Full** = primary detection engine. **Partial** = detects some patterns
 | **2.5.7** | Dragging Movements | AA | — | — | Partial | Static | Library-based drag detection |
 | **2.5.8** | Target Size (Minimum) | AA | — | **Full** | — | Pipeline | 24×24 + inline/UA/offset exceptions |
 | **3.1.1** | Language of Page | A | ✓ | — | — | Static | axe-core only |
+| **3.1.2** | Language of Parts | AA | — | — | Partial | Static | Empty lang, invalid BCP47, unannotated CJK |
 | **3.1.6** | Pronunciation | AAA | — | — | Partial | Static | `<ruby>` + glossary detection |
 | **3.2.1** | On Focus | A | — | — | Partial | Static | Inline handler scan |
 | **3.2.2** | On Input | A | — | — | Partial | Static | Inline handler scan |
@@ -74,7 +75,6 @@ Legend: **Full** = primary detection engine. **Partial** = detects some patterns
 | 1.2.5 Audio Description (Prerecorded) | AA | Partially covered by the new 1.2.3 check — deeper verification pending |
 | 2.2.1 Timing Adjustable | A | Not implemented — partial automatability |
 | 2.3.1 Three Flashes or Below | A | Not implemented — requires video-frame analysis |
-| 3.1.2 Language of Parts | AA | Not implemented — requires language-ID |
 | 3.2.3 Consistent Navigation | AA | Deferred — requires multi-page crawl |
 | 3.2.4 Consistent Identification | AA | Deferred — requires multi-page crawl |
 
