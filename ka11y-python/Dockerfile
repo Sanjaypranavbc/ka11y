@@ -24,7 +24,10 @@ COPY pyproject.toml poetry.lock ./
 COPY ka11y/ ./ka11y/
 COPY i18n/   ./i18n/
 
-RUN pip install --no-cache-dir --upgrade poetry
+RUN pip install --no-cache-dir "poetry==2.3.2"
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=0 \
+    POETRY_CACHE_DIR=/tmp/poetry_cache
 
 # Japanese NLP support (sudachipy + sudachidict + spaCy ja_core_news_lg).
 # Toggle off at build time for a smaller EN-only image:
