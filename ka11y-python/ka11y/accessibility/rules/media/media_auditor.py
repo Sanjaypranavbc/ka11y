@@ -357,6 +357,8 @@ class MediaAuditor:
     def generate_audit_report(
         self,
         items: List[Dict[str, Any]],
+        run_1_2_1: bool = True,
+        run_1_2_2: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Audit all media elements through Gates 1–5.
@@ -375,14 +377,14 @@ class MediaAuditor:
         records: List[Dict[str, Any]] = []
 
         for item in items:
-            record = self._audit_single(item)
+            record = self._audit_single(item, run_1_2_1, run_1_2_2)
             records.append(record)
 
         self._write_csv(records)
         self._log_summary(records)
         return records
 
-    def _audit_single(self, item: Dict[str, Any]) -> Dict[str, Any]:
+    def _audit_single(self, item: Dict[str, Any], run_1_2_1: bool = True, run_1_2_2: bool = True) -> Dict[str, Any]:
         """Run all gates on a single media element, return the audit record."""
         base = {
             "page_url": item.get("page_url", ""),
@@ -434,6 +436,9 @@ class MediaAuditor:
             
             # ── 1.2.2 Flow for Synchronized Media ─────────────────────────────
             
+            if not run_1_2_2:
+                return base
+
             # Gate 3: Is it a labeled alternative?
             gate3 = _gate_3_is_labeled_alternative(item)
             if gate3:
@@ -497,6 +502,10 @@ class MediaAuditor:
 
 
         # ── Gate 3: Is it a labeled media alternative? ────────────────────
+        
+        if not run_1_2_1:
+            return base
+
         gate3 = _gate_3_is_labeled_alternative(item)
         if gate3:
             status, violation, gate = gate3

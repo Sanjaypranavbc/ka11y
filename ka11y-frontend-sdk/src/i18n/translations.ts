@@ -18,6 +18,7 @@ export const translations = {
     "nav.imageVisualiser":    "Image Visualiser",
     "nav.wcagRules":          "WCAG Rules",
     "nav.settings":           "Settings",
+    "nav.ruleEvaluator":      "Individual Rule Tester",
 
     // ── Sidebar ─────────────────────────────────────────────────────────────
     "sidebar.ariaLabel":      "Audit controls",
@@ -216,6 +217,7 @@ export const translations = {
     "nav.imageVisualiser":    "画像ビジュアライザ",
     "nav.wcagRules":          "WCAGルール",
     "nav.settings":           "設定",
+    "nav.ruleEvaluator":      "個別ルール監査",
 
     // ── Sidebar ─────────────────────────────────────────────────────────────
     "sidebar.ariaLabel":      "監査コントロール",

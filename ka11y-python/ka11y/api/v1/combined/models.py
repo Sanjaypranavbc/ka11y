@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, HttpUrl, model_validator
 _SC_STAGE_PREREQUISITES = {
     "1.1.1": ("run_image_audit",),
     "1.2.1": ("run_media_audit",),
+    "1.2.2": ("run_captions_audit",),
     "1.3.4": ("run_orientation_audit",),
     "1.4.3": ("run_ocr",),
     "1.4.4": ("run_resize_text_audit",),
@@ -45,6 +46,7 @@ class CombinedRequest(BaseModel):
     run_form_audit: bool = True
     run_label_in_name_audit: bool = True
     run_media_audit: bool = True
+    run_captions_audit: bool = True
     run_pause_stop_hide_audit: bool = True
     run_target_size_audit: bool = True
     # ── Rendered-layout WCAG checks ──────────────────────────────────────────

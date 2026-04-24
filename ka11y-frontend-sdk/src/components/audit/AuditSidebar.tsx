@@ -18,6 +18,7 @@ import {
   X,
   Images,
   BookOpen,
+  Beaker,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/i18n/LanguageContext";
@@ -40,6 +41,7 @@ const NAV_ITEMS: { key: TranslationKey; value: TabValue; icon: React.ElementType
   { key: "nav.passes",          value: "passes",              icon: CheckCircle2    },
   { key: "nav.imageVisualiser", value: "image-visualisation", icon: Images          },
   { key: "nav.wcagRules",       value: "wcag-rules",          icon: BookOpen        },
+  { key: "nav.ruleEvaluator",     value: "rule-evaluator",        icon: Beaker          },
   { key: "nav.settings",        value: "settings",            icon: Settings        },
 ];
 

@@ -961,13 +961,14 @@ async def _stage_media_audit_universal(
     url: str,
     output_dir: Path,
     run_media_audit: bool,
+    run_captions_audit: bool,
     job_id: str,
     snapshot_task,
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "media_audit")
-    if not run_media_audit:
+    if not run_media_audit and not run_captions_audit:
         _stage_complete(job_id, "media_audit", 0)
         return []
 
@@ -979,6 +980,8 @@ async def _stage_media_audit_universal(
         records = await asyncio.to_thread(
             auditor.generate_audit_report,
             [item.model_dump() for item in snapshot.media],
+            run_1_2_1=run_media_audit,
+            run_1_2_2=run_captions_audit,
         )
         findings = _media_to_findings(records, url)
         _record_stage_metrics(
@@ -1050,6 +1053,7 @@ async def _run_python_stages(
     run_form_audit: bool,
     run_label_in_name_audit: bool,
     run_media_audit: bool,
+    run_captions_audit: bool,
     run_pause_stop_hide_audit: bool,
     run_target_size_audit: bool,
     run_resize_text_audit: bool,
@@ -1082,6 +1086,7 @@ async def _run_python_stages(
             run_form_audit,
             # run_label_in_name_audit, # Handled by pipeline
             run_media_audit,
+            run_captions_audit,
             run_pause_stop_hide_audit,
             run_target_size_audit,
             run_text_spacing_audit,
@@ -1167,7 +1172,7 @@ async def _run_python_stages(
         ),
         _timed(
             _stage_media_audit_universal(
-                url, output_dir, run_media_audit, job_id, snapshot_task, lang, step_logger
+                url, output_dir, run_media_audit, run_captions_audit, job_id, snapshot_task, lang, step_logger
             )
         ),
         _timed(

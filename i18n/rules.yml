@@ -43,7 +43,7 @@ rules:
 
   "1.2.2":
     level: "A"
-    severity: null
+    severity: "critical"
     name: "Captions (Prerecorded)"
     description: >-
       Captions are provided for all pre-recorded audio content

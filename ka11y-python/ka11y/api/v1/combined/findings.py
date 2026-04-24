@@ -1280,50 +1280,51 @@ def _focus_not_obscured_enh_to_findings(
 
 
 def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
-    """Convert MediaAuditor records to standard findings for WCAG 1.2.1."""
+    """Convert MediaAuditor records to standard findings for WCAG 1.2.1 and 1.2.2."""
     findings = []
     for r in records:
-        status_raw = r.get("wcag_1_2_1_status", "")
-        if status_raw == "N/A":
-            continue
-        if status_raw == "FAILED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_1_2_1_media",
-                    wcag_sc="1.2.1",
-                    status="fail",
-                    reason=r.get("wcag_1_2_1_violation")
-                    or "No text alternative for prerecorded media.",
-                    severity=_PYTHON_SEVERITY.get("1.2.1", "critical"),
-                    **_record_element_kwargs(r, page_url),
-                )
-            )
-        elif status_raw == "NEEDS_REVIEW":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_1_2_1_media",
-                    wcag_sc="1.2.1",
-                    status="needs_review",
-                    reason=r.get("wcag_1_2_1_violation")
-                    or "Manual review required for transcript quality.",
-                    severity=_PYTHON_SEVERITY.get("1.2.1", "critical"),
-                    **_record_element_kwargs(r, page_url),
-                )
-            )
-        elif status_raw == "PASSED":
-            findings.append(
-                _make_finding(
-                    source="python",
-                    rule_id="python_1_2_1_media",
-                    wcag_sc="1.2.1",
-                    status="pass",
-                    reason="Prerecorded media has an equivalent text alternative.",
-                    severity=None,
-                    **_record_element_kwargs(r, page_url),
-                )
-            )
+        # WCAG 1.2.1
+        s_121 = r.get("wcag_1_2_1_status", "")
+        if s_121 == "FAILED":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_1_media", wcag_sc="1.2.1", status="fail",
+                reason=r.get("wcag_1_2_1_violation") or "No text alternative for prerecorded media.",
+                severity=_PYTHON_SEVERITY.get("1.2.1", "critical"), **_record_element_kwargs(r, page_url)
+            ))
+        elif s_121 == "NEEDS_REVIEW":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_1_media", wcag_sc="1.2.1", status="needs_review",
+                reason=r.get("wcag_1_2_1_violation") or "Manual review required for transcript quality.",
+                severity=_PYTHON_SEVERITY.get("1.2.1", "critical"), **_record_element_kwargs(r, page_url)
+            ))
+        elif s_121 == "PASSED":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_1_media", wcag_sc="1.2.1", status="pass",
+                reason="Prerecorded media has an equivalent text alternative.",
+                severity=None, **_record_element_kwargs(r, page_url)
+            ))
+
+        # WCAG 1.2.2
+        s_122 = r.get("wcag_1_2_2_status", "")
+        if s_122 == "FAILED":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="fail",
+                reason=r.get("wcag_1_2_2_violation") or "No captions found for synchronized media.",
+                severity=_PYTHON_SEVERITY.get("1.2.2", "critical"), **_record_element_kwargs(r, page_url)
+            ))
+        elif s_122 == "NEEDS_REVIEW":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="needs_review",
+                reason=r.get("wcag_1_2_2_violation") or "Manual review required for captions quality.",
+                severity=_PYTHON_SEVERITY.get("1.2.2", "critical"), **_record_element_kwargs(r, page_url)
+            ))
+        elif s_122 == "PASSED":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="pass",
+                reason="Synchronized media has a captions track.",
+                severity=None, **_record_element_kwargs(r, page_url)
+            ))
+            
     return findings
 
 

@@ -9,6 +9,7 @@ import { PassesTab } from "@/components/audit/PassesTab";
 import { ImageVisualisationTab } from "@/components/audit/ImageVisualisationTab";
 import { SettingsTab, ThemePreference } from "@/components/audit/SettingsTab";
 import { WcagRulesTab } from "@/components/audit/WcagRulesTab";
+import { RuleEvaluatorTab } from "@/components/audit/RuleEvaluatorTab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TabValue, StageInfo } from "@/types/audit";
 import { AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react";
@@ -226,6 +227,7 @@ const Index = () => {
                   imageAuditReport={result.image_audit_report}
                 />
               )}
+              {activeTab === "rule-evaluator"      && <RuleEvaluatorTab />}
               {activeTab === "settings"            && (
                 <SettingsTab
                   maxRows={maxRows}

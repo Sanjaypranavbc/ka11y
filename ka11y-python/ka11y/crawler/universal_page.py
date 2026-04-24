@@ -912,7 +912,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         function getNearbyLinks(el) {
             const links = [];
             let container = el.parentElement;
-            for (let i = 0; i < 3 && container; i++) {
+            for (let i = 0; i < 6 && container; i++) {
                 queryShadow(container, 'a[href]').forEach(a => {
                     const href = a.getAttribute('href') || '';
                     const text = (a.innerText || a.textContent || '').trim();
@@ -963,7 +963,6 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         }
 
         queryShadow(document, 'audio, video').forEach(el => {
-            if (shouldIgnoreForSnapshot(el)) return;
             media.push({
                 ...metaFor(el),
                 element_index: media.length,
@@ -1532,7 +1531,7 @@ class UniversalPageLoader:
             "sensory": [],
         }
 
-        frames = await cls._collect_same_origin_frames(page, page_url=page_url, output=output)
+        frames = await cls._collect_all_frames(page, page_url=page_url, output=output)
         for frame, frame_path in frames:
             if frame.is_detached():
                 # Silently skip detached frames if they were just transient/blank
@@ -1639,7 +1638,7 @@ class UniversalPageLoader:
         return list(dict.fromkeys(resolved))
 
     @classmethod
-    async def _collect_same_origin_frames(
+    async def _collect_all_frames(
         cls,
         page: Page,
         *,
@@ -1652,18 +1651,6 @@ class UniversalPageLoader:
             frames.append((frame, path))
             for index, child in enumerate(frame.child_frames):
                 child_path = f"{path}.{index}"
-                child_url = child.url or ""
-                if child_url and not cls._is_same_origin(page_url, child_url):
-                    warning = await cls._build_frame_warning(
-                        code="cross_origin_frame_skipped",
-                        page_url=page_url,
-                        frame=child,
-                        frame_path=child_path,
-                        message="Skipped cross-origin frame during universal extraction",
-                    )
-                    output.warnings.append(warning)
-                    output.partial = True
-                    continue
                 await walk(child, child_path)
 
         await walk(page.main_frame, "main")
