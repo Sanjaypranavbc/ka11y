@@ -350,8 +350,11 @@ export function useAudit() {
     async (config: AuditConfig) => {
       setJobStatus("pending");
       setError(null);
+      setFailure(null);
       setCurrentStage("");
       setStages([]);
+      setPlan(null);
+      setStageProgress(null);
       setWarnings([]);
       stopPolling();
       closeSSE();
@@ -429,6 +432,19 @@ export function useAudit() {
     URL.revokeObjectURL(url);
   }, [result]);
 
-  return { result, jobStatus, error, runAudit, exportJSON, currentStage, stages, warnings, activeRun };
+  return {
+    result,
+    jobStatus,
+    error,
+    failure,
+    runAudit,
+    exportJSON,
+    currentStage,
+    stages,
+    plan,
+    stageProgress,
+    warnings,
+    activeRun,
+  };
 }
 
