@@ -405,6 +405,9 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         filename = r.get("filename")
         detected_text = r.get("detected_text")
 
+        if status_raw == "PASSED" and "manual review" in reason.lower():
+            status_raw = "INCOMPLETE"
+
         if status_raw == "INCOMPLETE":
             findings.append(
                 _make_finding(
