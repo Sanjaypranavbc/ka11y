@@ -11,14 +11,15 @@ class EvidenceFormatter:
             status_map = {
                 VerdictStatus.PASS: "pass",
                 VerdictStatus.FAIL: "fail",
-                VerdictStatus.NEEDS_REVIEW: "needs_review"
+                VerdictStatus.NEEDS_REVIEW: "needs_review",
+                VerdictStatus.NOT_APPLICABLE: "not_applicable",
             }
             
             finding = {
                 "source": "python",
                 "rule_id": v.rule_id,
                 "wcag_sc": v.wcag_sc,
-                "status": status_map.get(v.status, "pass"),
+                "status": status_map.get(v.status, "not_applicable"),
                 "reason": v.human_reason,
                 "confidence_score": round(v.confidence, 2),
                 # Backward compatibility: element details

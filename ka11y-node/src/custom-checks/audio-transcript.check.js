@@ -30,7 +30,12 @@ async function run(page, context = {}) {
         return decodeURIComponent(base);
       } catch (_) {
         const path = href.split('?')[0].split('#')[0];
-        return decodeURIComponent((path.split('/').pop() || '').trim());
+        const base = (path.split('/').pop() || '').trim();
+        try {
+          return decodeURIComponent(base);
+        } catch (__) {
+          return base;
+        }
       }
     }
 
