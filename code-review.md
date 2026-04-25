@@ -951,3 +951,5 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 3. **3.1.2 Language of Parts** — per-text-node language detection via `fasttext-langid` (also fixes §3.3 `lang` drift for 1.3.3 sensory). Estimate: 3–4 days.
 4. **Extend `capture_status` to OCR/contrast converters** — 1.4.3 / 1.4.5 / 1.4.11 converters still trust OCR silently; downgrade to INCOMPLETE when `capture_status != ok`. Estimate: 1 day.
 5. **Japanese NLP quality** — SudachiPy morpheme filtering (Priority 3) + `ja_core_news_lg` upgrade (Priority 2) from `internals/japanese-language-support.mdx`. Estimate: 2–3 days.
+6. **Python Pipeline** is comming in frontend needs to know what it means
+7. **Some passes from 1.1.1 aren't in needs review** 1.1.1 manual review in reason are classified as passes

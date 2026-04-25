@@ -15,7 +15,7 @@ class EvidenceFormatter:
             }
             
             finding = {
-                "source": "python_pipeline",
+                "source": "python",
                 "rule_id": v.rule_id,
                 "wcag_sc": v.wcag_sc,
                 "status": status_map.get(v.status, "pass"),
