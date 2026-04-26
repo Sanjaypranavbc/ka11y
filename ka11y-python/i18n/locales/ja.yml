@@ -1,14 +1,139 @@
 # ============================================================
 # ka11y — Japanese (日本語) locale
 # ============================================================
-# Translate ONLY: name, description, suggested_fix
-# Do NOT include: level, severity (those come from rules.yml)
+# Translate the following sections — each key here overrides the
+# corresponding English entry in i18n/rules.yml. Leave a value blank or
+# omit a key to fall back to English.
 #
-# Leave a field blank or omit it to fall back to English.
+#   severities       — display labels for severity machine values
+#   levels           — display labels for WCAG conformance levels
+#   statuses         — display labels for finding status values
+#   rules.*.name / description / suggested_fix
+#   reason_templates — per-rule reason strings (see top of rules.yml)
+#
+# Stable machine fields (level, severity, status) come from rules.yml
+# and MUST NOT be redefined here.
 # ============================================================
 
 version: "1.0"
 lang: "ja"
+
+# Severity display labels
+severities:
+  critical: "重大"
+  high: "高"
+  medium: "中"
+  low: "低"
+  none: "なし"
+
+# WCAG level display labels
+levels:
+  A: "レベル A"
+  AA: "レベル AA"
+  AAA: "レベル AAA"
+
+# Finding status display labels
+statuses:
+  pass: "合格"
+  fail: "不合格"
+  needs_review: "要確認"
+  inapplicable: "対象外"
+
+# Per-finding reason templates (JA). Keys mirror i18n/rules.yml exactly.
+# Placeholders use {name} interpolation. Missing keys fall back to English.
+reason_templates:
+
+  "1.1.1":
+    capture_failed:    "画像のキャプチャに失敗しました — OCR で代替テキストを検証できませんでした。"
+    fail_missing_alt:  "画像に十分な alt 属性がありません。"
+    pass:              "画像には十分な代替テキストがあります。"
+
+  "1.2.1":
+    fail_no_alt:        "収録済みメディアにテキスト代替がありません。"
+    needs_review:       "書き起こしの品質について手動確認が必要です。"
+    pass:               "収録済みメディアには同等のテキスト代替が提供されています。"
+
+  "1.3.3":
+    fail_default:       "指示が知覚的特性（{sensory_categories}）のみに依存しており、非感覚的な識別子がありません。"
+    pass_no_records:    "クロール対象に知覚的特性のみに依存する指示は検出されませんでした。"
+    pass:               "指示には十分な非感覚的識別子が含まれています。"
+
+  "1.3.4":
+    pass: "コンテンツは縦向き・横向きの両方で利用可能です。"
+
+  "1.4.3":
+    needs_review_unknown: '画像 "{filename}" 内のテキストについて、OCR のコントラスト判定データが得られなかったため WCAG 1.4.3 AA を検証できませんでした。手動確認が必要です。観測比: {ratio}（前景 {fg_hex} / 背景 {bg_hex}）。'
+    fail:                 '画像 "{filename}" 内のテキストは WCAG 1.4.3 AA のコントラスト基準を満たしていません。比率 {ratio}（前景 {fg_hex} / 背景 {bg_hex}）。{text_type} の必要最小値は {threshold}:1 です。'
+    pass:                 '{image_label} 内のテキストは WCAG 1.4.3 AA のコントラスト基準を満たしています。比率 {ratio}（前景 {fg_hex} / 背景 {bg_hex}）。'
+    capture_failed:       'スクリーンショットのキャプチャに失敗しました（状態: {capture_status}{capture_error_suffix}）。コントラスト解析を実行できませんでした。手動確認が必要です。'
+
+  "1.4.4":
+    pass: "200% に拡大してもテキストが折り返され、コンテンツが失われません。"
+
+  "1.4.5":
+    capture_failed: "画像のキャプチャに失敗しました — OCR で文字の有無を判定できませんでした。"
+    fail:           "画像にテキストが含まれています — 実際の CSS スタイル付きテキストに置き換えてください。"
+    pass:           "画像にテキストは含まれていません（またはロゴ例外が適用されます）。"
+
+  "1.4.6":
+    needs_review_unknown: '画像 "{filename}" 内のテキストについて、OCR のコントラスト判定データが得られなかったため WCAG 1.4.6 AAA 強化コントラストを検証できませんでした。手動確認が必要です。観測比: {ratio}（前景 {fg_hex} / 背景 {bg_hex}）。'
+    fail:                 '画像 "{filename}" 内のテキストは WCAG 1.4.6 AAA 強化コントラスト基準を満たしていません。比率 {ratio}（前景 {fg_hex} / 背景 {bg_hex}）。{text_type} の必要最小値は {threshold}:1 です。'
+    pass:                 '{image_label} 内のテキストは WCAG 1.4.6 AAA 強化コントラスト基準を満たしています。比率 {ratio}（前景 {fg_hex} / 背景 {bg_hex}）。'
+    capture_failed:       'スクリーンショットのキャプチャに失敗しました（状態: {capture_status}{capture_error_suffix}）。強化コントラスト解析を実行できませんでした。手動確認が必要です。'
+
+  "1.4.10":
+    pass: "320 CSS ピクセル幅でも横スクロールなしでコンテンツが折り返されます。"
+
+  "1.4.11":
+    needs_review: "UI コンポーネントのコントラストを自動で検証できませんでした。"
+    fail:         "UI コンポーネントのコントラスト比が最低 3:1 を下回っています。"
+    pass:         "UI コンポーネントは 3:1 のコントラスト比を満たしています。"
+
+  "1.4.12":
+    fail:                 "テキスト間隔のオーバーライド適用後に要素がテキストをクリッピングしています。"
+    needs_review_warning: "固定の高さと overflow:hidden の組み合わせにより、テキスト間隔の拡大時にクリッピングが起こる可能性があります。"
+    needs_review_info:    "固定の高さが検出されました。間隔拡大時にテキストがクリッピングしないか確認してください。"
+    pass_static:          "固定の高さや overflow:hidden によるクリッピングのリスクは検出されませんでした。"
+    pass_rendered:        "テキスト間隔のオーバーライド適用後もコンテンツや機能が失われていません。"
+
+  "1.4.13":
+    pass: "ホバー／フォーカスで表示されるコンテンツは、解除可能・ホバー可能・永続表示の要件を満たしています。"
+
+  "2.2.2":
+    fail:         "自動再生コンテンツに一時停止／停止の手段がありません。"
+    needs_review: "動的コンテンツの再生時間を自動判定できませんでした。"
+    pass:         "動的コンテンツには一時停止／停止の手段があるか、例外条件を満たしています。"
+
+  "2.4.11":
+    pass: "フォーカス中の要素が著者作成コンテンツによって完全に隠されていません。"
+
+  "2.4.12":
+    pass: "フォーカス中の要素が著者作成コンテンツによって（部分的にも）隠されていません。"
+
+  "2.5.3":
+    fail: "アクセシブル名に視覚ラベルが含まれていません。"
+    pass: "アクセシブル名に視覚ラベルが含まれています。"
+
+  "2.5.8":
+    fail: "ターゲットサイズ {width}×{height} px は最小 24×24 px を下回っています。"
+    pass: "ターゲットサイズ {width}×{height} px は最小 24×24 px を満たしています。"
+
+  "3.3.1":
+    fail: "フォーム項目が WCAG 3.3.1 に違反しています。"
+    pass: "フォーム項目は WCAG 3.3.1 を満たしています。"
+
+  "3.3.2":
+    fail: "フォーム項目が WCAG 3.3.2 に違反しています。"
+    pass: "フォーム項目は WCAG 3.3.2 を満たしています。"
+
+  "4.1.2":
+    capture_failed: "機能的画像のキャプチャに失敗しました — アクセシブル名を検証できませんでした。"
+    fail:           "機能的画像に意味のあるアクセシブル名が設定されていません。"
+    pass:           "機能的画像に意味のあるアクセシブル名が設定されています。"
+
+  "_generic":
+    fail_unknown:         "ページが WCAG {wcag_sc} に違反しています。"
+    needs_review_unknown: "WCAG {wcag_sc} は手動確認が必要です。"
 
 rules:
 
@@ -779,3 +904,95 @@ rules:
       動的に追加されるメッセージ（「送信しました」「エラーが発生しました」「読み込み中」等）は
       role="status" または role="alert"、aria-live="polite" または aria-live="assertive" を
       使用してスクリーンリーダーに通知してください。
+
+axe_rules:
+  accesskeys:
+    title: "accesskey の一意性"
+    suggested_fix: "各 accesskey 属性には一意の文字を割り当ててください。accesskey はブラウザーやスクリーンリーダーのショートカットと競合しやすいため、本当に必要かも見直してください。"
+  aria-allowed-role:
+    title: "要素に許可された ARIA ロール"
+    suggested_fix: "role 属性を削除するか、その要素で許可されているロールに置き換えてください。"
+  aria-dialog-name:
+    title: "ARIA ダイアログのアクセシブル名"
+    suggested_fix: "ダイアログ内の見出しを参照する aria-labelledby、または aria-label を追加してください。"
+  aria-text:
+    title: "フォーカス可能要素上の ARIA text ロール"
+    suggested_fix: "インタラクティブ要素やフォーカス可能な子要素を含む要素から role=\"text\" を削除してください。"
+  aria-treeitem-name:
+    title: "ARIA treeitem のアクセシブル名"
+    suggested_fix: "role=\"treeitem\" を持つ要素には、可視テキストまたは aria-label を追加してください。"
+  empty-heading:
+    title: "空の見出しなし"
+    suggested_fix: "すべての見出しに意味のあるテキストを入れてください。装飾目的だけなら見出し要素をやめて CSS を使ってください。"
+  empty-table-header:
+    title: "空の表見出しなし"
+    suggested_fix: "各 th 要素に説明的なテキストを追加してください。見えない見出しが必要なら空のままではなく visually-hidden クラスを使ってください。"
+  focus-order-semantics:
+    title: "フォーカス順とセマンティクス"
+    suggested_fix: "ネイティブのインタラクティブ要素を使うか、フォーカス可能な要素に適切な ARIA ロールを追加してください。"
+  frame-tested:
+    title: "axe でテスト可能な iframe"
+    suggested_fix: "iframe の内容は別途テストしてください。可能であれば同一オリジンで配信し、自動テストが到達できるようにしてください。"
+  heading-order:
+    title: "見出しレベルの順序"
+    suggested_fix: "見出しレベルは順番どおりに使用してください。見出しのレベルは見た目ではなく文書構造を表すものです。"
+  hidden-content:
+    title: "非表示コンテンツの確認"
+    suggested_fix: "非表示コンテンツを確認し、モーダルがフォーカスを適切に閉じ込めて通知されること、装飾要素だけが aria-hidden=\"true\" になっていることを確認してください。"
+  image-redundant-alt:
+    title: "冗長でない画像代替テキスト"
+    suggested_fix: "画像の役割と同じ可視テキストが隣接している場合、その画像には alt=\"\" を設定して重複読上げを避けてください。"
+  label-title-only:
+    title: "title のみのラベル禁止"
+    suggested_fix: "title 属性だけに頼らず、可視の label 要素を追加してください。title は補足情報として残して構いません。"
+  landmark-banner-is-top-level:
+    title: "トップレベルのバナーランドマーク"
+    suggested_fix: "header 要素または role=\"banner\" の要素を body 直下のトップレベルに移動してください。"
+  landmark-complementary-is-top-level:
+    title: "トップレベルの補足ランドマーク"
+    suggested_fix: "aside 要素は main の子ではなく、ページのトップレベルで main の兄弟要素として配置してください。"
+  landmark-contentinfo-is-top-level:
+    title: "トップレベルの contentinfo ランドマーク"
+    suggested_fix: "footer 要素または role=\"contentinfo\" の要素は、別のランドマークの中ではなく body 直下に配置してください。"
+  landmark-main-is-top-level:
+    title: "トップレベルの main ランドマーク"
+    suggested_fix: "main 要素を body の直接の子要素にしてください。"
+  landmark-no-duplicate-banner:
+    title: "重複するバナーランドマークなし"
+    suggested_fix: "複数のバナーランドマークは 1 つに統合してください。セクション内ヘッダーが必要なら div や文脈上の header を使ってください。"
+  landmark-no-duplicate-contentinfo:
+    title: "重複する contentinfo ランドマークなし"
+    suggested_fix: "フッター情報は 1 つの footer にまとめてください。article や section 内の文脈的フッターは許容されます。"
+  landmark-no-duplicate-main:
+    title: "重複する main ランドマークなし"
+    suggested_fix: "重複した main 要素を削除し、1 つだけ残してください。"
+  landmark-one-main:
+    title: "main ランドマークは 1 つ"
+    suggested_fix: "主たるコンテンツを main 要素で囲んでください。"
+  landmark-unique:
+    title: "一意なランドマークラベル"
+    suggested_fix: "同じ種類のランドマークを複数使う場合は、aria-label を一意にしてください。"
+  meta-viewport-large:
+    title: "大きなズームを許可する viewport"
+    suggested_fix: "maximum-scale の制限を削除するか、少なくとも 5 に設定してください。"
+  page-has-heading-one:
+    title: "ページに h1 がある"
+    suggested_fix: "ページの主題を示す h1 を 1 つ追加してください。"
+  presentation-role-conflict:
+    title: "フォーカス可能要素の presentation ロール"
+    suggested_fix: "フォーカス可能要素に role=\"presentation\" や role=\"none\" を付けないでください。必要なら role を削除するか、その要素をフォーカス不可にしてください。"
+  region:
+    title: "ランドマーク内のコンテンツ"
+    suggested_fix: "主要なコンテンツはランドマーク要素で囲んでください。主コンテンツは main、ナビゲーションは nav を使ってください。"
+  scope-attr-valid:
+    title: "有効な table header scope"
+    suggested_fix: "列見出しには scope=\"col\"、行見出しには scope=\"row\" を使ってください。グループ化見出しには rowgroup や colgroup を使用してください。"
+  skip-link:
+    title: "スキップリンク"
+    suggested_fix: "最初のフォーカス可能要素としてスキップリンクを追加し、リンク先 ID が存在することと、必要なら tabindex=\"-1\" でフォーカスできることを確認してください。"
+  tabindex:
+    title: "正の tabindex なし"
+    suggested_fix: "要素をタブ順に含めるなら tabindex=\"0\"、外すなら tabindex=\"-1\" を使ってください。正の tabindex ではなく DOM 構造を調整してください。"
+  table-duplicate-name:
+    title: "caption と summary の重複なし"
+    suggested_fix: "caption には簡潔な表題を、summary には表の構造説明を設定し、同じ内容の繰り返しを避けてください。"
