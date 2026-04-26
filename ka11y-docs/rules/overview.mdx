@@ -112,7 +112,9 @@ axe-core assigns its own severity values (`critical`, `serious`, `moderate`, `mi
 
 ## Language support
 
-ka11y targets **English and Japanese** as primary audit languages. Finding text (criterion names, reasons, suggested fixes) is fully localised via the shared `i18n/rules.yml` + locale overlay system.
+ka11y targets **English (`en`), Japanese (`ja`), and German (`de`)** as the supported audit languages. Every text-bearing field on a finding — `criterion_name`, `description`, `suggested_fix`, `reason`, `severity_label`, `level_label`, `status_label` — is sourced from the shared `i18n/rules.yml` plus the matching `i18n/locales/<lang>.yml` overlay. Stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) are identical across locales and are the safe key to filter on.
+
+Each finding includes a stable `reason_code` (e.g. `fail_missing_alt`, `capture_failed`, `needs_review_warning`); the reporter resolves it via `reason_templates.<sc>.<code>`, falling back to the shared `_generic` block (`fail_unknown`, `needs_review_unknown`) when a SC has no specific template. The top-level `labels` block on every report carries the full localized maps (`severities`, `levels`, `statuses`) so frontends can render any machine value without re-fetching the rules catalogue.
 
 NLP-backed rule quality differs between languages:
 
