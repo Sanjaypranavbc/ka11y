@@ -9,9 +9,26 @@ description: "What is covered, what is not, and how to improve Japanese-language
 
 ## Summary
 
-ka11y supports Japanese audits end-to-end: the `lang` parameter flows through both engines, finding text is localised via `i18n/rules.yml` + locale overlay, and some NLP-backed rules use a Japanese spaCy model. However, **NLP-dependent rules produce a higher false-positive/false-negative rate on Japanese pages** than on English pages due to tokenization limitations, vocabulary gaps, and `lang` attribute drift.
+ka11y supports Japanese audits end-to-end: the `lang` parameter flows through both engines, every text-bearing finding field is universally localised via `i18n/rules.yml` + the `i18n/locales/<lang>.yml` overlay, and some NLP-backed rules use a Japanese spaCy model. However, **NLP-dependent rules produce a higher false-positive/false-negative rate on Japanese pages** than on English pages due to tokenization limitations, vocabulary gaps, and `lang` attribute drift.
 
 DOM-structural, rendered-layout, and contrast rules are unaffected — they operate on computed style and bounding boxes and produce equivalent quality for all languages.
+
+## Localized output
+
+Setting `?lang=ja` (or `lang: "ja"` in the audit body) makes every text-bearing field in the report come from the YAML for that language:
+
+| Field | Source |
+|-------|--------|
+| `criterion_name` | `rules.<sc>.name` |
+| `description` (rules catalogue) | `rules.<sc>.description` |
+| `suggested_fix` | `rules.<sc>.suggested_fix` |
+| `reason` | `reason_templates.<sc>.<reason_code>` (with the `_generic` block as fallback) |
+| `severity_label` | `severities.<severity>` |
+| `level_label` | `levels.<level>` |
+| `status_label` | `statuses.<status>` |
+| Top-level `labels` | full `severities` / `levels` / `statuses` maps |
+
+The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) never change across languages and are safe to filter / group on. axe-core's `failureSummary` is localized natively by `axe.configure({ locale })`; Python converters emit a `reason_code` plus optional `reason_params`, and `_make_finding` resolves the localized text through `i18n.loader.render_reason()`.
 
 ---
 

@@ -288,14 +288,18 @@ Every finding — from any source — uses the same flat structure. This enables
 
 ```json
 {
-  "source":         "python | axe_core",
+  "source":         "python | axe_core | custom",
   "rule_id":        "python_1_1_1_alt",
   "wcag_sc":        "1.1.1",
   "criterion_name": "Non-text Content",
   "level":          "A | AA | AAA",
+  "level_label":    "Level A",
   "severity":       "critical | high | medium | low | null",
+  "severity_label": "Critical",
   "status":         "fail | needs_review | pass",
+  "status_label":   "Fail",
   "reason":         "Image is missing alt attribute.",
+  "reason_code":    "fail_missing_alt",
   "suggested_fix":  "Add a descriptive alt attribute…",
   "element": {
     "html":      "<img src=\"/banner.jpg\" class=\"hero\">",
@@ -306,7 +310,9 @@ Every finding — from any source — uses the same flat structure. This enables
 }
 ```
 
-Pass findings carry `severity: null`, `suggested_fix: null`, and `element: null`.
+Pass findings carry `severity: null`, `severity_label: null`, `suggested_fix: null`, and `element: null`.
+
+`severity`, `level`, `status`, `reason_code`, and `wcag_sc` are stable machine values that never change across languages — filter and group on those. `severity_label`, `level_label`, `status_label`, `criterion_name`, `reason`, and `suggested_fix` are universally localized: pick the language with `?lang=ja` (or `de`) and every one of these fields is rendered from `i18n/rules.yml` and the matching `i18n/locales/<lang>.yml` overlay.
 
 ---
 
