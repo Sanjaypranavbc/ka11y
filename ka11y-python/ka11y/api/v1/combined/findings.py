@@ -1132,13 +1132,33 @@ def _rendered_rule_to_findings(
     pass_code: str = "pass",
     fail_code: str = "fail_unknown",
     needs_review_code: str = "needs_review_unknown",
+    emit_synthetic_pass: bool = False,
 ) -> List[Dict]:
     """Generic converter for rendered-layout rule records.
 
     Reason text is rendered from the localized YAML templates. The auditor's
     raw English `*_violation` string is passed as the fallback so a finding
     never ships with a blank reason if no template is found.
+
+    When `emit_synthetic_pass` is True and records is empty, a page-level pass
+    is emitted so the rule still appears in reports.
     """
+    if not records and emit_synthetic_pass:
+        return [
+            _make_finding(
+                source="python",
+                rule_id=rule_id,
+                wcag_sc=wcag_sc,
+                status="pass",
+                reason_code="pass_no_records",
+                severity=None,
+                element_html="",
+                element_id=None,
+                element_tag=None,
+                page_url=page_url,
+            )
+        ]
+
     findings: List[Dict] = []
     for r in records:
         status_raw = r.get(f"{rule_key}_status", "")
@@ -1195,6 +1215,7 @@ def _resize_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         rule_key="wcag_1_4_4",
         rule_id="python_1_4_4_resize_text",
         wcag_sc="1.4.4",
+        emit_synthetic_pass=True,
     )
 
 
@@ -1205,6 +1226,7 @@ def _reflow_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         rule_key="wcag_1_4_10",
         rule_id="python_1_4_10_reflow",
         wcag_sc="1.4.10",
+        emit_synthetic_pass=True,
     )
 
 
@@ -1373,6 +1395,7 @@ def _hover_focus_content_to_findings(records: List[Dict], page_url: str) -> List
         rule_key="wcag_1_4_13",
         rule_id="python_1_4_13_hover_or_focus_content",
         wcag_sc="1.4.13",
+        emit_synthetic_pass=True,
     )
 
 
@@ -1385,6 +1408,7 @@ def _focus_not_obscured_min_to_findings(
         rule_key="wcag_2_4_11",
         rule_id="python_2_4_11_focus_not_obscured_minimum",
         wcag_sc="2.4.11",
+        emit_synthetic_pass=True,
     )
 
 
@@ -1397,6 +1421,7 @@ def _focus_not_obscured_enh_to_findings(
         rule_key="wcag_2_4_12",
         rule_id="python_2_4_12_focus_not_obscured_enhanced",
         wcag_sc="2.4.12",
+        emit_synthetic_pass=True,
     )
 
 

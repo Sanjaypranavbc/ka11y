@@ -1162,12 +1162,12 @@ async def _run_python_stages(
         # MUTED: _stage_label_in_name_universal is replaced by Pipeline 2.5.3
         _timed(
             _run_pipeline_stage(
-                url, 
-                job_id, 
-                run_image_audit=run_image_audit, 
+                url,
+                job_id,
+                run_image_audit=run_image_audit,
                 run_label_in_name_audit=run_label_in_name_audit,
                 run_target_size_audit=run_target_size_audit,
-                # Explicitly passing flags to orchestrate the new policies
+                lang=lang,
             )
         ),
         _timed(

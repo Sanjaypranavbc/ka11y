@@ -21,7 +21,7 @@ from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="pipeline_stage")
 
-async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_label_in_name_audit: bool, run_target_size_audit: bool = True, run_focus_audit: bool = True, run_contrast_audit: bool = True) -> List[Dict[str, Any]]:
+async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_label_in_name_audit: bool, run_target_size_audit: bool = True, run_focus_audit: bool = True, run_contrast_audit: bool = True, lang: str = "en") -> List[Dict[str, Any]]:
     """
     Entry point for the new Unified Accessibility Pipeline.
     Evaluates context-aware WCAG rules using rich DOM/Visual context.
@@ -81,7 +81,7 @@ async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_
             logger.info(f"Pipeline generated {len(all_verdicts)} verdicts.")
 
             # 5. Format to legacy schema
-            legacy_findings = EvidenceFormatter.to_legacy_findings(all_verdicts)
+            legacy_findings = EvidenceFormatter.to_legacy_findings(all_verdicts, lang=lang)
             
             # Ensure page_url is injected just like other stages
             for finding in legacy_findings:

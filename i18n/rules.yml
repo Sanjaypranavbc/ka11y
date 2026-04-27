@@ -94,7 +94,8 @@ reason_templates:
     capture_failed:       'Screenshot capture failed (status: {capture_status}{capture_error_suffix}) — contrast analysis could not run. Manual review required.'
 
   "1.4.4":
-    pass: "Text reflows correctly at 200% without loss of content."
+    pass:          "Text reflows correctly at 200% without loss of content."
+    pass_no_records: "No text-resize issues detected — all content appears to scale correctly at 200%."
 
   "1.4.5":
     capture_failed: "Image capture failed — OCR could not determine if image contains text."
@@ -108,7 +109,8 @@ reason_templates:
     capture_failed:       'Screenshot capture failed (status: {capture_status}{capture_error_suffix}) — enhanced contrast analysis could not run. Manual review required.'
 
   "1.4.10":
-    pass: "Content reflows without horizontal scrolling at 320 CSS px."
+    pass:          "Content reflows without horizontal scrolling at 320 CSS px."
+    pass_no_records: "No reflow issues detected — content appears to adapt correctly to narrow viewports."
 
   "1.4.11":
     needs_review: "UI component contrast could not be verified automatically."
@@ -123,7 +125,8 @@ reason_templates:
     pass_rendered:        "No content or functionality is lost after text spacing overrides."
 
   "1.4.13":
-    pass: "Hover/focus-triggered content meets dismissible/hoverable/persistent requirements."
+    pass:          "Hover/focus-triggered content meets dismissible/hoverable/persistent requirements."
+    pass_no_records: "No hover/focus-triggered content issues detected on the audited page."
 
   "2.2.2":
     fail:         "Auto-playing content has no pause/stop mechanism."
@@ -131,18 +134,35 @@ reason_templates:
     pass:         "Moving content has a pause/stop mechanism or exception applies."
 
   "2.4.11":
-    pass: "No focused element is entirely hidden by author-created content."
+    pass:          "No focused element is entirely hidden by author-created content."
+    pass_no_records: "No focus-obscuring issues detected — focused elements appear fully visible."
 
   "2.4.12":
-    pass: "No focused element is obscured (even partially) by author-created content."
+    pass:          "No focused element is obscured (even partially) by author-created content."
+    pass_no_records: "No partial focus-obscuring issues detected — all focused elements appear unobscured."
+
+  "2.4.7":
+    no_focus_indicator:    "Element has no visible focus indicator (no outline, box-shadow, or color change)."
+    focus_indicator_present: "Element presents a visual change when focused via keyboard."
+
+  "2.4.13":
+    no_focus_indicator:        "Element has no visible focus indicator (fails 2.4.7 prerequisite)."
+    thin_or_low_contrast_focus: "Focus indicator thickness ({thickness_px} px) is below the {min_px} px minimum and contrast change is not prominent. Manual review required."
+    low_contrast_focus:        "Focus indicator contrast ({contrast}:1) is below the {min_contrast}:1 minimum."
+    valid_focus_appearance:    "Focus indicator is prominent and distinct."
 
   "2.5.3":
     fail: "Accessible name does not contain visible label."
     pass: "Accessible name contains the visible label."
 
   "2.5.8":
-    fail: "Target size {width}×{height} px is below 24×24 px minimum."
-    pass: "Target size {width}×{height} px meets the 24×24 px minimum."
+    fail:            "Target size {width}×{height} px is below 24×24 px minimum."
+    pass:            "Target size {width}×{height} px meets the 24×24 px minimum."
+    undersized_target:  "Target is undersized ({width}×{height} px) and lacks sufficient adjacent spacing."
+    size_meets_minimum: "Target bounding box ({width}×{height} px) meets the 24×24 px minimum."
+    inline_exception:   "Target is an inline link within a text block — 2.5.8 exception applies."
+    spacing_exception:  "Target is undersized but meets the 24 px combined spacing exception."
+    not_interactive:    "Element is not interactive — target size minimum does not apply."
 
   "3.3.1":
     fail: "Form field violates WCAG 3.3.1."

@@ -105,5 +105,6 @@ class RuleVerdict(BaseModel):
     confidence: float
     reason_code: str
     human_reason: str
+    reason_params: Dict[str, Any] = Field(default_factory=dict)
     evidence: Dict[str, Any] = Field(default_factory=dict)
     element: ElementContext
