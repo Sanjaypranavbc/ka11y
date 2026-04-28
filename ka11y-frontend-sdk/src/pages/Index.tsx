@@ -195,6 +195,16 @@ const Index = () => {
 
           ) : jobStatus === "idle" ? (
             /* ── Empty / welcome ────────────────────────────────────── */
+            activeTab === "rule-evaluator" ? (
+              <RuleEvaluatorTab />
+            ) : activeTab === "settings" ? (
+              <SettingsTab
+                maxRows={maxRows}
+                onMaxRowsChange={handleMaxRowsChange}
+                themePreference={themePreference}
+                onThemePreferenceChange={setThemePreference}
+              />
+            ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-4">
                 <h1 className="text-5xl font-extrabold tracking-[-0.04em] text-foreground leading-none">
@@ -205,6 +215,7 @@ const Index = () => {
                 </p>
               </div>
             </div>
+            )
 
           ) : (
             /* ── Results ────────────────────────────────────────────── */

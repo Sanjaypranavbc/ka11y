@@ -25,7 +25,7 @@ interface TestResponse {
 
 export function RuleEvaluatorTab() {
   const { t, lang } = useLanguage();
-  const [url, setUrl]     = useState(localStorage.getItem("ka11y_last_url") || "");
+  const [url, setUrl] = useState(localStorage.getItem("ka11y_last_url") || "");
   const [ruleId, setRuleId] = useState("wcag_1_2_2");
   const [forceRefresh, setForceRefresh] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -78,17 +78,17 @@ export function RuleEvaluatorTab() {
         <div className="space-y-3">
           <div className="grid gap-2">
             <Label htmlFor="test-url" className="text-xs font-semibold">Target URL</Label>
-            <Input 
+            <Input
               id="test-url"
-              value={url} 
-              onChange={(e) => setUrl(e.target.value)} 
-              placeholder="https://example.com" 
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com"
               className="font-mono text-xs max-w-lg"
             />
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="test-rule" className="text-xs font-semibold">Configured Sandbox Rule</Label>
+            <Label htmlFor="test-rule" className="text-xs font-semibold">Select Rule</Label>
             <select
               id="test-rule"
               value={ruleId}
@@ -98,6 +98,14 @@ export function RuleEvaluatorTab() {
               <optgroup label="Audio & Video">
                 <option value="wcag_1_2_1">WCAG 1.2.1 Audio-only/Video-only</option>
                 <option value="wcag_1_2_2">WCAG 1.2.2 Captions (Prerecorded)</option>
+              </optgroup>
+              <optgroup label="Images & Text Alternatives">
+                <option value="wcag_1_1_1">WCAG 1.1.1 Non-text Content</option>
+                <option value="wcag_1_4_5">WCAG 1.4.5 Images of Text</option>
+                <option value="wcag_1_4_11">WCAG 1.4.11 Non-text Contrast</option>
+                <option value="wcag_4_1_2">WCAG 4.1.2 Name, Role, Value</option>
+                <option value="wcag_1_4_3">WCAG 1.4.3 Contrast (Minimum)</option>
+                <option value="wcag_1_4_6">WCAG 1.4.6 Contrast (Enhanced)</option>
               </optgroup>
               <optgroup label="Forms & Inputs">
                 <option value="wcag_3_3_1">WCAG 3.3.1 Error Identification</option>
@@ -110,6 +118,14 @@ export function RuleEvaluatorTab() {
                 <option value="wcag_2_5_8">WCAG 2.5.8 Target Size (Minimum)</option>
                 <option value="wcag_1_4_12">WCAG 1.4.12 Text Spacing</option>
                 <option value="wcag_1_3_3">WCAG 1.3.3 Sensory Characteristics</option>
+              </optgroup>
+              <optgroup label="Viewport & Rendering">
+                <option value="wcag_1_4_4">WCAG 1.4.4 Resize Text</option>
+                <option value="wcag_1_4_10">WCAG 1.4.10 Reflow</option>
+                <option value="wcag_1_3_4">WCAG 1.3.4 Orientation</option>
+                <option value="wcag_1_4_13">WCAG 1.4.13 Content on Hover or Focus</option>
+                <option value="wcag_2_4_11">WCAG 2.4.11 Focus Not Obscured (Min)</option>
+                <option value="wcag_2_4_12">WCAG 2.4.12 Focus Not Obscured (Enh)</option>
               </optgroup>
               <optgroup label="Standard Javascript Engines">
                 <option value="axe_core">All Axe-Core Rules (Live Render)</option>
@@ -125,7 +141,7 @@ export function RuleEvaluatorTab() {
             />
             <Label htmlFor="test-force" className="text-xs text-muted-foreground">Force Snapshot Refresh</Label>
           </div>
-          
+
           <Button onClick={handleTest} disabled={loading || !url} size="sm" className="w-32">
             {loading ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-2" />}
             {loading ? "Evaluating..." : "Evaluate Rule"}
@@ -143,30 +159,30 @@ export function RuleEvaluatorTab() {
 
         {results && (
           <div className="space-y-3">
-             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Findings ({results.length})</h3>
-             {results.length === 0 ? (
-                <div className="px-4 py-8 border border-dashed rounded flex flex-col items-center justify-center text-muted-foreground">
-                  <CheckCircle className="h-8 w-8 mb-2 opacity-50" />
-                  <p className="text-xs">Rule passed. No findings reported for this rule.</p>
-                </div>
-             ) : (
-                results.map((r, i) => (
-                  <div key={i} className="border border-border p-3 rounded bg-card text-xs space-y-2">
-                    <div className="flex items-center gap-2">
-                        {r.status === "fail" && <XCircle className="h-4 w-4 text-destructive" />}
-                        {r.status === "needs_review" && <HelpCircle className="h-4 w-4 text-orange-500" />}
-                        {r.status === "pass" && <CheckCircle className="h-4 w-4 text-success" />}
-                        <span className="font-semibold">{r.rule_id}</span>
-                    </div>
-                    <p className="text-muted-foreground">{r.reason}</p>
-                    {r.element?.html && (
-                       <pre className="mt-2 p-2 bg-muted/30 border text-[10px] rounded overflow-x-auto text-muted-foreground font-mono">
-                         {r.element.html}
-                       </pre>
-                    )}
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Findings ({results.length})</h3>
+            {results.length === 0 ? (
+              <div className="px-4 py-8 border border-dashed rounded flex flex-col items-center justify-center text-muted-foreground">
+                <CheckCircle className="h-8 w-8 mb-2 opacity-50" />
+                <p className="text-xs">Rule passed. No findings reported for this rule.</p>
+              </div>
+            ) : (
+              results.map((r, i) => (
+                <div key={i} className="border border-border p-3 rounded bg-card text-xs space-y-2">
+                  <div className="flex items-center gap-2">
+                    {r.status === "fail" && <XCircle className="h-4 w-4 text-destructive" />}
+                    {r.status === "needs_review" && <HelpCircle className="h-4 w-4 text-orange-500" />}
+                    {r.status === "pass" && <CheckCircle className="h-4 w-4 text-success" />}
+                    <span className="font-semibold">{r.rule_id}</span>
                   </div>
-                ))
-             )}
+                  <p className="text-muted-foreground">{r.reason}</p>
+                  {r.element?.html && (
+                    <pre className="mt-2 p-2 bg-muted/30 border text-[10px] rounded overflow-x-auto text-muted-foreground font-mono">
+                      {r.element.html}
+                    </pre>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

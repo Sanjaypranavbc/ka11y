@@ -1303,6 +1303,12 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                 reason="Prerecorded media has an equivalent text alternative.",
                 severity=None, **_record_element_kwargs(r, page_url)
             ))
+        elif s_121 == "N/A":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_1_media", wcag_sc="1.2.1", status="pass",
+                reason=r.get("wcag_1_2_1_violation") or "Rule 1.2.1 evaluates to N/A for this element.",
+                severity=None, **_record_element_kwargs(r, page_url)
+            ))
 
         # WCAG 1.2.2
         s_122 = r.get("wcag_1_2_2_status", "")
@@ -1322,6 +1328,12 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
             findings.append(_make_finding(
                 source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="pass",
                 reason="Synchronized media has a captions track.",
+                severity=None, **_record_element_kwargs(r, page_url)
+            ))
+        elif s_122 == "N/A":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="pass",
+                reason=r.get("wcag_1_2_2_violation") or "Rule 1.2.2 evaluates to N/A for this element.",
                 severity=None, **_record_element_kwargs(r, page_url)
             ))
             

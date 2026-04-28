@@ -162,6 +162,7 @@ export interface AuditConfig {
   run_pause_stop_hide_audit: boolean;
   run_target_size_audit: boolean;
   run_media_audit: boolean;
+  run_captions_audit: boolean;
   run_sensory_audit: boolean;
   // Rendered-layout checks (Playwright)
   run_resize_text_audit: boolean;

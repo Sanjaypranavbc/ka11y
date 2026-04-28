@@ -514,7 +514,11 @@ def _download_media(url: str, output_dir: str) -> Optional[str]:
     Returns the file path, or None if download fails or exceeds size limit.
     """
     try:
-        with httpx.Client(timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
+        # Prevent 403 blocks from CDNs like Wikimedia by spoofing a browser user-agent
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        with httpx.Client(timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True, headers=headers) as client:
             with client.stream("GET", url) as resp:
                 resp.raise_for_status()
 

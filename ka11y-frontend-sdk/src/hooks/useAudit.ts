@@ -333,6 +333,7 @@ export function useAudit() {
             run_focus_not_obscured_min_audit: config.run_focus_not_obscured_min_audit,
             run_focus_not_obscured_enh_audit: config.run_focus_not_obscured_enh_audit,
             run_media_audit: config.run_media_audit,
+            run_captions_audit: config.run_captions_audit,
             run_sensory_audit: config.run_sensory_audit,
           }),
         });
