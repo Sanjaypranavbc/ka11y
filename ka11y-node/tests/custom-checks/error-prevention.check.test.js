@@ -36,6 +36,14 @@ describe('error-prevention.check (WCAG 3.3.4)', () => {
     expect(result.rules[0].reason).toContain('1 high-risk form');
   });
 
+  test('passes when destructive form exposes undo window safeguard (G164)', async () => {
+    const page = makePage([
+      { category: 'destructive', hasSafeguard: true, hasUndoWindow: true, formAction: '/delete-account', formId: 'danger-form' },
+    ]);
+    const result = await run(page);
+    expect(result.rules[0].status).toBe('pass');
+  });
+
   test('fails for destructive action forms without safeguards', async () => {
     const page = makePage([
       { category: 'destructive', hasSafeguard: false, hasReviewText: false, hasConfirmCheckbox: false, hasReviewButton: false, formAction: '/delete-account', formId: null },
@@ -49,5 +57,6 @@ describe('error-prevention.check (WCAG 3.3.4)', () => {
     expect(getKeywordList('error_prevention', 'financial_keywords')).toContain('購入');
     expect(getKeywordList('error_prevention', 'legal_keywords')).toContain('利用規約');
     expect(getKeywordList('error_prevention', 'destructive_keywords')).toContain('アカウント削除');
+    expect(getKeywordList('error_prevention', 'undo_keywords')).toContain('取り消し');
   });
 });

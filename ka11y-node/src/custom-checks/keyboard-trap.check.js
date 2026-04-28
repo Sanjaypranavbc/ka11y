@@ -41,6 +41,24 @@ function _formatTrapDetail(detail, context) {
     );
   }
 
+  if (detail.type === 'script-key-suppression') {
+    return _t(
+      context,
+      'keyboard handler suppresses {keys} with preventDefault() ({snippet})',
+      'キーボードハンドラーが preventDefault() で {keys} を抑止しています（{snippet}）',
+      { keys: detail.keys || 'Tab/Escape', snippet: detail.snippet || '' },
+    );
+  }
+
+  if (detail.type === 'nonmodal-no-close') {
+    return _t(
+      context,
+      'non-modal popup remains visible after Escape ({selector})',
+      '非モーダルポップアップが Escape 後も表示されたままです（{selector}）',
+      { selector: detail.selector || detail.html || '' },
+    );
+  }
+
   return '';
 }
 
@@ -355,11 +373,131 @@ async function run(page, context = {}) {
     }
   }
 
+  // ── F60 non-modal popup dismissibility probe ─────────────────────────────
+  // Heuristic: visible popups/menus/tooltips should either dismiss on Escape
+  // or expose a close affordance.
+  const nonModalFindings = [];
+  if (!trapHtml) {
+    const nonModalCandidates = await page.evaluate(() => {
+      const SEL = [
+        '[role="tooltip"]',
+        '[role="menu"]',
+        '[role="listbox"]',
+        '.popover',
+        '.tooltip',
+        '.dropdown-menu',
+        '[data-popup]',
+        '[data-popover]',
+      ].join(', ');
+      return Array.from(document.querySelectorAll(SEL))
+        .filter(el => {
+          if (el.closest('dialog[open], [role="dialog"], [aria-modal="true"]')) return false;
+          const cs = window.getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        })
+        .slice(0, 5)
+        .map((el, idx) => {
+          if (!el.id) el.setAttribute('data-ka11y-popup-index', String(idx));
+          const selector = el.id
+            ? `#${CSS.escape(el.id)}`
+            : `[data-ka11y-popup-index="${idx}"]`;
+          return {
+            selector,
+            html: el.outerHTML.slice(0, 150),
+          };
+        });
+    });
+
+    for (const candidate of (nonModalCandidates || [])) {
+      await page.evaluate((sel) => {
+        const root = document.querySelector(sel);
+        if (!root) return;
+        const focusable = root.querySelector(
+          '[autofocus], button, [href], input, [tabindex]:not([tabindex="-1"])'
+        );
+        (focusable || root).focus({ preventScroll: true });
+      }, candidate.selector);
+      await new Promise(r => setTimeout(r, SETTLE_MS));
+
+      await page.keyboard.press('Escape');
+      await new Promise(r => setTimeout(r, SETTLE_MS + 20));
+
+      const outcome = await page.evaluate((sel) => {
+        const root = document.querySelector(sel);
+        if (!root) return { stillVisible: false, hasCloseAffordance: true };
+        const cs = window.getComputedStyle(root);
+        const rect = root.getBoundingClientRect();
+        const stillVisible = cs.display !== 'none' &&
+          cs.visibility !== 'hidden' &&
+          rect.width > 0 &&
+          rect.height > 0;
+        const hasCloseAffordance = !!root.querySelector(
+          'button[aria-label*="close" i], button[aria-label*="dismiss" i], button[aria-label*="閉じる"], .close, .btn-close, [data-dismiss], [data-bs-dismiss]'
+        );
+        return { stillVisible, hasCloseAffordance };
+      }, candidate.selector);
+
+      if (outcome && outcome.stillVisible && !outcome.hasCloseAffordance) {
+        nonModalFindings.push({
+          type: 'nonmodal-no-close',
+          selector: candidate.selector,
+          html: candidate.html,
+        });
+      }
+    }
+  }
+
+  // ── F58 scripted key suppression heuristic ───────────────────────────────
+  const keySuppressionFindings = !trapHtml
+    ? (await page.evaluate(() => {
+        const findings = [];
+        const KEY_HINT_RE = /(Tab|Escape|Arrow(?:Up|Down|Left|Right))/i;
+        const PRESS_ATTRS = ['onkeydown', 'onkeyup', 'onkeypress'];
+
+        for (const el of Array.from(document.querySelectorAll('[onkeydown], [onkeyup], [onkeypress]')).slice(0, 200)) {
+          const handler = PRESS_ATTRS.map(attr => el.getAttribute(attr) || '').join(' ');
+          if (!handler) continue;
+          if (!/preventDefault\s*\(/i.test(handler)) continue;
+          const keyMatch = handler.match(KEY_HINT_RE);
+          if (!keyMatch) continue;
+          findings.push({
+            type: 'script-key-suppression',
+            keys: keyMatch[1],
+            snippet: handler.slice(0, 120),
+            html: el.outerHTML.slice(0, 120),
+          });
+          if (findings.length >= 3) break;
+        }
+
+        if (findings.length === 0) {
+          for (const script of Array.from(document.querySelectorAll('script:not([src])')).slice(0, 30)) {
+            const src = script.textContent || '';
+            if (!/addEventListener\s*\(\s*['"]key(?:down|press|up)['"]/i.test(src)) continue;
+            if (!/preventDefault\s*\(/i.test(src)) continue;
+            const keyMatch = src.match(KEY_HINT_RE);
+            if (!keyMatch) continue;
+            findings.push({
+              type: 'script-key-suppression',
+              keys: keyMatch[1],
+              snippet: src.slice(0, 120).replace(/\s+/g, ' '),
+              html: '<script>',
+            });
+            break;
+          }
+        }
+        return findings;
+      }) || [])
+    : [];
+
   if (
     !trapHtml
     && arrowTrapFindings.length === 0
     && iframeTrapFindings.length === 0
     && modalFindings.length === 0
+    && nonModalFindings.length === 0
+    && keySuppressionFindings.length === 0
   ) {
     return {
       successCriteriaId: SC,
@@ -396,7 +534,15 @@ async function run(page, context = {}) {
       .map(f => _formatTrapDetail({ ...f, frameUrl: f.frameUrl.slice(0, 60) }, sharedContext))
       .filter(Boolean)
       .join('; ');
-    const allDetail = [arrowDetail, iframeDetail].filter(Boolean).join('; ');
+    const nonModalDetail = nonModalFindings
+      .map(f => _formatTrapDetail(f, sharedContext))
+      .filter(Boolean)
+      .join('; ');
+    const scriptDetail = keySuppressionFindings
+      .map(f => _formatTrapDetail(f, sharedContext))
+      .filter(Boolean)
+      .join('; ');
+    const allDetail = [arrowDetail, iframeDetail, nonModalDetail, scriptDetail].filter(Boolean).join('; ');
     return {
       successCriteriaId: SC,
       rules: [{
@@ -404,7 +550,7 @@ async function run(page, context = {}) {
         description: 'Keyboard focus must not be trapped in a component',
         impact: 'serious',
         status: 'incomplete',
-        reason: _t(sharedContext, 'Potential keyboard traps detected: {detail}. Verify arrow key navigation and escape paths are available.', 'キーボードトラップの可能性が検出されました: {detail}。矢印キーでの移動や Escape による離脱経路があるか確認してください。', { detail: allDetail }),
+        reason: _t(sharedContext, 'Potential keyboard trap signals detected: {detail}. Verify Tab/Shift+Tab escape paths, popup dismissibility, and key handlers that suppress Tab/Escape.', 'キーボードトラップの可能性があるシグナルを検出しました: {detail}。Tab/Shift+Tab で離脱できるか、ポップアップが閉じられるか、Tab/Escape を抑止するキー処理がないか確認してください。', { detail: allDetail }),
         helpUrl: HELP_URL,
       }],
     };

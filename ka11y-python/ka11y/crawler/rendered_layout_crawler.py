@@ -466,7 +466,7 @@ class RenderedLayoutCrawler:
                 if el_data is None:
                     continue  # focus on body — skip
 
-                rect_d = el_data.get("rect", {})
+                rect_d = el_data.get("rect") or {}
                 focus_rect = rect_from_dict(rect_d)
 
                 # Skip zero-size / offscreen elements

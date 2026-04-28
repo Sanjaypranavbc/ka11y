@@ -135,6 +135,32 @@ checks:
         - "breadcrumb"
       ja:
         - "パンくず"
+    related_links_keywords:
+      en:
+        - "related"
+        - "related links"
+        - "recommended"
+        - "similar"
+        - "also viewed"
+        - "you may also like"
+      ja:
+        - "関連"
+        - "関連記事"
+        - "関連リンク"
+        - "おすすめ"
+        - "あわせて読みたい"
+    page_index_keywords:
+      en:
+        - "all pages"
+        - "site index"
+        - "directory"
+        - "a-z"
+        - "index"
+      ja:
+        - "一覧"
+        - "索引"
+        - "全ページ"
+        - "サイト索引"
     reason_templates:
       pass:
         en: 'Multiple navigation mechanisms were found: {found_list}.'
@@ -325,6 +351,19 @@ checks:
         - "ステップ"
         - "進行"
         - "確認"
+    undo_keywords:
+      en:
+        - "undo"
+        - "revert"
+        - "restore"
+        - "take back"
+        - "cancel within"
+      ja:
+        - "取り消し"
+        - "元に戻す"
+        - "復元"
+        - "やり直し"
+        - "取り消せます"
     reason_templates:
       no_risk:
         en: 'No legal, financial, or destructive action forms were detected.'
@@ -417,6 +456,12 @@ checks:
         - "site map"
       ja:
         - "サイトマップ"
+    toc_keywords:
+      en:
+        - "table of contents"
+        - "toc"
+      ja:
+        - "目次"
 
   pointer_cancellation:
     action_keywords:
@@ -752,4 +797,3 @@ crawl_browser:
         - "コピーする"
         - "使用する"
         - "反映する"
-

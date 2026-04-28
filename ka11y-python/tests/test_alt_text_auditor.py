@@ -586,7 +586,7 @@ class TestAltTextAuditorReport:
             "wcag_1_4_5_status", "wcag_1_4_11_status",
             "overall_status", "wcag_1_1_1_reason", "wcag_4_1_2_reason",
             "wcag_1_4_5_reason", "wcag_1_4_11_reason",
-            "screenshot_path",
+            "screenshot_path", "capture_status", "capture_error",
         ]
         assert cols == expected
 

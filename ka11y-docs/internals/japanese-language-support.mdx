@@ -9,9 +9,26 @@ description: "What is covered, what is not, and how to improve Japanese-language
 
 ## Summary
 
-ka11y supports Japanese audits end-to-end: the `lang` parameter flows through both engines, finding text is localised via `i18n/rules.yml` + locale overlay, and some NLP-backed rules use a Japanese spaCy model. However, **NLP-dependent rules produce a higher false-positive/false-negative rate on Japanese pages** than on English pages due to tokenization limitations, vocabulary gaps, and `lang` attribute drift.
+ka11y supports Japanese audits end-to-end: the `lang` parameter flows through both engines, every text-bearing finding field is universally localised via `i18n/rules.yml` + the `i18n/locales/<lang>.yml` overlay, and some NLP-backed rules use a Japanese spaCy model. However, **NLP-dependent rules produce a higher false-positive/false-negative rate on Japanese pages** than on English pages due to tokenization limitations, vocabulary gaps, and `lang` attribute drift.
 
 DOM-structural, rendered-layout, and contrast rules are unaffected — they operate on computed style and bounding boxes and produce equivalent quality for all languages.
+
+## Localized output
+
+Setting `?lang=ja` (or `lang: "ja"` in the audit body) makes every text-bearing field in the report come from the YAML for that language:
+
+| Field | Source |
+|-------|--------|
+| `criterion_name` | `rules.<sc>.name` |
+| `description` (rules catalogue) | `rules.<sc>.description` |
+| `suggested_fix` | `rules.<sc>.suggested_fix` |
+| `reason` | `reason_templates.<sc>.<reason_code>` (with the `_generic` block as fallback) |
+| `severity_label` | `severities.<severity>` |
+| `level_label` | `levels.<level>` |
+| `status_label` | `statuses.<status>` |
+| Top-level `labels` | full `severities` / `levels` / `statuses` maps |
+
+The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) never change across languages and are safe to filter / group on. axe-core's `failureSummary` is localized natively by `axe.configure({ locale })`; Python converters emit a `reason_code` plus optional `reason_params`, and `_make_finding` resolves the localized text through `i18n.loader.render_reason()`.
 
 ---
 
@@ -102,7 +119,7 @@ PaddleOCR and EasyOCR are used for alt-text validation against image content. Ja
 | Issue | Impact |
 |---|---|
 | Vertical text (縦組み / tategumi) | OCR reads columns left-to-right; characters are merged or swapped |
-| Half-width katakana (`ｶﾀｶﾅ`) | Treated as ASCII symbols; not matched against JA keyword patterns |
+| Half-width katakana (`ｶﾀｶﾅ`) | ✅ Now normalized via NFKC before keyword matching (see Priority 5 below); OCR recognition of half-width glyphs as distinct characters remains an engine limitation |
 | Fonts below 12 pt | Misread rate increases substantially; small kanji strokes are dropped |
 | Mixed kanji + kana + ASCII | Model confidence drops below threshold; region is skipped |
 
@@ -165,43 +182,60 @@ Call `detect_lang(element.inner_text)` for each instructional sentence before di
 
 ---
 
-### Priority 2 — Upgrade `ja_core_news_sm` → `ja_core_news_lg`
+### Priority 2 — Upgrade `ja_core_news_sm` → `ja_core_news_lg` ✅ Implemented (2026-04-24)
+
+`_get_nlp()` in `sensory_auditor.py` now tries `ja_core_news_lg` first and silently falls back to `ja_core_news_sm` if the large model is not installed:
+
+```python
+for model_name in ("ja_core_news_lg", "ja_core_news_sm"):
+    try:
+        nlp = spacy.load(model_name, disable=["ner"])
+        break
+    except OSError:
+        continue
+```
+
+Install the large model to activate the upgrade:
 
 ```bash
 python -m spacy download ja_core_news_lg
 ```
 
-Update model loading in `sensory_auditor.py`:
-
-```python
-JA_MODEL = os.getenv("KA11Y_JA_SPACY_MODEL", "ja_core_news_lg")
-```
-
-The large model includes contextual word vectors and achieves 94%+ POS accuracy on web-register text. Load lazily on first JA request; the model is ~400 MB but is cached in process memory.
+The large model includes contextual word vectors and achieves 94%+ POS accuracy on web-register text. Load is lazy on first JA request; ~400 MB, cached in process memory.
 
 ---
 
-### Priority 3 — SudachiPy morpheme-level stop-word filtering
+### Priority 3 — SudachiPy morpheme-level stop-word filtering ✅ Implemented (2026-04-24)
 
-Replace the CJK character-class regex strip with SudachiPy tokenization:
+`_has_meaningful_label_text_ja()` in `sensory_auditor.py` now uses SudachiPy tokenization with graceful fallback to the regex-strip approach when SudachiPy is not installed:
 
 ```python
-from sudachipy import tokenizer, dictionary
-
-_sudachi = dictionary.Dictionary().create()
-
-DISCARD_POS = {"助詞", "助動詞", "記号", "接続詞", "感動詞"}
-
-def japanese_content_words(text: str) -> list[str]:
-    morphemes = _sudachi.tokenize(text, tokenizer.Tokenizer.SplitMode.C)
-    return [
-        m.dictionary_form()
-        for m in morphemes
-        if m.part_of_speech()[0] not in DISCARD_POS
-    ]
+try:
+    import sudachipy
+    tokenizer_obj = sudachipy.Dictionary().create()
+    morphemes = tokenizer_obj.tokenize(text)
+    for m in morphemes:
+        pos0 = m.part_of_speech()[0]
+        if pos0 not in ("名詞", "動詞", "形容詞", "形容動詞"):
+            continue
+        surface = m.surface()
+        # skip sensory / generic UI / stop / instruction tokens
+        ...
+        if _CJK_CHAR_RE.search(surface) or re.search(r"[a-zA-Z]{3,}", surface):
+            return True  # meaningful label found
+    return False
+except Exception:
+    pass  # fall through to regex strip
 ```
 
-Use this in `_remaining_label_words` when `lang == "ja"`.
+Install SudachiPy to activate:
+
+```bash
+# Using the optional extras group:
+poetry install -E japanese
+# Or directly:
+pip install sudachipy sudachidict-core
+```
 
 ---
 
@@ -224,22 +258,28 @@ SENSORY_WORDS = SENSORY_WORDS_EN | SENSORY_WORDS_JA
 
 ---
 
-### Priority 5 — Half-width katakana normalization
+### Priority 5 — Half-width katakana normalization ✅ Implemented (2026-04-24)
 
-Add NFKC normalization as the first step in all text-processing paths (both Python and Node):
+NFKC normalization is now applied as the first step in all text-processing paths in both engines:
+
+**Python** (`sensory_auditor.py`) — `_normalize_text()` calls `unicodedata.normalize("NFKC", text)` and is invoked at the top of `_iter_text_sources()` before any spaCy or keyword processing:
 
 ```python
-# Python
 import unicodedata
-text = unicodedata.normalize("NFKC", text)
+
+def _normalize_text(text: str) -> str:
+    return unicodedata.normalize("NFKC", text)
 ```
+
+**Node** (`sharedAssets.js`) — `normalizeText()` calls `text.normalize('NFKC')` and is applied inside `_normalizeStringList()`, so every keyword entry in every check's config list is normalized at pattern-build time:
 
 ```javascript
-// Node
-text = text.normalize("NFKC");
+function normalizeText(text) {
+  return typeof text === 'string' ? text.normalize('NFKC') : text;
+}
 ```
 
-This converts `ｶﾀｶﾅ` → `カタカナ`, `Ａ` → `A`, and `１` → `1`, ensuring half-width variants match keyword patterns and OCR patterns consistently.
+This converts `ｶﾀｶﾅ` → `カタカナ`, `Ａ` → `A`, and `１` → `1`, ensuring half-width variants match keyword patterns and OCR patterns consistently across both engines.
 
 ---
 

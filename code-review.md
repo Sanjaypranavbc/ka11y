@@ -1,8 +1,55 @@
 # ka11y Code Review — WCAG Technique Coverage & Limitations
 
-**Date:** April 23, 2026
+**Date:** April 24, 2026
 **Scope:** Full audit of implemented rules in `ka11y-python/` and `ka11y-node/`, cross-referenced against W3C WCAG 2.2 Techniques (Sufficient + Failure).
 **Goal:** Identify what each rule *actually* detects vs. what the WCAG SC requires, so gaps can be closed or documented.
+
+---
+
+## Sprint changes — 2026-04-24 (pass 2)
+
+Three critical sprint items completed in this pass:
+
+| Item | Status | Files changed |
+|---|---|---|
+| **3.1.2 Language of Parts** | Implemented | `ka11y-node/src/custom-checks/language-of-parts.check.js` (new — empty lang=, invalid BCP47, unannotated CJK on non-CJK pages); registered in `index.js` STATIC_ORDER |
+| **`capture_status` → OCR/contrast converters** | Implemented | `ka11y-python/ka11y/crawler/models.py` (+`capture_status`, `capture_error` on `ImageData`); `crawler/crawler.py` (failed captures register as `ImageData` with `capture_status="failed"`); `alttext.py` (short-circuit to INCOMPLETE); `findings.py` (`_alt_text_to_findings`, `_name_role_value_to_findings`, `_images_of_text_to_findings` handle INCOMPLETE; new `_contrast_capture_failed_to_findings` for 1.4.3 / 1.4.6); `stages.py` + `__init__.py` wired |
+| **Japanese NLP quality** | Implemented | `sensory_auditor.py`: `_get_nlp()` now tries `ja_core_news_lg` before `ja_core_news_sm`; `_has_meaningful_label_text_ja()` uses SudachiPy morpheme-level POS filtering with graceful try/except fallback; `pyproject.toml` adds `sudachipy`/`sudachidict-core` as optional `[japanese]` extras |
+
+Tests after changes: `ka11y-python` 618/618, `ka11y-node` 233/233.
+
+---
+
+## Sprint changes — 2026-04-24 (pass 1)
+
+Priority gap-closure items addressed in this pass:
+
+| Item | Status | Files changed |
+|---|---|---|
+| **1.2.1 F30 filename-only transcript links** | Implemented (heuristic) | `ka11y-node/src/custom-checks/audio-transcript.check.js` (+filename-only label detection) |
+| **1.4.1 F81/F13 non-link colour-only cues** | Implemented (heuristic) | `use-of-color.check.js` (required-field colour-only + colour-only instructional text scan) |
+| **2.1.2 F58/F60 extension** | Implemented (partial heuristic) | `keyboard-trap.check.js` (scripted `preventDefault()` key suppression + non-modal Escape dismissibility probe) |
+| **2.4.5 G125/G126** | Implemented (heuristic) | `multiple-ways.check.js` (related-links sections + page-index lists) |
+| **2.4.8 G127 ToC signal** | Implemented | `location.check.js` (ToC/location indicator detection) |
+| **3.3.4 G164 undo window** | Implemented (heuristic) | `error-prevention.check.js` (+undo/revert safeguard detection) |
+| **4.1.3 F114 toast-without-ARIA** | Implemented (heuristic) | `status-messages.check.js` (+toast library patterns + dedicated toast incomplete rule) |
+| **Config keyword expansion (EN+JA)** | Implemented | `config/universal.yml` (`multiple_ways.*`, `location.toc_keywords`, `error_prevention.undo_keywords`) |
+
+---
+
+## Bug fixes — 2026-04-24 (patch)
+
+Seven runtime and logic bugs found during the code review were fixed in this patch. Tests went from 616/618 → 618/618 Python, 233/233 Node.
+
+| # | Bug | Root cause | Fix | Files changed |
+|---|---|---|---|---|
+| 1 | **`IMAGE_AUDIT_RECORD_CONVERTERS` registry missing 2 of 4 entries** | `_alt_text_to_findings` (`wcag_1_1_1_status`) and `_images_of_text_to_findings` (`wcag_1_4_5_status`) were commented out as "Handled by Pipeline" — broke a registry-completeness test and caused those SCs to emit no Python findings in the combined report | Uncommented both entries | `ka11y-python/ka11y/api/v1/combined/findings.py` |
+| 2 | **Orientation ratio threshold too strict** | `_dramatic_ratio_flags_needs_review`: threshold was `ratio < 0.1`; test documents 10 portrait vs 2 landscape (ratio 0.2) must trigger | Changed `< 0.1` → `< 0.5` | `ka11y-python/ka11y/accessibility/rendered/evaluators/orientation.py` |
+| 3 | **`error-prevention.check.js` safe-forms reference always shows fallback** | `f.formId` was never set in `riskForms` objects (correct field name is `element_id`) → `form#<id>` string was always replaced by `<form> (category)` | Changed `f.formId ?` → `f.element_id ?` | `ka11y-node/src/custom-checks/error-prevention.check.js` |
+| 4 | **2-letter uppercase abbreviations ("UI", "AI", "OK") always filtered from OCR word list** | `_norm()` lowercases all text before word extraction; `w.isupper()` on a lowercased word is always False; the `len(w) >= 3` floor then drops 2-letter tokens | Scan raw (pre-`_norm()`) OCR text with `re.findall(r'\b[A-Z]{2}\b', raw_ocr)`, lowercase results, and append to `ocr_words` before matching | `ka11y-python/ka11y/accessibility/rules/non_text/alttext.py` |
+| 5 | **Half-width katakana (`ｶﾀｶﾅ`) not normalized before NLP in Python** | `sensory_auditor.py` fed raw text directly to spaCy and keyword sets; half-width variants escaped all Japanese keyword matches | Added `_normalize_text()` using `unicodedata.normalize("NFKC", text)` called at the top of `_iter_text_sources()` | `ka11y-python/ka11y/accessibility/rules/non_text/sensory_auditor.py` |
+| 6 | **Half-width katakana not normalized in Node keyword lists** | `sharedAssets.js` built keyword patterns from raw config strings; half-width variants in user config or JA copy bypassed regex matches | Added `normalizeText()` using `text.normalize('NFKC')` applied inside `_normalizeStringList()`; exported the function | `ka11y-node/src/custom-checks/sharedAssets.js` |
+| 7 | **Cross-service image findings duplicated in merged report** | Python image findings set `element.element_id` to the image src URL (a URL, not a DOM id); axe findings for the same `<img>` use CSS selectors — both end up with different `_sig()` keys, so the same image appears twice | Added URL detection (`el_id_is_url`) to skip unstable URL-shaped element_ids from the `id:` namespace; added `img:` namespace keyed on `image_src` as a stable cross-service dedup key | `ka11y-python/ka11y/api/v1/combined/runner.py` |
 
 ---
 
@@ -21,7 +68,7 @@ Priority sprint items from the previous review addressed in this pass:
 | **Japanese support** | Verified | Auditing confirmed `config/universal.yml` already carries EN+JA keyword lists across 30+ categories; `sensory_auditor.py` has `SENSORY_WORDS_JA`, `GENERIC_UI_NOUNS_JA`, `STOP_WORDS_JA` with particles (は/が/を/に) and `_detect_lang` overrides `<html lang="en">` when body text is CJK. New checks ship with inline EN+JA copy. |
 | **Multi-page crawling (2.4.5 / 3.2.3 / 3.2.4 / 3.2.6)** | Deferred | Explicitly out of scope this sprint — requires a new crawl queue + cross-page dedup layer. Documented as future work. |
 
-Test results after changes: `ka11y-python` 616/618 passing (2 pre-existing failures unrelated to this pass), `ka11y-node` 226/226 passing.
+Test results after changes: `ka11y-python` 616/618 passing (2 failures fixed in the subsequent patch — see "Bug fixes — 2026-04-24"), `ka11y-node` 233/233 passing.
 
 ---
 
@@ -43,10 +90,10 @@ Technique IDs use WCAG 2.2 numbering: `G*` (general), `H*` (HTML), `C*` (CSS), `
 
 | SC | Level | ka11y-python | ka11y-node | Status |
 |---|---|---|---|---|
-| 1.1.1 Non-text Content | A | Full pipeline | axe-core only | Strong |
+| 1.1.1 Non-text Content | A | Full pipeline | axe-core + `background-image-content.check.js` | Strong |
 | 1.2.1 Audio/Video-only (Prerecorded) | A | `media_auditor.py` | `audio-transcript.check.js` | Partial |
-| 1.2.2 Captions (Prerecorded) | A | — | axe-core only | **Gap** |
-| 1.2.3 Audio Description or Media Alt | A | — | axe-core only | **Gap** |
+| 1.2.2 Captions (Prerecorded) | A | — | `captions-prerecorded.check.js` | Partial |
+| 1.2.3 Audio Description or Media Alt | A | — | `audio-description.check.js` | Partial |
 | 1.2.4 Captions (Live) | AA | — | — | **Not implemented** |
 | 1.2.5 Audio Description (Prerecorded) | AA | — | — | **Not implemented** |
 | 1.3.1 Info and Relationships | A | `policy_1_3_1` | axe-core | Partial |
@@ -54,8 +101,8 @@ Technique IDs use WCAG 2.2 numbering: `G*` (general), `H*` (HTML), `C*` (CSS), `
 | 1.3.3 Sensory Characteristics | A | `sensory_auditor.py` | — | Partial (NLP-bounded) |
 | 1.3.4 Orientation | AA | rendered evaluator | `orientation.check.js` | Strong |
 | 1.3.5 Identify Input Purpose | AA | — | axe-core only | Partial |
-| 1.4.1 Use of Color | A | — | `use-of-color.check.js` | Partial (links only) |
-| 1.4.2 Audio Control | A | — | — | **Not implemented** |
+| 1.4.1 Use of Color | A | — | `use-of-color.check.js` | Partial (links + non-link heuristics) |
+| 1.4.2 Audio Control | A | — | `audio-control.check.js` | Partial |
 | 1.4.3 Contrast (Minimum) | AA | `contrast_analyser.py` | axe-core | Strong |
 | 1.4.4 Resize Text | AA | rendered evaluator | — | Partial |
 | 1.4.5 Images of Text | AA | pipeline + policy | `images-of-text.check.js` | Partial |
@@ -83,7 +130,7 @@ Technique IDs use WCAG 2.2 numbering: `G*` (general), `H*` (HTML), `C*` (CSS), `
 | 2.5.7 Dragging Movements | AA | — | `dragging-movements.check.js` | Partial |
 | 2.5.8 Target Size (Minimum) | AA | `target_size_auditor.py` | — | Strong |
 | 3.1.1 Language of Page | A | — | axe-core | axe-covered |
-| 3.1.2 Language of Parts | AA | — | — | **Not implemented** |
+| 3.1.2 Language of Parts | AA | — | `language-of-parts.check.js` | Partial (empty lang, invalid BCP47, unannotated CJK) |
 | 3.1.6 Pronunciation | AAA | — | `pronunciation.check.js` | Partial |
 | 3.2.1 On Focus | A | — | `on-focus.check.js` | Partial |
 | 3.2.2 On Input | A | — | `on-input.check.js` | Partial |
@@ -134,11 +181,11 @@ Multi-stage pipeline: (1) DOM crawl → `ImageData`, (2) CNN classifier → `{in
 | F72 ASCII art without text alt | Failure | Missed — requires human judgment | — |
 
 ### Known limitations
-1. **Acronym collision:** 3-char token floor in `_check_1_1_1_informative` causes false negatives for valid 2-letter tokens (e.g., "UI", "Go", "OK").
-2. **Synonym blindness:** Literal OCR match. "Search" in image + alt "Look up" → false fail.
-3. **Classifier dependency:** ML misclassification propagates. If logo is labelled `informative`, logo-keyword gate (`_check_1_1_1_logo`) is skipped and `brand name` passes.
-4. **CSS background images:** Entire category untouched — `<div style="background-image: url(hero.jpg)">` with decorative/informative content is invisible.
-5. **SVG `<title>`:** SVGs with inline `<title>` children are parsed inconsistently — accessible-name computation sometimes falls back to filename.
+1. **Synonym blindness:** Literal OCR match. "Search" in image + alt "Look up" → false fail.
+2. **Classifier dependency:** ML misclassification propagates. If logo is labelled `informative`, logo-keyword gate (`_check_1_1_1_logo`) is skipped and `brand name` passes.
+3. **CSS background images:** Entire category untouched — `<div style="background-image: url(hero.jpg)">` with decorative/informative content is invisible.
+4. **SVG `<title>`:** SVGs with inline `<title>` children are parsed inconsistently — accessible-name computation sometimes falls back to filename.
+5. **2-letter token handling:** ✅ Fixed (2026-04-24 patch) — uppercase 2-letter abbreviations ("UI", "AI", "OK") are now extracted from raw OCR text before `_norm()` lowercasing, so they participate in the word-match check.
 
 ---
 
@@ -396,12 +443,13 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 | G159 Alternative for video-only | Sufficient | Partial | Same as above. |
 | H96 `<track>` element | Sufficient | **Covered** | Track `src` is HEAD-fetched to confirm reachability. |
 | G166 Synchronized alternatives | Sufficient | Missed — belongs to 1.2.2 / 1.2.3 | Now handled by the new `audio-description.check.js`. |
-| F30 Text alternative is filename | Failure | Missed — automatable | Filename-only transcript links should be flagged. |
+| F30 Text alternative is filename | Failure | Partial | Filename-only transcript labels/links are now flagged heuristically; content quality still requires review. |
 
 ### Known limitations
 1. **Cross-page transcripts** — only same-page links are checked; PDF/`/transcripts/` destinations are not fetched or verified.
 2. **Keyword-only match** — mis-triggers on non-transcript links containing "text" / "subtitles" in other contexts.
-3. **Content equivalence** — transcript text isn't compared against audio content.
+3. **Filename heuristic scope** — generic labels such as "Download transcript" pass even if destination quality is poor.
+4. **Content equivalence** — transcript text isn't compared against audio content.
 
 ---
 
@@ -429,7 +477,7 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 1.4.1 Use of Color — `use-of-color.check.js`
-**Logic:** Finds links inside `p/li/td/th/blockquote/article>p/dd/section>p/svg`. For each, computes ancestor baseline style and checks at least one non-colour cue: text-decoration, border-bottom, outline, font-style, background-color, ≥100-unit font-weight delta.
+**Logic:** Finds links inside `p/li/td/th/blockquote/article>p/dd/section>p/svg`. For each, computes ancestor baseline style and checks at least one non-colour cue: text-decoration, border-bottom, outline, font-style, background-color, ≥100-unit font-weight delta. Extended with heuristics for required-form controls that appear colour-coded without textual required markers, plus colour-only instructional text patterns.
 
 ### Technique coverage
 
@@ -439,20 +487,20 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 | G182 Additional non-colour cue | Sufficient | **Covered** | Six different cue categories inspected. |
 | G205 Text colour + additional cue | Sufficient | Partial | Only inline-link block containers are scanned. |
 | C15 Using CSS to change the presentation | Sufficient | **Covered** |
-| F13 Information by colour alone (charts/forms/maps) | Failure | Missed — automatable | Not yet extended to chart legends or form field colour-coding. |
+| F13 Information by colour alone (charts/forms/maps) | Failure | Partial | Adds heuristic detection for colour-only instructional text; chart/map semantics still need broader modelling. |
 | F73 Link distinguished by colour only | Failure | **Covered** | Core path. |
-| F81 Required fields by colour only | Failure | Missed — automatable | Despite 3.3.2 coverage, no cross-check with colour usage. |
+| F81 Required fields by colour only | Failure | Partial | Required controls now include a colour-only signal heuristic when no textual required cue is present. |
 
 ### Known limitations
 1. **Strict container scope** — misses nested block containers that don't match the fixed selector list.
 2. **Hover-state blind** — static DOM only; hover-underline-only patterns pass falsely.
 3. **100-unit font-weight threshold** — imperceptible in thin typefaces.
-4. **No form / chart / legend coverage** — rule is limited to prose links.
+4. **Chart/legend semantics** — dedicated legend-to-series linkage is still not modelled; current non-link checks are heuristic.
 
 ---
 
 ## 2.1.2 No Keyboard Trap — `keyboard-trap.check.js`
-**Logic:** (1) Forward Tab up to 200 times, track last 4 focused keys via `CYCLE_WINDOW`, flag stuck / A-B-A-B cycles. (2) Shift+Tab reverse traversal with the same heuristic. (3) Escape verification after each suspected trap. (4) Arrow-key-trap scan for `role=tree/grid/listbox/menu/tablist/radiogroup`. (5) Same-origin iframe Tab trap. (6) **New (2026-04-23):** focuses every visible `dialog[open]` / `[role="dialog"]` / `[aria-modal="true"]`, presses Escape, fails if focus remains inside (F85).
+**Logic:** (1) Forward Tab up to 200 times, track last 4 focused keys via `CYCLE_WINDOW`, flag stuck / A-B-A-B cycles. (2) Shift+Tab reverse traversal with the same heuristic. (3) Escape verification after each suspected trap. (4) Arrow-key-trap scan for `role=tree/grid/listbox/menu/tablist/radiogroup`. (5) Same-origin iframe Tab trap. (6) Modal-without-escape probe for visible `dialog[open]` / `[role="dialog"]` / `[aria-modal="true"]` (F85). (7) Heuristic scripted key suppression scan (`preventDefault` on Tab/Escape/Arrow) for F58 risk. (8) Non-modal popup Escape-dismissal/close-affordance probe for F60 risk.
 
 ### Technique coverage
 
@@ -461,14 +509,14 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 | G21 No keyboard trap | Sufficient | **Covered** | Forward + reverse Tab cycles. |
 | F10 Two non-exiting controls | Failure | **Covered** | Two-element cycle pattern. |
 | F85 Modal traps focus without close | Failure | **Covered** | Added in this sprint. |
-| F58 Script that blocks keyboard events | Failure | Missed — automatable | No `preventDefault()` inspection on key handlers. |
-| F60 Pop-up that cannot be closed | Failure | Partial | Covered via F85 for modals; non-modal pop-ups not tested. |
+| F58 Script that blocks keyboard events | Failure | Partial | Inline/script key handlers that suppress Tab/Escape/Arrow via `preventDefault()` are now flagged heuristically. |
+| F60 Pop-up that cannot be closed | Failure | Partial | Non-modal popup candidates are now probed for Escape dismissibility + close affordance; framework internals may still evade detection. |
 
 ### Known limitations
 1. **200-tab ceiling** — very long pages with >200 focusable elements may miss a trap beyond the ceiling.
 2. **Stable-key fallback** — when an element lacks `id` / `name`, the key is derived from DOM position; layout shifts between tabs can produce noisy cycle detections.
-3. **Escape-only dismissal** — pop-ups that require a specific close button but not Escape are detected only when they are modal (role=dialog).
-4. **Scripted keypress suppression** (F58) — not inspected.
+3. **Escape-only dismissal** — some components intentionally use close-button-only flows; non-modal findings remain heuristic.
+4. **Script coverage limit** — external bundled handlers are only pattern-detected when inline snippets are observable.
 
 ---
 
@@ -485,9 +533,9 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 2.4.5 Multiple Ways — `multiple-ways.check.js`
-**Logic:** Counts presence of at least 2 of: site search, sitemap link, nav with ≥3 links, breadcrumb.
+**Logic:** Counts presence of at least 2 of: site search, sitemap link, nav landmarks, breadcrumb, table-of-contents signals, related-links sections, or page-index/list-of-pages signals.
 
-**Technique coverage:** G63 Sitemap — Partial. G64 ToC — Missed. G125 Related-pages links — Missed. G126 List of links to all pages — Missed. G161 Search — **Covered**. G185 Link to sitemap — **Covered**.
+**Technique coverage:** G63 Sitemap — Partial. G64 ToC — Partial. G125 Related-pages links — Partial. G126 List of links to all pages — Partial. G161 Search — **Covered**. G185 Link to sitemap — **Covered**.
 
 **Limitations:**
 1. **Single-page scope:** True "multiple ways" is a site-level property; single-URL evaluation cannot confirm.
@@ -508,9 +556,9 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 2.4.8 Location — `location.check.js`
-**Logic:** Presence of breadcrumb nav, `<title>`-reflecting-page-position, or aria-current="page".
+**Logic:** Presence of breadcrumb nav, `aria-current` location markers, active nav state, sitemap link, or table-of-contents location aids.
 
-**Technique coverage:** G65 Breadcrumb — **Covered**. G63 Sitemap — Partial. G127 ToC — Missed. G128 Indication of current location — **Covered**.
+**Technique coverage:** G65 Breadcrumb — **Covered**. G63 Sitemap — Partial. G127 ToC — Partial. G128 Indication of current location — **Covered**.
 
 **Limitations:**
 1. **AAA-only criterion** — often intentionally skipped.
@@ -611,9 +659,9 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 3.3.4 Error Prevention (Legal/Financial) — `error-prevention.check.js`
-**Logic:** Classify forms as financial/legal/destructive via keyword scan of submit button + headings + form meta. Then require at least one of: confirm step, review page, irreversibility warning.
+**Logic:** Classify forms as financial/legal/destructive via keyword scan of submit button + headings + form meta. Then require at least one safeguard: confirm step, review page, irreversibility warning, multi-step indicator, or explicit undo/revert window.
 
-**Technique coverage:** G98 Reversible — Partial. G99 Checked — Partial. G155 Confirmation — Partial. G164 Undo window — Missed.
+**Technique coverage:** G98 Reversible — Partial. G99 Checked — Partial. G155 Confirmation — Partial. G164 Undo window — Partial.
 
 **Limitations:**
 1. **Keyword classification:** False positives ("privacy policy" in footer) and false negatives (crypto/web3 transactions).
@@ -657,7 +705,7 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 ---
 
 ## 4.1.3 Status Messages — `status-messages.check.js`
-**Logic:** Enumerates `role="status"` / `role="alert"` / `aria-live="polite"|"assertive"` regions, counts them, and inspects form inline-validation containers (`.error`, `[aria-invalid=true]`) for missing live-region association. Emits separate rule IDs for `custom-status-messages-atomic` (missing `aria-atomic`) and `custom-status-messages-inline-validation`.
+**Logic:** Enumerates `role="status"` / `role="alert"` / `aria-live="polite"|"assertive"` regions, counts them, and inspects form inline-validation containers (`.error`, `[aria-invalid=true]`) for missing live-region association. Emits separate rule IDs for `custom-status-messages-atomic` (missing `aria-atomic`), `custom-status-messages-inline-validation`, and `custom-status-messages-toast` (toast/notification containers without ARIA live semantics).
 
 ### Technique coverage
 
@@ -667,12 +715,12 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 | ARIA22 `role="status"` | Sufficient | **Covered** |
 | ARIA23 `role="log"` | Sufficient | Partial | Role is detected but not validated against 4.1.3 applicability. |
 | G199 Programmatically determined status | Sufficient | Partial | Presence-based; not dynamic-announcement verified. |
-| F114 Text that is a status but cannot be programmatically determined | Failure | Missed — automatable | Toast notification containers without any ARIA are not heuristically detected. |
+| F114 Text that is a status but cannot be programmatically determined | Failure | Partial | Adds toast/notification heuristics for missing ARIA live semantics (`custom-status-messages-toast`). |
 
 ### Known limitations
 1. **Snapshot-only** — the page is scanned once. Cannot verify that a message actually becomes announced when an event happens.
 2. **`aria-atomic` / `aria-relevant`** — only `aria-atomic` emit is checked; `aria-relevant` semantics (additions vs. removals vs. text) are ignored.
-3. **Toast libraries** — container classes from react-toastify, sonner, react-hot-toast are not matched heuristically.
+3. **Toast libraries** — common classes (`react-toastify`, `sonner`, `react-hot-toast`) are heuristically matched, but dynamic runtime containers can still evade static snapshot detection.
 
 ---
 
@@ -773,11 +821,11 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 
 ---
 
-## 3.2 Cross-service finding duplication
+## 3.2 Cross-service finding duplication ✅ Fixed (2026-04-24 patch)
 - Both `axeResultMapper.js` and Python pipeline emit findings for shared SCs (1.1.1, 2.4.7, 2.5.3, 4.1.2).
 - Runner dedup key is `(wcag_sc, status, element_signature)` — when the element signature differs between axe and Python (XPath vs selector), the same violation shows up twice.
 
-**Fix:** harmonise element signatures at the formatter level.
+**Fix applied:** `_sig()` in `runner.py` now detects when `element_id` is URL-shaped (indicating a Python image finding's src URL, not a DOM id) and skips it as an unstable dedup key. An `img:` namespace keyed on `image_src` provides a stable cross-service key that both axe and Python findings can resolve to the same element.
 
 ---
 
@@ -849,7 +897,7 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 
 6. **OCR: handle vertical text.** When PaddleOCR confidence is below 0.6 on a text region, add a Tesseract `--psm 5` (vertical single column) fallback step — vertical Japanese columns produce this low-confidence pattern consistently.
 
-7. **Half-width katakana normalization.** Normalize `ｶﾀｶﾅ` → `カタカナ` before any NLP pipeline step using `unicodedata.normalize('NFKC', text)` in Python and `text.normalize('NFKC')` in Node. This prevents half-width variants from escaping Japanese keyword matches in all Node and Python checks.
+7. ✅ **Half-width katakana normalization** *(implemented 2026-04-24 patch).* Normalize `ｶﾀｶﾅ` → `カタカナ` before any NLP pipeline step using `unicodedata.normalize('NFKC', text)` in Python and `text.normalize('NFKC')` in Node. Implemented in `sensory_auditor.py` (`_normalize_text()` + `_iter_text_sources()`) and `sharedAssets.js` (`normalizeText()` applied inside `_normalizeStringList()`).
 
 ---
 
@@ -880,9 +928,28 @@ For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describe
 5. ✅ Per-finding `capture_status` — distinct `incomplete` status with reason & error context.
 6. ✅ Japanese support verification — confirmed existing infrastructure (EN+JA keyword lists across 30+ categories, `SENSORY_WORDS_JA`, `_detect_lang` CJK heuristic); new checks ship with inline JA translations.
 
+**Completed 2026-04-24 sprint:**
+1. ✅ 1.2.1 F30 — filename-only transcript-link heuristic in `audio-transcript.check.js`.
+2. ✅ 1.4.1 F13/F81 — non-link colour-only heuristics in `use-of-color.check.js`.
+3. ✅ 2.1.2 F58/F60 — scripted key suppression and non-modal popup dismissibility probes in `keyboard-trap.check.js`.
+4. ✅ 2.4.5 G125/G126 and 2.4.8 G127 — related-links/page-index/ToC signals in `multiple-ways.check.js` and `location.check.js`.
+5. ✅ 3.3.4 G164 — undo/revert safeguard heuristic in `error-prevention.check.js`.
+6. ✅ 4.1.3 F114 — toast-without-ARIA heuristic via `custom-status-messages-toast`.
+
+**Completed 2026-04-24 patch (bug fixes — 618/618 tests passing):**
+1. ✅ `IMAGE_AUDIT_RECORD_CONVERTERS` registry completeness — uncommented `_alt_text_to_findings` + `_images_of_text_to_findings` in `findings.py`.
+2. ✅ Orientation dramatic-ratio threshold — `< 0.1` → `< 0.5` in `orientation.py`.
+3. ✅ `error-prevention.check.js` safe-form ref string — `f.formId` → `f.element_id`.
+4. ✅ 2-letter uppercase abbreviation handling in OCR word matching — extract raw `[A-Z]{2}` tokens before `_norm()` in `alttext.py`.
+5. ✅ NFKC normalization in Python NLP path — `_normalize_text()` in `sensory_auditor.py`.
+6. ✅ NFKC normalization in Node keyword lists — `normalizeText()` in `sharedAssets.js`.
+7. ✅ Cross-service image dedup (§3.2) — URL-shaped `element_id` detection + `img:` namespace in `runner.py`.
+
 **Next sprint (proposed):**
-1. Multi-page crawling for 2.4.5 / 3.2.3 / 3.2.4 / 3.2.6 — largest remaining gap, requires new crawl queue.
-2. 1.2.4 Captions (Live) — extend `captions-prerecorded` to detect `is-live` / HLS / WebRTC sources.
-3. 3.1.2 Language of Parts — per-text-node language detection via `fasttext-langid`.
-4. Toast-library heuristic for 4.1.3 — whitelist react-toastify, sonner, react-hot-toast class patterns.
-5. Extend `capture_status` plumbing to OCR/contrast (1.4.3 / 1.4.5 / 1.4.11 converters currently still trust OCR silently).
+1. **Multi-page crawling** for 2.4.5 / 3.2.3 / 3.2.4 / 3.2.6 — largest remaining gap, requires new crawl queue and cross-page dedup layer. Estimates: 2–3 weeks.
+2. **1.2.4 Captions (Live)** — extend `captions-prerecorded` to detect `is-live` / HLS (`m3u8`) / WebRTC sources and flag missing captions in live context. Estimate: 2–3 days.
+3. **3.1.2 Language of Parts** — per-text-node language detection via `fasttext-langid` (also fixes §3.3 `lang` drift for 1.3.3 sensory). Estimate: 3–4 days.
+4. **Extend `capture_status` to OCR/contrast converters** — 1.4.3 / 1.4.5 / 1.4.11 converters still trust OCR silently; downgrade to INCOMPLETE when `capture_status != ok`. Estimate: 1 day.
+5. **Japanese NLP quality** — SudachiPy morpheme filtering (Priority 3) + `ja_core_news_lg` upgrade (Priority 2) from `internals/japanese-language-support.mdx`. Estimate: 2–3 days.
+6. **Python Pipeline** is comming in frontend needs to know what it means
+7. **Some passes from 1.1.1 aren't in needs review** 1.1.1 manual review in reason are classified as passes

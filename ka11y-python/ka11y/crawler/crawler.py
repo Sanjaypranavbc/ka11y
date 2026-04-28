@@ -337,6 +337,8 @@ class AsyncImageCrawler:
     def _make_image_data(
         self, *, url, src, alt, title, cr: _CR, screenshot_path, filename,
         element_id: str | None = None,
+        capture_status: str = "ok",
+        capture_error: str | None = None,
     ) -> ImageData:
         return ImageData(
             url=url,
@@ -356,6 +358,8 @@ class AsyncImageCrawler:
             screenshot_path=screenshot_path,
             filename=filename,
             element_id=element_id,
+            capture_status=capture_status,
+            capture_error=capture_error,
         )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -659,6 +663,21 @@ class AsyncImageCrawler:
                             )
                             logger.info(
                                 f"  ✓ [{cr.type}/{cr.sub_type}] {os.path.basename(save_path)}"
+                            )
+                        else:
+                            # Register even failed captures so converters can emit INCOMPLETE
+                            self.images_data.append(
+                                self._make_image_data(
+                                    url=url,
+                                    src=abs_src,
+                                    alt=alt,
+                                    title=title,
+                                    cr=cr,
+                                    screenshot_path="",
+                                    filename=filename,
+                                    element_id=f"img_{img_hash}",
+                                    capture_status="failed",
+                                )
                             )
 
                     except Exception as e:

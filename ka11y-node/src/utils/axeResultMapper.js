@@ -84,10 +84,29 @@ const {
   BEST_PRACTICE_NAME,
   WCAG_LEVEL,
 } = require('./wcagMetadata');
-const { getAxeRuleLocales, getRules } = require('./rulesLoader');
+const {
+  getAxeRuleLocales,
+  getRules,
+  getSeverityLabel,
+  getLevelLabel,
+  getStatusLabel,
+} = require('./rulesLoader');
 
 // English rules cached at startup as fallback.
 const _enRules = getRules('en');
+
+/**
+ * Augment a finding with localized severity/level/status display labels
+ * (and copies of the stable machine values, so consumers that only look at
+ * `severity_label` / `level_label` / `status_label` always have something
+ * to render). Mutates and returns the finding for ergonomic chaining.
+ */
+function _attachLabels(finding, lang) {
+  finding.severity_label = getSeverityLabel(finding.severity, lang);
+  finding.level_label    = getLevelLabel(finding.level, lang);
+  finding.status_label   = getStatusLabel(finding.status, lang);
+  return finding;
+}
 const FAILURE_SUMMARY_PREFIX_RE = /^(?:Fix (?:any|all) of the following:|次の(?:いずれか|すべて)を修正します:)\s*/i;
 
 function cleanReason(summary, fallback) {
@@ -475,6 +494,8 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en') {
     }
   }
 
+  for (const f of findings) _attachLabels(f, lang);
+
   // Sort: fail → needs_review → pass
   const ORDER = { fail: 0, needs_review: 1, pass: 2 };
   findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
@@ -666,6 +687,8 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
       }
     }
   }
+
+  for (const f of findings) _attachLabels(f, lang);
 
   // Sort: fail → needs_review → pass
   const ORDER = { fail: 0, needs_review: 1, pass: 2 };

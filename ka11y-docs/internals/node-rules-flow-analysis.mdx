@@ -5,6 +5,7 @@ description: "End-to-end request flow and rule-by-rule execution details for the
 
 > Generated: 2026-04-08
 > Updated: 2026-04-23 — added 4 new static checks (1.2.2, 1.2.3, 1.4.2, background-image-content)
+> Updated: 2026-04-24 — closed Node heuristic gaps for F30/F13/F81/F58/F60/G125/G126/G127/G164/F114
 > Scope: `ka11y-node/src/custom-checks/` (28 custom WCAG checks) + `ka11y-node/src/services/`
 > Stack: Node.js + Express + Puppeteer + axe-core
 
@@ -132,6 +133,7 @@ flowchart TD
 |------|-----------------|
 | VTT / SRT track elements | `<track>` inside `<audio>` |
 | Transcript links | Sibling/parent anchor with "transcript" keyword |
+| Filename-only transcript labels | Flags links like `transcript.pdf` / `audio.vtt` as F30 risk |
 | `<figcaption>` captions | Adjacent figcaption in figure |
 | Collapsed details | `<details>` with transcript content |
 | ARIA description | `aria-describedby` pointing to transcript block |
@@ -139,7 +141,7 @@ flowchart TD
 #### Cases Missed
 | Case | Why |
 |------|-----|
-| Transcript in collapsed accordion | Hidden content not evaluated |
+| Transcript quality/equivalence | Link/track presence is checked; content parity is not verified |
 | Transcript behind auth | External link resolution not followed |
 | Transcript inside iframe | Cross-origin iframe content inaccessible |
 
@@ -382,16 +384,19 @@ flowchart TD
     CUE -- "font-weight delta ≥ 100" --> PASS
     CUE -- "italic" --> PASS
     CUE -- "None" --> FAIL["FAIL: 1.4.1 Color-only distinction"]
+    FAIL --> NL["Heuristic scan: required-field color-only + color-only instructions"]
 ```
 
 #### Cases Covered
 - Underline, border-bottom, outline, background change, font-weight delta (≥100), italic.
 - Comparison against non-anchor ancestor computed styles.
+- Required-field color-only heuristic (no textual `required` / `必須` marker).
+- Color-only instructional copy heuristic (state message tied only to color words).
 
 #### Cases Missed
-- Links in SVG text elements.
 - Links inside shadow DOM.
 - Links rendered on canvas.
+- Chart/map legend semantics are still heuristic and can require manual review.
 
 ---
 
@@ -461,11 +466,14 @@ flowchart TD
 | ARIA widget arrow traps | Tree, grid, listbox, menu, tablist, radiogroup |
 | Iframe Tab traps | Cross-frame Tab navigation test |
 | Escape verification | ESC key press before confirming trap |
+| Modal no-escape trap (F85) | Visible dialog remains focused after Escape |
+| Scripted key suppression (F58 heuristic) | Detects `preventDefault()` on Tab/Escape/Arrow handlers |
+| Non-modal dismissibility (F60 heuristic) | Popup remains visible after Escape and has no close affordance |
 
 #### Cases Missed
 | Case | Why |
 |------|-----|
-| Dialog traps that ESC closes | ESC exits trap, not flagged as violation |
+| Framework-internal keyboard handlers | External bundled scripts may evade static snippet detection |
 | Shadow DOM traps | Closed shadow DOM inaccessible |
 | Dynamic focus management | Focus targets added after page load |
 
@@ -592,11 +600,10 @@ flowchart TD
 ```
 
 #### Cases Covered
-- Breadcrumb navigation, `aria-current="page"`, active nav items (`.active`, `[aria-selected]`), sitemap link, `aria-current="step"`, JSON-LD `BreadcrumbList`.
+- Breadcrumb navigation, `aria-current="page"`, active nav items (`.active`, `[aria-selected]`), sitemap link, table-of-contents signals, `aria-current="step"`, JSON-LD `BreadcrumbList`.
 
 #### Cases Missed
 - Implicit location from page title alone.
-- Visual breadcrumb without ARIA markup.
 - Dynamic location updates post-navigation.
 
 ---
@@ -896,7 +903,7 @@ flowchart TD
     FORM["Forms on page"] --> RISK{"High-risk context?"}
     RISK -- "financial / legal / destructive action keywords" --> SAFE{"Safeguards present?"}
     RISK -- "No" --> PASS["PASS"]
-    SAFE -- "Review text / confirm checkbox / review button / multi-step indicator" --> PASS
+    SAFE -- "Review text / confirm checkbox / review button / multi-step indicator / undo-revert signal" --> PASS
     SAFE -- "None" --> FAIL["FAIL: 3.3.4 No error prevention mechanism"]
 ```
 
@@ -909,6 +916,7 @@ flowchart TD
 | Review/confirm safeguards | "review", "confirm" in text/buttons |
 | Confirmation checkboxes | `input[type=checkbox]` near submit |
 | Multi-step indicators | Step/progress indicator presence |
+| Undo/revert safeguards | "undo", "revert", "restore", `取り消し`, `元に戻す` signals |
 
 #### Cases Missed
 | Case | Why |
@@ -1041,6 +1049,7 @@ flowchart TD
 | Dynamic context detection | Form, search, cart, notification selectors |
 | `aria-atomic` validation | On `role="alert"` elements |
 | Inline validation errors | `[aria-invalid]` + message elements |
+| Toast containers without ARIA semantics | Emits `custom-status-messages-toast` heuristic finding |
 
 #### Cases Missed
 | Case | Why |

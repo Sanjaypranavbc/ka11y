@@ -1,0 +1,104 @@
+---
+title: "3.1.2 Language of Parts"
+description: "WCAG 3.1.2 — Passages in a different language from the page language must be identified with a lang attribute"
+---
+
+<Info>
+  **Level AA** · Engine: ka11y-node · File: `ka11y-node/src/custom-checks/language-of-parts.check.js` · Mode: static
+</Info>
+
+## Rule
+
+When content includes passages written in a language different from the primary language of the page, each such passage must carry a `lang` attribute so that screen readers can switch pronunciation rules automatically.
+
+**Reference:** [WCAG 2.2 § 3.1.2 Understanding Language of Parts](https://www.w3.org/WAI/WCAG22/Understanding/language-of-parts)
+
+---
+
+## What is checked
+
+The check runs three distinct sub-rules in a single page evaluation pass:
+
+### Sub-rule 1 — Empty `lang` attribute (`custom-language-of-parts-empty`)
+
+Any visible element that carries `lang=""` (empty string) fails. Screen readers cannot determine the language of enclosed text when the attribute value is blank.
+
+**Impact:** serious
+
+```html
+<!-- Bad -->
+<span lang="">こんにちは</span>
+
+<!-- Good -->
+<span lang="ja">こんにちは</span>
+```
+
+---
+
+### Sub-rule 2 — Invalid BCP47 language tag (`custom-language-of-parts-invalid`)
+
+`lang` attribute values must conform to BCP47 format: a 2–3 letter primary subtag optionally followed by hyphen-separated subtags of 1–8 alphanumeric characters (e.g. `en`, `ja`, `zh-Hant`, `pt-BR`).
+
+**Impact:** moderate
+
+```html
+<!-- Bad (not BCP47) -->
+<p lang="english">Welcome</p>
+<p lang="japanese">ようこそ</p>
+
+<!-- Good -->
+<p lang="en">Welcome</p>
+<p lang="ja">ようこそ</p>
+```
+
+---
+
+### Sub-rule 3 — Unannotated CJK text on a non-CJK page (`custom-language-of-parts-unannotated-cjk`)
+
+When the page's declared `<html lang="...">` is not a CJK language (`ja`, `zh`, `ko`, `yue`, `cmn`) but an element contains direct CJK characters (Hiragana, Katakana, or CJK unified ideographs) without an ancestor `lang` annotation, the check emits a `needs_review` finding.
+
+**Impact:** moderate | **Status:** `needs_review` (manual confirmation required)
+
+```html
+<!-- Page declared lang="en" — bad: no lang on Japanese passage -->
+<p>See also: <span>詳しくはこちら</span></p>
+
+<!-- Good: annotated -->
+<p>See also: <span lang="ja">詳しくはこちら</span></p>
+```
+
+CJK character ranges detected: Hiragana (U+3040–U+30FF), Katakana (U+30A0–U+30FF), CJK Unified Ideographs (U+4E00–U+9FFF), CJK Compatibility Ideographs, half-width Katakana (U+FF65–U+FF9F).
+
+---
+
+## Pass condition
+
+The check passes (single rule, status `pass`) when:
+- The page has a valid `lang` attribute on `<html>`,
+- No elements have an empty `lang` attribute,
+- No elements have an invalid BCP47 `lang` value, and
+- No visible elements contain unannotated CJK text on a non-CJK page.
+
+---
+
+## Prerequisite
+
+If `<html>` has no `lang` attribute at all, the check returns a single `fail` pointing to WCAG 3.1.1 (Language of Page) and skips all other analysis — 3.1.2 cannot be evaluated without a declared page language.
+
+---
+
+## Limits
+
+- CJK scanning is capped at 20 findings per page to avoid flooding the report on pages with heavy CJK content.
+- Invisible elements (`display:none`, `visibility:hidden`) are excluded.
+- Sub-rule 3 is heuristic: it fires on direct text-node content only (descendants of the element are not re-scanned) and cannot detect languages other than CJK that lack white-space word boundaries.
+
+---
+
+## How to fix
+
+| Finding | Fix |
+|---------|-----|
+| Empty `lang=""` | Set a valid BCP47 tag: `lang="ja"`, `lang="fr"`, etc. |
+| Invalid BCP47 | Use the correct code: `lang="en"` not `lang="english"` |
+| Unannotated CJK | Wrap the passage: `<span lang="ja">…</span>` or add `lang="ja"` to the nearest containing block |

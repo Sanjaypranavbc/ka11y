@@ -35,6 +35,9 @@ class ImageData(BaseModel):
     element_id: str | None = None
     screenshot_path: str
     filename: str
+    # Capture status: "ok" | "failed" | "timeout" | "network" | "dom_missing"
+    capture_status: str = "ok"
+    capture_error: Optional[str] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

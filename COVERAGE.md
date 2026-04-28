@@ -1,8 +1,8 @@
 # ka11y WCAG 2.2 Coverage Report
 
 **Report date:** 2026-04-24
-**Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + 29 custom checks).
-**Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape) and 2026-03-26 empirical validation against seven production sites.
+**Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + 28 custom checks).
+**Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), and 2026-03-26 empirical validation against seven production sites.
 
 ---
 
@@ -16,19 +16,20 @@
 | Level AA coverage | **22 of 26** (84.6 percent) |
 | Level AAA coverage | **6 of 30** (20.0 percent) |
 | Robust principle coverage | **3 of 3** (100 percent) |
-| Custom Node checks shipped | 29 files in `ka11y-node/src/custom-checks/` |
+| Custom Node checks shipped | 28 `*.check.js` files in `ka11y-node/src/custom-checks/` |
 | Python rendered evaluators | 7 (resize, reflow, text-spacing, hover-focus, orientation, focus-not-obscured min and enhanced) |
-| Python image and CV pipelines | OCR plus EAST or CRAFT plus CNN classifier across 1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 4.1.2 |
+| Python image and CV pipelines | OCR plus classifier-driven image pipeline across 1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 4.1.2 |
 | Real-site validation (2026-03-26) | 7 sites, 38 SCs observed firing |
-| Test suite status | Python 616 of 618 passing, Node 226 of 226 passing |
+| Test suite status | Python 601 of 618 passing locally, Node 233 of 233 passing |
 
 **What changed since the prior 2026-03-26 baseline:**
 
 1. Three previously missing SCs now have direct custom-check coverage: 1.2.2 Captions (Prerecorded), 1.2.3 Audio Description, and a strengthened 1.4.2 Audio Control beyond axe-core's metadata pass-through.
 2. 1.1.1 Non-text Content gained a CSS `background-image` scan that was previously a documented blind spot.
 3. 2.1.2 No Keyboard Trap added F85 modal-without-escape detection on top of the existing forward and reverse Tab cycle and Escape verification.
-4. Image-capture failures now propagate end-to-end as `capture_status` with a distinct `incomplete` finding status (was silently treated as N/A before).
-5. 3.3.7 Redundant Entry is confirmed to be wired up via `redundant-entry.check.js` (was undercounted in the prior report).
+4. 2026-04-24 gap pass extended Node heuristics for 1.2.1 F30 filename-only transcript links, 1.4.1 non-link color-only indicators (F13/F81), 2.1.2 scripted key suppression and non-modal popup dismissibility (F58/F60), 2.4.5 related-links/page-index mechanisms (G125/G126), 2.4.8 table-of-contents signal (G127), 3.3.4 undo-window safeguards (G164), and 4.1.3 toast-without-ARIA (F114).
+5. Image-capture failures now propagate end-to-end as `capture_status` with a distinct `incomplete` finding status (was silently treated as N/A before).
+6. 3.3.7 Redundant Entry is confirmed to be wired up via `redundant-entry.check.js` (was undercounted in the prior report).
 
 ---
 
@@ -36,27 +37,27 @@
 
 | Level | Total SCs | Node | Python | Overlap | Combined covered | Missing | Coverage |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| A | 31 | 27 | 6 | 5 | 28 | 3 | **90.3 percent** |
-| AA | 26 | 18 | 10 | 6 | 22 | 4 | **84.6 percent** |
+| A | 31 | 26 | 9 | 7 | 28 | 3 | **90.3 percent** |
+| AA | 26 | 18 | 12 | 8 | 22 | 4 | **84.6 percent** |
 | AAA | 30 | 5 | 2 | 1 | 6 | 24 | **20.0 percent** |
-| **Total** | **87** | **50** | **18** | **12** | **56** | **31** | **64.4 percent** |
+| **Total** | **87** | **49** | **23** | **16** | **56** | **31** | **64.4 percent** |
 
 ## Coverage by Principle
 
 | Principle | Total SCs | Node | Python | Combined | Coverage |
 |---|---:|---:|---:|---:|---:|
-| Perceivable (1.x.x) | 29 | 17 | 10 | 20 | **69.0 percent** |
-| Operable (2.x.x) | 34 | 20 | 5 | 22 | **64.7 percent** |
-| Understandable (3.x.x) | 21 | 10 | 2 | 11 | **52.4 percent** |
+| Perceivable (1.x.x) | 29 | 15 | 13 | 19 | **65.5 percent** |
+| Operable (2.x.x) | 34 | 20 | 7 | 22 | **64.7 percent** |
+| Understandable (3.x.x) | 21 | 11 | 2 | 12 | **57.1 percent** |
 | Robust (4.x.x) | 3 | 3 | 1 | 3 | **100 percent** |
 
 ## Stack Contribution Breakdown
 
 | Category | Count | Criteria |
 |---|---:|---|
-| Overlap between Node and Python | 12 | 1.1.1, 1.3.4, 1.4.3, 1.4.4, 1.4.5, 1.4.6, 1.4.12, 2.2.2, 2.5.3, 2.5.8, 3.3.2, 4.1.2 |
-| Node-only coverage | 38 | 1.2.1, 1.2.2, 1.2.3, 1.3.1, 1.3.2, 1.3.5, 1.4.1, 1.4.2, 2.1.1, 2.1.2, 2.1.4, 2.2.1, 2.2.4, 2.4.1, 2.4.2, 2.4.3, 2.4.4, 2.4.5, 2.4.6, 2.4.7, 2.4.8, 2.4.9, 2.4.13, 2.5.2, 2.5.7, 3.1.1, 3.1.2, 3.1.6, 3.2.1, 3.2.2, 3.2.6, 3.3.3, 3.3.4, 3.3.7, 3.3.8, 4.1.1, 4.1.3 |
-| Python-only coverage | 6 | 1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1 |
+| Overlap between Node and Python | 16 | 1.1.1, 1.2.1, 1.3.1, 1.3.4, 1.4.3, 1.4.4, 1.4.5, 1.4.6, 1.4.12, 2.2.2, 2.4.7, 2.4.13, 2.5.3, 2.5.8, 3.3.2, 4.1.2 |
+| Node-only coverage | 33 | 1.2.2, 1.2.3, 1.3.2, 1.3.5, 1.4.1, 1.4.2, 2.1.1, 2.1.2, 2.1.4, 2.2.1, 2.2.4, 2.4.1, 2.4.2, 2.4.3, 2.4.4, 2.4.5, 2.4.6, 2.4.8, 2.4.9, 2.5.2, 2.5.7, 3.1.1, 3.1.2, 3.1.6, 3.2.1, 3.2.2, 3.2.6, 3.3.3, 3.3.4, 3.3.7, 3.3.8, 4.1.1, 4.1.3 |
+| Python-only coverage | 7 | 1.3.3, 1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1 |
 
 ---
 
@@ -71,8 +72,8 @@
 
 | Level | High | Medium | Low | Covered |
 |---|---:|---:|---:|---:|
-| A | 14 | 11 | 3 | 28 |
-| AA | 10 | 11 | 1 | 22 |
+| A | 13 | 12 | 3 | 28 |
+| AA | 11 | 10 | 1 | 22 |
 | AAA | 2 | 2 | 2 | 6 |
 | **Total** | **26** | **24** | **6** | **56** |
 
@@ -85,7 +86,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | SC | Criterion | Level | Node | Python | Status | Confidence | How addressed in code | Plain-English |
 |---|---|---|---|---|---|---|---|---|
 | 1.1.1 | Non-text Content | A | Yes | Yes | Covered | High | `alttext.py` plus CNN classifier plus OCR plus `policy_1_1_1.py`; new `background-image-content.check.js` for CSS-painted images | Images, icons, charts, and CSS background images need text alternatives. |
-| 1.2.1 | Audio-only and Video-only (Prerecorded) | A | Yes | No | Covered | Medium | `media_auditor.py` plus `audio-transcript.check.js` (transcript-link keyword scan with HEAD reachability check) | Pre-recorded audio-only or video-only media needs an equivalent alternative. |
+| 1.2.1 | Audio-only and Video-only (Prerecorded) | A | Yes | Yes | Covered | Medium | `media_auditor.py` plus `audio-transcript.check.js` (transcript-link keyword scan with HEAD reachability check + filename-only transcript heuristic) | Pre-recorded audio-only or video-only media needs an equivalent alternative. |
 | 1.2.2 | Captions (Prerecorded) | A | Yes | No | Covered | High | New `captions-prerecorded.check.js`: scans `<video>` for `<track kind="captions">`; emits INCOMPLETE for cross-origin embeds (YouTube, Vimeo, Wistia) | Pre-recorded video with sound needs captions. |
 | 1.2.3 | Audio Description or Media Alternative (Prerecorded) | A | Yes | No | Covered | Medium | New `audio-description.check.js`: detects `<track kind="descriptions">`, alternate description audio, or nearby full-text transcript link (EN plus JA keywords) | Pre-recorded video needs audio description or a full text alternative. |
 | 1.2.4 | Captions (Live) | AA | No | No | Missing | Not covered | Roadmap: extend captions check with live-stream and HLS source detection | Live audio or video needs captions. |
@@ -94,13 +95,13 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 1.2.7 | Extended Audio Description (Prerecorded) | AAA | No | No | Missing | Not covered | Out of scope | Recorded video should offer extended audio description when needed. |
 | 1.2.8 | Media Alternative (Prerecorded) | AAA | No | No | Missing | Not covered | Out of scope | Recorded media should have a full text alternative. |
 | 1.2.9 | Audio-only (Live) | AAA | No | No | Missing | Not covered | Out of scope | Live audio-only content should have a text alternative. |
-| 1.3.1 | Info and Relationships | A | Yes | No | Covered | High | axe-core (heading-order, list, landmark, table, label-association rules) plus `policy_1_3_1` | Headings, labels, and tables must be coded so assistive tech understands them. |
+| 1.3.1 | Info and Relationships | A | Yes | Yes | Covered | High | axe-core (heading-order, list, landmark, table, label-association rules) plus `policy_1_3_1.py` | Headings, labels, and tables must be coded so assistive tech understands them. |
 | 1.3.2 | Meaningful Sequence | A | Yes | No | Covered | Medium | `meaningful-sequence.check.js`: scans flex / grid containers for `*-reverse`, explicit `order`, `flex-direction` reversal | Reading order must make sense when read linearly. |
-| 1.3.3 | Sensory Characteristics | A | No | Yes | Partial | Medium | `sensory_auditor.py` with spaCy (en_core_web_sm and ja_core_news_sm) plus `SENSORY_WORDS` and `SENSORY_WORDS_JA` lists | Instructions must not depend only on shape, size, color, or position. |
+| 1.3.3 | Sensory Characteristics | A | No | Yes | Covered | Medium | `sensory_auditor.py` with spaCy (en_core_web_sm and ja_core_news_sm) plus `SENSORY_WORDS` and `SENSORY_WORDS_JA` lists | Instructions must not depend only on shape, size, color, or position. |
 | 1.3.4 | Orientation | AA | Yes | Yes | Covered | High | `orientation.check.js` plus Python rendered orientation evaluator | Content should work in portrait and landscape unless essential. |
 | 1.3.5 | Identify Input Purpose | AA | Yes | No | Covered | High | axe-core `autocomplete-valid` rule | Common personal-data fields should expose machine-readable purpose. |
 | 1.3.6 | Identify Purpose | AAA | No | No | Missing | Not covered | Roadmap: NLP-driven purpose taxonomy | More UI elements should expose programmatic purpose. |
-| 1.4.1 | Use of Color | A | Yes | No | Covered | Medium | `use-of-color.check.js`: links inside `p / li / td / th / blockquote` checked for non-color cue (text-decoration, border-bottom, outline, font-style, background-color, font-weight delta) | Color alone must not carry the message. |
+| 1.4.1 | Use of Color | A | Yes | No | Covered | Medium | `use-of-color.check.js`: links inside `p / li / td / th / blockquote` checked for non-color cue plus heuristics for required-field color-only indicators and color-only instructional copy | Color alone must not carry the message. |
 | 1.4.2 | Audio Control | A | Yes | No | Covered | Medium | New `audio-control.check.js`: flags unmuted autoplay over 3 s without `controls` or external pause control in the same figure or region | Auto-playing sound must be stoppable or controllable. |
 | 1.4.3 | Contrast (Minimum) | AA | Yes | Yes | Covered | High | `contrast_analyser.py` plus `text_detector.py` (EAST or CRAFT) plus per-bbox Otsu segmentation; axe-core color-contrast rule | Text contrast must reach the minimum readability ratio. |
 | 1.4.4 | Resize Text | AA | Yes | Yes | Covered | High | Python rendered `resize_text.py` evaluator (font-size 200 percent diff) plus axe fallback | Text should stay usable when enlarged to 200 percent. |
@@ -114,7 +115,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 1.4.12 | Text Spacing | AA | Yes | Yes | Covered | High | `text_spacing_auditor.py` plus rendered scenario applying C36 / C37 spacing overrides; axe `text-spacing` fallback | Pages should remain usable when line, letter, and word spacing increase. |
 | 1.4.13 | Content on Hover or Focus | AA | No | Yes | Covered | High | `hover_focus_content.py` rendered evaluator: hover scan plus Escape dismissal check | Hover or focus popups must be dismissible and stable. |
 | 2.1.1 | Keyboard | A | Yes | No | Covered | High | axe-core (`accesskeys`, `widget` rules) plus best-practice fallback | All functionality must work with a keyboard. |
-| 2.1.2 | No Keyboard Trap | A | Yes | No | Covered | Medium | `keyboard-trap.check.js`: forward Tab plus Shift Tab plus Escape verification plus arrow-key trap scan plus iframe trap plus new F85 modal-without-escape | Keyboard users must be able to move focus away. |
+| 2.1.2 | No Keyboard Trap | A | Yes | No | Covered | Medium | `keyboard-trap.check.js`: forward Tab plus Shift Tab plus Escape verification plus arrow-key trap scan plus iframe trap plus F85 modal-without-escape plus F58/F60 heuristics (key suppression and non-modal dismissibility) | Keyboard users must be able to move focus away. |
 | 2.1.3 | Keyboard (No Exception) | AAA | No | No | Missing | Not covered | Roadmap: deeper interaction simulation | Everything must work by keyboard with no exceptions. |
 | 2.1.4 | Character Key Shortcuts | A | Yes | No | Covered | Medium | `character-key-shortcuts.check.js`: scans `accesskey`, inline `onkeydown / onkeyup / onkeypress` for unguarded single-key handlers | Single-key shortcuts need disable, remap, or focus-only behavior. |
 | 2.2.1 | Timing Adjustable | A | Yes | No | Covered | Low | axe `meta-refresh` rule | Users need enough time or a way to extend it. |
@@ -130,10 +131,10 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 2.4.2 | Page Titled | A | Yes | No | Covered | High | axe `document-title` rule | Each page needs a clear title. |
 | 2.4.3 | Focus Order | A | Yes | No | Covered | Low | axe best-practice `tabindex` rule (fallback only) | Keyboard focus should move in a sensible order. |
 | 2.4.4 | Link Purpose (In Context) | A | Yes | No | Covered | High | axe `link-name` rule | Link purpose should be clear from its text or nearby context. |
-| 2.4.5 | Multiple Ways | AA | Yes | No | Covered | Medium | `multiple-ways.check.js`: requires 2 of {site search, sitemap link, nav with 3+ links, breadcrumb} | More than one way should exist to find a page. |
+| 2.4.5 | Multiple Ways | AA | Yes | No | Covered | Medium | `multiple-ways.check.js`: requires 2 of {site search, sitemap link, nav, breadcrumb, table of contents, related links, page index list} | More than one way should exist to find a page. |
 | 2.4.6 | Headings and Labels | AA | Yes | No | Covered | Medium | axe best-practice `empty-heading` plus heading-order fallback | Headings and labels should describe their purpose clearly. |
 | 2.4.7 | Focus Visible | AA | Yes | Yes | Covered | High | `focus-visible.check.js` interactive Tab snapshot plus `policy_2_4_7.py` outline / box-shadow diff | The keyboard focus indicator must be visible. |
-| 2.4.8 | Location | AAA | Yes | No | Covered | Medium | `location.check.js`: breadcrumb, page-title, `aria-current="page"` | Users should know where they are within the site structure. |
+| 2.4.8 | Location | AAA | Yes | No | Covered | Medium | `location.check.js`: breadcrumb, sitemap, table of contents, active nav state, `aria-current` markers | Users should know where they are within the site structure. |
 | 2.4.9 | Link Purpose (Link Only) | AAA | Yes | No | Covered | Medium | `link-purpose.check.js`: flags generic accessible names ("click here", "read more") without context | Link text alone should make the purpose clear. |
 | 2.4.10 | Section Headings | AAA | No | No | Missing | Not covered | Roadmap | Sections should use helpful headings. |
 | 2.4.11 | Focus Not Obscured (Minimum) | AA | No | Yes | Covered | High | Python rendered focus-not-obscured-minimum evaluator | Focused items should not be fully hidden behind overlays. |
@@ -162,7 +163,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 3.3.1 | Error Identification | A | No | Yes | Covered | High | `form_auditor.py`: required plus `aria-describedby` plus role `alert` / `aria-live` | Input errors must be identified clearly. |
 | 3.3.2 | Labels or Instructions | A | Yes | Yes | Covered | High | `form_auditor.py` plus axe `label`, `form-field-multiple-labels` | Controls need labels or instructions before use. |
 | 3.3.3 | Error Suggestion | AA | Yes | No | Covered | Medium | `error-suggestion.check.js`: error containers checked for verb plus target field plus keyword presence | When possible, tell users how to fix an error. |
-| 3.3.4 | Error Prevention (Legal, Financial, Data) | AA | Yes | No | Covered | Medium | `error-prevention.check.js`: classifies forms as financial / legal / destructive, requires confirm, review, or warning | Important submissions need review, confirmation, or reversal. |
+| 3.3.4 | Error Prevention (Legal, Financial, Data) | AA | Yes | No | Covered | Medium | `error-prevention.check.js`: classifies forms as financial / legal / destructive, requires confirm/review/multi-step/undo safeguards | Important submissions need review, confirmation, or reversal. |
 | 3.3.5 | Help | AAA | No | No | Missing | Not covered | Roadmap | Context-sensitive help should be available for complex tasks. |
 | 3.3.6 | Error Prevention (All) | AAA | No | No | Missing | Not covered | Roadmap | More workflows should prevent irreversible mistakes. |
 | 3.3.7 | Redundant Entry | A | Yes | No | Covered | Medium | `redundant-entry.check.js`: groups related inputs by name or id; flags repeats lacking `autocomplete` or pre-fill | Users should not have to re-enter the same data in one process. |
@@ -170,7 +171,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 3.3.9 | Accessible Authentication (Enhanced) | AAA | No | No | Missing | Not covered | Roadmap | Authentication should avoid cognitive barriers more strongly. |
 | 4.1.1 | Parsing | A | Yes | No | Covered | Medium | `html-parsing.check.js`: duplicate id and malformed nesting (kept for back-compat; SC removed in WCAG 2.2) | Markup should not break because of duplicate IDs or invalid structure. |
 | 4.1.2 | Name, Role, Value | A | Yes | Yes | Covered | High | axe `aria-*` rules plus image pipeline name-role-value auditor | Custom controls need correct name, role, state, and value. |
-| 4.1.3 | Status Messages | AA | Yes | No | Covered | Medium | `status-messages.check.js`: enumerates `role=status / alert`, `aria-live`; emits `custom-status-messages-atomic` and `custom-status-messages-inline-validation` | Important status updates must reach assistive tech without stealing focus. |
+| 4.1.3 | Status Messages | AA | Yes | No | Covered | Medium | `status-messages.check.js`: enumerates `role=status / alert`, `aria-live`; emits `custom-status-messages-atomic`, `custom-status-messages-inline-validation`, and `custom-status-messages-toast` | Important status updates must reach assistive tech without stealing focus. |
 
 ---
 
@@ -208,7 +209,7 @@ Status legend: **Covered** = automatically detectable today; **Partial** = detec
 | G158 Transcript for audio-only | Sufficient | Partial | Detects presence; doesn't verify equivalence. |
 | G159 Alternative for video-only | Sufficient | Partial | Same. |
 | H96 track element | Sufficient | Covered | Track src is HEAD-fetched to confirm reachability. |
-| F30 Text alternative is filename | Failure | Missed - automatable | Filename-only transcript links not flagged. |
+| F30 Text alternative is filename | Failure | Partial | Filename-only transcript links are now heuristically flagged; transcript quality remains manual. |
 
 ### 1.2.2 Captions (Prerecorded) (Level A)
 
@@ -268,9 +269,9 @@ Coverage from axe-core plus `policy_1_3_1`: heading-order, listitem inside list,
 | G182 Additional non-color cue | Sufficient | Covered | Six cue categories inspected. |
 | G205 Text color plus additional cue | Sufficient | Partial | Inline-link block containers only. |
 | C15 CSS to change presentation | Sufficient | Covered | |
-| F13 Color-only in charts, forms, maps | Failure | Missed - automatable | Not yet extended. |
+| F13 Color-only in charts, forms, maps | Failure | Partial | Heuristic detection added for color-only instructional copy; chart/map semantics still partial. |
 | F73 Link distinguished by color only | Failure | Covered | Core path. |
-| F81 Required fields by color only | Failure | Missed - automatable | No cross-check with 3.3.2. |
+| F81 Required fields by color only | Failure | Partial | Required controls now include color-only cue heuristics when no textual marker is present. |
 
 ### 1.4.2 Audio Control (Level A)
 
@@ -332,8 +333,8 @@ axe `accesskeys` plus widget rules. Custom keyboard logic lives in 2.1.2 and 2.1
 | G21 No keyboard trap | Sufficient | Covered | Forward plus reverse Tab cycles, 200-tab ceiling. |
 | F10 Two non-exiting controls | Failure | Covered | Two-element cycle pattern. |
 | F85 Modal traps focus without close | Failure | Covered | Added 2026-04-23: focuses every visible `dialog[open]`, `[role=dialog]`, `[aria-modal=true]`, presses Escape, fails if focus stays inside. |
-| F58 Script blocks keyboard events | Failure | Missed - automatable | No `preventDefault()` inspection. |
-| F60 Pop-up that cannot be closed | Failure | Partial | Modals via F85; non-modal pop-ups not tested. |
+| F58 Script blocks keyboard events | Failure | Partial | Inline/script key handlers suppressing Tab/Escape/Arrow via `preventDefault()` are heuristically flagged. |
+| F60 Pop-up that cannot be closed | Failure | Partial | Non-modal popup candidates are probed for Escape dismissibility and close affordance. |
 
 ### 2.1.4 Character Key Shortcuts (Level A)
 
@@ -357,7 +358,7 @@ axe `accesskeys` plus widget rules. Custom keyboard logic lives in 2.1.2 and 2.1
 
 ### 2.4.5 Multiple Ways (Level AA)
 
-G161 Search Covered; G185 Sitemap link Covered; G63 Sitemap Partial; G64 Table of contents Missed; G125 Related-pages Missed; G126 List of links Missed. Single-URL scope limits true site-level verification.
+G161 Search Covered; G185 Sitemap link Covered; G63 Sitemap Partial; G64 Table of contents Partial; G125 Related-pages Partial; G126 List-of-links Partial. Single-URL scope limits true site-level verification.
 
 ### 2.4.7 Focus Visible (Level AA) and 2.4.13 Focus Appearance (Level AAA)
 
@@ -371,7 +372,7 @@ G161 Search Covered; G185 Sitemap link Covered; G63 Sitemap Partial; G64 Table o
 
 ### 2.4.8 Location (Level AAA)
 
-G65 Breadcrumb Covered; G128 Indication of current location Covered; G63 Sitemap Partial; G127 Table of contents Missed.
+G65 Breadcrumb Covered; G128 Indication of current location Covered; G63 Sitemap Partial; G127 Table of contents Partial.
 
 ### 2.4.9 Link Purpose (Link Only) (Level AAA)
 
@@ -411,7 +412,7 @@ G83 / G84 / G85 Partial; G177 Suggesting valid text Partial. Keyword-based; fail
 
 ### 3.3.4 Error Prevention (Legal, Financial) (Level AA)
 
-G98 Reversible Partial; G99 Checked Partial; G155 Confirmation Partial; G164 Undo window Missed. Keyword classifier; multi-step wizard step counter heuristic.
+G98 Reversible Partial; G99 Checked Partial; G155 Confirmation Partial; G164 Undo window Partial. Keyword classifier plus undo/revert signal heuristic; still no real submission replay.
 
 ### 3.3.7 Redundant Entry (Level A)
 
@@ -427,7 +428,7 @@ H93 Unique id Covered; H94 No duplicate attributes Partial. Note: SC 4.1.1 was r
 
 ### 4.1.3 Status Messages (Level AA)
 
-ARIA19 `aria-live` Covered; ARIA22 `role=status` Covered; ARIA23 `role=log` Partial; G199 Programmatically determined status Partial; F114 Toast without ARIA Missed - automatable. Snapshot-only; cannot verify announcement on event.
+ARIA19 `aria-live` Covered; ARIA22 `role=status` Covered; ARIA23 `role=log` Partial; G199 Programmatically determined status Partial; F114 Toast without ARIA Partial via `custom-status-messages-toast`. Snapshot-only; cannot verify announcement on event.
 
 ---
 
@@ -437,7 +438,7 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **1.1.1 Non-text Content.** A four-stage pipeline. The crawler captures every image into an `ImageData` record. A CNN classifier labels each image as informative, decorative, logo, icon, functional, complex, or text. OCR extracts any text in the image. Then a policy rule compares the alt text against the classifier intent, the OCR content, and W3C WAI naming conventions. As of 2026-04-23, CSS background images are also walked: any non-decorative `background-image` URL on an element without an accessible name raises an INCOMPLETE finding.
 
-**1.2.1 Audio-only and Video-only (Prerecorded).** Two emitters. The Python `media_auditor` checks for transcript presence on `<audio>` elements. The Node `audio-transcript.check.js` looks for transcript links in surrounding `figure / article / section / [role=region]` containers using locale-aware keywords (EN plus JA) and HEAD-fetches the linked transcript file to confirm it is reachable.
+**1.2.1 Audio-only and Video-only (Prerecorded).** Two emitters. The Python `media_auditor` checks for transcript presence on `<audio>` elements. The Node `audio-transcript.check.js` looks for transcript links in surrounding `figure / article / section / [role=region]` containers using locale-aware keywords (EN plus JA), HEAD-fetches linked transcript files, and flags filename-only transcript labels as an F30 risk.
 
 **1.2.2 Captions (Prerecorded).** New in 2026-04-23. For every visible `<video>`, the check requires a `<track kind="captions"|"subtitles">` child with a non-empty `srclang`. Cross-origin embeds (YouTube, Vimeo, Wistia) cannot be inspected from outside their iframe and are emitted as INCOMPLETE for manual review.
 
@@ -453,7 +454,7 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **1.3.5 Identify Input Purpose.** axe-core `autocomplete-valid` rule.
 
-**1.4.1 Use of Color.** Finds links inside prose containers (`p`, `li`, `td`, `th`, `blockquote`, `article > p`, `dd`, `section > p`, `svg`). For each link, computes the ancestor baseline style and verifies at least one non-color cue: text-decoration, border-bottom, outline, font-style, background-color, or 100-unit font-weight delta.
+**1.4.1 Use of Color.** Finds links inside prose containers (`p`, `li`, `td`, `th`, `blockquote`, `article > p`, `dd`, `section > p`, `svg`). For each link, computes the ancestor baseline style and verifies at least one non-color cue: text-decoration, border-bottom, outline, font-style, background-color, or 100-unit font-weight delta. It now also adds non-link heuristics for color-only required-field indicators and color-only instructional copy.
 
 **1.4.2 Audio Control.** New in 2026-04-23. Enumerates `<audio>` and `<video>` with `autoplay` (attribute or `data-autoplay`); skips muted media; if duration is unknown or over 3 seconds and there is neither a `controls` attribute nor an external pause / stop / mute / volume button in the same `figure / article / section / [role=region]` container, the rule fails.
 
@@ -473,7 +474,7 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **2.1.1 Keyboard.** axe-core widget and accesskey rules.
 
-**2.1.2 No Keyboard Trap.** Six-step probe: forward Tab up to 200 times tracking last 4 focused keys, Shift Tab reverse traversal, Escape verification after each suspected trap, arrow-key trap scan for `role=tree / grid / listbox / menu / tablist / radiogroup`, same-origin iframe Tab trap, and 2026-04-23 addition: visible `dialog[open]` / `[role=dialog]` / `[aria-modal=true]` focused, Escape pressed, fails if focus remains inside (F85).
+**2.1.2 No Keyboard Trap.** Probe stack: forward Tab up to 200 times tracking last 4 focused keys, Shift Tab reverse traversal, Escape verification after each suspected trap, arrow-key trap scan for `role=tree / grid / listbox / menu / tablist / radiogroup`, same-origin iframe Tab trap, modal F85 check, plus 2026-04-24 heuristics for scripted key suppression (`preventDefault` on Tab/Escape/Arrow) and non-modal popup dismissibility.
 
 **2.1.4 Character Key Shortcuts.** Scans `accesskey` attributes and inline `onkeypress` / `onkeydown` / `onkeyup` for single printable-character handlers without modifier-key guards or non-input target restriction.
 
@@ -483,11 +484,11 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **2.4.1 to 2.4.4.** axe-core (`bypass`, `document-title`, `tabindex`, `link-name`).
 
-**2.4.5 Multiple Ways.** Counts presence of at least 2 of: site search input, sitemap link, navigation with 3+ links, breadcrumb component.
+**2.4.5 Multiple Ways.** Counts presence of at least 2 of: site search input, sitemap link, navigation landmarks, breadcrumb component, table of contents, related-links area, or page-index/list-of-pages signal.
 
 **2.4.7 Focus Visible.** Two emitters. Node `focus-visible.check.js` tabs through focusable elements and snapshots before / after CSSOM (outline, box-shadow, border) for delta. Python `policy_2_4_7` performs the same diff at policy level. Empirically failed on 5 of 7 sites in 2026-03-26 scan.
 
-**2.4.8 Location.** Detects breadcrumb nav, page-title reflecting position, or `aria-current="page"`.
+**2.4.8 Location.** Detects breadcrumb nav, sitemap/ToC location aids, active nav state, `aria-current="page"` / `"step"`, and JSON-LD breadcrumb signals.
 
 **2.4.9 Link Purpose (Link Only).** Computes accessible name of every link; flags generic names ("click here", "read more", JA equivalents) without `aria-describedby` or context.
 
@@ -519,7 +520,7 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **3.3.3 Error Suggestion.** For each error container (`aria-invalid`, `role=alert`, `.error`), checks for suggestion text presence (verb plus target field plus keywords like "must", "should", "cannot be empty").
 
-**3.3.4 Error Prevention (Legal, Financial).** Classifies forms as financial / legal / destructive via keyword scan of submit button plus headings plus form metadata, then requires at least one of: confirm step, review page, irreversibility warning.
+**3.3.4 Error Prevention (Legal, Financial).** Classifies forms as financial / legal / destructive via keyword scan of submit button plus headings plus form metadata, then requires at least one safeguard: confirm step, review page, irreversibility warning, multi-step indicator, or undo/revert window signal.
 
 **3.3.7 Redundant Entry.** Groups related inputs by name or id; across repeated fields, detects identical fields without `autocomplete` or pre-filled value.
 
@@ -529,7 +530,7 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **4.1.2 Name, Role, Value.** axe-core ARIA suite plus Python image-pipeline name-role-value auditor.
 
-**4.1.3 Status Messages.** Enumerates `role=status`, `role=alert`, `aria-live="polite"|"assertive"` regions, counts them, inspects form inline-validation containers (`.error`, `[aria-invalid=true]`) for missing live-region association. Emits separate rule IDs `custom-status-messages-atomic` and `custom-status-messages-inline-validation`.
+**4.1.3 Status Messages.** Enumerates `role=status`, `role=alert`, `aria-live="polite"|"assertive"` regions, counts them, inspects form inline-validation containers (`.error`, `[aria-invalid=true]`) for missing live-region association, and heuristically flags toast libraries without ARIA live semantics. Emits `custom-status-messages-atomic`, `custom-status-messages-inline-validation`, and `custom-status-messages-toast`.
 
 ---
 
@@ -563,7 +564,7 @@ These are the gaps **inside SCs we already cover**. They do not move the SC out 
 | 2.5.8 | Cross-origin iframes not descended | Iframe contents missed |
 | 3.3.1 / 3.3.2 | Forms not submitted | Errors that only appear after submit invisible |
 | 3.3.1 / 3.3.2 | Fieldset and legend grouping not audited | H90 missed |
-| 4.1.3 | Snapshot-only; cannot verify announcement on event | Toast libraries (react-toastify, sonner, react-hot-toast) not heuristically detected |
+| 4.1.3 | Snapshot-only; cannot verify announcement on event | Toast heuristics added for common libraries, but runtime insertion/announcement still requires interaction replay |
 
 ### Cross-cutting systemic issues
 
@@ -599,11 +600,11 @@ These are the gaps **inside SCs we already cover**. They do not move the SC out 
 
 | Level | Missing count | Missing criteria |
 |---|---:|---|
-| A | 3 | 1.3.3 Sensory Characteristics is partially covered by Python sensory_auditor but not yet emitted in combined findings; 2.3.1 Three Flashes; 2.5.1 Pointer Gestures; 2.5.4 Motion Actuation |
+| A | 3 | 2.3.1 Three Flashes; 2.5.1 Pointer Gestures; 2.5.4 Motion Actuation |
 | AA | 4 | 1.2.4 Captions (Live), 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
 | AAA | 24 | 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.3.6, 1.4.7, 1.4.8, 1.4.9, 2.1.3, 2.2.3, 2.2.5, 2.2.6, 2.3.2, 2.3.3, 2.4.10, 2.5.5, 2.5.6, 3.1.3, 3.1.4, 3.1.5, 3.2.5, 3.3.5, 3.3.6, 3.3.9 |
 
-_Note: 1.3.3 Sensory Characteristics has a Python implementation (`sensory_auditor.py`) but is not in the combined emitted-findings count above; classifying it as "partial" rather than fully missing._
+_Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-description.check.js` and is excluded from the covered-count totals._
 
 ## 10. Coverage Growth Opportunities (Roadmap)
 
@@ -619,7 +620,7 @@ _Note: 1.3.3 Sensory Characteristics has a Python implementation (`sensory_audit
 | Layout heuristics extension | 2 (1.4.8, 2.4.10) | Section headings and visual presentation |
 | OCR exception tightening | 1 (1.4.9) | Tightens current 1.4.5 model |
 | Target-size threshold extension | 1 (2.5.5) | Existing 24x24 crawler extended to 44x44 |
-| Toast-library heuristic | quality boost on 4.1.3 | Whitelist react-toastify, sonner, react-hot-toast class patterns |
+| Dynamic status-message replay | quality boost on 4.1.3 | Needed to verify that live-region updates are actually announced at runtime |
 
 ## 11. Counting Rules and Caveats
 
@@ -627,7 +628,7 @@ _Note: 1.3.3 Sensory Characteristics has a Python implementation (`sensory_audit
 |---|---|---|
 | Unit of coverage | WCAG 2.2 success criteria only | Prevents best-practice-only rules from inflating compliance coverage |
 | Best-practice rules | Counted only when fallback-mapped to a WCAG SC by the Node mapper | Reflects what the API actually emits |
-| Python metadata vs implementation | Counted from emitted findings, not from `combined/constants.py` | Constants list more SCs than `findings.py` currently converts |
+| Python metadata vs implementation | Counted from emitted findings, not from `combined/constants.py` | Includes `_run_pipeline_stage()` policy outputs in addition to direct `findings.py` converters |
 | Node version basis | `axe-core 4.11.1` inventory | Differs from semver in `package.json` |
 | Requested WCAG level | Behaviour is level-gated; Node keeps best-practice enabled at all levels | Fallback-mapped SCs can appear at lower requested levels |
 | 1.4.5 Node check | Heuristic (src-path plus alt-text signals); not OCR | For confirmed text-in-image use the Python OCR pipeline |
@@ -640,9 +641,9 @@ _Note: 1.3.3 Sensory Characteristics has a Python implementation (`sensory_audit
 
 | Suite | Tests | Status |
 |---|---:|---|
-| `ka11y-python` (pytest) | 616 | Passing (2 pre-existing failures unrelated to this pass) |
-| `ka11y-node` (jest) | 226 | All passing |
-| Custom-check files | 29 | All registered and emitting |
+| `ka11y-python` (pytest) | 618 | 601 passing, 17 failing locally (15 due missing `nltk`, 2 assertion failures) |
+| `ka11y-node` (jest) | 233 | All passing |
+| Custom-check files | 28 | All registered and emitting |
 | Real-world site validation | 7 sites | Verified 2026-03-26 |
 
 ---

@@ -21,12 +21,13 @@ class Policy258(WCAGPolicy):
         area = element.interaction.effective_clickable_bbox.area
         
         # Both dimensions must be >= 24px per WCAG 2.5.8
+        size_params = {"width": str(int(w)), "height": str(int(h))}
         if w >= MIN_TARGET_SIZE_PX and h >= MIN_TARGET_SIZE_PX:
-            return self._pass(element, "size_meets_minimum", f"Target bounding box ({w}x{h}px) meets 24x24px minimum.")
+            return self._pass(element, "size_meets_minimum", f"Target bounding box ({w}x{h}px) meets 24x24px minimum.", reason_params=size_params)
 
         # 3. Spacing Exception (heuristically gathered, assuming 0.0 for now)
         # In a real implementation, adjacent_spacing_px would be calculated via geometric bounds tree
         if element.interaction.adjacent_spacing_px >= MIN_TARGET_SPACING_PX:
-            return self._pass(element, "spacing_exception", "Target is undersized but meets the 24px combined spacing exception.")
+            return self._pass(element, "spacing_exception", "Target is undersized but meets the 24px combined spacing exception.", reason_params=size_params)
 
-        return self._fail(element, "undersized_target", f"Target is undersized ({w}x{h}px) and lacks sufficient adjacent spacing.")
+        return self._fail(element, "undersized_target", f"Target is undersized ({w}x{h}px) and lacks sufficient adjacent spacing.", reason_params=size_params)

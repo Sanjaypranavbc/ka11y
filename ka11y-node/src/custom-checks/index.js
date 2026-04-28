@@ -29,6 +29,7 @@ const STATIC_ORDER = [
   'custom-images-of-text',
   'custom-background-image-content',
   'custom-pronunciation',
+  'custom-language-of-parts',
 ];
 
 const INTERACTIVE_ORDER = [

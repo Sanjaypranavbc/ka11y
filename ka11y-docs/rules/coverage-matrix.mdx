@@ -22,7 +22,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 ---
 
 ## 1.1.1 Non-text Content
-**Engine:** `ka11y-python` pipeline (`policy_1_1_1.py` + `alttext.py` + OCR + image classifier).
+**Engine:** `ka11y-python` pipeline (`policy_1_1_1.py` + `alttext.py` + OCR + image classifier) plus `ka11y-node` `background-image-content.check.js` for CSS background images.
 
 | Technique | Kind | Status |
 |---|---|---|
@@ -32,7 +32,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | H36 `alt` on `<input type="image">` | Sufficient | Partial |
 | H53 `<object>` fallback content | Sufficient | Missed — automatable |
 | H2 Adjacent text + image | Sufficient | Missed — automatable |
-| F3 CSS background-image carrying information | Failure | Missed — automatable |
+| F3 CSS background-image carrying information | Failure | Partial (Node `custom-background-image-content`) |
 | F20 `alt=""` on informative | Failure | Covered |
 | F30 Filename / placeholder alt | Failure | Covered |
 | F38 / F39 Decorative mis-marked | Failure | Covered |
@@ -42,7 +42,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 **Known limitations**
 - 3-character OCR token floor causes false negatives on valid 2-letter labels (e.g. "UI").
 - OCR matching is literal — semantic synonyms (alt "Look up" vs OCR "Search") fail.
-- CSS `background-image` backgrounds are invisible to the crawler.
+- CSS `background-image` detection is **filename-heuristic only** — it does not OCR the background pixels. Backgrounds whose filenames do not contain decoration or text keywords pass through the "needs review" bucket; real image content is not analysed.
 - Classifier misclassification propagates: a logo labelled as `informative` bypasses logo-keyword enforcement.
 
 ---
@@ -56,10 +56,11 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | G159 Transcript/alternative for video-only | Sufficient | Partial |
 | G166 Synchronized alternatives | Sufficient | Missed (applies to 1.2.2/1.2.3) |
 | H96 `<track>` element | Sufficient | Covered |
+| F30 Filename-only transcript label/link | Failure | Partial |
 
 **Known limitations**
 - Transcript link detection is keyword-based and scoped to 2 DOM-ancestor levels.
-- Content equivalence between audio and transcript is not verified.
+- Filename-only transcript links are heuristically flagged, but transcript quality/equivalence is not verified.
 
 ---
 
@@ -124,19 +125,20 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 ---
 
 ## 1.4.1 Use of Color
-**Engine:** `ka11y-node/use-of-color.check.js` (inline links only).
+**Engine:** `ka11y-node/use-of-color.check.js` (inline links + non-link color-only heuristics).
 
 | Technique | Kind | Status |
 |---|---|---|
 | G14 Information not by colour alone | Sufficient | Partial |
 | G182 Additional cue beyond colour | Sufficient | Covered |
 | G205 Text colour + additional cue | Sufficient | Partial |
-| F13 Information via colour only (charts/forms) | Failure | Missed |
+| F13 Information via colour only (charts/forms) | Failure | Partial |
 | F73 Link distinguished by colour only | Failure | Covered (links only) |
-| F81 Required fields by colour only | Failure | Missed |
+| F81 Required fields by colour only | Failure | Partial |
 
 **Known limitations**
-- Only links inside prose containers (`p, li, td, th, blockquote, article > p, dd, section > p, svg`); other containers are skipped.
+- Link detection still focuses on prose containers (`p, li, td, th, blockquote, article > p, dd, section > p, svg`).
+- Non-link checks (required fields, color-instruction text) are heuristic and should be reviewed manually.
 - Static DOM only — hover-underline-only patterns pass.
 
 ---
@@ -172,7 +174,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 ---
 
 ## 1.4.5 Images of Text
-**Engine:** `ka11y-python` pipeline + `ka11y-node/images-of-text.check.js`.
+**Engine:** `ka11y-python` pipeline + `ka11y-node/images-of-text.check.js` + `ka11y-node/background-image-content.check.js` (secondary finding `custom-background-image-content-text-image`).
 
 | Technique | Kind | Status |
 |---|---|---|
@@ -183,7 +185,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 
 **Known limitations**
 - Wordmark logos vs styled text images boundary is classifier-dependent.
-- CSS `background-image` backgrounds carrying text are invisible in the node heuristic.
+- CSS background images carrying text are flagged **only when the filename matches text-indicating keywords** (`banner`, `headline`, `title`, `hero`, `cta`, `promo`, `callout`, `masthead`, `heading`, `text`). Images with neutral filenames that still contain rendered text will not be caught.
 
 ---
 
@@ -249,13 +251,15 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | Technique | Kind | Status |
 |---|---|---|
 | G21 No keyboard trap | Sufficient | Covered |
-| F10 Two non-exiting controls | Failure | Partial |
-| F85 Dialog traps focus without close | Failure | Missed — interactive |
+| F10 Two non-exiting controls | Failure | Covered |
+| F58 Script suppresses keyboard events | Failure | Partial |
+| F60 Popup cannot be dismissed | Failure | Partial |
+| F85 Dialog traps focus without close | Failure | Covered |
 
 **Known limitations**
-- Only forward Tab is tested (no Shift+Tab).
-- Escape-to-dismiss not simulated — modal traps that require Escape aren't verified.
 - 200-tab ceiling; very long pages may false-negative.
+- Script suppression detection is pattern-based (inline/observable script only).
+- Non-modal dismissibility probe is heuristic and can over/under-report framework widgets.
 
 ---
 
@@ -297,8 +301,9 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | Technique | Kind | Status |
 |---|---|---|
 | G63 Sitemap | Sufficient | Partial |
-| G64 Table of contents | Sufficient | Missed |
-| G125 Related-pages links | Sufficient | Missed |
+| G64 Table of contents | Sufficient | Partial |
+| G125 Related-pages links | Sufficient | Partial |
+| G126 List of links to all pages | Sufficient | Partial |
 | G161 Search | Sufficient | Covered |
 | G185 Link to sitemap | Sufficient | Covered |
 
@@ -325,7 +330,7 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | Technique | Kind | Status |
 |---|---|---|
 | G65 Breadcrumb trail | Sufficient | Covered |
-| G127 Table of contents | Sufficient | Missed |
+| G127 Table of contents | Sufficient | Partial |
 | G128 Indication of current location | Sufficient | Covered |
 
 ---
@@ -478,7 +483,7 @@ Detects presence + location of help. Cross-page consistency requires multi-URL c
 | G98 Reversible submissions | Sufficient | Partial |
 | G99 Checked submissions | Sufficient | Partial |
 | G155 Confirmation step | Sufficient | Partial |
-| G164 Undo window | Sufficient | Missed |
+| G164 Undo window | Sufficient | Partial |
 
 ---
 
@@ -531,9 +536,11 @@ Single-page scope only. Cannot observe step-to-step state in wizards.
 | ARIA19 `aria-live` | Sufficient | Covered |
 | ARIA22 `role="status"` | Sufficient | Covered |
 | G199 Programmatic status message | Sufficient | Partial |
+| F114 Toast/status UI without ARIA semantics | Failure | Partial |
 
 **Known limitations**
 - Snapshot-only; cannot validate dynamic announcement when an event occurs.
+- Toast heuristics cover common library patterns but dynamic runtime insertion can still evade static checks.
 
 ---
 

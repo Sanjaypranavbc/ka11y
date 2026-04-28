@@ -65,6 +65,9 @@ services:
     build:
       context: ./ka11y-python
       dockerfile: Dockerfile
+      args:
+        # Set to "0" to skip sudachipy/sudachidict + ja_core_news_lg (~500MB).
+        INSTALL_JAPANESE: "1"
     image: ka11y-python:latest
     container_name: ka11y-python
     restart: unless-stopped

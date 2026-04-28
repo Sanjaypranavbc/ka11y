@@ -146,6 +146,8 @@ _REPORT_COLUMNS = [
     "wcag_1_4_5_reason",
     "wcag_1_4_11_reason",
     "screenshot_path",
+    "capture_status",
+    "capture_error",
 ]
 
 
@@ -234,8 +236,14 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
             "(manual review recommended)",
         )
 
-    norm_ocr = _norm(" ".join(detected_texts))
+    raw_ocr = " ".join(detected_texts)
+    norm_ocr = _norm(raw_ocr)
     ocr_words = [w for w in norm_ocr.split() if len(w) >= 3]
+    # Also include 2-letter uppercase abbreviations from the original OCR text
+    # (e.g. "UI", "AI", "OK") which are lost by _norm's lowercasing.
+    abbr_words = [w.lower() for w in re.findall(r'\b[A-Z]{2}\b', raw_ocr)
+                  if w.lower() not in ocr_words]
+    ocr_words = ocr_words + abbr_words
 
     if not ocr_words:
         return True, "PASS [1.1.1] OCR tokens too short to match; alt is non-empty"
@@ -602,6 +610,48 @@ class AltTextAccessibilityAuditor:
             is_functional = bool(img.is_functional)
             is_decorative = bool(img.is_decorative)
             screenshot_path = str(img.screenshot_path or "")
+            capture_status = getattr(img, "capture_status", "ok") or "ok"
+            capture_error = getattr(img, "capture_error", None)
+
+            # ── Short-circuit when screenshot capture failed ──────────────
+            if capture_status != "ok":
+                _cs_reason = (
+                    f"Screenshot capture failed (status: {capture_status}"
+                    + (f", error: {capture_error}" if capture_error else "")
+                    + ") — OCR could not run; manual review required."
+                )
+                records.append(
+                    {
+                        "filename": filename,
+                        "src": src,
+                        "url": url,
+                        "classification": classification,
+                        "sub_type": sub_type,
+                        "is_logo": is_logo,
+                        "is_icon": is_icon,
+                        "is_button": is_button,
+                        "is_functional": is_functional,
+                        "is_decorative": is_decorative,
+                        "alt_text": alt_text,
+                        "title": title,
+                        "has_ocr_text": False,
+                        "detected_text": "",
+                        "contrast_violations_count": 0,
+                        "wcag_1_1_1_status": "INCOMPLETE",
+                        "wcag_4_1_2_status": "INCOMPLETE" if is_functional else "N/A",
+                        "wcag_1_4_5_status": "INCOMPLETE",
+                        "wcag_1_4_11_status": "INCOMPLETE" if (is_button or is_icon) else "N/A",
+                        "overall_status": "INCOMPLETE",
+                        "wcag_1_1_1_reason": _cs_reason,
+                        "wcag_4_1_2_reason": _cs_reason if is_functional else "N/A",
+                        "wcag_1_4_5_reason": _cs_reason,
+                        "wcag_1_4_11_reason": _cs_reason if (is_button or is_icon) else "N/A",
+                        "screenshot_path": screenshot_path,
+                        "capture_status": capture_status,
+                        "capture_error": capture_error or "",
+                    }
+                )
+                continue
 
             # ── OCR lookup by filename ───────────────────────────────────
             has_ocr_text, detected_texts, contrast_count = _ocr_for_file(
@@ -785,6 +835,8 @@ class AltTextAccessibilityAuditor:
                     "wcag_1_4_5_reason": wcag_1_4_5_reason,
                     "wcag_1_4_11_reason": wcag_1_4_11_reason,
                     "screenshot_path": screenshot_path,
+                    "capture_status": capture_status,
+                    "capture_error": capture_error or "",
                 }
             )
 

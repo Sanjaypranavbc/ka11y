@@ -180,7 +180,7 @@ async def collect_snapshot(
 
     elements: List[ElementSnapshot] = []
     for item in raw.get("elements", []):
-        rect_d = item.get("rect", {})
+        rect_d = item.get("rect") or {}
         elements.append(
             ElementSnapshot(
                 element_id=item.get("element_id"),
