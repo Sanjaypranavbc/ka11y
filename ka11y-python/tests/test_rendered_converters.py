@@ -122,9 +122,29 @@ def test_na_record_skipped(fn, rule_key, expected_sc, expected_rid):
     assert findings == []
 
 
+# Converters that emit a synthetic page-level pass when records is empty
+_SYNTHETIC_PASS_FNS = {
+    _resize_text_to_findings,
+    _reflow_to_findings,
+    _hover_focus_content_to_findings,
+    _focus_not_obscured_min_to_findings,
+    _focus_not_obscured_enh_to_findings,
+}
+
+
 @pytest.mark.parametrize("fn,rule_key,expected_sc,expected_rid", _CONVERTER_CASES)
 def test_empty_records(fn, rule_key, expected_sc, expected_rid):
-    assert fn([], PAGE_URL) == []
+    findings = fn([], PAGE_URL)
+    if fn in _SYNTHETIC_PASS_FNS:
+        assert len(findings) == 1, f"{fn.__name__} should emit a synthetic pass for empty records"
+        f = findings[0]
+        assert f["status"] == "pass"
+        assert f["reason_code"] == "pass_no_records"
+        assert f["wcag_sc"] == expected_sc
+        assert f["rule_id"] == expected_rid
+        assert f["element"] is None
+    else:
+        assert findings == []
 
 
 def test_mixed_records():
