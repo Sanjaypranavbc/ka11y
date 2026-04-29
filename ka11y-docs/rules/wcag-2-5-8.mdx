@@ -100,3 +100,12 @@ For elements where you cannot change the visual size:
   min-height: 24px;
 }
 ```
+
+## Known limitations
+
+- **Viewport-coupled** — measurements run at 1440 px viewport. Mobile-specific sizing issues (often more severe) are not captured without reconfiguring the crawler.
+- **Iframe contents** are not traversed.
+- **Essential / equivalent exceptions** require human judgment and are not auto-applied.
+- **Z-index stacking** — transparent overlaid targets can trigger false offset-intersection failures.
+
+See [Technique coverage for 2.5.8](/rules/coverage-matrix#2-5-8-target-size-minimum).

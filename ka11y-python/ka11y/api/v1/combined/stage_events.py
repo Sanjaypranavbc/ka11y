@@ -10,14 +10,23 @@ _stage_complete() or _stage_error_and_warn() on exit.
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timezone
+from typing import Any, Optional
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils.step_logger import append_step_log
 
+from .constants import STAGE_WEIGHTS
 from .store import _broadcast, _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
+
+# Throttle stage_progress events to at most one per (job_id, stage, phase)
+# every _PROGRESS_MIN_INTERVAL_S seconds to prevent SSE flooding on fast
+# inner loops (e.g. OCR scanning 200+ images).
+_PROGRESS_MIN_INTERVAL_S = 0.2
+_progress_last_emit: dict[tuple[str, str, str], float] = {}
 
 
 def _fire_broadcast(job_id: str, event_type: str, data: dict) -> None:
@@ -39,6 +48,44 @@ def _fire_broadcast(job_id: str, event_type: str, data: dict) -> None:
         )
 
 
+def _plan_index(job_id: str, name: str) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    """Return (index, total, weight) for `name` given the job's plan.
+
+    index is 1-based. Returns (None, None, None) when no plan was stored
+    (e.g. unit tests that never call emit_job_plan()), so older callers
+    still function without the new fields.
+    """
+    plan = _jobs.get(job_id, {}).get("plan")
+    if not plan:
+        return (None, None, None)
+    stages = plan.get("stages", []) or []
+    total = len(stages) or None
+    for i, s in enumerate(stages, 1):
+        if s.get("key") == name:
+            return (i, total, int(s.get("weight", 0)) or None)
+    return (None, total, STAGE_WEIGHTS.get(name))
+
+
+def emit_job_plan(job_id: str, active_stage_keys: list[str]) -> None:
+    """Emit the stage plan for the whole job — frontend uses this to draw the bar.
+
+    `active_stage_keys` should be the list of stage keys that will actually run,
+    in execution order, derived from the audit request flags.
+    """
+    stages = [
+        {"key": k, "weight": STAGE_WEIGHTS.get(k, 1)}
+        for k in active_stage_keys
+    ]
+    plan = {
+        "stages": stages,
+        "total": len(stages),
+        "weight_total": sum(s["weight"] for s in stages) or 1,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _jobs.setdefault(job_id, {})["plan"] = plan
+    _fire_broadcast(job_id, "job_plan", {"job_id": job_id, **plan})
+
+
 def _stage_start(job_id: str, name: str) -> None:
     now = datetime.now(timezone.utc).isoformat()
     rec = {"name": name, "status": "running", "started_at": now}
@@ -52,7 +99,46 @@ def _stage_start(job_id: str, name: str) -> None:
         message="Stage started",
         context={"job_id": job_id, "stage_name": name, "started_at": now},
     )
-    _fire_broadcast(job_id, "stage_start", {"stage_name": name, "started_at": now})
+    idx, total, weight = _plan_index(job_id, name)
+    payload: dict[str, Any] = {"stage_name": name, "started_at": now}
+    if idx is not None:
+        payload.update(index=idx, total=total, weight=weight)
+    _fire_broadcast(job_id, "stage_start", payload)
+
+
+def emit_stage_progress(
+    job_id: str,
+    name: str,
+    current: int,
+    total: int,
+    *,
+    phase: Optional[str] = None,
+) -> None:
+    """Sub-progress inside a stage. Throttled to _PROGRESS_MIN_INTERVAL_S per
+    (job_id, stage, phase) to avoid flooding the SSE stream.
+
+    - `current` and `total` define the inner progress bar (e.g. 17 of 38 images).
+    - `phase` is an optional sub-label ("crawl", "ocr", "transcribe"…) that the
+       UI displays alongside the stage name.
+
+    Always emits on the terminal boundary (current >= total) so the UI can
+    transition cleanly even when the last iteration is sub-throttle.
+    """
+    key = (job_id, name, phase or "")
+    now_s = time.monotonic()
+    last = _progress_last_emit.get(key, 0.0)
+    at_end = total > 0 and current >= total
+    if not at_end and (now_s - last) < _PROGRESS_MIN_INTERVAL_S:
+        return
+    _progress_last_emit[key] = now_s
+    payload = {
+        "stage_name": name,
+        "current": int(current),
+        "total": int(total),
+    }
+    if phase:
+        payload["phase"] = phase
+    _fire_broadcast(job_id, "stage_progress", payload)
 
 
 def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
@@ -82,11 +168,19 @@ def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
             "findings_count": findings_count,
         },
     )
-    _fire_broadcast(
-        job_id,
-        "stage_complete",
-        {"stage_name": name, "completed_at": now, "findings_count": findings_count},
-    )
+    idx, total, weight = _plan_index(job_id, name)
+    payload: dict[str, Any] = {
+        "stage_name": name,
+        "completed_at": now,
+        "findings_count": findings_count,
+    }
+    if idx is not None:
+        payload.update(index=idx, total=total, weight=weight)
+    _fire_broadcast(job_id, "stage_complete", payload)
+    # drop per-(job,stage,phase) throttle entries for this stage to cap memory
+    _progress_last_emit.pop((job_id, name, ""), None)
+    for phase in ("crawl", "ocr", "transcribe"):
+        _progress_last_emit.pop((job_id, name, phase), None)
 
 
 def _stage_error(job_id: str, name: str, error: str) -> None:
@@ -109,7 +203,11 @@ def _stage_error(job_id: str, name: str, error: str) -> None:
         message="Stage failed",
         context={"job_id": job_id, "stage_name": name, "error": error, "completed_at": now},
     )
-    _fire_broadcast(job_id, "stage_error", {"stage_name": name, "error": error})
+    idx, total, weight = _plan_index(job_id, name)
+    payload: dict[str, Any] = {"stage_name": name, "error": error}
+    if idx is not None:
+        payload.update(index=idx, total=total, weight=weight)
+    _fire_broadcast(job_id, "stage_error", payload)
 
 
 def _stage_error_and_warn(job_id: str, name: str, exc: Exception | None) -> None:

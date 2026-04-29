@@ -25,6 +25,9 @@ def relative_luminance(rgb):
 
 def cluster_colors(pixels, k):
     pixels = np.float32(pixels)
+    if len(pixels) == 0:
+        return []
+    k = max(1, min(k, len(pixels)))
     _, labels, centers = cv2.kmeans(
         pixels,
         k,

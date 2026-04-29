@@ -158,4 +158,25 @@ describe('status-messages.check (WCAG 4.1.3)', () => {
     expect(result.rules[0].reason).toContain('動的コンテンツ');
     expect(result.rules[0].reason).toContain('検索結果');
   });
+
+  test('emits toast heuristic rule when toast containers lack ARIA live semantics', async () => {
+    const page = makePage({
+      liveRegionCount: 1,
+      formCount: 0,
+      hasAlerts: false,
+      hasPolite: true,
+      hasSearchResults: false,
+      hasCartOrCounter: false,
+      hasNotificationArea: true,
+      needsLiveRegions: true,
+      toastWithoutAria: [
+        { html: '<div class="Toastify__toast-container"></div>', tag: 'DIV' },
+      ],
+    });
+    const result = await run(page);
+    const toastRule = result.rules.find(r => r.ruleId === 'custom-status-messages-toast');
+    expect(toastRule).toBeTruthy();
+    expect(toastRule.status).toBe('incomplete');
+    expect(toastRule.reason).toContain('toast');
+  });
 });

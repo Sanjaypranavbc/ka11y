@@ -69,8 +69,15 @@ def export_section(records: list, section_name: str, output_dir: str):
 
 
 def main():
-    # Step 1: Get the JSON file path
-    input_file = r"/home/meghana/Downloads/combined_report(19).json"
+    # Step 1: Get the JSON file path from CLI arg or interactive prompt
+    if len(sys.argv) > 1:
+        input_file = sys.argv[1]
+    else:
+        input_file = input("Enter path to JSON file: ").strip().strip('"').strip("'")
+
+    if not input_file:
+        print("\n  ERROR: No file path provided.")
+        sys.exit(1)
 
     # Validate the file exists
     if not os.path.isfile(input_file):

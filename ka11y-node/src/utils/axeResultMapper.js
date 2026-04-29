@@ -1,81 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 'use strict';
 
 const rulesGuide = require('./rulesGuide');
@@ -84,10 +7,29 @@ const {
   BEST_PRACTICE_NAME,
   WCAG_LEVEL,
 } = require('./wcagMetadata');
-const { getAxeRuleLocales, getRules } = require('./rulesLoader');
+const {
+  getAxeRuleLocales,
+  getRules,
+  getSeverityLabel,
+  getLevelLabel,
+  getStatusLabel,
+} = require('./rulesLoader');
 
 // English rules cached at startup as fallback.
 const _enRules = getRules('en');
+
+/**
+ * Augment a finding with localized severity/level/status display labels
+ * (and copies of the stable machine values, so consumers that only look at
+ * `severity_label` / `level_label` / `status_label` always have something
+ * to render). Mutates and returns the finding for ergonomic chaining.
+ */
+function _attachLabels(finding, lang) {
+  finding.severity_label = getSeverityLabel(finding.severity, lang);
+  finding.level_label    = getLevelLabel(finding.level, lang);
+  finding.status_label   = getStatusLabel(finding.status, lang);
+  return finding;
+}
 const FAILURE_SUMMARY_PREFIX_RE = /^(?:Fix (?:any|all) of the following:|次の(?:いずれか|すべて)を修正します:)\s*/i;
 
 function cleanReason(summary, fallback) {
@@ -103,7 +45,7 @@ function cleanReason(summary, fallback) {
  * @param {string|null} criteriaFilter - Optional WCAG SC ID to filter by (e.g. "1.1.1")
  * @returns {Array<object>} Structured rule results sorted by severity
  */
-function mapResults(axeResults, criteriaFilter = null) {
+function mapResults(results, criteriaFilter = null, accessLintResults = null) {
   const resultMap = {};
 
   // violations → status: "fail"
@@ -159,7 +101,69 @@ function mapResults(axeResults, criteriaFilter = null) {
   for (const { _criteriaId, ...rule } of flat) {
     const key = _criteriaId ?? 'best-practice';
     if (!grouped[key]) grouped[key] = [];
+    
+    // Tag Axe-core inherently
+    rule.detected_by = ["axe-core"];
     grouped[key].push(rule);
+  }
+
+  // --- NEW: THE DEDUPLICATION ENGINE ---
+  if (accessLintResults && accessLintResults.violations) {
+    for (const alViolation of accessLintResults.violations) {
+      const wcagKey = (alViolation.wcag && alViolation.wcag[0]) ? alViolation.wcag[0] : 'best-practice';
+      
+      if (grouped[wcagKey]) {
+        let merged = false;
+        for (const axeRule of grouped[wcagKey]) {
+          const matchingNode = axeRule.nodes?.find(n => 
+            n.target && n.target.includes(alViolation.selector)
+          );
+
+          if (matchingNode) {
+            axeRule.detected_by.push("accesslint");
+            axeRule.aiContext = alViolation.aiContext;
+            merged = true;
+            break;
+          }
+        }
+
+        if (!merged) {
+          grouped[wcagKey].push({
+            id: alViolation.ruleId,
+            description: alViolation.message,
+            help: alViolation.message,
+            helpUrl: '',
+            tags: alViolation.tags || [],
+            impact: alViolation.impact,
+            status: 'fail',
+            detected_by: ["accesslint"],
+            aiContext: alViolation.aiContext,
+            nodes: [{
+              html: alViolation.html,
+              target: [alViolation.selector],
+              failureSummary: alViolation.context || alViolation.message
+            }]
+          });
+        }
+      } else {
+        grouped[wcagKey] = [{
+            id: alViolation.ruleId,
+            description: alViolation.message,
+            help: alViolation.message,
+            helpUrl: '',
+            tags: alViolation.tags || [],
+            impact: alViolation.impact,
+            status: 'fail',
+            detected_by: ["accesslint"],
+            aiContext: alViolation.aiContext,
+            nodes: [{
+              html: alViolation.html,
+              target: [alViolation.selector],
+              failureSummary: alViolation.context || alViolation.message
+            }]
+        }];
+      }
+    }
   }
 
   return Object.entries(grouped)
@@ -478,6 +482,51 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter 
     }
   }
 
+  // --- NEW: THE DEDUPLICATION ENGINE (FLAT) ---
+  if (accessLintResults && accessLintResults.violations) {
+    for (const alViolation of accessLintResults.violations) {
+      const wcagKey = (alViolation.wcag && alViolation.wcag[0]) ? alViolation.wcag[0] : 'best-practice';
+      const alSelector = alViolation.selector;
+      
+      let merged = false;
+      for (const finding of findings) {
+        if (finding.wcag_sc === wcagKey && finding.element?.selector === alSelector) {
+          finding.detected_by = finding.detected_by || ["axe-core"];
+          if (!finding.detected_by.includes("accesslint")) {
+             finding.detected_by.push("accesslint");
+          }
+          finding.aiContext = alViolation.aiContext;
+          merged = true;
+          break;
+        }
+      }
+
+      if (!merged) {
+        findings.push({
+          source:         'accesslint',
+          rule_id:        alViolation.ruleId,
+          wcag_sc:        wcagKey,
+          criterion_name: _criterionName(wcagKey, alViolation.ruleId, alViolation.message || null, lang),
+          level:          _criterionLevel(wcagKey),
+          severity:       IMPACT_TO_SEVERITY[alViolation.impact] || null,
+          status:         'fail',
+          reason:         alViolation.message,
+          suggested_fix:  alViolation.context || null,
+          help_url:       '',
+          element:        { selector: alSelector, html_snippet: alViolation.html, page_url: pageUrl },
+          detected_by:    ["accesslint"],
+          aiContext:      alViolation.aiContext
+        });
+      }
+    }
+  }
+
+  for (const f of findings) {
+    if (!f.detected_by) f.detected_by = ["axe-core"];
+  }
+
+  for (const f of findings) _attachLabels(f, lang);
+
   // Sort: fail → needs_review → pass
   const ORDER = { fail: 0, needs_review: 1, pass: 2 };
   findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
@@ -669,6 +718,8 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
       }
     }
   }
+
+  for (const f of findings) _attachLabels(f, lang);
 
   // Sort: fail → needs_review → pass
   const ORDER = { fail: 0, needs_review: 1, pass: 2 };

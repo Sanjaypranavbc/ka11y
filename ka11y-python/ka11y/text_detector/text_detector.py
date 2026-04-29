@@ -604,7 +604,7 @@ class TextClassification:
 
                             f.write(f'#### {i}. Text: "{text_snippet}"\n')
 
-                            fg = det.color_info.get("foreground", {})
+                            fg = det.color_info.get("foreground") or {}
                             f.write(
                                 f"- **Detected Text Color**: {fg.get('hex', 'N/A')} (Lum: {fg.get('luminance', 'N/A')})\n\n"
                             )
@@ -656,7 +656,7 @@ class TextClassification:
             for result in self.results:
                 for det in result.detections:
                     if det.color_info:
-                        fg = det.color_info.get("foreground", {}).get("hex", "N/A")
+                        fg = (det.color_info.get("foreground") or {}).get("hex", "N/A")
 
                         for check in det.color_info.get("contrast_checks", []):
                             bg = check["bg_color"]["hex"]

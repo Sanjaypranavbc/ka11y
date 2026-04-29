@@ -76,6 +76,7 @@ from .findings import (
     _hover_focus_content_to_findings,
     _focus_not_obscured_min_to_findings,
     _focus_not_obscured_enh_to_findings,
+    _contrast_capture_failed_to_findings,
 )
 
 __all__ = [
@@ -103,4 +104,5 @@ __all__ = [
     "_hover_focus_content_to_findings",
     "_focus_not_obscured_min_to_findings",
     "_focus_not_obscured_enh_to_findings",
+    "_contrast_capture_failed_to_findings",
 ]

@@ -30,6 +30,8 @@ const severityColors: Record<string, string> = {
 
 const sourceColors: Record<string, string> = {
   axe: "bg-primary/15 text-primary border-primary/30",
+  "axe-core": "bg-primary/15 text-primary border-primary/30",
+  accesslint: "bg-purple-100 text-purple-800 border-purple-300",
   python: "bg-accent text-accent-foreground border-accent-foreground/30",
   custom: "bg-serious/15 text-serious border-serious/30",
   unknown: "bg-muted text-muted-foreground border-border",
@@ -216,12 +218,19 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
                   </Badge>
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
-                  <Badge
-                    variant="outline"
-                    className={cn("text-[10px]", sourceColors[v.source] || sourceColors.unknown)}
-                  >
-                    {v.source}
-                  </Badge>
+                  {v.detected_by && v.detected_by.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {v.detected_by.map(engine => (
+                        <Badge key={engine} variant="outline" className={cn("text-[10px]", sourceColors[engine] || sourceColors.unknown)}>
+                          {engine}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <Badge variant="outline" className={cn("text-[10px]", sourceColors[v.source] || sourceColors.unknown)}>
+                      {v.source}
+                    </Badge>
+                  )}
                 </TableCell>
                 <TableCell className="font-mono text-xs">{v.rule_id}</TableCell>
                 <TableCell className="font-mono text-xs hidden lg:table-cell">{formatCriterionId(v.wcag_sc)}</TableCell>
@@ -230,9 +239,20 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
                 <TableCell className="text-xs text-muted-foreground max-w-xs">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span tabIndex={0} className="cursor-help truncate block max-w-xs">{v.reason}</span>
+                      <span tabIndex={0} className="cursor-help truncate block max-w-xs">
+                        {v.reason}
+                        {v.aiContext && <span className="text-purple-500 font-semibold ml-1">✨ AI</span>}
+                      </span>
                     </TooltipTrigger>
-                    <TooltipContent className="max-w-sm text-xs">{v.reason}</TooltipContent>
+                    <TooltipContent className="max-w-sm text-xs">
+                      <p>{v.reason}</p>
+                      {v.aiContext && (
+                        <div className="mt-2 text-purple-200 border-t border-purple-800/50 pt-2 flex flex-col">
+                          <span className="font-semibold mb-1 text-purple-300">AccessLint AI Context:</span>
+                          {v.aiContext}
+                        </div>
+                      )}
+                    </TooltipContent>
                   </Tooltip>
                 </TableCell>
                 <TableCell>

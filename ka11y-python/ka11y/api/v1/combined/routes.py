@@ -290,18 +290,25 @@ async def get_job_image(job_id: str, path: str):
             if img.get("path")
         )
 
-    if path not in valid_paths:
+    # Canonicalize the requested path to prevent path-traversal attacks.
+    # valid_paths are already canonical absolute paths stored by the auditor.
+    try:
+        canonical_path = Path(path).resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image path.")
+
+    canonical_valid = {str(Path(p).resolve()) for p in valid_paths}
+    if str(canonical_path) not in canonical_valid:
         raise HTTPException(
             status_code=403,
             detail="Image path is not associated with this job.",
         )
 
-    img_path = Path(path)
-    if not img_path.exists() or not img_path.is_file():
+    if not canonical_path.exists() or not canonical_path.is_file():
         raise HTTPException(status_code=404, detail="Image file not found on server.")
 
-    media_type, _ = mimetypes.guess_type(str(img_path))
-    return FileResponse(str(img_path), media_type=media_type or "image/png")
+    media_type, _ = mimetypes.guess_type(str(canonical_path))
+    return FileResponse(str(canonical_path), media_type=media_type or "image/png")
 
 
 @router.get("/{job_id}/stream")

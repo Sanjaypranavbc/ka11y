@@ -248,6 +248,10 @@ class MovingContentCrawler:
                 const el = effect.target;
                 if (!el || !el.tagName) return;
 
+                // Skip visually hidden elements — they cannot distract users
+                const cs = window.getComputedStyle(el);
+                if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return;
+
                 const timing  = effect.getTiming ? effect.getTiming() : {};
                 const durMs   = typeof timing.duration === 'number' ? timing.duration : 0;
                 const iters   = timing.iterations;

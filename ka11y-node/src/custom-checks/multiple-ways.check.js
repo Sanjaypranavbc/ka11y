@@ -25,12 +25,20 @@ async function run(page, context = {}) {
   const breadcrumbPattern = buildKeywordPattern(
     getKeywordList('multiple_ways', 'breadcrumb_keywords', sharedContext)
   ) || 'breadcrumb';
+  const relatedPattern = buildKeywordPattern(
+    getKeywordList('multiple_ways', 'related_links_keywords', sharedContext)
+  ) || 'related|recommended|similar|popular|also\\s+viewed|関連|おすすめ|関連記事';
+  const pageIndexPattern = buildKeywordPattern(
+    getKeywordList('multiple_ways', 'page_index_keywords', sharedContext)
+  ) || 'all\\s+pages|index|a-z|directory|site\\s+index|一覧|索引';
 
   const data = await page.evaluate((patterns) => {
     const searchRe = new RegExp(patterns.searchPattern, 'i');
     const sitemapRe = new RegExp(patterns.sitemapPattern, 'i');
     const tocRe = new RegExp(patterns.tocPattern, 'i');
     const breadcrumbRe = new RegExp(patterns.breadcrumbPattern, 'i');
+    const relatedRe = new RegExp(patterns.relatedPattern, 'i');
+    const pageIndexRe = new RegExp(patterns.pageIndexPattern, 'i');
     const hasSearch = !!(
       document.querySelector('input[type="search"]') ||
       document.querySelector('[role="search"]') ||
@@ -79,20 +87,52 @@ async function run(page, context = {}) {
       )
     );
 
-    return { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents };
+    const hasRelatedLinks = !!(
+      Array.from(document.querySelectorAll('section, aside, nav, div, [aria-label]')).some(el => {
+        const signal = [
+          el.getAttribute('id') || '',
+          el.getAttribute('class') || '',
+          el.getAttribute('aria-label') || '',
+          (el.querySelector('h1,h2,h3,h4,h5,h6') || {}).textContent || '',
+        ].join(' ');
+        if (!relatedRe.test(signal)) return false;
+        return el.querySelectorAll('a[href]').length >= 2;
+      }) ||
+      Array.from(document.querySelectorAll('a[href]')).some(a => relatedRe.test(a.getAttribute('href') || ''))
+    );
+
+    const hasPageIndexList = !!(
+      Array.from(document.querySelectorAll('section, nav, div, main, article')).some(el => {
+        const signal = [
+          el.getAttribute('id') || '',
+          el.getAttribute('class') || '',
+          el.getAttribute('aria-label') || '',
+          (el.querySelector('h1,h2,h3,h4,h5,h6') || {}).textContent || '',
+        ].join(' ');
+        if (!pageIndexRe.test(signal)) return false;
+        return el.querySelectorAll('a[href]').length >= 8;
+      }) ||
+      Array.from(document.querySelectorAll('a[href]')).some(a => pageIndexRe.test((a.textContent || '') + ' ' + (a.getAttribute('href') || '')))
+    );
+
+    return { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents, hasRelatedLinks, hasPageIndexList };
   }, {
     searchPattern,
     sitemapPattern,
     tocPattern,
     breadcrumbPattern,
+    relatedPattern,
+    pageIndexPattern,
   });
 
-  const { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents } = data;
+  const { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents, hasRelatedLinks, hasPageIndexList } = data;
   const ways = (hasSearch ? 1 : 0) +
                (hasSitemap ? 1 : 0) +
                (navCount >= 1 ? 1 : 0) +
                (hasBreadcrumb ? 1 : 0) +
-               (hasTableOfContents ? 1 : 0);
+               (hasTableOfContents ? 1 : 0) +
+               (hasRelatedLinks ? 1 : 0) +
+               (hasPageIndexList ? 1 : 0);
 
   if (ways >= 2) {
     const list = [
@@ -101,6 +141,8 @@ async function run(page, context = {}) {
       navCount >= 1 && `${navCount} nav element(s)`,
       hasBreadcrumb && 'breadcrumb',
       hasTableOfContents && 'table of contents',
+      hasRelatedLinks && 'related links section',
+      hasPageIndexList && 'page index list',
     ].filter(Boolean);
     return {
       successCriteriaId: SC,
@@ -127,6 +169,8 @@ async function run(page, context = {}) {
     navCount >= 1 && `${navCount} nav element(s)`,
     hasBreadcrumb && 'breadcrumb',
     hasTableOfContents && 'table of contents',
+    hasRelatedLinks && 'related links section',
+    hasPageIndexList && 'page index list',
   ].filter(Boolean);
   const missing = [
     !hasSearch && 'search',
@@ -134,6 +178,8 @@ async function run(page, context = {}) {
     navCount < 1 && 'navigation menu',
     !hasBreadcrumb && 'breadcrumb',
     !hasTableOfContents && 'table of contents',
+    !hasRelatedLinks && 'related links',
+    !hasPageIndexList && 'page index list',
   ].filter(Boolean);
 
   return {

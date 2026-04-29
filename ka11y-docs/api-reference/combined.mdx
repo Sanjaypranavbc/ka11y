@@ -24,13 +24,16 @@ If you want a **full production-style run**, omit the optional `run_*` booleans 
 </ParamField>
 
 <ParamField body="lang" type="string" default="en">
-  Result language for localized output. Use `"ja"` for Japanese (`"en"` and `"de"` are also supported). Unsupported values fall back to English.
+  Result language for localized output. Currently supported: `"en"`, `"ja"`, `"de"`. Unsupported values fall back to English.
 
-  Current behavior:
+  All text-bearing fields in the report are universally localized from `i18n/rules.yml` and the per-locale overlay files:
 
-  - Node findings localize `criterion_name`, `reason`, and `suggested_fix`
-  - Python findings localize `criterion_name` and `suggested_fix` through shared i18n
-  - Python `reason` localization depends on the underlying auditor; some older auditors still emit English reasons
+  - `criterion_name`, `description`, `suggested_fix` — sourced from `rules.<sc>` per language
+  - `reason` — rendered from `reason_templates.<sc>.<reason_code>` (with the shared `_generic` block as fallback)
+  - `severity_label`, `level_label`, `status_label` — localized companions to the stable machine values `severity`, `level`, `status`
+  - `labels.severities`, `labels.levels`, `labels.statuses` (top-level) — full label maps so the frontend can render any machine value without re-fetching the rules catalogue
+
+  Stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) never change across languages; filter and group on those.
 </ParamField>
 
 <ParamField body="run_ocr" type="boolean" default="true">

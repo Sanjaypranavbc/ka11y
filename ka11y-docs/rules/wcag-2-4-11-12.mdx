@@ -102,3 +102,11 @@ a:focus, button:focus {
 | `wcag_sc` | `2.4.12` |
 | `level` | `AAA` |
 | `severity` | `high` |
+
+## Known limitations
+
+- **100-step tab ceiling** — the focus-scan scenario bounds traversal. Very long forms may skip elements beyond step 100.
+- **Sticky/fixed-position overlays** with dynamic offsets can produce transient false negatives depending on scroll-timing.
+- **Custom focus indicators drawn on `<canvas>` / SVG** cannot be measured from the DOM.
+
+See [Technique coverage for 2.4.11 / 2.4.12](/rules/coverage-matrix#2-4-11-2-4-12-focus-not-obscured).

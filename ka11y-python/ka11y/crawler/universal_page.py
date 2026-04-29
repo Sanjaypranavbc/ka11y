@@ -1358,17 +1358,28 @@ class UniversalPageLoader:
                 logger.info(f"[universal] capping links from {len(links)} to {policy.max_links_per_page}")
                 links = links[:policy.max_links_per_page]
 
+            def _count_for_url(collection: list) -> int:
+                return len([r for r in collection if r.get("page_url") == url])
+
+            page_forms        = _count_for_url(output.forms)
+            page_interactive  = _count_for_url(output.interactive)
+            page_target_sizes = _count_for_url(output.target_sizes)
+            page_moving       = _count_for_url(output.moving_content)
+            page_media        = _count_for_url(output.media)
+            page_text_spacing = _count_for_url(output.text_spacing)
+            page_sensory      = _count_for_url(output.sensory)
+
             output.page_summaries.append(
                 {
                     "page_url": url,
                     "depth": depth,
-                    "forms": len(output.forms),
-                    "interactive": len(output.interactive),
-                    "target_sizes": len(output.target_sizes),
-                    "moving_content": len(output.moving_content),
-                    "media": len(output.media),
-                    "text_spacing": len(output.text_spacing),
-                    "sensory": len(output.sensory),
+                    "forms": page_forms,
+                    "interactive": page_interactive,
+                    "target_sizes": page_target_sizes,
+                    "moving_content": page_moving,
+                    "media": page_media,
+                    "text_spacing": page_text_spacing,
+                    "sensory": page_sensory,
                     "links_found": len(links),
                 }
             )
@@ -1383,13 +1394,13 @@ class UniversalPageLoader:
                     context={
                         "url": url,
                         "depth": depth,
-                        "forms": len(output.forms),
-                        "interactive": len(output.interactive),
-                        "target_sizes": len(output.target_sizes),
-                        "moving_content": len(output.moving_content),
-                        "media": len(output.media),
-                        "text_spacing": len(output.text_spacing),
-                        "sensory": len(output.sensory),
+                        "forms": page_forms,
+                        "interactive": page_interactive,
+                        "target_sizes": page_target_sizes,
+                        "moving_content": page_moving,
+                        "media": page_media,
+                        "text_spacing": page_text_spacing,
+                        "sensory": page_sensory,
                         "links_found": len(links),
                         "warnings": page_warning_count,
                     },
@@ -1651,6 +1662,11 @@ class UniversalPageLoader:
             frames.append((frame, path))
             for index, child in enumerate(frame.child_frames):
                 child_path = f"{path}.{index}"
+                child_url = child.url or ""
+                if child_url and not cls._is_same_origin(page_url, child_url):
+                    logger.info(f"Skipped cross-origin frame during universal extraction: {child_url}")
+                    output.partial = True
+                    continue
                 await walk(child, child_path)
 
         await walk(page.main_frame, "main")

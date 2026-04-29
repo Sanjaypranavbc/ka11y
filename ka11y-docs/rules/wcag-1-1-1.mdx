@@ -114,3 +114,23 @@ Localization in the combined finding arrays works like this:
 <img src="chart.png" alt="Q1 revenue chart" aria-describedby="chart-desc">
 <p id="chart-desc">Bar chart showing Q1 revenue of £2.4M, up 12% from Q4…</p>
 ```
+
+## Known limitations
+
+- **Literal OCR matching** — semantic synonyms (alt "Look up" vs OCR "Search") fail the content-equivalence check.
+- **Classifier dependency** — a logo mis-labelled as `informative` bypasses the logo-keyword gate.
+- **`<object>` / `<embed>` fallback content** is not traversed.
+- **2-letter token coverage** — uppercase abbreviations (e.g. "UI", "AI", "OK") are now extracted directly from the raw OCR output before lowercasing, so they are included in the word-match check. Single-character tokens are still excluded.
+
+## CSS background images (supplementary check)
+
+Images set via CSS `background-image: url(...)` are not reachable by the Python OCR crawler (they are not `<img>` elements), but the Node engine's `custom-background-image-content` check (`ka11y-node/src/custom-checks/background-image-content.check.js`) flags them heuristically:
+
+- Scans every element's computed `background-image` for `url(...)` references.
+- Filters out pure gradients, data URIs, tiny (< 24 × 24 CSS px) backgrounds, `aria-hidden`/`presentation` roles, and URLs whose filename hints decoration (`gradient`, `pattern`, `noise`, `texture`, `overlay`, `mask`, `fade`, `blur`, `dot`, `divider`, `separator`).
+- Emits `status: "incomplete"` (needs review) when a non-decorative background has no accessible name (`aria-label`, `title`, or text content) on its host element — WCAG 1.1.1 concern.
+- Emits a separate `custom-background-image-content-text-image` finding when the filename contains text-indicating keywords (`banner`, `headline`, `title`, `hero`, `cta`, `promo`, `callout`, `masthead`, `heading`, `text`) — WCAG 1.4.5 concern, suggesting real CSS-styled text instead of an image of text.
+
+This is a heuristic filename-based signal, not OCR over the background pixels — treat findings as "needs manual review" rather than hard violations.
+
+See [Technique coverage for 1.1.1](/rules/coverage-matrix#1-1-1-non-text-content) for the full W3C technique map.

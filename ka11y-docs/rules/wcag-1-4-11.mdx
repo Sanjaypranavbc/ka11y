@@ -56,3 +56,11 @@ Ensure that all meaningful graphical elements have a contrast ratio of at least 
 ```
 
 If an icon is accompanied by a text label that already passes 1.4.3, the icon itself may be considered decorative and exempt from 1.4.11. However, ka11y recommends maintaining 3:1 contrast for all functional graphics for better usability.
+
+## Known limitations
+
+- **Fill-only buttons** (no border, background colour only) emit N/A because no UI boundary is detectable.
+- **Active / hover / focus state contrast** is not measured — only the default rendered state.
+- **Charts and data visualisations** exempt by G207 are not distinguished; decorative chart borders may be flagged.
+
+See [Technique coverage for 1.4.11](/rules/coverage-matrix#1-4-11-non-text-contrast).

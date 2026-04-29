@@ -69,12 +69,12 @@ In-memory job store (`_jobs` dict) and SSE pub/sub bus. Both are module-level si
 
 ### `findings.py`
 Contains:
-- `_make_finding()` — the single factory for all finding dicts (enforces schema)
+- `_make_finding()` — the single factory for all finding dicts (enforces schema). Resolves the active language via the `_lang_ctx` ContextVar (set by `runner._run_job()` from the request `lang` param), then looks up `criterion_name`, `suggested_fix`, `severity_label`, `level_label`, `status_label`, and the `reason` template — so every emitted finding is fully localized without each converter having to think about it.
 - `_build_contrast_report()` — structures OCR results into the contrast report section
-- One `_xxx_to_findings(records, page_url)` function per auditor
+- One `_xxx_to_findings(records, page_url)` function per auditor. Converters pass `reason_code=` (and optional `reason_params=`) instead of inline English strings; the factory renders the template via `i18n.loader.render_reason()` and falls back to the shared `_generic` block when an SC has no specific template.
 
 ### `report.py`
-`_build_report()` — groups flat findings into `violations`, `needs_review`, `passes`; computes `by_severity`, `by_level`, `by_wcag_sc`, `by_source` summary buckets.
+`_build_report()` — groups flat findings into `violations`, `needs_review`, `passes`; computes `by_severity`, `by_level`, `by_wcag_sc`, `by_source` summary buckets. Also attaches the active `lang` and a top-level `labels` block (full `severities` / `levels` / `statuses` maps) so frontends can render any machine value in the active language without re-fetching the rules catalogue.
 
 ### `stages.py`
 One `async def _stage_xxx(...)` coroutine per rule family. All are gathered concurrently by `_run_python_stages()`. Crawlers and auditors are called here; results are passed through the relevant converter.

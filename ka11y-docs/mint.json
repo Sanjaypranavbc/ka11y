@@ -53,6 +53,7 @@
       "pages": [
         "introduction",
         "quickstart",
+        "how-it-works",
         "architecture"
       ]
     },
@@ -70,15 +71,20 @@
       "pages": [
         "rules/overview",
         "rules/node-custom-checks",
+        "rules/coverage-matrix",
+        "rules/wcag-dependency-tree",
         "rules/wcag-1-1-1",
+        "rules/wcag-1-3-1",
+        "rules/wcag-1-3-3",
+        "rules/wcag-1-3-4",
         "rules/wcag-1-4-3",
         "rules/wcag-1-4-4",
         "rules/wcag-1-4-10",
+        "rules/wcag-1-4-11",
         "rules/wcag-1-4-12",
-        "rules/wcag-1-3-4",
         "rules/wcag-1-4-13",
-        "rules/wcag-2-4-11-12",
         "rules/wcag-2-2-2",
+        "rules/wcag-2-4-11-12",
         "rules/wcag-2-5-3",
         "rules/wcag-2-5-8",
         "rules/wcag-3-3-1-3-3-2"
@@ -98,12 +104,23 @@
       "pages": [
         "internals/combined-package",
         "internals/python-rules-flow-analysis",
+        "internals/node-rules-flow-analysis",
         "internals/crawler-metadata",
         "internals/data-models",
         "internals/sse-events",
         "internals/output-format",
         "internals/live-ten-site-analysis",
-        "internals/config"
+        "internals/config",
+        "internals/test-case-documentation",
+        "internals/confidence-report",
+        "internals/japanese-language-support"
+      ]
+    },
+    {
+      "group": "Internals (日本語)",
+      "pages": [
+        "internals/python-rules-flow-analysis-jp",
+        "internals/node-rules-flow-analysis-ja"
       ]
     },
     {

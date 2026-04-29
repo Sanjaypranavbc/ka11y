@@ -193,9 +193,20 @@ class AccessibilityService {
       { timeout: 2_000 }
     );
 
+    const INJECT_TIMEOUT_MS = 10_000;
     const tryInject = async () => {
-      await page.addScriptTag({ path: this._axeCorePath });
-      await waitForAxe();
+      const injectWithTimeout = (fn) =>
+        Promise.race([
+          fn(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('axe injection timed out')), INJECT_TIMEOUT_MS)
+          ),
+        ]);
+      await injectWithTimeout(async () => {
+        await page.addScriptTag({ path: this._axeCorePath });
+        await page.addScriptTag({ path: require.resolve('@accesslint/core/dist/index.iife.js') });
+        await waitForAxe();
+      });
     };
 
     try {
@@ -262,16 +273,22 @@ class AccessibilityService {
       await this._injectAxe(page);
       await this._configureAxeLocale(page, lang);
 
-      this._logger.info('Running axe.run() analysis...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
-          // axe is available as a global after script injection
+      this._logger.info('Running axe.run() and AccessLint sequentially...');
+      const { axeResults, accessLintResults } = await page.evaluate(async (runOptions) => {
+        // 1. Await Axe-core
+        const axeRes = await new Promise((resolve, reject) => {
           // eslint-disable-next-line no-undef
           axe.run(document, { runOnly: runOptions }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });
         });
+
+        // 2. Immediately run AccessLint natively
+        const alRes = window.AccessLint.runAudit(document);
+        
+        // Return both arrays back to the Node server
+        return { axeResults: axeRes, accessLintResults: alRes };
       }, runOnly);
 
       this._logger.info(
@@ -287,7 +304,7 @@ class AccessibilityService {
         : customResults;
       this._logger.info(`Custom checks complete — ${filteredCustom.length} SC(s) returned.`);
 
-      return mergeWithAxe(mapResults(axeResults, criteriaId), filteredCustom);
+      return mergeWithAxe(mapResults(axeResults, criteriaId, accessLintResults), filteredCustom);
     } catch (err) {
       this._logger.error('Error during accessibility analysis:', err.message);
       throw err;
@@ -346,15 +363,22 @@ class AccessibilityService {
       await this._injectAxe(page);
       await this._configureAxeLocale(page, lang);
 
-      this._logger.info('Running axe.run() analysis...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
+      this._logger.info('Running axe.run() and AccessLint sequentially...');
+      const { axeResults, accessLintResults } = await page.evaluate(async (runOptions) => {
+        // 1. Await Axe-core
+        const axeRes = await new Promise((resolve, reject) => {
           // eslint-disable-next-line no-undef
           axe.run(document, { runOnly: runOptions }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });
         });
+
+        // 2. Immediately run AccessLint natively
+        const alRes = window.AccessLint.runAudit(document);
+        
+        // Return both arrays back to the Node server
+        return { axeResults: axeRes, accessLintResults: alRes };
       }, runOnly);
 
       this._logger.info(
@@ -370,7 +394,7 @@ class AccessibilityService {
         : customResults;
       this._logger.info(`Custom checks complete — ${filteredCustom.length} SC(s) returned.`);
 
-      return mergeWithAxe(mapResults(axeResults, criteriaId), filteredCustom);
+      return mergeWithAxe(mapResults(axeResults, criteriaId, accessLintResults), filteredCustom);
     } catch (err) {
       this._logger.error(`Error during URL accessibility analysis: ${err.message}`);
       throw err;
@@ -429,15 +453,22 @@ class AccessibilityService {
       await this._injectAxe(page, '[flat]');
       await this._configureAxeLocale(page, lang, '[flat]');
 
-      this._logger.info('[flat] Running axe.run()...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
+      this._logger.info('[flat] Running axe.run() and AccessLint sequentially...');
+      const { axeResults, accessLintResults } = await page.evaluate(async (runOptions) => {
+        // 1. Await Axe-core
+        const axeRes = await new Promise((resolve, reject) => {
           // eslint-disable-next-line no-undef
           axe.run(document, { runOnly: runOptions }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });
         });
+
+        // 2. Immediately run AccessLint natively
+        const alRes = window.AccessLint.runAudit(document);
+        
+        // Return both arrays back to the Node server
+        return { axeResults: axeRes, accessLintResults: alRes };
       }, runOnly);
 
       this._logger.info(
@@ -465,7 +496,7 @@ class AccessibilityService {
       const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
       this._logger.info(`[flat] Custom checks complete — ${customFindings.length} finding(s).`);
 
-      const findings = [...mapResultsFlat(axeResults, url, lang), ...customFindings];
+      const findings = [...mapResultsFlat(axeResults, url, lang, accessLintResults), ...customFindings];
       const ORDER = { fail: 0, needs_review: 1, pass: 2 };
       findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
       return findings;

@@ -231,7 +231,11 @@ class ClassifyAssets:
                                  window.getComputedStyle(el).cursor === "pointer"
                 };
             }""")
-        except Exception:
+        except Exception as _ctx_err:
+            logger.warning(
+                f"[classifier] evaluate() failed for element context; "
+                f"defaulting to non-interactive. Error: {_ctx_err}"
+            )
             ctx = {
                 "inButton": False,
                 "inLink": False,

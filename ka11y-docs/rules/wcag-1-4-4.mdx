@@ -87,3 +87,10 @@ Evaluator compares: which text-bearing elements became clipped?
 | `level` | `AA` |
 | `severity` | `high` |
 | `status` | `fail` \| `needs_review` \| `pass` |
+
+## Known limitations
+
+- **Clipping detection is geometric** — relies on `offsetWidth > scrollWidth`; padding-clipped text is missed.
+- **CSS unit analysis** (C12, C13, C14 — ems, percentages, named sizes) is not performed at stylesheet level; only the rendered 200% diff is examined.
+
+See [Technique coverage for 1.4.4](/rules/coverage-matrix#1-4-4-resize-text).

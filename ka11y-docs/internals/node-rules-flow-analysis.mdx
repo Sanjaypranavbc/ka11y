@@ -4,7 +4,9 @@ description: "End-to-end request flow and rule-by-rule execution details for the
 ---
 
 > Generated: 2026-04-08
-> Scope: `ka11y-node/src/custom-checks/` (24 custom WCAG checks) + `ka11y-node/src/services/`
+> Updated: 2026-04-23 — added 4 new static checks (1.2.2, 1.2.3, 1.4.2, background-image-content)
+> Updated: 2026-04-24 — closed Node heuristic gaps for F30/F13/F81/F58/F60/G125/G126/G127/G164/F114
+> Scope: `ka11y-node/src/custom-checks/` (28 custom WCAG checks) + `ka11y-node/src/services/`
 > Stack: Node.js + Express + Puppeteer + axe-core
 
 > Update 2026-04-13: custom checks now receive shared rule context (`lang` + shared config) from the service layer. Migrated checks read EN/JA heuristics and selected reason templates from `config/universal.yml` instead of hardcoded JS lists.
@@ -48,8 +50,8 @@ flowchart TD
     SVC --> STAT["runStaticChecks(page)"]
     SVC --> INTER["runInteractiveChecks(page)"]
 
-    subgraph "Static Checks (Parallel)"
-        S1["HTML Parsing / Parsing"]
+    subgraph "Static Checks (Parallel) — 23 checks"
+        S1["HTML Parsing"]
         S2["Status Messages"]
         S3["Multiple Ways"]
         S4["Meaningful Sequence"]
@@ -63,14 +65,18 @@ flowchart TD
         S12["Accessible Auth"]
         S13["Use of Color"]
         S14["Audio Transcript"]
-        S15["Link Purpose"]
-        S16["Location"]
-        S17["Orientation (Static)"]
-        S18["Images of Text"]
-        S19["Pronunciation"]
+        S15["Captions Prerecorded ★"]
+        S16["Audio Description ★"]
+        S17["Audio Control ★"]
+        S18["Link Purpose"]
+        S19["Location"]
+        S20["Orientation (Static)"]
+        S21["Images of Text"]
+        S22["Background Image Content ★"]
+        S23["Pronunciation"]
     end
 
-    subgraph "Interactive Checks (Sequential)"
+    subgraph "Interactive Checks (Sequential) — 5 checks"
         I1["Focus Visible"]
         I2["Focus Appearance"]
         I3["On Focus"]
@@ -78,7 +84,7 @@ flowchart TD
         I5["Keyboard Trap"]
     end
 
-    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19
+    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21 & S22 & S23
     INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
 
@@ -127,6 +133,7 @@ flowchart TD
 |------|-----------------|
 | VTT / SRT track elements | `<track>` inside `<audio>` |
 | Transcript links | Sibling/parent anchor with "transcript" keyword |
+| Filename-only transcript labels | Flags links like `transcript.pdf` / `audio.vtt` as F30 risk |
 | `<figcaption>` captions | Adjacent figcaption in figure |
 | Collapsed details | `<details>` with transcript content |
 | ARIA description | `aria-describedby` pointing to transcript block |
@@ -134,9 +141,161 @@ flowchart TD
 #### Cases Missed
 | Case | Why |
 |------|-----|
-| Transcript in collapsed accordion | Hidden content not evaluated |
+| Transcript quality/equivalence | Link/track presence is checked; content parity is not verified |
 | Transcript behind auth | External link resolution not followed |
 | Transcript inside iframe | Cross-origin iframe content inaccessible |
+
+---
+
+### 1.2.2 — Captions (Prerecorded) ★ New (Level A)
+**Check:** `captions-prerecorded.check.js`
+
+#### Flowchart
+```mermaid
+flowchart TD
+    VID["video elements"] --> LIVE{"Looks live? data-live / hls / stream"}
+    LIVE -- Yes --> SKIP["Skip (live content — SC 1.2.4 scope)"]
+    LIVE -- No --> MUTED{"muted?"}
+    MUTED -- Yes --> SKIP
+    MUTED -- No --> CROSS{"Cross-origin iframe (YouTube/Vimeo)?"}
+    CROSS -- Yes --> INC1["INCOMPLETE: Cannot inspect cross-origin captions"]
+    CROSS -- No --> TRACK{"track kind=captions/subtitles with src + srclang?"}
+    TRACK -- Yes --> PASS["PASS"]
+    TRACK -- No --> ARIA{"aria-describedby → text alternative?"}
+    ARIA -- Yes --> PASS
+    ARIA -- No --> DET{"nearby details with transcript keywords?"}
+    DET -- Yes --> PASS
+    DET -- No --> FAIL["FAIL: 1.2.2 No captions found"]
+```
+
+#### Cases Covered
+| Case | Detection |
+|------|-----------|
+| VTT / SRT caption track | `<track kind="captions">` or `kind="subtitles"` with `src` + `srclang` |
+| ARIA text alternative | `aria-describedby` pointing to a valid text block |
+| Collapsed transcript | `<details>` with caption/transcript keyword in text |
+| Live content exemption | `data-live="true"`, HLS URL, `/stream/` in src — excluded |
+| Cross-origin video players | Flagged INCOMPLETE (YouTube/Vimeo iframe — cannot inspect) |
+
+#### Cases Missed
+| Case | Why |
+|------|-----|
+| Cross-origin iframe captions | Same-origin restriction on iframe DOM access |
+| Captions injected by JS after load | Static DOM snapshot only |
+| Third-party caption overlays (Rev.com etc.) | External script; no DOM marker |
+
+---
+
+### 1.2.3 — Audio Description or Media Alternative ★ New (Level A)
+**Check:** `audio-description.check.js`
+
+#### Flowchart
+```mermaid
+flowchart TD
+    VID["video elements"] --> MUTED{"muted?"}
+    MUTED -- Yes --> SKIP["Skip (no audio track)"]
+    MUTED -- No --> DESC{"track kind=descriptions with src + srclang?"}
+    DESC -- Yes --> PASS["PASS"]
+    DESC -- No --> ALT{"Second audio element labeled as description?"}
+    ALT -- Yes --> PASS
+    ALT -- No --> TXT{"Nearby alt-text link or details block?"}
+    TXT -- Yes --> PASS
+    TXT -- No --> FAIL["FAIL: 1.2.3 No audio description or text alternative"]
+```
+
+#### Detection signals (in priority order)
+| Signal | What is checked |
+|--------|----------------|
+| `<track kind="descriptions">` | Must have valid `src` + `srclang` attribute |
+| Second `<audio>` / `<source>` | `data-kind` or `title` attribute contains "description" or "audio-desc" |
+| Nearby text alternative | `<a>` with ALT_KEYWORDS in text, or `<details>` with transcript/description keyword |
+
+ALT_KEYWORDS: `transcript`, `text version`, `full-text alternative`, `audio description`, `descriptive transcript`, `書き起こし`, `文字起こし`, `音声解説`, `音声ガイド`, `代替テキスト`
+
+#### Cases Missed
+| Case | Why |
+|------|-----|
+| Description on a separate page | External link resolution not followed |
+| Audio description via third-party player | No DOM marker |
+| Video-only content (1.2.1 scope) | Muted videos exempt from 1.2.3 |
+
+---
+
+### 1.4.2 — Audio Control ★ New (Level A)
+**Check:** `audio-control.check.js`
+
+#### Flowchart
+```mermaid
+flowchart TD
+    MEDIA["audio + video elements"] --> AUTO{"autoplay attribute or data-autoplay?"}
+    AUTO -- No --> PASS["PASS"]
+    AUTO -- Yes --> MUTED{"muted?"}
+    MUTED -- Yes --> PASS
+    MUTED -- No --> DUR{"Duration known and <= 3 s?"}
+    DUR -- Yes --> PASS
+    DUR -- No --> CTRL{"native controls attribute?"}
+    CTRL -- Yes --> PASS
+    CTRL -- No --> EXT{"Nearby pause/stop/mute/volume button?"}
+    EXT -- Yes --> PASS
+    EXT -- No --> FAIL["FAIL: 1.4.2 Autoplaying audio with no control"]
+```
+
+#### Exemption logic
+| Exemption | Condition |
+|-----------|-----------|
+| Muted autoplay | `media.muted === true` — no audible audio |
+| Short duration | `data-duration` or `media.duration` ≤ 3 seconds |
+| Native controls | `controls` attribute present on the element |
+| External control | Button/role="button" in nearest `figure/article/section` with pause/stop/mute/volume label — also matches JP: `一時停止`, `停止`, `音量`, `消音` |
+
+#### Cases Missed
+| Case | Why |
+|------|-----|
+| Autoplay triggered by JS after load | Attribute absent at snapshot time |
+| Volume slider without text label | Control text pattern only — unlabeled sliders pass |
+| Background music via Web Audio API | Not a `<audio>` / `<video>` element |
+
+---
+
+### 1.1.1 — Background Image Content ★ New supplemental (Level A)
+**Check:** `background-image-content.check.js`
+**SC:** 1.1.1 (also emits supplementary 1.4.5 hints)
+
+This check is **supplemental to axe-core's 1.1.1 coverage**. It specifically targets CSS `background-image` URLs — a category that axe-core does not inspect.
+
+#### Flowchart
+```mermaid
+flowchart TD
+    ALL["All elements (max 400)"] --> BG{"background-image: url(...) set?"}
+    BG -- No / gradient-only --> SKIP["Skip"]
+    BG -- Yes --> DECOR{"URL matches decorative pattern? gradient/pattern/texture/noise/divider"}
+    DECOR -- Yes --> SKIP
+    DECOR -- No --> SIZE{"Element >= 24×24 px and visible?"}
+    SIZE -- No --> SKIP
+    SIZE -- Yes --> NAME{"aria-label / title / role=img + alt present?"}
+    NAME -- Yes --> PASS["PASS"]
+    NAME -- No --> TEXT{"URL matches text-hint? banner/headline/title/hero/cta/promo"}
+    TEXT -- Yes --> FAIL["FAIL: 1.1.1 Text-hint background image lacks text alternative"]
+    TEXT -- No --> NEARBY{"Nearby heading / figcaption / aria-labelledby?"}
+    NEARBY -- Yes --> PASS
+    NEARBY -- No --> INC["INCOMPLETE: Background image — manual review needed"]
+```
+
+#### Cases Covered
+| Case | Detection |
+|------|-----------|
+| Hero / banner images | URL keyword matching: `banner`, `headline`, `title`, `hero`, `cta`, `promo`, `masthead` |
+| Decorative pattern exemption | URL keyword: `gradient`, `pattern`, `noise`, `texture`, `overlay`, `fade`, `divider` |
+| ARIA text alternative | `aria-label`, `title`, `role="img"` + `aria-label` combo |
+| Nearby semantic label | Adjacent heading, `<figcaption>`, or `aria-labelledby` reference |
+| Inline data URIs | Always skipped — can't inspect content |
+
+#### Cases Missed
+| Case | Why |
+|------|-----|
+| Background images without keyword hints in URL | URL heuristic only — no pixel analysis |
+| SVG data URIs with text | Skipped as data: URI |
+| Images loaded via CSS custom property (`--bg-url`) | Computed style fallback doesn't resolve vars in all browsers |
 
 ---
 
@@ -225,16 +384,19 @@ flowchart TD
     CUE -- "font-weight delta ≥ 100" --> PASS
     CUE -- "italic" --> PASS
     CUE -- "None" --> FAIL["FAIL: 1.4.1 Color-only distinction"]
+    FAIL --> NL["Heuristic scan: required-field color-only + color-only instructions"]
 ```
 
 #### Cases Covered
 - Underline, border-bottom, outline, background change, font-weight delta (≥100), italic.
 - Comparison against non-anchor ancestor computed styles.
+- Required-field color-only heuristic (no textual `required` / `必須` marker).
+- Color-only instructional copy heuristic (state message tied only to color words).
 
 #### Cases Missed
-- Links in SVG text elements.
 - Links inside shadow DOM.
 - Links rendered on canvas.
+- Chart/map legend semantics are still heuristic and can require manual review.
 
 ---
 
@@ -304,11 +466,14 @@ flowchart TD
 | ARIA widget arrow traps | Tree, grid, listbox, menu, tablist, radiogroup |
 | Iframe Tab traps | Cross-frame Tab navigation test |
 | Escape verification | ESC key press before confirming trap |
+| Modal no-escape trap (F85) | Visible dialog remains focused after Escape |
+| Scripted key suppression (F58 heuristic) | Detects `preventDefault()` on Tab/Escape/Arrow handlers |
+| Non-modal dismissibility (F60 heuristic) | Popup remains visible after Escape and has no close affordance |
 
 #### Cases Missed
 | Case | Why |
 |------|-----|
-| Dialog traps that ESC closes | ESC exits trap, not flagged as violation |
+| Framework-internal keyboard handlers | External bundled scripts may evade static snippet detection |
 | Shadow DOM traps | Closed shadow DOM inaccessible |
 | Dynamic focus management | Focus targets added after page load |
 
@@ -435,11 +600,10 @@ flowchart TD
 ```
 
 #### Cases Covered
-- Breadcrumb navigation, `aria-current="page"`, active nav items (`.active`, `[aria-selected]`), sitemap link, `aria-current="step"`, JSON-LD `BreadcrumbList`.
+- Breadcrumb navigation, `aria-current="page"`, active nav items (`.active`, `[aria-selected]`), sitemap link, table-of-contents signals, `aria-current="step"`, JSON-LD `BreadcrumbList`.
 
 #### Cases Missed
 - Implicit location from page title alone.
-- Visual breadcrumb without ARIA markup.
 - Dynamic location updates post-navigation.
 
 ---
@@ -739,7 +903,7 @@ flowchart TD
     FORM["Forms on page"] --> RISK{"High-risk context?"}
     RISK -- "financial / legal / destructive action keywords" --> SAFE{"Safeguards present?"}
     RISK -- "No" --> PASS["PASS"]
-    SAFE -- "Review text / confirm checkbox / review button / multi-step indicator" --> PASS
+    SAFE -- "Review text / confirm checkbox / review button / multi-step indicator / undo-revert signal" --> PASS
     SAFE -- "None" --> FAIL["FAIL: 3.3.4 No error prevention mechanism"]
 ```
 
@@ -752,6 +916,7 @@ flowchart TD
 | Review/confirm safeguards | "review", "confirm" in text/buttons |
 | Confirmation checkboxes | `input[type=checkbox]` near submit |
 | Multi-step indicators | Step/progress indicator presence |
+| Undo/revert safeguards | "undo", "revert", "restore", `取り消し`, `元に戻す` signals |
 
 #### Cases Missed
 | Case | Why |
@@ -884,6 +1049,7 @@ flowchart TD
 | Dynamic context detection | Form, search, cart, notification selectors |
 | `aria-atomic` validation | On `role="alert"` elements |
 | Inline validation errors | `[aria-invalid]` + message elements |
+| Toast containers without ARIA semantics | Emits `custom-status-messages-toast` heuristic finding |
 
 #### Cases Missed
 | Case | Why |

@@ -23,10 +23,14 @@ async function run(page, context = {}) {
   const sitemapPattern = buildKeywordPattern(
     getKeywordList('location', 'sitemap_keywords', sharedContext)
   ) || 'sitemap|site\\s*map';
+  const tocPattern = buildKeywordPattern(
+    getKeywordList('location', 'toc_keywords', sharedContext)
+  ) || 'table\\s+of\\s+contents?|toc|目次';
 
   const data = await page.evaluate((patterns) => {
     const breadcrumbRe = new RegExp(patterns.breadcrumbPattern, 'i');
     const sitemapRe = new RegExp(patterns.sitemapPattern, 'i');
+    const tocRe = new RegExp(patterns.tocPattern, 'i');
     // 1. Breadcrumb navigation — explicit aria-label or class patterns
     const hasBreadcrumb = !!(
       document.querySelector('[class*="breadcrumb" i]') ||
@@ -61,6 +65,17 @@ async function run(page, context = {}) {
       )
     );
 
+    // 4b. Table-of-contents style location aid
+    const hasTableOfContents = !!(
+      document.querySelector('[id*="toc" i], [class*="toc" i]') ||
+      Array.from(document.querySelectorAll('[class], [id], [aria-label], a[href]')).some(el =>
+        tocRe.test(el.getAttribute('class') || '') ||
+        tocRe.test(el.getAttribute('id') || '') ||
+        tocRe.test(el.getAttribute('aria-label') || '') ||
+        tocRe.test(el.textContent || '')
+      )
+    );
+
     // 5. aria-current="step" — indicates current step in a multi-step process
     const hasAriaCurrentStep = !!document.querySelector('[aria-current="step"]');
 
@@ -74,25 +89,27 @@ async function run(page, context = {}) {
     }
 
     const hasVisibleLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasAriaCurrentStep;
-    const hasWeakLocationIndicator = hasSiteMap || hasJsonLdBreadcrumb;
+    const hasWeakLocationIndicator = hasSiteMap || hasJsonLdBreadcrumb || hasTableOfContents;
 
     return {
       hasBreadcrumb,
       hasAriaCurrent,
       hasActiveNavItem,
       hasSiteMap,
+      hasTableOfContents,
       hasAriaCurrentStep,
       hasJsonLdBreadcrumb,
       hasVisibleLocationIndicator,
       hasWeakLocationIndicator,
     };
-  }, { breadcrumbPattern, sitemapPattern });
+  }, { breadcrumbPattern, sitemapPattern, tocPattern });
 
   if (data.hasVisibleLocationIndicator) {
     const mechanisms = [
       data.hasBreadcrumb && 'breadcrumb navigation',
       data.hasAriaCurrent && 'aria-current="page"',
       data.hasActiveNavItem && 'active navigation item',
+
       data.hasAriaCurrentStep && 'aria-current="step"',
     ].filter(Boolean).join(', ');
 
@@ -113,6 +130,7 @@ async function run(page, context = {}) {
     const weakMechanisms = [
       data.hasSiteMap && 'sitemap link',
       data.hasJsonLdBreadcrumb && 'JSON-LD BreadcrumbList',
+      data.hasTableOfContents && 'table of contents',
     ].filter(Boolean).join(', ');
 
     return {
@@ -135,7 +153,7 @@ async function run(page, context = {}) {
       description: 'Users must be able to determine their location within a set of web pages',
       impact: 'moderate',
       status: 'incomplete',
-      reason: _t(sharedContext, 'No location indicator detected (no breadcrumb, no aria-current="page" in navigation, no active nav item, no sitemap link). If this is a multi-page site, provide a breadcrumb or highlight the current page in navigation.', '現在位置を示す手段は検出されませんでした（パンくず、ナビゲーション内の aria-current="page"、アクティブなナビ項目、サイトマップリンクなし）。複数ページのサイトであれば、パンくずを提供するか、ナビゲーションで現在ページを明示してください。'),
+      reason: _t(sharedContext, 'No location indicator detected (no breadcrumb, no aria-current="page" in navigation, no active nav item, no sitemap link, no table of contents). If this is a multi-page site, provide a breadcrumb or highlight the current page in navigation.', '現在位置を示す手段は検出されませんでした（パンくず、ナビゲーション内の aria-current="page"、アクティブなナビ項目、サイトマップリンク、目次なし）。複数ページのサイトであれば、パンくずを提供するか、ナビゲーションで現在ページを明示してください。'),
       helpUrl: HELP_URL,
     }],
   };

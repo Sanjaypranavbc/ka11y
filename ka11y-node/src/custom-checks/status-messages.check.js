@@ -20,19 +20,19 @@ async function run(page, context = {}) {
 
   const searchResultPattern = buildKeywordPattern(
     getKeywordList('status_messages', 'search_result_keywords', sharedContext)
-  );
+  ) || 'result|結果';
 
   const counterBadgePattern = buildKeywordPattern(
     getKeywordList('status_messages', 'counter_badge_keywords', sharedContext)
-  );
+  ) || 'count|counter|notification|unread|新着|件|通知|未読';
 
   const cartPattern = buildKeywordPattern(
     getKeywordList('status_messages', 'cart_keywords', sharedContext)
-  );
+  ) || 'cart|basket|カート|買い物かご';
 
   const notificationClassPattern = buildKeywordPattern(
     getKeywordList('status_messages', 'notification_class_keywords', sharedContext)
-  );
+  ) || 'notification|toast|snackbar|flash|alert|banner|sonner|hot-toast|toastify';
 
   const data = await page.evaluate((searchResultReStr, counterBadgeReStr, cartReStr, notificationClassReStr) => {
     const searchResultRe = new RegExp(searchResultReStr, 'i');
@@ -92,7 +92,21 @@ async function run(page, context = {}) {
              !(/alert|banner/i.test(classStr) && el.hasAttribute('role'));
     });
 
-    const notificationAreaEls = notificationCandidates.filter(el => {
+    const toastLibCandidates = Array.from(document.querySelectorAll([
+      '.Toastify__toast-container',
+      '.Toastify',
+      '[data-sonner-toaster]',
+      '[data-sonner-toast]',
+      '.sonner-toast',
+      '.react-hot-toast',
+      '[data-rht-toaster]',
+      '[class*="toastify" i]',
+      '[class*="hot-toast" i]',
+      '[class*="sonner" i]',
+    ].join(', ')));
+    const combinedNotificationCandidates = [...new Set([...notificationCandidates, ...toastLibCandidates])];
+
+    const notificationAreaEls = combinedNotificationCandidates.filter(el => {
       // Walk up ancestors to check if this element is already inside a live region
       let node = el;
       while (node && node !== document.body) {
@@ -107,6 +121,20 @@ async function run(page, context = {}) {
       return true; // notification element has no live region ancestor
     });
     const hasNotificationArea = notificationAreaEls.length > 0;
+    const toastWithoutAria = notificationAreaEls.filter(el => {
+      const classStr = typeof el.className === 'string' ? el.className : '';
+      const dataAttrs = `${el.getAttribute('data-sonner-toast') || ''} ${el.getAttribute('data-sonner-toaster') || ''}`;
+      const looksLikeToast = /toastify|toast|hot-toast|sonner/i.test(classStr) || dataAttrs.trim().length > 0;
+      if (!looksLikeToast) return false;
+      const ownRole = (el.getAttribute('role') || '').toLowerCase();
+      const ownLive = (el.getAttribute('aria-live') || '').toLowerCase();
+      return !['status', 'alert', 'log'].includes(ownRole) && ownLive === '';
+    }).map(el => ({
+      html: el.outerHTML.slice(0, 150),
+      element_id: el.id || null,
+      target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+      tag: el.tagName.toUpperCase(),
+    }));
 
     const needsLiveRegions = formCount > 0 || hasSearchResults || hasCartOrCounter || hasNotificationArea;
 
@@ -168,11 +196,12 @@ async function run(page, context = {}) {
       anyLiveRegionHasContent,
       alertsWithoutAtomic,
       invalidWithoutLiveRegion,
+      toastWithoutAria,
       contextElements,
     };
   }, searchResultPattern, counterBadgePattern, cartPattern, notificationClassPattern);
 
-  const { liveRegionCount, formCount, hasAlerts, hasPolite, hasSearchResults, hasCartOrCounter, hasNotificationArea, needsLiveRegions, anyLiveRegionHasContent, alertsWithoutAtomic = [], invalidWithoutLiveRegion = [], contextElements = [] } = data;
+  const { liveRegionCount, formCount, hasAlerts, hasPolite, hasSearchResults, hasCartOrCounter, hasNotificationArea, needsLiveRegions, anyLiveRegionHasContent, alertsWithoutAtomic = [], invalidWithoutLiveRegion = [], toastWithoutAria = [], contextElements = [] } = data;
   const dynamicContexts = [
     formCount > 0 && _t(sharedContext, '{count} form(s)', 'フォーム {count} 件', { count: formCount }),
     hasSearchResults && _t(sharedContext, 'search results', '検索結果'),
@@ -201,6 +230,17 @@ async function run(page, context = {}) {
       status: 'incomplete',
       reason: _t(sharedContext, '{count} [aria-invalid] element(s) have no live region ancestor (aria-live, role="status/alert/log"). Inline validation errors may not be announced to screen reader users.', '[aria-invalid] 要素 {count} 件にライブリージョンの祖先（aria-live、role="status/alert/log"）がありません。インラインの入力検証エラーがスクリーンリーダー利用者に通知されない可能性があります。', { count: invalidWithoutLiveRegion.length }),
       elements: invalidWithoutLiveRegion,
+      helpUrl: HELP_URL,
+    });
+  }
+  if (toastWithoutAria.length > 0) {
+    extraRules.push({
+      ruleId: `${RULE_ID}-toast`,
+      description: 'Status messages must be programmatically determinable',
+      impact: null,
+      status: 'incomplete',
+      reason: _t(sharedContext, '{count} toast/notification container(s) appear without role="status"/"alert"/"log" or aria-live. These status updates may not be announced to screen readers (F114 risk).', 'role="status"/"alert"/"log" または aria-live を持たないトースト/通知コンテナが {count} 件見つかりました。これらの状態更新はスクリーンリーダーに通知されない可能性があります（F114 のリスク）。', { count: toastWithoutAria.length }),
+      elements: toastWithoutAria,
       helpUrl: HELP_URL,
     });
   }

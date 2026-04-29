@@ -27,3 +27,23 @@ _SUGGESTED_FIX: dict[str, str] = get_suggested_fixes("en")
 
 #: {sc_id: severity}  Only rules with an explicit severity entry are included.
 _PYTHON_SEVERITY: dict[str, str] = get_severities()
+
+
+# ---------------------------------------------------------------------------
+# Progress-bar stage weights.
+# Calibrated against a typical t3.large 4–7 min audit (see PLAN_FOR_EC2.md §4.2).
+# Sum is 100 → `index * weight / 100` gives an honest percent-complete.
+# ---------------------------------------------------------------------------
+STAGE_WEIGHTS: dict[str, int] = {
+    "axe_core": 4,
+    "image_audit": 40,
+    "pipeline": 10,              # 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
+    "form_audit": 2,
+    "label_in_name": 1,
+    "pause_stop_hide": 2,
+    "target_size": 1,
+    "text_spacing": 2,
+    "rendered_layout_audit": 20,
+    "media_audit": 18,
+    "sensory_audit": 2,
+}

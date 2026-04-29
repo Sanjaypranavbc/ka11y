@@ -20,16 +20,17 @@ def get_config_value(*path: str, default: Any = None) -> Any:
     return _get_nested(config, path, default)
 
 
-def get_int_config(*path: str, default: int, minimum: int | None = None) -> int:
+def get_int_config(*path: str, default: int | None = None, minimum: int | None = None) -> int | None:
     value = get_config_value(*path, default=default)
+    if value is None:
+        return None
     try:
         parsed = int(value)
     except (TypeError, ValueError):
-        parsed = default
+        return None
     if minimum is not None:
         return max(parsed, minimum)
     return parsed
-
 
 def get_cjk_langs() -> list[str]:
     raw = get_config_value(
@@ -92,12 +93,12 @@ def get_max_hover_candidates() -> int:
     )
 
 
-def get_max_ocr_images_per_run() -> int:
+def get_max_ocr_images_per_run() -> int | None:
     return get_int_config(
         "crawler",
         "performance",
         "max_ocr_images_per_run",
-        default=60,
+        default=None,
         minimum=1,
     )
 
@@ -188,6 +189,10 @@ def select_ocr_candidate_paths(
     ranked.sort(key=lambda item: item[0])
     ordered = [path for _, path in ranked]
 
-    if limit <= 0 or len(ordered) <= limit:
+    if limit is None or len(ordered) <= limit:  # None = no limit
         return ordered, []
     return ordered[:limit], ordered[limit:]
+
+
+
+

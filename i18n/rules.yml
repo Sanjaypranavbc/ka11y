@@ -4,15 +4,184 @@
 # SINGLE SOURCE OF TRUTH — edit only this file, then run:
 #   scripts/sync-i18n.sh
 #
-# Non-translatable fields (do NOT put in locale files):
+# Stable machine fields (do NOT put in locale files — they are filtered
+# on by clients and must remain identical across languages):
 #   level    — A | AA | AAA
 #   severity — critical | high | medium | low | null
 #
 # Translatable fields (copy to locales/<lang>.yml to translate):
 #   name, description, suggested_fix
+#   severities.<key>          — human-readable label for each severity
+#   levels.<key>              — human-readable label for each WCAG level
+#   statuses.<key>            — human-readable label for finding status
+#   reason_templates.<rule>.<code> — localized reason strings (see below)
+#
+# Reason templates
+# ----------------
+# Every per-finding `reason` string in both engines is rendered from a
+# template lookup in `reason_templates`.  The structure is:
+#
+#   reason_templates:
+#     "1.1.1":
+#       missing_alt: "Image is missing an alt attribute."
+#       generic_alt: "Alt text is generic: {alt}."
+#       passed: "Image has adequate alt text."
+#
+# Placeholders use {name} interpolation.  Locale files override individual
+# keys; keys not overridden fall back to English.
 # ============================================================
 
 version: "1.0"
+
+# Severity labels (translatable). The machine value (critical/high/medium/low)
+# is stable across languages; only the display label is localized.
+severities:
+  critical: "Critical"
+  high: "High"
+  medium: "Medium"
+  low: "Low"
+  none: "None"
+
+# WCAG conformance level labels (translatable).
+levels:
+  A: "Level A"
+  AA: "Level AA"
+  AAA: "Level AAA"
+
+# Finding status labels (translatable). The machine value (pass/fail/needs_review)
+# stays stable; only the display label is localized.
+statuses:
+  pass: "Pass"
+  fail: "Fail"
+  needs_review: "Needs Review"
+  inapplicable: "Not Applicable"
+
+# ============================================================
+# Per-finding reason templates (translatable)
+# ============================================================
+# Keyed by WCAG SC ID, then by an opaque code string used by the
+# emitting auditor.  Both ka11y-python and ka11y-node look up reason
+# strings from the same map; locale files override individual codes
+# without having to redeclare the rule body.
+#
+# Placeholders are written as {name} and resolved against per-call
+# parameters.  Missing placeholders render as empty.
+# ============================================================
+reason_templates:
+
+  "1.1.1":
+    capture_failed:    "Image capture failed — alt text could not be verified by OCR."
+    fail_missing_alt:  "Image missing adequate alt text."
+    pass:              "Image has adequate alt text."
+
+  "1.2.1":
+    fail_no_alt:        "No text alternative for prerecorded media."
+    needs_review:       "Manual review required for transcript quality."
+    pass:               "Prerecorded media has an equivalent text alternative."
+
+  "1.3.3":
+    fail_default:       'Instruction relies solely on a sensory characteristic ({sensory_categories}) with no non-sensory identifier.'
+    pass_no_records:    "No sensory-characteristics-only instructions detected in the crawled content."
+    pass:               "Instruction provides sufficient non-sensory identifiers."
+
+  "1.3.4":
+    pass: "Content is available in both portrait and landscape orientations."
+
+  "1.4.3":
+    needs_review_unknown: 'Text in image "{filename}" could not be verified for WCAG 1.4.3 AA contrast because OCR contrast compliance data is missing. Manual review required. Observed ratio: {ratio} (fg {fg_hex} on bg {bg_hex}).'
+    fail:                 'Text in image "{filename}" fails WCAG 1.4.3 AA contrast. Ratio {ratio} (fg {fg_hex} on bg {bg_hex}). Required minimum: {threshold}:1 for {text_type}.'
+    pass:                 'Text in {image_label} passes WCAG 1.4.3 AA contrast. Ratio {ratio} (fg {fg_hex} on bg {bg_hex}).'
+    capture_failed:       'Screenshot capture failed (status: {capture_status}{capture_error_suffix}) — contrast analysis could not run. Manual review required.'
+
+  "1.4.4":
+    pass:          "Text reflows correctly at 200% without loss of content."
+    pass_no_records: "No text-resize issues detected — all content appears to scale correctly at 200%."
+
+  "1.4.5":
+    capture_failed: "Image capture failed — OCR could not determine if image contains text."
+    fail:           "Image contains text — replace with real CSS-styled text."
+    pass:           "Image does not contain text (or logo exception applies)."
+
+  "1.4.6":
+    needs_review_unknown: 'Text in image "{filename}" could not be verified for WCAG 1.4.6 AAA enhanced contrast because OCR contrast compliance data is missing. Manual review required. Observed ratio: {ratio} (fg {fg_hex} on bg {bg_hex}).'
+    fail:                 'Text in image "{filename}" fails WCAG 1.4.6 AAA enhanced contrast. Ratio {ratio} (fg {fg_hex} on bg {bg_hex}). Required minimum: {threshold}:1 for {text_type}.'
+    pass:                 'Text in {image_label} passes WCAG 1.4.6 AAA enhanced contrast. Ratio {ratio} (fg {fg_hex} on bg {bg_hex}).'
+    capture_failed:       'Screenshot capture failed (status: {capture_status}{capture_error_suffix}) — enhanced contrast analysis could not run. Manual review required.'
+
+  "1.4.10":
+    pass:          "Content reflows without horizontal scrolling at 320 CSS px."
+    pass_no_records: "No reflow issues detected — content appears to adapt correctly to narrow viewports."
+
+  "1.4.11":
+    needs_review: "UI component contrast could not be verified automatically."
+    fail:         "UI component contrast ratio is below 3:1 minimum."
+    pass:         "UI component meets 3:1 contrast ratio."
+
+  "1.4.12":
+    fail:                 "Element clips text after spacing overrides."
+    needs_review_warning: "Fixed height with overflow hidden may clip text when spacing increases."
+    needs_review_info:    "Fixed height detected. Verify text does not clip when spacing increases."
+    pass_static:          "No fixed-height/overflow-hidden clipping risk detected."
+    pass_rendered:        "No content or functionality is lost after text spacing overrides."
+
+  "1.4.13":
+    pass:          "Hover/focus-triggered content meets dismissible/hoverable/persistent requirements."
+    pass_no_records: "No hover/focus-triggered content issues detected on the audited page."
+
+  "2.2.2":
+    fail:         "Auto-playing content has no pause/stop mechanism."
+    needs_review: "Moving content duration could not be determined automatically."
+    pass:         "Moving content has a pause/stop mechanism or exception applies."
+
+  "2.4.11":
+    pass:          "No focused element is entirely hidden by author-created content."
+    pass_no_records: "No focus-obscuring issues detected — focused elements appear fully visible."
+
+  "2.4.12":
+    pass:          "No focused element is obscured (even partially) by author-created content."
+    pass_no_records: "No partial focus-obscuring issues detected — all focused elements appear unobscured."
+
+  "2.4.7":
+    no_focus_indicator:    "Element has no visible focus indicator (no outline, box-shadow, or color change)."
+    focus_indicator_present: "Element presents a visual change when focused via keyboard."
+
+  "2.4.13":
+    no_focus_indicator:        "Element has no visible focus indicator (fails 2.4.7 prerequisite)."
+    thin_or_low_contrast_focus: "Focus indicator thickness ({thickness_px} px) is below the {min_px} px minimum and contrast change is not prominent. Manual review required."
+    low_contrast_focus:        "Focus indicator contrast ({contrast}:1) is below the {min_contrast}:1 minimum."
+    valid_focus_appearance:    "Focus indicator is prominent and distinct."
+
+  "2.5.3":
+    fail: "Accessible name does not contain visible label."
+    pass: "Accessible name contains the visible label."
+
+  "2.5.8":
+    fail:            "Target size {width}×{height} px is below 24×24 px minimum."
+    pass:            "Target size {width}×{height} px meets the 24×24 px minimum."
+    undersized_target:  "Target is undersized ({width}×{height} px) and lacks sufficient adjacent spacing."
+    size_meets_minimum: "Target bounding box ({width}×{height} px) meets the 24×24 px minimum."
+    inline_exception:   "Target is an inline link within a text block — 2.5.8 exception applies."
+    spacing_exception:  "Target is undersized but meets the 24 px combined spacing exception."
+    not_interactive:    "Element is not interactive — target size minimum does not apply."
+
+  "3.3.1":
+    fail: "Form field violates WCAG 3.3.1."
+    pass: "Form field meets WCAG 3.3.1."
+
+  "3.3.2":
+    fail: "Form field violates WCAG 3.3.2."
+    pass: "Form field meets WCAG 3.3.2."
+
+  "4.1.2":
+    capture_failed: "Functional image capture failed — accessible name could not be verified."
+    fail:           "Functional image is missing a meaningful accessible name."
+    pass:           "Functional image has a meaningful accessible name."
+
+  # Generic catch-alls used by rendered-rule converters when the auditor
+  # did not emit a more specific reason.
+  "_generic":
+    fail_unknown:         "Page violates WCAG {wcag_sc}."
+    needs_review_unknown: "WCAG {wcag_sc} requires manual review."
 
 rules:
 
