@@ -602,7 +602,7 @@ These are the gaps **inside SCs we already cover**. They do not move the SC out 
 | Level | Missing count | Missing criteria |
 |---|---:|---|
 | A | 2 | 2.3.1 Three Flashes; 2.5.4 Motion Actuation |
-| AA | 3 | 1.2.4 Captions (Live), 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
+| AA | 4 | 1.2.4 Captions (Live), 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
 | AAA | 24 | 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.3.6, 1.4.7, 1.4.8, 1.4.9, 2.1.3, 2.2.3, 2.2.5, 2.2.6, 2.3.2, 2.3.3, 2.4.10, 2.5.5, 2.5.6, 3.1.3, 3.1.4, 3.1.5, 3.2.5, 3.3.5, 3.3.6, 3.3.9 |
 
 _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-description.check.js` and is excluded from the covered-count totals._
@@ -615,7 +615,7 @@ _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-de
 | Media analysis pipeline | 10 (1.2.4 to 1.2.9, 1.4.7, 2.3.1, 2.3.2, plus tightens 1.2.5) | Single pipeline covers prerecorded alternatives, live captions, flash checks, background audio |
 | NLP enrichment (fasttext-langid plus ja_core_news_lg) | 5 (3.1.3, 3.1.4, 3.1.5, 1.3.6, plus elevates 1.3.3 quality) | Language, sensory-instruction, readability cluster naturally |
 | Stateful workflow replay | 4 (3.3.5, 3.3.6, plus tightens 3.3.7 and 3.3.9) | Help, error-prevention, enhanced authentication |
-| Motion and gesture instrumentation | 3 (2.3.3, 2.5.1, 2.5.4) | Gesture, motion-from-interaction, motion-actuation share runtime hooks |
+| Motion and gesture instrumentation | 2 (2.3.3, 2.5.4) | Motion-from-interaction and motion-actuation share runtime hooks; 2.5.1 shipped 2026-04-30 |
 | Session-state monitor | 3 (2.2.3, 2.2.5, 2.2.6) | Timeout and interruption handling |
 | Deeper interaction simulation | 3 (2.1.3, 2.5.6, 3.2.5) | Keyboard-no-exception, concurrent input, change-on-request |
 | Layout heuristics extension | 2 (1.4.8, 2.4.10) | Section headings and visual presentation |
