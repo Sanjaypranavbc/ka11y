@@ -1,235 +1,267 @@
 /**
  * @fileoverview WCAG 2.5.1 Pointer Gestures — three-layer audit orchestrator.
  *
- * Layer 1 — axe-core custom rule: DOM selector matching with escape hatch checks.
- * Layer 2 — gesture event listener registry: runtime interception of addEventListener.
- * Layer 3 — escape hatch re-validation: per-element verification to reduce FPs from L2.
+ * Layer "dom-pattern"     — CSS selector matching against the selector bank.
+ * Layer "library-detected"— Gesture library fingerprinting with no DOM findings.
+ * Layer "axe-rule"        — Custom axe-core rule for attribute-based detection.
  *
  * Usage:
  *   import { auditPointerGestures } from './audits/wcag-2.5.1/index.js';
- *   const violations = await auditPointerGestures(page, { url: 'https://example.com' });
+ *   const result = await auditPointerGestures(page, { pageUrl, runAxeRule: true });
  */
 
 import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import path from 'path';
+import { fileURLToPath }  from 'url';
+import path               from 'path';
 
-import { enSelectors, jaSelectors }           from './multilingual-selectors.js';
-import { pointerGesturesRule, pointerGesturesCheck } from './axe-rule-pointer-gestures.js';
-import { injectGestureDetector, extractGestureRegistry } from './gesture-listener-detector.js';
-import { checkEscapeHatch }                   from './escape-hatch-checker.js';
+import { getSelectorBank }                            from './multilingual-selectors.js';
+import { detectGestureLibraries }                     from './gesture-library-detector.js';
+import { inspectPage }                                from './dom-inspector.js';
+import { validateEscapeHatch }                        from './escape-hatch-validator.js';
+import { buildViolation }                             from './violation-builder.js';
+import { pointerGestureRule, pointerGestureCheck }   from './axe-rule-pointer-gestures.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const _require  = createRequire(import.meta.url);
 
-/* Resolve absolute path to the bundled axe-core minified build. */
-const AXE_PATH = _require.resolve('axe-core/axe.min.js');
+/* Resolve absolute path to bundled axe-core (used as fallback for addScriptTag). */
+let _resolvedAxePath;
+try {
+  _resolvedAxePath = _require.resolve('axe-core/axe.min.js');
+} catch (_) {
+  _resolvedAxePath = path.join(__dirname, '..', '..', 'node_modules', 'axe-core', 'axe.min.js');
+}
 
-const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/pointer-gestures';
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
+/* ── Internal helpers ───────────────────────────────────────────────────── */
 
 /**
- * Constructs a canonical violation object.
+ * Detects the page language from the DOM.
  *
- * @param {Object} p
+ * @param {Object} page
+ * @returns {Promise<string>}
+ */
+async function _detectLang(page) {
+  try {
+    return await page.evaluate(() =>
+      document.documentElement.lang ||
+      document.querySelector('meta[http-equiv="content-language"]')?.content ||
+      'en',
+    );
+  } catch (_) {
+    return 'en';
+  }
+}
+
+/**
+ * Returns true if the page object is already closed / unusable.
+ *
+ * @param {Object} page
+ * @returns {boolean}
+ */
+function _isClosed(page) {
+  /* Playwright: page.isClosed() — Puppeteer: page._closed */
+  if (typeof page.isClosed === 'function') return page.isClosed();
+  if (page._closed === true) return true;
+  return false;
+}
+
+/* ── Empty result factory ────────────────────────────────────────────────── */
+
+/**
+ * @param {string} pageUrl
  * @returns {Object}
  */
-function makeViolation({
-  layer,
-  lang,
-  element       = null,
-  selector,
-  escapeHatchFound  = false,
-  escapeHatchType   = null,
-  message,
-}) {
+function _emptyResult(pageUrl) {
   return {
-    ruleId:           'wcag-2.5.1-pointer-gestures',
-    impact:           'serious',
-    wcag:             '2.5.1',
-    layer,
-    lang,
-    element:          element ? String(element).slice(0, 200) : null,
-    selector,
-    escapeHatchFound,
-    escapeHatchType,
-    message,
-    helpUrl:          HELP_URL,
+    pageUrl,
+    pageLang: 'en',
+    gestureLibrariesDetected: [],
+    domFindingsCount: 0,
+    violations: [],
+    warnings:   [],
+    summary: {
+      total: 0, violations: 0, warnings: 0,
+      layers: { domPattern: 0, libraryDetected: 0, axeRule: 0 },
+    },
   };
 }
 
-/**
- * Detects page language, preferring an explicit override.
- *
- * @param {Object} page
- * @param {string} [override]
- * @returns {Promise<string>}
- */
-async function detectLang(page, override) {
-  if (override) return override;
-  try {
-    return await page.evaluate(() => document.documentElement.lang || '');
-  } catch (_) {
-    return '';
-  }
-}
+/* ── Public API ─────────────────────────────────────────────────────────── */
 
 /**
- * Navigates the page to a URL, handling Playwright ('networkidle') and Puppeteer
- * ('networkidle0') waitUntil option differences.
+ * Runs the full WCAG 2.5.1 Pointer Gestures audit against a navigated page.
  *
- * @param {Object} page
- * @param {string} url
- * @returns {Promise<void>}
- */
-async function navigateTo(page, url) {
-  try {
-    await page.goto(url, { waitUntil: 'networkidle' }); // Playwright
-  } catch (playwrightErr) {
-    if (!String(playwrightErr).includes('networkidle')) throw playwrightErr;
-    await page.goto(url, { waitUntil: 'networkidle0' }); // Puppeteer fallback
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Runs the full WCAG 2.5.1 Pointer Gestures audit against a loaded page.
+ * The caller is responsible for navigating the page to the target URL before
+ * calling this function.  If the page is already closed or an early step fails,
+ * an empty result is returned gracefully.
  *
- * The caller is responsible for:
- *   • Creating the browser/page object.
- *   • Calling injectGestureDetector(page) BEFORE page.goto() when using Layer 2.
- *     (This function does NOT call injectGestureDetector itself, because
- *      addInitScript / evaluateOnNewDocument must be called before navigation.)
- *   • If `options.url` is provided, this function navigates to it; otherwise the
- *     page must already be at the target URL.
- *
- * @param {Object}  page              - Playwright or Puppeteer Page object
+ * @param {import('@playwright/test').Page|Object} page - Playwright/Puppeteer Page object
  * @param {Object}  [options={}]
- * @param {string}  [options.url]     - Navigate to this URL before auditing
- * @param {string}  [options.lang]    - Override detected page language ('en'|'ja')
- * @param {boolean} [options.injectAxe=true] - Inject axe-core from node_modules
- * @returns {Promise<Array<Object>>}  Unified violations array (deduplicated by selector)
+ * @param {string}  [options.pageUrl]        - URL string for the current page (metadata only)
+ * @param {boolean} [options.runAxeRule=true] - Whether to run the custom axe-core rule
+ * @param {string}  [options.axeScriptPath]  - Path to axe-core script for injection
+ * @returns {Promise<Object>} Structured audit result
  */
 export async function auditPointerGestures(page, options = {}) {
-  const { url, lang: langOverride, injectAxe = true } = options;
+  const {
+    pageUrl      = '',
+    runAxeRule   = true,
+    axeScriptPath = _resolvedAxePath,
+  } = options;
 
-  if (url) await navigateTo(page, url);
+  if (_isClosed(page)) return _emptyResult(pageUrl);
 
-  const detectedLang = await detectLang(page, langOverride);
-  const violations   = [];
-  const seen         = new Set(); // deduplicates entries across all layers by selector
+  /* ── Step 1: Detect page language ──────────────────────────────────────── */
+  const lang = await _detectLang(page);
 
-  // ── Layer 1: axe-core custom rule ──────────────────────────────────────────
+  /* ── Step 2: Get selector bank ─────────────────────────────────────────── */
+  const selectorBank = getSelectorBank(lang);
+
+  /* ── Step 3: Detect gesture libraries ──────────────────────────────────── */
+  const detectedLibraries = await detectGestureLibraries(page);
+
+  /* ── Step 4: DOM inspection ─────────────────────────────────────────────── */
+  let domFindings = [];
   try {
-    if (injectAxe) {
-      await page.addScriptTag({ path: AXE_PATH });
-    }
+    domFindings = await inspectPage(page, selectorBank);
+  } catch (err) {
+    console.warn('[wcag-2.5.1] inspectPage failed:', err.message);
+  }
 
-    /*
-     * The evaluate function must be serialised to a string and reconstructed
-     * inside the browser via new Function(), because page.evaluate() cannot
-     * transfer live function references across the Node↔browser boundary.
-     */
-    const evaluateFnStr = `(${pointerGesturesCheck.evaluate.toString()})`;
+  const allItems = [];
 
-    const axeResults = await page.evaluate(
-      (rule, checkId, evalStr, enSel, jaSel) => {
-        axe.configure({
-          rules: [rule],
-          checks: [{
-            id:       checkId,
-            // eslint-disable-next-line no-new-func
-            evaluate: new Function('return ' + evalStr)(),
-            options:  { enSelectors: enSel, jaSelectors: jaSel },
-          }],
-        });
-        return axe.run(document, {
-          runOnly: { type: 'rule', values: [rule.id] },
-        });
-      },
-      pointerGesturesRule,
-      pointerGesturesCheck.id,
-      evaluateFnStr,
-      enSelectors,
-      jaSelectors,
+  /* ── Step 5: Validate each DOM finding ──────────────────────────────────── */
+  for (const finding of domFindings) {
+    const escapeHatch = await validateEscapeHatch(page, finding.selector).catch(
+      () => ({ hasAlternative: false, evidence: [] }),
     );
 
-    for (const v of axeResults.violations) {
-      for (const node of v.nodes) {
-        const checkData   = node.any?.[0]?.data || {};
-        const subViolations = Array.isArray(checkData.violations) && checkData.violations.length > 0
-          ? checkData.violations
-          : [{ selector: (node.target?.[0] || 'body'), element: node.html, matchedCategory: 'unknown' }];
+    allItems.push(buildViolation({
+      finding,
+      escapeHatch,
+      detectedLibraries,
+      pageUrl,
+      pageLang: lang,
+      layer:    'dom-pattern',
+    }));
+  }
 
-        for (const sv of subViolations) {
-          if (seen.has(sv.selector)) continue;
-          seen.add(sv.selector);
-          violations.push(makeViolation({
-            layer:   'layer-1',
-            lang:    checkData.lang || detectedLang,
-            element: sv.element,
-            selector: sv.selector,
-            escapeHatchFound: false,
-            message: `Gesture-only widget (${sv.matchedCategory}) matched by axe rule — no single-pointer alternative found`,
+  /* ── Step 6: Library-level summary violation ────────────────────────────── */
+  if (detectedLibraries.size > 0 && domFindings.length === 0) {
+    allItems.push(buildViolation({
+      finding: {
+        category:    'library-only',
+        selector:    'N/A',
+        outerHTML:   null,
+        boundingBox: null,
+        rawSelector: 'N/A',
+      },
+      escapeHatch:       { hasAlternative: false, evidence: [] },
+      detectedLibraries,
+      pageUrl,
+      pageLang: lang,
+      layer:    'library-detected',
+    }));
+    // Override the message for library-only findings
+    allItems[allItems.length - 1].message =
+      `Gesture library detected: ${[...detectedLibraries].join(', ')} — manual gesture audit required`;
+    allItems[allItems.length - 1].severity = 'warning';
+  }
+
+  /* ── Step 7 (optional): axe-core custom rule ──────────────────────────── */
+  if (runAxeRule && !_isClosed(page)) {
+    try {
+      await page.addScriptTag({ path: axeScriptPath });
+
+      const evaluateFnBody = pointerGestureCheck.evaluate.toString()
+        .replace(/^function _evaluateBody\([^)]*\)\s*\{/, '')
+        .replace(/\}$/, '')
+        .trim();
+
+      const axeViolations = await page.evaluate(
+        (rule, checkId, evalFnBody, checkMeta, ruleMeta) => {
+          // eslint-disable-next-line no-new-func
+          const evaluateFn = new Function('node', 'options', evalFnBody);
+
+          axe.configure({
+            checks: [{
+              id:       checkId,
+              evaluate: evaluateFn,
+              metadata: checkMeta,
+            }],
+            rules: [{
+              id:       rule.id,
+              selector: rule.selector,
+              tags:     rule.tags,
+              any:      rule.any,
+              metadata: ruleMeta,
+            }],
+          });
+
+          return axe.run(document, {
+            runOnly: { type: 'rule', values: [rule.id] },
+          }).then(results => results.violations);
+        },
+        pointerGestureRule,
+        pointerGestureCheck.id,
+        evaluateFnBody,
+        pointerGestureCheck.metadata,
+        pointerGestureRule.metadata,
+      );
+
+      for (const v of axeViolations) {
+        for (const node of v.nodes) {
+          const checkData = node.any?.[0]?.data || {};
+          allItems.push(buildViolation({
+            finding: {
+              category:    checkData.gestureAttr || 'gesture-attribute',
+              selector:    node.target?.[0] || 'body',
+              outerHTML:   checkData.element || node.html || null,
+              boundingBox: null,
+              rawSelector: node.target?.[0] || 'body',
+            },
+            escapeHatch:       { hasAlternative: false, evidence: [] },
+            detectedLibraries,
+            pageUrl,
+            pageLang: lang,
+            layer:    'axe-rule',
           }));
         }
       }
-    }
-  } catch (err) {
-    console.warn('[wcag-2.5.1] Layer 1 (axe-core) skipped:', err.message);
-  }
-
-  // ── Layer 2: gesture event listener registry ───────────────────────────────
-  let layer2Registry = [];
-  try {
-    layer2Registry = await extractGestureRegistry(page);
-
-    for (const entry of layer2Registry) {
-      if (entry.hasClickAlternative) continue; // has a usable alternative
-      if (seen.has(entry.selector)) continue;
-      seen.add(entry.selector);
-      violations.push(makeViolation({
-        layer:   'layer-2',
-        lang:    detectedLang,
-        element: null,
-        selector: entry.selector,
-        escapeHatchFound: false,
-        message: `Element registers gesture events [${entry.events.join(', ')}] with no click/keyboard alternative`,
-      }));
-    }
-  } catch (err) {
-    console.warn('[wcag-2.5.1] Layer 2 (gesture registry) skipped:', err.message);
-  }
-
-  // ── Layer 3: escape hatch re-validation (Layer 2 violations only) ──────────
-  // Layer 1 already performs inline escape hatch checks during axe evaluation.
-  // Layer 3 re-checks only Layer 2 results to reduce false positives.
-  const layer2ViolationSelectors = layer2Registry
-    .filter(e => !e.hasClickAlternative && seen.has(e.selector))
-    .map(e => e.selector);
-
-  for (const sel of layer2ViolationSelectors) {
-    try {
-      const hatch = await checkEscapeHatch(page, sel);
-      if (!hatch.found) continue;
-
-      const existing = violations.find(v => v.selector === sel && v.layer === 'layer-2');
-      if (existing) {
-        existing.escapeHatchFound = true;
-        existing.escapeHatchType  = hatch.type;
-        existing.layer            = 'layer-3';
-        existing.message          = `[Layer 3 re-validated] Escape hatch found (${hatch.type}): ${hatch.detail}`;
-      }
-    } catch (_) {
-      // checkEscapeHatch is best-effort; a failure is non-fatal
+    } catch (axeErr) {
+      console.warn('[wcag-2.5.1] axe-core layer skipped:', axeErr.message);
     }
   }
 
-  return violations;
+  /* ── Step 8: Build and return result object ──────────────────────────── */
+  const violations = allItems.filter(i => i.severity === 'violation');
+  const warnings   = allItems.filter(i => i.severity === 'warning');
+
+  const layers = { domPattern: 0, libraryDetected: 0, axeRule: 0 };
+  for (const item of allItems) {
+    if (item.layer === 'dom-pattern')      layers.domPattern++;
+    else if (item.layer === 'library-detected') layers.libraryDetected++;
+    else if (item.layer === 'axe-rule')    layers.axeRule++;
+  }
+
+  return {
+    pageUrl,
+    pageLang:                lang,
+    gestureLibrariesDetected: [...detectedLibraries],
+    domFindingsCount:         domFindings.length,
+    violations,
+    warnings,
+    summary: {
+      total:      allItems.length,
+      violations: violations.length,
+      warnings:   warnings.length,
+      layers,
+    },
+  };
 }
+
+/* Re-export helpers so callers don't need separate imports for common utilities. */
+export { getSelectorBank } from './multilingual-selectors.js';
+export { detectGestureLibraries }  from './gesture-library-detector.js';
+export { validateEscapeHatch }     from './escape-hatch-validator.js';
+export { buildViolation }          from './violation-builder.js';
