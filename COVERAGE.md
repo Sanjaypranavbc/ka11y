@@ -10,10 +10,10 @@
 
 | Metric | Value |
 |---|---|
-| WCAG 2.2 Success Criteria emitted (combined) | **58 of 87** |
-| Overall coverage | **66.7 percent** |
+| WCAG 2.2 Success Criteria emitted (combined) | **59 of 87** |
+| Overall coverage | **67.8 percent** |
 | Level A coverage | **30 of 31** (96.8 percent) |
-| Level AA coverage | **22 of 26** (84.6 percent) |
+| Level AA coverage | **23 of 26** (88.5 percent) |
 | Level AAA coverage | **6 of 30** (20.0 percent) |
 | Robust principle coverage | **3 of 3** (100 percent) |
 | Custom Node checks shipped | 28 `*.check.js` files in `ka11y-node/src/custom-checks/`; plus `audits/wcag-2.5.1/` three-layer module |
@@ -39,9 +39,9 @@
 | Level | Total SCs | Node | Python | Overlap | Combined covered | Missing | Coverage |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | A | 31 | 28 | 9 | 7 | 30 | 1 | **96.8 percent** |
-| AA | 26 | 18 | 12 | 8 | 22 | 4 | **84.6 percent** |
+| AA | 26 | 19 | 12 | 8 | 23 | 3 | **88.5 percent** |
 | AAA | 30 | 5 | 2 | 1 | 6 | 24 | **20.0 percent** |
-| **Total** | **87** | **51** | **23** | **16** | **58** | **29** | **66.7 percent** |
+| **Total** | **87** | **52** | **23** | **16** | **59** | **28** | **67.8 percent** |
 
 ## Coverage by Principle
 
@@ -90,7 +90,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 1.2.1 | Audio-only and Video-only (Prerecorded) | A | Yes | Yes | Covered | Medium | `media_auditor.py` plus `audio-transcript.check.js` (transcript-link keyword scan with HEAD reachability check + filename-only transcript heuristic) | Pre-recorded audio-only or video-only media needs an equivalent alternative. |
 | 1.2.2 | Captions (Prerecorded) | A | Yes | No | Covered | High | New `captions-prerecorded.check.js`: scans `<video>` for `<track kind="captions">`; emits INCOMPLETE for cross-origin embeds (YouTube, Vimeo, Wistia) | Pre-recorded video with sound needs captions. |
 | 1.2.3 | Audio Description or Media Alternative (Prerecorded) | A | Yes | No | Covered | Medium | New `audio-description.check.js`: detects `<track kind="descriptions">`, alternate description audio, or nearby full-text transcript link (EN plus JA keywords) | Pre-recorded video needs audio description or a full text alternative. |
-| 1.2.4 | Captions (Live) | AA | No | No | Missing | Not covered | Roadmap: extend captions check with live-stream and HLS source detection | Live audio or video needs captions. |
+| 1.2.4 | Captions (Live) | AA | Yes | No | Covered | Medium | `captions-live.check.js`: scans for live embed patterns and player-rendered caption elements; flags missing tracks on likely-live media | Live audio or video needs captions. |
 | 1.2.5 | Audio Description (Prerecorded) | AA | Partial | No | Partial | Low | Partly covered by `audio-description.check.js` (1.2.3 path); no separate emitter | Recorded video needs audio description for important visuals. |
 | 1.2.6 | Sign Language (Prerecorded) | AAA | No | No | Missing | Not covered | Out of scope | Recorded video should provide sign language for spoken content. |
 | 1.2.7 | Extended Audio Description (Prerecorded) | AAA | No | No | Missing | Not covered | Out of scope | Recorded video should offer extended audio description when needed. |
@@ -630,7 +630,7 @@ These are the gaps **inside SCs we already cover**. They do not move the SC out 
 | Level | Missing count | Missing criteria |
 |---|---:|---|
 | A | 2 | 2.3.1 Three Flashes; 2.5.4 Motion Actuation |
-| AA | 4 | 1.2.4 Captions (Live), 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
+| AA | 3 | 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
 | AAA | 24 | 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.3.6, 1.4.7, 1.4.8, 1.4.9, 2.1.3, 2.2.3, 2.2.5, 2.2.6, 2.3.2, 2.3.3, 2.4.10, 2.5.5, 2.5.6, 3.1.3, 3.1.4, 3.1.5, 3.2.5, 3.3.5, 3.3.6, 3.3.9 |
 
 _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-description.check.js` and is excluded from the covered-count totals._
