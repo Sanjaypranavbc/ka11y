@@ -394,6 +394,15 @@ Multi-layer detection: CSS selector bank (carousels, drag-drop, map embeds, touc
 
 G210 Up-event only Partial; F101 Down-event trigger Covered; F102 No cancel mechanism Partial. Inline-handler bias (React or Vue invisible); draggable essential exemption not detected.
 
+### 2.5.4 Motion Actuation (Level A)
+
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| G213 Provide conventional controls | Sufficient | Partial | Emits manual review items |
+| F106 Failure — motion required with no alternative | Failure | Covered | Heuristic detection |
+
+Multi-layer detection: Runtime checks (`ondevicemotion`), script scanning for API keywords, library fingerprinting (`shake.js`), and iOS permission API usage. Emits findings with `manualReviewRequired: true`. Essential context (fitness, VR) is heuristically classified.
+
 ### 2.5.3 Label in Name (Level A)
 
 G208, G211, F96 all Covered. Limitations: icon-only controls have no visible label so no violation possible; whitespace vs punctuation edge cases; shadow DOM not traversed.
