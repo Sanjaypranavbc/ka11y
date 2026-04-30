@@ -102,16 +102,38 @@ async function run(page, context = {}) {
     }
 
     // Inspect iframes for known live embed patterns; cross-origin iframes need manual review
+    // unless they have URL parameters explicitly forcing captions on.
     const iframes = Array.from(document.querySelectorAll('iframe'));
     for (const ifr of iframes) {
       const src = (ifr.getAttribute('src') || '').toLowerCase();
       if (!src) continue;
+      
       const isLiveEmbed = LIVE_EMBED_PATTERNS.some(p => src.includes(p));
       if (!isLiveEmbed) continue;
-      // If iframe is same-origin we could inspect inner doc; usually cross-origin -> flag
+
+      // Improvement: Check if the embed URL explicitly forces captions on
+      const hasForcedCaptions = 
+        (src.includes('youtube.com/embed') && /[?&]cc_load_policy=1/.test(src)) ||
+        (src.includes('vimeo.com') && /[?&]texttrack=/.test(src));
+
+      if (hasForcedCaptions) {
+        continue; // Passing signal — player is configured to show captions
+      }
+
+      // Improvement: Look for a nearby ARIA-live region that might be a CART stream
+      const container = ifr.closest('figure, article, section, [role="region"], [role="main"]') || ifr.parentElement;
+      const hasCartStream = container && Array.from(container.querySelectorAll('[aria-live]')).some(el => {
+         const txt = (el.textContent || '').toLowerCase();
+         const label = (el.getAttribute('aria-label') || '').toLowerCase();
+         return /caption|transcript|live text|字幕|文字起こし/i.test(label + ' ' + txt);
+      });
+
+      if (hasCartStream) {
+        continue; // Passing signal — an external CART stream is provided next to the video
+      }
+
       let crossOrigin = false;
       try {
-        // access a property to test same-origin
         const _ = ifr.contentDocument && ifr.contentDocument.readyState;
       } catch (e) {
         crossOrigin = true;

@@ -64,9 +64,19 @@ async function validateEscapeHatch(page, elementSelector) {
 
       /* ── Check 4: Adjacent control buttons within 2 DOM levels ─────────
          Check (a) children of the element, (b) siblings, (c) parent's siblings */
+      
+      function checkButtonSemantics(btn) {
+        const label = ((btn.textContent || '') + ' ' + (btn.getAttribute('aria-label') || '') + ' ' + (btn.getAttribute('title') || '')).toLowerCase();
+        const SEMANTIC_MATCH = /next|prev|forward|back|zoom|\+|-|left|right|up|down|次へ|前へ|ズーム|拡大|縮小|進む|戻る/i;
+        if (SEMANTIC_MATCH.test(label)) {
+          return ` (High quality: semantically matches gesture action)`;
+        }
+        return '';
+      }
+
       const internalBtn = el.querySelector(ALT_BTN);
       if (internalBtn) {
-        evidence.push(`Child <${internalBtn.tagName.toLowerCase()}> provides a pointer alternative`);
+        evidence.push(`Child <${internalBtn.tagName.toLowerCase()}> provides a pointer alternative${checkButtonSemantics(internalBtn)}`);
       }
 
       const parent = el.parentElement;
@@ -74,7 +84,7 @@ async function validateEscapeHatch(page, elementSelector) {
         const siblingBtns = Array.from(parent.querySelectorAll(ALT_BTN))
           .filter(s => !el.contains(s) && s !== el);
         if (siblingBtns.length > 0) {
-          evidence.push(`Sibling <${siblingBtns[0].tagName.toLowerCase()}> found in parent`);
+          evidence.push(`Sibling <${siblingBtns[0].tagName.toLowerCase()}> found in parent${checkButtonSemantics(siblingBtns[0])}`);
         }
 
         /* parent's parent siblings (grandparent context) */
@@ -83,7 +93,7 @@ async function validateEscapeHatch(page, elementSelector) {
           const unclesBtns = Array.from(grandparent.querySelectorAll(ALT_BTN))
             .filter(s => !parent.contains(s) && s !== parent);
           if (unclesBtns.length > 0) {
-            evidence.push(`Button found in grandparent context: <${unclesBtns[0].tagName.toLowerCase()}>`);
+            evidence.push(`Button found in grandparent context: <${unclesBtns[0].tagName.toLowerCase()}>${checkButtonSemantics(unclesBtns[0])}`);
           }
         }
       }

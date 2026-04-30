@@ -90,10 +90,18 @@ async function inspectPage(page, selectorBank) {
             element,
             MAX_HTML_LENGTH,
           ).catch(() => '');
+          
+          // Improvement: Check touch-action CSS property. `none` or `pan-y` is often used
+          // to disable native browser gestures and implement custom JS gestures instead.
+          const touchAction = await page.evaluate((node) => {
+             return window.getComputedStyle(node).touchAction;
+          }, element).catch(() => 'auto');
+          
+          const hasCustomTouchAction = touchAction === 'none' || touchAction === 'pan-y' || touchAction === 'pan-x';
 
           const boundingBox = await element.boundingBox().catch(() => null);
 
-          findings.push({ category, selector: cssPath, outerHTML, boundingBox, rawSelector });
+          findings.push({ category, selector: cssPath, outerHTML, boundingBox, rawSelector, hasCustomTouchAction });
         } catch (err) {
           console.warn(`[wcag-2.5.1] dom-inspector: element skipped for "${rawSelector}":`, err.message);
         }

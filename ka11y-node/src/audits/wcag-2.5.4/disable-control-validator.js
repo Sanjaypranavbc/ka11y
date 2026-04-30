@@ -51,12 +51,20 @@ async function validateDisableControl(page) {
       }
 
       // Medium Confidence Checks
-      const switches = Array.from(document.querySelectorAll('[role="switch"]'));
+      const switches = Array.from(document.querySelectorAll('[role="switch"], [aria-pressed="true"], [aria-pressed="false"]'));
       if (switches.length > 0) {
         const pageText = document.body.textContent || '';
         if (checkPatterns(pageText, motionPatterns)) {
           if (highestConfidence === 'none' || highestConfidence === 'low') highestConfidence = 'medium';
-          evidence.push('Found ARIA switch on a page mentioning motion');
+          evidence.push('Found ARIA switch or pressed-toggle on a page mentioning motion');
+        }
+        // Deep Check: Does the switch specifically reference motion?
+        for (const sw of switches) {
+           const label = (sw.getAttribute('aria-label') || sw.textContent || '').trim();
+           if (checkPatterns(label, motionPatterns)) {
+              highestConfidence = 'high';
+              evidence.push(`Found ARIA switch/toggle specifically for motion: "${label}"`);
+           }
         }
       }
 
