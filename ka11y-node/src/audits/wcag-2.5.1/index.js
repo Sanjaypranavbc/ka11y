@@ -267,7 +267,3 @@ module.exports = {
   validateEscapeHatch,
   buildViolation
 };
-h }     from './escape-hatch-validator.js';
-export { buildViolation }          from './violation-builder.js';
-module.exports = { auditPointerGestures };
-;
