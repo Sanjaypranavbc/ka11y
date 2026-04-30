@@ -369,6 +369,24 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 
 ---
 
+## 2.5.1 Pointer Gestures
+**Engine:** `ka11y-node/audits/wcag-2.5.1/` (three-layer module: `dom-inspector.js` + `gesture-library-detector.js` + `axe-rule-pointer-gestures.js`).
+
+| Technique | Kind | Status |
+|---|---|---|
+| G215 Use controls to achieve same result as path-based gesture | Sufficient | Partial |
+| G216 Single-point activation for spatial positions | Sufficient | Partial |
+| F105 Dragging without single-pointer alternative | Failure | Covered |
+| F107 Pointer gesture required with no alternative | Failure | Partial |
+
+**Known limitations**
+- Gesture logic wired directly via `addEventListener` in bundled JS (React, Vue, Angular) is invisible to the DOM selector layer; the `gesture-listener-detector.js` monkey-patch must be injected before navigation to capture those.
+- Map embeds are always flagged as candidates — keyboard zoom controls cannot be confirmed without interaction simulation.
+- Essential gesture exemption cannot be auto-detected (drawing apps, signature pads, etc.).
+- Cross-origin iframes not inspected.
+
+---
+
 ## 2.5.2 Pointer Cancellation
 **Engine:** `ka11y-node/pointer-cancellation.check.js`.
 
