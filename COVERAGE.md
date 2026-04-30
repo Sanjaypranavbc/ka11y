@@ -379,6 +379,17 @@ G65 Breadcrumb Covered; G128 Indication of current location Covered; G63 Sitemap
 
 G53, H30, F84 Covered; G91, H33 Partial. Keyword list is finite; localization English plus Japanese mainly.
 
+### 2.5.1 Pointer Gestures (Level A)
+
+| Technique | Type | Status | Notes |
+|---|---|---|---|
+| G215 Use controls to achieve same result as path-based gesture | Sufficient | Partial | Detects button/link alternatives near flagged widget; quality of alternative not verified. |
+| G216 Providing single-point activation for spatial positions | Sufficient | Partial | `onclick` handler presence checked; whether click fully replaces the gesture is not confirmed. |
+| F105 Failure — dragging without single-pointer alternative | Failure | Covered | `draggable="true"` elements without button/keyboard alternative flagged. |
+| F107 Failure — pointer gesture required with no alternative | Failure | Partial | Gesture data-attributes (`data-swipe`, `data-pinch`, `data-タッチ`, etc.) flagged; gesture logic inside bundled JS event listeners is invisible. |
+
+Multi-layer detection: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (window-global + script `src`), and a custom axe-core rule. Escape-hatch validator checks click handlers, keyboard handlers, aria-controls, button siblings, and tabIndex. EN + JA multilingual selector banks. See `audits/wcag-2.5.1/` for the full implementation.
+
 ### 2.5.2 Pointer Cancellation (Level A)
 
 G210 Up-event only Partial; F101 Down-event trigger Covered; F102 No cancel mechanism Partial. Inline-handler bias (React or Vue invisible); draggable essential exemption not detected.
@@ -497,6 +508,8 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **2.4.13 Focus Appearance.** Snapshots each focusable element before and after `focus()`. Requires outline-width 2 px or enclosure plus 3:1 contrast against adjacent color. Empirically failed on 6 of 7 sites in 2026-03-26 scan, the most common failure observed.
 
+**2.5.1 Pointer Gestures.** Three-layer module (`audits/wcag-2.5.1/`). Layer 1 (dom-pattern): a multilingual CSS selector bank (EN + JA) matches carousel containers, drag-and-drop wrappers, map embeds, touch-gesture widgets, and path-based interaction elements; each matched element is passed to an escape-hatch validator that checks for click handlers, keyboard event handlers, `aria-controls`, sibling/child buttons, and tab-focusable siblings. Layer 2 (library-detected): window-global variable checks and script `src` attribute scanning fingerprint Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, Embla, TouchSwipe, and ZingTouch. Layer 3 (axe-rule): a custom axe-core check runs on the serialised page DOM for elements with gesture data-attributes lacking any single-pointer alternative. Findings with a detected escape hatch are downgraded to warnings; remaining findings are violations.
+
 **2.5.2 Pointer Cancellation.** Finds elements with `onpointerdown` or `onmousedown` triggering navigation or submit without matching up-event; checks for `pointercancel` or `preventDefault` patterns.
 
 **2.5.3 Label in Name.** For each interactive element, NFC-normalized casefolded visible label text is compared against the computed accessible name. Failure if visible label is non-empty and accessible name does not contain it.
@@ -560,6 +573,10 @@ These are the gaps **inside SCs we already cover**. They do not move the SC out 
 | 2.4.7 | Fixed 100-step tab limit | Very long forms miss elements |
 | 2.4.7 | Custom-drawn focus on canvas or SVG cannot be measured from DOM style | False negatives on canvas widgets |
 | 2.4.13 | Time-budget ceiling at 2,000 elements | Late elements unaudited |
+| 2.5.1 | Gesture logic inside bundled JS (React, Vue) invisible to DOM selector and axe layers | False negatives on SPA gesture handlers — Layer 2 monkey-patch (`gesture-listener-detector.js`) must be injected before navigation to capture these |
+| 2.5.1 | Map embeds always flagged as candidates | Cannot determine whether native keyboard zoom controls exist without interaction simulation |
+| 2.5.1 | Essential gesture exemption cannot be auto-detected | Drawing apps, signature pads, and trajectory games require manual triage |
+| 2.5.1 | Cross-origin iframes not inspected | Third-party widget gesture requirements invisible |
 | 2.5.3 | Shadow DOM not traversed | Controls inside closed shadow roots missed |
 | 2.5.8 | Viewport-coupled at 1440 px | Mobile target-size unmeasured |
 | 2.5.8 | Cross-origin iframes not descended | Iframe contents missed |
