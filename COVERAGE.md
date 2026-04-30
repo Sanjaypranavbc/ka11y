@@ -1,8 +1,8 @@
 # ka11y WCAG 2.2 Coverage Report
 
-**Report date:** 2026-04-24
-**Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + 28 custom checks).
-**Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), and 2026-03-26 empirical validation against seven production sites.
+**Report date:** 2026-04-30
+**Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + 29 custom checks).
+**Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), 2026-04-30 2.5.1 Pointer Gestures three-layer audit module (`audits/wcag-2.5.1/`), and 2026-03-26 empirical validation against seven production sites.
 
 ---
 
@@ -10,13 +10,13 @@
 
 | Metric | Value |
 |---|---|
-| WCAG 2.2 Success Criteria emitted (combined) | **56 of 87** |
-| Overall coverage | **64.4 percent** |
-| Level A coverage | **28 of 31** (90.3 percent) |
+| WCAG 2.2 Success Criteria emitted (combined) | **57 of 87** |
+| Overall coverage | **65.5 percent** |
+| Level A coverage | **29 of 31** (93.5 percent) |
 | Level AA coverage | **22 of 26** (84.6 percent) |
 | Level AAA coverage | **6 of 30** (20.0 percent) |
 | Robust principle coverage | **3 of 3** (100 percent) |
-| Custom Node checks shipped | 28 `*.check.js` files in `ka11y-node/src/custom-checks/` |
+| Custom Node checks shipped | 28 `*.check.js` files in `ka11y-node/src/custom-checks/`; plus `audits/wcag-2.5.1/` three-layer module |
 | Python rendered evaluators | 7 (resize, reflow, text-spacing, hover-focus, orientation, focus-not-obscured min and enhanced) |
 | Python image and CV pipelines | OCR plus classifier-driven image pipeline across 1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 4.1.2 |
 | Real-site validation (2026-03-26) | 7 sites, 38 SCs observed firing |
@@ -30,6 +30,7 @@
 4. 2026-04-24 gap pass extended Node heuristics for 1.2.1 F30 filename-only transcript links, 1.4.1 non-link color-only indicators (F13/F81), 2.1.2 scripted key suppression and non-modal popup dismissibility (F58/F60), 2.4.5 related-links/page-index mechanisms (G125/G126), 2.4.8 table-of-contents signal (G127), 3.3.4 undo-window safeguards (G164), and 4.1.3 toast-without-ARIA (F114).
 5. Image-capture failures now propagate end-to-end as `capture_status` with a distinct `incomplete` finding status (was silently treated as N/A before).
 6. 3.3.7 Redundant Entry is confirmed to be wired up via `redundant-entry.check.js` (was undercounted in the prior report).
+7. 2.5.1 Pointer Gestures (2026-04-30) added via a new three-layer audit module (`audits/wcag-2.5.1/`): CSS selector bank matching (carousels, drag-drop, map embeds, touch widgets, path-based interactions), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, etc.), and a custom axe-core rule for gesture data-attributes. Full EN + JA multilingual selector banks. Escape-hatch validator reduces false positives by detecting sibling/child buttons, aria-controls, keyboard handlers, and tabIndex alternatives. Findings with a detected escape hatch are emitted as warnings rather than violations.
 
 ---
 
@@ -37,17 +38,17 @@
 
 | Level | Total SCs | Node | Python | Overlap | Combined covered | Missing | Coverage |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| A | 31 | 26 | 9 | 7 | 28 | 3 | **90.3 percent** |
+| A | 31 | 27 | 9 | 7 | 29 | 2 | **93.5 percent** |
 | AA | 26 | 18 | 12 | 8 | 22 | 4 | **84.6 percent** |
 | AAA | 30 | 5 | 2 | 1 | 6 | 24 | **20.0 percent** |
-| **Total** | **87** | **49** | **23** | **16** | **56** | **31** | **64.4 percent** |
+| **Total** | **87** | **50** | **23** | **16** | **57** | **30** | **65.5 percent** |
 
 ## Coverage by Principle
 
 | Principle | Total SCs | Node | Python | Combined | Coverage |
 |---|---:|---:|---:|---:|---:|
 | Perceivable (1.x.x) | 29 | 15 | 13 | 19 | **65.5 percent** |
-| Operable (2.x.x) | 34 | 20 | 7 | 22 | **64.7 percent** |
+| Operable (2.x.x) | 34 | 21 | 7 | 23 | **67.6 percent** |
 | Understandable (3.x.x) | 21 | 11 | 2 | 12 | **57.1 percent** |
 | Robust (4.x.x) | 3 | 3 | 1 | 3 | **100 percent** |
 
@@ -56,7 +57,7 @@
 | Category | Count | Criteria |
 |---|---:|---|
 | Overlap between Node and Python | 16 | 1.1.1, 1.2.1, 1.3.1, 1.3.4, 1.4.3, 1.4.4, 1.4.5, 1.4.6, 1.4.12, 2.2.2, 2.4.7, 2.4.13, 2.5.3, 2.5.8, 3.3.2, 4.1.2 |
-| Node-only coverage | 33 | 1.2.2, 1.2.3, 1.3.2, 1.3.5, 1.4.1, 1.4.2, 2.1.1, 2.1.2, 2.1.4, 2.2.1, 2.2.4, 2.4.1, 2.4.2, 2.4.3, 2.4.4, 2.4.5, 2.4.6, 2.4.8, 2.4.9, 2.5.2, 2.5.7, 3.1.1, 3.1.2, 3.1.6, 3.2.1, 3.2.2, 3.2.6, 3.3.3, 3.3.4, 3.3.7, 3.3.8, 4.1.1, 4.1.3 |
+| Node-only coverage | 34 | 1.2.2, 1.2.3, 1.3.2, 1.3.5, 1.4.1, 1.4.2, 2.1.1, 2.1.2, 2.1.4, 2.2.1, 2.2.4, 2.4.1, 2.4.2, 2.4.3, 2.4.4, 2.4.5, 2.4.6, 2.4.8, 2.4.9, 2.5.1, 2.5.2, 2.5.7, 3.1.1, 3.1.2, 3.1.6, 3.2.1, 3.2.2, 3.2.6, 3.3.3, 3.3.4, 3.3.7, 3.3.8, 4.1.1, 4.1.3 |
 | Python-only coverage | 7 | 1.3.3, 1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1 |
 
 ---
@@ -75,7 +76,7 @@
 | A | 13 | 12 | 3 | 28 |
 | AA | 11 | 10 | 1 | 22 |
 | AAA | 2 | 2 | 2 | 6 |
-| **Total** | **26** | **24** | **6** | **56** |
+| **Total** | **26** | **25** | **6** | **57** |
 
 ---
 
@@ -140,7 +141,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 2.4.11 | Focus Not Obscured (Minimum) | AA | No | Yes | Covered | High | Python rendered focus-not-obscured-minimum evaluator | Focused items should not be fully hidden behind overlays. |
 | 2.4.12 | Focus Not Obscured (Enhanced) | AAA | No | Yes | Covered | High | Python rendered focus-not-obscured-enhanced evaluator | Focused items should not be obscured at all. |
 | 2.4.13 | Focus Appearance | AA | Yes | Yes | Covered | Medium | `focus-appearance.check.js` interactive snapshot plus `policy_2_4_13.py` (outline width 2 px or enclosure plus 3:1 contrast) | Focus indicator size and contrast must be strong enough. |
-| 2.5.1 | Pointer Gestures | A | No | No | Missing | Not covered | Roadmap | Complex gestures need a simple pointer alternative. |
+| 2.5.1 | Pointer Gestures | A | Yes | No | Covered | Medium | New `audits/wcag-2.5.1/` three-layer module: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, etc.), custom axe-core rule for gesture data-attributes; escape-hatch validator reduces false positives; full EN + JA multilingual selector banks | Complex gestures need a simple pointer alternative. |
 | 2.5.2 | Pointer Cancellation | A | Yes | No | Covered | Low | `pointer-cancellation.check.js`: flags `onpointerdown` / `onmousedown` triggering navigation or submit without `pointercancel` or `preventDefault` | Pointer actions should not trigger unexpectedly on the down event. |
 | 2.5.3 | Label in Name | A | Yes | Yes | Covered | High | `label_in_name_auditor.py`: NFC-normalized casefolded visible label vs computed accessible name | Visible label text should also exist in the accessible name. |
 | 2.5.4 | Motion Actuation | A | No | No | Missing | Not covered | Roadmap | Motion-based actions need an alternative and an off switch. |
@@ -600,8 +601,8 @@ These are the gaps **inside SCs we already cover**. They do not move the SC out 
 
 | Level | Missing count | Missing criteria |
 |---|---:|---|
-| A | 3 | 2.3.1 Three Flashes; 2.5.1 Pointer Gestures; 2.5.4 Motion Actuation |
-| AA | 4 | 1.2.4 Captions (Live), 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
+| A | 2 | 2.3.1 Three Flashes; 2.5.4 Motion Actuation |
+| AA | 3 | 1.2.4 Captions (Live), 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
 | AAA | 24 | 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.3.6, 1.4.7, 1.4.8, 1.4.9, 2.1.3, 2.2.3, 2.2.5, 2.2.6, 2.3.2, 2.3.3, 2.4.10, 2.5.5, 2.5.6, 3.1.3, 3.1.4, 3.1.5, 3.2.5, 3.3.5, 3.3.6, 3.3.9 |
 
 _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-description.check.js` and is excluded from the covered-count totals._
