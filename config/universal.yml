@@ -510,34 +510,6 @@ checks:
         - "注文"
         - "クリック"
 
-crawler:
-  include_data_uris: false
-  include_invisible: false
-  scroll_passes: 3
-  language:
-    cjk_langs:
-      - "ja"
-      - "zh"
-      - "zh-CN"
-      - "zh-TW"
-      - "zh-HK"
-      - "ko"
-  reporting:
-    max_warning_samples: 3
-  performance:
-    max_focus_steps: 100
-    max_hover_candidates: 12
-    max_ocr_images_per_run: 60
-
-crawl_browser:
-  width: 1920
-  height: 1080
-
-# ── Check-specific heuristics (previously misplaced under crawl_browser) ────
-# These are read by sharedAssets.getCheckConfig(checkKey) via
-# getSharedConfigValue(['checks', checkKey], ...).  They must live here.
-checks_addendum_note: "See checks: section below — accessible_auth, status_messages, link_purpose, images_of_text, and redundant_entry have been moved there."
-
   accessible_auth:
     login_form_keywords:
       en:
@@ -802,3 +774,27 @@ checks_addendum_note: "See checks: section below — accessible_auth, status_mes
         - "コピーする"
         - "使用する"
         - "反映する"
+
+crawler:
+  include_data_uris: false
+  include_invisible: false
+  scroll_passes: 3
+  language:
+    cjk_langs:
+      - "ja"
+      - "zh"
+      - "zh-CN"
+      - "zh-TW"
+      - "zh-HK"
+      - "ko"
+  reporting:
+    max_warning_samples: 3
+  performance:
+    max_focus_steps: 100
+    max_hover_candidates: 12
+    max_ocr_images_per_run: 60
+
+
+crawl_browser:
+  width: 1920
+  height: 1080
