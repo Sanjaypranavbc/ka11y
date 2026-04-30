@@ -8,7 +8,7 @@ import { validateDisableControl } from './disable-control-validator.js';
 import { buildViolation } from './violation-builder.js';
 import { motionActuationRule, registerMotionActuationRule } from './axe-rule-motion-actuation.js';
 
-export async function auditMotionActuation(page, options = {}) {
+async function auditMotionActuation(page, options = {}) {
   const {
     pageUrl = '',
     runAxeRule = true,

@@ -19,7 +19,7 @@ function buildMessage(requirement, disableControl, essentialClassification) {
   return msg;
 }
 
-export function buildViolation({ motionEvidence, disableControl, detectedLibraries, essentialClassification, requirement, pageUrl, pageLang, layer }) {
+function buildViolation({ motionEvidence, disableControl, detectedLibraries, essentialClassification, requirement, pageUrl, pageLang, layer }) {
   return {
     ruleId: "wcag-2.5.4-motion-actuation",
     wcag: "2.5.4",

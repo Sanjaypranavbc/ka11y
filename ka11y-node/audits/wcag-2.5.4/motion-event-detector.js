@@ -7,7 +7,7 @@
  * @param {import('playwright').Page} page - Playwright page object
  * @returns {Promise<Object>} MotionDetectionResult object with evidence and confidence
  */
-export async function detectMotionEventListeners(page) {
+async function detectMotionEventListeners(page) {
   const frames = page.frames();
   const results = await Promise.all(frames.map(async (frame) => {
     let runtimeCheck = { devicemotionOnHandler: false, deviceorientationOnHandler: false, jqueryMotion: false };

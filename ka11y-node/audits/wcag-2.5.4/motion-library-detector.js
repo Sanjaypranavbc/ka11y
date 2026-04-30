@@ -7,7 +7,7 @@
  * @param {import('playwright').Page} page - Playwright page object
  * @returns {Promise<Map<string, { confidence: string, evidence: string }>>}
  */
-export async function detectMotionLibraries(page) {
+async function detectMotionLibraries(page) {
   let detected = new Map();
   try {
     const libs = await page.evaluate(() => {

@@ -7,7 +7,7 @@
  * @param {import('playwright').Page} page - Playwright page object
  * @returns {Promise<{ hasDisableControl: boolean, confidence: "high" | "medium" | "low" | "none", evidence: string[] }>}
  */
-export async function validateDisableControl(page) {
+async function validateDisableControl(page) {
   try {
     const result = await page.evaluate(() => {
       const evidence = [];

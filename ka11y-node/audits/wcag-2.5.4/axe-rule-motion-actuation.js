@@ -2,7 +2,7 @@
  * @fileoverview Custom axe-core rule for static WCAG 2.5.4 Motion Actuation DOM analysis
  */
 
-export const motionActuationRule = {
+const motionActuationRule = {
   id: 'motion-actuation-2-5-4',
   selector: '*',  // runs on document body
   tags: ['wcag2a', 'wcag21a', 'wcag22a', 'wcag254', 'motion-actuation'],
@@ -52,7 +52,7 @@ export const motionActuationRule = {
  * Registers the custom motion actuation rule with an axe-core instance.
  * @param {Object} axeInstance - The axe-core object
  */
-export function registerMotionActuationRule(axeInstance) {
+function registerMotionActuationRule(axeInstance) {
   axeInstance.configure({
     checks: [motionActuationRule.check],
     rules: [{

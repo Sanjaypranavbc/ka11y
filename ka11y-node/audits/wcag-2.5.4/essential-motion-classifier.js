@@ -8,7 +8,7 @@
  * @param {Object} motionEvidence - Evidence from the detector
  * @returns {Promise<{ likelyEssential: boolean, reason: string | null }>}
  */
-export async function classifyMotionAsEssential(page, motionEvidence) {
+async function classifyMotionAsEssential(page, motionEvidence) {
   try {
     const data = await page.evaluate(() => {
        const title = (document.title || '').toLowerCase();
@@ -48,4 +48,4 @@ export async function classifyMotionAsEssential(page, motionEvidence) {
     console.warn('[wcag-2.5.4] classification failed:', err.message);
     return { likelyEssential: false, reason: null };
   }
-}
+}module.exports = { classifyMotionAsEssential };
