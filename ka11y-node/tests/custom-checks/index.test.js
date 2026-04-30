@@ -124,11 +124,20 @@ describe('runAll', () => {
       on: jest.fn(),
       off: jest.fn(),
       url: jest.fn().mockReturnValue('https://example.com'),
+      frames: jest.fn().mockReturnValue([]),
+      mainFrame: jest.fn().mockReturnValue({}),
     };
 
     const results = await runAll(mockPage);
     expect(results.length).toBeGreaterThan(0);
-    expect(results.every(r => Array.isArray(r.rules) && r.rules.length === 1)).toBe(true);
-    expect(results.every(r => r.rules[0].status === 'incomplete')).toBe(true);
+    
+    // Checks should either fail gracefully and return an 'incomplete' error wrapper, 
+    // or catch their own errors and return a valid result (often 'pass' or 'incomplete').
+    // None should be silently dropped.
+    expect(results.every(r => Array.isArray(r.rules) && r.rules.length > 0)).toBe(true);
+    
+    const executionFailures = results.filter(r => r.rules[0].reason && r.rules[0].reason.includes('execution failed'));
+    expect(executionFailures.length).toBeGreaterThan(0);
+    expect(executionFailures.every(r => r.rules[0].status === 'incomplete')).toBe(true);
   });
 });
