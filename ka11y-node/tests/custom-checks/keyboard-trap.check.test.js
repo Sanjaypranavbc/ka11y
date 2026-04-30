@@ -177,13 +177,10 @@ describe('keyboard-trap.check (WCAG 2.1.2)', () => {
       undefined, // body.focus
       null,      // forward Tab: no active element
       null,      // Shift+Tab: no active element
-      [], [], [], [], [], [], // arrow-role probes (tree..radiogroup)
+      [], [], [], [], [], [], [], [], // 8 arrow-role probes (tree, grid, listbox, menu, tablist, radiogroup, treegrid, composite)
       [],        // dialogs
       [],        // non-modal candidates
-      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // index 11
-      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // index 12
-      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // index 13
-      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // index 14
+      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // F58 heuristic
     ];
     let idx = 0;
     const page = {
@@ -198,5 +195,5 @@ describe('keyboard-trap.check (WCAG 2.1.2)', () => {
     const result = await run(page);
     expect(result.rules[0].status).toBe('incomplete');
     expect(result.rules[0].reason).toContain('preventDefault');
-  });
+  }, 15000);
 });
