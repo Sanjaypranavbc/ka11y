@@ -225,10 +225,27 @@ async function run(page, context = {}) {
     }
   }
 
-  if (violations.length === 0) {
+  const cssRules = cssFindings.map(f => ({
+    ruleId:      `${RULE_ID}-css-reset`,
+    description: 'CSS :focus outline reset without :focus-visible restoration',
+    impact:      'serious',
+    status:      'incomplete',
+    reason:      _t(sharedContext, 'CSS rule "{selector}" removes the focus outline for all pointer/keyboard users without restoring it via :focus-visible. Add a :focus-visible rule to preserve keyboard focus styling.', 'CSS ルール "{selector}" はすべてのユーザーの focus アウトラインを削除していますが、:focus-visible で復元されていません。キーボードフォーカス表示を維持するには :focus-visible ルールを追加してください。', { selector: f.selector }),
+    selector:    f.selector,
+    helpUrl:     HELP_URL,
+  }));
+
+  if (violations.length === 0 && cssRules.length === 0) {
     return {
       successCriteriaId: SC,
       rules: [{ ruleId: RULE_ID, description: 'Focusable elements must have a visible focus indicator', impact: null, status: 'pass', reason: _t(sharedContext, 'All {count} sampled focusable elements have a visible focus indicator.', 'サンプリングしたフォーカス可能要素 {count} 件すべてに、視認できるフォーカスインジケーターがあります。', { count: elements.length }), helpUrl: HELP_URL }],
+    };
+  }
+
+  if (violations.length === 0 && cssRules.length > 0) {
+    return {
+      successCriteriaId: SC,
+      rules: cssRules,
     };
   }
 
@@ -250,7 +267,7 @@ async function run(page, context = {}) {
       ),
       elements: violations,
       helpUrl: HELP_URL,
-    }],
+    }, ...cssRules],
   };
 }
 

@@ -197,53 +197,94 @@ async function run(page, context = {}) {
     }
   }
 
-  // ── Arrow key trap detection in ARIA widgets ──────────────────────────────
-  const arrowTrapRoles = ['tree', 'grid', 'listbox', 'menu', 'tablist', 'radiogroup'];
+  // ── Arrow key trap detection in ARIA composite widgets ───────────────────
+  // WCAG 2.1.2 for composite widgets: arrow keys SHOULD navigate within the
+  // widget; Tab MUST be able to exit.  We test both concerns:
+  // 1. Arrow keys do nothing at all (unimplemented widget — AT users can't navigate)
+  // 2. Tab cannot exit the widget container after entering it
+  const ARROW_TRAP_ROLES = ['tree', 'grid', 'listbox', 'menu', 'tablist', 'radiogroup', 'treegrid', 'composite'];
   const arrowTrapFindings = [];
 
   if (!trapHtml) {
-    for (const role of arrowTrapRoles) {
+    for (const role of ARROW_TRAP_ROLES) {
       const widgets = await page.evaluate((r) => {
         return Array.from(document.querySelectorAll(`[role="${r}"]`)).slice(0, 3).map(el => ({
           id: el.id || null,
           html: el.outerHTML.slice(0, 100),
-          selector: el.id ? `#${el.id}` : null,
+          selector: el.id ? `#${CSS.escape(el.id)}` : null,
           role: r,
+          childCount: el.querySelectorAll('[role]').length,
         }));
       }, role);
 
       for (const widget of (widgets || [])) {
-        // Focus the widget
+        // Skip trivially empty widgets
+        if (widget.childCount === 0) continue;
+
+        // Focus first focusable descendant or the widget itself
         await page.evaluate((sel, r) => {
-          const el = sel
-            ? document.querySelector(sel)
-            : document.querySelector(`[role="${r}"]`);
-          if (el) el.focus({ preventScroll: true });
+          const root = sel ? document.querySelector(sel) : document.querySelector(`[role="${r}"]`);
+          if (!root) return;
+          const first = root.querySelector('[tabindex], button, a[href], input, select, textarea, [role="option"], [role="treeitem"], [role="menuitem"], [role="tab"], [role="row"], [role="gridcell"]');
+          (first || root).focus({ preventScroll: true });
         }, widget.selector, role);
         await new Promise(res => setTimeout(res, SETTLE_MS));
 
-        const before = await page.evaluate(() => {
+        const focusBeforeArrows = await page.evaluate((sel, r) => {
+          const root = sel ? document.querySelector(sel) : document.querySelector(`[role="${r}"]`);
           const el = document.activeElement;
-          if (!el) return null;
+          if (!el) return { key: null, insideWidget: false };
           const allEls = Array.from(document.querySelectorAll('*'));
-          return `${allEls.indexOf(el)}:${el.tagName}`;
-        });
+          return {
+            key: `${allEls.indexOf(el)}:${el.tagName}`,
+            insideWidget: root ? root.contains(el) : false,
+          };
+        }, widget.selector, role);
 
-        // Press ArrowDown twice
+        if (!focusBeforeArrows.insideWidget) continue;
+
+        // Press ArrowDown then ArrowUp — if either changes active element, arrows work
         await page.keyboard.press('ArrowDown');
         await new Promise(res => setTimeout(res, SETTLE_MS));
-        await page.keyboard.press('ArrowDown');
-        await new Promise(res => setTimeout(res, SETTLE_MS));
-
-        const after = await page.evaluate(() => {
+        const afterDown = await page.evaluate(() => {
           const el = document.activeElement;
-          if (!el) return null;
           const allEls = Array.from(document.querySelectorAll('*'));
-          return `${allEls.indexOf(el)}:${el.tagName}`;
+          return el ? `${allEls.indexOf(el)}:${el.tagName}` : null;
         });
 
-        if (before && after && before === after) {
-          arrowTrapFindings.push({ type: 'arrow-key-trap', role, html: widget.html });
+        await page.keyboard.press('ArrowUp');
+        await new Promise(res => setTimeout(res, SETTLE_MS));
+        const afterUp = await page.evaluate(() => {
+          const el = document.activeElement;
+          const allEls = Array.from(document.querySelectorAll('*'));
+          return el ? `${allEls.indexOf(el)}:${el.tagName}` : null;
+        });
+
+        const arrowsDoNothing = afterDown === focusBeforeArrows.key && afterUp === focusBeforeArrows.key;
+
+        // Also test: does Tab exit the widget container?
+        await page.keyboard.press('Tab');
+        await new Promise(res => setTimeout(res, SETTLE_MS));
+        const afterTab = await page.evaluate((sel, r) => {
+          const root = sel ? document.querySelector(sel) : document.querySelector(`[role="${r}"]`);
+          const el = document.activeElement;
+          if (!el || el === document.body) return { key: null, insideWidget: false };
+          const allEls = Array.from(document.querySelectorAll('*'));
+          return {
+            key: `${allEls.indexOf(el)}:${el.tagName}`,
+            insideWidget: root ? root.contains(el) : false,
+          };
+        }, widget.selector, role);
+
+        const tabCannotExit = afterTab.insideWidget;
+
+        if (arrowsDoNothing || tabCannotExit) {
+          arrowTrapFindings.push({
+            type: 'arrow-key-trap',
+            role,
+            html: widget.html,
+            detail: arrowsDoNothing ? 'arrows unresponsive' : 'Tab cannot exit widget',
+          });
         }
       }
     }

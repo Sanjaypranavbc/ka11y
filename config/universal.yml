@@ -510,6 +510,38 @@ checks:
         - "注文"
         - "クリック"
 
+  known_embeds:
+    video_player_patterns:
+      - "youtube.com/embed"
+      - "player.vimeo.com"
+      - "wistia"
+      - "dailymotion.com/embed"
+      - "rumble.com/embed"
+      - "jwplayer"
+      - "brightcove"
+      - "kaltura"
+      - "bitchute.com/embed"
+      - "loom.com/embed"
+      - "videojs"
+    audio_player_patterns:
+      - "open.spotify.com/embed"
+      - "w.soundcloud.com/player"
+      - "bandcamp.com/track"
+      - "bandcamp.com/album"
+      - "music.apple.com"
+      - "podcasts.apple.com"
+      - "anchor.fm/s"
+      - "castbox.fm"
+      - "player.simplecast.com"
+      - "buzzsprout.com"
+      - "podbean.com/media/player"
+      - "audiomack.com/embed"
+    combined_media_patterns:
+      - "facebook.com/plugins"
+      - "twitter.com/i/videos"
+      - "tiktok.com/embed"
+      - "instagram.com/p"
+
   accessible_auth:
     login_form_keywords:
       en:
