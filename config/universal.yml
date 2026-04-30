@@ -533,6 +533,11 @@ crawl_browser:
   width: 1920
   height: 1080
 
+# ── Check-specific heuristics (previously misplaced under crawl_browser) ────
+# These are read by sharedAssets.getCheckConfig(checkKey) via
+# getSharedConfigValue(['checks', checkKey], ...).  They must live here.
+checks_addendum_note: "See checks: section below — accessible_auth, status_messages, link_purpose, images_of_text, and redundant_entry have been moved there."
+
   accessible_auth:
     login_form_keywords:
       en:
