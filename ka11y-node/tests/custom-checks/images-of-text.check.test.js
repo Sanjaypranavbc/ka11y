@@ -17,7 +17,7 @@ describe('images-of-text.check (WCAG 1.4.5)', () => {
     expect(result.rules[0].ruleId).toBe('custom-images-of-text');
   });
 
-  test('fails when high-confidence text-image violations detected', async () => {
+  test('returns incomplete when high-confidence text-image violations detected', async () => {
     const page = makePage({
       ...emptyData,
       checkedCount: 10,
@@ -26,7 +26,7 @@ describe('images-of-text.check (WCAG 1.4.5)', () => {
       ],
     });
     const result = await run(page);
-    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].status).toBe('incomplete');
     expect(result.rules[0].impact).toBe('moderate');
     expect(result.rules[0].reason).toContain('1 image(s)');
   });
@@ -44,7 +44,7 @@ describe('images-of-text.check (WCAG 1.4.5)', () => {
     expect(result.rules[0].reason).toContain('1 image(s)');
   });
 
-  test('bg violations count as failures', async () => {
+  test('bg violations count as incomplete', async () => {
     const page = makePage({
       ...emptyData,
       bgTextViolations: [
@@ -52,7 +52,7 @@ describe('images-of-text.check (WCAG 1.4.5)', () => {
       ],
     });
     const result = await run(page);
-    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].status).toBe('incomplete');
   });
 
   test('passes with descriptive message when no images found', async () => {
@@ -62,14 +62,14 @@ describe('images-of-text.check (WCAG 1.4.5)', () => {
     expect(result.rules[0].reason).toContain('No candidate images');
   });
 
-  test('fail takes precedence over needs_review', async () => {
+  test('returns incomplete when both violations and needs_review exist', async () => {
     const page = makePage({
       ...emptyData,
       violations:   [{ src: '/banner.png', alt: 'Buy now save big money today', html: '', id: null }],
       needsReview:  [{ src: '/promo.png',  alt: 'Save more today on all items', html: '', id: null }],
     });
     const result = await run(page);
-    expect(result.rules[0].status).toBe('fail');
+    expect(result.rules[0].status).toBe('incomplete');
   });
 
 });

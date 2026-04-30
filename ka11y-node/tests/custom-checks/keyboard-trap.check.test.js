@@ -85,9 +85,14 @@ function makeArrowTrapPage() {
     [],        // menu widgets
     [{ id: 'tabs', html: '<div role="tablist">...</div>', selector: '#tabs', role: 'tablist' }],
     undefined, // focus widget
-    '10:DIV',  // before ArrowDown
+    { key: '10:DIV', insideWidget: true },  // before ArrowDown
     '10:DIV',  // after ArrowDown -> trap
+    '10:DIV',  // after ArrowUp -> trap
+    { key: '10:DIV', insideWidget: true },  // after Tab -> trap
     [],        // radiogroup widgets
+    [],        // dialogs
+    [],        // non-modal
+    [],        // f58
   ];
   let idx = 0;
 
@@ -312,18 +317,16 @@ describe('keyboard-trap.check (WCAG 2.1.2)', () => {
   });
 
   test('reports scripted Tab/Escape suppression as incomplete (F58 heuristic)', async () => {
-    const responses = [
-      undefined, // body.focus
-      null,      // forward Tab: no active element
-      null,      // Shift+Tab: no active element
-      [], [], [], [], [], [], // arrow-role probes (tree..radiogroup)
-      [],        // dialogs
-      [],        // non-modal candidates
-      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // suppression findings
-    ];
-    let idx = 0;
     const page = {
-      evaluate: jest.fn().mockImplementation(() => Promise.resolve(responses[idx++] ?? null)),
+      evaluate: jest.fn().mockImplementation((fn) => {
+        const str = fn.toString();
+        if (str.includes('document.body.focus')) return Promise.resolve(undefined);
+        if (str.includes('document.activeElement')) return Promise.resolve(null);
+        if (str.includes('script-key-suppression')) {
+          return Promise.resolve([{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }]);
+        }
+        return Promise.resolve([]);
+      }),
       keyboard: {
         press: jest.fn().mockResolvedValue(undefined),
         down: jest.fn().mockResolvedValue(undefined),

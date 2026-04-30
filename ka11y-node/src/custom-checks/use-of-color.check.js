@@ -221,6 +221,44 @@ async function run(page, context = {}) {
       });
     }
 
+    // Status indicator / colored badge heuristic: small colored elements with no text or aria cue
+    const indicatorEls = Array.from(document.querySelectorAll(
+      '[class*="status"],[class*="badge"],[class*="dot"],[class*="indicator"],[class*="state"],[data-status]'
+    )).slice(0, 400);
+
+    for (const el of indicatorEls) {
+      const cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') continue;
+
+      const text = (el.textContent || '').trim();
+      const ariaLabel = (el.getAttribute('aria-label') || '').trim();
+      const title     = (el.getAttribute('title') || '').trim();
+      const role      = el.getAttribute('role') || '';
+      if (text.length > 3 || ariaLabel || title || role === 'img') continue;
+
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue;
+      const isSmall    = rect.width <= 24 && rect.height <= 24;
+      const radVal     = parseFloat(cs.borderRadius) || 0;
+      const isCircular = radVal >= Math.min(rect.width || 1, rect.height || 1) / 2;
+      if (!isSmall && !isCircular) continue;
+
+      const bg = parseRgb(cs.backgroundColor);
+      if (!bg) continue;
+      const [r, g, b] = bg;
+      if (r > 200 && g > 200 && b > 200) continue; // near-white
+      if (r < 55  && g < 55  && b < 55)  continue; // near-black
+      if (Math.max(r, g, b) - Math.min(r, g, b) < 30) continue; // near-gray
+
+      nonLinkViolations.push({
+        type: 'status-color-only',
+        html: el.outerHTML.slice(0, 150),
+        element_id: el.id || null,
+        target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
+      });
+    }
+
     return {
       violations,
       checkedCount: checked.length,

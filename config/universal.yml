@@ -510,28 +510,37 @@ checks:
         - "注文"
         - "クリック"
 
-crawler:
-  include_data_uris: false
-  include_invisible: false
-  scroll_passes: 3
-  language:
-    cjk_langs:
-      - "ja"
-      - "zh"
-      - "zh-CN"
-      - "zh-TW"
-      - "zh-HK"
-      - "ko"
-  reporting:
-    max_warning_samples: 3
-  performance:
-    max_focus_steps: 100
-    max_hover_candidates: 12
-    max_ocr_images_per_run: 60
-
-crawl_browser:
-  width: 1920
-  height: 1080
+  known_embeds:
+    video_player_patterns:
+      - "youtube.com/embed"
+      - "player.vimeo.com"
+      - "wistia"
+      - "dailymotion.com/embed"
+      - "rumble.com/embed"
+      - "jwplayer"
+      - "brightcove"
+      - "kaltura"
+      - "bitchute.com/embed"
+      - "loom.com/embed"
+      - "videojs"
+    audio_player_patterns:
+      - "open.spotify.com/embed"
+      - "w.soundcloud.com/player"
+      - "bandcamp.com/track"
+      - "bandcamp.com/album"
+      - "music.apple.com"
+      - "podcasts.apple.com"
+      - "anchor.fm/s"
+      - "castbox.fm"
+      - "player.simplecast.com"
+      - "buzzsprout.com"
+      - "podbean.com/media/player"
+      - "audiomack.com/embed"
+    combined_media_patterns:
+      - "facebook.com/plugins"
+      - "twitter.com/i/videos"
+      - "tiktok.com/embed"
+      - "instagram.com/p"
 
   accessible_auth:
     login_form_keywords:
@@ -797,3 +806,27 @@ crawl_browser:
         - "コピーする"
         - "使用する"
         - "反映する"
+
+crawler:
+  include_data_uris: false
+  include_invisible: false
+  scroll_passes: 3
+  language:
+    cjk_langs:
+      - "ja"
+      - "zh"
+      - "zh-CN"
+      - "zh-TW"
+      - "zh-HK"
+      - "ko"
+  reporting:
+    max_warning_samples: 3
+  performance:
+    max_focus_steps: 100
+    max_hover_candidates: 12
+    max_ocr_images_per_run: 60
+
+
+crawl_browser:
+  width: 1920
+  height: 1080

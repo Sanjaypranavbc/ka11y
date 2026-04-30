@@ -369,6 +369,24 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 
 ---
 
+## 2.5.1 Pointer Gestures
+**Engine:** `ka11y-node/src/audits/wcag-2.5.1/` (three-layer module: `dom-inspector.js` + `gesture-library-detector.js` + `axe-rule-pointer-gestures.js`).
+
+| Technique | Kind | Status |
+|---|---|---|
+| G215 Use controls to achieve same result as path-based gesture | Sufficient | Partial |
+| G216 Single-point activation for spatial positions | Sufficient | Partial |
+| F105 Dragging without single-pointer alternative | Failure | Covered |
+| F107 Pointer gesture required with no alternative | Failure | Partial |
+
+**Known limitations**
+- Gesture logic wired directly via `addEventListener` in bundled JS (React, Vue, Angular) is invisible to the DOM selector layer; the `gesture-listener-detector.js` monkey-patch must be injected before navigation to capture those.
+- Map embeds are always flagged as candidates — keyboard zoom controls cannot be confirmed without interaction simulation.
+- Essential gesture exemption cannot be auto-detected (drawing apps, signature pads, etc.).
+- Cross-origin iframes not inspected.
+
+---
+
 ## 2.5.2 Pointer Cancellation
 **Engine:** `ka11y-node/pointer-cancellation.check.js`.
 
@@ -390,6 +408,21 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | G208 Visible label in accessible name | Sufficient | Covered |
 | G211 Match visible label | Sufficient | Covered |
 | F96 Accessible name missing visible label | Failure | Covered |
+
+---
+
+## 2.5.4 Motion Actuation
+**Engine:** `ka11y-node/src/audits/wcag-2.5.4/` (Multi-layer sensor detection).
+
+| Technique | Kind | Status |
+|---|---|---|
+| G213 Provide conventional controls | Sufficient | Partial (requires manual review) |
+| F106 Failure — motion required with no alternative | Failure | Covered (heuristic detection) |
+
+**Known limitations**
+- sensor input cannot be physically simulated; detection is based on script and API usage patterns.
+- Essential motion (pedometer, compass) is heuristically classified but requires human confirmation.
+- All findings are marked as "needs manual review".
 
 ---
 
@@ -548,9 +581,7 @@ Single-page scope only. Cannot observe step-to-step state in wizards.
 
 | SC | Level | Why it's not implemented |
 |---|---|---|
-| 1.2.2 Captions (Prerecorded) | A | Automatable; not yet wired |
-| 1.2.3 Audio Description | A | Automatable; not yet wired |
-| 1.2.4 Captions (Live) | AA | Automatable; not yet wired |
+| 1.2.4 Captions (Live) | AA | Partial |
 | 1.2.5 Audio Description (Prerecorded) | AA | Automatable; not yet wired |
 | 1.4.2 Audio Control | A | Automatable; not yet wired |
 | 2.2.1 Timing Adjustable | A | Partial (requires timeout detection) |

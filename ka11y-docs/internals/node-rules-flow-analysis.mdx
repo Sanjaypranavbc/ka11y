@@ -74,6 +74,8 @@ flowchart TD
         S21["Images of Text"]
         S22["Background Image Content ★"]
         S23["Pronunciation"]
+        S24["Pointer Gestures ★"]
+        S25["Motion Actuation ★"]
     end
 
     subgraph "Interactive Checks (Sequential) — 5 checks"
@@ -84,7 +86,7 @@ flowchart TD
         I5["Keyboard Trap"]
     end
 
-    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21 & S22 & S23
+    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21 & S22 & S23 & S24 & S25
     INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
 
@@ -1075,7 +1077,9 @@ flowchart TD
 | 2.4.8 | Location | location.check.js | Static | Static | Medium |
 | 2.4.9 | Link Purpose (Link Only) | link-purpose.check.js | Static | Static | High |
 | 2.4.13 | Focus Appearance | focus-appearance.check.js | Interactive | Interactive | High |
+| 2.5.1 | Pointer Gestures | src/audits/wcag-2.5.1/ | Static | Static | Medium |
 | 2.5.2 | Pointer Cancellation | pointer-cancellation.check.js | Static | Static | Medium |
+| 2.5.4 | Motion Actuation | src/audits/wcag-2.5.4/ | Static | Static | Low |
 | 2.5.7 | Dragging Movements | dragging-movements.check.js | Static | Static | Medium |
 | 3.1.6 | Pronunciation | pronunciation.check.js | Static | Static | High |
 | 3.2.1 | On Focus | on-focus.check.js | Interactive | Interactive | High |

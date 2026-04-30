@@ -135,6 +135,10 @@ Use the helpers in `ka11y-node/src/custom-checks/sharedAssets.js`:
 - `getCheckConfig(checkKey, context)`
 - `renderReasonTemplate(checkKey, reasonCode, params, context, fallback)`
 
+Example — adding 1.2.4 (Captions (Live)):
+
+Create `ka11y-node/src/custom-checks/captions-live.check.js` which exports SC = '1.2.4' and RULE_ID = 'custom-captions-live'. The check should heuristically detect live media (data-live attributes, HLS/m3u8, "live" badges, or known embed providers) and verify either <track kind="captions">, populated textTracks, or visible captioning elements on the page. Cross-origin embedded players should be flagged for manual verification.
+
 ### Step 4: Return structured `elements`
 
 This is the most important rule for coverage.

@@ -1,0 +1,75 @@
+---
+title: "2.5.4 Motion Actuation"
+description: "WCAG 2.5.4 — functionality operated by device or user motion can also be operated by UI components and can be disabled"
+---
+
+<Info>
+  **Level A** · WCAG 2.1 / 2.2 · Engine: `ka11y-node` · Module: `src/audits/wcag-2.5.4/index.js`
+</Info>
+
+## What it checks
+
+Any functionality that is triggered by moving the device (e.g. shaking to undo, tilting to scroll) or by the user's motion (e.g. waving at a camera) must satisfy two requirements:
+
+| Requirement | Meaning |
+|---|---|
+| **UI Alternative** | The same action can be performed using standard UI controls (buttons, links, keyboard). |
+| **Motion can be disabled** | The user can turn off the motion-based trigger to prevent accidental activation. |
+
+## Why this matters
+
+Users with motor impairments, tremors, or those who have their devices mounted (e.g. on a wheelchair) may not be able to perform specific motions or may trigger them accidentally. Providing a non-motion alternative and a way to disable the sensor-based trigger ensures the interface remains usable for them.
+
+## Detection strategy
+
+Since sensor input cannot be physically simulated in a desktop automation context, this module uses a **multi-layered static and runtime analysis** to identify potential motion usage:
+
+| Layer | How it works |
+|---|---|
+| **Runtime Handlers** | Checks `window.ondevicemotion` and `window.ondeviceorientation` properties and jQuery's event registry across all frames. |
+| **Script Scanning** | Scans all inline and same-origin external scripts for motion API keywords (`DeviceMotionEvent`, `accelerationIncludingGravity`, `shake`, etc.). |
+| **Library Fingerprinting** | Identifies known motion-handling libraries like `shake.js` or `gyroscape` via global variables and script URLs. |
+| **iOS Permission API** | Detects calls to `DeviceMotionEvent.requestPermission()`, a strong signal of motion intent in modern web apps. |
+
+## Essential motion classification
+
+Some motion is **essential** to the function and is exempt from the requirement (e.g. a step counter or a spirit level). The auditor uses heuristics to identify these contexts:
+- Pedometer / Fitness apps (`steps`, `workout`)
+- Navigation / Compass tools (`gps`, `compass`)
+- VR / AR experiences (`WebXR`, `three.js`)
+- Measurement tools (`level`, `tilt angle`)
+
+## Manual review required
+
+**Automated testing of SC 2.5.4 has hard limits.** All findings from this module are emitted with `manualReviewRequired: true`. 
+
+### Human Auditor Checklist
+1. **Open the page on a real mobile device.**
+2. **Shake or tilt the device.** Does any action trigger?
+3. **If yes — is there a button that does the same thing?** (e.g. a visible "Undo" button).
+4. **Is there a settings menu** to turn this motion off?
+5. **Verify "essential" claims.** Is the motion truly required for the feature to exist?
+
+## Output structure
+
+`auditMotionActuation()` returns a structured result including:
+- `motionDetected`: Boolean
+- `confidence`: `"high"` | `"medium"` | `"low"`
+- `manualReviewItems`: List of potential violations for human triage
+- `essentialClassification`: Heuristic result for exemption
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Shake-to-Undo only | A notes app that only lets you undo by shaking, with no "Undo" button in the toolbar. |
+| No "Off" switch | A game that uses tilt for steering but has no setting to switch to a D-pad or joystick. |
+| Unguarded sensor use | A site that refreshes data on shake but provides no way to lock this behavior. |
+
+## Suggested fix
+
+1. **Add a UI control**: Ensure every motion-triggered action has a corresponding button or menu item.
+2. **Add a toggle**: Include a "Disable Motion Actuation" setting in your application's accessibility or general preferences.
+3. **Respect OS settings**: Check for system-level "Reduce Motion" preferences if possible via media queries (`prefers-reduced-motion`).
+
+See [Technique coverage matrix](/rules/coverage-matrix#2-5-4-motion-actuation) for more detail.
