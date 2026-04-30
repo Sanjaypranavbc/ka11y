@@ -523,6 +523,8 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **2.5.3 Label in Name.** For each interactive element, NFC-normalized casefolded visible label text is compared against the computed accessible name. Failure if visible label is non-empty and accessible name does not contain it.
 
+**2.5.4 Motion Actuation.** Multi-layer sensor detection checks `ondevicemotion` and `ondeviceorientation` in the runtime, scans inline and external scripts for sensor API keywords, and fingerprints known motion libraries (e.g. shake.js). Findings are emitted with `manualReviewRequired: true` because UI alternatives and off-switches cannot be fully simulated. Essential context (fitness, compass, VR) is heuristically classified.
+
 **2.5.7 Dragging Movements.** Detects `draggable=true`, HTML5 drag listeners, Swiper, Slick, native range. Flags when no alternative single-pointer action (button, keyboard) is present in vicinity.
 
 **2.5.8 Target Size (Minimum).** Rendered `getBoundingClientRect` against 24x24. Exceptions implemented for inline (display inline plus paragraph parent), UA-controlled (`appearance` unchanged), and offset (theoretical 24 box around centre does not intersect neighbours).
