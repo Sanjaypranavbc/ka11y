@@ -28,6 +28,13 @@ let auditPointerGestures;
 let injectGestureDetector;
 
 beforeAll(async () => {
+  // Skip setup unless at least one test URL is configured — avoids ESM dynamic import
+  // overhead when running unit tests in CI or locally without integration targets.
+  if (!IS_EN_CONFIGURED && !IS_JA_CONFIGURED) {
+    console.warn('Skipping WCAG 2.5.1 integration tests — URLs not configured');
+    return;
+  }
+
   /* Dynamic import for the ESM audit module */
   ({ auditPointerGestures } = await import('../audits/wcag-2.5.1/index.js'));
   ({ injectGestureDetector } = await import('../audits/wcag-2.5.1/gesture-listener-detector.js'));
