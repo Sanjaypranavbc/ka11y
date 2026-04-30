@@ -13,6 +13,8 @@ const STATIC_ORDER = [
   'custom-character-key-shortcuts',
   'custom-pointer-cancellation',
   'custom-dragging-movements',
+  'custom-pointer-gestures',
+  'custom-motion-actuation',
   'custom-consistent-help',
   'custom-error-suggestion',
   'custom-error-prevention',
@@ -21,6 +23,7 @@ const STATIC_ORDER = [
   'custom-use-of-color',
   'custom-audio-transcript',
   'custom-captions-prerecorded',
+  'custom-captions-live',
   'custom-audio-description',
   'custom-audio-control',
   'custom-link-purpose',
@@ -48,6 +51,8 @@ const LEGACY_META = {
   'custom-character-key-shortcuts': { mode: 'static',    fallbackDescription: 'Single character key shortcuts must be remappable or disableable' },
   'custom-pointer-cancellation':  { mode: 'static',      fallbackDescription: 'Functionality that uses a single pointer must be cancellable' },
   'custom-dragging-movements':    { mode: 'static',      fallbackDescription: 'Dragging movements must have a single-pointer alternative' },
+  'custom-pointer-gestures':      { mode: 'static',      fallbackDescription: 'Complex gestures must have a single-pointer alternative' },
+  'custom-motion-actuation':      { mode: 'static',      fallbackDescription: 'Motion-based functionality must have a UI alternative and be disableable' },
   'custom-consistent-help':       { mode: 'static',      fallbackDescription: 'Help mechanisms must appear in a consistent location across pages' },
   'custom-error-suggestion':      { mode: 'static',      fallbackDescription: 'Error messages must suggest how to correct mistakes' },
   'custom-error-prevention':      { mode: 'static',      fallbackDescription: 'High-risk submissions must be reversible, checked, or confirmed' },
@@ -253,16 +258,6 @@ async function runAll(page, context = {}) {
   const staticR = await runStaticChecks(page, context);
   const interactiveR = await runInteractiveChecks(page, context);
   return [...staticR, ...interactiveR];
-}
-
-module.exports = {
-  _loadCheckDefinitions,
-  mergeWithAxe,
-  runAll,
-  runInteractiveChecks,
-  runStaticChecks,
-};
-[...staticR, ...interactiveR];
 }
 
 module.exports = {
