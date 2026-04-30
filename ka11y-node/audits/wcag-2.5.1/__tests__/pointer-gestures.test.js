@@ -10,7 +10,7 @@
 
 import { getSelectorBank }           from '../multilingual-selectors.js';
 import { buildViolation }            from '../violation-builder.js';
-import { adaptToReportFormat }       from '../../reporters/wcag-251-report-adapter.js';
+import { adaptToReportFormat }       from '../../../reporters/wcag-251-report-adapter.js';
 
 /* ─────────────────────────────────────────────────────────────────────────
    1. getSelectorBank — Japanese returns merged selectors
@@ -234,7 +234,7 @@ describe('adaptToReportFormat', () => {
 /*
 import { chromium }           from 'playwright';
 import { auditPointerGestures } from '../index.js';
-import { adaptToReportFormat }  from '../../reporters/wcag-251-report-adapter.js';
+import { adaptToReportFormat }  from '../../../reporters/wcag-251-report-adapter.js';
 
 const FIXTURE_URL = 'http://localhost:3000/fixture-swiper.html';
 
