@@ -56,6 +56,7 @@ const LEGACY_META = {
   'custom-use-of-color':          { mode: 'static',      fallbackDescription: 'Color must not be the only visual means of conveying information' },
   'custom-audio-transcript':      { mode: 'static',      fallbackDescription: 'Audio-only prerecorded content must have a text alternative' },
   'custom-captions-prerecorded':  { mode: 'static',      fallbackDescription: 'Prerecorded video content must have captions' },
+  'custom-captions-live':         { mode: 'static',      fallbackDescription: 'Live audio or live video content must have real-time captions' },
   'custom-audio-description':     { mode: 'static',      fallbackDescription: 'Prerecorded synchronized media must have an audio description or full-text alternative' },
   'custom-audio-control':         { mode: 'static',      fallbackDescription: 'Audio that plays automatically for more than 3 seconds must have a pause/stop/volume control' },
   'custom-link-purpose':          { mode: 'static',      fallbackDescription: 'Link purpose must be determinable from link text alone' },
@@ -252,6 +253,16 @@ async function runAll(page, context = {}) {
   const staticR = await runStaticChecks(page, context);
   const interactiveR = await runInteractiveChecks(page, context);
   return [...staticR, ...interactiveR];
+}
+
+module.exports = {
+  _loadCheckDefinitions,
+  mergeWithAxe,
+  runAll,
+  runInteractiveChecks,
+  runStaticChecks,
+};
+[...staticR, ...interactiveR];
 }
 
 module.exports = {
