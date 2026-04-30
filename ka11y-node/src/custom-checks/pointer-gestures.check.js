@@ -1,6 +1,6 @@
 'use strict';
 
-const { auditPointerGestures } = require('../../audits/wcag-2.5.1/index.js');
+const { auditPointerGestures } = require('../audits/wcag-2.5.1/index.js');
 const { getSharedRuleContext, renderLocalizedText } = require('./sharedAssets');
 
 const SC = '2.5.1';

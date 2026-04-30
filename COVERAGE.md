@@ -2,7 +2,7 @@
 
 **Report date:** 2026-04-30
 **Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + 29 custom checks).
-**Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), 2026-04-30 2.5.1 Pointer Gestures three-layer audit module (`audits/wcag-2.5.1/`), and 2026-03-26 empirical validation against seven production sites.
+**Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), 2026-04-30 2.5.1 Pointer Gestures three-layer audit module (`src/src/audits/wcag-2.5.1/`), and 2026-03-26 empirical validation against seven production sites.
 
 ---
 
@@ -16,7 +16,7 @@
 | Level AA coverage | **23 of 26** (88.5 percent) |
 | Level AAA coverage | **6 of 30** (20.0 percent) |
 | Robust principle coverage | **3 of 3** (100 percent) |
-| Custom Node checks shipped | 28 `*.check.js` files in `ka11y-node/src/custom-checks/`; plus `audits/wcag-2.5.1/` three-layer module |
+| Custom Node checks shipped | 28 `*.check.js` files in `ka11y-node/src/custom-checks/`; plus `src/src/audits/wcag-2.5.1/` three-layer module |
 | Python rendered evaluators | 7 (resize, reflow, text-spacing, hover-focus, orientation, focus-not-obscured min and enhanced) |
 | Python image and CV pipelines | OCR plus classifier-driven image pipeline across 1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 4.1.2 |
 | Real-site validation (2026-03-26) | 7 sites, 38 SCs observed firing |
@@ -30,7 +30,7 @@
 4. 2026-04-24 gap pass extended Node heuristics for 1.2.1 F30 filename-only transcript links, 1.4.1 non-link color-only indicators (F13/F81), 2.1.2 scripted key suppression and non-modal popup dismissibility (F58/F60), 2.4.5 related-links/page-index mechanisms (G125/G126), 2.4.8 table-of-contents signal (G127), 3.3.4 undo-window safeguards (G164), and 4.1.3 toast-without-ARIA (F114).
 5. Image-capture failures now propagate end-to-end as `capture_status` with a distinct `incomplete` finding status (was silently treated as N/A before).
 6. 3.3.7 Redundant Entry is confirmed to be wired up via `redundant-entry.check.js` (was undercounted in the prior report).
-7. 2.5.1 Pointer Gestures (2026-04-30) added via a new three-layer audit module (`audits/wcag-2.5.1/`): CSS selector bank matching (carousels, drag-drop, map embeds, touch widgets, path-based interactions), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, etc.), and a custom axe-core rule for gesture data-attributes. Full EN + JA multilingual selector banks. Escape-hatch validator reduces false positives by detecting sibling/child buttons, aria-controls, keyboard handlers, and tabIndex alternatives. Findings with a detected escape hatch are emitted as warnings rather than violations.
+7. 2.5.1 Pointer Gestures (2026-04-30) added via a new three-layer audit module (`src/src/audits/wcag-2.5.1/`): CSS selector bank matching (carousels, drag-drop, map embeds, touch widgets, path-based interactions), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, etc.), and a custom axe-core rule for gesture data-attributes. Full EN + JA multilingual selector banks. Escape-hatch validator reduces false positives by detecting sibling/child buttons, aria-controls, keyboard handlers, and tabIndex alternatives. Findings with a detected escape hatch are emitted as warnings rather than violations.
 
 ---
 
@@ -141,10 +141,10 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 2.4.11 | Focus Not Obscured (Minimum) | AA | No | Yes | Covered | High | Python rendered focus-not-obscured-minimum evaluator | Focused items should not be fully hidden behind overlays. |
 | 2.4.12 | Focus Not Obscured (Enhanced) | AAA | No | Yes | Covered | High | Python rendered focus-not-obscured-enhanced evaluator | Focused items should not be obscured at all. |
 | 2.4.13 | Focus Appearance | AA | Yes | Yes | Covered | Medium | `focus-appearance.check.js` interactive snapshot plus `policy_2_4_13.py` (outline width 2 px or enclosure plus 3:1 contrast) | Focus indicator size and contrast must be strong enough. |
-| 2.5.1 | Pointer Gestures | A | Yes | No | Covered | Medium | New `audits/wcag-2.5.1/` three-layer module: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, etc.), custom axe-core rule for gesture data-attributes; escape-hatch validator reduces false positives; full EN + JA multilingual selector banks | Complex gestures need a simple pointer alternative. |
+| 2.5.1 | Pointer Gestures | A | Yes | No | Covered | Medium | New `src/src/audits/wcag-2.5.1/` three-layer module: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, etc.), custom axe-core rule for gesture data-attributes; escape-hatch validator reduces false positives; full EN + JA multilingual selector banks | Complex gestures need a simple pointer alternative. |
 | 2.5.2 | Pointer Cancellation | A | Yes | No | Covered | Low | `pointer-cancellation.check.js`: flags `onpointerdown` / `onmousedown` triggering navigation or submit without `pointercancel` or `preventDefault` | Pointer actions should not trigger unexpectedly on the down event. |
 | 2.5.3 | Label in Name | A | Yes | Yes | Covered | High | `label_in_name_auditor.py`: NFC-normalized casefolded visible label vs computed accessible name | Visible label text should also exist in the accessible name. |
-| 2.5.4 | Motion Actuation | A | Yes | No | Covered | Low | `audits/wcag-2.5.4/`: Multi-layer sensor detection; emits manual review required | Motion-based actions need an alternative and an off switch. |
+| 2.5.4 | Motion Actuation | A | Yes | No | Covered | Low | `src/audits/wcag-2.5.4/`: Multi-layer sensor detection; emits manual review required | Motion-based actions need an alternative and an off switch. |
 | 2.5.5 | Target Size | AAA | No | No | Missing | Not covered | Tightening 2.5.8 to 44 px would unlock | Targets should use the larger AAA minimum size. |
 | 2.5.6 | Concurrent Input Mechanisms | AAA | No | No | Missing | Not covered | Roadmap | Different input methods should remain available together. |
 | 2.5.7 | Dragging Movements | AA | Yes | No | Covered | Medium | `dragging-movements.check.js`: `draggable=true`, HTML5 drag listeners, library detection (Swiper, Slick) | Drag operations need a simpler non-drag alternative. |
@@ -388,7 +388,7 @@ G53, H30, F84 Covered; G91, H33 Partial. Keyword list is finite; localization En
 | F105 Failure — dragging without single-pointer alternative | Failure | Covered | `draggable="true"` elements without button/keyboard alternative flagged. |
 | F107 Failure — pointer gesture required with no alternative | Failure | Partial | Gesture data-attributes (`data-swipe`, `data-pinch`, `data-タッチ`, etc.) flagged; gesture logic inside bundled JS event listeners is invisible. |
 
-Multi-layer detection: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (window-global + script `src`), and a custom axe-core rule. Escape-hatch validator checks click handlers, keyboard handlers, aria-controls, button siblings, and tabIndex. EN + JA multilingual selector banks. See `audits/wcag-2.5.1/` for the full implementation.
+Multi-layer detection: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (window-global + script `src`), and a custom axe-core rule. Escape-hatch validator checks click handlers, keyboard handlers, aria-controls, button siblings, and tabIndex. EN + JA multilingual selector banks. See `src/src/audits/wcag-2.5.1/` for the full implementation.
 
 ### 2.5.2 Pointer Cancellation (Level A)
 
@@ -517,7 +517,7 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **2.4.13 Focus Appearance.** Snapshots each focusable element before and after `focus()`. Requires outline-width 2 px or enclosure plus 3:1 contrast against adjacent color. Empirically failed on 6 of 7 sites in 2026-03-26 scan, the most common failure observed.
 
-**2.5.1 Pointer Gestures.** Three-layer module (`audits/wcag-2.5.1/`). Layer 1 (dom-pattern): a multilingual CSS selector bank (EN + JA) matches carousel containers, drag-and-drop wrappers, map embeds, touch-gesture widgets, and path-based interaction elements; each matched element is passed to an escape-hatch validator that checks for click handlers, keyboard event handlers, `aria-controls`, sibling/child buttons, and tab-focusable siblings. Layer 2 (library-detected): window-global variable checks and script `src` attribute scanning fingerprint Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, Embla, TouchSwipe, and ZingTouch. Layer 3 (axe-rule): a custom axe-core check runs on the serialised page DOM for elements with gesture data-attributes lacking any single-pointer alternative. Findings with a detected escape hatch are downgraded to warnings; remaining findings are violations.
+**2.5.1 Pointer Gestures.** Three-layer module (`src/src/audits/wcag-2.5.1/`). Layer 1 (dom-pattern): a multilingual CSS selector bank (EN + JA) matches carousel containers, drag-and-drop wrappers, map embeds, touch-gesture widgets, and path-based interaction elements; each matched element is passed to an escape-hatch validator that checks for click handlers, keyboard event handlers, `aria-controls`, sibling/child buttons, and tab-focusable siblings. Layer 2 (library-detected): window-global variable checks and script `src` attribute scanning fingerprint Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, Embla, TouchSwipe, and ZingTouch. Layer 3 (axe-rule): a custom axe-core check runs on the serialised page DOM for elements with gesture data-attributes lacking any single-pointer alternative. Findings with a detected escape hatch are downgraded to warnings; remaining findings are violations.
 
 **2.5.2 Pointer Cancellation.** Finds elements with `onpointerdown` or `onmousedown` triggering navigation or submit without matching up-event; checks for `pointercancel` or `preventDefault` patterns.
 

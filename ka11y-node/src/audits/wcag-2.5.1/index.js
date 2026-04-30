@@ -6,7 +6,7 @@
  * Layer "axe-rule"        — Custom axe-core rule for attribute-based detection.
  *
  * Usage:
- *   const { auditPointerGestures } = require('./audits/wcag-2.5.1/index.js');
+ *   const { auditPointerGestures } = require('./src/audits/wcag-2.5.1/index.js');
  *   const result = await auditPointerGestures(page, { pageUrl, runAxeRule: true });
  */
 
@@ -270,3 +270,4 @@ module.exports = {
 h }     from './escape-hatch-validator.js';
 export { buildViolation }          from './violation-builder.js';
 module.exports = { auditPointerGestures };
+;

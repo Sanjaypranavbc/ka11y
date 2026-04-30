@@ -1,6 +1,6 @@
 'use strict';
 
-const { auditMotionActuation } = require('../../audits/wcag-2.5.4/index.js');
+const { auditMotionActuation } = require('../audits/wcag-2.5.4/index.js');
 const { getSharedRuleContext, renderLocalizedText } = require('./sharedAssets');
 
 const SC = '2.5.4';

@@ -2,7 +2,7 @@
  * @fileoverview Unit + integration-stub tests for the WCAG 2.5.1 Pointer Gestures module.
  *
  * Run with:
- *   NODE_OPTIONS='--experimental-vm-modules' npx jest audits/wcag-2.5.1/__tests__/pointer-gestures.test.js
+ *   NODE_OPTIONS='--experimental-vm-modules' npx jest src/audits/wcag-2.5.1/__tests__/pointer-gestures.test.js
  *
  * The integration test at the bottom requires Playwright and a local HTML fixture;
  * it is commented out and can be enabled by replacing FIXTURE_URL below.
@@ -10,7 +10,7 @@
 
 const { getSelectorBank } = require('../multilingual-selectors.js');
 const { buildViolation } = require('../violation-builder.js');
-const { adaptToReportFormat } = require('../../../reporters/wcag-251-report-adapter.js');
+const { adaptToReportFormat } = require('../../../../reporters/wcag-251-report-adapter.js');
 
 /* ─────────────────────────────────────────────────────────────────────────
    1. getSelectorBank — Japanese returns merged selectors
@@ -234,7 +234,7 @@ describe('adaptToReportFormat', () => {
 /*
 const { chromium } = require('playwright');
 const { auditPointerGestures } = require('../index.js');
-const { adaptToReportFormat } = require('../../../reporters/wcag-251-report-adapter.js');
+const { adaptToReportFormat } = require('../../../../reporters/wcag-251-report-adapter.js');
 
 const FIXTURE_URL = 'http://localhost:3000/fixture-swiper.html';
 

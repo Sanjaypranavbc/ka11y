@@ -3,7 +3,7 @@
  */
 const { classifyMotionAsEssential } = require('../essential-motion-classifier.js');
 const { buildViolation } = require('../violation-builder.js');
-const { adaptToReportFormat, generateManualChecklistHTML } = require('../../../reporters/wcag-254-report-adapter.js');
+const { adaptToReportFormat, generateManualChecklistHTML } = require('../../../../reporters/wcag-254-report-adapter.js');
 
 describe('WCAG 2.5.4 Motion Actuation', () => {
 

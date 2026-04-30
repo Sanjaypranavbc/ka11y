@@ -9,7 +9,7 @@
  * Formats a violations array for output or downstream consumption.
  *
  * @param {Array<Object>} violations
- *   Array returned by auditPointerGestures() from audits/wcag-2.5.1/index.js.
+ *   Array returned by auditPointerGestures() from src/audits/wcag-2.5.1/index.js.
  * @param {"json"|"flat"|"grouped-by-lang"} reportFormat
  *   Output format:
  *   - "flat"           — returns the violations array as-is (no transformation)

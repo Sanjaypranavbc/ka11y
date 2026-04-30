@@ -4,7 +4,7 @@ description: "WCAG 2.5.1 — all functionality using multipoint or path-based ge
 ---
 
 <Info>
-  **Level AA** · WCAG 2.1 / 2.2 · Engine: `ka11y-node` · Module: `audits/wcag-2.5.1/index.js`
+  **Level AA** · WCAG 2.1 / 2.2 · Engine: `ka11y-node` · Module: `src/audits/wcag-2.5.1/index.js`
 </Info>
 
 ## What it checks
@@ -91,7 +91,7 @@ Each `ViolationRecord` contains:
 ## Usage
 
 ```js
-import { auditPointerGestures } from './audits/wcag-2.5.1/index.js';
+import { auditPointerGestures } from './src/audits/wcag-2.5.1/index.js';
 import { adaptToReportFormat }  from './reporters/wcag-251-report-adapter.js';
 
 // Inside your per-page crawler handler:
@@ -109,15 +109,15 @@ const reportItems = adaptToReportFormat(result);
 
 | File | Purpose |
 |---|---|
-| `audits/wcag-2.5.1/index.js` | Main orchestrator — call `auditPointerGestures()` |
-| `audits/wcag-2.5.1/multilingual-selectors.js` | CSS selector banks (EN + JA); `getSelectorBank(lang)` |
-| `audits/wcag-2.5.1/gesture-library-detector.js` | Window global + script src fingerprinting |
-| `audits/wcag-2.5.1/dom-inspector.js` | Live DOM query and bounding-box extraction |
-| `audits/wcag-2.5.1/escape-hatch-validator.js` | Per-element single-pointer alternative checks |
-| `audits/wcag-2.5.1/axe-rule-pointer-gestures.js` | axe-core rule + check definitions |
-| `audits/wcag-2.5.1/violation-builder.js` | Canonical violation object factory |
+| `src/audits/wcag-2.5.1/index.js` | Main orchestrator — call `auditPointerGestures()` |
+| `src/audits/wcag-2.5.1/multilingual-selectors.js` | CSS selector banks (EN + JA); `getSelectorBank(lang)` |
+| `src/audits/wcag-2.5.1/gesture-library-detector.js` | Window global + script src fingerprinting |
+| `src/audits/wcag-2.5.1/dom-inspector.js` | Live DOM query and bounding-box extraction |
+| `src/audits/wcag-2.5.1/escape-hatch-validator.js` | Per-element single-pointer alternative checks |
+| `src/audits/wcag-2.5.1/axe-rule-pointer-gestures.js` | axe-core rule + check definitions |
+| `src/audits/wcag-2.5.1/violation-builder.js` | Canonical violation object factory |
 | `reporters/wcag-251-report-adapter.js` | Flat-array adapter for report builder |
-| `audits/wcag-2.5.1/__tests__/pointer-gestures.test.js` | Unit + integration-stub tests |
+| `src/audits/wcag-2.5.1/__tests__/pointer-gestures.test.js` | Unit + integration-stub tests |
 
 ## Technique coverage
 

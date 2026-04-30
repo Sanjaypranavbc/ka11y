@@ -36,8 +36,8 @@ beforeAll(async () => {
   }
 
   /* Dynamic import for the ESM audit module */
-  ({ auditPointerGestures } = await import('../audits/wcag-2.5.1/index.js'));
-  ({ injectGestureDetector } = await import('../audits/wcag-2.5.1/gesture-listener-detector.js'));
+  ({ auditPointerGestures } = await import('../src/audits/wcag-2.5.1/index.js'));
+  ({ injectGestureDetector } = await import('../src/audits/wcag-2.5.1/gesture-listener-detector.js'));
 
   browser = await puppeteer.launch({
     headless: 'new',
