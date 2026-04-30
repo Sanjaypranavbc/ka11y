@@ -21,15 +21,12 @@ const { validateEscapeHatch } = require('./escape-hatch-validator.js');
 const { buildViolation } = require('./violation-builder.js');
 const { pointerGestureRule, pointerGestureCheck } = require('./axe-rule-pointer-gestures.js');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const _require  = createRequire(import.meta.url);
-
 /* Resolve absolute path to bundled axe-core (used as fallback for addScriptTag). */
 let _resolvedAxePath;
 try {
-  _resolvedAxePath = _require.resolve('axe-core/axe.min.js');
+  _resolvedAxePath = require.resolve('axe-core/axe.min.js');
 } catch (_) {
-  _resolvedAxePath = path.join(__dirname, '..', '..', 'node_modules', 'axe-core', 'axe.min.js');
+  _resolvedAxePath = path.join(__dirname, '..', '..', '..', 'node_modules', 'axe-core', 'axe.min.js');
 }
 
 /* ── Internal helpers ───────────────────────────────────────────────────── */
