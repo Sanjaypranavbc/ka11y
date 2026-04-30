@@ -260,9 +260,13 @@ async function auditPointerGestures(page, options = {}) {
   };
 }
 
-/* Re-export helpers so callers don't need separate imports for common utilities. */
-export { getSelectorBank } from './multilingual-selectors.js';
-export { detectGestureLibraries }  from './gesture-library-detector.js';
-export { validateEscapeHatch }     from './escape-hatch-validator.js';
+module.exports = {
+  auditPointerGestures,
+  getSelectorBank,
+  detectGestureLibraries,
+  validateEscapeHatch,
+  buildViolation
+};
+h }     from './escape-hatch-validator.js';
 export { buildViolation }          from './violation-builder.js';
 module.exports = { auditPointerGestures };
