@@ -24,13 +24,13 @@ export async function classifyMotionAsEssential(page, motionEvidence) {
 
     const text = data.text;
 
-    if (/(steps|pedometer|fitness|workout|calories|歩数|フィットネス)/.test(text)) {
+    if (/\b(steps|pedometer|fitness|workout|calories|歩数|フィットネス)\b/.test(text)) {
        return { likelyEssential: true, reason: 'Pedometer / fitness context detected' };
     }
-    if (/(compass|navigation|ar|augmented reality|コンパス|ナビ)/.test(text)) {
+    if (/\b(gps|compass|ar|augmented reality|コンパス)\b/.test(text)) {
        return { likelyEssential: true, reason: 'Navigation / compass context detected' };
     }
-    if (/(level|measure|tilt angle|水平器)/.test(text)) {
+    if (/\b(level|measure|tilt angle|水平器)\b/.test(text)) {
        return { likelyEssential: true, reason: 'Spirit level / measurement tool context detected' };
     }
     if (/(vr|virtual reality|webxr)/.test(text) || (text.includes('three.js') && text.includes('camera'))) {

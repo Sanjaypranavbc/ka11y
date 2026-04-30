@@ -85,6 +85,22 @@ async function run(page, context = {}) {
       if (!isFlex && !isGrid && !isMultiCol) continue;
       if (containerCount++ >= maxC) break;
 
+      // Multi-column layout: visual reading order may diverge from DOM order
+      if (isMultiCol) {
+        results.push({
+          tagName: el.tagName.toLowerCase(),
+          element_id: el.id || null,
+          target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+          tag: el.tagName.toUpperCase(),
+          display,
+          flexDir: null,
+          orders: null,
+          reasonCode: 'multi-column-layout',
+          html: el.outerHTML.slice(0, 150),
+        });
+        continue;
+      }
+
       const children = Array.from(el.children).filter(ch => {
         // Only consider visible children — exclude all common hiding patterns
         const cs = window.getComputedStyle(ch);
@@ -138,11 +154,31 @@ async function run(page, context = {}) {
         orderReorders = visualOrder.some((vi, di) => vi !== domIndices[di]);
       }
 
-      // Grid placement reordering: explicit grid-column/row-start on children
+      // Grid auto-flow dense: may place items out of DOM order
+      if (isGrid) {
+        const gridAutoFlow = style.gridAutoFlow || '';
+        if (gridAutoFlow.includes('dense')) {
+          results.push({
+            tagName: el.tagName.toLowerCase(),
+            element_id: el.id || null,
+            target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+            tag: el.tagName.toUpperCase(),
+            display,
+            flexDir: null,
+            orders: null,
+            reasonCode: 'grid-auto-flow-dense',
+            html: el.outerHTML.slice(0, 150),
+          });
+          continue;
+        }
+      }
+
+      // Grid explicit placement: grid-row or grid-column (start or end) on children
       if (isGrid) {
         const hasGridPlacement = children.some(ch => {
           const ccs = window.getComputedStyle(ch);
-          return ccs.gridColumnStart !== 'auto' || ccs.gridRowStart !== 'auto';
+          return ccs.gridColumnStart !== 'auto' || ccs.gridRowStart !== 'auto' ||
+                 ccs.gridColumnEnd   !== 'auto' || ccs.gridRowEnd   !== 'auto';
         });
         if (hasGridPlacement) {
           results.push({
