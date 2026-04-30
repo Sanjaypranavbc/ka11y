@@ -10,9 +10,9 @@
 
 | Metric | Value |
 |---|---|
-| WCAG 2.2 Success Criteria emitted (combined) | **57 of 87** |
-| Overall coverage | **65.5 percent** |
-| Level A coverage | **29 of 31** (93.5 percent) |
+| WCAG 2.2 Success Criteria emitted (combined) | **58 of 87** |
+| Overall coverage | **66.7 percent** |
+| Level A coverage | **30 of 31** (96.8 percent) |
 | Level AA coverage | **22 of 26** (84.6 percent) |
 | Level AAA coverage | **6 of 30** (20.0 percent) |
 | Robust principle coverage | **3 of 3** (100 percent) |
