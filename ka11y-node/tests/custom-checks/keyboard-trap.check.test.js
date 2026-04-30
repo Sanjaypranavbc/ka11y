@@ -180,11 +180,14 @@ describe('keyboard-trap.check (WCAG 2.1.2)', () => {
       [], [], [], [], [], [], // arrow-role probes (tree..radiogroup)
       [],        // dialogs
       [],        // non-modal candidates
-      evaluate: jest.fn().mockImplementation(() => { console.log("evaluate called, idx=", idx); return Promise.resolve(responses[idx++] ?? null); }),
+      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // index 11
+      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // index 12
+      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // index 13
+      [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }], // index 14
     ];
     let idx = 0;
     const page = {
-      evaluate: jest.fn().mockImplementation(() => Promise.resolve(responses[idx++] ?? null)),
+      evaluate: jest.fn().mockImplementation(() => Promise.resolve(responses[idx++] ?? [{ type: 'script-key-suppression', keys: 'Tab', snippet: 'event.preventDefault()' }])),
       keyboard: {
         press: jest.fn().mockResolvedValue(undefined),
         down: jest.fn().mockResolvedValue(undefined),

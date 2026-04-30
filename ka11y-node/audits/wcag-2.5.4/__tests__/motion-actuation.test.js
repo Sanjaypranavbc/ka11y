@@ -1,9 +1,9 @@
 /**
  * @fileoverview Tests for WCAG 2.5.4 Motion Actuation
  */
-import { classifyMotionAsEssential } from '../essential-motion-classifier.js';
-import { buildViolation } from '../violation-builder.js';
-import { adaptToReportFormat, generateManualChecklistHTML } from '../../../reporters/wcag-254-report-adapter.js';
+const { classifyMotionAsEssential } = require('../essential-motion-classifier.js');
+const { buildViolation } = require('../violation-builder.js');
+const { adaptToReportFormat, generateManualChecklistHTML } = require('../../../reporters/wcag-254-report-adapter.js');
 
 describe('WCAG 2.5.4 Motion Actuation', () => {
 
