@@ -125,7 +125,7 @@ function gestureDetectorInitScript() {
  * @param {Object} page - A Playwright or Puppeteer Page instance
  * @returns {Promise<void>}
  */
-export async function injectGestureDetector(page) {
+async function injectGestureDetector(page) {
   if (typeof page.addInitScript === 'function') {
     await page.addInitScript(gestureDetectorInitScript);
   } else if (typeof page.evaluateOnNewDocument === 'function') {
@@ -147,8 +147,9 @@ export async function injectGestureDetector(page) {
  * @param {Object} page - A Playwright or Puppeteer Page instance
  * @returns {Promise<Array<{selector: string, events: string[], hasClickAlternative: boolean}>>}
  */
-export async function extractGestureRegistry(page) {
+async function extractGestureRegistry(page) {
   return page.evaluate(() =>
     (window.__gestureRegistry || []).filter(e => e.events.length > 0)
   );
 }
+module.exports = { injectGestureDetector };

@@ -1,12 +1,12 @@
 /**
  * @fileoverview WCAG 2.5.4 Motion Actuation - Audit Orchestrator
  */
-import { detectMotionEventListeners } from './motion-event-detector.js';
-import { detectMotionLibraries } from './motion-library-detector.js';
-import { classifyMotionAsEssential } from './essential-motion-classifier.js';
-import { validateDisableControl } from './disable-control-validator.js';
-import { buildViolation } from './violation-builder.js';
-import { motionActuationRule, registerMotionActuationRule } from './axe-rule-motion-actuation.js';
+const { detectMotionEventListeners } = require('./motion-event-detector.js');
+const { detectMotionLibraries } = require('./motion-library-detector.js');
+const { classifyMotionAsEssential } = require('./essential-motion-classifier.js');
+const { validateDisableControl } = require('./disable-control-validator.js');
+const { buildViolation } = require('./violation-builder.js');
+const { motionActuationRule, registerMotionActuationRule } = require('./axe-rule-motion-actuation.js');
 
 async function auditMotionActuation(page, options = {}) {
   const {

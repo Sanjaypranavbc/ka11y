@@ -232,7 +232,7 @@ const _ja = {
  * @param {string} lang - BCP 47 language tag (e.g. "en", "ja", "ja-JP")
  * @returns {SelectorBank}
  */
-export function getSelectorBank(lang = 'en') {
+function getSelectorBank(lang = 'en') {
   const isJapanese = String(lang).toLowerCase().startsWith('ja');
 
   if (!isJapanese) return { ..._en };
@@ -247,5 +247,6 @@ export function getSelectorBank(lang = 'en') {
 }
 
 /* Backward-compat named exports (used by gesture-listener-detector.js, axe rule, etc.) */
-export const enSelectors = _en;
-export const jaSelectors = _ja;
+const enSelectors = _en;
+const jaSelectors = _ja;
+module.exports = { enSelectors, jaSelectors, getSelectorBank };

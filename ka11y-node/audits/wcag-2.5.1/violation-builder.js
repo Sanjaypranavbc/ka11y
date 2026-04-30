@@ -42,7 +42,7 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/pointer-gestures';
  * @param {"dom-pattern"|"library-detected"|"axe-rule"} p.layer
  * @returns {ViolationRecord}
  */
-export function buildViolation({ finding, escapeHatch, detectedLibraries, pageUrl, pageLang, layer }) {
+function buildViolation({ finding, escapeHatch, detectedLibraries, pageUrl, pageLang, layer }) {
   const libs = [...(detectedLibraries || [])];
 
   const message = escapeHatch.hasAlternative
@@ -71,3 +71,4 @@ export function buildViolation({ finding, escapeHatch, detectedLibraries, pageUr
     timestamp:                new Date().toISOString(),
   };
 }
+module.exports = { buildViolation };

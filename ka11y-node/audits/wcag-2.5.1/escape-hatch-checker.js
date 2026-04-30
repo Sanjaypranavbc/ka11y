@@ -20,7 +20,7 @@
  * @param {string} selector - CSS selector of the flagged gesture element
  * @returns {Promise<{found: boolean, type: string, detail: string}>}
  */
-export async function checkEscapeHatch(page, selector) {
+async function checkEscapeHatch(page, selector) {
   return page.evaluate((sel) => {
     const el = document.querySelector(sel);
     if (!el) {

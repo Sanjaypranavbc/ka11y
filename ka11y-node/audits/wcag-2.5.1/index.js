@@ -6,20 +6,20 @@
  * Layer "axe-rule"        — Custom axe-core rule for attribute-based detection.
  *
  * Usage:
- *   import { auditPointerGestures } from './audits/wcag-2.5.1/index.js';
+ *   const { auditPointerGestures } = require('./audits/wcag-2.5.1/index.js');
  *   const result = await auditPointerGestures(page, { pageUrl, runAxeRule: true });
  */
 
-import { createRequire } from 'module';
-import { fileURLToPath }  from 'url';
-import path               from 'path';
 
-import { getSelectorBank }                            from './multilingual-selectors.js';
-import { detectGestureLibraries }                     from './gesture-library-detector.js';
-import { inspectPage }                                from './dom-inspector.js';
-import { validateEscapeHatch }                        from './escape-hatch-validator.js';
-import { buildViolation }                             from './violation-builder.js';
-import { pointerGestureRule, pointerGestureCheck }   from './axe-rule-pointer-gestures.js';
+
+const path = require('path');
+
+const { getSelectorBank } = require('./multilingual-selectors.js');
+const { detectGestureLibraries } = require('./gesture-library-detector.js');
+const { inspectPage } = require('./dom-inspector.js');
+const { validateEscapeHatch } = require('./escape-hatch-validator.js');
+const { buildViolation } = require('./violation-builder.js');
+const { pointerGestureRule, pointerGestureCheck } = require('./axe-rule-pointer-gestures.js');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const _require  = createRequire(import.meta.url);
@@ -102,7 +102,7 @@ function _emptyResult(pageUrl) {
  * @param {string}  [options.axeScriptPath]  - Path to axe-core script for injection
  * @returns {Promise<Object>} Structured audit result
  */
-export async function auditPointerGestures(page, options = {}) {
+async function auditPointerGestures(page, options = {}) {
   const {
     pageUrl      = '',
     runAxeRule   = true,
@@ -265,3 +265,4 @@ export { getSelectorBank } from './multilingual-selectors.js';
 export { detectGestureLibraries }  from './gesture-library-detector.js';
 export { validateEscapeHatch }     from './escape-hatch-validator.js';
 export { buildViolation }          from './violation-builder.js';
+module.exports = { auditPointerGestures };

@@ -52,7 +52,7 @@ const SCRIPT_SRC_PATTERNS = [
  * @param {import('@playwright/test').Page|Object} page - Playwright/Puppeteer Page object
  * @returns {Promise<Set<string>>} Set of detected library name strings
  */
-export async function detectGestureLibraries(page) {
+async function detectGestureLibraries(page) {
   const detected = new Set();
 
   try {
@@ -99,3 +99,4 @@ export async function detectGestureLibraries(page) {
 
   return detected;
 }
+module.exports = { detectGestureLibraries };

@@ -9,7 +9,7 @@
  *     reconstructed with `new Function()`.
  */
 
-import { enSelectors, jaSelectors } from './multilingual-selectors.js';
+const { enSelectors, jaSelectors } = require('./multilingual-selectors.js');
 
 /* ── Comma-joined selector string (all categories, EN + JA banks) ───────── */
 const _allSelectors = [
@@ -74,7 +74,7 @@ function _evaluateBody(node, options) {
 /* ── Exported rule and check objects ───────────────────────────────────── */
 
 /** @type {Object} axe-core check definition */
-export const pointerGestureCheck = {
+const pointerGestureCheck = {
   id:       'pointer-gestures-2-5-1-check',
   evaluate: _evaluateBody,
   metadata: {
@@ -90,7 +90,7 @@ export const pointerGestureCheck = {
  * @type {Object} axe-core rule definition for WCAG 2.5.1 Pointer Gestures.
  * Pass to axe.configure({ rules: [pointerGestureRule] }).
  */
-export const pointerGestureRule = {
+const pointerGestureRule = {
   id:       'pointer-gestures-2-5-1',
   selector: ALL_SELECTORS_STRING,
   tags:     ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'wcag251', 'pointer-gestures'],
@@ -108,7 +108,7 @@ export const pointerGestureRule = {
  * @param {Object} axeInstance - The axe-core object (window.axe inside a browser evaluate)
  * @returns {void}
  */
-export function registerPointerGestureRule(axeInstance) {
+function registerPointerGestureRule(axeInstance) {
   axeInstance.configure({
     checks: [pointerGestureCheck],
     rules:  [pointerGestureRule],
@@ -116,5 +116,6 @@ export function registerPointerGestureRule(axeInstance) {
 }
 
 /* ── Backward-compat aliases (used by existing index.js and spec file) ─── */
-export const pointerGesturesRule  = pointerGestureRule;
-export const pointerGesturesCheck = pointerGestureCheck;
+const pointerGesturesRule  = pointerGestureRule;
+const pointerGesturesCheck = pointerGestureCheck;
+module.exports = { pointerGestureRule, pointerGestureCheck, registerPointerGestureRule };

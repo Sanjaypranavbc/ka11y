@@ -34,7 +34,7 @@
  * @param {Object} auditResult - Result object from auditPointerGestures()
  * @returns {ReportItem[]}
  */
-export function adaptToReportFormat(auditResult) {
+function adaptToReportFormat(auditResult) {
   if (!auditResult || typeof auditResult !== 'object') return [];
 
   const allItems = [
@@ -63,3 +63,4 @@ export function adaptToReportFormat(auditResult) {
     },
   }));
 }
+module.exports = { adaptToReportFormat };

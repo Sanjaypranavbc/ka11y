@@ -1,7 +1,7 @@
 /**
  * @fileoverview Adapts WCAG 2.5.4 violations into standardized flat report items.
  */
-export function adaptToReportFormat(auditResult) {
+function adaptToReportFormat(auditResult) {
   if (!auditResult || !Array.isArray(auditResult.manualReviewItems)) return [];
 
   return auditResult.manualReviewItems.map((item, index) => ({
@@ -30,7 +30,7 @@ export function adaptToReportFormat(auditResult) {
   }));
 }
 
-export function generateManualChecklistHTML(auditResult) {
+function generateManualChecklistHTML(auditResult) {
   const url = auditResult.pageUrl || 'N/A';
   const conf = auditResult.summary?.confidence || 'none';
   const libs = auditResult.motionLibrariesDetected?.join(', ') || 'None';
@@ -68,4 +68,4 @@ export function generateManualChecklistHTML(auditResult) {
   </ol>
 </div>
   `.trim();
-}
+}module.exports = { adaptToReportFormat, generateManualChecklistHTML };

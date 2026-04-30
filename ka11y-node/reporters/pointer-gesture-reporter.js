@@ -18,7 +18,7 @@
  * @returns {Array<Object>|string|Object}
  * @throws {Error} If reportFormat is not one of the three recognised values.
  */
-export function formatViolations(violations, reportFormat) {
+function formatViolations(violations, reportFormat) {
   switch (reportFormat) {
     case 'flat':
       return violations;

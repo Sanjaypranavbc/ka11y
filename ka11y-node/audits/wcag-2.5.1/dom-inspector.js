@@ -49,7 +49,7 @@ const CSS_PATH_FN_BODY = `
  * @param {import('./multilingual-selectors.js').SelectorBank} selectorBank
  * @returns {Promise<DOMFinding[]>}
  */
-export async function inspectPage(page, selectorBank) {
+async function inspectPage(page, selectorBank) {
   /** @type {DOMFinding[]} */
   const findings = [];
   /** @type {Set<string>} dedup by computed CSS path */
@@ -103,3 +103,4 @@ export async function inspectPage(page, selectorBank) {
 
   return findings;
 }
+module.exports = { inspectPage };

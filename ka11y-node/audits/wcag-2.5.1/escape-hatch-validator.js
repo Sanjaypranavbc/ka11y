@@ -27,7 +27,7 @@
  * @param {string} elementSelector                      - CSS selector for the element to check
  * @returns {Promise<EscapeHatchResult>}
  */
-export async function validateEscapeHatch(page, elementSelector) {
+async function validateEscapeHatch(page, elementSelector) {
   try {
     return await page.evaluate((selector) => {
       const el = document.querySelector(selector);
@@ -106,3 +106,4 @@ export async function validateEscapeHatch(page, elementSelector) {
     return { hasAlternative: false, evidence: [] };
   }
 }
+module.exports = { validateEscapeHatch };
