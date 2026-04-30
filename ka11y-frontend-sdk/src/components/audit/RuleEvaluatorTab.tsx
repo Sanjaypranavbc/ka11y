@@ -6,12 +6,18 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Play, AlertCircle, CheckCircle, HelpCircle, XCircle } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { EngineBadge } from "./EngineBadge";
+import { Badge } from "@/components/ui/badge";
 
 interface Finding {
   rule_id: string;
   wcag_sc: string;
   status: "pass" | "fail" | "needs_review";
   reason: string;
+  source?: string;
+  detected_by?: string[];
+  aiContext?: string | null;
   element?: {
     selector?: string;
     html?: string;
@@ -168,13 +174,42 @@ export function RuleEvaluatorTab() {
             ) : (
               results.map((r, i) => (
                 <div key={i} className="border border-border p-3 rounded bg-card text-xs space-y-2">
-                  <div className="flex items-center gap-2">
-                    {r.status === "fail" && <XCircle className="h-4 w-4 text-destructive" />}
-                    {r.status === "needs_review" && <HelpCircle className="h-4 w-4 text-orange-500" />}
-                    {r.status === "pass" && <CheckCircle className="h-4 w-4 text-success" />}
-                    <span className="font-semibold">{r.rule_id}</span>
-                  </div>
-                  <p className="text-muted-foreground">{r.reason}</p>
+                    <div className="flex items-center gap-2">
+                      {r.status === "fail" && <XCircle className="h-4 w-4 text-destructive" />}
+                      {r.status === "needs_review" && <HelpCircle className="h-4 w-4 text-orange-500" />}
+                      {r.status === "pass" && <CheckCircle className="h-4 w-4 text-success" />}
+                      <span className="font-semibold">{r.rule_id}</span>
+                      
+                      {r.detected_by && r.detected_by.length > 0 ? (
+                        <div className="ml-auto flex items-center">
+                          <EngineBadge detectedBy={r.detected_by} />
+                        </div>
+                      ) : r.source ? (
+                        <Badge variant="outline" className="ml-auto text-[10px]">
+                          {r.source}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    
+                    <div className="text-muted-foreground">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span tabIndex={0} className="cursor-help inline-flex items-center">
+                            {r.reason}
+                            {r.aiContext && <span className="text-purple-500 font-semibold ml-1">✨ AI</span>}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-sm text-xs">
+                          <p>{r.reason}</p>
+                          {r.aiContext && (
+                            <div className="mt-2 text-purple-200 border-t border-purple-800/50 pt-2 flex flex-col">
+                              <span className="font-semibold mb-1 text-purple-300">AccessLint AI Context:</span>
+                              {r.aiContext}
+                            </div>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   {r.element?.html && (
                     <pre className="mt-2 p-2 bg-muted/30 border text-[10px] rounded overflow-x-auto text-muted-foreground font-mono">
                       {r.element.html}

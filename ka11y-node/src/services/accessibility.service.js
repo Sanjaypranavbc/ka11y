@@ -204,7 +204,12 @@ class AccessibilityService {
         ]);
       await injectWithTimeout(async () => {
         await page.addScriptTag({ path: this._axeCorePath });
-        await page.addScriptTag({ path: require.resolve('@accesslint/core/dist/index.iife.js') });
+        
+        // Workaround for Node.js "exports" restrictions in @accesslint/core package.json
+        const alDir = require('path').dirname(require.resolve('@accesslint/core'));
+        const alIifePath = require('path').join(alDir, 'index.iife.js');
+        await page.addScriptTag({ path: alIifePath });
+        
         await waitForAxe();
       });
     };
@@ -285,7 +290,16 @@ class AccessibilityService {
         });
 
         // 2. Immediately run AccessLint natively
-        const alRes = window.AccessLint.runAudit(document);
+        const alResRaw = window.AccessLint.runAudit(document);
+        
+        // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
+        const alRes = {
+          ...alResRaw,
+          violations: (alResRaw.violations || []).map(v => {
+            const { element, source, ...safeProps } = v;
+            return safeProps;
+          })
+        };
         
         // Return both arrays back to the Node server
         return { axeResults: axeRes, accessLintResults: alRes };
@@ -375,7 +389,16 @@ class AccessibilityService {
         });
 
         // 2. Immediately run AccessLint natively
-        const alRes = window.AccessLint.runAudit(document);
+        const alResRaw = window.AccessLint.runAudit(document);
+        
+        // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
+        const alRes = {
+          ...alResRaw,
+          violations: (alResRaw.violations || []).map(v => {
+            const { element, source, ...safeProps } = v;
+            return safeProps;
+          })
+        };
         
         // Return both arrays back to the Node server
         return { axeResults: axeRes, accessLintResults: alRes };
@@ -465,7 +488,17 @@ class AccessibilityService {
         });
 
         // 2. Immediately run AccessLint natively
-        const alRes = window.AccessLint.runAudit(document);
+        const alResRaw = window.AccessLint.runAudit(document);
+        
+        // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
+        const alRes = {
+          ...alResRaw,
+          violations: (alResRaw.violations || []).map(v => {
+            // Destructure to remove non-serializable 'element' and 'source' node properties
+            const { element, source, ...safeProps } = v;
+            return safeProps;
+          })
+        };
         
         // Return both arrays back to the Node server
         return { axeResults: axeRes, accessLintResults: alRes };
@@ -496,7 +529,7 @@ class AccessibilityService {
       const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
       this._logger.info(`[flat] Custom checks complete — ${customFindings.length} finding(s).`);
 
-      const findings = [...mapResultsFlat(axeResults, url, lang, accessLintResults), ...customFindings];
+      const findings = [...mapResultsFlat(axeResults, url, lang, null, accessLintResults), ...customFindings];
       const ORDER = { fail: 0, needs_review: 1, pass: 2 };
       findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
       return findings;
