@@ -411,6 +411,21 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 
 ---
 
+## 2.5.4 Motion Actuation
+**Engine:** `ka11y-node/audits/wcag-2.5.4/` (Multi-layer sensor detection).
+
+| Technique | Kind | Status |
+|---|---|---|
+| G213 Provide conventional controls | Sufficient | Partial (requires manual review) |
+| F106 Failure — motion required with no alternative | Failure | Covered (heuristic detection) |
+
+**Known limitations**
+- sensor input cannot be physically simulated; detection is based on script and API usage patterns.
+- Essential motion (pedometer, compass) is heuristically classified but requires human confirmation.
+- All findings are marked as "needs manual review".
+
+---
+
 ## 2.5.7 Dragging Movements
 **Engine:** `ka11y-node/dragging-movements.check.js`.
 
@@ -566,8 +581,6 @@ Single-page scope only. Cannot observe step-to-step state in wizards.
 
 | SC | Level | Why it's not implemented |
 |---|---|---|
-| 1.2.2 Captions (Prerecorded) | A | Automatable; not yet wired |
-| 1.2.3 Audio Description | A | Automatable; not yet wired |
 | 1.2.4 Captions (Live) | AA | Automatable; not yet wired |
 | 1.2.5 Audio Description (Prerecorded) | AA | Automatable; not yet wired |
 | 1.4.2 Audio Control | A | Automatable; not yet wired |

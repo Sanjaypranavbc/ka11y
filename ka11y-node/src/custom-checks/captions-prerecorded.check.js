@@ -69,18 +69,36 @@ async function run(page, context = {}) {
       }
     }
 
-    // Also inspect YouTube/Vimeo iframes — CC menu is author-controlled and
-    // not programmatically detectable. Emit incomplete.
-    const iframes = Array.from(document.querySelectorAll(
-      'iframe[src*="youtube.com/embed" i], iframe[src*="player.vimeo.com" i], iframe[src*="wistia" i]'
-    ));
+    // Third-party media embeds: video players, audio players, combined platforms.
+    // CC menus are author-controlled in cross-origin iframes; flag for manual review.
+    const EMBED_PATTERNS = [
+      // video
+      'youtube.com/embed', 'player.vimeo.com', 'wistia',
+      'dailymotion.com/embed', 'rumble.com/embed', 'jwplayer',
+      'brightcove', 'kaltura', 'bitchute.com/embed', 'loom.com/embed', 'videojs',
+      // audio (no caption track possible — flag for transcript review)
+      'open.spotify.com/embed', 'w.soundcloud.com/player',
+      'bandcamp.com/track', 'bandcamp.com/album',
+      'music.apple.com', 'podcasts.apple.com', 'anchor.fm/s',
+      'castbox.fm', 'player.simplecast.com', 'buzzsprout.com',
+      'podbean.com/media/player', 'audiomack.com/embed',
+      // combined
+      'facebook.com/plugins', 'twitter.com/i/videos', 'tiktok.com/embed', 'instagram.com/p',
+    ];
+    const iframeSel = EMBED_PATTERNS.map(p => `iframe[src*="${p}" i]`).join(', ');
+    const iframes = Array.from(document.querySelectorAll(iframeSel));
     for (const ifr of iframes) {
+      const src = (ifr.getAttribute('src') || '').toLowerCase();
+      const isAudioOnly = [
+        'spotify', 'soundcloud', 'bandcamp', 'apple.com', 'anchor.fm',
+        'castbox', 'simplecast', 'buzzsprout', 'podbean', 'audiomack',
+      ].some(p => src.includes(p));
       issues.push({
         html: ifr.outerHTML.slice(0, 200),
         element_id: ifr.id || null,
         target: ifr.id ? [`iframe#${CSS.escape(ifr.id)}`] : ['iframe'],
         tag: 'IFRAME',
-        reason: 'embedded-player',
+        reason: isAudioOnly ? 'embedded-audio-player' : 'embedded-player',
       });
     }
 
