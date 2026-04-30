@@ -153,4 +153,4 @@ async function detectMotionEventListeners(page) {
     confidence,
     rawEvidence: combinedRawEvidence
   };
-}
+}module.exports = { detectMotionEventListeners };

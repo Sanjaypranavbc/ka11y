@@ -154,4 +154,4 @@ async function auditMotionActuation(page, options = {}) {
         }
      }
   };
-}
+}module.exports = { auditMotionActuation };

@@ -63,4 +63,4 @@ function registerMotionActuationRule(axeInstance) {
       metadata: motionActuationRule.metadata
     }]
   });
-}
+}module.exports = { motionActuationRule, registerMotionActuationRule };

@@ -99,4 +99,4 @@ async function validateDisableControl(page) {
     console.warn('[wcag-2.5.4] disable control validation failed:', err.message);
     return { hasDisableControl: false, confidence: 'low', evidence: [] };
   }
-}
+}module.exports = { validateDisableControl };

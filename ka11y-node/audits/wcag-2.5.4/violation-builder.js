@@ -47,4 +47,4 @@ function buildViolation({ motionEvidence, disableControl, detectedLibraries, ess
     manualReviewRequired: true,
     timestamp: new Date().toISOString()
   };
-}
+}module.exports = { buildViolation };
