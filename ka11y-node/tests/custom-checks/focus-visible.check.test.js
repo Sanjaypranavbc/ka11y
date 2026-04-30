@@ -44,8 +44,9 @@ function makePage({ elements = [], unfocusedStyles = BASE_STYLES, focusedStyles 
     evaluate: jest.fn().mockImplementation(() => {
       callNum++;
       if (callNum === 1) return Promise.resolve(elements);
+      if (callNum === 2) return Promise.resolve([]); // cssFindings
       // Each element uses 4 evaluate calls (unfocused, focus, focused, blur)
-      const callInGroup = (callNum - 2) % 4;
+      const callInGroup = (callNum - 3) % 4;
       if (callInGroup === 0) return Promise.resolve({ ...unfocusedStyles }); // unfocused styles
       if (callInGroup === 2) return Promise.resolve({ ...focusedStyles });   // focused styles
       return Promise.resolve(null);  // focus/blur actions
