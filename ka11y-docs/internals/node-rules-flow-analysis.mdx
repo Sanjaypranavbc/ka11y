@@ -74,6 +74,8 @@ flowchart TD
         S21["Images of Text"]
         S22["Background Image Content ★"]
         S23["Pronunciation"]
+        S24["Pointer Gestures ★"]
+        S25["Motion Actuation ★"]
     end
 
     subgraph "Interactive Checks (Sequential) — 5 checks"
@@ -84,7 +86,7 @@ flowchart TD
         I5["Keyboard Trap"]
     end
 
-    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21 & S22 & S23
+    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21 & S22 & S23 & S24 & S25
     INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
 
