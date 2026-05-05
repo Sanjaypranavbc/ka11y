@@ -33,11 +33,32 @@ Since sensor input cannot be physically simulated in a desktop automation contex
 
 ## Essential motion classification
 
-Some motion is **essential** to the function and is exempt from the requirement (e.g. a step counter or a spirit level). The auditor uses heuristics to identify these contexts:
-- Pedometer / Fitness apps (`steps`, `workout`)
-- Navigation / Compass tools (`gps`, `compass`)
-- VR / AR experiences (`WebXR`, `three.js`)
-- Measurement tools (`level`, `tilt angle`)
+Some motion is **essential** to the function and is exempt from the requirement (e.g. a step counter or a spirit level). The auditor uses heuristics over `<title>`, `<h1>`, and `<meta name="description">` plus a small set of DOM signals to identify these contexts:
+
+| Signal | Triggers exemption |
+|---|---|
+| Text mentions `steps`, `pedometer`, `fitness`, `workout`, `calories`, `歩数`, `フィットネス` | Pedometer / fitness context |
+| Text mentions `gps`, `compass`, `ar`, `augmented reality`, `コンパス` | Navigation / compass context |
+| Text mentions `level`, `measure`, `tilt angle`, `水平器` | Spirit level / measurement tool |
+| Text mentions `vr`, `virtual reality`, `webxr`, or `three.js` + `camera` | VR / AR experience |
+| `<script type="application/ld+json">` declares `@type: "VideoGame"` or `applicationCategory: "Game"`, **or** a `<canvas>` exists on a page mentioning "game" | Game context (Schema / Canvas) |
+| At least one `<canvas>` exposes a `webgl` / `webgl2` rendering context | WebGL 3D context (often requires device orientation) |
+| `[aria-live]` and `[role="application"]` / `[role="status"]` both present | Accessibility-supported AT context |
+
+When a finding is classified as essential the violation severity is downgraded to `warning` and `manualReviewRequired: true` is set so a human can confirm the exemption.
+
+## Disable-control detection
+
+`validateDisableControl()` returns the highest-confidence signal it finds:
+
+| Confidence | Signal |
+|---|---|
+| `high` | A `<button>`, `<input type="checkbox">`, `<select>`, ARIA `[role="switch"]` or `[aria-pressed]` toggle whose accessible name matches a motion keyword (`motion`, `shake`, `tilt`, `gyro`, `モーション`, `シェイク`, `傾き`); a `<label>`-associated checkbox tied to one of those keywords; or an explicit "disable motion" / "シェイク無効" control |
+| `high` (settings) | A link whose text or `href` mentions `settings` / `preferences` / `設定` |
+| `medium` | A switch or `aria-pressed` toggle is present and the page text mentions motion (without a label-level match); a `<details>` / `[role="dialog"]` settings panel containing a checkbox; or any element with an `aria-label` mentioning `accessibility` / `アクセシビリティ` |
+| `low` | A settings cog icon (`<img>` / `<svg>` / `<i>` / `<span>` whose class, id, or aria-label matches `settings` / `preferences` / `設定`) |
+
+A page is treated as having a disable control when confidence is `medium` or higher.
 
 ## Manual review required
 
@@ -71,5 +92,20 @@ Some motion is **essential** to the function and is exempt from the requirement 
 1. **Add a UI control**: Ensure every motion-triggered action has a corresponding button or menu item.
 2. **Add a toggle**: Include a "Disable Motion Actuation" setting in your application's accessibility or general preferences.
 3. **Respect OS settings**: Check for system-level "Reduce Motion" preferences if possible via media queries (`prefers-reduced-motion`).
+
+## Module file map
+
+| File | Purpose |
+|---|---|
+| `src/audits/wcag-2.5.4/index.js` | Main orchestrator — call `auditMotionActuation()` |
+| `src/audits/wcag-2.5.4/motion-event-detector.js` | Per-frame runtime + script scan for `devicemotion`/`deviceorientation` listeners |
+| `src/audits/wcag-2.5.4/motion-library-detector.js` | Window global + script-src fingerprinting for `shake.js`, `gyroscape`, etc. |
+| `src/audits/wcag-2.5.4/essential-motion-classifier.js` | Heuristic classifier for exempt contexts (fitness, VR, games, WebGL, …) |
+| `src/audits/wcag-2.5.4/disable-control-validator.js` | DOM scan for disable toggles / motion-related settings |
+| `src/audits/wcag-2.5.4/axe-rule-motion-actuation.js` | axe-core rule + check definitions |
+| `src/audits/wcag-2.5.4/violation-builder.js` | Canonical violation object factory (sets `manualReviewRequired: true`) |
+| `reporters/wcag-254-report-adapter.js` | Flat-array adapter + manual checklist HTML generator |
+| `src/custom-checks/motion-actuation.check.js` | Custom-check wrapper invoked by the audit pipeline; emits a single `incomplete` rule when motion is detected |
+| `src/audits/wcag-2.5.4/__tests__/motion-actuation.test.js` | Unit tests for the audit modules |
 
 See [Technique coverage matrix](/rules/coverage-matrix#2-5-4-motion-actuation) for more detail.
