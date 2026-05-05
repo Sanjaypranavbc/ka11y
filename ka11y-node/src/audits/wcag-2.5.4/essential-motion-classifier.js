@@ -66,4 +66,6 @@ async function classifyMotionAsEssential(page, motionEvidence) {
     console.warn('[wcag-2.5.4] classification failed:', err.message);
     return { likelyEssential: false, reason: null };
   }
-}module.exports = { classifyMotionAsEssential };
+}
+
+module.exports = { classifyMotionAsEssential };

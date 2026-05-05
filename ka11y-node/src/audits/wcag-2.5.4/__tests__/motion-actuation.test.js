@@ -4,6 +4,7 @@
 const { classifyMotionAsEssential } = require('../essential-motion-classifier.js');
 const { buildViolation } = require('../violation-builder.js');
 const { adaptToReportFormat, generateManualChecklistHTML } = require('../../../../reporters/wcag-254-report-adapter.js');
+const { motionActuationRule } = require('../axe-rule-motion-actuation.js');
 
 describe('WCAG 2.5.4 Motion Actuation', () => {
 
@@ -70,6 +71,54 @@ describe('WCAG 2.5.4 Motion Actuation', () => {
      });
      expect(html).toContain('<div class="wcag-254-checklist">');
      expect((html.match(/<li/g) || []).length).toBe(5);
+  });
+
+  // ── axe rule polarity (regression: previously inverted) ──────────────────
+  describe('axe-rule-motion-actuation evaluate() polarity', () => {
+    function runEvaluateIn(documentMock, windowMock) {
+      // Mirror the way axe-core invokes the check inside the page: bind
+      // `document` and `window` into scope and call the function body.
+      const fn = motionActuationRule.check.evaluate;
+      const ctx = { document: documentMock, window: windowMock };
+      // eslint-disable-next-line no-new-func
+      return new Function('document', 'window', `return (${fn.toString()}).call(this, null, {}, null, null);`)
+        .call(ctx, documentMock, windowMock);
+    }
+
+    test('passes when no motion handler is registered', () => {
+      const result = runEvaluateIn(
+        { body: { innerText: '' }, querySelectorAll: () => [] },
+        { ondevicemotion: null, ondeviceorientation: null }
+      );
+      expect(result).toBe(true);
+    });
+
+    test('fails when motion handler is registered and no disable surface exists', () => {
+      const result = runEvaluateIn(
+        { body: { innerText: 'fun shake game' }, querySelectorAll: () => [] },
+        { ondevicemotion: function () {} }
+      );
+      expect(result).toBe(false);
+    });
+
+    test('passes when motion handler + "disable motion" copy is present', () => {
+      const result = runEvaluateIn(
+        { body: { innerText: 'Tap to disable motion controls' }, querySelectorAll: () => [] },
+        { ondevicemotion: function () {} }
+      );
+      expect(result).toBe(true);
+    });
+
+    test('passes when motion handler + a settings link is present', () => {
+      const result = runEvaluateIn(
+        {
+          body: { innerText: 'shake the phone' },
+          querySelectorAll: () => [{ href: '/settings', textContent: 'Settings' }]
+        },
+        { ondeviceorientation: function () {} }
+      );
+      expect(result).toBe(true);
+    });
   });
 
   /*
