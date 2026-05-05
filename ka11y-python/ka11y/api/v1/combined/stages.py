@@ -148,7 +148,9 @@ async def _call_node_flat(
     try:
         # 300s timeout to allow for heavy custom checks on complex pages
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(endpoint, json={"url": url, "level": wcag_level, "lang": lang})
+            resp = await client.post(
+                endpoint, json={"url": url, "level": wcag_level, "lang": lang}
+            )
             resp.raise_for_status()
             return resp.json().get("findings", [])
     except httpx.ConnectError:
@@ -255,13 +257,19 @@ async def _stage_image_audit(
                 include_paths=ocr_paths,
             )
             emit_stage_progress(
-                job_id, "image_audit",
-                current=0, total=len(ocr_paths), phase="ocr",
+                job_id,
+                "image_audit",
+                current=0,
+                total=len(ocr_paths),
+                phase="ocr",
             )
             await asyncio.to_thread(detector.scan_directory)
             emit_stage_progress(
-                job_id, "image_audit",
-                current=len(ocr_paths), total=len(ocr_paths), phase="ocr",
+                job_id,
+                "image_audit",
+                current=len(ocr_paths),
+                total=len(ocr_paths),
+                phase="ocr",
             )
 
             saver = TextClassification(source_directory=image_crawler.output_dir)
@@ -280,8 +288,11 @@ async def _stage_image_audit(
         if run_image_audit:
             auditor = AltTextAccessibilityAuditor()
             emit_stage_progress(
-                job_id, "image_audit",
-                current=0, total=len(image_crawler.images_data), phase="alt_audit",
+                job_id,
+                "image_audit",
+                current=0,
+                total=len(image_crawler.images_data),
+                phase="alt_audit",
             )
             records = await asyncio.to_thread(
                 auditor.generate_audit_report,
@@ -290,7 +301,8 @@ async def _stage_image_audit(
                 output_dir=image_crawler.output_dir,
             )
             emit_stage_progress(
-                job_id, "image_audit",
+                job_id,
+                "image_audit",
                 current=len(image_crawler.images_data),
                 total=len(image_crawler.images_data),
                 phase="alt_audit",
@@ -310,9 +322,9 @@ async def _stage_image_audit(
             extra={
                 "ocr_results": len(ocr_results),
                 "ocr_images_scanned": len(ocr_paths) if run_ocr else 0,
-                "contrast_regions": (contrast_report or {}).get("summary", {}).get(
-                    "total_regions_analysed", 0
-                ),
+                "contrast_regions": (contrast_report or {})
+                .get("summary", {})
+                .get("total_regions_analysed", 0),
             },
         )
 
@@ -381,12 +393,12 @@ async def _stage_form_audit(
 
 
 async def _stage_sensory_audit(
-        url: str,
-        output_dir: Path,
-        max_depth: int,
-        run_sensory_audit: bool,
-        job_id: str,
-        lang: str = "en",
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_sensory_audit: bool,
+    job_id: str,
+    lang: str = "en",
 ) -> List[Dict]:
     """
     Crawl text-bearing elements → 1.3.3 sensory-characteristics check.
@@ -823,12 +835,16 @@ async def _stage_form_audit_universal(
         return []
 
     try:
-        from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
+        from ka11y.accessibility.rules.forms.form_auditor import (
+            FormAccessibilityAuditor,
+        )
 
         snapshot = await snapshot_task
         form_auditor = FormAccessibilityAuditor(output_dir=str(output_dir))
         records = await asyncio.to_thread(
-            functools.partial(form_auditor.generate_audit_report, form_inputs=snapshot.forms)
+            functools.partial(
+                form_auditor.generate_audit_report, form_inputs=snapshot.forms
+            )
         )
         findings = _form_to_findings(records, url)
         _record_stage_metrics(
@@ -865,7 +881,9 @@ async def _stage_label_in_name_universal(
 
         snapshot = await snapshot_task
         auditor = LabelInNameAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.interactive)
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report, snapshot.interactive
+        )
         findings = _lin_to_findings(records, url)
         _record_stage_metrics(
             step_logger,
@@ -901,7 +919,9 @@ async def _stage_pause_stop_hide_universal(
 
         snapshot = await snapshot_task
         auditor = PauseStopHideAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.moving_content)
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report, snapshot.moving_content
+        )
         findings = _psh_to_findings(records, url)
         _record_stage_metrics(
             step_logger,
@@ -942,7 +962,9 @@ async def _stage_target_size_universal(
 
         snapshot = await snapshot_task
         auditor = TargetSizeAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.target_sizes)
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report, snapshot.target_sizes
+        )
         findings = _ts_to_findings(records, url)
         _record_stage_metrics(
             step_logger,
@@ -978,7 +1000,9 @@ async def _stage_text_spacing_universal(
 
         snapshot = await snapshot_task
         auditor = TextSpacingAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.text_spacing)
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report, snapshot.text_spacing
+        )
         findings = _crawler_text_spacing_to_findings(records, url)
         _record_stage_metrics(
             step_logger,
@@ -1074,8 +1098,8 @@ async def _stage_sensory_audit_universal(
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
 
-
 # ... [code stays the same up to _run_python_stages]
+
 
 async def _run_python_stages(
     *,
@@ -1125,7 +1149,7 @@ async def _run_python_stages(
             run_sensory_audit,
         )
     )
-    
+
     # 1. Run universal snapshot first
     snapshot = None
     discovered_urls = [url]
@@ -1150,8 +1174,15 @@ async def _run_python_stages(
     results = await asyncio.gather(
         _timed(
             _stage_image_audit(
-                url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang, step_logger,
-                discovered_urls=discovered_urls
+                url,
+                output_dir,
+                max_depth,
+                run_ocr,
+                run_image_audit,
+                job_id,
+                lang,
+                step_logger,
+                discovered_urls=discovered_urls,
             )
         ),
         _timed(
@@ -1172,7 +1203,12 @@ async def _run_python_stages(
         ),
         _timed(
             _stage_pause_stop_hide_universal(
-                url, output_dir, run_pause_stop_hide_audit, job_id, snapshot_task, step_logger
+                url,
+                output_dir,
+                run_pause_stop_hide_audit,
+                job_id,
+                snapshot_task,
+                step_logger,
             )
         ),
         # MUTED: _stage_target_size_universal is replaced by Pipeline 2.5.8
@@ -1183,7 +1219,12 @@ async def _run_python_stages(
         # ),
         _timed(
             _stage_text_spacing_universal(
-                url, output_dir, run_text_spacing_audit, job_id, snapshot_task, step_logger
+                url,
+                output_dir,
+                run_text_spacing_audit,
+                job_id,
+                snapshot_task,
+                step_logger,
             )
         ),
         _timed(
@@ -1199,20 +1240,31 @@ async def _run_python_stages(
                 run_focus_not_obscured_enh_audit,
                 job_id,
                 step_logger,
-                discovered_urls=discovered_urls
+                discovered_urls=discovered_urls,
             )
         ),
         _timed(
             _stage_media_audit_universal(
-                url, output_dir, run_media_audit, job_id, snapshot_task, lang, step_logger
+                url,
+                output_dir,
+                run_media_audit,
+                job_id,
+                snapshot_task,
+                lang,
+                step_logger,
             )
         ),
         _timed(
             _stage_sensory_audit_universal(
-                url, output_dir, run_sensory_audit, job_id, lang, snapshot_task, step_logger
+                url,
+                output_dir,
+                run_sensory_audit,
+                job_id,
+                lang,
+                snapshot_task,
+                step_logger,
             )
         ),
-
         return_exceptions=True,
     )
 

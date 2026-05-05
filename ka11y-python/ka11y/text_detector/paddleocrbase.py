@@ -61,7 +61,12 @@ class OCRReader:
     text_detector.py works with either engine without modification.
     """
 
-    def __init__(self, source_directory: str, output_directory: Optional[str] = None, lang: str = "en"):
+    def __init__(
+        self,
+        source_directory: str,
+        output_directory: Optional[str] = None,
+        lang: str = "en",
+    ):
         self.source_directory = source_directory
         self.output_directory = output_directory
         self.lang = lang
@@ -90,8 +95,8 @@ class OCRReader:
         results = []
         # predict() returns a list with one dict per image.
         for page in raw:
-            boxes  = page.get("dt_polys",   [])   # list of np arrays, shape (4, 2)
-            texts  = page.get("rec_texts",  [])
+            boxes = page.get("dt_polys", [])  # list of np arrays, shape (4, 2)
+            texts = page.get("rec_texts", [])
             scores = page.get("rec_scores", [])
 
             for box, text, score in zip(boxes, texts, scores):

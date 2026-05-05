@@ -2,9 +2,12 @@ from typing import Dict, Any, List
 from ..models import RuleVerdict, VerdictStatus
 from ka11y.i18n.loader import render_reason
 
+
 class EvidenceFormatter:
     @staticmethod
-    def to_legacy_findings(verdicts: List[RuleVerdict], lang: str = "en") -> List[Dict[str, Any]]:
+    def to_legacy_findings(
+        verdicts: List[RuleVerdict], lang: str = "en"
+    ) -> List[Dict[str, Any]]:
         """Converts the new pipeline verdicts to the existing UI-compatible schema."""
         legacy_list = []
         for v in verdicts:
@@ -41,10 +44,10 @@ class EvidenceFormatter:
                 "pipeline_meta": {
                     "reason_code": v.reason_code,
                     "section": v.element.semantics.section_type,
-                    "evidence": v.evidence
-                }
+                    "evidence": v.evidence,
+                },
             }
-            
+
             if v.element.visual.src:
                 finding["element"]["image_src"] = v.element.visual.src
 

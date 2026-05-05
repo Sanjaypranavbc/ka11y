@@ -35,7 +35,7 @@ def segment_text_region(region: np.ndarray) -> np.ndarray:
     # 1. thresh == 0 is text
     # 2. thresh == 255 is text
 
-    mask_candidate_1 = thresh            # text = white (255)
+    mask_candidate_1 = thresh  # text = white (255)
     mask_candidate_2 = cv2.bitwise_not(thresh)  # text = black (0 → 255)
 
     def compute_separation(mask):
@@ -67,6 +67,7 @@ def segment_text_region(region: np.ndarray) -> np.ndarray:
         return mask_candidate_2
     else:
         return mask_candidate_1
+
 
 # -------------------------
 # Luminance + contrast
@@ -245,9 +246,11 @@ def analyze_text_region(
     except Exception as e:
         return {"error": str(e)}
 
+
 # -------------------------
 # UI COMPONENT CONTRAST (WCAG 1.4.11)
 # -------------------------
+
 
 def _compute_luminance_map(region: np.ndarray) -> np.ndarray:
     """Convert region to luminance map."""
@@ -258,9 +261,7 @@ def _compute_luminance_map(region: np.ndarray) -> np.ndarray:
         linear[:, :, i] = srgb_to_linear(rgb[:, :, i])
 
     luminance = (
-        0.2126 * linear[:, :, 0]
-        + 0.7152 * linear[:, :, 1]
-        + 0.0722 * linear[:, :, 2]
+        0.2126 * linear[:, :, 0] + 0.7152 * linear[:, :, 1] + 0.0722 * linear[:, :, 2]
     )
     return luminance
 
@@ -268,7 +269,7 @@ def _compute_luminance_map(region: np.ndarray) -> np.ndarray:
 def analyze_ui_component(
     image: Union[str, np.ndarray],
     bbox: List[Tuple[int, int]],
-    context_pad: int = 8,   # 🔑 important for F14
+    context_pad: int = 8,  # 🔑 important for F14
 ) -> Dict[str, Any]:
     """
     Analyze non-text contrast (WCAG 1.4.11) for UI components.
@@ -343,10 +344,7 @@ def analyze_ui_component(
         ratio = (lighter + 0.05) / (darker + 0.05)
 
         # --- WCAG 1.4.11 ---
-        compliance = check_wcag_compliance(
-            ratio,
-            is_ui_component=True  # 🔑 F15 fix
-        )
+        compliance = check_wcag_compliance(ratio, is_ui_component=True)  # 🔑 F15 fix
 
         return {
             "contrast_ratio": round(ratio, 2),

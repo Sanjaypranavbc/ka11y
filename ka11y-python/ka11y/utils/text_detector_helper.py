@@ -1,6 +1,7 @@
-
 import cv2
 import numpy as np
+
+
 def estimate_boldness(img, bbox):
     x_coords = [p[0] for p in bbox]
     y_coords = [p[1] for p in bbox]
@@ -15,9 +16,7 @@ def estimate_boldness(img, bbox):
 
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
 
-    _, thresh = cv2.threshold(
-        gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     text_pixels = np.sum(thresh == 0)
     total_pixels = thresh.size
@@ -45,8 +44,7 @@ def load_image_with_alpha(image_path):
         background = np.ones_like(img[:, :, :3]) * 255
 
         img = (
-            img[:, :, :3] * alpha[..., None]
-            + background * (1 - alpha[..., None])
+            img[:, :, :3] * alpha[..., None] + background * (1 - alpha[..., None])
         ).astype(np.uint8)
 
     return img

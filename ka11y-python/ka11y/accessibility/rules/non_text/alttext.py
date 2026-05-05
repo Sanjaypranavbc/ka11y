@@ -37,6 +37,7 @@ from datetime import datetime
 
 from ka11y.config.logger import setup_logger
 from ka11y.accessibility.rules.non_text import contrast_analyser
+
 logger = setup_logger(name="KAC", tag="audit")
 
 
@@ -96,27 +97,141 @@ _HOME_WORDS: set[str] = {"home", "ホーム", "トップ"}
 
 # Acceptable action/purpose words for buttons
 _BUTTON_ACTION_WORDS: set[str] = {
-    "menu", "close", "open", "search", "back", "forward", "next", "prev", "previous",
-    "submit", "send", "cancel", "confirm", "ok", "yes", "no", "save", "delete",
-    "edit", "add", "remove", "upload", "download", "share", "print", "copy",
-    "paste", "cut", "undo", "redo", "refresh", "reload", "home", "settings",
-    "help", "info", "more", "less", "expand", "collapse", "toggle", "play",
-    "pause", "stop", "mute", "unmute", "fullscreen", "exit fullscreen",
-    "zoom in", "zoom out", "like", "dislike", "comment", "reply", "follow",
-    "unfollow", "subscribe", "unsubscribe", "login", "logout", "sign in",
-    "sign out", "sign up", "register", "checkout", "cart", "bag", "wishlist",
-    "filter", "sort", "view", "hide", "show", "skip", "navigate", "go to",
-    "load more", "read more", "see more", "see all", "cookies settings",
-    "accept all cookies", "reject all", "accept cookies", "decline cookies",
-    "manage cookies", "cookie preferences", "previous slide", "next slide",
-    "go to slide", "new window", "opens in new tab",
+    "menu",
+    "close",
+    "open",
+    "search",
+    "back",
+    "forward",
+    "next",
+    "prev",
+    "previous",
+    "submit",
+    "send",
+    "cancel",
+    "confirm",
+    "ok",
+    "yes",
+    "no",
+    "save",
+    "delete",
+    "edit",
+    "add",
+    "remove",
+    "upload",
+    "download",
+    "share",
+    "print",
+    "copy",
+    "paste",
+    "cut",
+    "undo",
+    "redo",
+    "refresh",
+    "reload",
+    "home",
+    "settings",
+    "help",
+    "info",
+    "more",
+    "less",
+    "expand",
+    "collapse",
+    "toggle",
+    "play",
+    "pause",
+    "stop",
+    "mute",
+    "unmute",
+    "fullscreen",
+    "exit fullscreen",
+    "zoom in",
+    "zoom out",
+    "like",
+    "dislike",
+    "comment",
+    "reply",
+    "follow",
+    "unfollow",
+    "subscribe",
+    "unsubscribe",
+    "login",
+    "logout",
+    "sign in",
+    "sign out",
+    "sign up",
+    "register",
+    "checkout",
+    "cart",
+    "bag",
+    "wishlist",
+    "filter",
+    "sort",
+    "view",
+    "hide",
+    "show",
+    "skip",
+    "navigate",
+    "go to",
+    "load more",
+    "read more",
+    "see more",
+    "see all",
+    "cookies settings",
+    "accept all cookies",
+    "reject all",
+    "accept cookies",
+    "decline cookies",
+    "manage cookies",
+    "cookie preferences",
+    "previous slide",
+    "next slide",
+    "go to slide",
+    "new window",
+    "opens in new tab",
     # Japanese actions
-    "メニュー", "閉じる", "開く", "検索", "戻る", "進む", "次へ", "前へ",
-    "送信", "キャンセル", "確定", "保存", "削除", "編集", "追加", "削除",
-    "共有", "印刷", "コピー", "貼り付け", "切り取り", "元に戻す", "やり直し",
-    "更新", "ホーム", "設定", "ヘルプ", "詳細", "表示", "非表示",
-    "再生", "一時停止", "停止", "消音", "音量", "ログイン", "ログアウト",
-    "登録", "カート", "お気に入り", "絞り込み", "並べ替え",
+    "メニュー",
+    "閉じる",
+    "開く",
+    "検索",
+    "戻る",
+    "進む",
+    "次へ",
+    "前へ",
+    "送信",
+    "キャンセル",
+    "確定",
+    "保存",
+    "削除",
+    "編集",
+    "追加",
+    "削除",
+    "共有",
+    "印刷",
+    "コピー",
+    "貼り付け",
+    "切り取り",
+    "元に戻す",
+    "やり直し",
+    "更新",
+    "ホーム",
+    "設定",
+    "ヘルプ",
+    "詳細",
+    "表示",
+    "非表示",
+    "再生",
+    "一時停止",
+    "停止",
+    "消音",
+    "音量",
+    "ログイン",
+    "ログアウト",
+    "登録",
+    "カート",
+    "お気に入り",
+    "絞り込み",
+    "並べ替え",
 }
 
 # Report CSV columns (order preserved)
@@ -241,14 +356,21 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
     ocr_words = [w for w in norm_ocr.split() if len(w) >= 3]
     # Also include 2-letter uppercase abbreviations from the original OCR text
     # (e.g. "UI", "AI", "OK") which are lost by _norm's lowercasing.
-    abbr_words = [w.lower() for w in re.findall(r'\b[A-Z]{2}\b', raw_ocr)
-                  if w.lower() not in ocr_words]
+    abbr_words = [
+        w.lower()
+        for w in re.findall(r"\b[A-Z]{2}\b", raw_ocr)
+        if w.lower() not in ocr_words
+    ]
     ocr_words = ocr_words + abbr_words
 
     if not ocr_words:
         return True, "PASS [1.1.1] OCR tokens too short to match; alt is non-empty"
 
-    matched = [w for w in ocr_words if re.search(rf'\b{re.escape(w)}\b', norm_alt, re.IGNORECASE)]
+    matched = [
+        w
+        for w in ocr_words
+        if re.search(rf"\b{re.escape(w)}\b", norm_alt, re.IGNORECASE)
+    ]
     if matched:
         return True, f"PASS [1.1.1] OCR word(s) found in alt: {matched}"
 
@@ -302,7 +424,11 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
         return True, f"PASS [1.1.1] Icon alt describes purpose: '{alt}'"
 
     # Require at least 4 chars to filter out uninformative initials like "ab", "ok", or "++"
-    if len(norm) >= 4 and not norm.isdigit() and re.search(r"[a-z]{2}|[^\x00-\x7F]", norm):
+    if (
+        len(norm) >= 4
+        and not norm.isdigit()
+        and re.search(r"[a-z]{2}|[^\x00-\x7F]", norm)
+    ):
         return (
             True,
             f"PASS [1.1.1] Icon alt is non-empty: '{alt}' "
@@ -432,7 +558,7 @@ def _check_1_4_5(
         return (
             False,
             "FAIL [1.4.5] Image stored as logo but contains readable text "
-            "(likely plain wordmark, not exempt)"
+            "(likely plain wordmark, not exempt)",
         )
 
     if not has_ocr_text:
@@ -640,12 +766,16 @@ class AltTextAccessibilityAuditor:
                         "wcag_1_1_1_status": "INCOMPLETE",
                         "wcag_4_1_2_status": "INCOMPLETE" if is_functional else "N/A",
                         "wcag_1_4_5_status": "INCOMPLETE",
-                        "wcag_1_4_11_status": "INCOMPLETE" if (is_button or is_icon) else "N/A",
+                        "wcag_1_4_11_status": (
+                            "INCOMPLETE" if (is_button or is_icon) else "N/A"
+                        ),
                         "overall_status": "INCOMPLETE",
                         "wcag_1_1_1_reason": _cs_reason,
                         "wcag_4_1_2_reason": _cs_reason if is_functional else "N/A",
                         "wcag_1_4_5_reason": _cs_reason,
-                        "wcag_1_4_11_reason": _cs_reason if (is_button or is_icon) else "N/A",
+                        "wcag_1_4_11_reason": (
+                            _cs_reason if (is_button or is_icon) else "N/A"
+                        ),
                         "screenshot_path": screenshot_path,
                         "capture_status": capture_status,
                         "capture_error": capture_error or "",
@@ -659,7 +789,6 @@ class AltTextAccessibilityAuditor:
             )
             detected_joined = " | ".join(detected_texts)
             ocr_result = _ocr_result_for_file(ocr_results, filename)
-
 
             classifier_text_flag = getattr(img, "is_text_image", False)
             ocr_text_flag = has_ocr_text and len(detected_texts) > 0
@@ -749,17 +878,21 @@ class AltTextAccessibilityAuditor:
             # Decorative images of text are ALLOWED by WCAG 1.4.5.
             # Complex images/charts use text essentially.
             if (
-                text_flag 
-                and classification not in ("complex", "decorative") 
+                text_flag
+                and classification not in ("complex", "decorative")
                 and sub_type not in ("charts", "logos")
                 and not is_logo
             ):
                 wcag_1_4_5_pass = False
-                detected_snippet = (detected_joined[:50] + "...") if len(detected_joined) > 50 else detected_joined
+                detected_snippet = (
+                    (detected_joined[:50] + "...")
+                    if len(detected_joined) > 50
+                    else detected_joined
+                )
                 wcag_1_4_5_reason = (
-                        f"FAIL [1.4.5] Image contains text (\"{detected_snippet}\") "
-                        "but classifier marked as non-text. Replace with real CSS-styled text "
-                        "unless the presentation is essential."
+                    f'FAIL [1.4.5] Image contains text ("{detected_snippet}") '
+                    "but classifier marked as non-text. Replace with real CSS-styled text "
+                    "unless the presentation is essential."
                 )
 
             # ── WCAG 1.4.11 (Non-text Contrast) ─────────────────────────

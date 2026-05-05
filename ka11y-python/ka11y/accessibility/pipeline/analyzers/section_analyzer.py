@@ -1,6 +1,7 @@
 from typing import List
 from ..models import SectionType
 
+
 class SectionAnalyzer:
     """
     Evaluates the DOM ancestry of an element to determine its macro-context.
@@ -26,7 +27,9 @@ class SectionAnalyzer:
     }
 
     @classmethod
-    def analyze(cls, ancestor_tags: List[str], ancestor_roles: List[str]) -> SectionType:
+    def analyze(
+        cls, ancestor_tags: List[str], ancestor_roles: List[str]
+    ) -> SectionType:
         """
         Takes an ordered list of ancestors (closest to furthest) and returns
         the most specific semantic section type.
@@ -38,7 +41,7 @@ class SectionAnalyzer:
                 r = role.lower()
                 if r in cls._LANDMARK_MAP:
                     return cls._LANDMARK_MAP[r]
-            
+
             if tag:
                 t = tag.lower()
                 if t in cls._LANDMARK_MAP:

@@ -32,7 +32,12 @@ def get_ocr_reader(lang: str = "en") -> easyocr.Reader:
 
 class OCRReader:
 
-    def __init__(self, source_directory: str, output_directory: Optional[str] = None, lang: str = "en"):
+    def __init__(
+        self,
+        source_directory: str,
+        output_directory: Optional[str] = None,
+        lang: str = "en",
+    ):
         self.source_directory = source_directory
         self.output_directory = output_directory
         self.lang = lang
@@ -52,5 +57,5 @@ class OCRReader:
             paragraph=False,
             text_threshold=0.75,
             low_text=0.5,
-            link_threshold=0.4
+            link_threshold=0.4,
         )

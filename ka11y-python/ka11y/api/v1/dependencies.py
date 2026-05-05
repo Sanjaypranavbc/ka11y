@@ -28,6 +28,7 @@ from ka11y.utils.config_loader import load_config
 from ka11y.api.v1.models.pipeline import PipelineRequest
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from ka11y.crawler.crawler import AsyncImageCrawler
     from ka11y.crawler.forms_crawler import AsyncFormCrawler
@@ -35,12 +36,20 @@ if TYPE_CHECKING:
     from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
     from ka11y.crawler.interactive_crawler import InteractiveElementCrawler
     from ka11y.crawler.moving_content_crawler import MovingContentCrawler
-    from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import LabelInNameAuditor
-    from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import PauseStopHideAuditor
+    from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
+        LabelInNameAuditor,
+    )
+    from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
+        PauseStopHideAuditor,
+    )
     from ka11y.crawler.target_size_crawler import TargetSizeCrawler
-    from ka11y.accessibility.rules.input_modalities.target_size_auditor import TargetSizeAuditor
+    from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
+        TargetSizeAuditor,
+    )
     from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
-    from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import TextSpacingAuditor
+    from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
+        TextSpacingAuditor,
+    )
 
 # ── 1. Config ─────────────────────────────────────────────────────────────────
 

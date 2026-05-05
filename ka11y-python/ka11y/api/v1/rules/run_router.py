@@ -37,6 +37,7 @@ RULE_FLAGS = {
     "1.3.3": {"run_sensory_audit": True},
 }
 
+
 def create_rule_handler(rule_id: str):
     async def handler(payload: RuleRunRequest):
         return await _submit_rule_job(
@@ -73,7 +74,11 @@ async def _submit_rule_job(
 
     await assert_public_url(url)
 
-    all_fields = CombinedRequest.model_fields if hasattr(CombinedRequest, "model_fields") else CombinedRequest.__fields__
+    all_fields = (
+        CombinedRequest.model_fields
+        if hasattr(CombinedRequest, "model_fields")
+        else CombinedRequest.__fields__
+    )
     flags = {k: False for k in all_fields if k.startswith("run_")}
     flags.update(RULE_FLAGS.get(rule_id, {}))
 
@@ -102,6 +107,7 @@ async def _submit_rule_job(
     asyncio.create_task(_run_job(job_id, combined_payload, filter_rule=rule_id))
 
     from ka11y.config.logger import setup_logger
+
     logger = setup_logger(name="KAC", tag="rules")
     logger.info(
         f"[rules] job {job_id} submitted for {url} "
@@ -109,6 +115,7 @@ async def _submit_rule_job(
     )
 
     return _jobs[job_id]
+
 
 # Programmatically add routes for each rule to show them in Swagger
 for rule_id in RULE_FLAGS:
@@ -118,7 +125,7 @@ for rule_id in RULE_FLAGS:
         methods=["POST"],
         response_model=JobStatusResponse,
         summary=f"Run audit for rule {rule_id}",
-        status_code=202
+        status_code=202,
     )
     router.add_api_route(
         f"/{rule_id}/analyse-url",

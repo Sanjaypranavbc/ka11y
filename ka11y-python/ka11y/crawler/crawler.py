@@ -335,7 +335,15 @@ class AsyncImageCrawler:
         return cr.type  # informative / decorative
 
     def _make_image_data(
-        self, *, url, src, alt, title, cr: _CR, screenshot_path, filename,
+        self,
+        *,
+        url,
+        src,
+        alt,
+        title,
+        cr: _CR,
+        screenshot_path,
+        filename,
         element_id: str | None = None,
         capture_status: str = "ok",
         capture_error: str | None = None,
@@ -400,17 +408,19 @@ class AsyncImageCrawler:
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=30)
             ) as download_session:
-                
+
                 while queue:
                     url, depth = queue.popleft()
                     normalized_url = policy.normalize_url(url)
-                    
+
                     if normalized_url in self.visited_urls:
                         continue
                     self.visited_urls.add(normalized_url)
 
                     if len(self.visited_urls) > policy.max_pages:
-                        logger.warning(f"[image-crawler] Budget reached ({policy.max_pages} pages)")
+                        logger.warning(
+                            f"[image-crawler] Budget reached ({policy.max_pages} pages)"
+                        )
                         break
 
                     console.print(
@@ -429,28 +439,30 @@ class AsyncImageCrawler:
                             depth=depth,
                             download_session=download_session,
                         )
-                        
+
                         if depth < self.max_depth:
                             for link in new_links:
                                 if policy.is_allowed(link, self.base_url):
                                     queue.append((link, depth + 1))
-                                    
+
                     except Exception as e:
                         logger.error(f"Error crawling {normalized_url}: {e}")
 
             await context.close()
             await browser.close()
-            
+
             if not self.visited_urls:
                 raise ImageCrawlerNavigationError(
                     code="zero_pages_crawled",
                     url=self.base_url,
                     host=urlparse(self.base_url).hostname,
                     original_message="Crawl budget or navigation failures resulted in 0 pages being reached.",
-                    attempts=1
+                    attempts=1,
                 )
-            
-            logger.info(f"Browser closed — finished image crawl for {self.base_url} ({len(self.visited_urls)} pages)")
+
+            logger.info(
+                f"Browser closed — finished image crawl for {self.base_url} ({len(self.visited_urls)} pages)"
+            )
 
     async def _crawl_one_page(
         self,
@@ -471,9 +483,13 @@ class AsyncImageCrawler:
             # ── Cookie Handling ──
             try:
                 cookie_state = await handle_cookies(page)
-                logger.debug(f"[image_crawler] Cookie handling state for {url}: {cookie_state}")
+                logger.debug(
+                    f"[image_crawler] Cookie handling state for {url}: {cookie_state}"
+                )
             except Exception as e:
-                logger.debug(f"[image_crawler] Cookie handling exception for {url}: {e}")
+                logger.debug(
+                    f"[image_crawler] Cookie handling exception for {url}: {e}"
+                )
 
             await page.wait_for_timeout(1_000)
             await self._trigger_lazy_loading(page)
@@ -515,9 +531,8 @@ class AsyncImageCrawler:
                         description=f"[yellow]Image {idx+1}/{len(img_els)}[/yellow]",
                     )
                     try:
-                        if (
-                            not self.include_invisible
-                            and not await self._is_visible(img)
+                        if not self.include_invisible and not await self._is_visible(
+                            img
                         ):
                             skipped_hidden += 1
                             continue
@@ -585,10 +600,7 @@ class AsyncImageCrawler:
                         # ── screenshot / download ──
                         saved = False
                         if cr.is_icon:
-                            ext = (
-                                os.path.splitext(urlparse(abs_src).path)[1]
-                                or ".png"
-                            )
+                            ext = os.path.splitext(urlparse(abs_src).path)[1] or ".png"
                             filename = f"img_{img_hash}{ext}"
                             save_path = f"{img_dir}/{filename}"
                             saved = await self.classifier._download_file(
@@ -609,10 +621,7 @@ class AsyncImageCrawler:
                                     pass
 
                         elif cr.is_button:
-                            ext = (
-                                os.path.splitext(urlparse(abs_src).path)[1]
-                                or ".png"
-                            )
+                            ext = os.path.splitext(urlparse(abs_src).path)[1] or ".png"
                             filename = f"img_{img_hash}{ext}"
                             save_path = f"{img_dir}/{filename}"
                             saved = await self.classifier._download_file(
@@ -759,9 +768,7 @@ class AsyncImageCrawler:
                         };
                     }""")
                     html_hash = hashlib.md5(
-                        (
-                            await btn.evaluate("el => el.outerHTML.slice(0,200)")
-                        ).encode()
+                        (await btn.evaluate("el => el.outerHTML.slice(0,200)")).encode()
                     ).hexdigest()[:12]
                     if html_hash in seen_btns:
                         continue
@@ -821,7 +828,7 @@ class AsyncImageCrawler:
                         continue
                     svg_html = await svg.evaluate("el => el.outerHTML.slice(0,300)")
                     svg_hash = hashlib.md5(svg_html.encode()).hexdigest()[:12]
-                    
+
                     is_icon_svg = await self.classifier.is_icon(svg, "", "")
                     if not is_icon_svg:
                         continue
@@ -831,11 +838,11 @@ class AsyncImageCrawler:
                     os.makedirs(save_dir, exist_ok=True)
                     svg_file = f"svg_{svg_hash}.svg"
                     svg_path = f"{save_dir}/{svg_file}"
-                    
+
                     svg_content = await svg.evaluate("el => el.outerHTML")
                     with open(svg_path, "w", encoding="utf-8") as f:
                         f.write(svg_content)
-                    
+
                     captured_svgs += 1
                     self.images_data.append(
                         ImageData(
@@ -858,7 +865,7 @@ class AsyncImageCrawler:
                     )
                 except Exception:
                     pass
-            
+
             console.print(f"  [green]✓ Captured {captured_svgs} SVGs[/green]")
 
             # ── link extraction ──
@@ -868,7 +875,7 @@ class AsyncImageCrawler:
 
         finally:
             await page.close()
-            
+
         return links
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -953,9 +960,18 @@ class AsyncImageCrawler:
             w = csv.DictWriter(
                 f,
                 fieldnames=[
-                    "src", "alt_text", "title", "classification", "sub_type",
-                    "is_functional", "is_decorative", "is_complex", "is_logo",
-                    "is_icon", "is_button", "screenshot_path",
+                    "src",
+                    "alt_text",
+                    "title",
+                    "classification",
+                    "sub_type",
+                    "is_functional",
+                    "is_decorative",
+                    "is_complex",
+                    "is_logo",
+                    "is_icon",
+                    "is_button",
+                    "screenshot_path",
                 ],
             )
             w.writeheader()

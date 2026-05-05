@@ -64,8 +64,8 @@ def _build_report(
         "lang": lang,
         "labels": {
             "severities": get_severity_labels(lang),
-            "levels":     get_level_labels(lang),
-            "statuses":   get_status_labels(lang),
+            "levels": get_level_labels(lang),
+            "statuses": get_status_labels(lang),
         },
         "summary": {
             "total_findings": len(all_findings),

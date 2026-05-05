@@ -88,7 +88,9 @@ class ExecutionStepLogger:
         else:
             logger.processing(f"{step}: {message}")
 
-    def finalize(self, *, status: str, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def finalize(
+        self, *, status: str, message: str, context: Optional[Dict[str, Any]] = None
+    ) -> None:
         self.record(step=self.name, status=status, message=message, context=context)
         summary = {
             "name": self.name,

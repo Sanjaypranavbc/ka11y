@@ -14,7 +14,6 @@ from .models import Rect
 # ── Rectangle helpers ─────────────────────────────────────────────────────────
 
 
-
 def rect_from_dict(d: Dict[str, Any]) -> Rect:
     """Build a Rect from a getBoundingClientRect-style dict."""
     return Rect(

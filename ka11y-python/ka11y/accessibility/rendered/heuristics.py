@@ -105,7 +105,9 @@ def detect_body_overflow_hidden(snapshot: PageSnapshot) -> bool:
     return ox in ("hidden", "clip")
 
 
-def detect_landscape_horizontal_overflow(portrait: PageSnapshot, landscape: PageSnapshot) -> bool:
+def detect_landscape_horizontal_overflow(
+    portrait: PageSnapshot, landscape: PageSnapshot
+) -> bool:
     """
     True if landscape snapshot has a horizontal scroll but portrait doesn't.
     This often indicates the layout broke when rotated sideways.

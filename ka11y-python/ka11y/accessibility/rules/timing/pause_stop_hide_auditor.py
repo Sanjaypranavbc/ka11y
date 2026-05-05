@@ -277,7 +277,11 @@ class PauseStopHideAuditor:
                 else (
                     "failed"
                     if r["wcag_2_2_2_status"] == "FAILED"
-                    else ("needs_review" if r["wcag_2_2_2_status"] == "NEEDS_REVIEW" else "na")
+                    else (
+                        "needs_review"
+                        if r["wcag_2_2_2_status"] == "NEEDS_REVIEW"
+                        else "na"
+                    )
                 )
             )
             by_type[ct][bucket] += 1
@@ -296,8 +300,16 @@ class PauseStopHideAuditor:
                 "animation_name": f"N/A              : {na}",
                 "animation_duration_seconds": f"Pass rate        : {rate}%",
                 "animation_iteration_count": f"Axe-core misses  : {axe_would_miss}",
-                "wcag_2_2_2_status": "PASSED" if failed == 0 and needs_review == 0 else ("FAILED" if failed else "NEEDS_REVIEW"),
-                "overall_status": "PASSED" if failed == 0 and needs_review == 0 else ("FAILED" if failed else "NEEDS_REVIEW"),
+                "wcag_2_2_2_status": (
+                    "PASSED"
+                    if failed == 0 and needs_review == 0
+                    else ("FAILED" if failed else "NEEDS_REVIEW")
+                ),
+                "overall_status": (
+                    "PASSED"
+                    if failed == 0 and needs_review == 0
+                    else ("FAILED" if failed else "NEEDS_REVIEW")
+                ),
             }
         )
 
@@ -327,7 +339,9 @@ class PauseStopHideAuditor:
         total = len(records)
         passed = sum(1 for r in records if r["wcag_2_2_2_status"] == "PASSED")
         failed = sum(1 for r in records if r["wcag_2_2_2_status"] == "FAILED")
-        needs_review = sum(1 for r in records if r["wcag_2_2_2_status"] == "NEEDS_REVIEW")
+        needs_review = sum(
+            1 for r in records if r["wcag_2_2_2_status"] == "NEEDS_REVIEW"
+        )
         na = sum(1 for r in records if r["wcag_2_2_2_status"] == "N/A")
 
         failed_by_type: Dict[str, int] = {}
@@ -351,7 +365,11 @@ class PauseStopHideAuditor:
             "failed": failed,
             "needs_review": needs_review,
             "na": na,
-            "pass_rate_pct": round(passed / (passed + failed + needs_review) * 100, 1) if (passed + failed + needs_review) else 0,
+            "pass_rate_pct": (
+                round(passed / (passed + failed + needs_review) * 100, 1)
+                if (passed + failed + needs_review)
+                else 0
+            ),
             "wcag_2_2_2_failed": failed,
             "axe_would_miss": sum(1 for r in records if not r["axe_would_catch"]),
             "failed_by_type": failed_by_type,
