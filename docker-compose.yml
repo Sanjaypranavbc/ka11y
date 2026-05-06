@@ -117,6 +117,8 @@ services:
     build:
       context: ./ka11y-frontend-sdk
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "https://a11y-api.bluecaffeine.in" # http:localhost:8000/
     image: ka11y-frontend:latest
     container_name: ka11y-frontend
     restart: unless-stopped
