@@ -49,20 +49,36 @@ async function run(page, context = {}) {
     const videos = Array.from(document.querySelectorAll('video'));
     const issues = [];
     let liveCount = 0;
+    let unverifiedLiveCount = 0;
+
+    const hasWebSocketPreconnect = !!document.querySelector('link[rel="preconnect"][href^="wss://"]');
 
     for (const video of videos) {
-      const liveAttr = video.getAttribute('data-live') === 'true' || video.getAttribute('is-live') === 'true';
+      // Explicit opt-in
+      const liveOptIn = video.getAttribute('data-wcag-live-captions') === 'true';
+      
+      // Technical liveness signals
       const srcText = (video.currentSrc || '') + ' ' + (video.getAttribute('src') || '');
-      const looksLive = /\blive\b|m3u8|\.m3u8|\.m3u8\?|playlist|stream/i.test(srcText);
+      const isLiveUrl = /\.m3u8|\.mpd|\/live\//i.test(srcText);
 
-      // Nearby textual hint (e.g., badge saying "Live")
+      // Nearby textual hints
       const container = video.closest('figure, article, section, [role="region"], [role="main"]') || video.parentElement;
       const nearbyText = container ? (container.textContent || '').slice(0, 400) : '';
-      const hasLiveBadge = /\bLIVE\b|\blive\b|on air|now playing/i.test(nearbyText);
+      const mentionsLive = /\blive\b|streaming|broadcast/i.test(nearbyText);
 
-      const likelyLive = liveAttr || looksLive || hasLiveBadge;
-      if (!likelyLive) continue;
+      const hasLivenessEvidence = liveOptIn || isLiveUrl || hasWebSocketPreconnect || mentionsLive;
+
+      // Legacy/Broad heuristics for initial detection
+      const looksLive = hasLivenessEvidence || 
+                        /\blive\b|m3u8|playlist|stream/i.test(srcText) || 
+                        /\bLIVE\b|on air|now playing/i.test(nearbyText) ||
+                        video.getAttribute('data-live') === 'true' || 
+                        video.getAttribute('is-live') === 'true';
+
+      if (!looksLive) continue;
+      
       liveCount += 1;
+      if (!hasLivenessEvidence) unverifiedLiveCount += 1;
 
       // 1. Check for <track kind="captions" | "subtitles"> children
       const captionTracks = Array.from(video.querySelectorAll('track[kind="captions"], track[kind="subtitles"]'));
@@ -101,9 +117,7 @@ async function run(page, context = {}) {
       }
     }
 
-    // Inspect iframes for known live embed patterns; cross-origin iframes need manual review
-    // unless they have URL parameters explicitly forcing captions on.
-    const iframes = Array.from(document.querySelectorAll('iframe'));
+    // Inspect iframes for known live embed patterns
     for (const ifr of iframes) {
       const src = (ifr.getAttribute('src') || '').toLowerCase();
       if (!src) continue;
@@ -117,7 +131,7 @@ async function run(page, context = {}) {
         (src.includes('vimeo.com') && /[?&]texttrack=/.test(src));
 
       if (hasForcedCaptions) {
-        continue; // Passing signal — player is configured to show captions
+        continue; // Passing signal
       }
 
       // Improvement: Look for a nearby ARIA-live region that might be a CART stream
@@ -129,7 +143,7 @@ async function run(page, context = {}) {
       });
 
       if (hasCartStream) {
-        continue; // Passing signal — an external CART stream is provided next to the video
+        continue; // Passing signal
       }
 
       let crossOrigin = false;
@@ -147,7 +161,7 @@ async function run(page, context = {}) {
       });
     }
 
-    return { liveCount, issues };
+    return { liveCount, unverifiedLiveCount, issues };
   });
 
   if (data.liveCount === 0 && data.issues.length === 0) {
@@ -165,6 +179,19 @@ async function run(page, context = {}) {
   }
 
   if (data.issues.length === 0) {
+    if (data.unverifiedLiveCount > 0) {
+      return {
+        successCriteriaId: SC,
+        rules: [{
+          ruleId: RULE_ID,
+          description: FALLBACK_DESCRIPTION,
+          impact: 'moderate',
+          status: 'needs_review',
+          reason: _t(sharedContext, 'cannot verify captions are live; appears prerecorded', 'キャプションがライブであることを確認できません。事前録画のように見えます。'),
+          helpUrl: HELP_URL,
+        }],
+      };
+    }
     return {
       successCriteriaId: SC,
       rules: [{

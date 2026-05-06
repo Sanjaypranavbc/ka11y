@@ -8,9 +8,10 @@ const { motionActuationRule } = require('../axe-rule-motion-actuation.js');
 
 describe('WCAG 2.5.4 Motion Actuation', () => {
 
-  test('classifyMotionAsEssential returns likelyEssential: true for pedometer page', async () => {
+  test('classifyMotionAsEssential returns likelyEssential: false but includes soft signals for pedometer page without opt-in', async () => {
      const fakePage = {
         evaluate: jest.fn().mockResolvedValue({
+           hasExplicitOptIn: false,
            text: 'best pedometer and fitness app',
            hasCanvas: false,
            hasAriaLive: false,
@@ -18,8 +19,23 @@ describe('WCAG 2.5.4 Motion Actuation', () => {
         })
      };
      const result = await classifyMotionAsEssential(fakePage, {});
+     expect(result.likelyEssential).toBe(false);
+     expect(result.softSignals).toContain('Pedometer / fitness context detected');
+  });
+
+  test('classifyMotionAsEssential returns likelyEssential: true when explicit opt-in is present', async () => {
+     const fakePage = {
+        evaluate: jest.fn().mockResolvedValue({
+           hasExplicitOptIn: true,
+           text: 'random page',
+           hasCanvas: false,
+           hasAriaLive: false,
+           hasAriaRoles: false
+        })
+     };
+     const result = await classifyMotionAsEssential(fakePage, {});
      expect(result.likelyEssential).toBe(true);
-     expect(result.reason).toContain('fitness');
+     expect(result.reason).toContain('Explicit opt-in attribute');
   });
 
   test('buildViolation sets correct severity based on essential status', () => {

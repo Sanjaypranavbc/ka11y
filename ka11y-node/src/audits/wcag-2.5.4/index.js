@@ -40,7 +40,7 @@ async function auditMotionActuation(page, options = {}) {
        motionDetected: false,
        motionEvidence,
        motionLibrariesDetected: [],
-       essentialClassification: { likelyEssential: false, reason: null },
+       essentialClassification: { likelyEssential: false, reason: 'no motion detected', softSignals: [] },
        disableControlFound: false,
        violations: [],
        warnings: [],
