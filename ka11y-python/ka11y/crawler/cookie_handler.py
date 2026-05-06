@@ -64,9 +64,11 @@ async def _click_first_match(
 ) -> bool:
     candidates = [
         context.get_by_role("button", name=pattern).first,
-        context.locator("button, a, input[type='button'], input[type='submit'], [role='button']").filter(
-            has_text=pattern
-        ).first,
+        context.locator(
+            "button, a, input[type='button'], input[type='submit'], [role='button']"
+        )
+        .filter(has_text=pattern)
+        .first,
         context.locator(explicit_selector).first,
     ]
 
@@ -109,11 +111,14 @@ async def handle_cookies(page: Page) -> str:
 
         rejected_any = False
         for context in contexts:
-            rejected_any = await _click_first_match(
-                context,
-                pattern=_REJECT_PATTERN,
-                explicit_selector="#onetrust-reject-all-handler, .cookie-reject, #W0wltc",
-            ) or rejected_any
+            rejected_any = (
+                await _click_first_match(
+                    context,
+                    pattern=_REJECT_PATTERN,
+                    explicit_selector="#onetrust-reject-all-handler, .cookie-reject, #W0wltc",
+                )
+                or rejected_any
+            )
 
         if rejected_any:
             await page.wait_for_timeout(_STABILIZE_DELAY_MS)
@@ -123,11 +128,14 @@ async def handle_cookies(page: Page) -> str:
 
         accepted_any = False
         for context in contexts:
-            accepted_any = await _click_first_match(
-                context,
-                pattern=_ACCEPT_PATTERN,
-                explicit_selector="#onetrust-accept-btn-handler, .cookie-accept, #L2AGLb",
-            ) or accepted_any
+            accepted_any = (
+                await _click_first_match(
+                    context,
+                    pattern=_ACCEPT_PATTERN,
+                    explicit_selector="#onetrust-accept-btn-handler, .cookie-accept, #L2AGLb",
+                )
+                or accepted_any
+            )
 
         if accepted_any:
             await page.wait_for_timeout(_STABILIZE_DELAY_MS)

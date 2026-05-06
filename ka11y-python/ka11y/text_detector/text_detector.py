@@ -19,7 +19,7 @@ from ka11y.preprocessor.text_helper_models import (
 from ka11y.utils.text_detector_helper import (
     estimate_boldness,
     bbox_height_rotated,
-    load_image_with_alpha
+    load_image_with_alpha,
 )
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
@@ -31,13 +31,13 @@ logger.info("Logger initialized")
 
 try:
     from ka11y.text_detector.paddleocrbase import OCRReader, PaddleOCR
+
     # Verify it can actually be initialized (detects missing paddleocr lib)
     if PaddleOCR is None:
-         raise ImportError("PaddleOCR not functional")
+        raise ImportError("PaddleOCR not functional")
 except (ImportError, RuntimeError):
     logger.info("PaddleOCR not available, falling back to EasyOCR")
     from ka11y.text_detector.ocrbase import OCRReader
-
 
 
 class OCRPreprocessing:
@@ -49,7 +49,9 @@ class OCRPreprocessing:
         include_paths: Optional[List[str]] = None,
     ):
         self.source_directory = source_directory
-        self.include_paths = [str(Path(path).resolve()) for path in (include_paths or []) if path]
+        self.include_paths = [
+            str(Path(path).resolve()) for path in (include_paths or []) if path
+        ]
 
         if output_directory is None:
             self.base_output_dir = source_directory
@@ -204,7 +206,7 @@ class OCRPreprocessing:
         if not any(c.isalnum() for c in text):
             return False
 
-        (tl, tr, br, bl) = bbox
+        tl, tr, br, bl = bbox
         width = tr[0] - tl[0]
         height = bl[1] - tl[1]
 
@@ -212,7 +214,6 @@ class OCRPreprocessing:
             return False
 
         return True
-
 
     def detect_text_in_image(self, image_path: str) -> TextDetectionResult:
         """Use EasyOCR to detect text and run contrast analysis"""
@@ -288,8 +289,13 @@ class OCRPreprocessing:
                             # analyze_ui_component does not return "region"/"mask"
                             # keys — only analyze_text_region does.  Skip colour
                             # extraction when the keys are absent to avoid KeyError.
-                            if "region" not in contrast_info or "mask" not in contrast_info:
-                                raise ValueError("No region/mask available for colour extraction")
+                            if (
+                                "region" not in contrast_info
+                                or "mask" not in contrast_info
+                            ):
+                                raise ValueError(
+                                    "No region/mask available for colour extraction"
+                                )
 
                             extracted = extract_color.extract_colors_from_mask(
                                 contrast_info["region"], contrast_info["mask"], k_bg=3

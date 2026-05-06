@@ -10,7 +10,7 @@ LARGE_TEXT_BOLD_PT = 14.0
 
 # 2.5.8: Target Size
 MIN_TARGET_SIZE_PX = 24.0
-MIN_TARGET_SPACING_PX = 24.0 # Combined target + spacing
+MIN_TARGET_SPACING_PX = 24.0  # Combined target + spacing
 
 # 1.1.1: Alt Text
 MIN_ICON_ALT_LENGTH = 4

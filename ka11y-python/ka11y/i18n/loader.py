@@ -43,10 +43,11 @@ I18N_DIR = Path(os.environ.get("KA11Y_I18N_DIR", str(_DEFAULT_I18N_DIR)))
 
 class RuleEntry(BaseModel):
     """A single WCAG success criterion entry."""
+
     model_config = ConfigDict(frozen=True)
     id: str
-    level: str                    # "A" | "AA" | "AAA"
-    severity: Optional[str]       # "critical" | "high" | "medium" | "low" | None
+    level: str  # "A" | "AA" | "AAA"
+    severity: Optional[str]  # "critical" | "high" | "medium" | "low" | None
     name: str
     description: str
     suggested_fix: str
@@ -55,6 +56,7 @@ class RuleEntry(BaseModel):
 
 class LocaleBundle(BaseModel):
     """Localized labels + per-rule entries for one language."""
+
     model_config = ConfigDict(frozen=True)
     lang: str
     rules: Mapping[str, RuleEntry]
@@ -126,9 +128,13 @@ def _load_bundle_cached(lang: str) -> LocaleBundle:
         base_templates_top,
         locale_templates_top,
     )
-    severities = _merge_label_map(_DEFAULT_SEVERITY_LABELS_EN, base_severities, locale_severities)
+    severities = _merge_label_map(
+        _DEFAULT_SEVERITY_LABELS_EN, base_severities, locale_severities
+    )
     levels = _merge_label_map(_DEFAULT_LEVEL_LABELS_EN, base_levels, locale_levels)
-    statuses = _merge_label_map(_DEFAULT_STATUS_LABELS_EN, base_statuses, locale_statuses)
+    statuses = _merge_label_map(
+        _DEFAULT_STATUS_LABELS_EN, base_statuses, locale_statuses
+    )
 
     return LocaleBundle(
         lang=lang,
@@ -173,7 +179,9 @@ def _build_entries(
 
     # Include synthetic SC IDs (e.g. "_generic") that exist only in
     # reason_templates so callers can render shared catch-all messages.
-    synthetic_ids = (set(base_templates_top) | set(locale_templates_top)) - set(base_rules)
+    synthetic_ids = (set(base_templates_top) | set(locale_templates_top)) - set(
+        base_rules
+    )
 
     result: Dict[str, RuleEntry] = {}
     iter_ids = list(base_rules.keys()) + sorted(synthetic_ids)
@@ -210,7 +218,9 @@ def _build_entries(
             severity=base.get("severity"),  # never localised — stable enum
             name=_pick(override.get("name"), base.get("name", "")),
             description=_pick(override.get("description"), base.get("description", "")),
-            suggested_fix=_pick(override.get("suggested_fix"), base.get("suggested_fix", "")),
+            suggested_fix=_pick(
+                override.get("suggested_fix"), base.get("suggested_fix", "")
+            ),
             reason_templates=merged_templates,
         )
     return result
@@ -247,6 +257,7 @@ def load_rules(lang: str = "en") -> Dict[str, RuleEntry]:
 # ---------------------------------------------------------------------------
 # Convenience dict-like accessors
 # ---------------------------------------------------------------------------
+
 
 def get_wcag_names(lang: str = "en") -> Dict[str, str]:
     """Return {sc_id: name} for the given language."""
@@ -342,7 +353,9 @@ def render_reason(
         # Fall back to English if the locale has no override for this code
         if lang != "en":
             en_rule = load_bundle("en").rules.get(str(sc))
-            template = (en_rule.reason_templates.get(str(code)) if en_rule else "") or ""
+            template = (
+                en_rule.reason_templates.get(str(code)) if en_rule else ""
+            ) or ""
 
     if not template:
         # Fall back to the shared `_generic` block so every SC participates in
@@ -351,7 +364,9 @@ def render_reason(
         template = (generic.reason_templates.get(str(code)) if generic else None) or ""
         if not template and lang != "en":
             en_generic = load_bundle("en").rules.get("_generic")
-            template = (en_generic.reason_templates.get(str(code)) if en_generic else "") or ""
+            template = (
+                en_generic.reason_templates.get(str(code)) if en_generic else ""
+            ) or ""
 
     if not template:
         return fallback

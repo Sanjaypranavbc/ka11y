@@ -68,7 +68,9 @@ def _merge_findings(
             targets = [item for item in target if isinstance(item, str)]
         else:
             targets = []
-        cleaned = [" ".join(item.split()).strip().lower() for item in targets if item.strip()]
+        cleaned = [
+            " ".join(item.split()).strip().lower() for item in targets if item.strip()
+        ]
         if not cleaned:
             return ""
         return "||".join(dict.fromkeys(cleaned))
@@ -126,7 +128,9 @@ def _merge_findings(
     return list(merged.values()) + no_key
 
 
-async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None) -> None:
+async def _run_job(
+    job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
+) -> None:
     """
     Background task: run axe-core (Node) and Python stages in parallel.
 
@@ -165,7 +169,11 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             step="combined_job",
             status="running",
             message="Combined audit job started",
-            context={"url": url, "lang": payload.lang, "wcag_level": payload.wcag_level},
+            context={
+                "url": url,
+                "lang": payload.lang,
+                "wcag_level": payload.wcag_level,
+            },
         )
 
         # Announce the stage plan to SSE subscribers so the progress bar can render.
@@ -222,7 +230,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 run_hover_focus_content_audit=payload.run_hover_focus_content_audit,
                 run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
-                run_sensory_audit= payload.run_sensory_audit,
+                run_sensory_audit=payload.run_sensory_audit,
                 lang=payload.lang,
                 job_id=job_id,
                 step_logger=step_logger,
@@ -305,13 +313,17 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(img['path'], safe='')}"
                         )
-                        
+
         for array_key in ("violations", "needs_review", "passes"):
             for finding in report.get(array_key, []):
                 element = finding.get("element")
                 if element and isinstance(element, dict):
                     src = element.get("image_src")
-                    if src and not src.startswith("/api/v1/") and not src.startswith(("http://", "https://", "data:")):
+                    if (
+                        src
+                        and not src.startswith("/api/v1/")
+                        and not src.startswith(("http://", "https://", "data:"))
+                    ):
                         element["image_src"] = (
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(src, safe='')}"
@@ -319,7 +331,9 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
-            json.dump(report, fh, indent=2, ensure_ascii=False, default=_json_serializer)
+            json.dump(
+                report, fh, indent=2, ensure_ascii=False, default=_json_serializer
+            )
 
         _jobs[job_id].update(
             {
@@ -360,8 +374,14 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
 
     except Exception as exc:
         tb = traceback.format_exc()
-        origin = traceback.extract_tb(exc.__traceback__)[-1] if exc.__traceback__ else None
-        where = f"{origin.filename}:{origin.lineno} in {origin.name}()" if origin else "unknown"
+        origin = (
+            traceback.extract_tb(exc.__traceback__)[-1] if exc.__traceback__ else None
+        )
+        where = (
+            f"{origin.filename}:{origin.lineno} in {origin.name}()"
+            if origin
+            else "unknown"
+        )
         err_type = type(exc).__name__
         current_stage = _jobs[job_id].get("current_stage") or "post_processing"
         logger.error(

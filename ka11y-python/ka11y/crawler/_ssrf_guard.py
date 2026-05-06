@@ -25,20 +25,20 @@ import ipaddress
 import re
 
 _BLOCKED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),      # IPv4 loopback
-    ipaddress.ip_network("10.0.0.0/8"),        # RFC-1918 class A
-    ipaddress.ip_network("172.16.0.0/12"),     # RFC-1918 class B
-    ipaddress.ip_network("192.168.0.0/16"),    # RFC-1918 class C
-    ipaddress.ip_network("169.254.0.0/16"),    # IPv4 link-local
-    ipaddress.ip_network("100.64.0.0/10"),     # Shared address space (RFC 6598)
-    ipaddress.ip_network("192.0.0.0/24"),      # IETF protocol assignments
-    ipaddress.ip_network("192.0.2.0/24"),      # TEST-NET-1
-    ipaddress.ip_network("198.51.100.0/24"),   # TEST-NET-2
-    ipaddress.ip_network("203.0.113.0/24"),    # TEST-NET-3
-    ipaddress.ip_network("0.0.0.0/8"),         # "This" network
-    ipaddress.ip_network("::1/128"),           # IPv6 loopback
-    ipaddress.ip_network("fc00::/7"),          # IPv6 unique-local
-    ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
+    ipaddress.ip_network("127.0.0.0/8"),  # IPv4 loopback
+    ipaddress.ip_network("10.0.0.0/8"),  # RFC-1918 class A
+    ipaddress.ip_network("172.16.0.0/12"),  # RFC-1918 class B
+    ipaddress.ip_network("192.168.0.0/16"),  # RFC-1918 class C
+    ipaddress.ip_network("169.254.0.0/16"),  # IPv4 link-local
+    ipaddress.ip_network("100.64.0.0/10"),  # Shared address space (RFC 6598)
+    ipaddress.ip_network("192.0.0.0/24"),  # IETF protocol assignments
+    ipaddress.ip_network("192.0.2.0/24"),  # TEST-NET-1
+    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3
+    ipaddress.ip_network("0.0.0.0/8"),  # "This" network
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),  # IPv6 unique-local
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
     ipaddress.ip_network("::ffff:127.0.0.1/128"),  # IPv4-mapped loopback
 ]
 
@@ -54,8 +54,14 @@ def _ip_is_blocked(ip_str: str) -> bool:
         return False
     # Use Python's built-in address classification (covers multicast, reserved, etc.)
     # in addition to the explicit CIDR network list for comprehensive coverage.
-    if addr.is_private or addr.is_loopback or addr.is_link_local or \
-       addr.is_multicast or addr.is_reserved or addr.is_unspecified:
+    if (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
+    ):
         return True
     return any(addr in net for net in _BLOCKED_NETWORKS)
 

@@ -60,7 +60,9 @@ def _sc_sort_key(entry: Dict[str, Any]) -> tuple:
 
 @router.get("/wcag", summary="WCAG rules catalogue")
 async def get_wcag_rules(
-    lang: str = Query(default="en", description="BCP-47 language code (e.g. 'en', 'de', 'ja')"),
+    lang: str = Query(
+        default="en", description="BCP-47 language code (e.g. 'en', 'de', 'ja')"
+    ),
 ) -> JSONResponse:
     """
     Returns all WCAG success criteria with level, severity, name,
@@ -77,14 +79,14 @@ async def get_wcag_rules(
 
     rules_list: List[Dict[str, Any]] = [
         {
-            "id":             entry.id,
-            "level":          entry.level,
-            "level_label":    get_level_label(entry.level, safe_lang),
-            "severity":       entry.severity,
+            "id": entry.id,
+            "level": entry.level,
+            "level_label": get_level_label(entry.level, safe_lang),
+            "severity": entry.severity,
             "severity_label": get_severity_label(entry.severity, safe_lang),
-            "name":           entry.name,
-            "description":    entry.description,
-            "suggested_fix":  entry.suggested_fix,
+            "name": entry.name,
+            "description": entry.description,
+            "suggested_fix": entry.suggested_fix,
         }
         for entry in rules_map.values()
     ]
@@ -93,11 +95,11 @@ async def get_wcag_rules(
 
     return JSONResponse(
         content={
-            "version":    "1.0",
-            "lang":       safe_lang,
+            "version": "1.0",
+            "lang": safe_lang,
             "severities": dict(bundle.severities),
-            "levels":     dict(bundle.levels),
-            "statuses":   dict(bundle.statuses),
-            "rules":      rules_list,
+            "levels": dict(bundle.levels),
+            "statuses": dict(bundle.statuses),
+            "rules": rules_list,
         }
     )

@@ -1,4 +1,3 @@
-
 """
 ka11y/crawler/media_crawler.py
 ================================
@@ -52,10 +51,10 @@ class MediaElementData(BaseModel):
     element_index: int
 
     # ── Identity ──────────────────────────────────────────────────────────
-    tag: str                              # "AUDIO" | "VIDEO"
-    element_id: Optional[str] = None      # HTML id attribute
-    src: Optional[str] = None             # media source URL
-    html_snippet: str = ""                # outer HTML truncated to 500 chars
+    tag: str  # "AUDIO" | "VIDEO"
+    element_id: Optional[str] = None  # HTML id attribute
+    src: Optional[str] = None  # media source URL
+    html_snippet: str = ""  # outer HTML truncated to 500 chars
 
     # ── Media attributes ──────────────────────────────────────────────────
     has_autoplay: bool = False
@@ -69,15 +68,15 @@ class MediaElementData(BaseModel):
     tracks: List[Dict[str, Optional[str]]] = []
 
     # ── ARIA and role attributes ──────────────────────────────────────────
-    aria_hidden: bool = False             # aria-hidden="true" → decorative
-    role: Optional[str] = None            # role="presentation" → decorative
-    aria_label: Optional[str] = None      # explicit accessible name
-    aria_describedby_text: Optional[str] = None   # resolved aria-describedby
+    aria_hidden: bool = False  # aria-hidden="true" → decorative
+    role: Optional[str] = None  # role="presentation" → decorative
+    aria_label: Optional[str] = None  # explicit accessible name
+    aria_describedby_text: Optional[str] = None  # resolved aria-describedby
 
     # ── Nearby context (for transcript detection in the auditor) ──────────
     # Links in the parent container — the auditor searches these for
     # keywords like "transcript", "text version", etc.
-    nearby_links: List[Dict[str, str]] = []   # [{"href": "...", "text": "..."}]
+    nearby_links: List[Dict[str, str]] = []  # [{"href": "...", "text": "..."}]
 
     # Text content of the closest parent container (truncated).
     # Used to detect inline transcripts or "audio version of" labeling.
@@ -90,8 +89,6 @@ class MediaElementData(BaseModel):
     selector: Optional[str] = None
     element_ref_id: Optional[str] = None
     frame_path: Optional[str] = None
-
-
 
 
 # ── Crawler class ─────────────────────────────────────────────────────────────
@@ -260,9 +257,7 @@ class AsyncMediaCrawler:
         return results;
     }"""
 
-    def __init__(
-        self, *, base_url: str, output_dir: str, max_depth: int = 0
-    ) -> None:
+    def __init__(self, *, base_url: str, output_dir: str, max_depth: int = 0) -> None:
         self.base_url = base_url
         self.output_dir = Path(output_dir)
         self.max_depth = max_depth

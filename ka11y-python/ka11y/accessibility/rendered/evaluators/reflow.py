@@ -36,6 +36,7 @@ def _is_likely_exempt(tag: str, html: str) -> bool:
 
     return False
 
+
 def evaluate(
     snapshot_320: PageSnapshot,
 ) -> List[RuleAuditRecord]:
@@ -54,15 +55,12 @@ def evaluate(
 
     # ── Helper: valid overflow (allowed cases) ────────────────────────────────
     def _is_valid_overflow(el) -> bool:
-        return (
-            _is_likely_exempt(el.tag, el.html_snippet)
-            or getattr(el, "has_overflow_x_scroll", False)
+        return _is_likely_exempt(el.tag, el.html_snippet) or getattr(
+            el, "has_overflow_x_scroll", False
         )
 
     # Filter only REAL violations
-    valid_overflows = [
-        el for el in overflow_els if not _is_valid_overflow(el)
-    ]
+    valid_overflows = [el for el in overflow_els if not _is_valid_overflow(el)]
 
     # ── Case 1: Page has horizontal scroll ────────────────────────────────────
     if page_scrolls:

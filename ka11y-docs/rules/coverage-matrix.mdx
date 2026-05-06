@@ -64,6 +64,26 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 
 ---
 
+## 1.2.4 Captions (Live)
+**Engine:** `ka11y-node/src/custom-checks/captions-live.check.js`.
+
+Detects live media surfaces (HLS / m3u8, `data-live` attributes, "live" badges, known live-streaming embed providers) and verifies that captions are present.
+
+| Technique | Kind | Status |
+|---|---|---|
+| G9 Real-time captions for live audio in synchronized media | Sufficient | Partial |
+| H95 `<track kind="captions">` populated at runtime | Sufficient | Covered |
+| Embed: YouTube `cc_load_policy=1` URL parameter | Sufficient | Covered (passing signal) |
+| Embed: Vimeo `texttrack=…` URL parameter | Sufficient | Covered (passing signal) |
+| Adjacent CART stream (`[aria-live]` region whose label/text matches `caption` / `transcript` / `字幕` / `文字起こし`) | Sufficient | Covered (passing signal) |
+| F8 Failure — no synchronous text alternative for live audio | Failure | Partial — cross-origin players require manual review |
+
+**Known limitations**
+- Cross-origin embed players whose URL does not opt captions on (`cc_load_policy=1`, `texttrack=…`) and which lack a sibling CART stream are flagged for manual review — the auditor cannot inspect the player's DOM to confirm runtime captioning.
+- "Live" detection still depends on observable surface signals; back-end scheduled streams that lack a `live` badge or HLS source are invisible.
+
+---
+
 ## 1.3.1 Info and Relationships
 **Engine:** axe-core + `policy_1_3_1.py`.
 
@@ -581,7 +601,6 @@ Single-page scope only. Cannot observe step-to-step state in wizards.
 
 | SC | Level | Why it's not implemented |
 |---|---|---|
-| 1.2.4 Captions (Live) | AA | Partial |
 | 1.2.5 Audio Description (Prerecorded) | AA | Automatable; not yet wired |
 | 1.4.2 Audio Control | A | Automatable; not yet wired |
 | 2.2.1 Timing Adjustable | A | Partial (requires timeout detection) |

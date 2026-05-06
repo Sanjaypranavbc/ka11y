@@ -10,7 +10,12 @@ to work without any changes.
 
 from __future__ import annotations
 
-from ka11y.i18n.loader import get_severities, get_suggested_fixes, get_wcag_levels, get_wcag_names
+from ka11y.i18n.loader import (
+    get_severities,
+    get_suggested_fixes,
+    get_wcag_levels,
+    get_wcag_names,
+)
 
 # ---------------------------------------------------------------------------
 # Public dicts — same names and shapes as before, now YAML-backed.
@@ -37,7 +42,7 @@ _PYTHON_SEVERITY: dict[str, str] = get_severities()
 STAGE_WEIGHTS: dict[str, int] = {
     "axe_core": 4,
     "image_audit": 40,
-    "pipeline": 10,              # 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
+    "pipeline": 10,  # 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
     "form_audit": 2,
     "label_in_name": 1,
     "pause_stop_hide": 2,

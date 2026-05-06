@@ -51,22 +51,42 @@ async function validateDisableControl(page) {
       }
 
       // Medium Confidence Checks
-      const switches = Array.from(document.querySelectorAll('[role="switch"]'));
+      const switches = Array.from(document.querySelectorAll('[role="switch"], [aria-pressed="true"], [aria-pressed="false"]'));
       if (switches.length > 0) {
         const pageText = document.body.textContent || '';
         if (checkPatterns(pageText, motionPatterns)) {
           if (highestConfidence === 'none' || highestConfidence === 'low') highestConfidence = 'medium';
-          evidence.push('Found ARIA switch on a page mentioning motion');
+          evidence.push('Found ARIA switch or pressed-toggle on a page mentioning motion');
+        }
+        // Deep Check: Does the switch specifically reference motion?
+        for (const sw of switches) {
+           const label = (sw.getAttribute('aria-label') || sw.textContent || '').trim();
+           if (checkPatterns(label, motionPatterns)) {
+              highestConfidence = 'high';
+              evidence.push(`Found ARIA switch/toggle specifically for motion: "${label}"`);
+           }
         }
       }
 
-      const allElements = Array.from(document.querySelectorAll('*'));
-      for (const el of allElements) {
+      // Constrain "accessibility-section" detection to landmarks and interactive
+      // controls — and only count it as evidence if the same subtree mentions
+      // a motion keyword. The previous implementation walked
+      // `document.querySelectorAll('*')` and produced a medium-confidence pass
+      // on any page with an "Accessibility" landmark regardless of its content.
+      const accessibilityRegions = Array.from(document.querySelectorAll(
+        'nav, aside, section, dialog, button, a[href], [role="region"], [role="navigation"], [role="dialog"], [role="menu"]'
+      ));
+      for (const el of accessibilityRegions) {
         const ariaLabel = el.getAttribute('aria-label') || '';
-        if (checkPatterns(ariaLabel, accessibilityPatterns)) {
-          if (highestConfidence === 'none' || highestConfidence === 'low') highestConfidence = 'medium';
-          evidence.push('Found accessibility section/control via aria-label');
+        if (!checkPatterns(ariaLabel, accessibilityPatterns)) continue;
+
+        const subtreeText = (el.textContent || '');
+        if (!checkPatterns(subtreeText, motionPatterns)) continue;
+
+        if (highestConfidence === 'none' || highestConfidence === 'low') {
+          highestConfidence = 'medium';
         }
+        evidence.push(`Found accessibility region "${ariaLabel.trim()}" mentioning motion keywords`);
       }
 
       const details = Array.from(document.querySelectorAll('details, [role="dialog"]'));
@@ -99,4 +119,6 @@ async function validateDisableControl(page) {
     console.warn('[wcag-2.5.4] disable control validation failed:', err.message);
     return { hasDisableControl: false, confidence: 'low', evidence: [] };
   }
-}module.exports = { validateDisableControl };
+}
+
+module.exports = { validateDisableControl };

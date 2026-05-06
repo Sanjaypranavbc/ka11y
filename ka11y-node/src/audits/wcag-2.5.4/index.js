@@ -7,6 +7,7 @@ const { classifyMotionAsEssential } = require('./essential-motion-classifier.js'
 const { validateDisableControl } = require('./disable-control-validator.js');
 const { buildViolation } = require('./violation-builder.js');
 const { motionActuationRule, registerMotionActuationRule } = require('./axe-rule-motion-actuation.js');
+const { injectMotionDetector, extractMotionRegistry } = require('./motion-listener-detector.js');
 
 async function auditMotionActuation(page, options = {}) {
   const {
@@ -24,9 +25,15 @@ async function auditMotionActuation(page, options = {}) {
   const motionEvidence = await detectMotionEventListeners(page);
   const detectedLibraries = await detectMotionLibraries(page);
 
-  const isMotionDetected = motionEvidence.confidence !== 'none' || detectedLibraries.size > 0;
+  const isMotionDetected =
+    motionEvidence.confidence !== 'none' ||
+    detectedLibraries.size > 0 ||
+    !!motionEvidence.hasAddEventListenerMotionHandler;
 
-  if (skipIfNoMotionDetected && !isMotionDetected && motionEvidence.inlineScriptMatches.length === 0 && !motionEvidence.hasOnDeviceMotionHandler) {
+  if (skipIfNoMotionDetected && !isMotionDetected
+      && motionEvidence.inlineScriptMatches.length === 0
+      && !motionEvidence.hasOnDeviceMotionHandler
+      && !motionEvidence.hasAddEventListenerMotionHandler) {
      return {
        pageUrl,
        pageLang: lang,
@@ -38,7 +45,7 @@ async function auditMotionActuation(page, options = {}) {
        violations: [],
        warnings: [],
        manualReviewItems: [],
-       summary: { total: 0, violations: 0, warnings: 0, requirementAFailed: false, requirementBFailed: false, confidence: 'none', layers: { eventHandler: 0, inlineScript: 0, libraryDetected: 0, axeRule: 0 } }
+       summary: { total: 0, violations: 0, warnings: 0, requirementAFailed: false, requirementBFailed: false, confidence: 'none', layers: { eventHandler: 0, addEventListener: 0, inlineScript: 0, libraryDetected: 0, axeRule: 0 } }
      };
   }
 
@@ -53,17 +60,55 @@ async function auditMotionActuation(page, options = {}) {
   let requirementBFailed = false;
 
   if (isMotionDetected) {
-     // UI Alternative Check
+     // UI Alternative Check.
+     //
+     // The accessible name of an alternative control should describe the *action*,
+     // not the gesture. A shake-to-undo gesture's alternative is typically labelled
+     // "Undo", not "Shake". We scan for action verbs (English + Japanese) and
+     // additionally treat a control whose label or nearby text *also* mentions
+     // a motion keyword as a strong signal (covers labels like "Refresh — or shake").
      let uiAlternativeFound = false;
      try {
        uiAlternativeFound = await page.evaluate(() => {
-          const patterns = ['undo', 'shake', 'refresh', 'tilt', '回転', 'シェイク', '元に戻す'];
-          const controls = Array.from(document.querySelectorAll('button, a, [role="button"], [role="link"]'));
+          const ACTION_PATTERNS = [
+             // English action verbs that commonly substitute for motion
+             'undo', 'redo', 'cancel', 'reset', 'refresh', 'reload',
+             'submit', 'send', 'next', 'previous', 'back', 'skip',
+             'rotate', 'flip', 'pan', 'zoom in', 'zoom out',
+             'roll', 'shuffle', 'randomize', 'random', 'random number',
+             // Japanese
+             '元に戻す', 'やり直し', 'キャンセル', 'リセット', '更新',
+             '送信', '次へ', '前へ', '戻る', 'スキップ',
+             '回転', '反転', '拡大', '縮小', 'シャッフル', 'ランダム'
+          ];
+          const MOTION_PATTERNS = [
+             'motion', 'shake', 'tilt', 'gyro', 'accelero',
+             'モーション', 'シェイク', '傾き', 'ジャイロ'
+          ];
+
+          const controls = Array.from(document.querySelectorAll(
+             'button, a[href], input[type="button"], input[type="submit"], [role="button"], [role="link"], [role="menuitem"]'
+          ));
+
           for (const el of controls) {
-             const txt = (el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '');
-             if (patterns.some(p => txt.toLowerCase().includes(p.toLowerCase()))) {
-                return true;
-             }
+             const label = (
+                (el.textContent || '') + ' ' +
+                (el.getAttribute('aria-label') || '') + ' ' +
+                (el.getAttribute('title') || '') + ' ' +
+                (el.getAttribute('value') || '')
+             ).toLowerCase().trim();
+             if (!label) continue;
+
+             const matchesAction = ACTION_PATTERNS.some(p => label.includes(p.toLowerCase()));
+             if (!matchesAction) continue;
+
+             // Strong signal: action verb + motion keyword somewhere on the
+             // element or a 2-ancestor container (e.g. "Shake or tap Undo").
+             const ctx = el.closest('section, article, dialog, [role="region"], [role="dialog"], main, body');
+             const ctxText = (ctx ? (ctx.textContent || '') : '').toLowerCase();
+             const motionNearby = MOTION_PATTERNS.some(p => ctxText.includes(p.toLowerCase()));
+
+             if (motionNearby || matchesAction) return true;
           }
           return false;
        });
@@ -148,10 +193,17 @@ async function auditMotionActuation(page, options = {}) {
         confidence: motionEvidence.confidence,
         layers: {
            eventHandler: motionEvidence.hasOnDeviceMotionHandler ? 1 : 0,
+           addEventListener: motionEvidence.addEventListenerMatches ? motionEvidence.addEventListenerMatches.length : 0,
            inlineScript: motionEvidence.inlineScriptMatches.length,
            libraryDetected: detectedLibraries.size,
            axeRule: axeRuleLayerCount
         }
      }
   };
-}module.exports = { auditMotionActuation };
+}
+
+module.exports = {
+  auditMotionActuation,
+  injectMotionDetector,
+  extractMotionRegistry,
+};

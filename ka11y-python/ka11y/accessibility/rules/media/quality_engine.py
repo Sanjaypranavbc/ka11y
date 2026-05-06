@@ -57,6 +57,7 @@ def _verify_visual_equivalence_with_vision_model(
 ) -> Dict[str, Any]:
     """Reserved hook for future multimodal verification of video-only content."""
 
+
 # ── Ensure required NLTK data is downloaded at import time ────────────────────
 try:
     nltk.data.find("tokenizers/punkt_tab")
@@ -74,6 +75,7 @@ _SPACY_MODELS = {
 }
 _nlp_cache = {}
 
+
 def _get_nlp(lang: str):
     if lang not in _nlp_cache:
         model_name = _SPACY_MODELS.get(lang, _SPACY_MODELS["en"])
@@ -81,9 +83,12 @@ def _get_nlp(lang: str):
             _nlp_cache[lang] = spacy.load(model_name)
         except Exception:
             # Fallback if model not found
-            logger.warning(f"spaCy model {model_name} not found. Some checks may be less accurate.")
+            logger.warning(
+                f"spaCy model {model_name} not found. Some checks may be less accurate."
+            )
             _nlp_cache[lang] = None
     return _nlp_cache[lang]
+
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -94,49 +99,115 @@ _MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 _DOWNLOAD_TIMEOUT = 60.0
 
 # WER thresholds for Check 1
-_WER_PASS = 0.15       # WER ≤ 0.15 → 85%+ match → PASS
-_WER_FAIL = 0.40       # WER > 0.40 → <60% match → FAIL (summary, not transcript)
+_WER_PASS = 0.15  # WER ≤ 0.15 → 85%+ match → PASS
+_WER_FAIL = 0.40  # WER > 0.40 → <60% match → FAIL (summary, not transcript)
 
 # Non-speech audio event keywords for Check 3
 _AUDIO_EVENT_KEYWORDS = {
     "en": {
-        "applause", "laughter", "music", "silence", "pause", "noise",
-        "clapping", "cheering", "alarm", "beep", "crash", "door", "phone",
-        "inaudible", "crosstalk", "sound", "sigh", "cough", "crying",
-        "singing", "humming", "whistling", "thunder", "rain", "wind",
-        "footsteps", "knock", "ring", "buzz", "click", "snap", "pop",
-        "gasp", "scream", "whisper", "mumbling", "static", "feedback",
+        "applause",
+        "laughter",
+        "music",
+        "silence",
+        "pause",
+        "noise",
+        "clapping",
+        "cheering",
+        "alarm",
+        "beep",
+        "crash",
+        "door",
+        "phone",
+        "inaudible",
+        "crosstalk",
+        "sound",
+        "sigh",
+        "cough",
+        "crying",
+        "singing",
+        "humming",
+        "whistling",
+        "thunder",
+        "rain",
+        "wind",
+        "footsteps",
+        "knock",
+        "ring",
+        "buzz",
+        "click",
+        "snap",
+        "pop",
+        "gasp",
+        "scream",
+        "whisper",
+        "mumbling",
+        "static",
+        "feedback",
     },
     "ja": {
-        "拍手", "笑い声", "音楽", "静寂", "沈黙", "休止", "雑音", "ノイズ",
-        "手拍子", "歓声", "アラーム", "ビープ音", "衝突音", "ドア", "電話",
-        "聞き取り不能", "クロストーク", "音", "ため息", "咳", "泣き声",
-        "歌", "鼻歌", "口笛", "雷", "雨", "風", "足音", "ノック", "ベル",
-        "ブザー", "クリック", "スナップ", "破裂音", "喘ぎ", "悲鳴", "ささやき",
-        "つぶやき", "スタティック", "フィードバック",
-    }
+        "拍手",
+        "笑い声",
+        "音楽",
+        "静寂",
+        "沈黙",
+        "休止",
+        "雑音",
+        "ノイズ",
+        "手拍子",
+        "歓声",
+        "アラーム",
+        "ビープ音",
+        "衝突音",
+        "ドア",
+        "電話",
+        "聞き取り不能",
+        "クロストーク",
+        "音",
+        "ため息",
+        "咳",
+        "泣き声",
+        "歌",
+        "鼻歌",
+        "口笛",
+        "雷",
+        "雨",
+        "風",
+        "足音",
+        "ノック",
+        "ベル",
+        "ブザー",
+        "クリック",
+        "スナップ",
+        "破裂音",
+        "喘ぎ",
+        "悲鳴",
+        "ささやき",
+        "つぶやき",
+        "スタティック",
+        "フィードバック",
+    },
 }
 
 # Speaker label regex patterns for Check 2
 _SPEAKER_PATTERNS = {
     "en": [
-        re.compile(r"^[A-Z][a-zA-Z\s]{1,30}:\s", re.MULTILINE),     # Name: text
-        re.compile(r"\[[A-Z][a-zA-Z\s]{1,30}\]", re.MULTILINE),       # [Name]
-        re.compile(r"^Speaker\s\d+:", re.MULTILINE | re.IGNORECASE),   # Speaker 1:
-        re.compile(r"^Interviewer:", re.MULTILINE | re.IGNORECASE),    # Interviewer:
-        re.compile(r"^Host:", re.MULTILINE | re.IGNORECASE),           # Host:
-        re.compile(r"^Narrator:", re.MULTILINE | re.IGNORECASE),       # Narrator:
-        re.compile(r"^Moderator:", re.MULTILINE | re.IGNORECASE),      # Moderator:
+        re.compile(r"^[A-Z][a-zA-Z\s]{1,30}:\s", re.MULTILINE),  # Name: text
+        re.compile(r"\[[A-Z][a-zA-Z\s]{1,30}\]", re.MULTILINE),  # [Name]
+        re.compile(r"^Speaker\s\d+:", re.MULTILINE | re.IGNORECASE),  # Speaker 1:
+        re.compile(r"^Interviewer:", re.MULTILINE | re.IGNORECASE),  # Interviewer:
+        re.compile(r"^Host:", re.MULTILINE | re.IGNORECASE),  # Host:
+        re.compile(r"^Narrator:", re.MULTILINE | re.IGNORECASE),  # Narrator:
+        re.compile(r"^Moderator:", re.MULTILINE | re.IGNORECASE),  # Moderator:
     ],
     "ja": [
-        re.compile(r"^[^\s：]{1,10}：", re.MULTILINE),              # 名前：
-        re.compile(r"^【[^\s】]{1,10}】", re.MULTILINE),             # 【名前】
-        re.compile(r"^話者\s?\d+：", re.MULTILINE),                 # 話者1：
-        re.compile(r"^インタビュアー：", re.MULTILINE),              # インタビュアー：
-        re.compile(r"^ホスト：", re.MULTILINE),                      # ホスト：
-        re.compile(r"^ナレーター：", re.MULTILINE),                  # ナレーター：
-        re.compile(r"^司会：", re.MULTILINE),                       # 司会：
-    ]
+        re.compile(r"^[^\s：]{1,10}：", re.MULTILINE),  # 名前：
+        re.compile(r"^【[^\s】]{1,10}】", re.MULTILINE),  # 【名前】
+        re.compile(r"^話者\s?\d+：", re.MULTILINE),  # 話者1：
+        re.compile(r"^インタビュアー：", re.MULTILINE),  # インタビュアー：
+        re.compile(r"^ホスト：", re.MULTILINE),  # ホスト：
+        re.compile(r"^ナレーター：", re.MULTILINE),  # ナレーター：
+        re.compile(r"^司会：", re.MULTILINE),  # 司会：
+    ],
 }
 
 
@@ -154,7 +225,7 @@ def _check_result(
     """Build a standardized check result dict."""
     return {
         "check": check_name,
-        "status": status,       # "PASSED" | "FAILED" | "NEEDS_REVIEW" | "N/A"
+        "status": status,  # "PASSED" | "FAILED" | "NEEDS_REVIEW" | "N/A"
         "message": message,
         **extra,
     }
@@ -205,7 +276,9 @@ def _prepare_transcript(text: str, source_type: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _check_verbatim(whisper_text: str, dev_transcript: str, lang: str = "en") -> Dict[str, Any]:
+def _check_verbatim(
+    whisper_text: str, dev_transcript: str, lang: str = "en"
+) -> Dict[str, Any]:
     """
     Check 1: All speech is transcribed verbatim.
 
@@ -218,7 +291,8 @@ def _check_verbatim(whisper_text: str, dev_transcript: str, lang: str = "en") ->
 
     if not ref or not hyp:
         return _check_result(
-            "verbatim", "NEEDS_REVIEW",
+            "verbatim",
+            "NEEDS_REVIEW",
             "Insufficient text for comparison.",
             wer_score=None,
         )
@@ -239,14 +313,16 @@ def _check_verbatim(whisper_text: str, dev_transcript: str, lang: str = "en") ->
 
     if score <= _WER_PASS:
         return _check_result(
-            "verbatim", "PASSED",
+            "verbatim",
+            "PASSED",
             f"Transcript matches audio with WER={score:.2f} "
             f"({(1 - score) * 100:.0f}% accuracy).",
             wer_score=round(score, 4),
         )
     elif score > _WER_FAIL:
         return _check_result(
-            "verbatim", "FAILED",
+            "verbatim",
+            "FAILED",
             f"Transcript significantly differs from audio (WER={score:.2f}, "
             f"only {(1 - score) * 100:.0f}% accuracy). "
             f"This appears to be a summary, not a verbatim transcript.",
@@ -254,7 +330,8 @@ def _check_verbatim(whisper_text: str, dev_transcript: str, lang: str = "en") ->
         )
     else:
         return _check_result(
-            "verbatim", "NEEDS_REVIEW",
+            "verbatim",
+            "NEEDS_REVIEW",
             f"Transcript partially matches audio (WER={score:.2f}, "
             f"{(1 - score) * 100:.0f}% accuracy). May be paraphrased.",
             wer_score=round(score, 4),
@@ -288,7 +365,8 @@ def _check_speaker_ids(
 
     if label_count > 0:
         return _check_result(
-            "speaker_ids", "PASSED",
+            "speaker_ids",
+            "PASSED",
             f"Found {label_count} speaker label(s) in transcript.",
             labels_found=label_count,
             sample_labels=found_labels[:5],
@@ -297,14 +375,16 @@ def _check_speaker_ids(
     # No labels found — check if this might be single-speaker content
     if whisper_segment_count <= 3:
         return _check_result(
-            "speaker_ids", "NEEDS_REVIEW",
+            "speaker_ids",
+            "NEEDS_REVIEW",
             "No speaker labels found, but audio is short "
             "(may be single-speaker). Manual review recommended.",
             labels_found=0,
         )
 
     return _check_result(
-        "speaker_ids", "FAILED",
+        "speaker_ids",
+        "FAILED",
         "No speaker identification labels found in transcript. "
         "WCAG 1.2.1 requires identifying who is speaking "
         "when multiple speakers are present.",
@@ -332,7 +412,8 @@ def _check_non_speech_events(dev_transcript: str, lang: str = "en") -> Dict[str,
 
     if not all_descriptors:
         return _check_result(
-            "non_speech_events", "FAILED",
+            "non_speech_events",
+            "FAILED",
             "No bracketed audio event descriptors found in transcript "
             "(e.g., [applause], [music], [laughter]). "
             "WCAG 1.2.1 requires noting significant non-speech sounds.",
@@ -351,14 +432,16 @@ def _check_non_speech_events(dev_transcript: str, lang: str = "en") -> Dict[str,
 
     if matched_events:
         return _check_result(
-            "non_speech_events", "PASSED",
+            "non_speech_events",
+            "PASSED",
             f"Found {len(matched_events)} non-speech audio event(s) "
             f"documented in transcript.",
             events_found=matched_events[:10],
         )
 
     return _check_result(
-        "non_speech_events", "NEEDS_REVIEW",
+        "non_speech_events",
+        "NEEDS_REVIEW",
         f"Found {len(all_descriptors)} bracketed descriptor(s) but none "
         f"match known audio event keywords. Manual review needed.",
         events_found=[d.strip() for d in all_descriptors[:10]],
@@ -379,7 +462,9 @@ def _check_visual_content(dev_transcript: str, lang: str = "en") -> Dict[str, An
     if lang == "ja":
         nlp = _get_nlp("ja")
         if not nlp:
-            return _check_result("visual_content", "NEEDS_REVIEW", "Japanese POS tagger not available.")
+            return _check_result(
+                "visual_content", "NEEDS_REVIEW", "Japanese POS tagger not available."
+            )
 
         doc = nlp(dev_transcript[:2000])
         action_verbs = [t.text for t in doc if t.pos_ == "VERB"]
@@ -398,7 +483,8 @@ def _check_visual_content(dev_transcript: str, lang: str = "en") -> Dict[str, An
     verb_density = len(action_verbs) / max(token_count, 1)
 
     return _check_result(
-        "visual_content", "NEEDS_REVIEW",
+        "visual_content",
+        "NEEDS_REVIEW",
         f"Transcript contains {len(action_verbs)} action verb(s) and "
         f"{len(adjectives)} adjective(s). Verb density: {verb_density:.2%}. "
         f"Cannot verify visual accuracy without a vision model. "
@@ -427,19 +513,21 @@ def _check_sequence(
     """
     if not whisper_segments or not dev_transcript.strip():
         return _check_result(
-            "sequence", "NEEDS_REVIEW",
+            "sequence",
+            "NEEDS_REVIEW",
             "Insufficient data for sequence comparison.",
             quarter_scores=[],
         )
 
     # Build whisper text per quarter
-    total_duration = max(
-        seg.get("end", 0) for seg in whisper_segments
-    ) if whisper_segments else 0
+    total_duration = (
+        max(seg.get("end", 0) for seg in whisper_segments) if whisper_segments else 0
+    )
 
     if total_duration <= 0:
         return _check_result(
-            "sequence", "NEEDS_REVIEW",
+            "sequence",
+            "NEEDS_REVIEW",
             "Cannot determine audio duration for sequence analysis.",
             quarter_scores=[],
         )
@@ -456,25 +544,30 @@ def _check_sequence(
         nlp = _get_nlp("ja")
         if nlp:
             dev_words = [t.text for t in nlp(dev_transcript)]
-            whisper_quarter_words = [[t.text for t in nlp(wq)] for wq in whisper_quarters]
+            whisper_quarter_words = [
+                [t.text for t in nlp(wq)] for wq in whisper_quarters
+            ]
         else:
             dev_words = list(dev_transcript.replace(" ", ""))
-            whisper_quarter_words = [list(wq.replace(" ", "")) for wq in whisper_quarters]
+            whisper_quarter_words = [
+                list(wq.replace(" ", "")) for wq in whisper_quarters
+            ]
     else:
         dev_words = dev_transcript.split()
         whisper_quarter_words = [wq.split() for wq in whisper_quarters]
 
     quarter_size = max(len(dev_words) // 4, 1)
     dev_quarters = [
-        " ".join(dev_words[i * quarter_size:(i + 1) * quarter_size])
-        for i in range(4)
+        " ".join(dev_words[i * quarter_size : (i + 1) * quarter_size]) for i in range(4)
     ]
 
     # Compare each quarter pair
     quarter_scores = []
     for i in range(4):
         w_words = set(w.lower() for w in whisper_quarter_words[i])
-        d_words = set(d.lower() for d in dev_words[i * quarter_size:(i + 1) * quarter_size])
+        d_words = set(
+            d.lower() for d in dev_words[i * quarter_size : (i + 1) * quarter_size]
+        )
         if not w_words or not d_words:
             quarter_scores.append(0.0)
             continue
@@ -487,20 +580,21 @@ def _check_sequence(
 
     if avg_score >= 0.30:
         return _check_result(
-            "sequence", "PASSED",
+            "sequence",
+            "PASSED",
             f"Transcript follows audio sequence "
             f"(avg quarter overlap: {avg_score:.2%}).",
             quarter_scores=quarter_scores,
         )
     else:
         return _check_result(
-            "sequence", "FAILED",
+            "sequence",
+            "FAILED",
             f"Transcript sequence does not match audio order "
             f"(avg quarter overlap: {avg_score:.2%}). "
             f"Content may be reordered.",
             quarter_scores=quarter_scores,
         )
-
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -536,7 +630,9 @@ def _download_media(url: str, output_dir: str) -> Optional[str]:
                     for chunk in resp.iter_bytes(chunk_size=8192):
                         total += len(chunk)
                         if total > _MAX_DOWNLOAD_BYTES:
-                            logger.warning("[quality_engine] Download exceeded size limit")
+                            logger.warning(
+                                "[quality_engine] Download exceeded size limit"
+                            )
                             f.close()
                             out_path.unlink(missing_ok=True)
                             return None
@@ -574,19 +670,21 @@ def _transcribe_audio(audio_path: str) -> Optional[Dict[str, Any]]:
 
         segments_iter, info = model.transcribe(
             audio_path,
-            language=None,        # auto-detect
+            language=None,  # auto-detect
             beam_size=5,
-            vad_filter=True,      # voice activity detection for cleaner output
+            vad_filter=True,  # voice activity detection for cleaner output
         )
 
         segments = []
         full_text = []
         for seg in segments_iter:
-            segments.append({
-                "start": seg.start,
-                "end": seg.end,
-                "text": seg.text.strip(),
-            })
+            segments.append(
+                {
+                    "start": seg.start,
+                    "end": seg.end,
+                    "text": seg.text.strip(),
+                }
+            )
             full_text.append(seg.text.strip())
 
         return {
@@ -659,30 +757,37 @@ def evaluate_transcript_quality(
 
             if transcription:
                 # Check 1: Verbatim
-                checks.append(_check_verbatim(
-                    transcription["text"], clean_transcript, lang=lang
-                ))
+                checks.append(
+                    _check_verbatim(transcription["text"], clean_transcript, lang=lang)
+                )
 
                 # Check 2: Speaker IDs
-                checks.append(_check_speaker_ids(
-                    clean_transcript,
-                    whisper_segment_count=transcription["segment_count"],
-                    lang=lang,
-                ))
+                checks.append(
+                    _check_speaker_ids(
+                        clean_transcript,
+                        whisper_segment_count=transcription["segment_count"],
+                        lang=lang,
+                    )
+                )
 
                 # Check 3: Non-speech events
                 checks.append(_check_non_speech_events(clean_transcript, lang=lang))
 
                 # Check 5: Sequence
-                checks.append(_check_sequence(
-                    transcription["segments"], clean_transcript, lang=lang
-                ))
+                checks.append(
+                    _check_sequence(
+                        transcription["segments"], clean_transcript, lang=lang
+                    )
+                )
             else:
                 # Whisper failed — fall back to text-only checks
-                checks.append(_check_result(
-                    "verbatim", "NEEDS_REVIEW",
-                    "Could not transcribe audio (faster-whisper failed)."
-                ))
+                checks.append(
+                    _check_result(
+                        "verbatim",
+                        "NEEDS_REVIEW",
+                        "Could not transcribe audio (faster-whisper failed).",
+                    )
+                )
                 checks.append(_check_speaker_ids(clean_transcript, lang=lang))
                 checks.append(_check_non_speech_events(clean_transcript, lang=lang))
 
@@ -693,10 +798,13 @@ def evaluate_transcript_quality(
                 pass
         else:
             # Download failed — run text-only checks
-            checks.append(_check_result(
-                "verbatim", "NEEDS_REVIEW",
-                "Could not download media file for transcription."
-            ))
+            checks.append(
+                _check_result(
+                    "verbatim",
+                    "NEEDS_REVIEW",
+                    "Could not download media file for transcription.",
+                )
+            )
             checks.append(_check_speaker_ids(clean_transcript, lang=lang))
             checks.append(_check_non_speech_events(clean_transcript, lang=lang))
 
@@ -706,11 +814,14 @@ def evaluate_transcript_quality(
         checks.append(_check_visual_content(clean_transcript, lang=lang))
 
         # Check 5: Sequence (text-only, no audio timeline available)
-        checks.append(_check_result(
-            "sequence", "NEEDS_REVIEW",
-            "Cannot verify sequence order for video-only content without "
-            "audio timeline. Manual review recommended.",
-        ))
+        checks.append(
+            _check_result(
+                "sequence",
+                "NEEDS_REVIEW",
+                "Cannot verify sequence order for video-only content without "
+                "audio timeline. Manual review recommended.",
+            )
+        )
 
     # ── Determine overall status ─────────────────────────────────────────
     statuses = [c["status"] for c in checks]

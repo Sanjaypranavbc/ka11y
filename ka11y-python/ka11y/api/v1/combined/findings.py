@@ -580,7 +580,7 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
     for result in ocr_results:
         if not result.has_text:
             continue
-        
+
         # WCAG 1.4.3 Exception: Logos and decorative images have no contrast requirement
         classification = _infer_classification(result.original_path)
         if classification in ("logo", "decorative"):
@@ -615,13 +615,13 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
             image_label = f'{result.filename} -- "{text_snippet}"'
 
             common_params = {
-                "filename":    result.filename,
+                "filename": result.filename,
                 "image_label": image_label,
-                "ratio":       ratio_str,
-                "fg_hex":      fg_hex,
-                "bg_hex":      bg_hex,
-                "threshold":   threshold,
-                "text_type":   text_type,
+                "ratio": ratio_str,
+                "fg_hex": fg_hex,
+                "bg_hex": bg_hex,
+                "threshold": threshold,
+                "text_type": text_type,
             }
             if aa_normal is None:
                 findings.append(
@@ -724,13 +724,13 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
             image_label = f'{result.filename} -- "{text_snippet}"'
 
             common_params = {
-                "filename":    result.filename,
+                "filename": result.filename,
                 "image_label": image_label,
-                "ratio":       ratio_str,
-                "fg_hex":      fg_hex,
-                "bg_hex":      bg_hex,
-                "threshold":   threshold,
-                "text_type":   text_type,
+                "ratio": ratio_str,
+                "fg_hex": fg_hex,
+                "bg_hex": bg_hex,
+                "threshold": threshold,
+                "text_type": text_type,
             }
             if aaa_passes is None:
                 findings.append(
@@ -1332,7 +1332,9 @@ def _sensory_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     status="fail",
                     reason_code="fail_default",
                     reason_params={
-                        "sensory_categories": r.get("sensory_categories", "unspecified"),
+                        "sensory_categories": r.get(
+                            "sensory_categories", "unspecified"
+                        ),
                     },
                     reason=r.get("wcag_1_3_3_violation") or None,
                     severity=sev,
@@ -1492,7 +1494,9 @@ def _contrast_capture_failed_to_findings(
         capture_error = getattr(img, "capture_error", None)
         capture_params = {
             "capture_status": capture_status,
-            "capture_error_suffix": f", error: {capture_error}" if capture_error else "",
+            "capture_error_suffix": (
+                f", error: {capture_error}" if capture_error else ""
+            ),
         }
         element_html = f'<img src="{src}">'
         for wcag_sc, rule_id, sev in [

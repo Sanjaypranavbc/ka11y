@@ -263,8 +263,14 @@ async def get_combined_audit(job_id: str):
             element = finding.get("element")
             if element and isinstance(element, dict):
                 src = element.get("image_src")
-                if src and not src.startswith("/api/v1/") and not src.startswith(("http://", "https://", "data:")):
-                    element["image_src"] = f"/api/v1/combined/{job_id}/image?path={quote(src, safe='')}"
+                if (
+                    src
+                    and not src.startswith("/api/v1/")
+                    and not src.startswith(("http://", "https://", "data:"))
+                ):
+                    element["image_src"] = (
+                        f"/api/v1/combined/{job_id}/image?path={quote(src, safe='')}"
+                    )
 
     return job
 
@@ -286,9 +292,7 @@ async def get_job_image(job_id: str, path: str):
     for report_key in ("contrast_report", "image_audit_report"):
         report = result.get(report_key) or {}
         valid_paths.update(
-            img["path"]
-            for img in report.get("images", [])
-            if img.get("path")
+            img["path"] for img in report.get("images", []) if img.get("path")
         )
 
     # Canonicalize the requested path to prevent path-traversal attacks.

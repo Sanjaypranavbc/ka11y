@@ -2,6 +2,8 @@
  * @fileoverview Detects Motion Event Listeners for WCAG 2.5.4
  */
 
+const { extractMotionRegistry } = require('./motion-listener-detector.js');
+
 /**
  * Detects device motion event listeners via runtime checks and static script scanning.
  * @param {import('playwright').Page} page - Playwright page object
@@ -98,9 +100,13 @@ async function detectMotionEventListeners(page) {
     };
   }));
 
+  // Read entries captured by the addEventListener monkey-patch (if it was injected).
+  const addEventListenerMatches = await extractMotionRegistry(page);
+
   const combinedRawEvidence = [];
   let hasOnDeviceMotionHandler = false;
   let hasOnDeviceOrientationHandler = false;
+  let hasAddEventListenerMotionHandler = false;
   let hasInlineMatches = false;
   let hasExternalMatches = false;
   let hasUrlMatches = false;
@@ -108,6 +114,22 @@ async function detectMotionEventListeners(page) {
   const allInlineMatches = [];
   const allExternalScriptMatches = [];
   const allExternalUrlMatches = [];
+
+  for (const entry of addEventListenerMatches) {
+    if (entry.type === 'devicemotion') {
+      hasOnDeviceMotionHandler = true;
+      hasAddEventListenerMotionHandler = true;
+      combinedRawEvidence.push(`addEventListener('devicemotion', …) registered on ${entry.target}`);
+    } else if (entry.type === 'deviceorientation' || entry.type === 'deviceorientationabsolute') {
+      hasOnDeviceOrientationHandler = true;
+      hasAddEventListenerMotionHandler = true;
+      combinedRawEvidence.push(`addEventListener('${entry.type}', …) registered on ${entry.target}`);
+    } else if (entry.type === 'requestPermission') {
+      // iOS 13+ explicit opt-in is a strong signal even before any listener runs.
+      hasAddEventListenerMotionHandler = true;
+      combinedRawEvidence.push('DeviceMotionEvent.requestPermission() invoked (iOS 13+ opt-in)');
+    }
+  }
 
   for (const res of results) {
     if (res.runtimeCheck.devicemotionOnHandler || res.runtimeCheck.jqueryMotion) {
@@ -147,10 +169,14 @@ async function detectMotionEventListeners(page) {
   return {
     hasOnDeviceMotionHandler,
     hasOnDeviceOrientationHandler,
+    hasAddEventListenerMotionHandler,
+    addEventListenerMatches,
     inlineScriptMatches: allInlineMatches,
     externalScriptMatches: allExternalScriptMatches,
     externalScriptUrlMatches: allExternalUrlMatches,
     confidence,
     rawEvidence: combinedRawEvidence
   };
-}module.exports = { detectMotionEventListeners };
+}
+
+module.exports = { detectMotionEventListeners };
