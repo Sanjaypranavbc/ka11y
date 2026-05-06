@@ -28,7 +28,7 @@ from typing import AsyncGenerator
 
 from .models import CombinedRequest, JobStatusResponse
 from .runner import _run_job
-from .store import _get_subscribers_lock, _jobs, _subscribers
+from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 
 # Private/reserved IP ranges that must never be fetched (SSRF guard for redirects).
 # These CIDR networks cover: loopback, RFC-1918 private, link-local, unique-local
@@ -241,9 +241,19 @@ async def submit_combined_audit(payload: CombinedRequest):
 @router.get("/{job_id}", response_model=JobStatusResponse)
 async def get_combined_audit(job_id: str):
     """Poll the status or retrieve the result of a combined audit job."""
-    job = _jobs.get(job_id)
-    if not job:
+    if job_id not in _jobs:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+    # Snapshot under the per-job lock so a concurrent runner._run_job() update
+    # cannot publish a half-applied state to a polling client. Shallow copy is
+    # sufficient because we only read top-level fields below.
+    async with _get_job_lock(job_id):
+        snapshot = _jobs.get(job_id)
+        if not snapshot:
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        job = dict(snapshot)
+        # `stages` is a list mutated by sync stage_events; snapshot it too.
+        if "stages" in job:
+            job["stages"] = list(job["stages"])
 
     # Inject image_url into image-backed reports so the frontend can load them.
     result = job.get("result") or {}
