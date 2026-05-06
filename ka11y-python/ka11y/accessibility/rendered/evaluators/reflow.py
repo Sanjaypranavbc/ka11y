@@ -11,6 +11,7 @@ Exemptions: data tables, SVG charts/maps, code editors → NEEDS_REVIEW.
 
 from __future__ import annotations
 
+import logging
 from typing import List
 
 from ..models import PageSnapshot, RuleAuditRecord
@@ -19,7 +20,10 @@ from ..heuristics import (
     elements_with_horizontal_overflow,
 )
 
+logger = logging.getLogger(__name__)
+
 _RULE_KEY = "wcag_1_4_10"
+_REQUIRED_REFLOW_VIEWPORT_PX = 320
 _EXEMPT_TAGS = {"table", "svg", "canvas", "iframe", "pre", "code"}
 _EXEMPT_ROLES = {"grid", "treegrid", "spreadsheet"}
 
@@ -46,6 +50,20 @@ def evaluate(
     Returns one record per issue found (plus supporting element records if applicable).
     """
     records: List[RuleAuditRecord] = []
+
+    # WCAG 1.4.10 is defined at 320 CSS px. If the snapshot was captured at
+    # a different viewport (crawler misconfiguration, hot-reload, test),
+    # the result is not a valid 1.4.10 measurement. Log loudly so the
+    # mismatch is visible — but don't crash, because partial data is still
+    # better than no data for downstream report aggregation.
+    actual_width = getattr(snapshot_320, "viewport_width", None)
+    if actual_width is not None and actual_width != _REQUIRED_REFLOW_VIEWPORT_PX:
+        logger.warning(
+            "WCAG 1.4.10 reflow evaluator received a snapshot at viewport "
+            "%spx; the SC is defined at %spx and results may not be valid.",
+            actual_width,
+            _REQUIRED_REFLOW_VIEWPORT_PX,
+        )
 
     # 1. Page-level horizontal scroll check
     page_scrolls = detect_page_horizontal_scroll(snapshot_320)
