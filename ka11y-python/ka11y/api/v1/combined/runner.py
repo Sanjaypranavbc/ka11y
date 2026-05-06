@@ -336,15 +336,16 @@ async def _run_job(
                 report, fh, indent=2, ensure_ascii=False, default=_json_serializer
             )
 
-        _jobs[job_id].update(
-            {
-                "status": "completed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "report_path": str(report_path),
-                "result": report,
-                "current_stage": None,
-            }
-        )
+        async with _get_job_lock(job_id):
+            _jobs[job_id].update(
+                {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "report_path": str(report_path),
+                    "result": report,
+                    "current_stage": None,
+                }
+            )
 
         logger.info(
             f"[combined] job {job_id} completed — "
