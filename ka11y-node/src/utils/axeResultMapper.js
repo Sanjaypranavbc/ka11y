@@ -565,7 +565,8 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter 
   // --- NEW: THE DEDUPLICATION ENGINE (FLAT) ---
   if (accessLintResults && accessLintResults.violations) {
     for (const alViolation of accessLintResults.violations) {
-      const wcagKey = (alViolation.wcag && alViolation.wcag[0]) ? alViolation.wcag[0] : 'best-practice';
+      const mappedWcag = ACCESSLINT_WCAG_MAP[alViolation.ruleId] || null;
+      const wcagKey = mappedWcag || ((alViolation.wcag && alViolation.wcag[0]) ? alViolation.wcag[0] : 'best-practice');
       const alSelector = alViolation.selector;
       
       let merged = false;

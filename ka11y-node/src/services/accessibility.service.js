@@ -437,7 +437,7 @@ class AccessibilityService {
    * @param {string} url - Fully-qualified URL
    * @returns {Promise<Array<object>>} Flat findings array
    */
-  async analyseUrlFlat(url, level = 'AA', lang = 'en') {
+  async analyseUrlFlat(url, level = 'AA', lang = 'en', filter = null, runAxe = true, runAccessLint = true) {
     const { timeoutMs } = this._config.axe;
     const runOnly = { type: 'tag', values: _tagsForLevel(level) };
     let browser = null;
@@ -472,43 +472,70 @@ class AccessibilityService {
       // Use networkidle2 for parity with audit runner requirements and better JS coverage.
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
-      this._logger.info('[flat] Injecting axe-core...');
-      await this._injectAxe(page, '[flat]');
-      await this._configureAxeLocale(page, lang, '[flat]');
+      // Conditionally inject engines based on toggles
+      if (runAxe) {
+        this._logger.info('[flat] Injecting axe-core...');
+        await page.addScriptTag({ path: this._axeCorePath });
+        await page.waitForFunction(
+          () => Boolean(globalThis.axe && typeof globalThis.axe.run === 'function'),
+          { timeout: 10_000 }
+        );
+        await this._configureAxeLocale(page, lang, '[flat]');
+      }
 
-      this._logger.info('[flat] Running axe.run() and AccessLint sequentially...');
-      const { axeResults, accessLintResults } = await page.evaluate(async (runOptions) => {
-        // 1. Await Axe-core
-        const axeRes = await new Promise((resolve, reject) => {
-          // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
+      if (runAccessLint) {
+        this._logger.info('[flat] Injecting AccessLint...');
+        const alDir = require('path').dirname(require.resolve('@accesslint/core'));
+        const alIifePath = require('path').join(alDir, 'index.iife.js');
+        await page.addScriptTag({ path: alIifePath });
+      }
+
+      this._logger.info(`[flat] Running engines (axe=${runAxe}, accesslint=${runAccessLint})...`);
+      const { axeResults, accessLintResults } = await page.evaluate(async (runOptions, doAxe, doAL) => {
+        // 1. Axe-core (conditional)
+        let axeRes = null;
+        if (doAxe) {
+          axeRes = await new Promise((resolve, reject) => {
+            // eslint-disable-next-line no-undef
+            axe.run(document, { runOnly: runOptions }, (err, results) => {
+              if (err) reject(err);
+              else resolve(results);
+            });
           });
-        });
+        }
 
-        // 2. Immediately run AccessLint natively
-        const alResRaw = window.AccessLint.runAudit(document);
-        
-        // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
-        const alRes = {
-          ...alResRaw,
-          violations: (alResRaw.violations || []).map(v => {
-            // Destructure to remove non-serializable 'element' and 'source' node properties
-            const { element, source, ...safeProps } = v;
-            return safeProps;
-          })
-        };
-        
-        // Return both arrays back to the Node server
+        // 2. AccessLint (conditional)
+        let alRes = null;
+        if (doAL && window.AccessLint) {
+          const alResRaw = window.AccessLint.runAudit(document);
+          // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
+          alRes = {
+            ...alResRaw,
+            violations: (alResRaw.violations || []).map(v => {
+              const { element, source, ...safeProps } = v;
+              return safeProps;
+            })
+          };
+        }
+
         return { axeResults: axeRes, accessLintResults: alRes };
-      }, runOnly);
+      }, runOnly, runAxe, runAccessLint);
 
-      this._logger.info(
-        `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +
-        `passes: ${axeResults.passes.length}, ` +
-        `incomplete: ${(axeResults.incomplete || []).length}`
-      );
+      if (axeResults) {
+        this._logger.info(
+          `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +
+          `passes: ${axeResults.passes.length}, ` +
+          `incomplete: ${(axeResults.incomplete || []).length}`
+        );
+      } else {
+        this._logger.info('[flat] axe-core skipped (toggle off).');
+      }
+
+      if (accessLintResults) {
+        this._logger.info(`[flat] AccessLint complete — violations: ${(accessLintResults.violations || []).length}`);
+      } else {
+        this._logger.info('[flat] AccessLint skipped (toggle off).');
+      }
 
       this._logger.info('[flat] Running all custom checks (static + interactive)...');
       let customResults = [];
@@ -529,7 +556,9 @@ class AccessibilityService {
       const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
       this._logger.info(`[flat] Custom checks complete — ${customFindings.length} finding(s).`);
 
-      const findings = [...mapResultsFlat(axeResults, url, lang, null, accessLintResults), ...customFindings];
+      // Build findings: safe empty axeResults when axe is toggled off
+      const safeAxeResults = axeResults || { violations: [], passes: [], incomplete: [] };
+      const findings = [...mapResultsFlat(safeAxeResults, url, lang, null, accessLintResults), ...customFindings];
       const ORDER = { fail: 0, needs_review: 1, pass: 2 };
       findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
       return findings;

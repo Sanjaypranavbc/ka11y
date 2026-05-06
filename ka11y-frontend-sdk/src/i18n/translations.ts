@@ -34,7 +34,7 @@ export const translations = {
     "sidebar.runAudit":       "Run Audit",
     "sidebar.running":        "Running…",
     "sidebar.auditLanguage":  "Audit Language",
-    "sidebar.footer":         "WCAG 2.1 A / AA / AAA · axe-core + Python",
+    "sidebar.footer":         "WCAG 2.1 A / AA / AAA · ka11y Tri-Engine Pipeline",
 
     // ── Audit toggles ────────────────────────────────────────────────────────
     "toggle.ocr":             "OCR",
@@ -62,6 +62,8 @@ export const translations = {
 
     // ── Stage labels (sidebar compact) ────────────────────────────────────────
     "stage.axe_core":              "axe-core scan",
+    "stage.accesslint":            "AccessLint scan",
+    "stage.node_audit":            "Node engine scan",
     "stage.image_audit":           "Image audit",
     "stage.form_audit":            "Form audit",
     "stage.label_in_name":         "Label in name",
@@ -74,6 +76,8 @@ export const translations = {
 
     // ── Stage labels (progress panel full) ───────────────────────────────────
     "stageFull.axe_core":              "axe-core WCAG scan",
+    "stageFull.accesslint":            "AccessLint accessibility scan",
+    "stageFull.node_audit":            "Node engine (Axe+AL) scan",
     "stageFull.image_audit":           "Image alt-text (1.1.1)",
     "stageFull.form_audit":            "Form fields (3.3.1 / 3.3.2)",
     "stageFull.label_in_name":         "Label in name (2.5.3)",
@@ -234,7 +238,7 @@ export const translations = {
     "sidebar.runAudit":       "監査実行",
     "sidebar.running":        "実行中…",
     "sidebar.auditLanguage":  "監査言語",
-    "sidebar.footer":         "WCAG 2.1 A / AA / AAA · axe-core + Python",
+    "sidebar.footer":         "WCAG 2.1 A / AA / AAA · ka11y 統合パイプライン",
 
     // ── Audit toggles ────────────────────────────────────────────────────────
     "toggle.ocr":             "OCR",
@@ -262,6 +266,8 @@ export const translations = {
 
     // ── Stage labels (sidebar compact) ────────────────────────────────────────
     "stage.axe_core":              "axe-coreスキャン",
+    "stage.accesslint":            "AccessLintスキャン",
+    "stage.node_audit":            "Nodeエンジン監査",
     "stage.image_audit":           "画像監査",
     "stage.form_audit":            "フォーム監査",
     "stage.label_in_name":         "名前内のラベル",
@@ -274,6 +280,8 @@ export const translations = {
 
     // ── Stage labels (progress panel full) ───────────────────────────────────
     "stageFull.axe_core":              "axe-core WCAGスキャン",
+    "stageFull.accesslint":            "AccessLintアクセシビリティ監査",
+    "stageFull.node_audit":            "Nodeエンジン (Axe+AL) 監査",
     "stageFull.image_audit":           "画像代替テキスト (1.1.1)",
     "stageFull.form_audit":            "フォームフィールド (3.3.1 / 3.3.2)",
     "stageFull.label_in_name":         "名前内のラベル (2.5.3)",

@@ -141,14 +141,18 @@ def _allowed_levels(wcag_level: str) -> set:
 
 
 async def _call_node_flat(
-    url: str, node_base_url: str, wcag_level: str = "AAA", lang: str = "en"
+    url: str, node_base_url: str, wcag_level: str = "AAA", lang: str = "en",
+    run_axe: bool = True, run_accesslint: bool = True,
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings."""
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
     try:
         # 300s timeout to allow for heavy custom checks on complex pages
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(endpoint, json={"url": url, "level": wcag_level, "lang": lang})
+            resp = await client.post(endpoint, json={
+                "url": url, "level": wcag_level, "lang": lang,
+                "runAxe": run_axe, "runAccessLint": run_accesslint,
+            })
             resp.raise_for_status()
             return resp.json().get("findings", [])
     except httpx.ConnectError:
