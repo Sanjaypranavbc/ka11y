@@ -268,7 +268,12 @@ async def _run_job(
 
         if isinstance(python_result, Exception):
             pass  # all stages failed — warnings already recorded
+        elif isinstance(python_result, PythonStagesResult):
+            python_findings = python_result.findings
+            contrast_report = python_result.contrast_report
+            image_audit_report = python_result.image_audit_report
         elif isinstance(python_result, tuple) and len(python_result) == 3:
+            # Backwards-compat path: pre-dataclass callers / older test mocks.
             python_findings, contrast_report, image_audit_report = python_result
         else:
             # Unexpected return type — degrade gracefully rather than raising
