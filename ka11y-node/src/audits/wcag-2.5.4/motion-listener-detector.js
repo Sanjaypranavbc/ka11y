@@ -98,7 +98,9 @@ async function injectMotionDetector(page) {
 async function extractMotionRegistry(page) {
   try {
     return await page.evaluate(() => {
-      return Array.isArray(window.__motionRegistry) ? window.__motionRegistry : [];
+      const reg = window.__motionRegistry;
+      window.__motionRegistry = [];
+      return Array.isArray(reg) ? reg : [];
     });
   } catch (_) {
     return [];

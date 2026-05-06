@@ -20,6 +20,7 @@ that lists it — so all five steps share one directory.
 from __future__ import annotations
 
 import traceback
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -567,6 +568,16 @@ async def run_full_pipeline(
         )
 
     except Exception as e:
-        logger.error(f"Full pipeline failed: {e}")
+        # Internal error context (exception type, message, traceback) is logged
+        # but NEVER returned to the client. The opaque error_id allows support
+        # staff to correlate a 500 response with the corresponding log entry.
+        error_id = uuid.uuid4().hex
+        logger.error(f"Full pipeline failed (error_id={error_id}): {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Pipeline failed due to an internal error.",
+                "error_id": error_id,
+            },
+        )

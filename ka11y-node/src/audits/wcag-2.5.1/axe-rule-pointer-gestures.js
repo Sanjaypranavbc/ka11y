@@ -9,7 +9,7 @@
  *     reconstructed with `new Function()`.
  */
 
-const { enSelectors, jaSelectors } = require('./multilingual-selectors.js');
+const { enSelectors, jaSelectors, gestureAttrs } = require('./multilingual-selectors.js');
 
 /* ── Comma-joined selector string (all categories, EN + JA banks) ───────── */
 const _allSelectors = [
@@ -32,18 +32,7 @@ const ALL_SELECTORS_STRING = [...new Set(_allSelectors)].join(', ');
  * @returns {boolean} false = violation found; true = passed
  */
 function _evaluateBody(node, options) {
-  const gestureAttrs = [
-    'data-gesture', 'data-swipe', 'data-touch', 'data-pan', 'data-pinch',
-    'data-rotate', 'data-direction', 'data-flick', 'data-draw', 'data-path',
-    'data-scrub', 'data-signature',
-    // Japanese attribute names
-    'data-スワイプ',  // data-スワイプ
-    'data-タッチ',        // data-タッチ
-    'data-ジェスチャー', // data-ジェスチャー
-    'data-フリック', // data-フリック
-    'data-描画',              // data-描画
-    'data-ドラッグ', // data-ドラッグ
-  ];
+  const { gestureAttrs } = options;
 
   const hasGestureAttr = gestureAttrs.some(attr => node.hasAttribute(attr));
   const isDraggable    = node.getAttribute('draggable') === 'true';
@@ -110,7 +99,10 @@ const pointerGestureRule = {
  */
 function registerPointerGestureRule(axeInstance) {
   axeInstance.configure({
-    checks: [pointerGestureCheck],
+    checks: [{
+      ...pointerGestureCheck,
+      options: { gestureAttrs }
+    }],
     rules:  [pointerGestureRule],
   });
 }

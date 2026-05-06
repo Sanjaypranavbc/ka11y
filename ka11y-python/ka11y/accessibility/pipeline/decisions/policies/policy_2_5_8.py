@@ -31,10 +31,15 @@ class Policy258(WCAGPolicy):
             )
 
         # 2. Evaluate effective clickable area (combines label + input from context extractor)
-        w = element.interaction.effective_clickable_bbox.width
-        h = element.interaction.effective_clickable_bbox.height
-
-        area = element.interaction.effective_clickable_bbox.area
+        bbox = element.interaction.effective_clickable_bbox
+        if bbox is None:
+            return self._needs_review(
+                element,
+                "no_bounding_box",
+                "Target has no measurable bounding box; verify visually.",
+            )
+        w = bbox.width
+        h = bbox.height
 
         # Both dimensions must be >= 24px per WCAG 2.5.8
         size_params = {"width": str(int(w)), "height": str(int(h))}

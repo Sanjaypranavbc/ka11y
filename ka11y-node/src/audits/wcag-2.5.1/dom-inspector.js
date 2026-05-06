@@ -52,60 +52,79 @@ const CSS_PATH_FN_BODY = `
 async function inspectPage(page, selectorBank) {
   /** @type {DOMFinding[]} */
   const findings = [];
-  /** @type {Set<string>} dedup by computed CSS path */
+  /** @type {Set<string>} dedup by computed CSS path (across all categories) */
   const seen = new Set();
 
   for (const category of CATEGORIES) {
     const selectors = selectorBank[category];
     if (!Array.isArray(selectors) || selectors.length === 0) continue;
 
-    for (const rawSelector of selectors) {
-      let elements;
-      try {
-        elements = await page.$$(rawSelector);
-      } catch (err) {
-        console.warn(`[wcag-2.5.1] dom-inspector: invalid selector "${rawSelector}":`, err.message);
-        continue;
-      }
+    /* ONE round-trip per category: server-side iterates every selector,
+       computes cssPath + outerHTML + touch-action + boundingBox inline.
+       Drops the previous N-element × 3-evaluate pattern from
+       O(matches × 3) IPC calls to O(categories) calls — a 1000×+ reduction
+       on heavy pages. */
+    let batch;
+    try {
+      batch = await page.evaluate(
+        ({ selectorList, fnBody, maxHtml }) => {
+          // eslint-disable-next-line no-new-func
+          const cssPathOf = new Function('el', fnBody);
+          const out = [];
+          const invalid = [];
+          for (const rawSelector of selectorList) {
+            let nodes;
+            try {
+              nodes = document.querySelectorAll(rawSelector);
+            } catch (e) {
+              invalid.push({ rawSelector, message: e && e.message });
+              continue;
+            }
+            for (const node of nodes) {
+              const rect = node.getBoundingClientRect();
+              out.push({
+                rawSelector,
+                cssPath: cssPathOf(node),
+                outerHTML: (node.outerHTML || '').slice(0, maxHtml),
+                touchAction: window.getComputedStyle(node).touchAction,
+                boundingBox: rect && {
+                  x: rect.x,
+                  y: rect.y,
+                  width: rect.width,
+                  height: rect.height,
+                },
+              });
+            }
+          }
+          return { elements: out, invalid };
+        },
+        { selectorList: selectors, fnBody: CSS_PATH_FN_BODY, maxHtml: MAX_HTML_LENGTH },
+      );
+    } catch (err) {
+      console.warn(`[wcag-2.5.1] dom-inspector: evaluate threw for category "${category}":`, err.message);
+      continue;
+    }
 
-      for (const element of elements) {
-        try {
-          /* Compute a stable CSS path for the element by injecting helper into browser. */
-          const cssPath = await page.evaluate(
-            (node, fnBody) => {
-              // eslint-disable-next-line no-new-func
-              const cssPathOf = new Function('el', fnBody);
-              return cssPathOf(node);
-            },
-            element,
-            CSS_PATH_FN_BODY,
-          ).catch(() => null);
+    for (const inv of batch.invalid || []) {
+      console.warn(`[wcag-2.5.1] dom-inspector: invalid selector "${inv.rawSelector}":`, inv.message);
+    }
 
-          if (!cssPath) continue;
-          if (seen.has(cssPath)) continue;
-          seen.add(cssPath);
-
-          const outerHTML = await page.evaluate(
-            (node, max) => (node.outerHTML || '').slice(0, max),
-            element,
-            MAX_HTML_LENGTH,
-          ).catch(() => '');
-          
-          // Improvement: Check touch-action CSS property. `none` or `pan-y` is often used
-          // to disable native browser gestures and implement custom JS gestures instead.
-          const touchAction = await page.evaluate((node) => {
-             return window.getComputedStyle(node).touchAction;
-          }, element).catch(() => 'auto');
-          
-          const hasCustomTouchAction = touchAction === 'none' || touchAction === 'pan-y' || touchAction === 'pan-x';
-
-          const boundingBox = await element.boundingBox().catch(() => null);
-
-          findings.push({ category, selector: cssPath, outerHTML, boundingBox, rawSelector, hasCustomTouchAction });
-        } catch (err) {
-          console.warn(`[wcag-2.5.1] dom-inspector: element skipped for "${rawSelector}":`, err.message);
-        }
-      }
+    for (const item of batch.elements || []) {
+      const cssPath = item.cssPath;
+      if (!cssPath || seen.has(cssPath)) continue;
+      seen.add(cssPath);
+      const hasCustomTouchAction =
+        item.touchAction === 'none' ||
+        item.touchAction === 'pan-y' ||
+        item.touchAction === 'pan-x';
+      findings.push({
+        category,
+        selector: cssPath,
+        outerHTML: item.outerHTML || '',
+        boundingBox: item.boundingBox || null,
+        rawSelector: item.rawSelector,
+        hasCustomTouchAction,
+      });
     }
   }
 

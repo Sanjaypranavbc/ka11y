@@ -15,6 +15,7 @@ import json
 import os
 import time
 import traceback
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -384,18 +385,21 @@ async def _run_job(
         )
         err_type = type(exc).__name__
         current_stage = _jobs[job_id].get("current_stage") or "post_processing"
+        # Internal-only diagnostic detail (file paths, exception type, traceback)
+        # is logged but never surfaced to API clients. Clients receive an opaque
+        # error_id which support staff can correlate against these logs.
+        error_id = uuid.uuid4().hex
         logger.error(
-            f"[combined] job {job_id} failed during stage '{current_stage}' "
-            f"({err_type}: {exc}) at {where}\n{tb}"
+            f"[combined] job {job_id} (error_id={error_id}) failed during stage "
+            f"'{current_stage}' ({err_type}: {exc}) at {where}\n{tb}"
         )
         _jobs[job_id].update(
             {
                 "status": "failed",
                 "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error": f"{err_type}: {exc}",
+                "error": "Audit failed due to an internal error.",
+                "error_id": error_id,
                 "error_stage": current_stage,
-                "error_location": where,
-                "error_traceback": tb,
                 "current_stage": None,
             }
         )

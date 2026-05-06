@@ -222,6 +222,21 @@ const _ja = {
   ],
 };
 
+/* ── Shared Attribute Bank ──────────────────────────────────────────────── */
+
+const gestureAttrs = [
+  'data-gesture', 'data-swipe', 'data-touch', 'data-pan', 'data-pinch',
+  'data-rotate', 'data-direction', 'data-flick', 'data-draw', 'data-path',
+  'data-scrub', 'data-signature',
+  // Japanese attribute names
+  'data-スワイプ',
+  'data-タッチ',
+  'data-ジェスチャー',
+  'data-フリック',
+  'data-描画',
+  'data-ドラッグ',
+];
+
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 /**
@@ -249,4 +264,4 @@ function getSelectorBank(lang = 'en') {
 /* Backward-compat named exports (used by gesture-listener-detector.js, axe rule, etc.) */
 const enSelectors = _en;
 const jaSelectors = _ja;
-module.exports = { enSelectors, jaSelectors, getSelectorBank };
+module.exports = { enSelectors, jaSelectors, getSelectorBank, gestureAttrs };

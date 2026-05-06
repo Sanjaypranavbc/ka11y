@@ -1,5 +1,5 @@
 from .policy_1_4_3 import Policy143
-from ...models import ElementContext, RuleVerdict
+from ...models import ElementContext, RuleVerdict, VerdictStatus
 from ...runners.contrast_engine import ContrastEngine
 
 
@@ -10,7 +10,7 @@ class Policy146(Policy143):
     def evaluate(self, element: ElementContext) -> RuleVerdict:
         # Re-use the entire 1.4.3 logic, just override the thresholds
         verdict = super().evaluate(element)
-        if verdict.status == "not_applicable" or verdict.status == "needs_review":
+        if verdict.status in (VerdictStatus.NOT_APPLICABLE, VerdictStatus.NEEDS_REVIEW):
             return verdict
 
         evidence = verdict.evidence

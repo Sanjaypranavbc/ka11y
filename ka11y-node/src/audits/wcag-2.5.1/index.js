@@ -14,7 +14,7 @@
 
 const path = require('path');
 
-const { getSelectorBank } = require('./multilingual-selectors.js');
+const { getSelectorBank, gestureAttrs } = require('./multilingual-selectors.js');
 const { detectGestureLibraries } = require('./gesture-library-detector.js');
 const { inspectPage } = require('./dom-inspector.js');
 const { validateEscapeHatch } = require('./escape-hatch-validator.js');
@@ -176,7 +176,7 @@ async function auditPointerGestures(page, options = {}) {
         .trim();
 
       const axeViolations = await page.evaluate(
-        (rule, checkId, evalFnBody, checkMeta, ruleMeta) => {
+        (rule, checkId, evalFnBody, checkMeta, ruleMeta, gAttrs) => {
           // eslint-disable-next-line no-new-func
           const evaluateFn = new Function('node', 'options', evalFnBody);
 
@@ -185,6 +185,7 @@ async function auditPointerGestures(page, options = {}) {
               id:       checkId,
               evaluate: evaluateFn,
               metadata: checkMeta,
+              options:  { gestureAttrs: gAttrs }
             }],
             rules: [{
               id:       rule.id,
@@ -204,6 +205,7 @@ async function auditPointerGestures(page, options = {}) {
         evaluateFnBody,
         pointerGestureCheck.metadata,
         pointerGestureRule.metadata,
+        gestureAttrs
       );
 
       for (const v of axeViolations) {

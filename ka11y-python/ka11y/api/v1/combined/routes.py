@@ -309,6 +309,21 @@ async def get_job_image(job_id: str, path: str):
             detail="Image path is not associated with this job.",
         )
 
+    # Defence-in-depth: even if a (poisoned) auditor record stored a symlink
+    # pointing outside the job directory, refuse to serve content that escapes
+    # the job's own output_dir. This prevents the symlink-attack path noted in
+    # the security review.
+    job_output_dir = job.get("output_dir")
+    if job_output_dir:
+        try:
+            canonical_root = Path(job_output_dir).resolve()
+            canonical_path.relative_to(canonical_root)
+        except (ValueError, OSError):
+            raise HTTPException(
+                status_code=403,
+                detail="Image path escapes the job output directory.",
+            )
+
     if not canonical_path.exists() or not canonical_path.is_file():
         raise HTTPException(status_code=404, detail="Image file not found on server.")
 

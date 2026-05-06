@@ -282,32 +282,56 @@ def _is_empty(value) -> bool:
     return str(value).strip().lower() in {"nan", "none", "", "null"}
 
 
+def _build_ocr_index(ocr_results: list) -> dict:
+    """Pre-build a {basename → TextDetectionResult} lookup so per-image
+    queries become O(1). Avoids the prior O(n × m) Path-allocation hot loop
+    inside ``generate_audit_report``."""
+    index: dict = {}
+    for r in ocr_results:
+        try:
+            key = Path(r.filename).name.lower()
+        except Exception:
+            continue
+        index[key] = r
+    return index
+
+
 def _ocr_for_file(
     ocr_results: list,
     filename: str,
+    index: dict | None = None,
 ) -> tuple[bool, list[str], int]:
-    """
-    Lookup OCR results for a given filename.
+    """Lookup OCR results for a given filename.
     Returns (has_text, detected_texts, contrast_violations_count).
-    Uses TextDetectionResult objects from text_detector.
+
+    The optional ``index`` is a dict produced by :func:`_build_ocr_index`;
+    when supplied, lookup is O(1) instead of an O(m) scan over
+    ``ocr_results``. Backwards-compatible signature for older callers.
     """
     target = Path(filename).name.lower()
-    for r in ocr_results:
-        # r is a TextDetectionResult (Pydantic model)
-        r_name = Path(r.filename).name.lower()
-        if r_name == target:
-            texts = [d.text for d in r.detections if d.text and d.text.strip()]
-            return r.has_text, texts, r.contrast_violations_count
-    return False, [], 0
+    if index is not None:
+        r = index.get(target)
+    else:
+        r = next(
+            (x for x in ocr_results if Path(x.filename).name.lower() == target),
+            None,
+        )
+    if r is None:
+        return False, [], 0
+    texts = [d.text for d in r.detections if d.text and d.text.strip()]
+    return r.has_text, texts, r.contrast_violations_count
 
 
-def _ocr_result_for_file(ocr_results: list, filename: str):
-    """Return the full TextDetectionResult for a given filename, or None."""
+def _ocr_result_for_file(ocr_results: list, filename: str, index: dict | None = None):
+    """Return the full TextDetectionResult for a given filename, or None.
+    Accepts the same precomputed ``index`` as :func:`_ocr_for_file`."""
     target = Path(filename).name.lower()
-    for r in ocr_results:
-        if Path(r.filename).name.lower() == target:
-            return r
-    return None
+    if index is not None:
+        return index.get(target)
+    return next(
+        (r for r in ocr_results if Path(r.filename).name.lower() == target),
+        None,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -720,6 +744,9 @@ class AltTextAccessibilityAuditor:
         )
 
         records: list[dict] = []
+        # Precompute basename→OCR-result index ONCE so the per-image lookups
+        # below are O(1) instead of an O(m) scan per call.
+        ocr_index = _build_ocr_index(ocr_results)
 
         for img in images_data:
             # ── Pull fields from ImageData ───────────────────────────────
@@ -785,10 +812,10 @@ class AltTextAccessibilityAuditor:
 
             # ── OCR lookup by filename ───────────────────────────────────
             has_ocr_text, detected_texts, contrast_count = _ocr_for_file(
-                ocr_results, filename
+                ocr_results, filename, index=ocr_index
             )
             detected_joined = " | ".join(detected_texts)
-            ocr_result = _ocr_result_for_file(ocr_results, filename)
+            ocr_result = _ocr_result_for_file(ocr_results, filename, index=ocr_index)
 
             classifier_text_flag = getattr(img, "is_text_image", False)
             ocr_text_flag = has_ocr_text and len(detected_texts) > 0

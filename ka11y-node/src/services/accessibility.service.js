@@ -134,6 +134,7 @@ function _loadAxeLocale(lang = 'en') {
 
   const localeId = AXE_LOCALE_ALIASES[normalized] || AXE_LOCALE_ALIASES[normalized.split('-')[0]];
   if (!localeId) {
+    if (_axeLocaleCache.size >= 20) _axeLocaleCache.delete(_axeLocaleCache.keys().next().value);
     _axeLocaleCache.set(normalized, null);
     return null;
   }
@@ -141,9 +142,11 @@ function _loadAxeLocale(lang = 'en') {
   const localePath = path.join(AXE_LOCALE_DIR, `${localeId}.json`);
   try {
     const locale = JSON.parse(fs.readFileSync(localePath, 'utf8'));
+    if (_axeLocaleCache.size >= 20) _axeLocaleCache.delete(_axeLocaleCache.keys().next().value);
     _axeLocaleCache.set(normalized, locale);
     return locale;
   } catch {
+    if (_axeLocaleCache.size >= 20) _axeLocaleCache.delete(_axeLocaleCache.keys().next().value);
     _axeLocaleCache.set(normalized, null);
     return null;
   }
@@ -277,7 +280,10 @@ class AccessibilityService {
         return new Promise((resolve, reject) => {
           // axe is available as a global after script injection
           // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
+          axe.run(document, { 
+            runOnly: runOptions,
+            resultTypes: ['violations', 'passes', 'incomplete']
+          }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });
@@ -360,7 +366,10 @@ class AccessibilityService {
       const axeResults = await page.evaluate((runOptions) => {
         return new Promise((resolve, reject) => {
           // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
+          axe.run(document, { 
+            runOnly: runOptions,
+            resultTypes: ['violations', 'passes', 'incomplete']
+          }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });
@@ -443,7 +452,10 @@ class AccessibilityService {
       const axeResults = await page.evaluate((runOptions) => {
         return new Promise((resolve, reject) => {
           // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
+          axe.run(document, { 
+            runOnly: runOptions,
+            resultTypes: ['violations', 'passes', 'incomplete']
+          }, (err, results) => {
             if (err) reject(err);
             else resolve(results);
           });

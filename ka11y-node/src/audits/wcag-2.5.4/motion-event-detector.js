@@ -70,26 +70,35 @@ async function detectMotionEventListeners(page) {
       // Frame might be detached or cross-origin
     }
 
+    /* Single round-trip: fetch every external script in parallel inside the
+       page context (one frame.evaluate, not one-per-script), then run the
+       pattern check on all returned bodies in Node. Was O(externals) IPC
+       calls per frame; now O(1). */
     const externalScriptMatches = [];
-    for (const ext of scriptData.external) {
-       try {
-          const content = await frame.evaluate(async (src) => {
-             try {
-               const res = await fetch(src);
-               if (res.ok) return await res.text();
-             } catch (e) { return null; }
-             return null;
-          }, ext.src);
-
-          if (content) {
-             const patterns = ['devicemotion', 'deviceorientation', 'accelerationIncludingGravity', 'rotationRate', 'shake', 'tilt', 'gyroscope', 'accelerometer', 'motionEvent'];
-             patterns.forEach(p => {
-               if (new RegExp(p, 'i').test(content)) {
-                  externalScriptMatches.push({ pattern: p, scriptSrc: ext.src });
-               }
-             });
-          }
-       } catch (e) {}
+    const srcs = scriptData.external.map((e) => e.src);
+    let fetched = [];
+    if (srcs.length > 0) {
+      try {
+        fetched = await frame.evaluate(async (urls) => {
+          return Promise.all(urls.map(async (src) => {
+            try {
+              const res = await fetch(src);
+              if (res.ok) return { src, body: await res.text() };
+            } catch (_) { /* CORS / network */ }
+            return { src, body: null };
+          }));
+        }, srcs);
+      } catch (_) {
+        // Frame might be detached or blocked; carry on with no external matches.
+      }
+    }
+    const externalPatterns = ['devicemotion', 'deviceorientation', 'accelerationIncludingGravity', 'rotationRate', 'shake', 'tilt', 'gyroscope', 'accelerometer', 'motionEvent'];
+    const compiledExternal = externalPatterns.map((p) => ({ p, re: new RegExp(p, 'i') }));
+    for (const { src, body } of fetched) {
+      if (!body) continue;
+      for (const { p, re } of compiledExternal) {
+        if (re.test(body)) externalScriptMatches.push({ pattern: p, scriptSrc: src });
+      }
     }
 
     return {

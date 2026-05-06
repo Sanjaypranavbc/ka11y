@@ -37,8 +37,31 @@ async function validateEscapeHatch(page, elementSelector) {
       const ALT_BTN  = 'button, [role="button"], [aria-label], input[type="button"]';
 
       /* ── Check 1: Click handler on the element ───────────────────────── */
-      if (typeof el.onclick === 'function' || el.getAttribute('onclick')) {
-        evidence.push('Click handler present on element');
+      const onclickAttr = el.getAttribute('onclick') || '';
+      const onclickProp = typeof el.onclick === 'function' ? el.onclick.toString() : '';
+      const onclickBody = onclickAttr || onclickProp;
+
+      if (onclickBody) {
+        const cleaned = onclickBody
+          .replace(/^function\s*\(.*?\)\s*\{/, '')
+          .replace(/\}$/, '')
+          .replace(/void\s+0/g, '')
+          .replace(/null/g, '')
+          .replace(/return\s+false/g, '')
+          .replace(/[;{}\s]/g, '');
+        
+        const isRealAction = cleaned.length > 6;
+        const hasLabel = !!(
+          el.getAttribute('aria-label') ||
+          el.getAttribute('aria-labelledby') ||
+          (el.textContent || '').trim().length > 1 ||
+          el.getAttribute('alt') ||
+          (el.id && document.querySelector(`label[for="${el.id}"]`))
+        );
+
+        if (isRealAction || hasLabel) {
+          evidence.push('Valid click handler/alternative present on element');
+        }
       }
 
       /* ── Check 2: Keyboard handler on element or up to 3 ancestors ───── */
