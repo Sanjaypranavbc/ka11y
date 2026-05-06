@@ -394,16 +394,17 @@ async def _run_job(
             f"[combined] job {job_id} (error_id={error_id}) failed during stage "
             f"'{current_stage}' ({err_type}: {exc}) at {where}\n{tb}"
         )
-        _jobs[job_id].update(
-            {
-                "status": "failed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error": "Audit failed due to an internal error.",
-                "error_id": error_id,
-                "error_stage": current_stage,
-                "current_stage": None,
-            }
-        )
+        async with _get_job_lock(job_id):
+            _jobs[job_id].update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": "Audit failed due to an internal error.",
+                    "error_id": error_id,
+                    "error_stage": current_stage,
+                    "current_stage": None,
+                }
+            )
         step_logger.finalize(
             status="error",
             message="Combined audit job failed",
