@@ -1300,4 +1300,8 @@ async def _run_python_stages(
         if not isinstance(r, Exception):
             all_findings.extend(r)
 
-    return all_findings, contrast_report, image_audit_report
+    return PythonStagesResult(
+        findings=all_findings,
+        contrast_report=contrast_report,
+        image_audit_report=image_audit_report,
+    )
