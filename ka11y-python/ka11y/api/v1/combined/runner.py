@@ -36,7 +36,7 @@ from .stage_events import (
     emit_job_plan,
 )
 from .stages import _allowed_levels, _call_node_flat, _run_python_stages
-from .store import _broadcast, _close_subscribers, _jobs
+from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
 
