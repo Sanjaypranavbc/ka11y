@@ -151,7 +151,7 @@ async def _call_node_flat(
         async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(endpoint, json={
                 "url": url, "level": wcag_level, "lang": lang,
-                "runAxe": run_axe, "runAccessLint": run_accesslint,
+                "run_axe": run_axe, "run_accesslint": run_accesslint,
             })
             resp.raise_for_status()
             return resp.json().get("findings", [])

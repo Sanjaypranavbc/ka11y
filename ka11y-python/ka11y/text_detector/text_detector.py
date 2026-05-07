@@ -4,6 +4,7 @@ import os
 import json
 import shutil
 import sys
+import gc
 import csv
 from pathlib import Path
 from typing import List, Optional
@@ -472,6 +473,9 @@ class OCRPreprocessing:
                     )
             else:
                 print("  . No text")
+            
+            # Forced memory flush after each image to prevent OOM spikes
+            gc.collect()
 
         if self.skipped_images:
             logger.warning(

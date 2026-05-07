@@ -59,7 +59,7 @@ class CombinedRequest(BaseModel):
     run_focus_not_obscured_enh_audit: bool = True
     run_sensory_audit: bool = True
     # ── Node engine toggles ──────────────────────────────────────────────────
-    run_axe: bool = False
+    run_axe: bool = True
     run_accesslint: bool = True
     lang: str = "en"
 

@@ -437,7 +437,7 @@ class AccessibilityService {
    * @param {string} url - Fully-qualified URL
    * @returns {Promise<Array<object>>} Flat findings array
    */
-  async analyseUrlFlat(url, level = 'AA', lang = 'en', filter = null, runAxe = true, runAccessLint = true) {
+  async analyseUrlFlat(url, level = 'AA', lang = 'en', filter = null, run_axe = true, run_accesslint = true) {
     const { timeoutMs } = this._config.axe;
     const runOnly = { type: 'tag', values: _tagsForLevel(level) };
     let browser = null;
@@ -473,7 +473,7 @@ class AccessibilityService {
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
       // Conditionally inject engines based on toggles
-      if (runAxe) {
+      if (run_axe) {
         this._logger.info('[flat] Injecting axe-core...');
         await page.addScriptTag({ path: this._axeCorePath });
         await page.waitForFunction(
@@ -483,15 +483,47 @@ class AccessibilityService {
         await this._configureAxeLocale(page, lang, '[flat]');
       }
 
-      if (runAccessLint) {
+      if (run_accesslint) {
         this._logger.info('[flat] Injecting AccessLint...');
         const alDir = require('path').dirname(require.resolve('@accesslint/core'));
         const alIifePath = require('path').join(alDir, 'index.iife.js');
         await page.addScriptTag({ path: alIifePath });
+        
+        // Ensure AccessLint is ready in the browser context
+        await page.waitForFunction(
+          () => Boolean(globalThis.AccessLint && typeof globalThis.AccessLint.runAudit === 'function'),
+          { timeout: 5000 }
+        ).catch(e => this._logger.warn(`[flat] AccessLint ready check failed/timed out: ${e.message}`));
       }
 
-      this._logger.info(`[flat] Running engines (axe=${runAxe}, accesslint=${runAccessLint})...`);
+      this._logger.info(`[flat] Running engines (axe=${run_axe}, accesslint=${run_accesslint})...`);
       const { axeResults, accessLintResults } = await page.evaluate(async (runOptions, doAxe, doAL) => {
+        // Helper to get a clean CSS path for an element
+        const getCssPath = (el) => {
+          if (!el || el.nodeType !== 1) return null;
+          const path = [];
+          let current = el;
+          while (current && current.nodeType === 1) {
+            let selector = current.nodeName.toLowerCase();
+            if (current.id) {
+              selector += `#${CSS.escape(current.id)}`;
+              path.unshift(selector);
+              break; // ID is unique enough
+            } else {
+              let sib = current;
+              let nth = 1;
+              while (sib.previousElementSibling) {
+                sib = sib.previousElementSibling;
+                if (sib.nodeName.toLowerCase() === selector) nth++;
+              }
+              if (nth !== 1) selector += `:nth-of-type(${nth})`;
+            }
+            path.unshift(selector);
+            current = current.parentNode;
+          }
+          return path.join(' > ');
+        };
+
         // 1. Axe-core (conditional)
         let axeRes = null;
         if (doAxe) {
@@ -513,13 +545,18 @@ class AccessibilityService {
             ...alResRaw,
             violations: (alResRaw.violations || []).map(v => {
               const { element, source, ...safeProps } = v;
-              return safeProps;
+              // Extract serializable info from the live element if it exists
+              return {
+                ...safeProps,
+                selector: v.selector || getCssPath(element),
+                html: v.html || (element ? element.outerHTML : null)
+              };
             })
           };
         }
 
         return { axeResults: axeRes, accessLintResults: alRes };
-      }, runOnly, runAxe, runAccessLint);
+      }, runOnly, run_axe, run_accesslint);
 
       if (axeResults) {
         this._logger.info(

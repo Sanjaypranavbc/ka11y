@@ -329,6 +329,12 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
         with open(report_path, "w", encoding="utf-8") as fh:
             json.dump(report, fh, indent=2, ensure_ascii=False, default=_json_serializer)
 
+        # Slim down the "passes" array for the in-memory 'result' object used by the UI
+        if len(report.get("passes", [])) > 100:
+            logger.info(f"[combined] Slimming in-memory passes array from {len(report['passes'])} to 100 for job {job_id}")
+            report["passes"] = report["passes"][:100]
+            report["summary"]["passes_truncated"] = True
+
         _jobs[job_id].update(
             {
                 "status": "completed",
