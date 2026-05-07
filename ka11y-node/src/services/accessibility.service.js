@@ -247,6 +247,91 @@ class AccessibilityService {
   }
 
   /**
+   * Runs axe.run() in the browser context with a Node-side timeout.
+   *
+   * Bug fix (§7.3): the previous Promise.race + setTimeout pattern resolved
+   * on timeout but never cancelled the in-flight axe.run, so when the outer
+   * caller closed the browser the still-pending evaluate would surface a
+   * "Target closed" or "Execution context was destroyed" error as an
+   * unhandled rejection. We now:
+   *   1. Set a window.__ka11yAxeAbort flag so callers / future axe versions
+   *      can cooperate with cancellation.
+   *   2. Always clear the timer on settle (try/finally).
+   *   3. Attach a noop catch to the still-pending evaluate so the eventual
+   *      "Target closed" rejection is silently absorbed.
+   *
+   * @param {object} page                 - Puppeteer page
+   * @param {object} runOnly              - axe runOnly options
+   * @param {number} [timeoutMs]          - Override timeout (default: config.axe.timeoutMs || 90000)
+   * @param {string} [logPrefix='']       - Optional log prefix
+   * @returns {Promise<object>} axe results
+   */
+  async _runAxeWithTimeout(page, runOnly, timeoutMs, logPrefix = '') {
+    const prefix = logPrefix ? `${logPrefix} ` : '';
+    const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? timeoutMs
+      : (this._config.axe.timeoutMs || 90_000);
+
+    // Best-effort: set the abort flag in browser context. Tolerate failure
+    // so test mocks that don't care about extra evaluate calls still work.
+    try {
+      await page.evaluate(() => { window.__ka11yAxeAbort = false; });
+    } catch (_) { /* page may not be ready or mock not configured — ignore */ }
+
+    let timeoutHandle;
+
+    const axeRunPromise = page.evaluate((runOptions) => {
+      return new Promise((resolve, reject) => {
+        // eslint-disable-next-line no-undef
+        axe.run(document, {
+          runOnly: runOptions,
+          resultTypes: ['violations', 'passes', 'incomplete'],
+        }, (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        });
+      });
+    }, runOnly);
+
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutHandle = setTimeout(async () => {
+        // Signal cancellation to the browser context (best effort).
+        try {
+          await page.evaluate(() => {
+            try { window.__ka11yAxeAbort = true; } catch (_) {}
+            // eslint-disable-next-line no-undef
+            if (typeof axe !== 'undefined' && typeof axe._abortAll === 'function') {
+              try { axe._abortAll(); } catch (_) {}
+            }
+          });
+        } catch (e) {
+          this._logger.debug(`${prefix}Could not signal axe abort: ${e.message}`);
+        }
+        reject(new Error(`${prefix}axe.run timed out after ${effectiveTimeoutMs}ms`));
+      }, effectiveTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([axeRunPromise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutHandle);
+      // Silently absorb the eventual rejection of the still-pending evaluate
+      // when the outer caller closes the browser. Without this, "Target
+      // closed" surfaces as an unhandled rejection.
+      axeRunPromise.catch((e) => {
+        const msg = (e && e.message) || '';
+        if (msg.includes('Target closed') ||
+            msg.includes('Execution context was destroyed') ||
+            msg.includes('Session closed')) {
+          this._logger.debug(`${prefix}Late axe.run rejection after browser closed: ${msg}`);
+        } else {
+          this._logger.debug(`${prefix}Late axe.run rejection: ${msg}`);
+        }
+      });
+    }
+  }
+
+  /**
    * Analyzes HTML for accessibility issues.
    *
    * @param {string} html               - Raw HTML string
@@ -285,19 +370,7 @@ class AccessibilityService {
       await this._configureAxeLocale(page, lang);
 
       this._logger.info('Running axe.run() analysis...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
-          // axe is available as a global after script injection
-          // eslint-disable-next-line no-undef
-          axe.run(document, { 
-            runOnly: runOptions,
-            resultTypes: ['violations', 'passes', 'incomplete']
-          }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
-          });
-        });
-      }, runOnly);
+      const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs);
 
       this._logger.info(
         `axe.run() complete — violations: ${axeResults.violations.length}, ` +
@@ -372,18 +445,7 @@ class AccessibilityService {
       await this._configureAxeLocale(page, lang);
 
       this._logger.info('Running axe.run() analysis...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
-          // eslint-disable-next-line no-undef
-          axe.run(document, { 
-            runOnly: runOptions,
-            resultTypes: ['violations', 'passes', 'incomplete']
-          }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
-          });
-        });
-      }, runOnly);
+      const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs);
 
       this._logger.info(
         `axe.run() complete — violations: ${axeResults.violations.length}, ` +
@@ -458,18 +520,7 @@ class AccessibilityService {
       await this._configureAxeLocale(page, lang, '[flat]');
 
       this._logger.info('[flat] Running axe.run()...');
-      const axeResults = await page.evaluate((runOptions) => {
-        return new Promise((resolve, reject) => {
-          // eslint-disable-next-line no-undef
-          axe.run(document, { 
-            runOnly: runOptions,
-            resultTypes: ['violations', 'passes', 'incomplete']
-          }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
-          });
-        });
-      }, runOnly);
+      const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs, '[flat]');
 
       this._logger.info(
         `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +

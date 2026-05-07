@@ -34,8 +34,13 @@ class SectionAnalyzer:
         Takes an ordered list of ancestors (closest to furthest) and returns
         the most specific semantic section type.
         """
-        # Walk up the tree. The first matching landmark defines the immediate section.
-        for tag, role in zip(ancestor_tags, ancestor_roles):
+        # Walk up the tree. The first matching landmark defines the immediate
+        # section. zip_longest guards against an upstream length mismatch
+        # (e.g. when one ancestor has no role attribute) silently truncating
+        # the walk and missing a landmark match further up the tree.
+        from itertools import zip_longest
+
+        for tag, role in zip_longest(ancestor_tags, ancestor_roles, fillvalue=""):
             # Check role first as it is more specific
             if role:
                 r = role.lower()

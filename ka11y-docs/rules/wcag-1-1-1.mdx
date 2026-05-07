@@ -31,14 +31,14 @@ Before auditing, every image passes through a deterministic classification casca
 ## Per-classification rules
 
 <AccordionGroup>
-  <Accordion title="decorative — alt must be empty">
-    `alt=""` is required. Any non-empty alt text on a decorative image is a **violation** — it will be read by screen readers unnecessarily.
+  <Accordion title="decorative — alt must be empty (or image hidden from AT)">
+    `alt=""` is the canonical pattern. Any non-empty alt text on a decorative image is a **violation** — it will be read by screen readers unnecessarily. A decorative image **without an `alt` attribute at all** is normally a violation, but it PASSES when the element is programmatically hidden from assistive technology — i.e. `aria-hidden="true"` or `role="presentation"` / `role="none"`. The crawler captures both signals from the DOM and the auditor honours them on the missing-alt branch so the AT-hidden pattern doesn't false-fail.
   </Accordion>
   <Accordion title="informative — alt must describe content (OCR-backed)">
     alt must be non-empty. If OCR detects text in the image, one or more meaningful OCR words should appear in the alt text. If the visible text and alt text do not line up, the alt text is flagged as inaccurate.
   </Accordion>
-  <Accordion title="functional/logos — alt must include logo/home">
-    The alt text must contain the word "logo" or "home" so screen-reader users understand the image is a navigation landmark.
+  <Accordion title="functional/logos — alt must include logo/home (or a brand variant)">
+    The alt text must contain `logo`, `logotype`, `wordmark`, `brandmark`, `home`, or a localised equivalent (`ロゴ`, `標榜`, `ホーム`, `トップ`) so screen-reader users understand the image is a navigation landmark. Alts like "Meta Platforms Inc. logotype" and "Acme wordmark" are accepted.
   </Accordion>
   <Accordion title="functional/icons — alt must describe the action">
     The alt text must include "icon" or describe the action the icon triggers. Social brand icons must include the brand name (e.g. "Twitter icon" not just "icon").
@@ -98,14 +98,19 @@ Localization in the combined finding arrays works like this:
 ## Suggested fix
 
 ```html
-<!-- Decorative -->
+<!-- Decorative (preferred: explicit empty alt) -->
 <img src="divider.png" alt="">
+
+<!-- Decorative (also acceptable: AT-hidden, no alt required) -->
+<img src="texture.png" aria-hidden="true">
+<img src="ornament.png" role="presentation">
 
 <!-- Informative -->
 <img src="product.jpg" alt="Blue running shoes with white sole">
 
-<!-- Logo in nav link -->
+<!-- Logo in nav link (any of: logo / logotype / wordmark / brandmark / home) -->
 <a href="/"><img src="logo.svg" alt="Acme Corp logo"></a>
+<a href="/"><img src="brand.svg" alt="Meta Platforms Inc. logotype"></a>
 
 <!-- Icon button -->
 <button><img src="close.svg" alt="Close dialog"></button>

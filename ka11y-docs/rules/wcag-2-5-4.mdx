@@ -95,7 +95,7 @@ roll, shuffle, randomize, random, random number,
 回転, 反転, 拡大, 縮小, シャッフル, ランダム
 ```
 
-A control matching one of these is treated as a UI alternative, with extra confidence when its surrounding container also mentions a motion keyword (`motion`, `shake`, `tilt`, `gyro`, `accelero`, `モーション`, `シェイク`, `傾き`, `ジャイロ`).
+A control's accessible name must match an action verb **and** its ancestor container (`section`, `article`, `dialog`, `[role="region"]`, `[role="dialog"]`, `main`, `body`) must mention a motion keyword (`motion`, `shake`, `tilt`, `gyro`, `accelero`, `モーション`, `シェイク`, `傾き`, `ジャイロ`). Action-verb labels alone are not sufficient — pages with a "Submit" or "Cancel" button on an unrelated context would otherwise pass spuriously. Both signals are hard-required so a true alternative ("Shake or tap **Undo**") is reliably distinguished from coincidence.
 
 ## Manual review required
 
