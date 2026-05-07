@@ -1,4 +1,3 @@
-
 """
 ka11y/accessibility/rules/media/media_auditor.py
 ==================================================
@@ -125,14 +124,22 @@ def _gate_1_is_prerecorded(item: Dict[str, Any]) -> Optional[Tuple[str, str, int
 
     # Streaming manifest detection
     if src.endswith(".m3u8") or src.endswith(".mpd"):
-        return ("N/A", "Live streaming media detected (HLS/DASH manifest). "
-                "WCAG 1.2.1 does not apply — see 1.2.9.", 1)
+        return (
+            "N/A",
+            "Live streaming media detected (HLS/DASH manifest). "
+            "WCAG 1.2.1 does not apply — see 1.2.9.",
+            1,
+        )
 
     # Explicit live labeling
     for text in [aria_label, nearby_text]:
         if re.search(r"\blive\b", text):
-            return ("N/A", "Media is labeled as live content. "
-                    "WCAG 1.2.1 does not apply — see 1.2.9.", 1)
+            return (
+                "N/A",
+                "Media is labeled as live content. "
+                "WCAG 1.2.1 does not apply — see 1.2.9.",
+                1,
+            )
 
     return None  # Continue to Gate 2
 
@@ -174,7 +181,9 @@ def _gate_2_media_type(item: Dict[str, Any]) -> str:
     return "synchronized"
 
 
-def _gate_3_is_labeled_alternative(item: Dict[str, Any]) -> Optional[Tuple[str, str, int]]:
+def _gate_3_is_labeled_alternative(
+    item: Dict[str, Any],
+) -> Optional[Tuple[str, str, int]]:
     """
     Gate 3: Is the media a labeled alternative for text already present?
 
@@ -189,9 +198,12 @@ def _gate_3_is_labeled_alternative(item: Dict[str, Any]) -> Optional[Tuple[str, 
 
     for keyword in _MEDIA_ALT_KEYWORDS:
         if keyword in aria_label or keyword in nearby_text:
-            return ("N/A",
-                    f"Media is a clearly labeled alternative for existing text content "
-                    f"(matched: '{keyword}'). Exempt from 1.2.1.", 3)
+            return (
+                "N/A",
+                f"Media is a clearly labeled alternative for existing text content "
+                f"(matched: '{keyword}'). Exempt from 1.2.1.",
+                3,
+            )
 
     return None  # Continue to Gate 4
 
@@ -218,8 +230,7 @@ def _gate_4_find_transcript(
         kind = _normalize(track.get("kind") or "")
         if kind in _ALT_TRACK_KINDS:
             return (
-                {"type": "track", "url_or_text": track.get("src") or "",
-                 "kind": kind},
+                {"type": "track", "url_or_text": track.get("src") or "", "kind": kind},
                 None,
             )
 
@@ -231,8 +242,11 @@ def _gate_4_find_transcript(
         for keyword in _TRANSCRIPT_LINK_KEYWORDS:
             if keyword in link_text:
                 return (
-                    {"type": "link", "url_or_text": link_href,
-                     "matched_keyword": keyword},
+                    {
+                        "type": "link",
+                        "url_or_text": link_href,
+                        "matched_keyword": keyword,
+                    },
                     None,
                 )
 
@@ -259,11 +273,13 @@ def _gate_4_find_transcript(
     tag = item.get("tag", "media")
     return (
         None,
-        ("FAILED",
-         f"No text transcript, caption track, or audio alternative found for "
-         f"this prerecorded {tag.lower()} element. WCAG 1.2.1 requires a text "
-         f"alternative for prerecorded audio-only and video-only content.",
-         4),
+        (
+            "FAILED",
+            f"No text transcript, caption track, or audio alternative found for "
+            f"this prerecorded {tag.lower()} element. WCAG 1.2.1 requires a text "
+            f"alternative for prerecorded audio-only and video-only content.",
+            4,
+        ),
     )
 
 
@@ -411,12 +427,14 @@ class MediaAuditor:
         gate1 = _gate_1_is_prerecorded(item)
         if gate1:
             status, violation, gate = gate1
-            base.update({
-                "media_type": "live",
-                "wcag_1_2_1_status": status,
-                "wcag_1_2_1_violation": violation,
-                "wcag_1_2_1_gate_reached": gate,
-            })
+            base.update(
+                {
+                    "media_type": "live",
+                    "wcag_1_2_1_status": status,
+                    "wcag_1_2_1_violation": violation,
+                    "wcag_1_2_1_gate_reached": gate,
+                }
+            )
             return base
 
         # ── Gate 2: Classify media type ───────────────────────────────────
@@ -429,7 +447,7 @@ class MediaAuditor:
                 "wcag_1_2_1_status": "N/A",
                 "wcag_1_2_1_violation": (
                     "Synchronized media (has both audio and video tracks). "
-                    "WCAG 1.2.1 does not apply — see 1.2.2."
+                    "WCAG 1.2.1 does not apply — see 1.2.2 / 1.2.3."
                 ),
                 "wcag_1_2_1_gate_reached": 2,
             })
@@ -499,8 +517,6 @@ class MediaAuditor:
                 "wcag_1_2_2_gate_reached": 6,
             })
             return base
-
-
         # ── Gate 3: Is it a labeled media alternative? ────────────────────
         
         if not run_1_2_1:
@@ -509,24 +525,28 @@ class MediaAuditor:
         gate3 = _gate_3_is_labeled_alternative(item)
         if gate3:
             status, violation, gate = gate3
-            base.update({
-                "wcag_1_2_1_status": status,
-                "wcag_1_2_1_violation": violation,
-                "wcag_1_2_1_gate_reached": gate,
-            })
+            base.update(
+                {
+                    "wcag_1_2_1_status": status,
+                    "wcag_1_2_1_violation": violation,
+                    "wcag_1_2_1_gate_reached": gate,
+                }
+            )
             return base
 
         # Check if it's decorative (aria-hidden or role=presentation)
         if item.get("aria_hidden") or item.get("role") in ("presentation", "none"):
-            base.update({
-                "wcag_1_2_1_status": "N/A",
-                "wcag_1_2_1_violation": (
-                    "Media element is marked as decorative "
-                    "(aria-hidden='true' or role='presentation'). "
-                    "WCAG 1.2.1 does not apply."
-                ),
-                "wcag_1_2_1_gate_reached": 3,
-            })
+            base.update(
+                {
+                    "wcag_1_2_1_status": "N/A",
+                    "wcag_1_2_1_violation": (
+                        "Media element is marked as decorative "
+                        "(aria-hidden='true' or role='presentation'). "
+                        "WCAG 1.2.1 does not apply."
+                    ),
+                    "wcag_1_2_1_gate_reached": 3,
+                }
+            )
             return base
 
         # ── Gate 4: Find transcript / alternative ─────────────────────────
@@ -534,18 +554,23 @@ class MediaAuditor:
 
         if gate4_fail:
             status, violation, gate = gate4_fail
-            base.update({
-                "wcag_1_2_1_status": status,
-                "wcag_1_2_1_violation": violation,
-                "wcag_1_2_1_gate_reached": gate,
-            })
+            base.update(
+                {
+                    "wcag_1_2_1_status": status,
+                    "wcag_1_2_1_violation": violation,
+                    "wcag_1_2_1_gate_reached": gate,
+                }
+            )
             return base
 
         # Transcript found — record what was found
-        base["transcript_type"] = transcript_info.get("type") if transcript_info else None
+        base["transcript_type"] = (
+            transcript_info.get("type") if transcript_info else None
+        )
         base["transcript_url_or_text"] = (
             (transcript_info.get("url_or_text") or "")[:500]
-            if transcript_info else None
+            if transcript_info
+            else None
         )
 
         # ── Gate 5: Quality checks (mandatory) ────────────────────────────
@@ -558,20 +583,24 @@ class MediaAuditor:
         if quality_report:
             base["quality_report"] = quality_report
             overall = quality_report.get("overall_status", "NEEDS_REVIEW")
-            base.update({
-                "wcag_1_2_1_status": overall,
-                "wcag_1_2_1_violation": quality_report.get("message", ""),
-                "wcag_1_2_1_gate_reached": 5,
-            })
+            base.update(
+                {
+                    "wcag_1_2_1_status": overall,
+                    "wcag_1_2_1_violation": quality_report.get("message", ""),
+                    "wcag_1_2_1_gate_reached": 5,
+                }
+            )
         else:
-            base.update({
-                "wcag_1_2_1_status": "NEEDS_REVIEW",
-                "wcag_1_2_1_violation": (
-                    f"Transcript/alternative found ({transcript_info.get('type')}). "
-                    f"Quality evaluation could not run (missing media URL or transcript text)."
-                ),
-                "wcag_1_2_1_gate_reached": 5,
-            })
+            base.update(
+                {
+                    "wcag_1_2_1_status": "NEEDS_REVIEW",
+                    "wcag_1_2_1_violation": (
+                        f"Transcript/alternative found ({transcript_info.get('type')}). "
+                        f"Quality evaluation could not run (missing media URL or transcript text)."
+                    ),
+                    "wcag_1_2_1_gate_reached": 5,
+                }
+            )
 
         return base
 
@@ -603,9 +632,7 @@ class MediaAuditor:
                 lang=self.lang,
             )
         except Exception as exc:
-            logger.warning(
-                f"[media_auditor] quality check failed: {exc}"
-            )
+            logger.warning(f"[media_auditor] quality check failed: {exc}")
             return None
 
     # ── CSV output ────────────────────────────────────────────────────────
@@ -616,8 +643,9 @@ class MediaAuditor:
         if not records:
             return
         with open(csv_path, "w", newline="", encoding="utf-8") as fh:
-            writer = csv.DictWriter(fh, fieldnames=self.CSV_FIELDS,
-                                    extrasaction="ignore")
+            writer = csv.DictWriter(
+                fh, fieldnames=self.CSV_FIELDS, extrasaction="ignore"
+            )
             writer.writeheader()
             writer.writerows(records)
         logger.info(f"[media_auditor] saved {csv_path}")

@@ -105,11 +105,11 @@ def evaluate(
 
     for el in newly_clipped[:10]:
         records.append(
-                RuleAuditRecord(
-                    rule_key=_RULE_KEY,
-                    status="FAILED",
-                    violation=(
-                        f"<{el.tag}> text is clipped after WCAG 1.4.12 spacing overrides "
+            RuleAuditRecord(
+                rule_key=_RULE_KEY,
+                status="FAILED",
+                violation=(
+                    f"<{el.tag}> text is clipped after WCAG 1.4.12 spacing overrides "
                     f"(scrollW={el.scroll_width:.0f} > clientW={el.client_width:.0f}, "
                     f"overflow-{el.overflow_x}/{el.overflow_y}). "
                     f'Text: "{el.text[:80]}"'

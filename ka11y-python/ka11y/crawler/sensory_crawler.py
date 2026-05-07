@@ -36,7 +36,6 @@ from pydantic import BaseModel
 
 from ka11y.crawler.context_factory import new_crawler_context
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Data model
 # ─────────────────────────────────────────────────────────────────────────────
@@ -46,19 +45,19 @@ class SensoryElementData(BaseModel):
     page_url: str
 
     # Element identity
-    tag: str                          # p | li | label | legend | button | span | …
+    tag: str  # p | li | label | legend | button | span | …
     element_id: Optional[str] = None
     element_class: Optional[str] = None
 
     # Text content
-    text: str                         # visible inner text (trimmed)
+    text: str  # visible inner text (trimmed)
     aria_label: Optional[str] = None  # aria-label on the element itself
     aria_labelledby: Optional[str] = None
-    placeholder: Optional[str] = None # for input / textarea neighbours
-    value: Optional[str] = None       # visible value for button-like inputs
+    placeholder: Optional[str] = None  # for input / textarea neighbours
+    value: Optional[str] = None  # visible value for button-like inputs
 
     # Structural context
-    role: Optional[str] = None        # ARIA role
+    role: Optional[str] = None  # ARIA role
     parent_tag: Optional[str] = None
     nearest_heading: Optional[str] = None  # closest h1-h6 ancestor text
 
@@ -231,9 +230,9 @@ class AsyncSensoryCrawler:
     }"""
 
     def __init__(self, base_url: str, output_dir: str, max_depth: int = 0):
-        self.base_url   = base_url
+        self.base_url = base_url
         self.output_dir = Path(output_dir)
-        self.max_depth  = max_depth
+        self.max_depth = max_depth
         self.results: List[SensoryElementData] = []
         self.visited: set = set()
         self.output_dir.mkdir(parents=True, exist_ok=True)

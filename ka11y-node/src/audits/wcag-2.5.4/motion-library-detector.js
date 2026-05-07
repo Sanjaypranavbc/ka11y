@@ -35,4 +35,6 @@ async function detectMotionLibraries(page) {
     console.warn('[wcag-2.5.4] library detection failed:', err.message);
   }
   return detected;
-}module.exports = { detectMotionLibraries };
+}
+
+module.exports = { detectMotionLibraries };

@@ -1225,9 +1225,9 @@ class UniversalPageLoader:
             policy = CrawlPolicy(
                 max_depth=max_depth,
                 max_pages=20,  # Default safety cap
-                max_links_per_page=50
+                max_links_per_page=50,
             )
-        
+
         snapshot = PageSnapshot(page_url=url)
         har_path: Optional[str] = None
         har_file = output_dir / "universal_session.har"
@@ -1241,6 +1241,7 @@ class UniversalPageLoader:
             )
 
         from collections import deque
+
         queue: deque[tuple[str, int]] = deque([(url, 0)])
         visited: set[str] = set()
 
@@ -1269,11 +1270,15 @@ class UniversalPageLoader:
                     visited.add(normalized_url)
 
                     if not policy.is_allowed(normalized_url, url):
-                        logger.info(f"[universal] skipping off-origin/disallowed URL: {normalized_url}")
+                        logger.info(
+                            f"[universal] skipping off-origin/disallowed URL: {normalized_url}"
+                        )
                         continue
 
                     if snapshot.pages_crawled >= policy.max_pages:
-                        logger.warning(f"[universal] crawl budget exceeded ({policy.max_pages} pages)")
+                        logger.warning(
+                            f"[universal] crawl budget exceeded ({policy.max_pages} pages)"
+                        )
                         break
 
                     new_links = await cls._crawl_one_url(
@@ -1352,22 +1357,24 @@ class UniversalPageLoader:
 
             # Links extraction can just use the final state
             links = await cls._extract_links(page, root_url=url)
-            
+
             # Limit links per page
             if len(links) > policy.max_links_per_page:
-                logger.info(f"[universal] capping links from {len(links)} to {policy.max_links_per_page}")
-                links = links[:policy.max_links_per_page]
+                logger.info(
+                    f"[universal] capping links from {len(links)} to {policy.max_links_per_page}"
+                )
+                links = links[: policy.max_links_per_page]
 
             def _count_for_url(collection: list) -> int:
                 return len([r for r in collection if r.get("page_url") == url])
 
-            page_forms        = _count_for_url(output.forms)
-            page_interactive  = _count_for_url(output.interactive)
+            page_forms = _count_for_url(output.forms)
+            page_interactive = _count_for_url(output.interactive)
             page_target_sizes = _count_for_url(output.target_sizes)
-            page_moving       = _count_for_url(output.moving_content)
-            page_media        = _count_for_url(output.media)
+            page_moving = _count_for_url(output.moving_content)
+            page_media = _count_for_url(output.media)
             page_text_spacing = _count_for_url(output.text_spacing)
-            page_sensory      = _count_for_url(output.sensory)
+            page_sensory = _count_for_url(output.sensory)
 
             output.page_summaries.append(
                 {
@@ -1384,7 +1391,9 @@ class UniversalPageLoader:
                 }
             )
             output.pages_crawled += 1
-            page_warning_count = len([w for w in output.warnings if w.get("page_url") == url])
+            page_warning_count = len(
+                [w for w in output.warnings if w.get("page_url") == url]
+            )
 
             if step_logger:
                 step_logger.record(
@@ -1406,14 +1415,14 @@ class UniversalPageLoader:
                     },
                 )
         except NavigationError as exc:
-             # Captured as warning instead of hard error for universal crawl
-             warning = {
-                 "code": exc.code,
-                 "page_url": url,
-                 "message": str(exc),
-             }
-             output.warnings.append(warning)
-             logger.warning(f"[universal] {exc.code} for {url}: {exc}")
+            # Captured as warning instead of hard error for universal crawl
+            warning = {
+                "code": exc.code,
+                "page_url": url,
+                "message": str(exc),
+            }
+            output.warnings.append(warning)
+            logger.warning(f"[universal] {exc.code} for {url}: {exc}")
         except Exception as exc:
             output.partial = True
             warning = {
@@ -1435,7 +1444,6 @@ class UniversalPageLoader:
 
         return links
 
-
     @classmethod
     async def _prepare_page(
         cls,
@@ -1447,12 +1455,14 @@ class UniversalPageLoader:
         await navigate_with_resilience(page, url)
 
         try:
-            await page.wait_for_load_state("networkidle", timeout=_NETWORKIDLE_TIMEOUT_MS)
+            await page.wait_for_load_state(
+                "networkidle", timeout=_NETWORKIDLE_TIMEOUT_MS
+            )
         except Exception:
             logger.debug(f"[universal] networkidle timeout for {url}")
 
         await cls._wait_for_spa(page)
-        
+
         # ── Cookie Handling ──
         try:
             cookie_state = await handle_cookies(page)
@@ -1483,10 +1493,10 @@ class UniversalPageLoader:
     ) -> None:
         """Extracts DOM in chunks by scrolling to bypass Virtualized DOMs."""
         seen_refs = set()
-        
+
         # Read max scroll passes from config (fallback to 4)
         max_passes = 4
-        
+
         # Trigger initial lazy-load setup without scrolling
         initial_lazy_js = """async () => {
             document.querySelectorAll('[data-src],[data-lazy-src],[data-original],[loading="lazy"]').forEach(el => {
@@ -1507,19 +1517,23 @@ class UniversalPageLoader:
                 await page.evaluate(_DOM_STABILITY_JS, _DOM_STABILITY_MS)
             except Exception:
                 pass
-                
+
             # 2. Extract current viewport/DOM chunk
-            await cls._extract_page(page, page_url=page_url, output=output, seen_refs=seen_refs)
-            
+            await cls._extract_page(
+                page, page_url=page_url, output=output, seen_refs=seen_refs
+            )
+
             # 3. Check if we hit the bottom of the page
-            is_at_bottom = await page.evaluate("() => { const h = document.documentElement; return (window.innerHeight + window.scrollY) >= (h.scrollHeight - 100); }")
+            is_at_bottom = await page.evaluate(
+                "() => { const h = document.documentElement; return (window.innerHeight + window.scrollY) >= (h.scrollHeight - 100); }"
+            )
             if is_at_bottom:
                 break
-                
+
             # 4. Scroll down
             await page.evaluate("window.scrollBy(0, window.innerHeight * 1.5)")
             await page.wait_for_timeout(_POST_SCROLL_WAIT_MS)
-            
+
         # Reset scroll position to top
         await page.evaluate("window.scrollTo(0, 0)")
 
@@ -1611,13 +1625,13 @@ class UniversalPageLoader:
                 html=entry.get("html") or entry.get("html_snippet") or "",
                 index=idx,
             )
-            
+
             # Deduplication for virtualized DOMs (Infinite scroll chunking)
             if seen_refs is not None:
                 if ref_id in seen_refs:
                     continue
                 seen_refs.add(ref_id)
-                
+
             entry["element_ref_id"] = ref_id
             bucket.append(entry)
             output.element_refs[ref_id] = {
@@ -1664,7 +1678,9 @@ class UniversalPageLoader:
                 child_path = f"{path}.{index}"
                 child_url = child.url or ""
                 if child_url and not cls._is_same_origin(page_url, child_url):
-                    logger.info(f"Skipped cross-origin frame during universal extraction: {child_url}")
+                    logger.info(
+                        f"Skipped cross-origin frame during universal extraction: {child_url}"
+                    )
                     output.partial = True
                     continue
                 await walk(child, child_path)
@@ -1704,8 +1720,7 @@ class UniversalPageLoader:
             return warning
 
         try:
-            frame_meta = await frame_el.evaluate(
-                """(el) => ({
+            frame_meta = await frame_el.evaluate("""(el) => ({
                     tag: (el.tagName || '').toLowerCase(),
                     id: el.id || null,
                     name_attr: el.getAttribute('name'),
@@ -1717,8 +1732,7 @@ class UniversalPageLoader:
                     allow: el.getAttribute('allow'),
                     aria_label: el.getAttribute('aria-label'),
                     html_snippet: (el.outerHTML || '').slice(0, 240),
-                })"""
-            )
+                })""")
         except Exception:
             frame_meta = None
 

@@ -36,9 +36,50 @@ async function validateEscapeHatch(page, elementSelector) {
       const evidence = [];
       const ALT_BTN  = 'button, [role="button"], [aria-label], input[type="button"]';
 
+      // Known-empty handler bodies (already trimmed and stripped of trailing semicolons).
+      // A label alone is NOT proof of a pointer alternative — the handler must be non-trivial.
+      const KNOWN_EMPTY_PATTERNS = new Set([
+        '', 'void 0', 'void(0)', 'return false', 'return true',
+        'undefined', 'null', ';', 'false', 'true',
+      ]);
+
       /* ── Check 1: Click handler on the element ───────────────────────── */
-      if (typeof el.onclick === 'function' || el.getAttribute('onclick')) {
-        evidence.push('Click handler present on element');
+      const onclickAttr = el.getAttribute('onclick') || '';
+      let onclickProp = '';
+      if (typeof el.onclick === 'function') {
+        const fnStr = el.onclick.toString();
+        // Extract just the body if it's a `function (...) { ... }` wrapper
+        const m = fnStr.match(/^function\s*\(.*?\)\s*\{([\s\S]*)\}$/);
+        onclickProp = m ? m[1] : fnStr;
+      }
+      const onclickBody = onclickAttr || onclickProp;
+
+      if (onclickBody) {
+        // Normalize for known-empty matching: trim, drop trailing ;, collapse void(0)→void 0
+        let normalized = onclickBody.trim();
+        if (normalized.endsWith(';')) normalized = normalized.slice(0, -1).trim();
+        normalized = normalized.replace(/void\s*\(\s*0\s*\)/g, 'void 0');
+
+        const isKnownEmpty = KNOWN_EMPTY_PATTERNS.has(normalized);
+
+        const cleaned = onclickBody
+          .replace(/^function\s*\(.*?\)\s*\{/, '')
+          .replace(/\}$/, '')
+          .replace(/void\s*\(\s*0\s*\)/g, '')
+          .replace(/void\s+0/g, '')
+          .replace(/return\s+false/g, '')
+          .replace(/return\s+true/g, '')
+          .replace(/undefined/g, '')
+          .replace(/null/g, '')
+          .replace(/false/g, '')
+          .replace(/true/g, '')
+          .replace(/[;{}\s]/g, '');
+
+        const isRealAction = !isKnownEmpty && cleaned.length > 6;
+
+        if (isRealAction) {
+          evidence.push('Valid click handler/alternative present on element');
+        }
       }
 
       /* ── Check 2: Keyboard handler on element or up to 3 ancestors ───── */
@@ -64,9 +105,19 @@ async function validateEscapeHatch(page, elementSelector) {
 
       /* ── Check 4: Adjacent control buttons within 2 DOM levels ─────────
          Check (a) children of the element, (b) siblings, (c) parent's siblings */
+      
+      function checkButtonSemantics(btn) {
+        const label = ((btn.textContent || '') + ' ' + (btn.getAttribute('aria-label') || '') + ' ' + (btn.getAttribute('title') || '')).toLowerCase();
+        const SEMANTIC_MATCH = /next|prev|forward|back|zoom|\+|-|left|right|up|down|次へ|前へ|ズーム|拡大|縮小|進む|戻る/i;
+        if (SEMANTIC_MATCH.test(label)) {
+          return ` (High quality: semantically matches gesture action)`;
+        }
+        return '';
+      }
+
       const internalBtn = el.querySelector(ALT_BTN);
       if (internalBtn) {
-        evidence.push(`Child <${internalBtn.tagName.toLowerCase()}> provides a pointer alternative`);
+        evidence.push(`Child <${internalBtn.tagName.toLowerCase()}> provides a pointer alternative${checkButtonSemantics(internalBtn)}`);
       }
 
       const parent = el.parentElement;
@@ -74,7 +125,7 @@ async function validateEscapeHatch(page, elementSelector) {
         const siblingBtns = Array.from(parent.querySelectorAll(ALT_BTN))
           .filter(s => !el.contains(s) && s !== el);
         if (siblingBtns.length > 0) {
-          evidence.push(`Sibling <${siblingBtns[0].tagName.toLowerCase()}> found in parent`);
+          evidence.push(`Sibling <${siblingBtns[0].tagName.toLowerCase()}> found in parent${checkButtonSemantics(siblingBtns[0])}`);
         }
 
         /* parent's parent siblings (grandparent context) */
@@ -83,7 +134,7 @@ async function validateEscapeHatch(page, elementSelector) {
           const unclesBtns = Array.from(grandparent.querySelectorAll(ALT_BTN))
             .filter(s => !parent.contains(s) && s !== parent);
           if (unclesBtns.length > 0) {
-            evidence.push(`Button found in grandparent context: <${unclesBtns[0].tagName.toLowerCase()}>`);
+            evidence.push(`Button found in grandparent context: <${unclesBtns[0].tagName.toLowerCase()}>${checkButtonSemantics(unclesBtns[0])}`);
           }
         }
       }

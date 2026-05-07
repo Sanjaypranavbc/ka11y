@@ -39,6 +39,15 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | F65 Missing alt + all alternative name sources | Failure | Covered |
 | F71 Emoji/symbol without text alt | Failure | Missed — automatable |
 
+**Decorative + AT-hidden.** A decorative-classified image with no `alt` attribute
+PASSES when the element is hidden from assistive tech (`aria-hidden="true"` or
+`role="presentation"` / `role="none"`). Both signals are now plumbed from the
+crawler through `ImageData` to the auditor; without the AT-hidden signal,
+missing-alt remains a violation.
+
+**Logo / brand vocabulary.** The logo-name gate accepts `logo`, `logotype`,
+`wordmark`, `brandmark`, `home`, plus localised equivalents (`ロゴ`, `標榜`, `ホーム`, `トップ`).
+
 **Known limitations**
 - 3-character OCR token floor causes false negatives on valid 2-letter labels (e.g. "UI").
 - OCR matching is literal — semantic synonyms (alt "Look up" vs OCR "Search") fail.
@@ -61,6 +70,26 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 **Known limitations**
 - Transcript link detection is keyword-based and scoped to 2 DOM-ancestor levels.
 - Filename-only transcript links are heuristically flagged, but transcript quality/equivalence is not verified.
+
+---
+
+## 1.2.4 Captions (Live)
+**Engine:** `ka11y-node/src/custom-checks/captions-live.check.js`.
+
+Detects live media surfaces (HLS / m3u8, `data-live` attributes, "live" badges, known live-streaming embed providers) and verifies that captions are present.
+
+| Technique | Kind | Status |
+|---|---|---|
+| G9 Real-time captions for live audio in synchronized media | Sufficient | Partial |
+| H95 `<track kind="captions">` populated at runtime | Sufficient | Covered |
+| Embed: YouTube `cc_load_policy=1` URL parameter | Sufficient | Covered (passing signal) |
+| Embed: Vimeo `texttrack=…` URL parameter | Sufficient | Covered (passing signal) |
+| Adjacent CART stream (`[aria-live]` region whose label/text matches `caption` / `transcript` / `字幕` / `文字起こし`) | Sufficient | Covered (passing signal) |
+| F8 Failure — no synchronous text alternative for live audio | Failure | Partial — cross-origin players require manual review |
+
+**Known limitations**
+- Cross-origin embed players whose URL does not opt captions on (`cc_load_policy=1`, `texttrack=…`) and which lack a sibling CART stream are flagged for manual review — the auditor cannot inspect the player's DOM to confirm runtime captioning.
+- "Live" detection still depends on observable surface signals; back-end scheduled streams that lack a `live` badge or HLS source are invisible.
 
 ---
 
@@ -367,6 +396,13 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | ≥ 3:1 contrast | Requirement | Covered |
 | F78 Focus indicator insufficient contrast | Failure | Partial |
 
+**Failure semantics.** Both the thickness and contrast requirements are
+evaluated independently — either failure produces a `fail` verdict. (The
+prior implementation only failed when *both* dimensions were below threshold,
+which let a 0.5 px ring at 5:1 contrast pass spuriously.) When the focus
+contrast cannot be measured for an element, the verdict is `needs_review`
+rather than a hardcoded passing fallback.
+
 ---
 
 ## 2.5.1 Pointer Gestures
@@ -419,9 +455,15 @@ This page documents, for every implemented rule in `ka11y-python` and `ka11y-nod
 | G213 Provide conventional controls | Sufficient | Partial (requires manual review) |
 | F106 Failure — motion required with no alternative | Failure | Covered (heuristic detection) |
 
+**UI-alternative scan.** A control's accessible name must match an action verb
+(`undo` / `refresh` / `元に戻す` / …) **and** its ancestor container must mention a
+motion keyword (`shake` / `tilt` / `モーション` / …). Action-verb labels alone are
+not sufficient — that earlier formulation made any page with a "Submit"/"Cancel"
+button pass spuriously.
+
 **Known limitations**
-- sensor input cannot be physically simulated; detection is based on script and API usage patterns.
-- Essential motion (pedometer, compass) is heuristically classified but requires human confirmation.
+- Sensor input cannot be physically simulated; detection is based on script and API usage patterns.
+- Essential motion (pedometer, compass) is heuristically classified — only an explicit `data-wcag-motion-essential="true"` opt-in is auto-treated as exempt; soft signals (fitness, VR, WebGL, Schema.org `VideoGame`) downgrade severity but require human confirmation.
 - All findings are marked as "needs manual review".
 
 ---
@@ -581,7 +623,6 @@ Single-page scope only. Cannot observe step-to-step state in wizards.
 
 | SC | Level | Why it's not implemented |
 |---|---|---|
-| 1.2.4 Captions (Live) | AA | Partial |
 | 1.2.5 Audio Description (Prerecorded) | AA | Automatable; not yet wired |
 | 1.4.2 Audio Control | A | Automatable; not yet wired |
 | 2.2.1 Timing Adjustable | A | Partial (requires timeout detection) |

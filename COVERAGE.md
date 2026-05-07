@@ -1,8 +1,8 @@
 # ka11y WCAG 2.2 Coverage Report
 
-**Report date:** 2026-04-30
+**Report date:** 2026-05-07
 **Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + 29 custom checks).
-**Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), 2026-04-30 2.5.1 Pointer Gestures three-layer audit module (`src/src/audits/wcag-2.5.1/`), and 2026-03-26 empirical validation against seven production sites.
+**Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), 2026-04-30 2.5.1 Pointer Gestures three-layer audit module (`src/audits/wcag-2.5.1/`) and 2.5.4 Motion Actuation modularisation (`src/audits/wcag-2.5.4/`), 2026-05-05 2.5.4 hardening (axe rule polarity fix; addEventListener monkey-patch via `motion-listener-detector.js`; expanded UI-alternative + disable-control heuristics), 2026-05-07 2.5.4 UI-alternative scan now hard-requires motion-keyword adjacency (action verb labels alone are no longer enough — closes false-pass on any page with a "Submit"/"Cancel"/"Reset" button) and 1.2.4 live-captions enhancements (YouTube `cc_load_policy`, Vimeo `texttrack`, adjacent CART `[aria-live]`), and 2026-03-26 empirical validation against seven production sites.
 
 ---
 
@@ -90,7 +90,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 1.2.1 | Audio-only and Video-only (Prerecorded) | A | Yes | Yes | Covered | Medium | `media_auditor.py` plus `audio-transcript.check.js` (transcript-link keyword scan with HEAD reachability check + filename-only transcript heuristic) | Pre-recorded audio-only or video-only media needs an equivalent alternative. |
 | 1.2.2 | Captions (Prerecorded) | A | Yes | No | Covered | High | New `captions-prerecorded.check.js`: scans `<video>` for `<track kind="captions">`; emits INCOMPLETE for cross-origin embeds (YouTube, Vimeo, Wistia) | Pre-recorded video with sound needs captions. |
 | 1.2.3 | Audio Description or Media Alternative (Prerecorded) | A | Yes | No | Covered | Medium | New `audio-description.check.js`: detects `<track kind="descriptions">`, alternate description audio, or nearby full-text transcript link (EN plus JA keywords) | Pre-recorded video needs audio description or a full text alternative. |
-| 1.2.4 | Captions (Live) | AA | Yes | No | Covered | Medium | `captions-live.check.js`: scans for live embed patterns and player-rendered caption elements; flags missing tracks on likely-live media | Live audio or video needs captions. |
+| 1.2.4 | Captions (Live) | AA | Yes | No | Covered | Medium | `captions-live.check.js`: scans for live embed patterns and player-rendered caption elements; honours YouTube `cc_load_policy=1` and Vimeo `texttrack=…` URL params as passing signals; treats an adjacent `[aria-live]` region whose label/text matches `caption` / `transcript` / `字幕` / `文字起こし` as a CART-stream pass; flags remaining cross-origin live media for manual review | Live audio or video needs captions. |
 | 1.2.5 | Audio Description (Prerecorded) | AA | Partial | No | Partial | Low | Partly covered by `audio-description.check.js` (1.2.3 path); no separate emitter | Recorded video needs audio description for important visuals. |
 | 1.2.6 | Sign Language (Prerecorded) | AAA | No | No | Missing | Not covered | Out of scope | Recorded video should provide sign language for spoken content. |
 | 1.2.7 | Extended Audio Description (Prerecorded) | AAA | No | No | Missing | Not covered | Out of scope | Recorded video should offer extended audio description when needed. |
@@ -144,7 +144,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 2.5.1 | Pointer Gestures | A | Yes | No | Covered | Medium | New `src/src/audits/wcag-2.5.1/` three-layer module: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, etc.), custom axe-core rule for gesture data-attributes; escape-hatch validator reduces false positives; full EN + JA multilingual selector banks | Complex gestures need a simple pointer alternative. |
 | 2.5.2 | Pointer Cancellation | A | Yes | No | Covered | Low | `pointer-cancellation.check.js`: flags `onpointerdown` / `onmousedown` triggering navigation or submit without `pointercancel` or `preventDefault` | Pointer actions should not trigger unexpectedly on the down event. |
 | 2.5.3 | Label in Name | A | Yes | Yes | Covered | High | `label_in_name_auditor.py`: NFC-normalized casefolded visible label vs computed accessible name | Visible label text should also exist in the accessible name. |
-| 2.5.4 | Motion Actuation | A | Yes | No | Covered | Low | `src/audits/wcag-2.5.4/`: Multi-layer sensor detection; emits manual review required | Motion-based actions need an alternative and an off switch. |
+| 2.5.4 | Motion Actuation | A | Yes | No | Covered | Medium | `src/audits/wcag-2.5.4/`: Five-layer detection — runtime property scan, `addEventListener` monkey-patch (catches React/Vue/Angular sensor listeners), inline + external script keyword scan, library fingerprinting (`shake.js`, `gyroscape`, `hammer.js` motion mode, iOS opt-in API), and a custom axe rule with corrected `evaluate→true=pass` polarity. UI-alternative scan now uses action verbs + motion-keyword adjacency. Disable-control validator no longer flags any "Accessibility" landmark | Motion-based actions need an alternative and an off switch. |
 | 2.5.5 | Target Size | AAA | No | No | Missing | Not covered | Tightening 2.5.8 to 44 px would unlock | Targets should use the larger AAA minimum size. |
 | 2.5.6 | Concurrent Input Mechanisms | AAA | No | No | Missing | Not covered | Roadmap | Different input methods should remain available together. |
 | 2.5.7 | Dragging Movements | AA | Yes | No | Covered | Medium | `dragging-movements.check.js`: `draggable=true`, HTML5 drag listeners, library detection (Swiper, Slick) | Drag operations need a simpler non-drag alternative. |
@@ -398,10 +398,21 @@ G210 Up-event only Partial; F101 Down-event trigger Covered; F102 No cancel mech
 
 | Technique | Type | Status | Notes |
 |---|---|---|---|
-| G213 Provide conventional controls | Sufficient | Partial | Emits manual review items |
-| F106 Failure — motion required with no alternative | Failure | Covered | Heuristic detection |
+| G213 Provide conventional controls | Sufficient | Partial | UI-alternative scan matches action verbs (`undo`, `redo`, `cancel`, `reset`, `refresh`, `元に戻す`, `更新`, …) **and** hard-requires a motion keyword (`shake`, `tilt`, `gyro`, `モーション`, `シェイク`, …) somewhere in the control's ancestor container — action verbs alone no longer pass |
+| G218 / F106 Failure — motion required with no alternative | Sufficient / Failure | Covered | Multi-layer sensor detection; manual review still required |
+| Disable-control surface (toggle, switch, settings link, motion-labelled switch) | Sufficient | Covered | Tightened: aria-label="accessibility" only counts when its subtree mentions a motion keyword (previously matched any landmark) |
 
-Multi-layer detection: Runtime checks (`ondevicemotion`), script scanning for API keywords, library fingerprinting (`shake.js`), and iOS permission API usage. Emits findings with `manualReviewRequired: true`. Essential context (fitness, VR) is heuristically classified.
+Detection layers (2026-05-05 rewrite):
+
+1. **Runtime property scan** — `window.ondevicemotion` / `window.ondeviceorientation` and jQuery's event registry, in every frame.
+2. **`addEventListener` monkey-patch** — `motion-listener-detector.js` is injected via `addInitScript` (Playwright) or `evaluateOnNewDocument` (Puppeteer) before navigation. It intercepts `window.addEventListener('devicemotion'|'deviceorientation'|'deviceorientationabsolute', …)` and `DeviceMotionEvent.requestPermission()`, capturing call-site stack frames into `window.__motionRegistry`. Closes the previous blind spot where framework-wired listeners (React/Vue/Angular) were invisible to property-only scans.
+3. **Inline + external script keyword scan** — patterns such as `devicemotion`, `accelerationIncludingGravity`, `rotationRate`, `shake`, `tilt`, `gyroscope`, `accelerometer` against page scripts, with same-origin external scripts fetched and re-scanned.
+4. **Library fingerprinting** — `shake.js`, `gyroscape`, `hammer.js (motion mode)`, custom `[data-shake]` handlers, iOS `DeviceMotionEvent.requestPermission` opt-in API.
+5. **Custom axe-core rule** — `motion-actuation-2-5-4` follows axe convention (`evaluate→true = pass`, `false = fail`); flags pages where a motion handler is attached but neither a "disable motion / シェイク無効" copy nor a settings link is present.
+
+Essential-context classifier (`essential-motion-classifier.js`) exempts pedometer/fitness, navigation/compass, spirit-level/measurement, VR/WebXR, Schema.org `VideoGame`, and WebGL canvases — these downgrade severity to `warning` with `manualReviewRequired: true`.
+
+All findings still carry `manualReviewRequired: true` because UI alternatives and motion-off switches cannot be fully simulated headlessly.
 
 ### 2.5.3 Label in Name (Level A)
 

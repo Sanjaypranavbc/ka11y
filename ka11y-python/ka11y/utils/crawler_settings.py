@@ -20,7 +20,9 @@ def get_config_value(*path: str, default: Any = None) -> Any:
     return _get_nested(config, path, default)
 
 
-def get_int_config(*path: str, default: int | None = None, minimum: int | None = None) -> int | None:
+def get_int_config(
+    *path: str, default: int | None = None, minimum: int | None = None
+) -> int | None:
     value = get_config_value(*path, default=default)
     if value is None:
         return None
@@ -31,6 +33,7 @@ def get_int_config(*path: str, default: int | None = None, minimum: int | None =
     if minimum is not None:
         return max(parsed, minimum)
     return parsed
+
 
 def get_cjk_langs() -> list[str]:
     raw = get_config_value(
@@ -192,7 +195,3 @@ def select_ocr_candidate_paths(
     if limit is None or len(ordered) <= limit:  # None = no limit
         return ordered, []
     return ordered[:limit], ordered[limit:]
-
-
-
-

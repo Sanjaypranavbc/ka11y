@@ -15,6 +15,7 @@ import json
 import os
 import time
 import traceback
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -34,8 +35,13 @@ from .stage_events import (
     _stage_start,
     emit_job_plan,
 )
-from .stages import _allowed_levels, _call_node_flat, _run_python_stages
-from .store import _broadcast, _close_subscribers, _jobs
+from .stages import (
+    PythonStagesResult,
+    _allowed_levels,
+    _call_node_flat,
+    _run_python_stages,
+)
+from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -68,7 +74,9 @@ def _merge_findings(
             targets = [item for item in target if isinstance(item, str)]
         else:
             targets = []
-        cleaned = [" ".join(item.split()).strip().lower() for item in targets if item.strip()]
+        cleaned = [
+            " ".join(item.split()).strip().lower() for item in targets if item.strip()
+        ]
         if not cleaned:
             return ""
         return "||".join(dict.fromkeys(cleaned))
@@ -126,7 +134,9 @@ def _merge_findings(
     return list(merged.values()) + no_key
 
 
-async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None) -> None:
+async def _run_job(
+    job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
+) -> None:
     """
     Background task: run axe-core (Node) and Python stages in parallel.
 
@@ -165,7 +175,11 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             step="combined_job",
             status="running",
             message="Combined audit job started",
-            context={"url": url, "lang": payload.lang, "wcag_level": payload.wcag_level},
+            context={
+                "url": url,
+                "lang": payload.lang,
+                "wcag_level": payload.wcag_level,
+            },
         )
 
         # Announce the stage plan to SSE subscribers so the progress bar can render.
@@ -230,7 +244,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 run_hover_focus_content_audit=payload.run_hover_focus_content_audit,
                 run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
-                run_sensory_audit= payload.run_sensory_audit,
+                run_sensory_audit=payload.run_sensory_audit,
                 lang=payload.lang,
                 job_id=job_id,
                 step_logger=step_logger,
@@ -262,7 +276,12 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
 
         if isinstance(python_result, Exception):
             pass  # all stages failed — warnings already recorded
+        elif isinstance(python_result, PythonStagesResult):
+            python_findings = python_result.findings
+            contrast_report = python_result.contrast_report
+            image_audit_report = python_result.image_audit_report
         elif isinstance(python_result, tuple) and len(python_result) == 3:
+            # Backwards-compat path: pre-dataclass callers / older test mocks.
             python_findings, contrast_report, image_audit_report = python_result
         else:
             # Unexpected return type — degrade gracefully rather than raising
@@ -313,13 +332,17 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(img['path'], safe='')}"
                         )
-                        
+
         for array_key in ("violations", "needs_review", "passes"):
             for finding in report.get(array_key, []):
                 element = finding.get("element")
                 if element and isinstance(element, dict):
                     src = element.get("image_src")
-                    if src and not src.startswith("/api/v1/") and not src.startswith(("http://", "https://", "data:")):
+                    if (
+                        src
+                        and not src.startswith("/api/v1/")
+                        and not src.startswith(("http://", "https://", "data:"))
+                    ):
                         element["image_src"] = (
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(src, safe='')}"
@@ -327,7 +350,9 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
-            json.dump(report, fh, indent=2, ensure_ascii=False, default=_json_serializer)
+            json.dump(
+                report, fh, indent=2, ensure_ascii=False, default=_json_serializer
+            )
 
         # Slim down the "passes" array for the in-memory 'result' object used by the UI
         if len(report.get("passes", [])) > 100:
@@ -335,15 +360,16 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             report["passes"] = report["passes"][:100]
             report["summary"]["passes_truncated"] = True
 
-        _jobs[job_id].update(
-            {
-                "status": "completed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "report_path": str(report_path),
-                "result": report,
-                "current_stage": None,
-            }
-        )
+        async with _get_job_lock(job_id):
+            _jobs[job_id].update(
+                {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "report_path": str(report_path),
+                    "result": report,
+                    "current_stage": None,
+                }
+            )
 
         logger.info(
             f"[combined] job {job_id} completed — "
@@ -374,25 +400,35 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
 
     except Exception as exc:
         tb = traceback.format_exc()
-        origin = traceback.extract_tb(exc.__traceback__)[-1] if exc.__traceback__ else None
-        where = f"{origin.filename}:{origin.lineno} in {origin.name}()" if origin else "unknown"
+        origin = (
+            traceback.extract_tb(exc.__traceback__)[-1] if exc.__traceback__ else None
+        )
+        where = (
+            f"{origin.filename}:{origin.lineno} in {origin.name}()"
+            if origin
+            else "unknown"
+        )
         err_type = type(exc).__name__
         current_stage = _jobs[job_id].get("current_stage") or "post_processing"
+        # Internal-only diagnostic detail (file paths, exception type, traceback)
+        # is logged but never surfaced to API clients. Clients receive an opaque
+        # error_id which support staff can correlate against these logs.
+        error_id = uuid.uuid4().hex
         logger.error(
-            f"[combined] job {job_id} failed during stage '{current_stage}' "
-            f"({err_type}: {exc}) at {where}\n{tb}"
+            f"[combined] job {job_id} (error_id={error_id}) failed during stage "
+            f"'{current_stage}' ({err_type}: {exc}) at {where}\n{tb}"
         )
-        _jobs[job_id].update(
-            {
-                "status": "failed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error": f"{err_type}: {exc}",
-                "error_stage": current_stage,
-                "error_location": where,
-                "error_traceback": tb,
-                "current_stage": None,
-            }
-        )
+        async with _get_job_lock(job_id):
+            _jobs[job_id].update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": "Audit failed due to an internal error.",
+                    "error_id": error_id,
+                    "error_stage": current_stage,
+                    "current_stage": None,
+                }
+            )
         step_logger.finalize(
             status="error",
             message="Combined audit job failed",

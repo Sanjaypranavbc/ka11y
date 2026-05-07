@@ -101,6 +101,7 @@ const AXE_LOCALE_ALIASES = {
   'zh-cn': 'zh_CN',
   'zh-tw': 'zh_TW',
 };
+const AXE_LOCALE_CACHE_CAP = 32;
 const _axeLocaleCache = new Map();
 
 /**
@@ -130,23 +131,34 @@ function _sanitizeLocaleLang(lang = 'en') {
 function _loadAxeLocale(lang = 'en') {
   const normalized = _sanitizeLocaleLang(lang);
   if (!normalized || normalized === 'en') return null;
-  if (_axeLocaleCache.has(normalized)) return _axeLocaleCache.get(normalized);
 
+  // LRU: On cache hit, promote the entry to most recently used
+  if (_axeLocaleCache.has(normalized)) {
+    const cachedValue = _axeLocaleCache.get(normalized);
+    _axeLocaleCache.delete(normalized);
+    _axeLocaleCache.set(normalized, cachedValue);
+    return cachedValue;
+  }
+
+  // LRU: On cache miss, determine value, then evict if needed, then insert
+  let valueToCache = null;
   const localeId = AXE_LOCALE_ALIASES[normalized] || AXE_LOCALE_ALIASES[normalized.split('-')[0]];
-  if (!localeId) {
-    _axeLocaleCache.set(normalized, null);
-    return null;
+
+  if (localeId) {
+    const localePath = path.join(AXE_LOCALE_DIR, `${localeId}.json`);
+    try {
+      valueToCache = JSON.parse(fs.readFileSync(localePath, 'utf8'));
+    } catch {
+      // valueToCache remains null (existing behavior: cache null on error to avoid disk hits)
+    }
   }
 
-  const localePath = path.join(AXE_LOCALE_DIR, `${localeId}.json`);
-  try {
-    const locale = JSON.parse(fs.readFileSync(localePath, 'utf8'));
-    _axeLocaleCache.set(normalized, locale);
-    return locale;
-  } catch {
-    _axeLocaleCache.set(normalized, null);
-    return null;
+  // Evict least-recently-used (first entry) when at capacity
+  if (_axeLocaleCache.size >= AXE_LOCALE_CACHE_CAP) {
+    _axeLocaleCache.delete(_axeLocaleCache.keys().next().value);
   }
+  _axeLocaleCache.set(normalized, valueToCache);
+  return valueToCache;
 }
 
 /**
@@ -162,12 +174,12 @@ class AccessibilityService {
    * @param {object} config       - Application config ({ browser, axe })
    */
   constructor(puppeteer, axeCorePath, logger, config) {
-    this._puppeteer    = puppeteer;
-    this._axeCorePath  = axeCorePath;
-    this._logger       = logger;
-    this._config       = config;
-    this._activeCount  = 0;
-    this._waitQueue    = [];
+    this._puppeteer = puppeteer;
+    this._axeCorePath = axeCorePath;
+    this._logger = logger;
+    this._config = config;
+    this._activeCount = 0;
+    this._waitQueue = [];
   }
 
   _acquireSlot() {
@@ -204,12 +216,12 @@ class AccessibilityService {
         ]);
       await injectWithTimeout(async () => {
         await page.addScriptTag({ path: this._axeCorePath });
-        
+
         // Workaround for Node.js "exports" restrictions in @accesslint/core package.json
         const alDir = require('path').dirname(require.resolve('@accesslint/core'));
         const alIifePath = require('path').join(alDir, 'index.iife.js');
         await page.addScriptTag({ path: alIifePath });
-        
+
         await waitForAxe();
       });
     };
@@ -241,6 +253,91 @@ class AccessibilityService {
   }
 
   /**
+   * Runs axe.run() in the browser context with a Node-side timeout.
+   *
+   * Bug fix (§7.3): the previous Promise.race + setTimeout pattern resolved
+   * on timeout but never cancelled the in-flight axe.run, so when the outer
+   * caller closed the browser the still-pending evaluate would surface a
+   * "Target closed" or "Execution context was destroyed" error as an
+   * unhandled rejection. We now:
+   *   1. Set a window.__ka11yAxeAbort flag so callers / future axe versions
+   *      can cooperate with cancellation.
+   *   2. Always clear the timer on settle (try/finally).
+   *   3. Attach a noop catch to the still-pending evaluate so the eventual
+   *      "Target closed" rejection is silently absorbed.
+   *
+   * @param {object} page                 - Puppeteer page
+   * @param {object} runOnly              - axe runOnly options
+   * @param {number} [timeoutMs]          - Override timeout (default: config.axe.timeoutMs || 90000)
+   * @param {string} [logPrefix='']       - Optional log prefix
+   * @returns {Promise<object>} axe results
+   */
+  async _runAxeWithTimeout(page, runOnly, timeoutMs, logPrefix = '') {
+    const prefix = logPrefix ? `${logPrefix} ` : '';
+    const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? timeoutMs
+      : (this._config.axe.timeoutMs || 90_000);
+
+    // Best-effort: set the abort flag in browser context. Tolerate failure
+    // so test mocks that don't care about extra evaluate calls still work.
+    try {
+      await page.evaluate(() => { window.__ka11yAxeAbort = false; });
+    } catch (_) { /* page may not be ready or mock not configured — ignore */ }
+
+    let timeoutHandle;
+
+    const axeRunPromise = page.evaluate((runOptions) => {
+      return new Promise((resolve, reject) => {
+        // eslint-disable-next-line no-undef
+        axe.run(document, {
+          runOnly: runOptions,
+          resultTypes: ['violations', 'passes', 'incomplete'],
+        }, (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        });
+      });
+    }, runOnly);
+
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutHandle = setTimeout(async () => {
+        // Signal cancellation to the browser context (best effort).
+        try {
+          await page.evaluate(() => {
+            try { window.__ka11yAxeAbort = true; } catch (_) { }
+            // eslint-disable-next-line no-undef
+            if (typeof axe !== 'undefined' && typeof axe._abortAll === 'function') {
+              try { axe._abortAll(); } catch (_) { }
+            }
+          });
+        } catch (e) {
+          this._logger.debug(`${prefix}Could not signal axe abort: ${e.message}`);
+        }
+        reject(new Error(`${prefix}axe.run timed out after ${effectiveTimeoutMs}ms`));
+      }, effectiveTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([axeRunPromise, timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutHandle);
+      // Silently absorb the eventual rejection of the still-pending evaluate
+      // when the outer caller closes the browser. Without this, "Target
+      // closed" surfaces as an unhandled rejection.
+      axeRunPromise.catch((e) => {
+        const msg = (e && e.message) || '';
+        if (msg.includes('Target closed') ||
+          msg.includes('Execution context was destroyed') ||
+          msg.includes('Session closed')) {
+          this._logger.debug(`${prefix}Late axe.run rejection after browser closed: ${msg}`);
+        } else {
+          this._logger.debug(`${prefix}Late axe.run rejection: ${msg}`);
+        }
+      });
+    }
+  }
+
+  /**
    * Analyzes HTML for accessibility issues.
    *
    * @param {string} html               - Raw HTML string
@@ -255,10 +352,10 @@ class AccessibilityService {
     try {
       this._logger.info('Launching Puppeteer browser...');
       browser = await this._puppeteer.launch({
-        headless:       this._config.browser.headless,
+        headless: this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
         ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
-        args:           this._config.browser.args,
+        args: this._config.browser.args,
       });
 
       const page = await browser.newPage();
@@ -278,32 +375,24 @@ class AccessibilityService {
       await this._injectAxe(page);
       await this._configureAxeLocale(page, lang);
 
-      this._logger.info('Running axe.run() and AccessLint sequentially...');
-      const { axeResults, accessLintResults } = await page.evaluate(async (runOptions) => {
-        // 1. Await Axe-core
-        const axeRes = await new Promise((resolve, reject) => {
-          // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
-          });
-        });
+      this._logger.info('Running axe.run() analysis with timeout...');
+      const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs);
 
-        // 2. Immediately run AccessLint natively
+      this._logger.info('Running AccessLint sequentially...');
+      const accessLintResults = await page.evaluate(() => {
+        // Immediately run AccessLint natively
+        if (!window.AccessLint) return null;
         const alResRaw = window.AccessLint.runAudit(document);
         
         // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
-        const alRes = {
+        return {
           ...alResRaw,
           violations: (alResRaw.violations || []).map(v => {
             const { element, source, ...safeProps } = v;
             return safeProps;
           })
         };
-        
-        // Return both arrays back to the Node server
-        return { axeResults: axeRes, accessLintResults: alRes };
-      }, runOnly);
+      });
 
       this._logger.info(
         `axe.run() complete — violations: ${axeResults.violations.length}, ` +
@@ -347,10 +436,10 @@ class AccessibilityService {
     try {
       this._logger.info(`Launching Puppeteer browser for URL: ${url}`);
       browser = await this._puppeteer.launch({
-        headless:       this._config.browser.headless,
+        headless: this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
         ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
-        args:           this._config.browser.args,
+        args: this._config.browser.args,
       });
 
       const page = await browser.newPage();
@@ -377,32 +466,24 @@ class AccessibilityService {
       await this._injectAxe(page);
       await this._configureAxeLocale(page, lang);
 
-      this._logger.info('Running axe.run() and AccessLint sequentially...');
-      const { axeResults, accessLintResults } = await page.evaluate(async (runOptions) => {
-        // 1. Await Axe-core
-        const axeRes = await new Promise((resolve, reject) => {
-          // eslint-disable-next-line no-undef
-          axe.run(document, { runOnly: runOptions }, (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
-          });
-        });
+      this._logger.info('Running axe.run() analysis with timeout...');
+      const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs);
 
-        // 2. Immediately run AccessLint natively
+      this._logger.info('Running AccessLint sequentially...');
+      const accessLintResults = await page.evaluate(() => {
+        // Immediately run AccessLint natively
+        if (!window.AccessLint) return null;
         const alResRaw = window.AccessLint.runAudit(document);
         
         // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
-        const alRes = {
+        return {
           ...alResRaw,
           violations: (alResRaw.violations || []).map(v => {
             const { element, source, ...safeProps } = v;
             return safeProps;
           })
         };
-        
-        // Return both arrays back to the Node server
-        return { axeResults: axeRes, accessLintResults: alRes };
-      }, runOnly);
+      });
 
       this._logger.info(
         `axe.run() complete — violations: ${axeResults.violations.length}, ` +
@@ -447,10 +528,10 @@ class AccessibilityService {
     try {
       this._logger.info(`[flat] Launching browser for URL: ${url} level=${level}`);
       browser = await this._puppeteer.launch({
-        headless:       this._config.browser.headless,
+        headless: this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
         ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
-        args:           this._config.browser.args,
+        args: this._config.browser.args,
       });
 
       const page = await browser.newPage();
@@ -488,7 +569,7 @@ class AccessibilityService {
         const alDir = require('path').dirname(require.resolve('@accesslint/core'));
         const alIifePath = require('path').join(alDir, 'index.iife.js');
         await page.addScriptTag({ path: alIifePath });
-        
+
         // Ensure AccessLint is ready in the browser context
         await page.waitForFunction(
           () => Boolean(globalThis.AccessLint && typeof globalThis.AccessLint.runAudit === 'function'),
@@ -497,7 +578,14 @@ class AccessibilityService {
       }
 
       this._logger.info(`[flat] Running engines (axe=${run_axe}, accesslint=${run_accesslint})...`);
-      const { axeResults, accessLintResults } = await page.evaluate(async (runOptions, doAxe, doAL) => {
+      
+      let axeResults = null;
+      if (run_axe) {
+        this._logger.info('[flat] Running axe.run() analysis with timeout...');
+        axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs, '[flat]');
+      }
+
+      const accessLintResults = await page.evaluate(async (doAL) => {
         // Helper to get a clean CSS path for an element
         const getCssPath = (el) => {
           if (!el || el.nodeType !== 1) return null;
@@ -524,18 +612,6 @@ class AccessibilityService {
           return path.join(' > ');
         };
 
-        // 1. Axe-core (conditional)
-        let axeRes = null;
-        if (doAxe) {
-          axeRes = await new Promise((resolve, reject) => {
-            // eslint-disable-next-line no-undef
-            axe.run(document, { runOnly: runOptions }, (err, results) => {
-              if (err) reject(err);
-              else resolve(results);
-            });
-          });
-        }
-
         // 2. AccessLint (conditional)
         let alRes = null;
         if (doAL && window.AccessLint) {
@@ -555,8 +631,8 @@ class AccessibilityService {
           };
         }
 
-        return { axeResults: axeRes, accessLintResults: alRes };
-      }, runOnly, run_axe, run_accesslint);
+        return alRes;
+      }, run_accesslint);
 
       if (axeResults) {
         this._logger.info(

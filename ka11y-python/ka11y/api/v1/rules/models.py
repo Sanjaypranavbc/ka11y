@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, HttpUrl
 
+
 class RuleRunRequest(BaseModel):
     url: HttpUrl
     # max_depth: 0 = single-page; capped at 5 to prevent exponential crawl DoS

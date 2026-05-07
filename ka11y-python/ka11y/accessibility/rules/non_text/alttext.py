@@ -37,6 +37,7 @@ from datetime import datetime
 
 from ka11y.config.logger import setup_logger
 from ka11y.accessibility.rules.non_text import contrast_analyser
+
 logger = setup_logger(name="KAC", tag="audit")
 
 
@@ -91,32 +92,146 @@ _SOCIAL_BRAND_NAMES: set[str] = {
 }
 
 # Logo/Home/Action keywords in multiple languages
-_LOGO_WORDS: set[str] = {"logo", "ロゴ", "標榜"}
+_LOGO_WORDS: set[str] = {"logo", "logotype", "wordmark", "brandmark", "ロゴ", "標榜"}
 _HOME_WORDS: set[str] = {"home", "ホーム", "トップ"}
 
 # Acceptable action/purpose words for buttons
 _BUTTON_ACTION_WORDS: set[str] = {
-    "menu", "close", "open", "search", "back", "forward", "next", "prev", "previous",
-    "submit", "send", "cancel", "confirm", "ok", "yes", "no", "save", "delete",
-    "edit", "add", "remove", "upload", "download", "share", "print", "copy",
-    "paste", "cut", "undo", "redo", "refresh", "reload", "home", "settings",
-    "help", "info", "more", "less", "expand", "collapse", "toggle", "play",
-    "pause", "stop", "mute", "unmute", "fullscreen", "exit fullscreen",
-    "zoom in", "zoom out", "like", "dislike", "comment", "reply", "follow",
-    "unfollow", "subscribe", "unsubscribe", "login", "logout", "sign in",
-    "sign out", "sign up", "register", "checkout", "cart", "bag", "wishlist",
-    "filter", "sort", "view", "hide", "show", "skip", "navigate", "go to",
-    "load more", "read more", "see more", "see all", "cookies settings",
-    "accept all cookies", "reject all", "accept cookies", "decline cookies",
-    "manage cookies", "cookie preferences", "previous slide", "next slide",
-    "go to slide", "new window", "opens in new tab",
+    "menu",
+    "close",
+    "open",
+    "search",
+    "back",
+    "forward",
+    "next",
+    "prev",
+    "previous",
+    "submit",
+    "send",
+    "cancel",
+    "confirm",
+    "ok",
+    "yes",
+    "no",
+    "save",
+    "delete",
+    "edit",
+    "add",
+    "remove",
+    "upload",
+    "download",
+    "share",
+    "print",
+    "copy",
+    "paste",
+    "cut",
+    "undo",
+    "redo",
+    "refresh",
+    "reload",
+    "home",
+    "settings",
+    "help",
+    "info",
+    "more",
+    "less",
+    "expand",
+    "collapse",
+    "toggle",
+    "play",
+    "pause",
+    "stop",
+    "mute",
+    "unmute",
+    "fullscreen",
+    "exit fullscreen",
+    "zoom in",
+    "zoom out",
+    "like",
+    "dislike",
+    "comment",
+    "reply",
+    "follow",
+    "unfollow",
+    "subscribe",
+    "unsubscribe",
+    "login",
+    "logout",
+    "sign in",
+    "sign out",
+    "sign up",
+    "register",
+    "checkout",
+    "cart",
+    "bag",
+    "wishlist",
+    "filter",
+    "sort",
+    "view",
+    "hide",
+    "show",
+    "skip",
+    "navigate",
+    "go to",
+    "load more",
+    "read more",
+    "see more",
+    "see all",
+    "cookies settings",
+    "accept all cookies",
+    "reject all",
+    "accept cookies",
+    "decline cookies",
+    "manage cookies",
+    "cookie preferences",
+    "previous slide",
+    "next slide",
+    "go to slide",
+    "new window",
+    "opens in new tab",
     # Japanese actions
-    "メニュー", "閉じる", "開く", "検索", "戻る", "進む", "次へ", "前へ",
-    "送信", "キャンセル", "確定", "保存", "削除", "編集", "追加", "削除",
-    "共有", "印刷", "コピー", "貼り付け", "切り取り", "元に戻す", "やり直し",
-    "更新", "ホーム", "設定", "ヘルプ", "詳細", "表示", "非表示",
-    "再生", "一時停止", "停止", "消音", "音量", "ログイン", "ログアウト",
-    "登録", "カート", "お気に入り", "絞り込み", "並べ替え",
+    "メニュー",
+    "閉じる",
+    "開く",
+    "検索",
+    "戻る",
+    "進む",
+    "次へ",
+    "前へ",
+    "送信",
+    "キャンセル",
+    "確定",
+    "保存",
+    "削除",
+    "編集",
+    "追加",
+    "削除",
+    "共有",
+    "印刷",
+    "コピー",
+    "貼り付け",
+    "切り取り",
+    "元に戻す",
+    "やり直し",
+    "更新",
+    "ホーム",
+    "設定",
+    "ヘルプ",
+    "詳細",
+    "表示",
+    "非表示",
+    "再生",
+    "一時停止",
+    "停止",
+    "消音",
+    "音量",
+    "ログイン",
+    "ログアウト",
+    "登録",
+    "カート",
+    "お気に入り",
+    "絞り込み",
+    "並べ替え",
 }
 
 # Report CSV columns (order preserved)
@@ -167,32 +282,56 @@ def _is_empty(value) -> bool:
     return str(value).strip().lower() in {"nan", "none", "", "null"}
 
 
+def _build_ocr_index(ocr_results: list) -> dict:
+    """Pre-build a {basename → TextDetectionResult} lookup so per-image
+    queries become O(1). Avoids the prior O(n × m) Path-allocation hot loop
+    inside ``generate_audit_report``."""
+    index: dict = {}
+    for r in ocr_results:
+        try:
+            key = Path(r.filename).name.lower()
+        except Exception:
+            continue
+        index[key] = r
+    return index
+
+
 def _ocr_for_file(
     ocr_results: list,
     filename: str,
+    index: dict | None = None,
 ) -> tuple[bool, list[str], int]:
-    """
-    Lookup OCR results for a given filename.
+    """Lookup OCR results for a given filename.
     Returns (has_text, detected_texts, contrast_violations_count).
-    Uses TextDetectionResult objects from text_detector.
+
+    The optional ``index`` is a dict produced by :func:`_build_ocr_index`;
+    when supplied, lookup is O(1) instead of an O(m) scan over
+    ``ocr_results``. Backwards-compatible signature for older callers.
     """
     target = Path(filename).name.lower()
-    for r in ocr_results:
-        # r is a TextDetectionResult (Pydantic model)
-        r_name = Path(r.filename).name.lower()
-        if r_name == target:
-            texts = [d.text for d in r.detections if d.text and d.text.strip()]
-            return r.has_text, texts, r.contrast_violations_count
-    return False, [], 0
+    if index is not None:
+        r = index.get(target)
+    else:
+        r = next(
+            (x for x in ocr_results if Path(x.filename).name.lower() == target),
+            None,
+        )
+    if r is None:
+        return False, [], 0
+    texts = [d.text for d in r.detections if d.text and d.text.strip()]
+    return r.has_text, texts, r.contrast_violations_count
 
 
-def _ocr_result_for_file(ocr_results: list, filename: str):
-    """Return the full TextDetectionResult for a given filename, or None."""
+def _ocr_result_for_file(ocr_results: list, filename: str, index: dict | None = None):
+    """Return the full TextDetectionResult for a given filename, or None.
+    Accepts the same precomputed ``index`` as :func:`_ocr_for_file`."""
     target = Path(filename).name.lower()
-    for r in ocr_results:
-        if Path(r.filename).name.lower() == target:
-            return r
-    return None
+    if index is not None:
+        return index.get(target)
+    return next(
+        (r for r in ocr_results if Path(r.filename).name.lower() == target),
+        None,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -210,8 +349,30 @@ def _check_1_1_1_decorative(alt: str) -> tuple[bool, str]:
     )
 
 
-def _check_1_1_1_missing_alt(sub_type: str) -> tuple[bool, str]:
-    """Missing alt attribute entirely — WCAG violation for any image."""
+def _is_aria_hidden_from_at(aria_hidden: str | None, role: str | None) -> bool:
+    """A decorative image with no alt attribute is still WCAG-conformant
+    when the element is programmatically hidden from assistive technology
+    (`aria-hidden="true"` or `role="presentation"` / `role="none"`)."""
+    if aria_hidden and aria_hidden.strip().lower() == "true":
+        return True
+    if role and role.strip().lower() in ("presentation", "none"):
+        return True
+    return False
+
+
+def _check_1_1_1_missing_alt(
+    sub_type: str,
+    aria_hidden: str | None = None,
+    role: str | None = None,
+) -> tuple[bool, str]:
+    """Missing alt attribute. PASS if the image is programmatically hidden
+    from AT (aria-hidden="true" or role=presentation/none); FAIL otherwise."""
+    if _is_aria_hidden_from_at(aria_hidden, role):
+        return (
+            True,
+            "PASS [1.1.1] Decorative image is hidden from assistive tech "
+            "(aria-hidden=\"true\" or role=\"presentation\"); missing alt is acceptable.",
+        )
     return (
         False,
         "FAIL [1.1.1] Alt attribute is completely missing — "
@@ -241,14 +402,21 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
     ocr_words = [w for w in norm_ocr.split() if len(w) >= 3]
     # Also include 2-letter uppercase abbreviations from the original OCR text
     # (e.g. "UI", "AI", "OK") which are lost by _norm's lowercasing.
-    abbr_words = [w.lower() for w in re.findall(r'\b[A-Z]{2}\b', raw_ocr)
-                  if w.lower() not in ocr_words]
+    abbr_words = [
+        w.lower()
+        for w in re.findall(r"\b[A-Z]{2}\b", raw_ocr)
+        if w.lower() not in ocr_words
+    ]
     ocr_words = ocr_words + abbr_words
 
     if not ocr_words:
         return True, "PASS [1.1.1] OCR tokens too short to match; alt is non-empty"
 
-    matched = [w for w in ocr_words if re.search(rf'\b{re.escape(w)}\b', norm_alt, re.IGNORECASE)]
+    matched = [
+        w
+        for w in ocr_words
+        if re.search(rf"\b{re.escape(w)}\b", norm_alt, re.IGNORECASE)
+    ]
     if matched:
         return True, f"PASS [1.1.1] OCR word(s) found in alt: {matched}"
 
@@ -302,7 +470,11 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
         return True, f"PASS [1.1.1] Icon alt describes purpose: '{alt}'"
 
     # Require at least 4 chars to filter out uninformative initials like "ab", "ok", or "++"
-    if len(norm) >= 4 and not norm.isdigit() and re.search(r"[a-z]{2}|[^\x00-\x7F]", norm):
+    if (
+        len(norm) >= 4
+        and not norm.isdigit()
+        and re.search(r"[a-z]{2}|[^\x00-\x7F]", norm)
+    ):
         return (
             True,
             f"PASS [1.1.1] Icon alt is non-empty: '{alt}' "
@@ -432,7 +604,7 @@ def _check_1_4_5(
         return (
             False,
             "FAIL [1.4.5] Image stored as logo but contains readable text "
-            "(likely plain wordmark, not exempt)"
+            "(likely plain wordmark, not exempt)",
         )
 
     if not has_ocr_text:
@@ -594,6 +766,9 @@ class AltTextAccessibilityAuditor:
         )
 
         records: list[dict] = []
+        # Precompute basename→OCR-result index ONCE so the per-image lookups
+        # below are O(1) instead of an O(m) scan per call.
+        ocr_index = _build_ocr_index(ocr_results)
 
         for img in images_data:
             # ── Pull fields from ImageData ───────────────────────────────
@@ -640,12 +815,16 @@ class AltTextAccessibilityAuditor:
                         "wcag_1_1_1_status": "INCOMPLETE",
                         "wcag_4_1_2_status": "INCOMPLETE" if is_functional else "N/A",
                         "wcag_1_4_5_status": "INCOMPLETE",
-                        "wcag_1_4_11_status": "INCOMPLETE" if (is_button or is_icon) else "N/A",
+                        "wcag_1_4_11_status": (
+                            "INCOMPLETE" if (is_button or is_icon) else "N/A"
+                        ),
                         "overall_status": "INCOMPLETE",
                         "wcag_1_1_1_reason": _cs_reason,
                         "wcag_4_1_2_reason": _cs_reason if is_functional else "N/A",
                         "wcag_1_4_5_reason": _cs_reason,
-                        "wcag_1_4_11_reason": _cs_reason if (is_button or is_icon) else "N/A",
+                        "wcag_1_4_11_reason": (
+                            _cs_reason if (is_button or is_icon) else "N/A"
+                        ),
                         "screenshot_path": screenshot_path,
                         "capture_status": capture_status,
                         "capture_error": capture_error or "",
@@ -655,11 +834,10 @@ class AltTextAccessibilityAuditor:
 
             # ── OCR lookup by filename ───────────────────────────────────
             has_ocr_text, detected_texts, contrast_count = _ocr_for_file(
-                ocr_results, filename
+                ocr_results, filename, index=ocr_index
             )
             detected_joined = " | ".join(detected_texts)
-            ocr_result = _ocr_result_for_file(ocr_results, filename)
-
+            ocr_result = _ocr_result_for_file(ocr_results, filename, index=ocr_index)
 
             classifier_text_flag = getattr(img, "is_text_image", False)
             ocr_text_flag = has_ocr_text and len(detected_texts) > 0
@@ -692,7 +870,11 @@ class AltTextAccessibilityAuditor:
             if sub_type == "missing_alt" or (
                 classification == "decorative" and alt_text is None
             ):
-                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(sub_type)
+                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(
+                    sub_type,
+                    aria_hidden=getattr(img, "aria_hidden", None),
+                    role=getattr(img, "role", None),
+                )
 
             elif classification == "decorative":
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(alt_text)
@@ -749,17 +931,21 @@ class AltTextAccessibilityAuditor:
             # Decorative images of text are ALLOWED by WCAG 1.4.5.
             # Complex images/charts use text essentially.
             if (
-                text_flag 
-                and classification not in ("complex", "decorative") 
+                text_flag
+                and classification not in ("complex", "decorative")
                 and sub_type not in ("charts", "logos")
                 and not is_logo
             ):
                 wcag_1_4_5_pass = False
-                detected_snippet = (detected_joined[:50] + "...") if len(detected_joined) > 50 else detected_joined
+                detected_snippet = (
+                    (detected_joined[:50] + "...")
+                    if len(detected_joined) > 50
+                    else detected_joined
+                )
                 wcag_1_4_5_reason = (
-                        f"FAIL [1.4.5] Image contains text (\"{detected_snippet}\") "
-                        "but classifier marked as non-text. Replace with real CSS-styled text "
-                        "unless the presentation is essential."
+                    f'FAIL [1.4.5] Image contains text ("{detected_snippet}") '
+                    "but classifier marked as non-text. Replace with real CSS-styled text "
+                    "unless the presentation is essential."
                 )
 
             # ── WCAG 1.4.11 (Non-text Contrast) ─────────────────────────

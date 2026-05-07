@@ -15,7 +15,7 @@ The audit runs three complementary layers:
 
 | Layer | How it works |
 |---|---|
-| `dom-pattern` | CSS selector bank matches carousel, drag-and-drop, map embed, touch widget, and path-based interaction elements in the live DOM. |
+| `dom-pattern` | CSS selector bank matches carousel, drag-and-drop, map embed, touch widget, and path-based interaction elements in the live DOM. Each finding also captures `touch-action` (`none` / `pan-x` / `pan-y`) as a `hasCustomTouchAction` flag, since these values commonly disable native browser gestures in favour of custom JS gestures. |
 | `library-detected` | JavaScript global variable scan and script `src` fingerprinting identify gesture libraries (Hammer.js, Swiper, Interact.js, etc.) even when no matching DOM element is found. |
 | `axe-rule` | Custom axe-core rule checks gesture data-attributes (`data-swipe`, `data-pinch`, `draggable="true"`, and Japanese equivalents) for missing single-pointer alternatives inline. |
 
@@ -35,6 +35,8 @@ After flagging a candidate element the auditor checks whether an **escape hatch*
 | `<button>` / `[role="button"]` child | "Child \<button\> provides a pointer alternative" |
 | `<button>` / `[role="button"]` sibling | "Sibling \<button\> found in parent" |
 | `tabIndex >= 0` on element or sibling | "Element is tab-focusable (tabIndex >= 0)" |
+
+When an alternative button is found the validator additionally inspects its accessible name (`textContent`, `aria-label`, `title`) for tokens that semantically match the gesture action — `next` / `prev` / `forward` / `back` / `zoom` / `+` / `-` / `up` / `down` and the Japanese equivalents (`次へ`, `前へ`, `ズーム`, `拡大`, `縮小`, `進む`, `戻る`). When matched, the evidence string is annotated with `(High quality: semantically matches gesture action)`, which downstream reporters can surface to distinguish a genuine alternative from an unrelated nearby button.
 
 Findings where an escape hatch is detected are downgraded to **warning** for manual review.  Findings with no escape hatch are emitted as **violation**.
 
@@ -117,7 +119,9 @@ const reportItems = adaptToReportFormat(result);
 | `src/audits/wcag-2.5.1/axe-rule-pointer-gestures.js` | axe-core rule + check definitions |
 | `src/audits/wcag-2.5.1/violation-builder.js` | Canonical violation object factory |
 | `reporters/wcag-251-report-adapter.js` | Flat-array adapter for report builder |
-| `src/audits/wcag-2.5.1/__tests__/pointer-gestures.test.js` | Unit + integration-stub tests |
+| `src/custom-checks/pointer-gestures.check.js` | Custom-check wrapper invoked by the audit pipeline; localizes pass/fail/incomplete reasons |
+| `src/audits/wcag-2.5.1/__tests__/pointer-gestures.test.js` | Unit + integration-stub tests for the audit modules |
+| `tests/custom-checks/pointer-gestures.check.test.js` | Unit tests for the custom-check wrapper (pass / fail / incomplete branches, localization) |
 
 ## Technique coverage
 

@@ -48,7 +48,9 @@ def _fire_broadcast(job_id: str, event_type: str, data: dict) -> None:
         )
 
 
-def _plan_index(job_id: str, name: str) -> tuple[Optional[int], Optional[int], Optional[int]]:
+def _plan_index(
+    job_id: str, name: str
+) -> tuple[Optional[int], Optional[int], Optional[int]]:
     """Return (index, total, weight) for `name` given the job's plan.
 
     index is 1-based. Returns (None, None, None) when no plan was stored
@@ -72,10 +74,7 @@ def emit_job_plan(job_id: str, active_stage_keys: list[str]) -> None:
     `active_stage_keys` should be the list of stage keys that will actually run,
     in execution order, derived from the audit request flags.
     """
-    stages = [
-        {"key": k, "weight": STAGE_WEIGHTS.get(k, 1)}
-        for k in active_stage_keys
-    ]
+    stages = [{"key": k, "weight": STAGE_WEIGHTS.get(k, 1)} for k in active_stage_keys]
     plan = {
         "stages": stages,
         "total": len(stages),
@@ -201,7 +200,12 @@ def _stage_error(job_id: str, name: str, error: str) -> None:
         step=f"stage:{name}",
         status="error",
         message="Stage failed",
-        context={"job_id": job_id, "stage_name": name, "error": error, "completed_at": now},
+        context={
+            "job_id": job_id,
+            "stage_name": name,
+            "error": error,
+            "completed_at": now,
+        },
     )
     idx, total, weight = _plan_index(job_id, name)
     payload: dict[str, Any] = {"stage_name": name, "error": error}

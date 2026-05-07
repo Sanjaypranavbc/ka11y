@@ -32,6 +32,7 @@ function buildViolation({ motionEvidence, disableControl, detectedLibraries, ess
     pageLang: pageLang,
     motionLibrariesDetected: [...detectedLibraries.keys()],
     motionEvidence: motionEvidence.rawEvidence,
+    softSignals: essentialClassification.softSignals || [],
     disableControlFound: disableControl.hasDisableControl,
     disableControlEvidence: disableControl.evidence,
     likelyEssential: essentialClassification.likelyEssential,
@@ -47,4 +48,6 @@ function buildViolation({ motionEvidence, disableControl, detectedLibraries, ess
     manualReviewRequired: true,
     timestamp: new Date().toISOString()
   };
-}module.exports = { buildViolation };
+}
+
+module.exports = { buildViolation };

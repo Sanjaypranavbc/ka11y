@@ -98,9 +98,9 @@ class PageSnapshot(BaseModel):
     has_horizontal_scroll: bool = False
 
     # Orientation-specific page-level signals
-    body_overflow_x: str = "visible"   # computed style of document.body
-    body_transform: str = "none"        # CSS transform on document.body
-    screen_orientation: str = "unknown" # screen.orientation.type from browser
+    body_overflow_x: str = "visible"  # computed style of document.body
+    body_transform: str = "none"  # CSS transform on document.body
+    screen_orientation: str = "unknown"  # screen.orientation.type from browser
 
     elements: List[ElementSnapshot] = Field(default_factory=list)
 

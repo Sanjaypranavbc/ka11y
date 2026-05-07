@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -8,6 +9,22 @@ from typing import Any, Dict, Optional
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="step_logger")
+
+# Per-path locks. Concurrent stage tasks can call append_step_log() for the
+# same JSONL file; without a lock, two writes can interleave bytes mid-line
+# and corrupt the JSONL format. The registry itself is guarded by an outer
+# lock so dict mutations stay race-free.
+_locks_registry: Dict[str, threading.Lock] = {}
+_locks_registry_lock = threading.Lock()
+
+
+def _lock_for(path: str) -> threading.Lock:
+    with _locks_registry_lock:
+        lock = _locks_registry.get(path)
+        if lock is None:
+            lock = threading.Lock()
+            _locks_registry[path] = lock
+        return lock
 
 
 def _utc_now() -> str:
@@ -36,8 +53,10 @@ def append_step_log(
         "context": context or {},
     }
 
-    with log_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    serialised = json.dumps(entry, ensure_ascii=False) + "\n"
+    with _lock_for(str(log_path)):
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(serialised)
 
     return str(log_path)
 
@@ -88,7 +107,9 @@ class ExecutionStepLogger:
         else:
             logger.processing(f"{step}: {message}")
 
-    def finalize(self, *, status: str, message: str, context: Optional[Dict[str, Any]] = None) -> None:
+    def finalize(
+        self, *, status: str, message: str, context: Optional[Dict[str, Any]] = None
+    ) -> None:
         self.record(step=self.name, status=status, message=message, context=context)
         summary = {
             "name": self.name,

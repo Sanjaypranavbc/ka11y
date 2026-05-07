@@ -20,6 +20,7 @@ that lists it — so all five steps share one directory.
 from __future__ import annotations
 
 import traceback
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -53,10 +54,18 @@ from ka11y.crawler.target_size_crawler import TargetSizeCrawler
 from ka11y.crawler.text_spacing_crawler import AsyncTextSpacingCrawler
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
-from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import LabelInNameAuditor
-from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import PauseStopHideAuditor
-from ka11y.accessibility.rules.input_modalities.target_size_auditor import TargetSizeAuditor
-from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import TextSpacingAuditor
+from ka11y.accessibility.rules.input_modalities.label_in_name_auditor import (
+    LabelInNameAuditor,
+)
+from ka11y.accessibility.rules.timing.pause_stop_hide_auditor import (
+    PauseStopHideAuditor,
+)
+from ka11y.accessibility.rules.input_modalities.target_size_auditor import (
+    TargetSizeAuditor,
+)
+from ka11y.accessibility.rules.input_modalities.text_spacing_auditor import (
+    TextSpacingAuditor,
+)
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 logger = setup_logger(name="KAC", tag="pipeline")
@@ -218,7 +227,9 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
     # negative result. Count failing REGIONS instead (each region contributes at most 1).
     failing_regions = sum(1 for row in table_rows if row.get("violations"))
     pass_rate = (
-        round((total_regions - failing_regions) / total_regions * 100, 1) if total_regions else 0.0
+        round((total_regions - failing_regions) / total_regions * 100, 1)
+        if total_regions
+        else 0.0
     )
 
     return {
@@ -557,6 +568,16 @@ async def run_full_pipeline(
         )
 
     except Exception as e:
-        logger.error(f"Full pipeline failed: {e}")
+        # Internal error context (exception type, message, traceback) is logged
+        # but NEVER returned to the client. The opaque error_id allows support
+        # staff to correlate a 500 response with the corresponding log entry.
+        error_id = uuid.uuid4().hex
+        logger.error(f"Full pipeline failed (error_id={error_id}): {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Pipeline failed due to an internal error.",
+                "error_id": error_id,
+            },
+        )

@@ -11,6 +11,7 @@ Exemptions: data tables, SVG charts/maps, code editors → NEEDS_REVIEW.
 
 from __future__ import annotations
 
+import logging
 from typing import List
 
 from ..models import PageSnapshot, RuleAuditRecord
@@ -19,7 +20,10 @@ from ..heuristics import (
     elements_with_horizontal_overflow,
 )
 
+logger = logging.getLogger(__name__)
+
 _RULE_KEY = "wcag_1_4_10"
+_REQUIRED_REFLOW_VIEWPORT_PX = 320
 _EXEMPT_TAGS = {"table", "svg", "canvas", "iframe", "pre", "code"}
 _EXEMPT_ROLES = {"grid", "treegrid", "spreadsheet"}
 
@@ -36,6 +40,7 @@ def _is_likely_exempt(tag: str, html: str) -> bool:
 
     return False
 
+
 def evaluate(
     snapshot_320: PageSnapshot,
 ) -> List[RuleAuditRecord]:
@@ -46,6 +51,20 @@ def evaluate(
     """
     records: List[RuleAuditRecord] = []
 
+    # WCAG 1.4.10 is defined at 320 CSS px. If the snapshot was captured at
+    # a different viewport (crawler misconfiguration, hot-reload, test),
+    # the result is not a valid 1.4.10 measurement. Log loudly so the
+    # mismatch is visible — but don't crash, because partial data is still
+    # better than no data for downstream report aggregation.
+    actual_width = getattr(snapshot_320, "viewport_width", None)
+    if actual_width is not None and actual_width != _REQUIRED_REFLOW_VIEWPORT_PX:
+        logger.warning(
+            "WCAG 1.4.10 reflow evaluator received a snapshot at viewport "
+            "%spx; the SC is defined at %spx and results may not be valid.",
+            actual_width,
+            _REQUIRED_REFLOW_VIEWPORT_PX,
+        )
+
     # 1. Page-level horizontal scroll check
     page_scrolls = detect_page_horizontal_scroll(snapshot_320)
 
@@ -54,15 +73,12 @@ def evaluate(
 
     # ── Helper: valid overflow (allowed cases) ────────────────────────────────
     def _is_valid_overflow(el) -> bool:
-        return (
-            _is_likely_exempt(el.tag, el.html_snippet)
-            or getattr(el, "has_overflow_x_scroll", False)
+        return _is_likely_exempt(el.tag, el.html_snippet) or getattr(
+            el, "has_overflow_x_scroll", False
         )
 
     # Filter only REAL violations
-    valid_overflows = [
-        el for el in overflow_els if not _is_valid_overflow(el)
-    ]
+    valid_overflows = [el for el in overflow_els if not _is_valid_overflow(el)]
 
     # ── Case 1: Page has horizontal scroll ────────────────────────────────────
     if page_scrolls:

@@ -222,6 +222,44 @@ const _ja = {
   ],
 };
 
+/* ── Shared Attribute Bank ──────────────────────────────────────────────── */
+
+const gestureAttrs = [
+  'data-gesture', 'data-swipe', 'data-touch', 'data-pan', 'data-pinch',
+  'data-rotate', 'data-direction', 'data-flick', 'data-draw', 'data-path',
+  'data-scrub', 'data-signature',
+  // Japanese attribute names
+  'data-スワイプ',
+  'data-タッチ',
+  'data-ジェスチャー',
+  'data-フリック',
+  'data-描画',
+  'data-ドラッグ',
+];
+
+/* ── Unified Selector Constants ─────────────────────────────────────────── */
+
+/**
+ * Selector for alternative interactive elements (buttons, links, button-likes).
+ * Single source of truth — consumed by axe-rule-pointer-gestures.js and
+ * escape-hatch-checker.js to avoid drift.
+ * @type {string}
+ */
+const ALT_SEL = 'button, [role="button"], a[href], input[type="button"], input[type="submit"]';
+
+/**
+ * Comma-joined CSS selector string for all gesture-related elements
+ * (EN + JA banks, deduped, with library prefixes filtered out).
+ * @type {string}
+ */
+const _allCombinedSelectors = [...Object.values(_en), ...Object.values(_ja)]
+  .flat()
+  .filter(s => typeof s === 'string'
+    && !s.startsWith('Hammer')
+    && !s.startsWith('interact')
+    && !s.startsWith('ZingTouch'));
+const ALL_GESTURE_SELECTORS_STRING = [...new Set(_allCombinedSelectors)].join(', ');
+
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 /**
@@ -249,4 +287,11 @@ function getSelectorBank(lang = 'en') {
 /* Backward-compat named exports (used by gesture-listener-detector.js, axe rule, etc.) */
 const enSelectors = _en;
 const jaSelectors = _ja;
-module.exports = { enSelectors, jaSelectors, getSelectorBank };
+module.exports = {
+  enSelectors,
+  jaSelectors,
+  getSelectorBank,
+  gestureAttrs,
+  ALT_SEL,
+  ALL_GESTURE_SELECTORS_STRING,
+};

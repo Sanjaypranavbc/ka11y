@@ -115,15 +115,17 @@ def _violations_332(f: FormInputData) -> List[str]:
         )
 
     # (d) Autocomplete missing for personal-data input types
-    PERSONAL_TYPES = {"email", "tel", "url", "password", "name"}
-    PERSONAL_NAMES = {
+    PERSONAL_TYPES = {"email", "tel", "password"}
+    # Match these exactly or with standard prefixes/suffixes, not as loose substrings
+    PERSONAL_NAMES_EXACT = {
         "email",
         "phone",
+        "telephone",
         "tel",
         "password",
         "username",
-        "first-name",
-        "last-name",
+        "fname",
+        "lname",
         "firstname",
         "lastname",
         "address",
@@ -132,13 +134,19 @@ def _violations_332(f: FormInputData) -> List[str]:
         "postcode",
         "country",
     }
+    
     field_type = (f.type or "").lower()
     field_name = (f.name or "").lower()
-    if field_type in PERSONAL_TYPES or any(n in field_name for n in PERSONAL_NAMES):
+    
+    # Check if name is an exact match or a closely related variation (e.g., user_email, first-name)
+    name_parts = set(field_name.replace("-", "_").split("_"))
+    is_personal_name = bool(name_parts.intersection(PERSONAL_NAMES_EXACT))
+
+    if field_type in PERSONAL_TYPES or is_personal_name:
         if not f.autocomplete:
             viols.append(
                 "3.3.2: Personal-data field ("
-                + field_type
+                + (field_type if field_type in PERSONAL_TYPES else "name attribute")
                 + ") is missing the autocomplete attribute (WCAG 1.3.5 / 3.3.2 best practice)."
             )
 

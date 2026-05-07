@@ -27,17 +27,75 @@ Since sensor input cannot be physically simulated in a desktop automation contex
 | Layer | How it works |
 |---|---|
 | **Runtime Handlers** | Checks `window.ondevicemotion` and `window.ondeviceorientation` properties and jQuery's event registry across all frames. |
+| **`addEventListener` monkey-patch** | `motion-listener-detector.js` injects an init script via `addInitScript` (Playwright) or `evaluateOnNewDocument` (Puppeteer) **before** navigation. It intercepts `window.addEventListener('devicemotion' \| 'deviceorientation' \| 'deviceorientationabsolute', …)` and `DeviceMotionEvent.requestPermission()`, recording each call with its first three stack frames into `window.__motionRegistry`. This closes the previous blind spot where framework-wired listeners (React, Vue, Angular) bypassed the property-only scan. |
 | **Script Scanning** | Scans all inline and same-origin external scripts for motion API keywords (`DeviceMotionEvent`, `accelerationIncludingGravity`, `shake`, etc.). |
 | **Library Fingerprinting** | Identifies known motion-handling libraries like `shake.js` or `gyroscape` via global variables and script URLs. |
 | **iOS Permission API** | Detects calls to `DeviceMotionEvent.requestPermission()`, a strong signal of motion intent in modern web apps. |
+| **Custom axe rule** | `motion-actuation-2-5-4` (selector `body`, polarity `evaluate→true = pass`) flags pages where a motion handler is attached but neither a "disable motion" / "シェイク無効" copy nor a settings link is present. |
+
+### Injecting the addEventListener detector
+
+The monkey-patch must run **before** any page script. Wire it into your crawler:
+
+```js
+import {
+  injectMotionDetector,
+  auditMotionActuation,
+} from './src/audits/wcag-2.5.4/index.js';
+
+await injectMotionDetector(page);          // BEFORE page.goto(...)
+await page.goto(targetUrl, { waitUntil: 'networkidle' });
+const result = await auditMotionActuation(page, { pageUrl: targetUrl });
+```
+
+If the detector is not injected, the orchestrator silently degrades to the property-only scan (same behaviour as before this layer existed) — no exceptions are thrown.
 
 ## Essential motion classification
 
-Some motion is **essential** to the function and is exempt from the requirement (e.g. a step counter or a spirit level). The auditor uses heuristics to identify these contexts:
-- Pedometer / Fitness apps (`steps`, `workout`)
-- Navigation / Compass tools (`gps`, `compass`)
-- VR / AR experiences (`WebXR`, `three.js`)
-- Measurement tools (`level`, `tilt angle`)
+Some motion is **essential** to the function and is exempt from the requirement (e.g. a step counter or a spirit level). The auditor uses heuristics over `<title>`, `<h1>`, and `<meta name="description">` plus a small set of DOM signals to identify these contexts:
+
+| Signal | Triggers exemption |
+|---|---|
+| Text mentions `steps`, `pedometer`, `fitness`, `workout`, `calories`, `歩数`, `フィットネス` | Pedometer / fitness context |
+| Text mentions `gps`, `compass`, `ar`, `augmented reality`, `コンパス` | Navigation / compass context |
+| Text mentions `level`, `measure`, `tilt angle`, `水平器` | Spirit level / measurement tool |
+| Text mentions `vr`, `virtual reality`, `webxr`, or `three.js` + `camera` | VR / AR experience |
+| `<script type="application/ld+json">` declares `@type: "VideoGame"` or `applicationCategory: "Game"`, **or** a `<canvas>` exists on a page mentioning "game" | Game context (Schema / Canvas) |
+| At least one `<canvas>` exposes a `webgl` / `webgl2` rendering context | WebGL 3D context (often requires device orientation) |
+| `[aria-live]` and `[role="application"]` / `[role="status"]` both present | Accessibility-supported AT context |
+
+When a finding is classified as essential the violation severity is downgraded to `warning` and `manualReviewRequired: true` is set so a human can confirm the exemption.
+
+## Disable-control detection
+
+`validateDisableControl()` returns the highest-confidence signal it finds:
+
+| Confidence | Signal |
+|---|---|
+| `high` | A `<button>`, `<input type="checkbox">`, `<select>`, ARIA `[role="switch"]` or `[aria-pressed]` toggle whose accessible name matches a motion keyword (`motion`, `shake`, `tilt`, `gyro`, `モーション`, `シェイク`, `傾き`); a `<label>`-associated checkbox tied to one of those keywords; or an explicit "disable motion" / "シェイク無効" control |
+| `high` (settings) | A link whose text or `href` mentions `settings` / `preferences` / `設定` |
+| `medium` | A switch or `aria-pressed` toggle is present and the page text mentions motion (without a label-level match); a `<details>` / `[role="dialog"]` settings panel containing a checkbox; **or** a landmark / interactive control (`nav`, `aside`, `section`, `dialog`, `button`, `a[href]`, `[role="region"\|"navigation"\|"dialog"\|"menu"]`) whose `aria-label` mentions `accessibility` / `アクセシビリティ` **and** whose subtree text mentions a motion keyword. The aria-label scan was previously global (`document.querySelectorAll('*')`) and produced false-positive passes on any page with an "Accessibility" landmark — that is fixed. |
+| `low` | A settings cog icon (`<img>` / `<svg>` / `<i>` / `<span>` whose class, id, or aria-label matches `settings` / `preferences` / `設定`) |
+
+A page is treated as having a disable control when confidence is `medium` or higher.
+
+## UI-alternative detection
+
+The orchestrator (`index.js`) scans for an alternative control whose accessible name (`textContent` + `aria-label` + `title` + `value`) matches an **action verb** rather than the gesture name — the alternative for shake-to-undo is typically labelled "Undo", not "Shake".
+
+Action-verb patterns (English + Japanese):
+
+```
+undo, redo, cancel, reset, refresh, reload,
+submit, send, next, previous, back, skip,
+rotate, flip, pan, zoom in, zoom out,
+roll, shuffle, randomize, random, random number,
+元に戻す, やり直し, キャンセル, リセット, 更新,
+送信, 次へ, 前へ, 戻る, スキップ,
+回転, 反転, 拡大, 縮小, シャッフル, ランダム
+```
+
+A control's accessible name must match an action verb **and** its ancestor container (`section`, `article`, `dialog`, `[role="region"]`, `[role="dialog"]`, `main`, `body`) must mention a motion keyword (`motion`, `shake`, `tilt`, `gyro`, `accelero`, `モーション`, `シェイク`, `傾き`, `ジャイロ`). Action-verb labels alone are not sufficient — pages with a "Submit" or "Cancel" button on an unrelated context would otherwise pass spuriously. Both signals are hard-required so a true alternative ("Shake or tap **Undo**") is reliably distinguished from coincidence.
 
 ## Manual review required
 
@@ -71,5 +129,22 @@ Some motion is **essential** to the function and is exempt from the requirement 
 1. **Add a UI control**: Ensure every motion-triggered action has a corresponding button or menu item.
 2. **Add a toggle**: Include a "Disable Motion Actuation" setting in your application's accessibility or general preferences.
 3. **Respect OS settings**: Check for system-level "Reduce Motion" preferences if possible via media queries (`prefers-reduced-motion`).
+
+## Module file map
+
+| File | Purpose |
+|---|---|
+| `src/audits/wcag-2.5.4/index.js` | Main orchestrator — call `auditMotionActuation()`; also re-exports `injectMotionDetector` / `extractMotionRegistry` |
+| `src/audits/wcag-2.5.4/motion-event-detector.js` | Per-frame runtime + script scan for `devicemotion`/`deviceorientation` listeners; merges `addEventListener` registry entries |
+| `src/audits/wcag-2.5.4/motion-listener-detector.js` | Pre-navigation `addEventListener` monkey-patch (Playwright `addInitScript` / Puppeteer `evaluateOnNewDocument`); records call-site stack frames into `window.__motionRegistry` |
+| `src/audits/wcag-2.5.4/motion-library-detector.js` | Window global + script-src fingerprinting for `shake.js`, `gyroscape`, etc. |
+| `src/audits/wcag-2.5.4/essential-motion-classifier.js` | Heuristic classifier for exempt contexts (fitness, VR, games, WebGL, …) |
+| `src/audits/wcag-2.5.4/disable-control-validator.js` | DOM scan for disable toggles / motion-related settings |
+| `src/audits/wcag-2.5.4/axe-rule-motion-actuation.js` | axe-core rule + check definitions (polarity: `evaluate→true = pass`, `false = fail`) |
+| `src/audits/wcag-2.5.4/violation-builder.js` | Canonical violation object factory (sets `manualReviewRequired: true`) |
+| `reporters/wcag-254-report-adapter.js` | Flat-array adapter + manual checklist HTML generator |
+| `src/custom-checks/motion-actuation.check.js` | Custom-check wrapper invoked by the audit pipeline; emits a single `incomplete` rule when motion is detected |
+| `src/audits/wcag-2.5.4/__tests__/motion-actuation.test.js` | Unit tests for the orchestrator + axe rule polarity |
+| `src/audits/wcag-2.5.4/__tests__/motion-listener-detector.test.js` | Unit tests for the addEventListener monkey-patch and registry extractor |
 
 See [Technique coverage matrix](/rules/coverage-matrix#2-5-4-motion-actuation) for more detail.
