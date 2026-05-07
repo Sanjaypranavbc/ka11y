@@ -9,17 +9,11 @@
  *     reconstructed with `new Function()`.
  */
 
-const { enSelectors, jaSelectors, gestureAttrs } = require('./multilingual-selectors.js');
-
-/* ── Comma-joined selector string (all categories, EN + JA banks) ───────── */
-const _allSelectors = [
-  ...Object.values(enSelectors),
-  ...Object.values(jaSelectors),
-]
-  .flat()
-  .filter(s => typeof s === 'string' && !s.startsWith('Hammer') && !s.startsWith('interact') && !s.startsWith('ZingTouch'));
-
-const ALL_SELECTORS_STRING = [...new Set(_allSelectors)].join(', ');
+const {
+  gestureAttrs,
+  ALT_SEL,
+  ALL_GESTURE_SELECTORS_STRING,
+} = require('./multilingual-selectors.js');
 
 /* ── Check evaluate function (must be self-contained) ───────────────────── */
 
@@ -32,7 +26,7 @@ const ALL_SELECTORS_STRING = [...new Set(_allSelectors)].join(', ');
  * @returns {boolean} false = violation found; true = passed
  */
 function _evaluateBody(node, options) {
-  const { gestureAttrs } = options;
+  const { gestureAttrs, ALT_SEL } = options;
 
   const hasGestureAttr = gestureAttrs.some(attr => node.hasAttribute(attr));
   const isDraggable    = node.getAttribute('draggable') === 'true';
@@ -44,7 +38,6 @@ function _evaluateBody(node, options) {
   const hasFocusable    = node.tabIndex >= 0;
 
   const parent = node.parentElement;
-  const ALT_SEL = 'button, [role="button"], a[href], input[type="button"], input[type="submit"]';
   const hasButtonSibling = !!(parent && Array.from(parent.children)
     .some(c => c !== node && c.matches && c.matches(ALT_SEL)));
   const hasInternalBtn = !!(node.querySelector && node.querySelector(ALT_SEL));
@@ -81,7 +74,7 @@ const pointerGestureCheck = {
  */
 const pointerGestureRule = {
   id:       'pointer-gestures-2-5-1',
-  selector: ALL_SELECTORS_STRING,
+  selector: ALL_GESTURE_SELECTORS_STRING,
   tags:     ['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa', 'wcag251', 'pointer-gestures'],
   any:      ['pointer-gestures-2-5-1-check'],
   metadata: {
@@ -101,7 +94,7 @@ function registerPointerGestureRule(axeInstance) {
   axeInstance.configure({
     checks: [{
       ...pointerGestureCheck,
-      options: { gestureAttrs }
+      options: { gestureAttrs, ALT_SEL }
     }],
     rules:  [pointerGestureRule],
   });
