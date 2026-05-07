@@ -12,7 +12,7 @@ from ka11y.crawler.navigation import navigate_with_resilience
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.crawler.policy import CrawlPolicy
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 from pydantic import BaseModel, Field
 from datetime import datetime
 import time
@@ -347,6 +347,8 @@ class AsyncImageCrawler:
         element_id: str | None = None,
         capture_status: str = "ok",
         capture_error: str | None = None,
+        aria_hidden: Optional[str] = None,
+        role: Optional[str] = None,
     ) -> ImageData:
         return ImageData(
             url=url,
@@ -368,6 +370,8 @@ class AsyncImageCrawler:
             element_id=element_id,
             capture_status=capture_status,
             capture_error=capture_error,
+            aria_hidden=aria_hidden,
+            role=role,
         )
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -656,6 +660,14 @@ class AsyncImageCrawler:
                                     download_session, abs_src, save_path
                                 )
 
+                        # Decorative-classification + missing alt is only a
+                        # WCAG 1.1.1 PASS when the image is hidden from AT
+                        # (aria-hidden="true" or role in {presentation, none}).
+                        # Plumb both signals into ImageData so the auditor can
+                        # tell the two cases apart.
+                        ah = (el_context.get("ariaHidden") or "").strip() or None
+                        rl = (el_context.get("role") or "").strip() or None
+
                         if saved:
                             captured += 1
                             self.images_data.append(
@@ -668,6 +680,8 @@ class AsyncImageCrawler:
                                     screenshot_path=save_path,
                                     filename=filename,
                                     element_id=f"img_{img_hash}",
+                                    aria_hidden=ah,
+                                    role=rl,
                                 )
                             )
                             logger.info(
@@ -686,6 +700,8 @@ class AsyncImageCrawler:
                                     filename=filename,
                                     element_id=f"img_{img_hash}",
                                     capture_status="failed",
+                                    aria_hidden=ah,
+                                    role=rl,
                                 )
                             )
 

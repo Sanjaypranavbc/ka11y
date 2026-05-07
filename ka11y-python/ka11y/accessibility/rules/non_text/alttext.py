@@ -92,7 +92,7 @@ _SOCIAL_BRAND_NAMES: set[str] = {
 }
 
 # Logo/Home/Action keywords in multiple languages
-_LOGO_WORDS: set[str] = {"logo", "ロゴ", "標榜"}
+_LOGO_WORDS: set[str] = {"logo", "logotype", "wordmark", "brandmark", "ロゴ", "標榜"}
 _HOME_WORDS: set[str] = {"home", "ホーム", "トップ"}
 
 # Acceptable action/purpose words for buttons
@@ -349,8 +349,30 @@ def _check_1_1_1_decorative(alt: str) -> tuple[bool, str]:
     )
 
 
-def _check_1_1_1_missing_alt(sub_type: str) -> tuple[bool, str]:
-    """Missing alt attribute entirely — WCAG violation for any image."""
+def _is_aria_hidden_from_at(aria_hidden: str | None, role: str | None) -> bool:
+    """A decorative image with no alt attribute is still WCAG-conformant
+    when the element is programmatically hidden from assistive technology
+    (`aria-hidden="true"` or `role="presentation"` / `role="none"`)."""
+    if aria_hidden and aria_hidden.strip().lower() == "true":
+        return True
+    if role and role.strip().lower() in ("presentation", "none"):
+        return True
+    return False
+
+
+def _check_1_1_1_missing_alt(
+    sub_type: str,
+    aria_hidden: str | None = None,
+    role: str | None = None,
+) -> tuple[bool, str]:
+    """Missing alt attribute. PASS if the image is programmatically hidden
+    from AT (aria-hidden="true" or role=presentation/none); FAIL otherwise."""
+    if _is_aria_hidden_from_at(aria_hidden, role):
+        return (
+            True,
+            "PASS [1.1.1] Decorative image is hidden from assistive tech "
+            "(aria-hidden=\"true\" or role=\"presentation\"); missing alt is acceptable.",
+        )
     return (
         False,
         "FAIL [1.1.1] Alt attribute is completely missing — "
@@ -848,7 +870,11 @@ class AltTextAccessibilityAuditor:
             if sub_type == "missing_alt" or (
                 classification == "decorative" and alt_text is None
             ):
-                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(sub_type)
+                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(
+                    sub_type,
+                    aria_hidden=getattr(img, "aria_hidden", None),
+                    role=getattr(img, "role", None),
+                )
 
             elif classification == "decorative":
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(alt_text)
