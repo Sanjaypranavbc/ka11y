@@ -69,16 +69,15 @@ class TestFieldAppearsRequired:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestViolations331:
-    def test_required_field_with_no_aria_describedby_is_violation(self):
+    def test_required_field_with_no_aria_describedby_passes_if_no_error(self):
         f = make_field(required=True, aria_describedby=None)
         viols = _violations_331(f)
-        assert len(viols) == 1
-        assert "aria-describedby" in viols[0]
+        assert viols == []
 
-    def test_aria_required_true_treated_same_as_required(self):
+    def test_aria_required_true_with_no_aria_describedby_passes_if_no_error(self):
         f = make_field(required=False, aria_required="true", aria_describedby=None)
         viols = _violations_331(f)
-        assert any("aria-describedby" in v for v in viols)
+        assert viols == []
 
     def test_required_field_with_aria_describedby_but_no_error_element_is_violation(self):
         f = make_field(
@@ -260,10 +259,11 @@ class TestFormAccessibilityAuditorReport:
             make_field(
                 form_index=0, type="text", has_any_label=False,
             ),
-            # FAILED 3.3.1: required, no aria-describedby
+            # FAILED 3.3.1: error container exists but has no live/alert roles
             make_field(
                 form_index=0, type="text", has_any_label=True, label_text="Name",
-                required=True, aria_describedby=None,
+                required=True, aria_describedby="err2", error_element_id="err2",
+                error_has_role_alert=False, error_has_aria_live=None,
             ),
             # FAILED 3.3.2: password without autocomplete
             make_field(
