@@ -36,30 +36,48 @@ async function validateEscapeHatch(page, elementSelector) {
       const evidence = [];
       const ALT_BTN  = 'button, [role="button"], [aria-label], input[type="button"]';
 
+      // Known-empty handler bodies (already trimmed and stripped of trailing semicolons).
+      // A label alone is NOT proof of a pointer alternative — the handler must be non-trivial.
+      const KNOWN_EMPTY_PATTERNS = new Set([
+        '', 'void 0', 'void(0)', 'return false', 'return true',
+        'undefined', 'null', ';', 'false', 'true',
+      ]);
+
       /* ── Check 1: Click handler on the element ───────────────────────── */
       const onclickAttr = el.getAttribute('onclick') || '';
-      const onclickProp = typeof el.onclick === 'function' ? el.onclick.toString() : '';
+      let onclickProp = '';
+      if (typeof el.onclick === 'function') {
+        const fnStr = el.onclick.toString();
+        // Extract just the body if it's a `function (...) { ... }` wrapper
+        const m = fnStr.match(/^function\s*\(.*?\)\s*\{([\s\S]*)\}$/);
+        onclickProp = m ? m[1] : fnStr;
+      }
       const onclickBody = onclickAttr || onclickProp;
 
       if (onclickBody) {
+        // Normalize for known-empty matching: trim, drop trailing ;, collapse void(0)→void 0
+        let normalized = onclickBody.trim();
+        if (normalized.endsWith(';')) normalized = normalized.slice(0, -1).trim();
+        normalized = normalized.replace(/void\s*\(\s*0\s*\)/g, 'void 0');
+
+        const isKnownEmpty = KNOWN_EMPTY_PATTERNS.has(normalized);
+
         const cleaned = onclickBody
           .replace(/^function\s*\(.*?\)\s*\{/, '')
           .replace(/\}$/, '')
+          .replace(/void\s*\(\s*0\s*\)/g, '')
           .replace(/void\s+0/g, '')
-          .replace(/null/g, '')
           .replace(/return\s+false/g, '')
+          .replace(/return\s+true/g, '')
+          .replace(/undefined/g, '')
+          .replace(/null/g, '')
+          .replace(/false/g, '')
+          .replace(/true/g, '')
           .replace(/[;{}\s]/g, '');
-        
-        const isRealAction = cleaned.length > 6;
-        const hasLabel = !!(
-          el.getAttribute('aria-label') ||
-          el.getAttribute('aria-labelledby') ||
-          (el.textContent || '').trim().length > 1 ||
-          el.getAttribute('alt') ||
-          (el.id && document.querySelector(`label[for="${el.id}"]`))
-        );
 
-        if (isRealAction || hasLabel) {
+        const isRealAction = !isKnownEmpty && cleaned.length > 6;
+
+        if (isRealAction) {
           evidence.push('Valid click handler/alternative present on element');
         }
       }
