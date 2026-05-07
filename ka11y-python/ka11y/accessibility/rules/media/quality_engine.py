@@ -1,25 +1,24 @@
 """
 ka11y/accessibility/rules/media/quality_engine.py
 ===================================================
-WCAG 1.2.1 Gate 5 — Local transcript quality evaluation.
+WCAG 1.2.1 Gate 5 — Transcript quality evaluation.
 
-Uses faster-whisper + jiwer + regex + nltk to evaluate whether a
+Uses Deepgram API + jiwer + regex + nltk to evaluate whether a
 developer-provided transcript is an equivalent alternative for the media.
 
 5 checks
 ────────
-  Check 1: Verbatim speech (faster-whisper + jiwer WER)
-  Check 2: Speaker identification (regex + whisper segment gaps)
+  Check 1: Verbatim speech (Deepgram Nova-2 + jiwer WER)
+  Check 2: Speaker identification (regex + Deepgram diarization)
   Check 3: Non-speech audio events (bracket regex + keyword dictionary)
   Check 4: Meaningful visual content (NLTK POS tagging — always needs_review)
   Check 5: Correct sequence (timestamp quarter-overlap)
 
 Dependencies (required)
 ───────────────────────
-  faster-whisper  — local Whisper transcription (CTranslate2)
-  jiwer           — Word Error Rate computation
-  nltk            — POS tagging for visual content detection
-  ffmpeg          — system dependency required by faster-whisper
+  deepgram-sdk  — Deepgram API client for transcription + diarization
+  jiwer         — Word Error Rate computation
+  nltk          — POS tagging for visual content detection
 """
 
 from __future__ import annotations
@@ -33,9 +32,9 @@ from typing import Any, Dict, List, Optional
 import httpx
 import nltk
 import spacy
-from faster_whisper import WhisperModel
 from jiwer import wer as compute_wer
 from nltk.tokenize import word_tokenize
+from deepgram import DeepgramClient, PrerecordedOptions, FileSource
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils import not_implemented
@@ -269,14 +268,15 @@ def _check_verbatim(whisper_text: str, dev_transcript: str, lang: str = "en") ->
 def _check_speaker_ids(
     dev_transcript: str,
     whisper_segment_count: int = 0,
+    speaker_count: int = 0,
     lang: str = "en",
 ) -> Dict[str, Any]:
     """
     Check 2: All speakers are identified.
 
     Scans the transcript for speaker-change patterns (regex).
-    If faster-whisper detects multiple distinct segments with gaps > 2s
-    (suggesting speaker changes) but the transcript has zero labels → FAIL.
+    If Deepgram detects multiple distinct speakers (speaker_count > 1)
+    but the transcript has zero labels → FAIL.
     """
     patterns = _SPEAKER_PATTERNS.get(lang, _SPEAKER_PATTERNS["en"])
     found_labels = []
@@ -295,17 +295,16 @@ def _check_speaker_ids(
         )
 
     # No labels found — check if this might be single-speaker content
-    if whisper_segment_count <= 3:
+    if speaker_count <= 1:
         return _check_result(
             "speaker_ids", "NEEDS_REVIEW",
-            "No speaker labels found, but audio is short "
-            "(may be single-speaker). Manual review recommended.",
+            "No speaker labels found, but audio only has 1 speaker detected. Manual review recommended.",
             labels_found=0,
         )
 
     return _check_result(
         "speaker_ids", "FAILED",
-        "No speaker identification labels found in transcript. "
+        f"No speaker identification labels found in transcript, but Deepgram detected {speaker_count} speakers. "
         "WCAG 1.2.1 requires identifying who is speaking "
         "when multiple speakers are present.",
         labels_found=0,
@@ -555,52 +554,78 @@ def _download_media(url: str, output_dir: str) -> Optional[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Transcription helper (faster-whisper)
+# Transcription helper (Deepgram API)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def _transcribe_audio(audio_path: str) -> Optional[Dict[str, Any]]:
     """
-    Transcribe audio using faster-whisper (local CTranslate2 Whisper).
+    Transcribe audio using Deepgram SDK.
 
     Returns:
         {
             "text": str,            # full transcription
-            "segments": List[Dict], # [{start, end, text}, ...]
+            "segments": List[Dict], # [{start, end, text, speaker}, ...]
             "segment_count": int,
+            "speaker_count": int,
         }
-    Or None if transcription fails.
+    Or None if transcription fails or API key is missing.
     """
-    try:
-        # Use the "base" model for speed/accuracy balance
-        model_size = os.environ.get("WHISPER_MODEL_SIZE", "base")
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
+    api_key = os.environ.get("DEEPGRAM_API_KEY")
+    if not api_key:
+        logger.warning("[quality_engine] DEEPGRAM_API_KEY is not set. Cannot transcribe audio.")
+        return None
 
-        segments_iter, info = model.transcribe(
-            audio_path,
-            language=None,        # auto-detect
-            beam_size=5,
-            vad_filter=True,      # voice activity detection for cleaner output
+    try:
+        # Initialize the Deepgram client
+        deepgram = DeepgramClient(api_key)
+
+        with open(audio_path, "rb") as audio:
+            buffer_data = audio.read()
+
+        payload: FileSource = {"buffer": buffer_data}
+
+        # Configure options for our specific requirements
+        options = PrerecordedOptions(
+            model="nova-2",
+            smart_format=True,
+            utterances=True,
+            diarize=True,
+            punctuate=True,
         )
 
+        response = deepgram.listen.rest.v("1").transcribe_file(payload, options)
+        
+        # Parse the response safely
+        results = response.results
+        if not results or not getattr(results, 'utterances', None):
+            logger.warning("[quality_engine] Deepgram returned no utterances.")
+            return None
+
+        utterances = results.utterances
         segments = []
         full_text = []
-        for seg in segments_iter:
+        unique_speakers = set()
+
+        for u in utterances:
             segments.append({
-                "start": seg.start,
-                "end": seg.end,
-                "text": seg.text.strip(),
+                "start": u.start,
+                "end": u.end,
+                "text": u.transcript.strip(),
+                "speaker": u.speaker,
             })
-            full_text.append(seg.text.strip())
+            full_text.append(u.transcript.strip())
+            unique_speakers.add(u.speaker)
 
         return {
             "text": " ".join(full_text),
             "segments": segments,
             "segment_count": len(segments),
+            "speaker_count": len(unique_speakers),
         }
 
     except Exception as exc:
-        logger.warning(f"[quality_engine] Transcription failed: {exc}")
+        logger.warning(f"[quality_engine] Transcription failed via Deepgram: {exc}")
         return None
 
 
@@ -671,6 +696,7 @@ def evaluate_transcript_quality(
                 checks.append(_check_speaker_ids(
                     clean_transcript,
                     whisper_segment_count=transcription["segment_count"],
+                    speaker_count=transcription.get("speaker_count", 0),
                     lang=lang,
                 ))
 
@@ -682,10 +708,10 @@ def evaluate_transcript_quality(
                     transcription["segments"], clean_transcript, lang=lang
                 ))
             else:
-                # Whisper failed — fall back to text-only checks
+                # Deepgram failed — fall back to text-only checks
                 checks.append(_check_result(
                     "verbatim", "NEEDS_REVIEW",
-                    "Could not transcribe audio (faster-whisper failed)."
+                    "Could not transcribe audio (Deepgram failed or key missing)."
                 ))
                 checks.append(_check_speaker_ids(clean_transcript, lang=lang))
                 checks.append(_check_non_speech_events(clean_transcript, lang=lang))
@@ -740,8 +766,8 @@ def evaluate_transcript_quality(
 
 # ── SUMMARY ──────────────────────────────────────────────────────────────
 # What was done:
-#   Created the local quality engine with 5 checks using
-#   faster-whisper + jiwer + regex + nltk (all mandatory).
+#   Created the quality engine with 5 checks using
+#   Deepgram API + jiwer + regex + nltk.
 #
 # Principles applied:
 #   - SoC: Each check is an independent function.
@@ -754,4 +780,5 @@ def evaluate_transcript_quality(
 #   - Download failure → run text-only checks
 #   - Empty transcript → NEEDS_REVIEW
 #   - Audio-only vs Video-only → different checks applied
+#   - Missing DEEPGRAM_API_KEY → graceful fallback to text-only checks
 # ─────────────────────────────────────────────────────────────────────────

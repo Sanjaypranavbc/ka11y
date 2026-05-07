@@ -82,6 +82,7 @@ services:
 
     environment:
       NODE_BASE_URL:        "http://node:3000"
+      DEEPGRAM_API_KEY:     "${DEEPGRAM_API_KEY}"
       PYTHONUNBUFFERED:     "1"
       PYTHONDONTWRITEBYTECODE: "1"
 
