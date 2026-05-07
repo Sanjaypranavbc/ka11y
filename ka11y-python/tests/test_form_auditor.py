@@ -553,10 +553,10 @@ class TestFormAuditorAdditionalEdgeCases:
     def tmp_output(self, tmp_path):
         return str(tmp_path)
 
-    def test_required_with_no_error_message_patterns(self, tmp_output):
+    def test_required_with_no_error_message_patterns_passes(self, tmp_output):
         """
         Edge case: field has `required` attribute but no aria-describedby and
-        no error element — should produce a 3.3.1 violation.
+        no error element — should PASS 3.3.1 since there is no error state to announce.
         """
         f = make_field(
             required=True,
@@ -565,8 +565,7 @@ class TestFormAuditorAdditionalEdgeCases:
         )
         auditor = FormAccessibilityAuditor(output_dir=tmp_output)
         records = auditor.generate_audit_report([f])
-        assert records[0]["wcag_3_3_1_status"] == "FAILED"
-        assert "aria-describedby" in records[0]["wcag_3_3_1_violations"]
+        assert records[0]["wcag_3_3_1_status"] == "PASSED"
 
     def test_placeholder_only_label_detection(self, tmp_output):
         """
@@ -598,8 +597,8 @@ class TestFormAuditorAdditionalEdgeCases:
         records = auditor.generate_audit_report([f])
         assert records[0]["wcag_3_3_2_status"] == "FAILED"
 
-    def test_aria_required_without_describedby_triggers_331(self, tmp_output):
-        """aria-required=true should be treated same as required=True for 3.3.1."""
+    def test_aria_required_without_describedby_passes_331(self, tmp_output):
+        """aria-required=true should pass 3.3.1 if no error is present."""
         f = make_field(
             required=False,
             aria_required="true",
@@ -607,7 +606,7 @@ class TestFormAuditorAdditionalEdgeCases:
         )
         auditor = FormAccessibilityAuditor(output_dir=tmp_output)
         records = auditor.generate_audit_report([f])
-        assert records[0]["wcag_3_3_1_status"] == "FAILED"
+        assert records[0]["wcag_3_3_1_status"] == "PASSED"
 
     def test_field_with_label_and_proper_error_has_no_violations(self, tmp_output):
         """A fully-compliant field should pass both 3.3.1 and 3.3.2."""
