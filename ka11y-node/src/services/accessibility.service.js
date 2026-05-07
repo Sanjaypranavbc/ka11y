@@ -101,6 +101,7 @@ const AXE_LOCALE_ALIASES = {
   'zh-cn': 'zh_CN',
   'zh-tw': 'zh_TW',
 };
+const AXE_LOCALE_CACHE_CAP = 32;
 const _axeLocaleCache = new Map();
 
 /**
@@ -130,26 +131,34 @@ function _sanitizeLocaleLang(lang = 'en') {
 function _loadAxeLocale(lang = 'en') {
   const normalized = _sanitizeLocaleLang(lang);
   if (!normalized || normalized === 'en') return null;
-  if (_axeLocaleCache.has(normalized)) return _axeLocaleCache.get(normalized);
 
+  // LRU: On cache hit, promote the entry to most recently used
+  if (_axeLocaleCache.has(normalized)) {
+    const cachedValue = _axeLocaleCache.get(normalized);
+    _axeLocaleCache.delete(normalized);
+    _axeLocaleCache.set(normalized, cachedValue);
+    return cachedValue;
+  }
+
+  // LRU: On cache miss, determine value, then evict if needed, then insert
+  let valueToCache = null;
   const localeId = AXE_LOCALE_ALIASES[normalized] || AXE_LOCALE_ALIASES[normalized.split('-')[0]];
-  if (!localeId) {
-    if (_axeLocaleCache.size >= 20) _axeLocaleCache.delete(_axeLocaleCache.keys().next().value);
-    _axeLocaleCache.set(normalized, null);
-    return null;
+
+  if (localeId) {
+    const localePath = path.join(AXE_LOCALE_DIR, `${localeId}.json`);
+    try {
+      valueToCache = JSON.parse(fs.readFileSync(localePath, 'utf8'));
+    } catch {
+      // valueToCache remains null (existing behavior: cache null on error to avoid disk hits)
+    }
   }
 
-  const localePath = path.join(AXE_LOCALE_DIR, `${localeId}.json`);
-  try {
-    const locale = JSON.parse(fs.readFileSync(localePath, 'utf8'));
-    if (_axeLocaleCache.size >= 20) _axeLocaleCache.delete(_axeLocaleCache.keys().next().value);
-    _axeLocaleCache.set(normalized, locale);
-    return locale;
-  } catch {
-    if (_axeLocaleCache.size >= 20) _axeLocaleCache.delete(_axeLocaleCache.keys().next().value);
-    _axeLocaleCache.set(normalized, null);
-    return null;
+  // Evict least-recently-used (first entry) when at capacity
+  if (_axeLocaleCache.size >= AXE_LOCALE_CACHE_CAP) {
+    _axeLocaleCache.delete(_axeLocaleCache.keys().next().value);
   }
+  _axeLocaleCache.set(normalized, valueToCache);
+  return valueToCache;
 }
 
 /**
