@@ -102,13 +102,15 @@ async function auditMotionActuation(page, options = {}) {
              const matchesAction = ACTION_PATTERNS.some(p => label.includes(p.toLowerCase()));
              if (!matchesAction) continue;
 
-             // Strong signal: action verb + motion keyword somewhere on the
-             // element or a 2-ancestor container (e.g. "Shake or tap Undo").
+             // Action-verb labels alone are too noisy ("Submit"/"Cancel"
+             // appear on most pages). Require a motion keyword somewhere on
+             // the control's ancestor container so we only match true
+             // alternatives (e.g. "Shake or tap Undo", "Refresh — or shake").
              const ctx = el.closest('section, article, dialog, [role="region"], [role="dialog"], main, body');
              const ctxText = (ctx ? (ctx.textContent || '') : '').toLowerCase();
              const motionNearby = MOTION_PATTERNS.some(p => ctxText.includes(p.toLowerCase()));
 
-             if (motionNearby || matchesAction) return true;
+             if (motionNearby) return true;
           }
           return false;
        });
