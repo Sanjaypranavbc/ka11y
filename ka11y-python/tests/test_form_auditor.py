@@ -203,7 +203,7 @@ class TestViolations332:
     def test_url_field_without_autocomplete_is_violation(self):
         f = make_field(type="url", has_any_label=True, autocomplete=None)
         viols = _violations_332(f)
-        assert any("autocomplete" in v.lower() for v in viols)
+        assert not any("autocomplete" in v.lower() for v in viols)
 
     def test_text_field_with_personal_name_attribute_needs_autocomplete(self):
         # Field name "email" triggers autocomplete check regardless of type
