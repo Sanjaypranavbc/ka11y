@@ -36,4 +36,14 @@ class RuleTargetRouter:
         ):
             rules.extend(["1.4.3", "1.4.6"])
 
-        return list(set(rules))
+        # Order-preserving dedup. `list(set(...))` produced a non-deterministic
+        # ordering across hash randomisation runs, which made test snapshots
+        # flaky and the `applicable_rules` order unstable for downstream
+        # consumers that iterate rule-by-rule.
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for sc in rules:
+            if sc not in seen:
+                seen.add(sc)
+                deduped.append(sc)
+        return deduped

@@ -1,955 +1,627 @@
-# ka11y Code Review — WCAG Technique Coverage & Limitations
+# ka11y — System-Wide Code Review
 
-**Date:** April 24, 2026
-**Scope:** Full audit of implemented rules in `ka11y-python/` and `ka11y-node/`, cross-referenced against W3C WCAG 2.2 Techniques (Sufficient + Failure).
-**Goal:** Identify what each rule *actually* detects vs. what the WCAG SC requires, so gaps can be closed or documented.
+**Date:** 2026-05-06
+**Branch:** `fix-patches`
+**Scope:** Full system — `ka11y-python` (FastAPI + Playwright + auditors), `ka11y-node` (axe-core + custom checks), API/orchestration glue.
+**Reviewer mode:** FAANG production-readiness, brutally honest. ~140 grounded, file-anchored findings collapsed into the structure below.
 
 ---
 
-## Sprint changes — 2026-04-24 (pass 2)
+## 1. Executive Summary
 
-Three critical sprint items completed in this pass:
+### Overall rating: **54 / 100**
 
-| Item | Status | Files changed |
+The system *works* on the happy path for small pages. It does not yet behave like a production accessibility engine. The architecture is recognizably correct (separate Node/axe and Python AI layers, modular auditors, decision policies) but is undermined by:
+
+- **Data-loss bugs** — finding-converter field mismatches silently downgrade entire WCAG SCs to `needs_review`.
+- **Engine-level exception swallowing** — every policy bug is rebadged as `confidence=0.1` `NEEDS_REVIEW`, hiding bugs in production.
+- **Heuristic accuracy weaknesses** — many checks fire on pretexts (color words = sensory violation, "Settings" link = motion-disable control) without verifying intent.
+- **Resource economics** — 5 browser launches per URL, 8 concurrent contexts per scenario, monolithic 2000-line `page.evaluate()` returning megabytes of JSON, unbounded de-dup sets, no per-frame timeouts. Will not survive 1000 concurrent crawls.
+- **Security gaps** — SSRF guard misses decimal/hex-encoded IPs and post-allow redirects; API leaks tracebacks; no per-user auth/rate-limit isolation.
+
+### Top 5 critical issues
+
+| # | Issue | Impact |
 |---|---|---|
-| **3.1.2 Language of Parts** | Implemented | `ka11y-node/src/custom-checks/language-of-parts.check.js` (new — empty lang=, invalid BCP47, unannotated CJK on non-CJK pages); registered in `index.js` STATIC_ORDER |
-| **`capture_status` → OCR/contrast converters** | Implemented | `ka11y-python/ka11y/crawler/models.py` (+`capture_status`, `capture_error` on `ImageData`); `crawler/crawler.py` (failed captures register as `ImageData` with `capture_status="failed"`); `alttext.py` (short-circuit to INCOMPLETE); `findings.py` (`_alt_text_to_findings`, `_name_role_value_to_findings`, `_images_of_text_to_findings` handle INCOMPLETE; new `_contrast_capture_failed_to_findings` for 1.4.3 / 1.4.6); `stages.py` + `__init__.py` wired |
-| **Japanese NLP quality** | Implemented | `sensory_auditor.py`: `_get_nlp()` now tries `ja_core_news_lg` before `ja_core_news_sm`; `_has_meaningful_label_text_ja()` uses SudachiPy morpheme-level POS filtering with graceful try/except fallback; `pyproject.toml` adds `sudachipy`/`sudachidict-core` as optional `[japanese]` extras |
-
-Tests after changes: `ka11y-python` 618/618, `ka11y-node` 233/233.
-
----
-
-## Sprint changes — 2026-04-24 (pass 1)
-
-Priority gap-closure items addressed in this pass:
-
-| Item | Status | Files changed |
-|---|---|---|
-| **1.2.1 F30 filename-only transcript links** | Implemented (heuristic) | `ka11y-node/src/custom-checks/audio-transcript.check.js` (+filename-only label detection) |
-| **1.4.1 F81/F13 non-link colour-only cues** | Implemented (heuristic) | `use-of-color.check.js` (required-field colour-only + colour-only instructional text scan) |
-| **2.1.2 F58/F60 extension** | Implemented (partial heuristic) | `keyboard-trap.check.js` (scripted `preventDefault()` key suppression + non-modal Escape dismissibility probe) |
-| **2.4.5 G125/G126** | Implemented (heuristic) | `multiple-ways.check.js` (related-links sections + page-index lists) |
-| **2.4.8 G127 ToC signal** | Implemented | `location.check.js` (ToC/location indicator detection) |
-| **3.3.4 G164 undo window** | Implemented (heuristic) | `error-prevention.check.js` (+undo/revert safeguard detection) |
-| **4.1.3 F114 toast-without-ARIA** | Implemented (heuristic) | `status-messages.check.js` (+toast library patterns + dedicated toast incomplete rule) |
-| **Config keyword expansion (EN+JA)** | Implemented | `config/universal.yml` (`multiple_ways.*`, `location.toc_keywords`, `error_prevention.undo_keywords`) |
+| 1 | **Auditor → converter field-name mismatches** (`findings.py` expects `wcag_1_1_1_status`, auditor may emit different keys) → entire SC silently becomes `needs_review` | Whole rules report wrong; matches existing memory note for 1.1.1 |
+| 2 | **`DecisionEngine` swallows every `Exception` and emits `NEEDS_REVIEW` with confidence 0.1** (`engine.py:30-42`) → real policy bugs (e.g. `policy_1_4_6.py:13` enum/string compare always-false; `policy_2_5_8.py:34` None deref) become invisible | Hidden quality decay; impossible to debug in prod |
+| 3 | **SSRF guard bypass surface** — `_ssrf_guard.py` only matches dotted-quad IPs and only checks the *initial* URL; decimal `http://2130706433/`, hex `http://0x7f000001/`, and post-allow redirects to `169.254.169.254` slip through | Cloud-metadata exfil from a hosted scanner |
+| 4 | **Browser/resource economics broken** — each crawler (`crawler.py`, `media_crawler.py`, `sensory_crawler.py`, `rendered_layout_crawler.py`) launches its *own* Chromium; `rendered_layout_crawler` fans out 8 `_snapshot_at_viewport` contexts via `asyncio.gather` with no timeout and the page is *not* closed on the exception path; `universal_page._extract_page_chunked` keeps an unbounded `seen_refs` set across 4 scroll passes | OOM and hangs at scale; cost explosion |
+| 5 | **`universal_page._COMBINED_EXTRACT_JS` is a 2000-line monolithic `page.evaluate()`** that walks the DOM 7 times, serialises `outerHTML` for every element, and crosses the V8↔Python bridge with 8–15 MB JSON per page | Latency, memory, and a single JS bug breaks 7 categories at once |
 
 ---
 
-## Bug fixes — 2026-04-24 (patch)
+## 2. Architecture Review
 
-Seven runtime and logic bugs found during the code review were fixed in this patch. Tests went from 616/618 → 618/618 Python, 233/233 Node.
+### 2.1 Current architecture
 
-| # | Bug | Root cause | Fix | Files changed |
+```
+            ┌──────────────────────────┐
+            │  FastAPI app (main.py)   │
+            │  + _RateLimitMiddleware  │
+            └────────────┬─────────────┘
+                         │
+                         ▼
+        ┌──────────── api/v1 ──────────────┐
+        │  pipeline.py    (full pipeline)  │
+        │  combined/{routes,runner,        │
+        │           stages,findings}.py    │
+        │  rules/{run_router,metadata}.py  │
+        └────────────┬────────────┬────────┘
+                     │            │
+                     ▼            ▼
+   ┌────────────────────┐   ┌──────────────────────────────┐
+   │  Python crawlers   │   │  Node service (HTTP)         │
+   │  ─ crawler.py      │   │  src/services/accessibility  │
+   │  ─ media_crawler   │   │   ├ axe-core run            │
+   │  ─ sensory_crawler │   │   ├ custom-checks/*.check.js│
+   │  ─ rendered_layout │   │   └ audits/wcag-2.5.x/      │
+   │  ─ universal_page  │   └──────────────────────────────┘
+   └─────────┬──────────┘
+             ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │ accessibility/                                           │
+   │  rules/ (auditors: alttext, sensory, contrast, media,    │
+   │          forms, target_size, text_spacing, …)            │
+   │  rendered/ (reflow, text_spacing evaluators)             │
+   │  pipeline/                                               │
+   │   ├ extractors/ (element_context_extractor,              │
+   │   │             semantic_relationship_engine)            │
+   │   ├ analyzers/ (section_analyzer)                        │
+   │   ├ runners/ (contrast_engine, interaction_state_runner) │
+   │   ├ decisions/ (engine + policy_X_Y_Z)                   │
+   │   └ formatters/ (evidence_formatter)                     │
+   └──────────────────────────────────────────────────────────┘
+```
+
+### 2.2 Key flaws
+
+**F1 — Two parallel rule systems with no shared model.**
+`accessibility/rules/*` (large, image- and OCR-heavy auditors) and `accessibility/pipeline/decisions/*` (per-SC policy classes operating on `ElementContext`) both produce findings, but they don't share a data model. `combined/findings.py` is a 1000+ line translation layer that *must* know each auditor's idiosyncratic field names. This is the root cause of the data-loss bug class (Top-5 #1).
+
+**F2 — Crawler proliferation without a base class.**
+Four crawlers (`crawler.py` for images, `media_crawler.py`, `sensory_crawler.py`, `rendered_layout_crawler.py`) duplicate ~400 lines of browser launch / context creation / link extraction / cleanup. Each launches its *own* Chromium for the same URL.
+
+**F3 — One giant `page.evaluate` for everything.**
+`universal_page._COMBINED_EXTRACT_JS` is 2000+ lines and extracts forms, interactive, target_sizes, moving_content, media, text_spacing, and sensory data in a single JS function. Single bug → all 7 categories die. JSON payload is 8–15 MB on a 500-element page.
+
+**F4 — `DecisionEngine` exception policy hides correctness bugs.**
+`engine.py:30-42` `except Exception → NEEDS_REVIEW(confidence=0.1)` masks every concrete bug in the policy classes (string-vs-enum, None deref, missing import). There is no observability for "policies-that-keep-throwing".
+
+**F5 — Custom-check / audit duplication in Node.**
+For 2.5.1 and 2.5.4, both `custom-checks/{pointer-gestures,motion-actuation}.check.js` *and* `audits/wcag-2.5.{1,4}/index.js` exist. The selector banks (`multilingual-selectors.js` vs `axe-rule-pointer-gestures.js:11–46`) duplicate definitions that drift over time.
+
+**F6 — Tight coupling between policies and concrete data shapes.**
+`policy_1_3_1.py:29` reads `element.visual.computed_styles.get("type")` — but `type` is an HTML attribute, not a CSS property. This is the kind of bug an `ElementSemantics`-vs-`ElementVisual` boundary should make impossible.
+
+**F7 — Module-level singletons everywhere.**
+`combined/constants.py` loads `_WCAG_NAMES = get_wcag_names("en")` at import. `utils/config_loader.py:35` does `config = load_config()`. `i18n/loader.py` caches via `lru_cache`. None can be reloaded without process restart, and none are language-correct for non-English audits.
+
+### 2.3 Suggested improved architecture
+
+Five targeted changes; everything else is downstream of these.
+
+1. **One `PageExtraction` shared model with versioned schema.** Auditors emit `Finding(rule_id, status, evidence, ...)` directly. `combined/findings.py` becomes a thin grouper, not a translation layer. Field-mismatch class of bugs ceases to exist.
+2. **`BaseCrawler`** with a single browser pool. Concrete crawlers override `extract_for_url(page)`. Replaces ~400 lines of duplication; single browser per audit; per-stage views over one extraction.
+3. **Split `_COMBINED_EXTRACT_JS` into 4 focused extractors** (structural, geometry, dynamic, sensory). Each is testable in isolation; one failure does not poison the others.
+4. **Typed `PolicyError` in `DecisionEngine`** — engine catches *only* `PolicyError` and falls through to `NEEDS_REVIEW`. Anything else logs a structured error and crashes the request; in CI, that means a failing test, in prod a 5xx with an opaque error_id.
+5. **Replace four-crawler-per-URL pattern with one universal crawl + downstream evaluators.** Image classification, media probing, sensory scanning, layout snapshots are all *evaluators* over a `BrowsedPage` artefact, not separate Chromium launches.
+
+---
+
+## 3. Performance & Computational Analysis
+
+Findings ranked by production blast radius. Each lists root cause, complexity, and a code-anchored fix.
+
+### P-01 (CRITICAL) — Monolithic JS extractor, megabyte JSON per page
+**File:** `ka11y-python/ka11y/crawler/universal_page.py:55-1134`
+**Problem:** `_COMBINED_EXTRACT_JS` runs 7 querySelectorAll loops, calls `getBoundingClientRect()` on every target (forced reflow per element), and serialises `outerHTML` for every element into a single returned object.
+**Complexity:** O(N) DOM walks ×7 categories with full reflow per element ⇒ effective O(N) reflows. JSON marshalling O(total_html_bytes).
+**Impact:** 8–15 MB JSON per 500-element page; 2–5 s Python-side parse; ~5 GB/day at 1k pages/day. Single JS error kills 7 outputs.
+**Fix:**
+```python
+# Split into focused extractors; run sequentially or in 2 batches
+forms        = await frame.evaluate(FORMS_JS)
+interactive  = await frame.evaluate(INTERACTIVE_JS)
+geometry     = await frame.evaluate(GEOMETRY_JS)   # the only one that touches getBoundingClientRect
+sensory      = await frame.evaluate(SENSORY_JS)
+# Cap each extractor's output size before returning
+```
+And inside each JS: hash `outerHTML` to a 16-byte digest server-side rather than shipping it raw.
+
+### P-02 (CRITICAL) — Browser-per-crawler launches
+**Files:** `crawler.py:395-406`, `media_crawler.py:275-294`, `sensory_crawler.py:241-259`, `rendered_layout_crawler.py:242-259`
+**Problem:** Each of the four crawlers does `async with async_playwright() as p: browser = await p.chromium.launch(...)`. For one audit URL, that is **5 separate Chromium processes** (image + media + sensory + rendered_layout + universal), ~300 MB each = **~1.5 GB per URL**.
+**Fix:** Singleton `BrowserPool` in `app/main.py` lifespan; crawlers receive a `browser` and create only contexts.
+
+### P-03 (CRITICAL) — `rendered_layout_crawler` fan-out without timeout
+**File:** `rendered_layout_crawler.py:275-308`
+**Problem:** `asyncio.gather(*7 _snapshot_at_viewport, return_exceptions=True)` — each opens its *own* context + page. `return_exceptions=True` catches errors but not hangs; one stuck `wait_for_load_state("networkidle")` blocks the gather forever.
+**Complexity:** 7 contexts × (load + 7 sub-snapshots) per URL.
+**Fix:**
+```python
+async with asyncio.timeout(120):
+    results = await asyncio.gather(*scenarios, return_exceptions=True)
+```
+And reuse one context across the 7 viewport snapshots — the `_make_context` per scenario is only required when the *device profile* changes.
+
+### P-04 (CRITICAL) — Page leak on exception path
+**File:** `rendered_layout_crawler.py:380-396`
+**Problem:** `_snapshot_at_viewport` opens a `page` inside `try`, but the exception handler returns before any explicit `page.close()`. Only `ctx.close()` runs in `finally`. Under load this races and pages accumulate.
+**Fix:** `page = None` before try; `if page: await page.close()` in finally.
+
+### P-05 (HIGH) — Unbounded `seen_refs` in chunked extraction
+**File:** `universal_page.py:1488-1540`
+**Problem:** 4 scroll passes × N elements × dedup hash each — `seen_refs` grows without bound. 1k concurrent pages × 5k elements × 4 passes ≈ ~10 GB resident.
+**Fix:** Per-page cap (`if len(seen_refs) > 5000: break`) + flush dedup keys to disk between passes.
+
+### P-06 (HIGH) — N+1 `page.evaluate` per image
+**File:** `crawler.py:547-577`
+**Problem:** For each `<img>`, the code does ≥2 `evaluate(...)` round-trips (resolved label, parent context). 1000 images × 2 calls × ~10 ms = ~20 s overhead per page.
+**Fix:** Single `evaluate(el => ({label, ctx, title, ...}))`.
+
+### P-07 (HIGH) — N+1 `frame.evaluate` per relationship
+**File:** `pipeline/extractors/semantic_relationship_engine.py:89-94`
+**Problem:** `for context in contexts: relations = await frame.evaluate(_RELATIONSHIP_JS, context.element_id)` — one IPC per element.
+**Fix:** Pass list of IDs once: `frame.evaluate(JS, [ids])` returns `[{id, relations}]`.
+
+### P-08 (HIGH) — O(n²) adjacency scan in extractor
+**File:** `pipeline/extractors/element_context_extractor.py:165-178`
+**Problem:** Nested loops over interactive elements to compute neighbour gaps — quadratic in the number of focusables.
+**Fix:** Spatial bin (grid bucket on `Math.floor(x/64), Math.floor(y/64)`), check neighbours only.
+
+### P-09 (HIGH) — OCR result lookup is O(n·m)
+**File:** `accessibility/rules/non_text/alttext.py:787-802`
+**Problem:** `for img in images_data: _ocr_for_file(ocr_results, filename)` — inner function linearly scans `ocr_results`. With 1k images × 1k OCR rows = 1 M iterations, plus `Path` allocations per call.
+**Fix:** Build `ocr_by_filename = {Path(r.filename).name.lower(): r for r in ocr_results}` once.
+
+### P-10 (HIGH) — Hot regex compiled per call
+**Files:** `policy_1_1_1.py:74` (`re.search(r"[a-z]{2}|[^\x00-\x7F]", name)`), `policy_1_4_5.py:32` (`import re` inside method).
+**Fix:** Module-level `_DESCRIPTIVE_PATTERN = re.compile(...)`. Hoist `import`.
+
+### P-11 (MEDIUM) — Sensory regex sweep is O(text × categories)
+**File:** `accessibility/rules/non_text/sensory_auditor.py:1048`
+**Problem:** Per text token, iterates all 8 sensory category regexes.
+**Fix:** Single union regex: `_SENSORY_MEGA = re.compile("(" + "|".join(all_terms) + ")", re.IGNORECASE)` — one match call replaces N.
+
+### P-12 (MEDIUM) — Sequential snapshot then stages
+**File:** `combined/stages.py:1174-1286`
+**Problem:** `snapshot = await _load_universal_snapshot(...)` blocks the entire pipeline before stages start, even though `_stage_image_audit` does not need it.
+**Fix:** `snapshot_task = asyncio.create_task(...)`; pass the future into stages that need it; image audit runs immediately.
+
+### P-13 (MEDIUM) — Sync I/O on async route
+**File:** `api/v1/pipeline.py:299-572`
+**Problem:** `image_crawler.save_results()`, `detector.scan_directory()`, `save.save_reports()` are all blocking and called without `await`. Two concurrent users serialise on the event loop.
+**Fix:** `await asyncio.to_thread(image_crawler.save_results)` etc.
+
+### P-14 (MEDIUM) — Layout thrash in 2.5.4 motion detector
+**File:** `ka11y-node/src/audits/wcag-2.5.4/motion-event-detector.js:31`
+**Problem:** Reads `document.body.innerText` per regex pattern in a loop; each read forces layout.
+**Fix:** Read once into `const allText = document.body.innerText;`.
+
+### P-15 (MEDIUM) — DOM inspector 5k evaluate round-trips
+**File:** `ka11y-node/src/audits/wcag-2.5.1/dom-inspector.js:52-112`
+**Problem:** For each selector × match, calls `page.evaluate` to compute CSS path → up to 5k cross-process calls on heavy pages.
+**Fix:** Single `page.evaluate` that does selector iteration AND CSS-path computation server-side.
+
+### P-16 (LOW) — Locale cache + classifier cache unbounded
+**Files:** `ka11y-node/src/services/accessibility.service.js:104` (`_axeLocaleCache`), `ka11y-python/ka11y/crawler/crawler.py:589-591` (classifier cache).
+**Fix:** LRU with explicit cap.
+
+---
+
+## 4. Accuracy Issues (WCAG-Specific)
+
+For each SC: failure scenarios and the file that needs to change.
+
+### 1.1.1 Non-text content
+- **`alttext.py:318-326`** — `_check_1_1_1_decorative` only validates `alt=""` for classifier-decorative images; ignores `aria-hidden="true"`, `role="presentation"`, `<figure>` with `<figcaption>`. Decorative images with `aria-hidden` and missing `alt` **fail incorrectly**.
+- **`alttext.py:451-454`** — icon alt-text rule rejects valid 2-char universal symbols ("ok", "x", "→") because of a 4-char minimum.
+- **`alttext.py:401-442`** — for multi-word brand alt ("Meta Platforms Inc. logotype"), `_LOGO_WORDS` doesn't include "logotype" / "wordmark" → false fail.
+- **CSS `background-image` content is never seen.** No crawler step extracts background URLs; informational hero images with rendered text are simply missing from the audit. **Major false-negative source.**
+- **Shadow DOM not pierced** — modern web components with `<img>` inside `shadowRoot` bypass `images_data`.
+- **Accessible-name priority wrong** in `pipeline/extractors/element_context_extractor.py:245-270` — order is aria-label → alt → title → text. The W3C accname-1.2 spec puts `aria-labelledby` *before* `aria-label`, and form-control native `<label for>` association before `title`. Both are missing. False negatives on labelled form controls.
+
+### 1.2.x Time-based media
+- **`media_auditor.py:109-143`** `_gate_1_is_prerecorded` only checks `.m3u8` / `.mpd` for live. Streams via JS-replaced `<video src>` or MediaSource API are misclassified as prerecorded → false fail on missing transcript.
+- **`media_auditor.py:210-282`** `_gate_4_find_transcript` checks `<a>` / `<details>` / `aria-describedby` but ignores `<iframe>`-embedded transcripts and JS-revealed disclosure regions.
+- **WCAG 1.2.4 (live captions) — Node check insufficient** (`ka11y-node/src/custom-checks/captions-live.check.js`) — `<track kind="captions">` does not prove captions are *live*. A pre-recorded VTT will pass.
+
+### 1.3.1 Info & relationships
+- **`policy_1_3_1.py:29`** reads `element.visual.computed_styles.get("type")` — **fundamentally wrong**: `type` is an HTML attribute, not a CSS property. Always returns None for radio/checkbox. Form-grouping checks for radios silently never fire.
+
+### 1.3.3 Sensory characteristics
+- **`sensory_auditor.py:997-1032`** flags `"Press the Red button"` as sensory-only even when "Red" is the button's literal accessible name (e.g. Red Hat). Cross-check sensory token against the labelled element's name before flagging.
+
+### 1.4.3 / 1.4.6 Contrast (Minimum / Enhanced)
+- **`policy_1_4_6.py:13`** `if verdict.status == "not_applicable" or verdict.status == "needs_review":` — `status` is `VerdictStatus` enum, comparison is **always False**. AAA enhanced contrast is silently never escalated.
+- **`thresholds.py:6-7`** defines `CONTRAST_NORMAL_AAA = 7.0` / `CONTRAST_LARGE_AAA = 4.5` but no policy imports them — 1.4.6 inherits 1.4.3 and re-hardcodes thresholds inline.
+- **`contrast_engine.py:10-23`** `parse_rgb` does `re.findall(r"\d+", ...)` — splits the alpha "0.5" of `rgba(255,0,0,0.5)` into `[0, 5]`; ignores alpha entirely (no compositing with background). Anti-aliased / semi-transparent text is mismeasured.
+- **`contrast_analyser.py:151-187`** large-text threshold uses an `is_bold` boolean, not the actual `font-weight` value. CSS `font-weight: 700` text without explicit bold flag uses 4.5:1 instead of 3:1 → false fail.
+- **`contrast_analyser.py:102-114`** uses `np.percentile(text_pixels, 90)` with no guard for empty / single-pixel arrays — divides by zero or returns inf, then is silently swallowed by an outer try/except.
+
+### 1.4.10 Reflow
+- **`rendered/evaluators/reflow.py:40-100`** assumes the snapshot was taken at 320 CSS pixels; never asserts `snapshot_320.viewport_width == 320`. If `rendered_layout_crawler` was misconfigured to 360, evaluation silently runs against the wrong viewport.
+- **`text_spacing_auditor.py:31-49`** flags every container with `height + overflow:hidden` as a 1.4.12 WARNING regardless of whether spacing deltas would actually overflow. Dashboards drown in noise.
+
+### 1.4.11 Non-text contrast
+- **`alttext.py:614-686`** fallback path measures contrast against a *cropped* OCR image instead of the surrounding page pixels. White button on white page can pass at 1.5:1 instead of failing at 1.0:1.
+
+### 2.4.13 Focus appearance
+- **`policy_2_4_13.py:28-52`** the AND/OR composition of "thickness < min" and "contrast < 3.0" is inverted relative to the SC. An element with 0.5 px focus ring and 5:1 contrast is incorrectly downgraded to `needs_review`. Combined with **`interaction_state_runner.py:88-89`** hardcoded fallback `focus_ring_thickness_px=2.0; focus_ring_contrast=4.5`, real failing rings overwritten with passing values → **false PASS**.
+
+### 2.5.1 Pointer gestures (Node)
+- **`audits/wcag-2.5.1/escape-hatch-validator.js:39-42`** treats any `onclick` presence as proof of a single-pointer alternative. `onclick="void 0"` or empty handlers pass.
+- **Selector bank duplicated** between `multilingual-selectors.js` and `axe-rule-pointer-gestures.js:11-46` — drift inevitable.
+
+### 2.5.3 Label-in-name
+- **`policy_2_5_3.py:23-29`** strips all punctuation before `in` test. Accessible name `"Sign-In (Beta)"` against visible `"Sign In"` gives `"signin" in "signinbeta"` → True; the variant where the visible is `"Sign Up"` and the accessible is `"Sign Up Now"` could also short-circuit. Use word-boundary or token-set comparison.
+
+### 2.5.4 Motion actuation (Node)
+- **`audits/wcag-2.5.4/disable-control-validator.js:32-41`** treats *any* link containing "settings" as evidence of a motion-disable control. Account-settings page → false PASS.
+- **`audits/wcag-2.5.4/index.js:72-115`** "UI alternative" requirement is satisfied by any `onclick` element with a verb-like label, even if disabled or hidden. Need explicit checks: enabled, focusable, label semantically aligned.
+- **Heuristic-based "essential motion" classification** — keyword match on page text ("fitness", "pedometer") is insufficient evidence the motion is essential per the SC. Should require explicit `data-wcag-motion-essential` opt-in.
+- **`motion-listener-detector.js:30`** monkey-patched `window.__motionRegistry` accumulates across pages within a Puppeteer session — false positives from previous pages' listeners.
+
+### 2.5.8 Target size
+- **`policy_2_5_8.py:34-37`** dereferences `element.interaction.effective_clickable_bbox.width` — but the field is `Optional[BoundingBox]` (per `models.py:93`). Throws `AttributeError`, gets caught by `engine.py` → silent `NEEDS_REVIEW(0.1)`.
+- **`policy_2_5_8.py:23-31`** inline-link exemption fires when `display:inline` or any `<p>` ancestor — including a `<p>` wrapper in a navigation. WCAG exemption requires *links inline within a sentence of text*, which the current heuristic does not verify.
+- **`target_size_auditor.py:86-97`** offset exception is ambiguous on whether both axes must meet the threshold; required offset is not clamped to ≥0 (`(24-25)/2 = -0.5` printed to users).
+
+---
+
+## 5. Code Quality Issues
+
+### 5.1 Anti-patterns
+
+- **Catch-Exception-and-shrug.** `engine.py:30-42`, `extractors/element_context_extractor.py:281-283`, `interaction_state_runner.py:71-81`, every `try/except Exception: pass` in the crawlers and several stages. These hide real bugs. Replace with: catch *named* exceptions; everything else bubbles or logs `ERROR` with traceback.
+- **Late imports** — `import re` inside method body (`policy_1_4_5.py:32`) — minor but a smell that says "I'm afraid of import cycles". If there is a cycle, fix it.
+- **Filename typo** — `ka11y/classifier/classfier.py` — keeps producing typo-prone imports.
+- **`zip` over differently-sized lists** — `section_analyzer.py:38` zips `ancestor_tags` and `ancestor_roles`. Use `zip_longest` or assert equal length.
+- **Non-deterministic dedup** — `rule_target_router.py:39 return list(set(rules))` — order varies. Use ordered-dedup pattern.
+- **Module-level singletons that read files at import time** — `combined/constants.py:25-34` (`_WCAG_NAMES = get_wcag_names("en")`), `utils/config_loader.py:35` (`config = load_config()`). Hard to test, can't reload, language-incorrect for non-English audits.
+- **Mutable default arguments smell** — `_make_finding(..., element_target=None)` is fine, but downstream callers pass `target` lists into multiple findings; copy the list before storing.
+- **String-typed enums.** `policy_1_4_6.py:13` compares enum to literal string. Either use `VerdictStatus.NEEDS_REVIEW` everywhere or rely on `.value`. Don't mix.
+
+### 5.2 Maintainability
+
+- **2000-line JS string in a Python file.** `universal_page._COMBINED_EXTRACT_JS`. No syntax checking, no test coverage of the JS path, IDE highlighting is gone. Move to `extractors/*.js`, load via `Path.read_text`.
+- **`api/v1/combined/findings.py` is a 1000+ line translation layer** with dozens of `r.get("wcag_X_Y_Z_status", "")` calls. One typo silently downgrades a whole SC. Replace with a registry: `AUDITOR_FIELD_MAP = {"1.1.1": ("wcag_1_1_1_status", "wcag_1_1_1_reason"), ...}` plus a unit test that asserts every key in the map exists in some auditor's output.
+- **Tests run against mocks of axe-core.** `ka11y-node/src/audits/wcag-2.5.4/__tests__/motion-actuation.test.js:88-121` builds `{body: {innerText: ''}, querySelectorAll: () => []}` instead of a Puppeteer fixture. Tests pass; production fails on real DOMs.
+- **No schema versioning between Node and Python.** `_call_node_flat` (`combined/stages.py:143-166`) just calls `resp.json()`. Any Node-side rename silently breaks Python parsing.
+
+### 5.3 Best-practice violations
+
+- **Dynamic `import re` inside functions** — see above.
+- **`re.VERBOSE` with inline `# comments`** in `form_auditor.py:154` — looks correct but a single accidental whitespace change in pattern silently mutates semantics. Either add an explicit unit test for the pattern, or expand it to a non-VERBOSE form.
+- **Bare `except` swallowing across the codebase** — at least 25 occurrences in the crawler files alone.
+- **Logging at debug for production-relevant warnings** — `universal_page.py:1462` `logger.debug("[universal] networkidle timeout for {url}")`. Networkidle timeout is a real signal; should be `warning`.
+
+---
+
+## 6. Scalability Review
+
+### 6.1 Behaviour at 1k pages/day
+
+| Subsystem | Resource | Per-URL cost | At 1k URLs | Result |
 |---|---|---|---|---|
-| 1 | **`IMAGE_AUDIT_RECORD_CONVERTERS` registry missing 2 of 4 entries** | `_alt_text_to_findings` (`wcag_1_1_1_status`) and `_images_of_text_to_findings` (`wcag_1_4_5_status`) were commented out as "Handled by Pipeline" — broke a registry-completeness test and caused those SCs to emit no Python findings in the combined report | Uncommented both entries | `ka11y-python/ka11y/api/v1/combined/findings.py` |
-| 2 | **Orientation ratio threshold too strict** | `_dramatic_ratio_flags_needs_review`: threshold was `ratio < 0.1`; test documents 10 portrait vs 2 landscape (ratio 0.2) must trigger | Changed `< 0.1` → `< 0.5` | `ka11y-python/ka11y/accessibility/rendered/evaluators/orientation.py` |
-| 3 | **`error-prevention.check.js` safe-forms reference always shows fallback** | `f.formId` was never set in `riskForms` objects (correct field name is `element_id`) → `form#<id>` string was always replaced by `<form> (category)` | Changed `f.formId ?` → `f.element_id ?` | `ka11y-node/src/custom-checks/error-prevention.check.js` |
-| 4 | **2-letter uppercase abbreviations ("UI", "AI", "OK") always filtered from OCR word list** | `_norm()` lowercases all text before word extraction; `w.isupper()` on a lowercased word is always False; the `len(w) >= 3` floor then drops 2-letter tokens | Scan raw (pre-`_norm()`) OCR text with `re.findall(r'\b[A-Z]{2}\b', raw_ocr)`, lowercase results, and append to `ocr_words` before matching | `ka11y-python/ka11y/accessibility/rules/non_text/alttext.py` |
-| 5 | **Half-width katakana (`ｶﾀｶﾅ`) not normalized before NLP in Python** | `sensory_auditor.py` fed raw text directly to spaCy and keyword sets; half-width variants escaped all Japanese keyword matches | Added `_normalize_text()` using `unicodedata.normalize("NFKC", text)` called at the top of `_iter_text_sources()` | `ka11y-python/ka11y/accessibility/rules/non_text/sensory_auditor.py` |
-| 6 | **Half-width katakana not normalized in Node keyword lists** | `sharedAssets.js` built keyword patterns from raw config strings; half-width variants in user config or JA copy bypassed regex matches | Added `normalizeText()` using `text.normalize('NFKC')` applied inside `_normalizeStringList()`; exported the function | `ka11y-node/src/custom-checks/sharedAssets.js` |
-| 7 | **Cross-service image findings duplicated in merged report** | Python image findings set `element.element_id` to the image src URL (a URL, not a DOM id); axe findings for the same `<img>` use CSS selectors — both end up with different `_sig()` keys, so the same image appears twice | Added URL detection (`el_id_is_url`) to skip unstable URL-shaped element_ids from the `id:` namespace; added `img:` namespace keyed on `image_src` as a stable cross-service dedup key | `ka11y-python/ka11y/api/v1/combined/runner.py` |
+| Browser launches | Memory | 5 × ~300 MB | 1.5 GB peak per audit, no pool | OOM under any concurrency |
+| `_COMBINED_EXTRACT_JS` JSON | Memory + bandwidth | 8–15 MB JSON | 5–15 GB/day cross-process | Bottleneck on Python side parsing |
+| `seen_refs` accumulation | Memory | 5 MB × 4 passes | 10 MB / page resident | OOM on infinite-scroll pages |
+| `_jobs` dict (`runner.py`) | Memory | grows with stages list | indefinite | leaks when results never collected |
+| OCR model load | Memory | re-loaded per request (`OCRPreprocessing` instantiation in `pipeline.py`) | duplicated weights | 2–4 GB extra per concurrent audit |
+| Step log file append | Locks | none | concurrent audits can interleave bytes | corrupt JSONL |
+
+### 6.2 Parallel execution issues
+
+- **`_run_python_stages` returns a tuple by index** (`combined/stages.py:1274-1286`) — adding a stage shifts indices and the caller silently drops findings.
+- **`asyncio.gather(..., return_exceptions=True)` everywhere with no timeout** — one stuck inner await blocks all peers.
+- **Stage Server-Sent Events** (`stage_events.py:32-48`) — `_fire_broadcast` schedules a broadcast task but does not replay history when a client subscribes mid-job. Long audits will appear stuck to a re-connecting client.
+- **No queue / worker model.** Each HTTP request fans out a full Playwright + OCR + classifier + Node call chain on the FastAPI event loop. There is no way to back-pressure: at 30 concurrent requests (rate-limit cap), the server is already trying to launch 150 Chromium processes.
+
+### 6.3 Recommended scalability improvements
+
+1. **Browser pool with bounded slots** (`max_browsers = 4`), context leases.
+2. **Request → background queue** (Celery/RQ/asyncio worker). Sync HTTP returns `job_id` and `polling_url`; workers consume with bounded parallelism.
+3. **Streaming JSON** out of `page.evaluate()` — return a small index, fetch large bodies on demand from a temporary KV store. Or persist intermediate artefacts to disk per job and stream metadata only.
+4. **Single-OCR-process** worker with model loaded once; auditors send images over an in-process queue.
+5. **Per-job output directory + size cap** with TTL cleanup (currently nothing prunes `crawled_images/` and `output/`).
 
 ---
 
-## Sprint changes — 2026-04-23
+## 7. Security & Stability
 
-Priority sprint items from the previous review addressed in this pass:
+### 7.1 SSRF (`crawler/_ssrf_guard.py`)
 
-| Item | Status | Files changed |
-|---|---|---|
-| **§3.1 Silent image-capture failures** | Fixed | `ka11y-python/ka11y/crawler/models.py` (+`capture_status`, `capture_error` fields) · `crawler/crawler.py` (`_safe_screenshot_status` returns `(ok, status, err)`; failed captures still register as `ImageData`) · `accessibility/rules/non_text/alttext.py` (short-circuits to INCOMPLETE status) · `api/v1/combined/findings.py` (new `_capture_incomplete_finding`; 1.1.1 + 4.1.2 converters emit `status="incomplete"`) |
-| **1.2.2 Captions (Prerecorded)** | Implemented | New `ka11y-node/src/custom-checks/captions-prerecorded.check.js`; flags `<video>` without `<track kind="captions">` and raises INCOMPLETE for cross-origin embeds (YouTube / Vimeo / Wistia). |
-| **1.2.3 Audio Description** | Implemented | New `audio-description.check.js`; detects `<track kind="descriptions">`, alternate description audio, and nearby full-text transcript links. EN + JA keyword coverage inline. |
-| **1.4.2 Audio Control** | Implemented | New `audio-control.check.js`; flags unmuted autoplay media without controls or an external pause control within the same figure/region. |
-| **CSS `background-image` scan (1.1.1 / 1.4.5)** | Implemented | New `background-image-content.check.js`; walks non-decorative background images, emits INCOMPLETE for elements without an accessible name and a separate 1.4.5 INCOMPLETE when the URL carries text-hint keywords (`banner`/`headline`/`hero`/`cta`). |
-| **2.1.2 Shift+Tab + Escape** | Extended | `keyboard-trap.check.js` already had Shift+Tab + cycle-Escape verification; this pass added **F85 modal-without-escape** detection — focuses every visible `dialog[open]` / `[role="dialog"]` / `[aria-modal="true"]`, presses Escape, and FAILs if focus remains inside. |
-| **Japanese support** | Verified | Auditing confirmed `config/universal.yml` already carries EN+JA keyword lists across 30+ categories; `sensory_auditor.py` has `SENSORY_WORDS_JA`, `GENERIC_UI_NOUNS_JA`, `STOP_WORDS_JA` with particles (は/が/を/に) and `_detect_lang` overrides `<html lang="en">` when body text is CJK. New checks ship with inline EN+JA copy. |
-| **Multi-page crawling (2.4.5 / 3.2.3 / 3.2.4 / 3.2.6)** | Deferred | Explicitly out of scope this sprint — requires a new crawl queue + cross-page dedup layer. Documented as future work. |
+- **G1.** Only `_IP_HOST_RE = re.compile(r"https?://(\[?[0-9a-fA-F:.]+\]?)(?:[:/]|$)")` is checked. Decimal-encoded IPs (`http://2130706433/` = `127.0.0.1`), 0x-hex, 0-prefixed octal, and `::ffff:` IPv4-mapped IPv6 forms bypass.
+- **G2.** Only the *initial* request URL is validated; the route handler calls `route.continue_()` after the check, so a HTTP 302 from `https://safe-cdn.example/` to `http://169.254.169.254/latest/meta-data/iam/security-credentials/` is followed unchecked.
+- **G3.** Hostname-mode requires DNS resolution before validation; if DNS pinning isn't enforced, the attacker can rebind between resolution and connect (DNS rebinding).
+- **Fix sketch:** `urlparse` first, then resolve all `getaddrinfo` results into `ipaddress` objects, reject if *any* is private/link-local/loopback/multicast/reserved/IPv4-mapped. Re-validate every redirect via `page.on("response")`.
 
-Test results after changes: `ka11y-python` 616/618 passing (2 failures fixed in the subsequent patch — see "Bug fixes — 2026-04-24"), `ka11y-node` 233/233 passing.
+### 7.2 API surface
 
----
+- **Stack-trace leakage.** `combined/runner.py:395-398` writes `error_traceback: tb` into the job dict that is returned by `GET /combined/{job_id}`. Likewise `pipeline.py:569-572` and `crawl.py` raise `HTTPException(detail=str(e))`. Internal paths and dependency names leak.
+- **No authentication.** Rate limiter (`main.py:23-56`) is per-IP, trivially bypassed by spoofing `X-Forwarded-For` if the deployment trusts proxy headers without an allow-list. `_timestamps` map is never pruned — slow memory growth under varied client IPs.
+- **No request size cap.** `CombinedRequest` (`combined/models.py`) accepts arbitrary string lengths for `wcag_level`, `lang`. FastAPI does not enforce a body cap by default. Submit a 100 MB body, hold a worker.
+- **Symlink-validated path serving.** `routes.py:298-316` resolves symlinks then validates against `valid_paths`. If the *whitelist source* (auditor JSON) ever stores a symlink pointing outside `output/`, it becomes a read primitive. Add `is_file()` + parent-directory containment check.
 
-## Legend
+### 7.3 Crash risks
 
-| Column | Meaning |
-|---|---|
-| **Covered** | Technique is detectable automatically by the current code path. |
-| **Partial** | Detection exists but with known false-positive / false-negative risk. |
-| **Missed — automatable** | Could be detected with additional logic; gap to close. |
-| **Missed — requires human judgment** | Cannot be reliably automated (subjective, visual, or semantic); out-of-scope. |
-| **Missed — requires interactive simulation** | Needs browser interaction (hover, keyboard, submit); not yet wired. |
-
-Technique IDs use WCAG 2.2 numbering: `G*` (general), `H*` (HTML), `C*` (CSS), `SCR*` (script), `ARIA*`, `F*` (failure).
+- **`engine.py` exception swallowing** keeps the system "up" but hides correctness regressions. In CI, that means tests pass on broken policies. In prod, `confidence=0.1` `NEEDS_REVIEW` floods the report.
+- **Promise.race + setTimeout** in `accessibility.service.js:464-471` resolves on timeout but does not cancel the in-flight axe run; the page may close mid-evaluation, producing Puppeteer "Target closed" errors caught upstream.
+- **Step logger** appends JSON lines without a lock (`utils/step_logger.py:17-42`) — concurrent audits can interleave bytes into one line, corrupting the log.
 
 ---
 
-## Summary — Implemented SC Coverage
+## 8. Refactoring Plan (Step-by-Step)
 
-| SC | Level | ka11y-python | ka11y-node | Status |
-|---|---|---|---|---|
-| 1.1.1 Non-text Content | A | Full pipeline | axe-core + `background-image-content.check.js` | Strong |
-| 1.2.1 Audio/Video-only (Prerecorded) | A | `media_auditor.py` | `audio-transcript.check.js` | Partial |
-| 1.2.2 Captions (Prerecorded) | A | — | `captions-prerecorded.check.js` | Partial |
-| 1.2.3 Audio Description or Media Alt | A | — | `audio-description.check.js` | Partial |
-| 1.2.4 Captions (Live) | AA | — | — | **Not implemented** |
-| 1.2.5 Audio Description (Prerecorded) | AA | — | — | **Not implemented** |
-| 1.3.1 Info and Relationships | A | `policy_1_3_1` | axe-core | Partial |
-| 1.3.2 Meaningful Sequence | A | — | `meaningful-sequence.check.js` | Partial |
-| 1.3.3 Sensory Characteristics | A | `sensory_auditor.py` | — | Partial (NLP-bounded) |
-| 1.3.4 Orientation | AA | rendered evaluator | `orientation.check.js` | Strong |
-| 1.3.5 Identify Input Purpose | AA | — | axe-core only | Partial |
-| 1.4.1 Use of Color | A | — | `use-of-color.check.js` | Partial (links + non-link heuristics) |
-| 1.4.2 Audio Control | A | — | `audio-control.check.js` | Partial |
-| 1.4.3 Contrast (Minimum) | AA | `contrast_analyser.py` | axe-core | Strong |
-| 1.4.4 Resize Text | AA | rendered evaluator | — | Partial |
-| 1.4.5 Images of Text | AA | pipeline + policy | `images-of-text.check.js` | Partial |
-| 1.4.6 Contrast (Enhanced) | AAA | `policy_1_4_6` | — | Strong |
-| 1.4.10 Reflow | AA | rendered evaluator | — | Partial |
-| 1.4.11 Non-text Contrast | AA | `policy_1_4_11` | — | Partial |
-| 1.4.12 Text Spacing | AA | `text_spacing_auditor.py` + rendered | — | Partial |
-| 1.4.13 Content on Hover or Focus | AA | rendered evaluator | — | Partial |
-| 2.1.1 Keyboard | A | — | axe-core only | Partial |
-| 2.1.2 No Keyboard Trap | A | — | `keyboard-trap.check.js` | Partial |
-| 2.1.4 Character Key Shortcuts | A | — | `character-key-shortcuts.check.js` | Partial |
-| 2.2.1 Timing Adjustable | A | — | — | **Not implemented** |
-| 2.2.2 Pause, Stop, Hide | A | `pause_stop_hide_auditor.py` | — | Strong |
-| 2.3.1 Three Flashes | A | — | — | **Not implemented** |
-| 2.4.1–2.4.4 | A | — | axe-core only | axe-covered |
-| 2.4.5 Multiple Ways | AA | — | `multiple-ways.check.js` | Partial |
-| 2.4.7 Focus Visible | AA | `policy_2_4_7` | `focus-visible.check.js` | Strong |
-| 2.4.8 Location | AAA | — | `location.check.js` | Partial |
-| 2.4.9 Link Purpose (Link Only) | AAA | — | `link-purpose.check.js` | Partial |
-| 2.4.11 Focus Not Obscured (Min) | AA | rendered evaluator | — | Strong |
-| 2.4.12 Focus Not Obscured (Enh) | AAA | rendered evaluator | — | Strong |
-| 2.4.13 Focus Appearance | AAA | `policy_2_4_13` | `focus-appearance.check.js` | Partial |
-| 2.5.2 Pointer Cancellation | A | — | `pointer-cancellation.check.js` | Partial |
-| 2.5.3 Label in Name | A | `label_in_name_auditor.py` | — | Strong |
-| 2.5.7 Dragging Movements | AA | — | `dragging-movements.check.js` | Partial |
-| 2.5.8 Target Size (Minimum) | AA | `target_size_auditor.py` | — | Strong |
-| 3.1.1 Language of Page | A | — | axe-core | axe-covered |
-| 3.1.2 Language of Parts | AA | — | `language-of-parts.check.js` | Partial (empty lang, invalid BCP47, unannotated CJK) |
-| 3.1.6 Pronunciation | AAA | — | `pronunciation.check.js` | Partial |
-| 3.2.1 On Focus | A | — | `on-focus.check.js` | Partial |
-| 3.2.2 On Input | A | — | `on-input.check.js` | Partial |
-| 3.2.3 Consistent Navigation | AA | — | — | **Not implemented** (single-page scope) |
-| 3.2.4 Consistent Identification | AA | — | — | **Not implemented** (single-page scope) |
-| 3.2.6 Consistent Help | A | — | `consistent-help.check.js` | Partial (single-page scope) |
-| 3.3.1 Error Identification | A | `form_auditor.py` | — | Strong |
-| 3.3.2 Labels or Instructions | A | `form_auditor.py` | — | Strong |
-| 3.3.3 Error Suggestion | AA | — | `error-suggestion.check.js` | Partial |
-| 3.3.4 Error Prevention (Legal/Financial) | AA | — | `error-prevention.check.js` | Partial |
-| 3.3.7 Redundant Entry | A | — | `redundant-entry.check.js` | Partial |
-| 3.3.8 Accessible Authentication (Min) | AA | — | `accessible-auth.check.js` | Partial |
-| 4.1.1 Parsing | (obsolete in 2.2) | — | `html-parsing.check.js` | Strong |
-| 4.1.2 Name, Role, Value | A | pipeline | axe-core | Strong |
-| 4.1.3 Status Messages | AA | — | `status-messages.check.js` | Partial |
+Ordered for highest correctness / safety win per unit of effort.
+
+### Sprint 1 — Stop the bleeding (1 week)
+
+1. **Rename `engine.py` exception handler to typed `PolicyError`.** Anything else propagates. This single change surfaces every silent bug below.
+2. **Fix `policy_1_4_6.py:13`** enum-vs-string compare. Replace inheritance with a shared `evaluate_contrast(fg, bg, level)` callable.
+3. **Fix `policy_2_5_8.py:34-37`** — null check on `effective_clickable_bbox`.
+4. **Fix `policy_1_3_1.py:29`** — read input `type` from semantics, not CSS computed_styles.
+5. **Fix `policy_1_4_3` accessible-name priority** in `element_context_extractor.py:245-270` — implement aria-labelledby, native `<label for>`.
+6. **Fix `interaction_state_runner.py:88-89`** — extract real focus ring values, drop hardcoded fallbacks, return `NEEDS_REVIEW` if absent.
+7. **Build `AUDITOR_FIELD_MAP` registry in `combined/findings.py`** + unit test asserting every field name exists in the corresponding auditor's output.
+8. **Strip tracebacks from API error responses.** Single `error_id`; full info server-side only.
+
+### Sprint 2 — Architectural debt (2 weeks)
+
+9. **Create `BaseCrawler`** with shared browser pool. Migrate all four crawlers; one Chromium per audit.
+10. **Split `_COMBINED_EXTRACT_JS`** into 4 focused JS files loaded from disk (`extractors/forms.js`, `extractors/geometry.js`, …). Add JS-side max-bytes cap.
+11. **Replace tuple return from `_run_python_stages`** with a typed dataclass.
+12. **Wrap `asyncio.gather` callsites with `asyncio.timeout(...)`.**
+13. **Per-job `asyncio.Lock`** around `_jobs` mutation; or migrate `_jobs` to Redis / sqlite-backed store (essential for HA).
+14. **Background-job queue.** HTTP returns `202 + job_id`; workers pull from a bounded queue.
+
+### Sprint 3 — WCAG accuracy & heuristics (2 weeks)
+
+15. **Add CSS background-image extraction** — parse `getComputedStyle(el).backgroundImage` for `url(...)` and feed into image audit.
+16. **Shadow DOM piercing in image / sensory crawlers.**
+17. **Sensory cross-check** — token must not be the element's own labelled name.
+18. **Reflow assertion** — `assert snapshot_320.viewport_width == 320` or fail loudly.
+19. **Contrast — alpha-aware RGB parser; composite over background; accept real `font-weight`.**
+20. **2.5.4 motion classifier** — require explicit `data-wcag-motion-essential` opt-in instead of keyword heuristics.
+21. **2.5.4 disable-control validator** — downgrade "Settings link" signal; require motion-keyword adjacency.
+22. **2.5.1 escape-hatch** — require non-empty `onclick` evidence + matching label semantics; deduplicate selector banks into one shared module.
+23. **2.5.3 normalisation** — switch to token-set / word-boundary comparison.
+
+### Sprint 4 — Security & ops (1 week)
+
+24. **SSRF guard rewrite** — full IP form coverage + redirect interception via `page.on("response")` + DNS-pinning context option.
+25. **Symlink + parent-dir containment** in `get_job_image`.
+26. **Per-user API key** + per-key rate limiting.
+27. **Pydantic length limits** on every string field of `CombinedRequest`.
+28. **Lock around step-log append** (or move to one writer per job).
+29. **TTL cleanup** for `output/` and `crawled_images/`.
+
+### Sprint 5 — Performance polish (1 week)
+
+30. Batch `frame.evaluate` in `semantic_relationship_engine`.
+31. Spatial-bin adjacency in `element_context_extractor`.
+32. Hoist regex compilation in `policy_1_1_1`, `sensory_auditor`.
+33. Single OCR-result lookup dict in `alttext.py`.
+34. Single mega-regex for sensory categories.
+35. Single OCR worker with cached models.
+36. LRU eviction on `_axeLocaleCache`, classifier cache.
+
+After Sprint 5, target rating 80+/100. Reaching 95+ requires the auditor model unification (F1 in §2.2) — a 4-week project that deletes `combined/findings.py` entirely.
 
 ---
 
-# Section 1 — Visual / Non-Text Rules (ka11y-python)
+## 9. Improved Code Snippets
 
-## 1.1.1 Non-text Content
-**Files:** `ka11y-python/ka11y/accessibility/rules/non_text/alttext.py`, `ka11y/accessibility/pipeline/decisions/policies/policy_1_1_1.py`, `api/v1/combined/findings.py:413–431`.
+### 9.1 `DecisionEngine` exception policy (single highest-leverage fix)
 
-### What it checks
-Multi-stage pipeline: (1) DOM crawl → `ImageData`, (2) CNN classifier → `{informative, decorative, logo, icon, functional, complex, text}` label, (3) OCR → tokens, (4) policy matches alt text against classifier intent + OCR content + W3C WAI patterns (logo, icon, button).
+```python
+# pipeline/decisions/engine.py
+class PolicyError(Exception):
+    """Raised by a Policy when it cannot evaluate but did not crash."""
 
-### Technique coverage
+def evaluate(self, ctx: ElementContext) -> list[RuleVerdict]:
+    verdicts = []
+    for sc in self.router.applicable_rules(ctx):
+        policy = self.policies.get(sc)
+        if not policy:
+            logger.warning("no policy registered for %s", sc)
+            continue
+        try:
+            verdicts.append(policy.evaluate(ctx))
+        except PolicyError as e:
+            verdicts.append(RuleVerdict(
+                sc=sc, status=VerdictStatus.NEEDS_REVIEW,
+                confidence=0.1, evidence={"policy_error": str(e)},
+            ))
+        # Anything else propagates -> 500 + opaque error_id, logged with traceback.
+    return verdicts
+```
 
-| Technique | Type | Status | Notes |
-|---|---|---|---|
-| H37 `alt` on `<img>` | Sufficient | **Covered** | Missing `alt` → fail. |
-| H67 Null `alt` on decorative | Sufficient | **Covered** | Strict: any non-empty alt on classifier-labelled "decorative" fails. |
-| H2 Combining adjacent img + text | Sufficient | Missed — automatable | No detection of `<a><img><span>label</span></a>` double-announce pattern. |
-| H36 `alt` on `<input type="image">` | Sufficient | Partial | Crawler captures inputs; policy path for 4.1.2 functional name only — no dedicated `<input type="image">` branch. |
-| H53 `<object>` alternative | Sufficient | Missed — automatable | `<object>` and `<embed>` fallback content not traversed. |
-| H86 Text alt for ASCII art | Sufficient | Missed — requires human judgment | — |
-| ARIA6, ARIA10 `aria-label`/`aria-labelledby` on img | Sufficient | **Covered** | Uses computed accessible name. |
-| G94 Short text alternative serves same purpose | Sufficient | Partial | OCR-based literal matching; fails on synonyms (e.g. alt "Look up" vs OCR "Search"). |
-| G95 Short text alt provides brief description | Sufficient | Partial | No upper-bound length sanity (very long alts pass silently). |
-| F3 CSS background used for meaningful image | Failure | Missed — automatable | No scan of `background-image` URLs for non-decorative intent. |
-| F20 `alt=""` on informative | Failure | **Covered** | Classifier + OCR gate it. |
-| F30 Filename / placeholder alt ("DSC_1234.jpg", "image") | Failure | **Covered** | `_EMPTY_OR_GENERIC` set. |
-| F38 Decorative not marked with null alt | Failure | **Covered** | |
-| F39 Empty `alt` on image conveying information | Failure | **Covered** | Classifier-gated. |
-| F65 Missing alt, title, aria-label, aria-labelledby | Failure | **Covered** | |
-| F67 Long description not functional | Failure | Missed — requires human judgment | — |
-| F71 Emoji/symbol without text alt | Failure | Missed — automatable | Glyph-only text nodes (`<span>✉</span>`) are not checked. |
-| F72 ASCII art without text alt | Failure | Missed — requires human judgment | — |
+### 9.2 `policy_1_4_6.py` enum compare + dedup with 1.4.3
 
-### Known limitations
-1. **Synonym blindness:** Literal OCR match. "Search" in image + alt "Look up" → false fail.
-2. **Classifier dependency:** ML misclassification propagates. If logo is labelled `informative`, logo-keyword gate (`_check_1_1_1_logo`) is skipped and `brand name` passes.
-3. **CSS background images:** Entire category untouched — `<div style="background-image: url(hero.jpg)">` with decorative/informative content is invisible.
-4. **SVG `<title>`:** SVGs with inline `<title>` children are parsed inconsistently — accessible-name computation sometimes falls back to filename.
-5. **2-letter token handling:** ✅ Fixed (2026-04-24 patch) — uppercase 2-letter abbreviations ("UI", "AI", "OK") are now extracted from raw OCR text before `_norm()` lowercasing, so they participate in the word-match check.
+```python
+# pipeline/decisions/policies/policy_1_4_6.py
+from .contrast_shared import evaluate_contrast
 
----
+class Policy146(BasePolicy):
+    sc = "1.4.6"
+    def evaluate(self, ctx):
+        v = evaluate_contrast(ctx, normal=7.0, large=4.5)
+        if v.status in (VerdictStatus.NOT_APPLICABLE, VerdictStatus.NEEDS_REVIEW):
+            return v
+        return v
+```
 
-## 1.4.3 Contrast (Minimum) / 1.4.6 Contrast (Enhanced)
-**Files:** `rules/non_text/contrast_analyser.py`, `pipeline/decisions/policies/policy_1_4_3.py`, `policy_1_4_6.py`, `text_detector/text_detector.py`, `api/v1/combined/findings.py:551–688`.
+### 9.3 Field-map registry (kills the 1.1.1 data-loss class)
 
-### What it checks
-Computer-vision pipeline: render screenshot → EAST/CRAFT text detection → OCR + bbox → per-bbox Otsu binarization to separate fg/bg → convert to linear sRGB → relative luminance → `(L1+0.05)/(L2+0.05)` → threshold 4.5:1 / 3:1 (large) for 1.4.3; 7:1 / 4.5:1 for 1.4.6.
+```python
+# api/v1/combined/findings.py
+AUDITOR_FIELD_MAP: dict[str, dict[str, str]] = {
+    "1.1.1": {"status": "wcag_1_1_1_status", "reason": "wcag_1_1_1_reason"},
+    "1.4.3": {"status": "wcag_1_4_3_status", "reason": "wcag_1_4_3_reason"},
+    # ... one entry per SC ...
+}
 
-### Technique coverage
+def _read(record: dict, sc: str, field: str, default=""):
+    keys = AUDITOR_FIELD_MAP[sc]
+    return record.get(keys[field], default)
 
-| Technique | Status | Notes |
-|---|---|---|
-| G18 4.5:1 contrast ratio | **Covered** | Core formula. |
-| G145 3:1 contrast for large text | **Covered** | 18pt / 14pt-bold threshold applied. |
-| G17 7:1 for 1.4.6 | **Covered** | Policy 1.4.6. |
-| G148 No author-specified colors | Missed — requires human judgment | |
-| G174 Alternative high-contrast version | Missed — automatable | No detection of theme-toggle link. |
-| F24 Foreground w/o background (or vice versa) | Missed — automatable | Only measures rendered pixels; a bg-color rule with no color counterpart passes. |
-| F83 Background image fails contrast | Partial | Handled implicitly via pixel rendering, but no warning when OCR bbox sits on low-variance gradient. |
+# unit test (tests/test_field_map.py)
+def test_every_sc_field_appears_in_some_auditor_output():
+    sample = run_audit_against_fixture(FIXTURE_HTML)  # uses real auditors
+    keys = set().union(*(rec.keys() for rec in sample.records))
+    for sc, m in AUDITOR_FIELD_MAP.items():
+        assert m["status"] in keys, f"{sc} status field {m['status']} never emitted"
+```
 
-### Known limitations
-1. **Gradient failure:** Otsu assumes bimodal distribution; glassmorphism/vivid gradients yield failed segmentation (rule returns N/A rather than WARNING).
-2. **Anti-aliasing halo:** Pixel-level analysis captures halo pixels; 10th/90th percentile mitigates but doesn't eliminate skew.
-3. **High-DPI noise:** Retina screenshots add interpolation artefacts that shift ratios by ~0.1.
-4. **Disabled-state exemption not honoured:** WCAG exempts disabled controls; code flags `:disabled` inputs with low contrast.
-5. **Pseudo-content:** Text in `::before`/`::after` is rendered but its CSS color is not inspected directly — reliant on OCR even when CSSOM values are available.
+### 9.4 `BaseCrawler` with browser pool
 
----
+```python
+# crawler/base.py
+class BrowserPool:
+    def __init__(self, max_browsers: int = 4):
+        self._sema = asyncio.Semaphore(max_browsers)
+        self._browsers: list[Browser] = []
+        self._pw = None
 
-## 1.4.5 Images of Text
-**Files:** `ka11y-python/ka11y/api/v1/combined/findings.py:725–744`, `pipeline/decisions/policies/policy_1_4_5.py`, `ka11y-node/src/custom-checks/images-of-text.check.js`.
+    async def __aenter__(self):
+        self._pw = await async_playwright().start()
+        return self
 
-### What it checks
-Defense-in-depth: (a) node heuristic scores `<img>` by `src` keywords, alt length (>5 words), punctuation — producing `looksLikeImageOfText`; (b) python pipeline re-verifies with OCR token count and classifier label.
+    async def lease(self) -> Browser:
+        async with self._sema:
+            if not self._browsers:
+                self._browsers.append(await self._pw.chromium.launch(headless=True))
+            return self._browsers[0]
 
-### Technique coverage
+    async def close(self):
+        for b in self._browsers:
+            await b.close()
+        await self._pw.stop()
 
-| Technique | Status | Notes |
-|---|---|---|
-| C22 Use CSS to control text presentation | Partial | Flags candidates but cannot propose CSS replacements. |
-| G140 Separate real-text + decorative-image alternative | Missed — requires human judgment | |
-| C30 Use style switcher for customizable text | Missed — automatable | No toggle detection. |
-| F71 Information via image text only | **Covered** | Via OCR-heavy detection. |
+class BaseCrawler:
+    def __init__(self, pool: BrowserPool): self.pool = pool
 
-### Known limitations
-1. **Logotype false positives:** "logo" vs "styled text image" boundary relies on classifier `is_logo` flag — hit-or-miss on wordmark logos.
-2. **Incidental text:** Street sign in news photo flagged unless classifier marks image as `complex`/`informative`.
-3. **CSS `background-image` blind spot:** Large hero text rendered via CSS `background-image` is completely missed in the node heuristic (src-keyword only).
-4. **Language bias:** Heuristic scoring uses English/ASCII word counts; Japanese/Chinese text-heavy images score lower than intended.
+    async def crawl_page(self, url: str, *, timeout_s: float = 60):
+        browser = await self.pool.lease()
+        ctx = await new_crawler_context(browser)
+        page = None
+        try:
+            page = await ctx.new_page()
+            async with asyncio.timeout(timeout_s):
+                await navigate_with_resilience(page, url)
+                return await self.extract(page)
+        finally:
+            if page: await page.close()
+            await ctx.close()
 
----
+    async def extract(self, page): raise NotImplementedError
+```
 
-## 1.4.11 Non-text Contrast
-**Files:** `policy_1_4_11.py`, `api/v1/combined/findings.py:788–826`.
+### 9.5 SSRF guard hardening
 
-### What it checks
-Analyzes rendered boundaries of UI components (button border, focus ring) using segmented contrast. Flags < 3:1.
+```python
+# crawler/_ssrf_guard.py
+import socket, ipaddress
+from urllib.parse import urlparse
 
-### Technique coverage
+def _all_ips_for(host: str) -> set[ipaddress._BaseAddress]:
+    ips: set[ipaddress._BaseAddress] = set()
+    # Numeric forms first (decimal/hex/octal/IPv6/IPv4-mapped)
+    try:
+        ips.add(ipaddress.ip_address(host.strip("[]")))
+    except ValueError:
+        try:
+            ips.add(ipaddress.ip_address(int(host, 0)))  # 0x.., 0.., decimal
+        except ValueError:
+            pass
+    # DNS
+    try:
+        for fam, _, _, _, sa in socket.getaddrinfo(host, None):
+            ips.add(ipaddress.ip_address(sa[0]))
+    except socket.gaierror:
+        pass
+    return ips
 
-| Technique | Status | Notes |
-|---|---|---|
-| G195 Author-provided 3:1 contrast | Partial | Only works when boundary is visually present. |
-| G207 3:1 between active state UI and surroundings | Partial | Active/hover states not simulated. |
-| G209 Provide sufficient contrast at default | **Covered** | Default-state only. |
-| F78 Focus indicator w/o 3:1 | Partial | Handled via 2.4.7/2.4.13 branch. |
-| F79 No visible focus indicator | Covered | Policy 2.4.7. |
+def assert_public_url(url: str):
+    host = urlparse(url).hostname or ""
+    for ip in _all_ips_for(host):
+        if ip.is_private or ip.is_loopback or ip.is_link_local \
+           or ip.is_multicast or ip.is_reserved or ip.is_unspecified \
+           or (isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped and (
+                ip.ipv4_mapped.is_private or ip.ipv4_mapped.is_loopback)):
+            raise PermissionError(f"blocked SSRF target: {ip}")
 
-### Known limitations
-1. **Invisible boundaries:** Buttons styled only via background fill with no border are treated as having no UI boundary; no pass/fail decision emitted (returns N/A).
-2. **Graphs/charts (G207 exempt):** No detection of data-visualization exemptions; decorative chart borders may flag.
-3. **State-dependent contrast:** Hover/focus/active state contrast not measured (requires rendered-state simulation).
+# In Playwright route handler, register page.on("response", lambda r: ...
+# and re-validate r.headers.get("location") for any 3xx response.
+```
 
----
+### 9.6 Split monolithic JS extractor
 
-## 1.4.4 Resize Text / 1.4.10 Reflow / 1.4.12 Text Spacing / 1.4.13 Hover-Focus Content
-**Files:** `ka11y-python/ka11y/accessibility/rendered/evaluators/resize_text.py`, `reflow.py`, `text_spacing.py`, `hover_focus_content.py`.
+```python
+# crawler/extractors/__init__.py
+from pathlib import Path
+JS_DIR = Path(__file__).parent / "js"
+FORMS_JS       = (JS_DIR / "forms.js").read_text()
+INTERACTIVE_JS = (JS_DIR / "interactive.js").read_text()
+GEOMETRY_JS    = (JS_DIR / "geometry.js").read_text()  # the only one that triggers reflow
+SENSORY_JS     = (JS_DIR / "sensory.js").read_text()
 
-### What it checks
-Each rule runs a scenario (viewport resize, font-size 200%, 1.4.12 CSS overrides, 320px reflow, hover scan) and captures a rendered snapshot. Diffs bounding boxes pre/post to detect clipping / horizontal-scroll / dismissible popups.
+async def extract_universal(frame, *, max_bytes: int = 50_000_000):
+    forms       = await frame.evaluate(FORMS_JS)
+    interactive = await frame.evaluate(INTERACTIVE_JS)
+    geometry    = await frame.evaluate(GEOMETRY_JS)
+    sensory     = await frame.evaluate(SENSORY_JS)
+    out = {"forms": forms, "interactive": interactive,
+           "geometry": geometry, "sensory": sensory}
+    size = sum(len(json.dumps(v, default=str)) for v in out.values())
+    if size > max_bytes:
+        logger.warning("extractor output %d bytes; truncating", size)
+        for k in ("forms", "interactive"): out[k] = out[k][:1000]
+    return out
+```
 
-### Technique coverage (per SC)
+### 9.7 Sensory false-positive guard
 
-**1.4.4:** G142 (use ems/percentages) — Partial. C12, C13, C14 (relative units) — not inspected at stylesheet level. F69 clipped text at 200% — **Covered**. F80 at fixed width — Partial.
-
-**1.4.10:** C32/C34 (flexbox/grid responsive) — Partial. F102 fixed-size container — **Covered**. G206 overflow permitted — Partial.
-
-**1.4.12:** C36/C37 (user-overrideable spacing) — **Covered**. F104 clipped at increased spacing — **Covered**.
-
-**1.4.13:** G*: dismissible — Partial (esc-key scan). hoverable — Partial. persistent — Partial. F95 pointer-remove-triggers-hide — **Covered**.
-
-### Known limitations
-1. **Clipping detection is geometric only:** `offsetWidth > scrollWidth` is the proxy; padding-hidden text without overflow is missed.
-2. **No pre-change baseline sometimes:** `hover_scan` evaluator captures only popup-triggered state, not the dismissal lifecycle — popup stuck open after Escape is not flagged.
-3. **Text-spacing override scoped to `<html>`:** Some stylesheets use `!important` on descendants that defeat the override; no stylesheet-level diff.
-4. **Reflow false positives on intentionally horizontally-scrolling regions** (data tables, code blocks) — no whitelist.
-5. **Animation timing:** 1.4.13 uses a 300 ms settle; short-lived tooltips are captured mid-transition.
-
----
-
-## 1.3.3 Sensory Characteristics
-**File:** `rules/non_text/sensory_auditor.py`, `crawler/sensory_crawler.py`.
-
-### What it checks
-spaCy NLP (EN: `en_core_web_sm`, JA: `ja_core_news_sm`) detects instructional sentences; `_remaining_label_words` strips purpose phrases, sensory words, generic UI nouns, stop-words; if any non-sensory label remains → pass.
-
-### Technique coverage
-
-| Technique | Status | Notes |
-|---|---|---|
-| G96 Non-sensory identifier in addition | **Covered** |
-| F14 Identify content only by shape/location | **Covered** for English; Partial for Japanese (CJK word-boundary issues). |
-| F26 Using graphical symbol alone | Missed — requires visual grounding. |
-
-### Known limitations
-1. **Vocabulary exhaustion:** `SENSORY_WORDS` is finite. Novel terms ("translucent", "neon") escape detection.
-2. **CJK word boundaries:** Japanese path uses fallback CJK content-char stripping; leftover structural text can yield false pass.
-3. **Semantic disconnect:** Validates phrasing, not visual reality. "Click the red button" passes if *some* non-sensory label remains, even when the real button has no text.
-
----
-
-## 2.2.2 Pause, Stop, Hide
-**File:** `rules/timing/pause_stop_hide_auditor.py`, `crawler/moving_content_crawler.py`.
-
-### What it checks
-Playwright `getAnimations()` for keyframe + WAAPI; GIF frame count via Pillow; autoplay detection for Bootstrap/Slick/Swiper/Owl/Flickity/Glide/Splide with library-state introspection (e.g. `el.swiper.autoplay.running`); nearby-pause-button regex 2 levels up.
-
-### Technique coverage
-
-| Technique | Status | Notes |
-|---|---|---|
-| G4 Content pauses and user can resume | Partial | Only detects existence of button, not state-change. |
-| G11 Moving text < 5 sec | **Covered** | Infinite / >5 s threshold. |
-| G152 Animated GIF stops after 5 s | **Covered** via frame-count → infinite loop. |
-| G186 Pause button | Partial | 2-level DOM ancestor scan; deeper nesting missed. |
-| G191 Pause/stop/hide button with text | Partial | Regex includes "pause"/"stop"/"一時停止"; not exhaustive. |
-| F16 Scrolling with no pause | **Covered** (marquee). |
-| F50 Script that cannot be paused | Missed — automatable | `setInterval`/`requestAnimationFrame` hand-rolled animations without library markers escape detection. |
-
-### Known limitations
-1. **State verification gap:** Clicking the pause button is not simulated; "fake" pause buttons pass.
-2. **Custom carousels:** Non-library setInterval/rAF animations are invisible.
-3. **Pause button depth limit:** Fixed 2-level ancestor scan; deeper component hierarchies miss buttons.
-
----
-
-## 2.5.3 Label in Name
-**File:** `rules/input_modalities/label_in_name_auditor.py`.
-
-### What it checks
-For each interactive element, compares NFC-normalized + casefolded visible label text vs computed accessible name. Failure if visible label non-empty and accessible name does not contain it.
-
-### Technique coverage
-
-| Technique | Status | Notes |
-|---|---|---|
-| G208 Include visible label text in accessible name | **Covered** |
-| G211 Match visible label to accessible name | **Covered** |
-| F96 Accessible name does not contain visible label | **Covered** |
-
-### Known limitations
-1. **Icon-only controls:** No visible label → no violation possible (correct by WCAG, but hides misnamed icons).
-2. **Whitespace vs punctuation:** "Sign-up" vs "Sign up" casefolds match; but "Sign up!" vs "Sign up" substring succeeds — a semi-false pass if accessible name lacks exclamation.
-3. **Multi-line labels:** Collapses newlines → edge case where visible label has line break but accessible-name substring check passes (usually desired).
-4. **Shadow DOM:** Not traversed; controls inside closed shadow roots miss.
+```python
+# rules/non_text/sensory_auditor.py
+def _is_sensory_violation(text: str, element_acc_name: str | None):
+    tokens = _SENSORY_MEGA.findall(text.lower())
+    if not tokens:
+        return False
+    # Don't flag a token that IS the labelled name of the referenced control.
+    if element_acc_name and any(t in element_acc_name.lower() for t in tokens):
+        return False
+    return True
+```
 
 ---
 
-## 2.5.8 Target Size (Minimum)
-**File:** `rules/input_modalities/target_size_auditor.py`, `crawler/target_size_crawler.py`.
-
-### What it checks
-Rendered `getBoundingClientRect` vs 24×24. Exceptions: inline (`display: inline` + paragraph parent), UA-controlled (`appearance` unchanged), offset (theoretical 24×24 around centre does not intersect neighbouring targets).
-
-### Technique coverage
-
-| Technique | Status | Notes |
-|---|---|---|
-| G219 Ensure 24×24 | **Covered** |
-| Inline exception | **Covered** | `display: inline` + paragraph parent check. |
-| UA-controlled exception | **Covered** | `appearance: none` signals override. |
-| Offset exception | **Covered** | Theoretical 24-box intersection. |
-| Essential exception | Missed — requires human judgment | |
-| Equivalent exception | Missed — requires human judgment | |
-
-### Known limitations
-1. **Z-index stacking:** Transparent overlaid elements may trigger false offset intersection.
-2. **Padding vs target area confusion:** Developers style small visual + large padding; handled via `getBoundingClientRect`, but test messaging may confuse users.
-3. **Viewport-coupled:** Runs at 1440 px; mobile target-size issues unmeasured unless crawler reconfigured.
-4. **Iframe contents:** Crawler does not descend into cross-origin iframes.
-
----
-
-## 3.3.1 Error Identification / 3.3.2 Labels or Instructions
-**File:** `rules/forms/form_auditor.py`, `crawler/forms_crawler.py`.
-
-### What it checks
-For each `<input>` / `<select>` / `<textarea>`: (3.3.1) required + aria-describedby + role=alert/aria-live; (3.3.2) accessible name (label/aria-label/aria-labelledby) + autocomplete for email/tel/password.
-
-### Technique coverage
-
-| Technique | Status | Notes |
-|---|---|---|
-| G83/G85/G84 Text description of error | Partial | Only detects container presence, not error text quality. |
-| G139 Text cue adjacent | Missed — automatable | No positional proximity check. |
-| ARIA19 Programmatic error announcement | **Covered** |
-| H44 `<label>` associated with control | **Covered** |
-| H65 `title` for unlabelled control | Partial | `title` alone is discouraged; no warning. |
-| H90 `<legend>` for `<fieldset>` | Missed — automatable | `<fieldset>` grouping not audited. |
-| F82 Visual grouping without programmatic | Missed — automatable | |
-
-### Known limitations
-1. **Client-side validation triggering:** Does not submit forms; errors that appear only after submit are invisible.
-2. **CAPTCHA instructions:** Fields without labels but within a CAPTCHA exemption are still flagged.
-3. **Combobox pattern:** Custom ARIA comboboxes may have the accessible-name lookup misfire when `aria-labelledby` references a hidden node.
-4. **Fieldset/legend:** Grouping-level labels unchecked.
-
----
-
-## 2.4.7 Focus Visible / 2.4.13 Focus Appearance (python side)
-**Files:** `pipeline/decisions/policies/policy_2_4_7.py`, `policy_2_4_13.py`, `text_detector`, rendered focus_scan scenario.
-
-### What it checks
-2.4.7: tab through focusable elements, compare before/after outline/box-shadow; if delta under threshold and no ring → fail.
-2.4.13: rendered focus ring thickness + contrast against adjacent colour; area ≥ perimeter×2 OR encloses; ≥3:1 contrast.
-
-### Technique coverage
-
-| Technique | Status | Notes |
-|---|---|---|
-| G149 UA-provided focus indication | Partial | `:focus-visible` inheritance inconsistent. |
-| G165/G195 Author focus indicator | **Covered** |
-| C15 `:focus` styling | **Covered** |
-| F55 Remove default focus w/o replacement | **Covered** | `outline:0` + no alternative detected. |
-| F78 Focus indicator w/o 3:1 | Partial for 2.4.13 |
-
-### Known limitations
-1. **Fixed 100-step tab limit** in focus_scan; very long forms miss elements.
-2. **Custom-drawn focus** (canvas/SVG) cannot be measured from DOM style.
-3. **Colour-only focus cue** (no thickness change) — measured via contrast, but anti-aliasing noise creates grey-zone passes.
-
----
-
-# Section 2 — Node Custom Checks (ka11y-node)
-
-## 1.2.1 Audio/Video-only (Prerecorded) — `audio-transcript.check.js`
-**Logic:** Finds `<audio>` elements lacking `<track>` alternatives; searches for a transcript link within a `figure/article/section/[role=region]` ancestor using a locale-aware keyword list (`config/universal.yml → audio_transcript.transcript_keywords`). Also accepts `<figcaption>`, `<details>` with transcript text, and `aria-describedby` fallbacks.
-
-### Technique coverage
-
-| Technique | Type | Status | Notes |
-|---|---|---|---|
-| G158 Transcript for audio-only | Sufficient | Partial | Detects presence; doesn't verify content equivalence. |
-| G159 Alternative for video-only | Sufficient | Partial | Same as above. |
-| H96 `<track>` element | Sufficient | **Covered** | Track `src` is HEAD-fetched to confirm reachability. |
-| G166 Synchronized alternatives | Sufficient | Missed — belongs to 1.2.2 / 1.2.3 | Now handled by the new `audio-description.check.js`. |
-| F30 Text alternative is filename | Failure | Partial | Filename-only transcript labels/links are now flagged heuristically; content quality still requires review. |
-
-### Known limitations
-1. **Cross-page transcripts** — only same-page links are checked; PDF/`/transcripts/` destinations are not fetched or verified.
-2. **Keyword-only match** — mis-triggers on non-transcript links containing "text" / "subtitles" in other contexts.
-3. **Filename heuristic scope** — generic labels such as "Download transcript" pass even if destination quality is poor.
-4. **Content equivalence** — transcript text isn't compared against audio content.
-
----
-
-## 1.3.2 Meaningful Sequence — `meaningful-sequence.check.js`
-**Logic:** Scans up to 2000 flex/grid containers for: `flex-direction: *-reverse`, explicit `grid-column/row-start`, mixed floats, non-default `order` values on children.
-
-**Technique coverage:** C6 CSS to position content — Partial (only flex/grid). C27 DOM order matches visual — Partial. F1 reorder via float — **Covered**. F32 reverse direction — **Covered**. F33 white-space-based layout — Missed. F34 white-space between characters — Missed. F49 table for layout — Missed.
-
-**Limitations:**
-1. **Container limit (2000):** Very dense pages skip later containers.
-2. **Absolute-positioned reorder:** `position: absolute` with explicit `top/left` reordering is invisible.
-3. **Screen-reader DOM order check is structural only** — semantic correctness not verified.
-
----
-
-## 1.3.4 Orientation — `orientation.check.js`
-**Logic:** Looks for CSS `@media (orientation:*)` rules locking to one orientation, `screen.orientation.lock`, meta-viewport `orientation=`, and rotate-overlay prompts.
-
-**Technique coverage:** G214 Support orientation — **Covered**. F97 Locking orientation — **Covered**. F100 Restricting view based on orientation — Partial (only static CSS, not JS-triggered).
-
-**Limitations:**
-1. **JS orientation lock:** Detects API call only in inline/static `<script>` content; imported modules miss.
-2. **Essential exemption:** Not detected (bank check-deposit, virtual piano); false positives.
-
----
-
-## 1.4.1 Use of Color — `use-of-color.check.js`
-**Logic:** Finds links inside `p/li/td/th/blockquote/article>p/dd/section>p/svg`. For each, computes ancestor baseline style and checks at least one non-colour cue: text-decoration, border-bottom, outline, font-style, background-color, ≥100-unit font-weight delta. Extended with heuristics for required-form controls that appear colour-coded without textual required markers, plus colour-only instructional text patterns.
-
-### Technique coverage
-
-| Technique | Type | Status | Notes |
-|---|---|---|---|
-| G14 Information not by colour alone | Sufficient | Partial | Links in prose are covered; non-link colour-coded information is not. |
-| G182 Additional non-colour cue | Sufficient | **Covered** | Six different cue categories inspected. |
-| G205 Text colour + additional cue | Sufficient | Partial | Only inline-link block containers are scanned. |
-| C15 Using CSS to change the presentation | Sufficient | **Covered** |
-| F13 Information by colour alone (charts/forms/maps) | Failure | Partial | Adds heuristic detection for colour-only instructional text; chart/map semantics still need broader modelling. |
-| F73 Link distinguished by colour only | Failure | **Covered** | Core path. |
-| F81 Required fields by colour only | Failure | Partial | Required controls now include a colour-only signal heuristic when no textual required cue is present. |
-
-### Known limitations
-1. **Strict container scope** — misses nested block containers that don't match the fixed selector list.
-2. **Hover-state blind** — static DOM only; hover-underline-only patterns pass falsely.
-3. **100-unit font-weight threshold** — imperceptible in thin typefaces.
-4. **Chart/legend semantics** — dedicated legend-to-series linkage is still not modelled; current non-link checks are heuristic.
-
----
-
-## 2.1.2 No Keyboard Trap — `keyboard-trap.check.js`
-**Logic:** (1) Forward Tab up to 200 times, track last 4 focused keys via `CYCLE_WINDOW`, flag stuck / A-B-A-B cycles. (2) Shift+Tab reverse traversal with the same heuristic. (3) Escape verification after each suspected trap. (4) Arrow-key-trap scan for `role=tree/grid/listbox/menu/tablist/radiogroup`. (5) Same-origin iframe Tab trap. (6) Modal-without-escape probe for visible `dialog[open]` / `[role="dialog"]` / `[aria-modal="true"]` (F85). (7) Heuristic scripted key suppression scan (`preventDefault` on Tab/Escape/Arrow) for F58 risk. (8) Non-modal popup Escape-dismissal/close-affordance probe for F60 risk.
-
-### Technique coverage
-
-| Technique | Type | Status | Notes |
-|---|---|---|---|
-| G21 No keyboard trap | Sufficient | **Covered** | Forward + reverse Tab cycles. |
-| F10 Two non-exiting controls | Failure | **Covered** | Two-element cycle pattern. |
-| F85 Modal traps focus without close | Failure | **Covered** | Added in this sprint. |
-| F58 Script that blocks keyboard events | Failure | Partial | Inline/script key handlers that suppress Tab/Escape/Arrow via `preventDefault()` are now flagged heuristically. |
-| F60 Pop-up that cannot be closed | Failure | Partial | Non-modal popup candidates are now probed for Escape dismissibility + close affordance; framework internals may still evade detection. |
-
-### Known limitations
-1. **200-tab ceiling** — very long pages with >200 focusable elements may miss a trap beyond the ceiling.
-2. **Stable-key fallback** — when an element lacks `id` / `name`, the key is derived from DOM position; layout shifts between tabs can produce noisy cycle detections.
-3. **Escape-only dismissal** — some components intentionally use close-button-only flows; non-modal findings remain heuristic.
-4. **Script coverage limit** — external bundled handlers are only pattern-detected when inline snippets are observable.
-
----
-
-## 2.1.4 Character Key Shortcuts — `character-key-shortcuts.check.js`
-**Logic:** Scans `accesskey` attributes and inline `onkeypress`/`onkeydown`/`onkeyup` for single printable-character handlers without a guard for modifier key, non-input target, or disable-toggle UI.
-
-**Technique coverage:** G217 Provide mechanism to remap / G90/G93 modifier requirement — Partial. F99 single key shortcut without remap — Partial.
-
-**Limitations:**
-1. **Event handlers in bundled JS** not scanned (only inline + `accesskey`).
-2. **React/Vue synthetic handlers** invisible.
-3. **Remap UI detection heuristic:** Based on keyword matching for a nearby "shortcut settings" element.
-
----
-
-## 2.4.5 Multiple Ways — `multiple-ways.check.js`
-**Logic:** Counts presence of at least 2 of: site search, sitemap link, nav landmarks, breadcrumb, table-of-contents signals, related-links sections, or page-index/list-of-pages signals.
-
-**Technique coverage:** G63 Sitemap — Partial. G64 ToC — Partial. G125 Related-pages links — Partial. G126 List of links to all pages — Partial. G161 Search — **Covered**. G185 Link to sitemap — **Covered**.
-
-**Limitations:**
-1. **Single-page scope:** True "multiple ways" is a site-level property; single-URL evaluation cannot confirm.
-2. **Breadcrumb detection:** Relies on `aria-label="breadcrumb"` + schema.org markup; unconventional patterns missed.
-
----
-
-## 2.4.7 Focus Visible — `focus-visible.check.js` (interactive)
-**Logic:** Runs in interactive mode; tabs through focusable elements; for each, snapshots before/after CSSOM (outline, box-shadow, border) and diff.
-
-**Technique coverage:** Same as Python side (G149, G165, G195, C15, F55, F78).
-
-**Limitations:**
-1. **Delta threshold tuned per-browser** — Firefox default outline differs from Chrome.
-2. **SVG focus rings** (via `focusRing` proposal) not measured.
-3. **Missed elements with `:focus-visible` differing from `:focus`:** the test simulates plain focus, not keyboard-only navigation.
-
----
-
-## 2.4.8 Location — `location.check.js`
-**Logic:** Presence of breadcrumb nav, `aria-current` location markers, active nav state, sitemap link, or table-of-contents location aids.
-
-**Technique coverage:** G65 Breadcrumb — **Covered**. G63 Sitemap — Partial. G127 ToC — Partial. G128 Indication of current location — **Covered**.
-
-**Limitations:**
-1. **AAA-only criterion** — often intentionally skipped.
-2. **Semantic page-title parsing** is weak; won't detect "Home > Products > X" in document title.
-
----
-
-## 2.4.9 Link Purpose (Link Only) — `link-purpose.check.js`
-**Logic:** Computes accessible name of every link; flags generic names ("click here", "read more") when no aria-describedby or context.
-
-**Technique coverage:** G53 Identify link by accessible name — **Covered**. G91 Link text describes purpose — Partial. H30 Text content of link describes purpose — **Covered**. H33 title supplements link text — Partial. F84 "click here" pattern — **Covered**.
-
-**Limitations:**
-1. **Keyword list finite** — novel generic phrases ("discover now", "learn more") depend on seed list.
-2. **Localisation:** English + Japanese mainly; other locales may have gaps.
-
----
-
-## 2.4.13 Focus Appearance — `focus-appearance.check.js` (interactive)
-**Logic:** Snapshots each focusable element before/after `focus()`. Requires outline-width ≥ 2 px OR enclosure; contrast ≥ 3:1.
-
-**Technique coverage:** G195 Author focus indicator — **Covered**. SCR31 focus change via script — Missed. F78 — Partial.
-
-**Limitations:**
-1. **Area requirement ≥ perimeter×2 CSS px** is approximated by MIN_OUTLINE_WIDTH=2 — not a strict geometric check.
-2. **Contrast against the adjacent colour, not against the whole component** — imperfect when focus ring sits partly on gradient.
-3. **Time-budget ceiling:** Stops after 2000 elements.
-
----
-
-## 2.5.2 Pointer Cancellation — `pointer-cancellation.check.js`
-**Logic:** Finds elements with `onpointerdown`/`onmousedown` that trigger navigation or submit without matching up-event; checks for `pointercancel` or `preventDefault` patterns.
-
-**Technique coverage:** G210 Up-event only — Partial. F101 Down-event trigger — **Covered**. F102 No cancel mechanism — Partial.
-
-**Limitations:**
-1. **Inline-handler bias:** React/Vue synthetic handlers invisible.
-2. **Draggable essential exemption:** Not detected — drag-and-drop widgets falsely flagged.
-3. **Abort semantics not tested** — only pattern-matches source code.
-
----
-
-## 2.5.7 Dragging Movements — `dragging-movements.check.js`
-**Logic:** Finds `draggable="true"` elements, HTML5 drag listeners, Swiper/Slick/native range; flags when no alternative single-pointer action (buttons, keyboard) present in vicinity.
-
-**Technique coverage:** G219 Single-pointer alternative — Partial. F105 Dragging without alternative — **Covered**.
-
-**Limitations:**
-1. **Custom drag implementations** using `pointermove` + transform: matrix are library-detected only.
-2. **Essential exemption** (signature pads, map pan) not distinguished.
-3. **Alternative detection heuristic** based on nearby `<button>` keywords ("next", "previous").
-
----
-
-## 3.1.6 Pronunciation — `pronunciation.check.js`
-**Logic:** Scans `<ruby>`, `<bdi>` with `lang`, `<span lang="…">` containing IPA, dictionary-link adjacency for ambiguous words.
-
-**Technique coverage:** G62 Glossary — Partial. G120 Pronunciation near ambiguous word — Partial. H62 `<ruby>` — **Covered**. 
-
-**Limitations:**
-1. **AAA rule** — rarely required.
-2. **Ambiguity detection:** Requires a hand-crafted list of homographs; incomplete.
-
----
-
-## 3.2.1 On Focus / 3.2.2 On Input — `on-focus.check.js`, `on-input.check.js`
-**Logic:** Detects `onfocus` handlers triggering `window.open`/`location.href`/`submit()`; detects `onchange` on `<select>` or `<input type="checkbox"/radio>` triggering navigation or submit.
-
-**Technique coverage:** G107 Not submitting on input — Partial. F36 Submit on select — **Covered**. F37 Submit on radio — **Covered**.
-
-**Limitations:**
-1. **Inline handlers only** — framework event delegation bypasses.
-2. **Window.open inside nested function calls** not detected.
-3. **No simulation** — cannot confirm behaviour, only pattern-match.
-
----
-
-## 3.2.6 Consistent Help — `consistent-help.check.js`
-**Logic:** Finds help mechanism (contact, FAQ, chat, support link, phone) and records its position on the page (header/footer/sidebar/inline).
-
-**Technique coverage:** G220 Consistent help location — Partial. Criterion is cross-page; single-page scope yields only a "no help found" vs "help at location X" status.
-
-**Limitations:**
-1. **Single-page scope:** Cannot verify "consistent across pages" — needs crawl comparison.
-2. **Keyword taxonomy:** Localised but not exhaustive.
-
----
-
-## 3.3.3 Error Suggestion — `error-suggestion.check.js`
-**Logic:** For each error container (aria-invalid / role=alert / `.error`), checks for presence of suggestion text (has verb + target field reference; keywords "must", "should", "cannot be empty").
-
-**Technique coverage:** G83/G84/G85 Suggestions for input errors — Partial. G177 Suggesting valid text — Partial.
-
-**Limitations:**
-1. **Suggestion-quality heuristic:** keyword-based; fails for internationalized or novel error copy.
-2. **No submission** — errors appearing only after form submit are missed.
-
----
-
-## 3.3.4 Error Prevention (Legal/Financial) — `error-prevention.check.js`
-**Logic:** Classify forms as financial/legal/destructive via keyword scan of submit button + headings + form meta. Then require at least one safeguard: confirm step, review page, irreversibility warning, multi-step indicator, or explicit undo/revert window.
-
-**Technique coverage:** G98 Reversible — Partial. G99 Checked — Partial. G155 Confirmation — Partial. G164 Undo window — Partial.
-
-**Limitations:**
-1. **Keyword classification:** False positives ("privacy policy" in footer) and false negatives (crypto/web3 transactions).
-2. **Multi-step wizard detection:** Heuristic step counter may miscount.
-3. **No real submission** — cannot verify reversibility.
-
----
-
-## 3.3.7 Redundant Entry — `redundant-entry.check.js`
-**Logic:** Groups related forms/inputs via name/id matching; across repeated steps, detects identical fields without `autocomplete` or pre-filled value.
-
-**Technique coverage:** G218 Auto-fill from previous step — Partial.
-
-**Limitations:**
-1. **Session scope:** Single-page evaluation; cannot observe wizard step-to-step state.
-2. **Security exemption:** Re-entry for password confirmation is correct but may be flagged.
-
----
-
-## 3.3.8 Accessible Authentication (Minimum) — `accessible-auth.check.js`
-**Logic:** Finds auth forms (password input or login keywords). Flags presence of CAPTCHA image, reCAPTCHA iframe, or cognitive-test keywords without an alternative (WebAuthn, magic link, OTP).
-
-**Technique coverage:** G218 Alternative authentication — Partial. F109 CAPTCHA as only auth — Partial.
-
-**Limitations:**
-1. **CAPTCHA provider detection** is heuristic; niche providers miss.
-2. **Alternative-method detection** requires explicit button text.
-3. **Invisible reCAPTCHA v3** cannot be flagged (no visible UI).
-
----
-
-## 4.1.1 Parsing — `html-parsing.check.js`
-**Logic:** Counts duplicate `id=` attributes; flags malformed nesting (`<a>` inside `<a>`, `<button>` inside `<button>`).
-
-**Technique coverage:** H93 Unique id — **Covered**. H94 No duplicate attributes — Partial.
-
-**Limitations:**
-1. **WCAG 2.2 deprecation:** SC 4.1.1 was dropped in WCAG 2.2; kept for back-compat.
-2. **Parse errors beyond id:** No validation of unclosed tags (browsers auto-correct before DOM inspection).
-
----
-
-## 4.1.3 Status Messages — `status-messages.check.js`
-**Logic:** Enumerates `role="status"` / `role="alert"` / `aria-live="polite"|"assertive"` regions, counts them, and inspects form inline-validation containers (`.error`, `[aria-invalid=true]`) for missing live-region association. Emits separate rule IDs for `custom-status-messages-atomic` (missing `aria-atomic`), `custom-status-messages-inline-validation`, and `custom-status-messages-toast` (toast/notification containers without ARIA live semantics).
-
-### Technique coverage
-
-| Technique | Type | Status | Notes |
-|---|---|---|---|
-| ARIA19 `aria-live` | Sufficient | **Covered** | Counts polite + assertive. |
-| ARIA22 `role="status"` | Sufficient | **Covered** |
-| ARIA23 `role="log"` | Sufficient | Partial | Role is detected but not validated against 4.1.3 applicability. |
-| G199 Programmatically determined status | Sufficient | Partial | Presence-based; not dynamic-announcement verified. |
-| F114 Text that is a status but cannot be programmatically determined | Failure | Partial | Adds toast/notification heuristics for missing ARIA live semantics (`custom-status-messages-toast`). |
-
-### Known limitations
-1. **Snapshot-only** — the page is scanned once. Cannot verify that a message actually becomes announced when an event happens.
-2. **`aria-atomic` / `aria-relevant`** — only `aria-atomic` emit is checked; `aria-relevant` semantics (additions vs. removals vs. text) are ignored.
-3. **Toast libraries** — common classes (`react-toastify`, `sonner`, `react-hot-toast`) are heuristically matched, but dynamic runtime containers can still evade static snapshot detection.
-
----
-
-# Section 2b — Node Checks Added in 2026-04-23 Sprint
-
-## 1.2.2 Captions (Prerecorded) — `captions-prerecorded.check.js`
-**Logic:** For every visible `<video>`, inspect `<track kind="captions"|"subtitles">` children with a non-empty `srclang`. Skip muted / live-hint videos. Additionally enumerate cross-origin embeds (`youtube.com/embed`, `player.vimeo.com`, `wistia`) and emit INCOMPLETE because CC state isn't inspectable across origins.
-
-### Technique coverage
-
-| Technique | Type | Status | Notes |
-|---|---|---|---|
-| G93 Open / closed captions | Sufficient | Partial | Detects presence of a `<track>` + `srclang`; doesn't verify content. |
-| H95 `<track>` element with captions kind | Sufficient | **Covered** |
-| G87 Closed captions | Sufficient | Partial | Third-party players require manual review. |
-| F75 Video without captions | Failure | **Covered** | Flags missing captions on first-party `<video>`. |
-
-### Known limitations
-1. **Cross-origin embeds** — YouTube / Vimeo caption tracks are controlled by the hosting platform and aren't DOM-observable; always emitted as INCOMPLETE.
-2. **Live / muted detection** is heuristic (attribute + src substring / `.muted`); misclassification possible.
-
----
-
-## 1.2.3 Audio Description — `audio-description.check.js`
-**Logic:** For every `<video>`, check for a `<track kind="descriptions">` with `srclang`, a sibling `<audio>` / `<source>` whose `data-kind` / `title` contains "description", or a container transcript/details link matching the multi-locale `ALT_KEYWORDS` regex (EN + JA).
-
-### Technique coverage
-
-| Technique | Type | Status | Notes |
-|---|---|---|---|
-| G78 Second user-selectable audio track | Sufficient | Partial | Element-sibling detection; no switch-control verification. |
-| G173 Audio-described version of video | Sufficient | Partial | |
-| H96 `<track>` element with descriptions kind | Sufficient | **Covered** |
-| G8 Full text alternative | Sufficient | Partial | Nearby `<details>` / transcript link recognised. |
-
-### Known limitations
-1. **Audio description quality** not verified — only track presence.
-2. **Dubbed extended audio description tracks** (for 1.2.7) aren't distinguished from 1.2.3.
-
----
-
-## 1.4.2 Audio Control — `audio-control.check.js`
-**Logic:** Enumerates `<audio>` / `<video>` elements with `autoplay` (attribute or `data-autoplay`). Skip when `muted`. If duration is unknown or > 3 s AND there is neither a `controls` attribute nor an external pause/stop/mute/volume button in the figure/article/section/`[role=region]` container → FAIL.
-
-### Technique coverage
-
-| Technique | Type | Status | Notes |
-|---|---|---|---|
-| G60 Playing a sound that turns off automatically within 3 s | Sufficient | Partial | Requires `data-duration` or `.duration`; NaN-duration treated as > 3 s. |
-| G170 Providing a control near the beginning | Sufficient | **Covered** | Native `controls` or external button with pause/stop/mute/volume text. |
-| G171 Playing sound only on request | Sufficient | Partial | Inferred via autoplay/muted attrs. |
-| F23 Autoplay > 3 s without controls | Failure | **Covered** |
-
-### Known limitations
-1. **Web Audio API** sounds (scripted playback outside `<audio>`/`<video>`) are invisible.
-2. **Background music in iframes** — cross-origin media cannot be introspected.
-3. **Duration detection** — if `duration` hasn't loaded and no `data-duration` hint exists, the check pessimistically assumes > 3 s. May false-flag very short SFX.
-
----
-
-## 1.1.1 / 1.4.5 CSS Background Images — `background-image-content.check.js`
-**Logic:** Scans every DOM element's `computedStyle.backgroundImage`. Skips gradients, `data:` URIs, URLs matching decorative-hint patterns (`gradient`/`pattern`/`noise`/`texture`/`overlay`/`mask`/`fade`/`blur`/`dot`/`divider`), and elements < 24×24 px. Emits two rules: the primary 1.1.1 INCOMPLETE for non-decorative background images on elements without an accessible name; a secondary `-text-image` rule targeting 1.4.5 when the URL contains text-hint keywords (`banner`/`headline`/`hero`/`cta`/`promo`/`callout`/`masthead`/`heading`/`text`).
-
-### Technique coverage
-
-| Technique | Type | SC | Status | Notes |
-|---|---|---|---|---|
-| F3 CSS background used for meaningful image | Failure | 1.1.1 | **Covered (incomplete)** | New — previously invisible to the pipeline. |
-| C22 Use CSS to control text presentation | Sufficient | 1.4.5 | Partial | Keyword-based candidate detection. |
-| G140 Separate text and decorative image | Sufficient | 1.4.5 | Missed — judgment |
-
-### Known limitations
-1. **Intent classification is URL-keyword based** — a genuine decorative image with "banner" in its filename will raise a false positive.
-2. **Background size / position** not interpreted — an image cropped by `background-position` to a non-text region may still be flagged.
-3. **Inline `<style>` vs stylesheet origin** not distinguished — can't tell whether the background is author-set or injected by a third-party script.
-
----
-
-# Section 3 — Systemic Pipeline Issues
-
-## 3.1 Silent image-capture failures
-**Area:** `ka11y-python/ka11y/crawler/crawler.py`, `_safe_screenshot`, `download_image`, API response formatters.
-
-### Symptoms
-- Frontend renders broken-image icons when crawler fails to capture.
-- No warnings surfaced to user — failures are silently swallowed.
-- OCR/CV rules skip silently on empty images and mark the underlying SC as "N/A" — indistinguishable from a genuine clean pass.
-
-### Root causes
-1. `_safe_screenshot` and `download_image` swallow exceptions (CORS, timeout, 504) to keep the crawl alive.
-2. Combined-findings JSON has no `failed_to_capture` flag; empty `screenshot_path` flows to the UI.
-3. Canvas/SVG elements with external font deps often snapshot mid-paint; partial PNGs are persisted silently.
-
-### Fix recommendations
-- Introduce a `capture_status: ok|timeout|cors|network|dom_missing` enum per image and propagate to findings JSON.
-- In the formatter, downgrade rules that required a capture but got `capture_status != ok` from PASS/N-A to INCOMPLETE with reason.
-- Add user-visible banner at report top when ≥N images failed capture.
-
----
-
-## 3.2 Cross-service finding duplication ✅ Fixed (2026-04-24 patch)
-- Both `axeResultMapper.js` and Python pipeline emit findings for shared SCs (1.1.1, 2.4.7, 2.5.3, 4.1.2).
-- Runner dedup key is `(wcag_sc, status, element_signature)` — when the element signature differs between axe and Python (XPath vs selector), the same violation shows up twice.
-
-**Fix applied:** `_sig()` in `runner.py` now detects when `element_id` is URL-shaped (indicating a Python image finding's src URL, not a DOM id) and skips it as an unstable dedup key. An `img:` namespace keyed on `image_src` provides a stable cross-service key that both axe and Python findings can resolve to the same element.
-
----
-
-## 3.3 Language-detection drift
-- Sensory auditor and several node checks use inline `lang` attribute detection + CJK heuristic.
-- When `<html lang="en">` but the actual text is Japanese (common on mixed-language microsites), the wrong spaCy model is used — sensory check underperforms.
-
-**Fix:** per-element language detection via a lightweight `fasttext-langid` rather than DOM `lang`.
-
----
-
-## 3.4 Browser settle timing is per-rule
-- `SETTLE_MS = 60/80/300` scattered across checks with no central budget.
-- On low-end CI runners, settle elapses before React hydration finishes; tests flake.
-
-**Fix:** centralise in `shared-config.yaml` under `timing.settle_ms_profile: { fast|standard|slow }`.
-
----
-
-## 3.5 Japanese Language Compatibility
-
-**Scope:** All modules that perform NLP, keyword matching, or text analysis — `sensory_auditor.py`, `link-purpose.check.js`, `multiple-ways.check.js`, `consistent-help.check.js`, `error-suggestion.check.js`, `error-prevention.check.js`, `pronunciation.check.js`, `i18n/loader.py`.
-
-### Current Japanese coverage status
-
-| Module | JA Support | Quality |
-|---|---|---|
-| `sensory_auditor.py` (1.3.3) | `ja_core_news_sm` spaCy model + CJK char stripping | Weak |
-| `link-purpose.check.js` (2.4.9) | Static JA keyword list (`"こちら"`, `"詳細"`, etc.) | Partial |
-| `multiple-ways.check.js` (2.4.5) | JA breadcrumb / nav keyword detection | Partial |
-| `consistent-help.check.js` (3.2.6) | JA help-link keywords (`"お問い合わせ"`, etc.) | Partial |
-| `error-suggestion.check.js` (3.3.3) | JA suggestion keyword patterns | Partial |
-| `error-prevention.check.js` (3.3.4) | JA financial / legal keyword patterns | Partial |
-| `pronunciation.check.js` (3.1.6) | `<ruby>` detection + CJK character density | Strong |
-| `i18n/loader.py` | Locale overlay for finding text fields | Strong |
-| OCR (PaddleOCR / EasyOCR) | JA character detection when `lang=ja` is set | Partial |
-
-### Root causes of incomplete Japanese coverage
-
-1. **CJK word-boundary problem (critical).** Japanese text has no spaces between words. spaCy's `ja_core_news_sm` depends on a SudachiPy-derived dictionary tokenizer that is both smaller and less accurate than its English counterpart. The sensory auditor's `_remaining_label_words` method strips words by set membership, which requires correct tokenization — incorrect token splits cause structural text to survive the filter, yielding false passes for SC 1.3.3.
-
-2. **`lang` attribute drift.** Language routing is driven by `<html lang="...">`. When `lang="en"` but the page contains Japanese body text (common on mixed-language corporate sites), the English spaCy pipeline loads and processes JA characters as unknown tokens. The per-element `lang` attribute override is respected by DOM crawlers but is not propagated to the NLP layer.
-
-3. **`SENSORY_WORDS` vocabulary is English-primary.** The sensory auditor's word sets (`SENSORY_WORDS`, `GENERIC_UI_NOUNS`, `PURPOSE_WORDS`, `STOP_WORDS`) are curated for English. The JA fallback path strips CJK content characters with a regex, but residual structural text — particles (は, が, を), postpositions, sentence-final particles — is not filtered by POS tag, causing false passes or false fails depending on sentence structure.
-
-4. **OCR gaps for Japanese text.** PaddleOCR handles Japanese reasonably when `lang=ja` is configured. EasyOCR's JA model struggles with:
-   - Vertical text (縦組み / tategumi) — OCR reads left-to-right, columns are merged.
-   - Mixed kanji + kana + ASCII — common on Japanese web; model confidence drops.
-   - Small fonts below 12 pt — misread rate increases substantially.
-   - Half-width katakana (`ｶﾀｶﾅ`) — treated as ASCII symbols, not Japanese.
-
-5. **Node keyword lists are not exhaustive.** Static JA patterns in Node custom checks do not cover the full range of generic Japanese phrases. Common patterns like `"ここをクリック"`, `"詳しくはこちら"`, `"→"` (bare arrow), `"続きはこちら"` are absent from the generic-link-text seed list and other heuristic dictionaries.
-
-6. **`ja_core_news_sm` accuracy ceiling.** The small spaCy JA model achieves ~91% POS accuracy on clean newswire. On web copy — casual registers, katakana loan words, ASCII-mixed text — accuracy drops several points. The medium model (`ja_core_news_md`) is 2–3 points better; the large model (`ja_core_news_lg`) uses contextual word vectors and is significantly better on mixed-register text.
-
-7. **No morpheme-level stop-word filtering.** Japanese stop-word filtering uses CJK character-class stripping (`re.sub(r'[一-鿿぀-ゟ...]', '', text)`) which destroys word boundaries and content simultaneously. A morpheme-level stop-word list (filtering by POS tag: 助詞, 助動詞, 記号) via MeCab or SudachiPy would be far more accurate.
-
-### Fix recommendations
-
-1. **Per-element language detection via `fasttext-langid`.** Replace DOM `lang` attribute routing with a per-text-node language classifier. `fasttext-langid` identifies 176 languages from ≥ 20 characters in < 1 ms per call, handles mixed-language paragraphs, and removes the `lang` drift problem across all modules. This single change would fix issues 2 and partially 3.
-
-2. **Upgrade spaCy model to `ja_core_news_lg`.** The large model includes word vectors (94%+ POS accuracy on web text). The size increase (~400 MB vs ~12 MB for `sm`) is acceptable for server deployment; load lazily on first JA request and cache per-process.
-
-3. **Replace CJK character stripping with SudachiPy morpheme tokenization.** SudachiPy is the tokenizer underlying the spaCy JA pipeline — use it directly in `_remaining_label_words` to produce proper morpheme lists, then apply a morpheme-level stop-word filter (discard POS: 助詞, 助動詞, 記号, 接続詞).
-
-4. **Expand `SENSORY_WORDS` with Japanese sensory vocabulary.** Minimum additions: `右` (right), `左` (left), `上` (top / above), `下` (bottom / below), `赤い` (red), `青い` (blue), `丸い` (round), `四角` (square), `点滅` (flashing), `音声` (audio), `形` (shape), `色` (color), `位置` (position).
-
-5. **Extend Node JA keyword lists.** In `link-purpose.check.js`, `consistent-help.check.js`, `error-suggestion.check.js`, add: `"ここをクリック"`, `"詳しくはこちら"`, `"→"`, `"続きはこちら"`, `"もっと詳しく"`, `"お問い合わせ"`, `"サポートページ"`, `"ヘルプセンター"`.
-
-6. **OCR: handle vertical text.** When PaddleOCR confidence is below 0.6 on a text region, add a Tesseract `--psm 5` (vertical single column) fallback step — vertical Japanese columns produce this low-confidence pattern consistently.
-
-7. ✅ **Half-width katakana normalization** *(implemented 2026-04-24 patch).* Normalize `ｶﾀｶﾅ` → `カタカナ` before any NLP pipeline step using `unicodedata.normalize('NFKC', text)` in Python and `text.normalize('NFKC')` in Node. Implemented in `sensory_auditor.py` (`_normalize_text()` + `_iter_text_sources()`) and `sharedAssets.js` (`normalizeText()` applied inside `_normalizeStringList()`).
-
----
-
-# Section 4 — Unimplemented SCs (Automatable Gaps)
-
-| SC | Priority | Why it's detectable | Est. effort | Status |
-|---|---|---|---|---|
-| 1.2.2 Captions (Prerecorded) | High | Presence of `<track kind="captions">` on `<video>` | S | **Shipped 2026-04-23** |
-| 1.2.3 Audio Description | High | Presence of `<track kind="descriptions">` or second audio | S | **Shipped 2026-04-23** |
-| 1.4.2 Audio Control | Medium | `<audio autoplay>` + no controls, >3 s inferred | S | **Shipped 2026-04-23** |
-| 1.2.4 Captions (Live) | Medium | `<track kind="captions">` on live `<video>` | M | Pending |
-| 1.2.5 Audio Description (Prerecorded) | Medium | Second audio track or `descriptions` track | M | Partially covered by 1.2.3 check |
-| 2.2.1 Timing Adjustable | Medium | `<meta http-equiv="refresh">` + session-timeout detection | M | Pending |
-| 2.3.1 Three Flashes | Low | Frame-differential analysis of GIF/video — heavy | L | Pending |
-| 3.1.2 Language of Parts | Medium | Mixed-language text vs `lang=` attribute | M | Pending |
-| 3.2.3 Consistent Navigation | High (multi-page) | Requires crawler across pages | L | **Deferred — needs multi-page crawler** |
-| 3.2.4 Consistent Identification | High (multi-page) | Cross-page element-function identity | L | **Deferred — needs multi-page crawler** |
-
----
-
-## Priority sprint list
-
-**Completed 2026-04-23 sprint:**
-1. ✅ Silent capture failures (§3.1) — `capture_status` now propagates end-to-end and emits INCOMPLETE.
-2. ✅ 1.2.2 / 1.2.3 / 1.4.2 — three new node checks registered with fallback metadata and localised copy.
-3. ✅ CSS `background-image` scan — new `background-image-content.check.js` targeting 1.1.1 + 1.4.5.
-4. ✅ 2.1.2 keyboard-trap — Shift+Tab + Escape verification + F85 modal-without-escape detection.
-5. ✅ Per-finding `capture_status` — distinct `incomplete` status with reason & error context.
-6. ✅ Japanese support verification — confirmed existing infrastructure (EN+JA keyword lists across 30+ categories, `SENSORY_WORDS_JA`, `_detect_lang` CJK heuristic); new checks ship with inline JA translations.
-
-**Completed 2026-04-24 sprint:**
-1. ✅ 1.2.1 F30 — filename-only transcript-link heuristic in `audio-transcript.check.js`.
-2. ✅ 1.4.1 F13/F81 — non-link colour-only heuristics in `use-of-color.check.js`.
-3. ✅ 2.1.2 F58/F60 — scripted key suppression and non-modal popup dismissibility probes in `keyboard-trap.check.js`.
-4. ✅ 2.4.5 G125/G126 and 2.4.8 G127 — related-links/page-index/ToC signals in `multiple-ways.check.js` and `location.check.js`.
-5. ✅ 3.3.4 G164 — undo/revert safeguard heuristic in `error-prevention.check.js`.
-6. ✅ 4.1.3 F114 — toast-without-ARIA heuristic via `custom-status-messages-toast`.
-
-**Completed 2026-04-24 patch (bug fixes — 618/618 tests passing):**
-1. ✅ `IMAGE_AUDIT_RECORD_CONVERTERS` registry completeness — uncommented `_alt_text_to_findings` + `_images_of_text_to_findings` in `findings.py`.
-2. ✅ Orientation dramatic-ratio threshold — `< 0.1` → `< 0.5` in `orientation.py`.
-3. ✅ `error-prevention.check.js` safe-form ref string — `f.formId` → `f.element_id`.
-4. ✅ 2-letter uppercase abbreviation handling in OCR word matching — extract raw `[A-Z]{2}` tokens before `_norm()` in `alttext.py`.
-5. ✅ NFKC normalization in Python NLP path — `_normalize_text()` in `sensory_auditor.py`.
-6. ✅ NFKC normalization in Node keyword lists — `normalizeText()` in `sharedAssets.js`.
-7. ✅ Cross-service image dedup (§3.2) — URL-shaped `element_id` detection + `img:` namespace in `runner.py`.
-
-**Next sprint (proposed):**
-1. **Multi-page crawling** for 2.4.5 / 3.2.3 / 3.2.4 / 3.2.6 — largest remaining gap, requires new crawl queue and cross-page dedup layer. Estimates: 2–3 weeks.
-2. **1.2.4 Captions (Live)** — extend `captions-prerecorded` to detect `is-live` / HLS (`m3u8`) / WebRTC sources and flag missing captions in live context. Estimate: 2–3 days.
-3. **3.1.2 Language of Parts** — per-text-node language detection via `fasttext-langid` (also fixes §3.3 `lang` drift for 1.3.3 sensory). Estimate: 3–4 days.
-4. **Extend `capture_status` to OCR/contrast converters** — 1.4.3 / 1.4.5 / 1.4.11 converters still trust OCR silently; downgrade to INCOMPLETE when `capture_status != ok`. Estimate: 1 day.
-5. **Japanese NLP quality** — SudachiPy morpheme filtering (Priority 3) + `ja_core_news_lg` upgrade (Priority 2) from `internals/japanese-language-support.mdx`. Estimate: 2–3 days.
-6. **Python Pipeline** is comming in frontend needs to know what it means
-7. **Some passes from 1.1.1 aren't in needs review** 1.1.1 manual review in reason are classified as passes
+## 10. Final Verdict
+
+### What prevents this system from being perfect
+
+- **Two parallel, non-unified accuracy pipelines** (`rules/*` auditors and `pipeline/decisions/*` policies) communicating through a hand-maintained string-keyed translation layer. Every keystroke in either side must be mirrored, by hand, in `combined/findings.py`. Until this is unified, Top-5 #1 (silent data loss) is not a bug; it is the design.
+- **Engine-level swallowing of every Exception**. Ensures the API never 500s on a bad page; also ensures every regression in 30+ policy classes presents as `NEEDS_REVIEW(0.1)`. There is no signal to distinguish "I evaluated and was uncertain" from "I crashed and you should look".
+- **Duplicated crawlers + monolithic extractor**. Either you spend Chromium memory like water and ship gigabytes of JSON per audit, or you pick one, write it well, and treat the rest as evaluators over the artefact. The current code chose neither.
+- **WCAG heuristics over WCAG semantics.** The accessibility checks read like grep across attribute strings. WCAG SCs need *intent verification*: the link does navigate, the alternative is enabled, the captions are live. Substitute keyword matching for intent and you ship false positives that erode user trust faster than missing rules ever do.
+- **Security hardening is partial.** SSRF guard misses three IP-encoding tricks and the entire redirect path; API leaks tracebacks; rate limiting is per-IP without proxy validation.
+- **No back-pressure model.** A 30-req/min rate-limited HTTP front door behind a Playwright + Whisper + EasyOCR worker is not a deployable shape. There must be a queue.
+
+### What "perfect" looks like
+
+A perfect ka11y has, end-to-end:
+
+1. **One typed `BrowsedPage` artefact** produced by a single `BrowserPool`-backed crawl. All evaluators (image, media, sensory, layout) operate on it; no second Chromium launch.
+2. **Auditors emit `Finding(rule_id, status, evidence, locale_payload)` directly.** `combined/findings.py` ceases to exist; remains a thin grouper for response shape.
+3. **Engine catches `PolicyError` only.** Every other exception is a 5xx with an opaque ID and a logged traceback. CI fails on regressions.
+4. **WCAG checks verify intent, not strings.** Alternative controls must be enabled and labelled appropriately; motion-essential requires explicit opt-in; live captions require streaming evidence.
+5. **SSRF guard validates every IP form and every redirect**, with DNS pinning.
+6. **Background workers** consume from a bounded queue. HTTP front door returns `202 job_id`. Single OCR/Whisper process per host with cached models.
+7. **Stable JSON contract Node↔Python**, schema-versioned, with a CI test that fails on any drift.
+8. **Internationalisation never touches English-default module-level singletons.** Lang flows through call args, end-to-end.
+9. **Tests run against real DOMs**, not handcrafted mocks; an HTML fixture corpus lives in-repo and runs in CI.
+
+That is a 95+/100 system. It is two-to-three months of focused work from where you are now. The single highest-impact day of work is Sprint 1 step 1 — replace `engine.py`'s `except Exception` with `except PolicyError`. Most of the rest of this review will simplify or disappear once the resulting failures surface in CI.

@@ -1,6 +1,29 @@
-from typing import Dict, Any, List
+import re
+from typing import Dict, Any, List, Optional
 from playwright.async_api import Page
 from ..models import ElementContext, InteractionContext
+
+_PX_RE = re.compile(r"([\d.]+)\s*px")
+
+
+def _parse_outline_thickness_px(changes: List[Dict[str, Any]]) -> Optional[float]:
+    """Inspect the focus-state delta and pull the largest outline/border
+    thickness mentioned in any 'to' value. Returns None when no thickness
+    can be determined."""
+    best: Optional[float] = None
+    for change in changes or []:
+        prop = (change.get("property") or "").lower()
+        if "outline" not in prop and "border" not in prop and "shadow" not in prop:
+            continue
+        to_val = str(change.get("to") or "")
+        for match in _PX_RE.finditer(to_val):
+            try:
+                px = float(match.group(1))
+            except ValueError:
+                continue
+            if best is None or px > best:
+                best = px
+    return best
 
 
 class InteractionStateRunner:
@@ -85,5 +108,9 @@ class InteractionStateRunner:
                 delta = combined_results[ctx.element_id]
                 ctx.interaction.has_focus_ring = delta.get("has_visual_change", False)
                 if ctx.interaction.has_focus_ring:
-                    ctx.interaction.focus_ring_thickness_px = 2.0  # Heuristic fallback
-                    ctx.interaction.focus_ring_contrast = 4.5  # Heuristic fallback
+                    thickness = _parse_outline_thickness_px(delta.get("changes", []))
+                    if thickness is not None:
+                        ctx.interaction.focus_ring_thickness_px = thickness
+                    # focus_ring_contrast is left as None when unknown so that
+                    # downstream policies (e.g. 2.4.13) can treat it as
+                    # "needs review" instead of receiving a fake passing value.

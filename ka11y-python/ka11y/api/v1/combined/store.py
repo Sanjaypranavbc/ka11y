@@ -56,6 +56,42 @@ def _get_subscribers_lock() -> asyncio.Lock:
     return _subscribers_lock
 
 
+# Per-job locks. Multi-field _jobs[job_id].update({...}) calls and list-mutate
+# operations like stages.append() are not atomic in CPython (each kwarg is a
+# separate dict[k]=v). Without a lock, a polling reader can observe a
+# partially-applied update or iterate a stages list that's being appended to.
+# Same lazy-init-bound-to-running-loop pattern as _subscribers_lock above.
+_job_locks: Dict[str, asyncio.Lock] = {}
+_job_locks_loop: Any = None
+
+
+def _get_job_lock(job_id: str) -> asyncio.Lock:
+    """Return a per-job asyncio.Lock, creating it lazily and rebinding the
+    whole registry if the running event loop has changed (test runs, hot
+    reload). Holding this lock makes a multi-field update atomic from the
+    perspective of any other reader that also holds it."""
+    global _job_locks, _job_locks_loop
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+
+    if running_loop is not None and _job_locks_loop is not running_loop:
+        _job_locks = {}
+        _job_locks_loop = running_loop
+
+    lock = _job_locks.get(job_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _job_locks[job_id] = lock
+    return lock
+
+
+def _drop_job_lock(job_id: str) -> None:
+    """Release the lock entry for a job that's been removed from _jobs."""
+    _job_locks.pop(job_id, None)
+
+
 # TTL for completed/failed jobs (1 hour)
 _JOB_TTL_SECONDS: int = 3600
 
@@ -104,5 +140,6 @@ async def _evict_old_jobs() -> None:
         for jid in expired:
             _jobs.pop(jid, None)
             _subscribers.pop(jid, None)
+            _drop_job_lock(jid)
         if expired:
             logger.info(f"[combined] TTL eviction: removed {len(expired)} old jobs")

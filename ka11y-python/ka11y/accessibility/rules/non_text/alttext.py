@@ -92,7 +92,7 @@ _SOCIAL_BRAND_NAMES: set[str] = {
 }
 
 # Logo/Home/Action keywords in multiple languages
-_LOGO_WORDS: set[str] = {"logo", "ロゴ", "標榜"}
+_LOGO_WORDS: set[str] = {"logo", "logotype", "wordmark", "brandmark", "ロゴ", "標榜"}
 _HOME_WORDS: set[str] = {"home", "ホーム", "トップ"}
 
 # Acceptable action/purpose words for buttons
@@ -282,32 +282,56 @@ def _is_empty(value) -> bool:
     return str(value).strip().lower() in {"nan", "none", "", "null"}
 
 
+def _build_ocr_index(ocr_results: list) -> dict:
+    """Pre-build a {basename → TextDetectionResult} lookup so per-image
+    queries become O(1). Avoids the prior O(n × m) Path-allocation hot loop
+    inside ``generate_audit_report``."""
+    index: dict = {}
+    for r in ocr_results:
+        try:
+            key = Path(r.filename).name.lower()
+        except Exception:
+            continue
+        index[key] = r
+    return index
+
+
 def _ocr_for_file(
     ocr_results: list,
     filename: str,
+    index: dict | None = None,
 ) -> tuple[bool, list[str], int]:
-    """
-    Lookup OCR results for a given filename.
+    """Lookup OCR results for a given filename.
     Returns (has_text, detected_texts, contrast_violations_count).
-    Uses TextDetectionResult objects from text_detector.
+
+    The optional ``index`` is a dict produced by :func:`_build_ocr_index`;
+    when supplied, lookup is O(1) instead of an O(m) scan over
+    ``ocr_results``. Backwards-compatible signature for older callers.
     """
     target = Path(filename).name.lower()
-    for r in ocr_results:
-        # r is a TextDetectionResult (Pydantic model)
-        r_name = Path(r.filename).name.lower()
-        if r_name == target:
-            texts = [d.text for d in r.detections if d.text and d.text.strip()]
-            return r.has_text, texts, r.contrast_violations_count
-    return False, [], 0
+    if index is not None:
+        r = index.get(target)
+    else:
+        r = next(
+            (x for x in ocr_results if Path(x.filename).name.lower() == target),
+            None,
+        )
+    if r is None:
+        return False, [], 0
+    texts = [d.text for d in r.detections if d.text and d.text.strip()]
+    return r.has_text, texts, r.contrast_violations_count
 
 
-def _ocr_result_for_file(ocr_results: list, filename: str):
-    """Return the full TextDetectionResult for a given filename, or None."""
+def _ocr_result_for_file(ocr_results: list, filename: str, index: dict | None = None):
+    """Return the full TextDetectionResult for a given filename, or None.
+    Accepts the same precomputed ``index`` as :func:`_ocr_for_file`."""
     target = Path(filename).name.lower()
-    for r in ocr_results:
-        if Path(r.filename).name.lower() == target:
-            return r
-    return None
+    if index is not None:
+        return index.get(target)
+    return next(
+        (r for r in ocr_results if Path(r.filename).name.lower() == target),
+        None,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -325,8 +349,30 @@ def _check_1_1_1_decorative(alt: str) -> tuple[bool, str]:
     )
 
 
-def _check_1_1_1_missing_alt(sub_type: str) -> tuple[bool, str]:
-    """Missing alt attribute entirely — WCAG violation for any image."""
+def _is_aria_hidden_from_at(aria_hidden: str | None, role: str | None) -> bool:
+    """A decorative image with no alt attribute is still WCAG-conformant
+    when the element is programmatically hidden from assistive technology
+    (`aria-hidden="true"` or `role="presentation"` / `role="none"`)."""
+    if aria_hidden and aria_hidden.strip().lower() == "true":
+        return True
+    if role and role.strip().lower() in ("presentation", "none"):
+        return True
+    return False
+
+
+def _check_1_1_1_missing_alt(
+    sub_type: str,
+    aria_hidden: str | None = None,
+    role: str | None = None,
+) -> tuple[bool, str]:
+    """Missing alt attribute. PASS if the image is programmatically hidden
+    from AT (aria-hidden="true" or role=presentation/none); FAIL otherwise."""
+    if _is_aria_hidden_from_at(aria_hidden, role):
+        return (
+            True,
+            "PASS [1.1.1] Decorative image is hidden from assistive tech "
+            "(aria-hidden=\"true\" or role=\"presentation\"); missing alt is acceptable.",
+        )
     return (
         False,
         "FAIL [1.1.1] Alt attribute is completely missing — "
@@ -720,6 +766,9 @@ class AltTextAccessibilityAuditor:
         )
 
         records: list[dict] = []
+        # Precompute basename→OCR-result index ONCE so the per-image lookups
+        # below are O(1) instead of an O(m) scan per call.
+        ocr_index = _build_ocr_index(ocr_results)
 
         for img in images_data:
             # ── Pull fields from ImageData ───────────────────────────────
@@ -785,10 +834,10 @@ class AltTextAccessibilityAuditor:
 
             # ── OCR lookup by filename ───────────────────────────────────
             has_ocr_text, detected_texts, contrast_count = _ocr_for_file(
-                ocr_results, filename
+                ocr_results, filename, index=ocr_index
             )
             detected_joined = " | ".join(detected_texts)
-            ocr_result = _ocr_result_for_file(ocr_results, filename)
+            ocr_result = _ocr_result_for_file(ocr_results, filename, index=ocr_index)
 
             classifier_text_flag = getattr(img, "is_text_image", False)
             ocr_text_flag = has_ocr_text and len(detected_texts) > 0
@@ -821,7 +870,11 @@ class AltTextAccessibilityAuditor:
             if sub_type == "missing_alt" or (
                 classification == "decorative" and alt_text is None
             ):
-                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(sub_type)
+                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(
+                    sub_type,
+                    aria_hidden=getattr(img, "aria_hidden", None),
+                    role=getattr(img, "role", None),
+                )
 
             elif classification == "decorative":
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(alt_text)

@@ -5,6 +5,8 @@
  * inside the live page to reduce false positives before final reporting.
  */
 
+const { ALT_SEL } = require('./multilingual-selectors.js');
+
 /**
  * Checks whether a gesture-dependent element (or its nearest parent) provides a
  * single-pointer or keyboard alternative — an "escape hatch" in WCAG 2.5.1 terms.
@@ -21,13 +23,12 @@
  * @returns {Promise<{found: boolean, type: string, detail: string}>}
  */
 async function checkEscapeHatch(page, selector) {
-  return page.evaluate((sel) => {
+  return page.evaluate(({ sel, ALT_SEL }) => {
     const el = document.querySelector(sel);
     if (!el) {
       return { found: false, type: 'element-not-found', detail: `No element matched "${sel}"` };
     }
 
-    const ALT_SEL    = 'button, [role="button"], a[href], input[type="button"], input[type="submit"]';
     const NAV_PATTERN = /prev|next|previous|forward|back|left|right|slide|scroll|navigate|arrow/i;
 
     // ── Check 1: interactive child inside the element ─────────────────────
@@ -96,5 +97,5 @@ async function checkEscapeHatch(page, selector) {
     }
 
     return { found: false, type: 'none', detail: 'No escape hatch detected' };
-  }, selector);
+  }, { sel: selector, ALT_SEL });
 }

@@ -33,9 +33,26 @@ async function validateDisableControl(page) {
       for (const a of links) {
         const text = (a.textContent || '') + ' ' + (a.getAttribute('href') || '');
         if (checkPatterns(text, settingsPatterns)) {
-          if (highestConfidence === 'none' || highestConfidence === 'low') {
-            highestConfidence = 'high'; // Settings link is considered high confidence by spec
-            evidence.push(`Found settings link: ${a.href}`);
+          // Check for motion keywords in nearby text (same parent or siblings)
+          const parent = a.parentElement;
+          let hasMotionNearby = false;
+          if (parent) {
+            const nearbyText = parent.textContent || '';
+            if (checkPatterns(nearbyText, motionPatterns) || checkPatterns(nearbyText, accessibilityPatterns)) {
+              hasMotionNearby = true;
+            }
+          }
+
+          if (hasMotionNearby) {
+            if (highestConfidence === 'none' || highestConfidence === 'low') {
+              highestConfidence = 'medium';
+              evidence.push(`Found settings link with motion-related context: ${a.href}`);
+            }
+          } else {
+            if (highestConfidence === 'none') {
+              highestConfidence = 'low';
+              evidence.push(`Found generic settings link: ${a.href}`);
+            }
           }
         }
       }

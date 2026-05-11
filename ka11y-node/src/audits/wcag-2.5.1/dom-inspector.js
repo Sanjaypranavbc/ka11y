@@ -14,6 +14,7 @@
  * @property {string}     outerHTML   - outerHTML truncated to 300 characters
  * @property {{ x: number, y: number, width: number, height: number }|null} boundingBox
  * @property {string}     rawSelector - Raw selector string from the bank that matched
+ * @property {boolean}    hasCustomTouchAction - True if element has a non-default touch-action
  */
 
 const MAX_HTML_LENGTH = 300;
@@ -41,74 +42,92 @@ const CSS_PATH_FN_BODY = `
 `.trim();
 
 /**
- * Queries every selector in the bank against the live page, collecting metadata
- * for each matched element.  Duplicate DOM elements (same computed CSS path) are
- * kept only once.
+ * Queries every selector in the bank against the live page in a SINGLE
+ * page.evaluate round trip, collecting metadata for each matched element.
+ * Duplicate DOM elements (same computed CSS path) are kept only once,
+ * preferring the first category in CATEGORIES order.
  *
  * @param {import('@playwright/test').Page|Object} page - Playwright/Puppeteer Page object
  * @param {import('./multilingual-selectors.js').SelectorBank} selectorBank
  * @returns {Promise<DOMFinding[]>}
  */
 async function inspectPage(page, selectorBank) {
-  /** @type {DOMFinding[]} */
-  const findings = [];
-  /** @type {Set<string>} dedup by computed CSS path */
-  const seen = new Set();
+  let result;
+  try {
+    result = await page.evaluate(
+      ({ banks, categoriesOrder, fnBody, maxHtml }) => {
+        // eslint-disable-next-line no-new-func
+        const cssPathOf = new Function('el', fnBody);
+        const invalid   = [];
+        // Map: cssPath → element data. First insert wins, preserving CATEGORIES order.
+        const seen = new Map();
 
-  for (const category of CATEGORIES) {
-    const selectors = selectorBank[category];
-    if (!Array.isArray(selectors) || selectors.length === 0) continue;
+        for (const category of categoriesOrder) {
+          const selectorList = banks[category];
+          if (!Array.isArray(selectorList) || selectorList.length === 0) continue;
 
-    for (const rawSelector of selectors) {
-      let elements;
-      try {
-        elements = await page.$$(rawSelector);
-      } catch (err) {
-        console.warn(`[wcag-2.5.1] dom-inspector: invalid selector "${rawSelector}":`, err.message);
-        continue;
-      }
-
-      for (const element of elements) {
-        try {
-          /* Compute a stable CSS path for the element by injecting helper into browser. */
-          const cssPath = await page.evaluate(
-            (node, fnBody) => {
-              // eslint-disable-next-line no-new-func
-              const cssPathOf = new Function('el', fnBody);
-              return cssPathOf(node);
-            },
-            element,
-            CSS_PATH_FN_BODY,
-          ).catch(() => null);
-
-          if (!cssPath) continue;
-          if (seen.has(cssPath)) continue;
-          seen.add(cssPath);
-
-          const outerHTML = await page.evaluate(
-            (node, max) => (node.outerHTML || '').slice(0, max),
-            element,
-            MAX_HTML_LENGTH,
-          ).catch(() => '');
-          
-          // Improvement: Check touch-action CSS property. `none` or `pan-y` is often used
-          // to disable native browser gestures and implement custom JS gestures instead.
-          const touchAction = await page.evaluate((node) => {
-             return window.getComputedStyle(node).touchAction;
-          }, element).catch(() => 'auto');
-          
-          const hasCustomTouchAction = touchAction === 'none' || touchAction === 'pan-y' || touchAction === 'pan-x';
-
-          const boundingBox = await element.boundingBox().catch(() => null);
-
-          findings.push({ category, selector: cssPath, outerHTML, boundingBox, rawSelector, hasCustomTouchAction });
-        } catch (err) {
-          console.warn(`[wcag-2.5.1] dom-inspector: element skipped for "${rawSelector}":`, err.message);
+          for (const rawSelector of selectorList) {
+            let nodes;
+            try {
+              nodes = document.querySelectorAll(rawSelector);
+            } catch (e) {
+              invalid.push({ rawSelector, message: e && e.message });
+              continue;
+            }
+            for (const node of nodes) {
+              const cssPath = cssPathOf(node);
+              if (!cssPath || seen.has(cssPath)) continue;
+              const rect = node.getBoundingClientRect();
+              seen.set(cssPath, {
+                category,
+                rawSelector,
+                cssPath,
+                outerHTML: (node.outerHTML || '').slice(0, maxHtml),
+                touchAction: window.getComputedStyle(node).touchAction,
+                boundingBox: rect && {
+                  x: rect.x,
+                  y: rect.y,
+                  width: rect.width,
+                  height: rect.height,
+                },
+              });
+            }
+          }
         }
-      }
-    }
+        return { elements: Array.from(seen.values()), invalid };
+      },
+      {
+        banks: selectorBank,
+        categoriesOrder: CATEGORIES,
+        fnBody: CSS_PATH_FN_BODY,
+        maxHtml: MAX_HTML_LENGTH,
+      },
+    );
+  } catch (err) {
+    console.warn('[wcag-2.5.1] dom-inspector: evaluate threw:', err.message);
+    return [];
   }
 
+  for (const inv of result.invalid || []) {
+    console.warn(`[wcag-2.5.1] dom-inspector: invalid selector "${inv.rawSelector}":`, inv.message);
+  }
+
+  /** @type {DOMFinding[]} */
+  const findings = [];
+  for (const item of result.elements || []) {
+    const hasCustomTouchAction =
+      item.touchAction === 'none' ||
+      item.touchAction === 'pan-y' ||
+      item.touchAction === 'pan-x';
+    findings.push({
+      category:    item.category,
+      selector:    item.cssPath,
+      outerHTML:   item.outerHTML || '',
+      boundingBox: item.boundingBox || null,
+      rawSelector: item.rawSelector,
+      hasCustomTouchAction,
+    });
+  }
   return findings;
 }
 module.exports = { inspectPage };

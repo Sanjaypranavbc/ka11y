@@ -18,10 +18,30 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+
+
+@dataclass
+class PythonStagesResult:
+    """Typed return value from :func:`_run_python_stages`.
+
+    Replaces the prior ``(all_findings, contrast_report, image_audit_report)``
+    positional tuple, which silently broke whenever a stage was added or
+    reordered (the caller's positional unpack would point at the wrong
+    object). Named fields make the contract explicit at the type level."""
+
+    findings: List[Dict[str, Any]] = field(default_factory=list)
+    contrast_report: Optional[Dict[str, Any]] = None
+    image_audit_report: Optional[Dict[str, Any]] = None
+
+    def as_tuple(self) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """Backwards-compatible accessor for any caller still using
+        positional unpacking. Prefer the named attributes."""
+        return self.findings, self.contrast_report, self.image_audit_report
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils.crawler_settings import (
@@ -1124,15 +1144,12 @@ async def _run_python_stages(
     job_id: str,
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
-) -> Tuple[
-    List[Dict[str, Any]],
-    Optional[Dict[str, Any]],
-    Optional[Dict[str, Any]],
-]:
+) -> PythonStagesResult:
     """
     Run all Python audit stages concurrently.
 
-    Returns (all_findings, contrast_report, image_audit_report).
+    Returns a :class:`PythonStagesResult` with named ``findings``,
+    ``contrast_report``, and ``image_audit_report`` fields.
     """
 
     def _timed(coro):
@@ -1283,4 +1300,8 @@ async def _run_python_stages(
         if not isinstance(r, Exception):
             all_findings.extend(r)
 
-    return all_findings, contrast_report, image_audit_report
+    return PythonStagesResult(
+        findings=all_findings,
+        contrast_report=contrast_report,
+        image_audit_report=image_audit_report,
+    )

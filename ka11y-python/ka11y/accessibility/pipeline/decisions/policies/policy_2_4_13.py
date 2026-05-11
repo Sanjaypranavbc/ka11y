@@ -20,31 +20,42 @@ class Policy2413(WCAGPolicy):
                 "Element has no visible focus indicator (fails 2.4.7 prerequisite).",
             )
 
-        # If contrast change is significant, we pass it regardless of thickness
-        # (e.g., background goes from white to dark grey)
+        # WCAG 2.4.13 requires the focus indicator to satisfy *both* a minimum
+        # area (≥ 2 CSS pixels perimeter, approximated here by thickness) and
+        # a contrast ratio of at least 3:1 between focused/unfocused states.
+        # The previous implementation only failed when *both* dimensions were
+        # insufficient, so a 0.5px ring at 5:1 contrast incorrectly passed.
         contrast = element.interaction.focus_ring_contrast
-
         thickness = element.interaction.focus_ring_thickness_px
-        if thickness < MIN_FOCUS_THICKNESS_PX and (not contrast or contrast < 3.0):
-            return self._needs_review(
+
+        if thickness is not None and thickness < MIN_FOCUS_THICKNESS_PX:
+            return self._fail(
                 element,
-                "thin_or_low_contrast_focus",
-                f"Focus indicator thickness ({thickness}px) is below the {MIN_FOCUS_THICKNESS_PX}px minimum, and contrast change is not prominent. Manual review required.",
+                "thin_focus_indicator",
+                f"Focus indicator thickness ({thickness}px) is below the "
+                f"{MIN_FOCUS_THICKNESS_PX}px minimum.",
                 reason_params={
                     "thickness_px": str(thickness),
                     "min_px": str(MIN_FOCUS_THICKNESS_PX),
                 },
             )
 
-        if (
-            contrast
-            and contrast < MIN_FOCUS_CONTRAST
-            and thickness < MIN_FOCUS_THICKNESS_PX
-        ):
+        if contrast is None:
+            return self._needs_review(
+                element,
+                "unmeasured_focus_contrast",
+                "Focus indicator contrast could not be measured. Manual review required.",
+                reason_params={
+                    "thickness_px": str(thickness) if thickness is not None else "unknown",
+                },
+            )
+
+        if contrast < MIN_FOCUS_CONTRAST:
             return self._fail(
                 element,
                 "low_contrast_focus",
-                f"Focus indicator contrast ({contrast}:1) is below the {MIN_FOCUS_CONTRAST}:1 minimum.",
+                f"Focus indicator contrast ({contrast}:1) is below the "
+                f"{MIN_FOCUS_CONTRAST}:1 minimum.",
                 reason_params={
                     "contrast": str(contrast),
                     "min_contrast": str(MIN_FOCUS_CONTRAST),

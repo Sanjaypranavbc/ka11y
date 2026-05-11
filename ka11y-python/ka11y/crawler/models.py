@@ -38,6 +38,12 @@ class ImageData(BaseModel):
     # Capture status: "ok" | "failed" | "timeout" | "network" | "dom_missing"
     capture_status: str = "ok"
     capture_error: Optional[str] = None
+    # WCAG 1.1.1: a decorative image is allowed to omit alt only when it is
+    # programmatically hidden from assistive tech. Both signals are captured
+    # so the alttext auditor can distinguish "decorative + properly hidden"
+    # (PASS) from "decorative classification but exposed to AT" (FAIL).
+    aria_hidden: Optional[str] = None
+    role: Optional[str] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

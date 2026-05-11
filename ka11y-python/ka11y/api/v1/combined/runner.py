@@ -15,6 +15,7 @@ import json
 import os
 import time
 import traceback
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -34,8 +35,13 @@ from .stage_events import (
     _stage_start,
     emit_job_plan,
 )
-from .stages import _allowed_levels, _call_node_flat, _run_python_stages
-from .store import _broadcast, _close_subscribers, _jobs
+from .stages import (
+    PythonStagesResult,
+    _allowed_levels,
+    _call_node_flat,
+    _run_python_stages,
+)
+from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -262,7 +268,12 @@ async def _run_job(
 
         if isinstance(python_result, Exception):
             pass  # all stages failed — warnings already recorded
+        elif isinstance(python_result, PythonStagesResult):
+            python_findings = python_result.findings
+            contrast_report = python_result.contrast_report
+            image_audit_report = python_result.image_audit_report
         elif isinstance(python_result, tuple) and len(python_result) == 3:
+            # Backwards-compat path: pre-dataclass callers / older test mocks.
             python_findings, contrast_report, image_audit_report = python_result
         else:
             # Unexpected return type — degrade gracefully rather than raising
@@ -335,15 +346,16 @@ async def _run_job(
                 report, fh, indent=2, ensure_ascii=False, default=_json_serializer
             )
 
-        _jobs[job_id].update(
-            {
-                "status": "completed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "report_path": str(report_path),
-                "result": report,
-                "current_stage": None,
-            }
-        )
+        async with _get_job_lock(job_id):
+            _jobs[job_id].update(
+                {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "report_path": str(report_path),
+                    "result": report,
+                    "current_stage": None,
+                }
+            )
 
         logger.info(
             f"[combined] job {job_id} completed — "
@@ -384,21 +396,25 @@ async def _run_job(
         )
         err_type = type(exc).__name__
         current_stage = _jobs[job_id].get("current_stage") or "post_processing"
+        # Internal-only diagnostic detail (file paths, exception type, traceback)
+        # is logged but never surfaced to API clients. Clients receive an opaque
+        # error_id which support staff can correlate against these logs.
+        error_id = uuid.uuid4().hex
         logger.error(
-            f"[combined] job {job_id} failed during stage '{current_stage}' "
-            f"({err_type}: {exc}) at {where}\n{tb}"
+            f"[combined] job {job_id} (error_id={error_id}) failed during stage "
+            f"'{current_stage}' ({err_type}: {exc}) at {where}\n{tb}"
         )
-        _jobs[job_id].update(
-            {
-                "status": "failed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error": f"{err_type}: {exc}",
-                "error_stage": current_stage,
-                "error_location": where,
-                "error_traceback": tb,
-                "current_stage": None,
-            }
-        )
+        async with _get_job_lock(job_id):
+            _jobs[job_id].update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": "Audit failed due to an internal error.",
+                    "error_id": error_id,
+                    "error_stage": current_stage,
+                    "current_stage": None,
+                }
+            )
         step_logger.finalize(
             status="error",
             message="Combined audit job failed",

@@ -3,6 +3,11 @@ from .base_policy import WCAGPolicy
 from ...models import ElementContext, RuleVerdict, VerdictStatus
 from ...config.thresholds import GENERIC_ALT_STRINGS, MIN_ICON_ALT_LENGTH
 
+# Hoisted module-level so we don't pay the regex compile cost per element.
+# The pattern matches an icon alt that contains either two consecutive
+# lowercase letters OR any non-ASCII character (CJK / emoji / etc.).
+_DESCRIPTIVE_ALT_RE = re.compile(r"[a-z]{2}|[^\x00-\x7F]")
+
 
 class Policy111(WCAGPolicy):
     rule_id = "python_1_1_1_alt"
@@ -70,9 +75,7 @@ class Policy111(WCAGPolicy):
 
         # 6. Icon Logic
         if element.visual.cv_classification == "icon":
-            if len(name) < MIN_ICON_ALT_LENGTH or not re.search(
-                r"[a-z]{2}|[^\x00-\x7F]", name
-            ):
+            if len(name) < MIN_ICON_ALT_LENGTH or not _DESCRIPTIVE_ALT_RE.search(name):
                 return self._fail(
                     element,
                     "icon_terse",
