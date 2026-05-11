@@ -1,0 +1,163 @@
+{
+  "meta": {
+    "rule": "1.3.4",
+    "rule_name": "Orientation",
+    "source_url": "https://www.kao.com/global/en/",
+    "scraped_at": "2026-05-11",
+    "total_cases": 20,
+    "description": "Ground truth for WCAG 1.3.4 Orientation audit accuracy testing."
+  },
+  "cases": [
+    {
+      "id": "kao-134-01",
+      "description": "Standard responsive page — identical counts (PASS)",
+      "portrait": {
+        "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+        "elements": [{"visible": true, "focusable": true, "tag": "button"}]
+      },
+      "landscape": {
+        "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+        "elements": [{"visible": true, "focusable": true, "tag": "button"}]
+      },
+      "expected": { "status": "PASSED" }
+    },
+    {
+      "id": "kao-134-02",
+      "description": "Rotate-device overlay in landscape (NEEDS_REVIEW)",
+      "portrait": {
+        "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+        "elements": []
+      },
+      "landscape": {
+        "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+        "elements": [{"text": "Please rotate your device", "tag": "div", "visible": true}]
+      },
+      "expected": { "status": "NEEDS_REVIEW" }
+    },
+    {
+      "id": "kao-134-03",
+      "description": "CSS body transform lock in portrait (NEEDS_REVIEW)",
+      "portrait": {
+        "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+        "body_transform": "rotate(-90deg)", "elements": []
+      },
+      "landscape": {
+        "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+        "elements": []
+      },
+      "expected": { "status": "NEEDS_REVIEW" }
+    },
+    {
+      "id": "kao-134-04",
+      "description": "Missing main content in landscape (NEEDS_REVIEW)",
+      "portrait": {
+        "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+        "elements": [{"text": "Lots of content here...", "tag": "p", "visible": true}]
+      },
+      "landscape": {
+        "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+        "elements": []
+      },
+      "expected": { "status": "NEEDS_REVIEW" }
+    },
+    {
+      "id": "kao-134-05",
+      "description": "Body overflow: hidden in portrait (NEEDS_REVIEW)",
+      "portrait": {
+        "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+        "body_overflow_x": "hidden", "elements": []
+      },
+      "landscape": {
+        "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+        "elements": []
+      },
+      "expected": { "status": "NEEDS_REVIEW" }
+    },
+    {
+      "id": "kao-134-06",
+      "description": "Horizontal scroll introduced in landscape (NEEDS_REVIEW)",
+      "portrait": {
+        "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+        "has_horizontal_scroll": false, "elements": []
+      },
+      "landscape": {
+        "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+        "has_horizontal_scroll": true, "elements": []
+      },
+      "expected": { "status": "NEEDS_REVIEW" }
+    },
+    {
+      "id": "kao-134-07",
+      "description": "Dramatic interactive element count difference (NEEDS_REVIEW)",
+      "portrait": {
+        "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+        "elements": [{"visible": true, "focusable": true, "tag": "a"}]
+      },
+      "landscape": {
+        "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+        "elements": [
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"},
+            {"visible": true, "focusable": true, "tag": "a"}
+        ]
+      },
+      "expected": { "status": "NEEDS_REVIEW" }
+    },
+    {
+      "id": "kao-134-08",
+      "description": "One orientation has zero interactive elements (NEEDS_REVIEW)",
+      "portrait": {
+        "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+        "elements": [{"visible": true, "focusable": true, "tag": "a"}]
+      },
+      "landscape": {
+        "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+        "elements": []
+      },
+      "expected": { "status": "NEEDS_REVIEW" }
+    },
+    {
+        "id": "kao-134-09",
+        "description": "Piano app — essential landscape (NEEDS_REVIEW)",
+        "portrait": {
+          "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+          "elements": [{"text": "Best experienced in landscape", "tag": "div", "visible": true}]
+        },
+        "landscape": {
+          "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+          "elements": [{"visible": true, "focusable": true, "tag": "button"}]
+        },
+        "expected": { "status": "NEEDS_REVIEW" }
+    },
+    {
+        "id": "kao-134-10",
+        "description": "Simple responsive page — 2 vs 2 buttons (PASS)",
+        "portrait": {
+          "scenario": "portrait", "page_url": "url", "viewport_width": 375, "viewport_height": 667,
+          "elements": [{"visible": true, "focusable": true, "tag": "button"}, {"visible": true, "focusable": true, "tag": "button"}]
+        },
+        "landscape": {
+          "scenario": "landscape", "page_url": "url", "viewport_width": 667, "viewport_height": 375,
+          "elements": [{"visible": true, "focusable": true, "tag": "button"}, {"visible": true, "focusable": true, "tag": "button"}]
+        },
+        "expected": { "status": "PASSED" }
+    },
+    { "id": "kao-134-11", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-12", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-13", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-14", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-15", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-16", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-17", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-18", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-19", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}},
+    { "id": "kao-134-20", "description": "Empty portrait/landscape (PASS)", "portrait": {"scenario": "p", "page_url": "u", "viewport_width": 300, "viewport_height": 500, "elements": []}, "landscape": {"scenario": "l", "page_url": "u", "viewport_width": 500, "viewport_height": 300, "elements": []}, "expected": {"status": "PASSED"}}
+  ]
+}

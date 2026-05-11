@@ -1,0 +1,405 @@
+{
+  "meta": {
+    "rule": "1.3.1",
+    "rule_name": "Info and Relationships",
+    "source_url": "https://www.kao.com/global/en/",
+    "scraped_at": "2026-05-11",
+    "total_cases": 20,
+    "description": "Comprehensive ground truth for WCAG 1.3.1 Info and Relationships audit accuracy testing, featuring 20 edge cases themed after kao.com."
+  },
+  "cases": [
+    {
+      "id": "kao-131-01",
+      "description": "Global Header: Search input with programmatic aria-label",
+      "dom_attributes": {
+        "tag_name": "input",
+        "aria_label": "Search site content",
+        "placeholder": "Search"
+      },
+      "semantics": {
+        "tag_name": "input"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "text"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-02",
+      "description": "Newsletter: Email input with visible label text (mocked)",
+      "dom_attributes": {
+        "tag_name": "input",
+        "id": "newsletter-email"
+      },
+      "semantics": {
+        "tag_name": "input"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "email"
+        },
+        "visible_label_text": "Email Address"
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-03",
+      "description": "Inquiry Form: Message textarea with aria-label",
+      "dom_attributes": {
+        "tag_name": "textarea",
+        "aria_label": "Your message or inquiry"
+      },
+      "semantics": {
+        "tag_name": "textarea"
+      },
+      "visual": {
+        "computed_styles": {}
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-04",
+      "description": "Search: Orphaned input missing label, title, and visible text",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "text"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "fail",
+        "reason_code": "missing_relationship"
+      }
+    },
+    {
+      "id": "kao-131-05",
+      "description": "Survey: Radio button inside a section marked as form_region",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "section_type": "form_region",
+        "accessible_name": "Very Satisfied"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "radio"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-06",
+      "description": "Survey: Radio button inside a generic container with role='group'",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "ancestor_roles": ["group"],
+        "accessible_name": "Satisfied"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "radio"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-07",
+      "description": "Survey: Radio button inside a dedicated role='radiogroup'",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "ancestor_roles": ["radiogroup"],
+        "accessible_name": "Neutral"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "radio"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-08",
+      "description": "Survey: Radio button associated via aria-describedby",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "described_by_text": "Please select your satisfaction level",
+        "accessible_name": "Unsatisfied"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "radio"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-09",
+      "description": "Survey: Radio button using aria-controls for relationship",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "controls_elements": ["results-panel"],
+        "accessible_name": "Very Unsatisfied"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "radio"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-10",
+      "description": "Survey: Radio button using aria-owns for relationship",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "owns_elements": ["extra-options"],
+        "accessible_name": "Other"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "radio"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-11",
+      "description": "Survey: Orphaned Radio button with no semantic group",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "accessible_name": "Standalone Option"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "radio"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "needs_review",
+        "reason_code": "orphaned_input"
+      }
+    },
+    {
+      "id": "kao-131-12",
+      "description": "Privacy: Checkbox inside a form_region",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "section_type": "form_region",
+        "accessible_name": "I agree to the privacy policy"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "checkbox"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-13",
+      "description": "Privacy: Orphaned Checkbox with no semantic group",
+      "dom_attributes": {
+        "tag_name": "input"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "accessible_name": "Opt-in to marketing"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "checkbox"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "needs_review",
+        "reason_code": "orphaned_input"
+      }
+    },
+    {
+      "id": "kao-131-14",
+      "description": "Region: Country selector dropdown with aria-label",
+      "dom_attributes": {
+        "tag_name": "select",
+        "aria_label": "Select your country or region"
+      },
+      "semantics": {
+        "tag_name": "select"
+      },
+      "visual": {
+        "computed_styles": {}
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-15",
+      "description": "Region: Orphaned select element missing label",
+      "dom_attributes": {
+        "tag_name": "select"
+      },
+      "semantics": {
+        "tag_name": "select"
+      },
+      "visual": {
+        "computed_styles": {}
+      },
+      "expected": {
+        "wcag_1_3_1_status": "fail",
+        "reason_code": "missing_relationship"
+      }
+    },
+    {
+      "id": "kao-131-16",
+      "description": "ESG Data: Table header cell (th)",
+      "dom_attributes": {
+        "tag_name": "th"
+      },
+      "semantics": {
+        "tag_name": "th",
+        "is_in_data_table": true
+      },
+      "visual": {
+        "computed_styles": {}
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "table_context"
+      }
+    },
+    {
+      "id": "kao-131-17",
+      "description": "ESG Data: Table data cell (td)",
+      "dom_attributes": {
+        "tag_name": "td"
+      },
+      "semantics": {
+        "tag_name": "td",
+        "is_in_data_table": true
+      },
+      "visual": {
+        "computed_styles": {}
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "table_context"
+      }
+    },
+    {
+      "id": "kao-131-18",
+      "description": "Corporate Info: Standard paragraph (Not Applicable)",
+      "dom_attributes": {
+        "tag_name": "p"
+      },
+      "semantics": {
+        "tag_name": "p"
+      },
+      "visual": {
+        "computed_styles": {}
+      },
+      "expected": {
+        "wcag_1_3_1_status": "not_applicable",
+        "reason_code": "not_applicable"
+      }
+    },
+    {
+      "id": "kao-131-19",
+      "description": "Inquiry: Submit input with value as label",
+      "dom_attributes": {
+        "tag_name": "input",
+        "value": "Submit Inquiry"
+      },
+      "semantics": {
+        "tag_name": "input",
+        "accessible_name": "Submit Inquiry"
+      },
+      "visual": {
+        "computed_styles": {
+          "type": "submit"
+        }
+      },
+      "expected": {
+        "wcag_1_3_1_status": "pass",
+        "reason_code": "valid_relationship"
+      }
+    },
+    {
+      "id": "kao-131-20",
+      "description": "Visual: Decorative image element (Not Applicable for 1.3.1 structural checks)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": ""
+      },
+      "semantics": {
+        "tag_name": "img"
+      },
+      "visual": {
+        "computed_styles": {}
+      },
+      "expected": {
+        "wcag_1_3_1_status": "not_applicable",
+        "reason_code": "not_applicable"
+      }
+    }
+  ]
+}

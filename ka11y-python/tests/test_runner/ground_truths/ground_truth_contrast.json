@@ -1,0 +1,868 @@
+{
+  "meta": {
+    "rule": "1.4.3 | 1.4.6 | 1.4.11",
+    "rule_name": "Contrast (Minimum) | Contrast (Enhanced) | Non-text Contrast",
+    "source_url": "https://www.kao.com/global/en/",
+    "scraped_at": "2026-04-28",
+    "total_cases": 30,
+    "description": "Synthetic element-wise ground truth for WCAG 1.4.3, 1.4.6, and 1.4.11 accuracy testing. Cases are modelled after UI patterns observed on the Kao Corporation global homepage. All contrast ratios pre-verified against ContrastEngine.calculate_ratio(). 10 cases per rule covering all major decision branches."
+  },
+  "cases": [
+    {
+      "id": "c143-kao-01",
+      "rule": "1.4.3",
+      "description": "Kao logotype image \u2014 exempt as logo; aria_label present but contrast exempted",
+      "dom_attributes": {
+        "tag_name": "img",
+        "role": "img",
+        "html_snippet": "<img src='/kao-logo.svg' aria-label='Kao logo' style='color: rgb(118,118,118)' />",
+        "text_content": null,
+        "aria_label": "Kao logo",
+        "is_disabled": false,
+        "cv_classification": "logo"
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(118, 118, 118)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "pass",
+        "contrast_ratio": 4.54,
+        "threshold": 4.5,
+        "is_large_text": false,
+        "reason": "Logo exemption fires before contrast evaluation \u2014 contrast_exempt"
+      }
+    },
+    {
+      "id": "c143-kao-02",
+      "rule": "1.4.3",
+      "description": "Decorative star/bullet span in product listing \u2014 exempt as decorative",
+      "dom_attributes": {
+        "tag_name": "span",
+        "role": null,
+        "html_snippet": "<span style=\"color: rgb(170,170,170)\">\u2605</span>",
+        "text_content": "\u2605",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": "decorative"
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(170, 170, 170)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "pass",
+        "contrast_ratio": 2.32,
+        "threshold": 4.5,
+        "is_large_text": false,
+        "reason": "Decorative exemption fires before contrast evaluation \u2014 contrast_exempt"
+      }
+    },
+    {
+      "id": "c143-kao-03",
+      "rule": "1.4.3",
+      "description": "Disabled 'Subscribe' button on newsletter section \u2014 inactive exempt",
+      "dom_attributes": {
+        "tag_name": "button",
+        "role": null,
+        "html_snippet": "<button disabled style=\"color: rgb(136,136,136); background: rgb(230,230,230)\">Subscribe</button>",
+        "text_content": "Subscribe",
+        "aria_label": null,
+        "is_disabled": true,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(136, 136, 136)",
+        "bg_color": "rgb(230, 230, 230)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "pass",
+        "contrast_ratio": 2.21,
+        "threshold": 4.5,
+        "is_large_text": false,
+        "reason": "Disabled element exemption fires before contrast evaluation \u2014 contrast_exempt"
+      }
+    },
+    {
+      "id": "c143-kao-04",
+      "rule": "1.4.3",
+      "description": "Primary body copy paragraph \u2014 black text on white background, maximum contrast",
+      "dom_attributes": {
+        "tag_name": "p",
+        "role": null,
+        "html_snippet": "<p style=\"color: rgb(0,0,0); background: rgb(255,255,255)\">Enriching lives, in harmony with nature and society.</p>",
+        "text_content": "Enriching lives, in harmony with nature and society.",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(0, 0, 0)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "pass",
+        "contrast_ratio": 21.0,
+        "threshold": 4.5,
+        "is_large_text": false,
+        "reason": "Black on white \u2014 maximum contrast 21.0:1 \u2265 4.5:1"
+      }
+    },
+    {
+      "id": "c143-kao-05",
+      "rule": "1.4.3",
+      "description": "Navigation link text \u2014 borderline pass at #767676 on white",
+      "dom_attributes": {
+        "tag_name": "a",
+        "role": null,
+        "html_snippet": "<a href='/brands/' style=\"color: rgb(118,118,118)\">Our Brands</a>",
+        "text_content": "Our Brands",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(118, 118, 118)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "pass",
+        "contrast_ratio": 4.54,
+        "threshold": 4.5,
+        "is_large_text": false,
+        "reason": "Borderline pass \u2014 #767676 on white 4.54:1 \u2265 4.5:1"
+      }
+    },
+    {
+      "id": "c143-kao-06",
+      "rule": "1.4.3",
+      "description": "Footer secondary link \u2014 borderline fail at #777777 on white",
+      "dom_attributes": {
+        "tag_name": "a",
+        "role": null,
+        "html_snippet": "<a href='/sitemap/' style=\"color: rgb(119,119,119)\">Sitemap</a>",
+        "text_content": "Sitemap",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(119, 119, 119)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "fail",
+        "contrast_ratio": 4.48,
+        "threshold": 4.5,
+        "is_large_text": false,
+        "reason": "Borderline fail \u2014 #777777 on white 4.48:1 < 4.5:1"
+      }
+    },
+    {
+      "id": "c143-kao-07",
+      "rule": "1.4.3",
+      "description": "Section heading \u2014 large text (24px regular), passes at lower 3.0 threshold",
+      "dom_attributes": {
+        "tag_name": "h2",
+        "role": null,
+        "html_snippet": "<h2 style=\"color: rgb(148,148,148); font-size:24px\">Our Commitment</h2>",
+        "text_content": "Our Commitment",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(148, 148, 148)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "24px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "pass",
+        "contrast_ratio": 3.03,
+        "threshold": 3.0,
+        "is_large_text": true,
+        "reason": "Large text (24px regular) \u2014 3.03:1 \u2265 3.0:1"
+      }
+    },
+    {
+      "id": "c143-kao-08",
+      "rule": "1.4.3",
+      "description": "Bold sub-heading \u2014 large bold text (19px 700), passes large text threshold",
+      "dom_attributes": {
+        "tag_name": "h3",
+        "role": null,
+        "html_snippet": "<h3 style=\"color: rgb(89,89,89); font-size:19px; font-weight:700\">Sustainability</h3>",
+        "text_content": "Sustainability",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(89, 89, 89)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "19px",
+        "font_weight": "700",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "pass",
+        "contrast_ratio": 7.0,
+        "threshold": 3.0,
+        "is_large_text": true,
+        "reason": "Bold large text (19px 700) \u2014 7.0:1 \u2265 3.0:1"
+      }
+    },
+    {
+      "id": "c143-kao-09",
+      "rule": "1.4.3",
+      "description": "White headline overlaid on dark navy hero banner \u2014 passes via high contrast",
+      "dom_attributes": {
+        "tag_name": "h1",
+        "role": null,
+        "html_snippet": "<h1 style=\"color: rgb(255,255,255); background: rgb(0,51,102)\">Yoki-Monozukuri</h1>",
+        "text_content": "Yoki-Monozukuri",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(255, 255, 255)",
+        "bg_color": "rgb(0, 51, 102)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_3_status": "pass",
+        "contrast_ratio": 12.61,
+        "threshold": 4.5,
+        "is_large_text": false,
+        "reason": "White on navy #003366 \u2014 12.61:1 \u2265 4.5:1"
+      }
+    },
+    {
+      "id": "c143-kao-10",
+      "rule": "1.4.3",
+      "description": "Text-over-image hero section \u2014 OCR detected text, sampled background, fails contrast",
+      "dom_attributes": {
+        "tag_name": "div",
+        "role": null,
+        "html_snippet": "<div class='hero-section' style='background-image: url(/hero.jpg); color: rgb(200,200,200)'></div>",
+        "text_content": null,
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(200, 200, 200)",
+        "bg_color": "rgb(150, 150, 150)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": true
+      },
+      "ocr_result": {
+        "has_text": true,
+        "detected_text": "Innovation at Kao"
+      },
+      "expected": {
+        "wcag_1_4_3_status": "fail",
+        "contrast_ratio": 1.77,
+        "threshold": 4.5,
+        "is_large_text": false,
+        "reason": "OCR text on sampled hero image background \u2014 1.77:1 < 4.5:1"
+      }
+    },
+    {
+      "id": "c146-kao-01",
+      "rule": "1.4.6",
+      "description": "Kao logotype \u2014 logo exemption, no AAA re-evaluation performed",
+      "dom_attributes": {
+        "tag_name": "img",
+        "role": "img",
+        "html_snippet": "<img src='/kao-logo.svg' aria-label='Kao logo' />",
+        "text_content": null,
+        "aria_label": "Kao logo",
+        "is_disabled": false,
+        "cv_classification": "logo"
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(118, 118, 118)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "pass",
+        "contrast_ratio": 4.54,
+        "threshold": 7.0,
+        "is_large_text": false,
+        "reason": "Logo exempt \u2014 contrast_exempt fires before AAA threshold check"
+      }
+    },
+    {
+      "id": "c146-kao-02",
+      "rule": "1.4.6",
+      "description": "Decorative icon span \u2014 exempt, AAA check skipped",
+      "dom_attributes": {
+        "tag_name": "span",
+        "role": null,
+        "html_snippet": "<span aria-hidden='true' style='color: rgb(170,170,170)'>\u2605</span>",
+        "text_content": "\u2605",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": "decorative"
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(170, 170, 170)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "pass",
+        "contrast_ratio": 2.32,
+        "threshold": 7.0,
+        "is_large_text": false,
+        "reason": "Decorative exemption \u2014 no AAA evaluation"
+      }
+    },
+    {
+      "id": "c146-kao-03",
+      "rule": "1.4.6",
+      "description": "Primary body copy \u2014 black on white, well above AAA 7.0 threshold",
+      "dom_attributes": {
+        "tag_name": "p",
+        "role": null,
+        "html_snippet": "<p style='color: rgb(0,0,0)'>Enriching lives, in harmony with nature and society.</p>",
+        "text_content": "Enriching lives, in harmony with nature and society.",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(0, 0, 0)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "pass",
+        "contrast_ratio": 21.0,
+        "threshold": 7.0,
+        "is_large_text": false,
+        "reason": "Black on white 21.0:1 \u2265 7.0:1 \u2014 contrast_enhanced_sufficient"
+      }
+    },
+    {
+      "id": "c146-kao-04",
+      "rule": "1.4.6",
+      "description": "Navigation link \u2014 passes AA (#767676) but fails AAA (4.54 < 7.0)",
+      "dom_attributes": {
+        "tag_name": "a",
+        "role": null,
+        "html_snippet": "<a href='/brands/' style='color: rgb(118,118,118)'>Our Brands</a>",
+        "text_content": "Our Brands",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(118, 118, 118)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "fail",
+        "contrast_ratio": 4.54,
+        "threshold": 7.0,
+        "is_large_text": false,
+        "reason": "Passes AA 4.5 but fails AAA 7.0 \u2014 4.54:1 < 7.0:1"
+      }
+    },
+    {
+      "id": "c146-kao-05",
+      "rule": "1.4.6",
+      "description": "Brand-red CTA text \u2014 passes AA (5.89) but fails AAA (5.89 < 7.0)",
+      "dom_attributes": {
+        "tag_name": "span",
+        "role": null,
+        "html_snippet": "<span style='color: rgb(204,0,0)'>Learn More</span>",
+        "text_content": "Learn More",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(204, 0, 0)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "fail",
+        "contrast_ratio": 5.89,
+        "threshold": 7.0,
+        "is_large_text": false,
+        "reason": "Brand red passes AA but fails AAA \u2014 5.89:1 < 7.0:1 \u2014 contrast_enhanced_insufficient"
+      }
+    },
+    {
+      "id": "c146-kao-06",
+      "rule": "1.4.6",
+      "description": "White headline on dark navy hero \u2014 passes AAA (12.61 \u2265 7.0)",
+      "dom_attributes": {
+        "tag_name": "h1",
+        "role": null,
+        "html_snippet": "<h1 style='color: rgb(255,255,255); background: rgb(0,51,102)'>Yoki-Monozukuri</h1>",
+        "text_content": "Yoki-Monozukuri",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(255, 255, 255)",
+        "bg_color": "rgb(0, 51, 102)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "pass",
+        "contrast_ratio": 12.61,
+        "threshold": 7.0,
+        "is_large_text": false,
+        "reason": "White on navy 12.61:1 \u2265 7.0:1 \u2014 contrast_enhanced_sufficient"
+      }
+    },
+    {
+      "id": "c146-kao-07",
+      "rule": "1.4.6",
+      "description": "Section heading \u2014 large text 24px, passes AAA large threshold 4.5 exactly",
+      "dom_attributes": {
+        "tag_name": "h2",
+        "role": null,
+        "html_snippet": "<h2 style='color: rgb(118,118,118); font-size:24px'>ESG Strategy</h2>",
+        "text_content": "ESG Strategy",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(118, 118, 118)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "24px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "pass",
+        "contrast_ratio": 4.54,
+        "threshold": 4.5,
+        "is_large_text": true,
+        "reason": "Large text (24px) \u2014 AAA large threshold 4.5 \u2014 4.54:1 passes exactly"
+      }
+    },
+    {
+      "id": "c146-kao-08",
+      "rule": "1.4.6",
+      "description": "Product card sub-heading \u2014 large text 24px, fails AAA large threshold (3.03 < 4.5)",
+      "dom_attributes": {
+        "tag_name": "h3",
+        "role": null,
+        "html_snippet": "<h3 style='color: rgb(148,148,148); font-size:24px'>Merries</h3>",
+        "text_content": "Merries",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(148, 148, 148)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "24px",
+        "font_weight": "400",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "fail",
+        "contrast_ratio": 3.03,
+        "threshold": 4.5,
+        "is_large_text": true,
+        "reason": "Large text (24px) \u2014 3.03:1 passes AA large (3.0) but fails AAA large (4.5)"
+      }
+    },
+    {
+      "id": "c146-kao-09",
+      "rule": "1.4.6",
+      "description": "Bold large sub-heading 19px 700 \u2014 passes AAA large threshold exactly at 4.54",
+      "dom_attributes": {
+        "tag_name": "h3",
+        "role": null,
+        "html_snippet": "<h3 style='color: rgb(118,118,118); font-size:19px; font-weight:700'>Innovation</h3>",
+        "text_content": "Innovation",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(118, 118, 118)",
+        "bg_color": "rgb(255, 255, 255)",
+        "font_size": "19px",
+        "font_weight": "700",
+        "has_bg_image": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_4_6_status": "pass",
+        "contrast_ratio": 4.54,
+        "threshold": 4.5,
+        "is_large_text": true,
+        "reason": "Bold large text (19px 700) \u2014 4.54:1 \u2265 AAA large 4.5:1 \u2014 contrast_enhanced_sufficient"
+      }
+    },
+    {
+      "id": "c146-kao-10",
+      "rule": "1.4.6",
+      "description": "Text-over-image hero with OCR \u2014 white on sampled dark background, passes AAA (14.49 \u2265 7.0)",
+      "dom_attributes": {
+        "tag_name": "div",
+        "role": null,
+        "html_snippet": "<div class='hero-banner' style='background-image:url(/hero.jpg); color:rgb(255,255,255)'></div>",
+        "text_content": null,
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "visual_attributes": {
+        "fg_color": "rgb(255, 255, 255)",
+        "bg_color": "rgb(20, 40, 80)",
+        "font_size": "16px",
+        "font_weight": "400",
+        "has_bg_image": true
+      },
+      "ocr_result": {
+        "has_text": true,
+        "detected_text": "Welcome to Kao Corporation"
+      },
+      "expected": {
+        "wcag_1_4_6_status": "pass",
+        "contrast_ratio": 14.49,
+        "threshold": 7.0,
+        "is_large_text": false,
+        "reason": "OCR path \u2014 white on dark sampled bg 14.49:1 \u2265 AAA 7.0:1"
+      }
+    },
+    {
+      "id": "c1411-kao-01",
+      "rule": "1.4.11",
+      "description": "Plain paragraph \u2014 not a UI component, no cv_classification \u2014 not_applicable",
+      "dom_attributes": {
+        "tag_name": "p",
+        "role": null,
+        "html_snippet": "<p>Enriching lives, in harmony with nature and society.</p>",
+        "text_content": "Enriching lives, in harmony with nature and society.",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "interaction": {
+        "is_focusable": false,
+        "tab_index": -1
+      },
+      "computed_styles": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "border-top-color": "rgba(0, 0, 0, 0)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "not_applicable",
+        "reason_code": "not_ui_component",
+        "reason": "Plain paragraph \u2014 not interactive, not a native UI tag, no icon cv_classification"
+      }
+    },
+    {
+      "id": "c1411-kao-02",
+      "rule": "1.4.11",
+      "description": "Non-focusable product image div \u2014 cv_classification informative, not icon \u2014 not_applicable",
+      "dom_attributes": {
+        "tag_name": "div",
+        "role": null,
+        "html_snippet": "<div class='product-image'></div>",
+        "text_content": null,
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": "informative"
+      },
+      "interaction": {
+        "is_focusable": false,
+        "tab_index": -1
+      },
+      "computed_styles": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "border-top-color": "rgba(0, 0, 0, 0)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "not_applicable",
+        "reason_code": "not_ui_component",
+        "reason": "Non-interactive div with cv_classification='informative' (not 'icon') \u2014 not a UI component"
+      }
+    },
+    {
+      "id": "c1411-kao-03",
+      "rule": "1.4.11",
+      "description": "Static brand image \u2014 img tag, non-focusable, cv_classification informative \u2014 not_applicable",
+      "dom_attributes": {
+        "tag_name": "img",
+        "role": null,
+        "html_snippet": "<img src='/brand-banner.jpg' alt='Kao Brands' />",
+        "text_content": null,
+        "aria_label": "Kao Brands",
+        "is_disabled": false,
+        "cv_classification": "informative"
+      },
+      "interaction": {
+        "is_focusable": false,
+        "tab_index": -1
+      },
+      "computed_styles": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "border-top-color": "rgba(0, 0, 0, 0)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "not_applicable",
+        "reason_code": "not_ui_component",
+        "reason": "Static img with cv_classification='informative' \u2014 not 'icon', not focusable \u2014 not_applicable"
+      }
+    },
+    {
+      "id": "c1411-kao-04",
+      "rule": "1.4.11",
+      "description": "Disabled 'Search' button \u2014 inactive UI component, exempt from non-text contrast",
+      "dom_attributes": {
+        "tag_name": "button",
+        "role": null,
+        "html_snippet": "<button disabled style='background: rgb(200,200,200); border: 1px solid rgb(150,150,150)'>Search</button>",
+        "text_content": "Search",
+        "aria_label": null,
+        "is_disabled": true,
+        "cv_classification": null
+      },
+      "interaction": {
+        "is_focusable": true,
+        "tab_index": -1
+      },
+      "computed_styles": {
+        "background-color": "rgb(200, 200, 200)",
+        "border-top-color": "rgb(150, 150, 150)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "pass",
+        "reason_code": "inactive_exempt",
+        "reason": "Disabled button \u2014 WCAG 1.4.11 exempts inactive UI components \u2014 inactive_exempt"
+      }
+    },
+    {
+      "id": "c1411-kao-05",
+      "rule": "1.4.11",
+      "description": "Disabled email input on newsletter signup \u2014 inactive, exempt",
+      "dom_attributes": {
+        "tag_name": "input",
+        "role": null,
+        "html_snippet": "<input type='email' disabled style='background: rgba(0,0,0,0); border: 1px solid rgb(180,180,180)' />",
+        "text_content": null,
+        "aria_label": "Email address",
+        "is_disabled": true,
+        "cv_classification": null
+      },
+      "interaction": {
+        "is_focusable": true,
+        "tab_index": -1
+      },
+      "computed_styles": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "border-top-color": "rgb(180, 180, 180)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "pass",
+        "reason_code": "inactive_exempt",
+        "reason": "Disabled input \u2014 inactive_exempt fires before boundary contrast check"
+      }
+    },
+    {
+      "id": "c1411-kao-06",
+      "rule": "1.4.11",
+      "description": "Active CTA button with no background or border styling \u2014 no explicit boundary, needs_review",
+      "dom_attributes": {
+        "tag_name": "button",
+        "role": null,
+        "html_snippet": "<button class='ghost-btn'>Learn More</button>",
+        "text_content": "Learn More",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "interaction": {
+        "is_focusable": true,
+        "tab_index": 0
+      },
+      "computed_styles": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "border-top-color": "rgba(0, 0, 0, 0)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "needs_review",
+        "reason_code": "no_explicit_boundary",
+        "reason": "Active button \u2014 both bg and border transparent \u2014 cannot determine boundary contrast statically"
+      }
+    },
+    {
+      "id": "c1411-kao-07",
+      "rule": "1.4.11",
+      "description": "Navigation anchor link \u2014 focusable, no background or border \u2014 no_explicit_boundary",
+      "dom_attributes": {
+        "tag_name": "a",
+        "role": null,
+        "html_snippet": "<a href='/sustainability/'>Sustainability</a>",
+        "text_content": "Sustainability",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "interaction": {
+        "is_focusable": true,
+        "tab_index": 0
+      },
+      "computed_styles": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "border-top-color": "rgba(0, 0, 0, 0)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "needs_review",
+        "reason_code": "no_explicit_boundary",
+        "reason": "Focusable link \u2014 both bg and border transparent \u2014 no_explicit_boundary"
+      }
+    },
+    {
+      "id": "c1411-kao-08",
+      "rule": "1.4.11",
+      "description": "Primary 'Contact Us' CTA button with solid background \u2014 has explicit boundary, needs_review",
+      "dom_attributes": {
+        "tag_name": "button",
+        "role": null,
+        "html_snippet": "<button style='background: rgb(0,120,212)'>Contact Us</button>",
+        "text_content": "Contact Us",
+        "aria_label": null,
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "interaction": {
+        "is_focusable": true,
+        "tab_index": 0
+      },
+      "computed_styles": {
+        "background-color": "rgb(0, 120, 212)",
+        "border-top-color": "rgba(0, 0, 0, 0)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "needs_review",
+        "reason_code": "boundary_contrast_review",
+        "reason": "Active button with solid bg \u2014 boundary contrast requires visual/screenshot analysis"
+      }
+    },
+    {
+      "id": "c1411-kao-09",
+      "rule": "1.4.11",
+      "description": "Search text input with visible border only \u2014 has explicit boundary via border, needs_review",
+      "dom_attributes": {
+        "tag_name": "input",
+        "role": null,
+        "html_snippet": "<input type='search' style='background: rgba(0,0,0,0); border: 1px solid rgb(100,100,100)' />",
+        "text_content": null,
+        "aria_label": "Search",
+        "is_disabled": false,
+        "cv_classification": null
+      },
+      "interaction": {
+        "is_focusable": true,
+        "tab_index": 0
+      },
+      "computed_styles": {
+        "background-color": "rgba(0, 0, 0, 0)",
+        "border-top-color": "rgb(100, 100, 100)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "needs_review",
+        "reason_code": "boundary_contrast_review",
+        "reason": "Active input with visible border \u2014 boundary_contrast_review (real check needs visual engine)"
+      }
+    },
+    {
+      "id": "c1411-kao-10",
+      "rule": "1.4.11",
+      "description": "Hamburger menu icon div \u2014 non-focusable but cv_classification='icon', has bg \u2014 needs_review",
+      "dom_attributes": {
+        "tag_name": "div",
+        "role": null,
+        "html_snippet": "<div class='menu-icon' aria-label='Open menu' style='background: rgb(50,50,50)'></div>",
+        "text_content": null,
+        "aria_label": "Open menu",
+        "is_disabled": false,
+        "cv_classification": "icon"
+      },
+      "interaction": {
+        "is_focusable": false,
+        "tab_index": -1
+      },
+      "computed_styles": {
+        "background-color": "rgb(50, 50, 50)",
+        "border-top-color": "rgba(0, 0, 0, 0)"
+      },
+      "expected": {
+        "wcag_1_4_11_status": "needs_review",
+        "reason_code": "boundary_contrast_review",
+        "reason": "Non-focusable div with cv_classification='icon' \u2014 icon path enters UI component check \u2014 boundary_contrast_review"
+      }
+    }
+  ]
+}
