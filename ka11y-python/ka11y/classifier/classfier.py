@@ -6,8 +6,6 @@ from rich.console import Console
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.models import ImageData
 
-
-
 console = Console(force_terminal=True)
 logger = setup_logger(name="KAC", tag="classify_assets")
 
@@ -231,7 +229,11 @@ class ClassifyAssets:
                                  window.getComputedStyle(el).cursor === "pointer"
                 };
             }""")
-        except Exception:
+        except Exception as _ctx_err:
+            logger.warning(
+                f"[classifier] evaluate() failed for element context; "
+                f"defaulting to non-interactive. Error: {_ctx_err}"
+            )
             ctx = {
                 "inButton": False,
                 "inLink": False,

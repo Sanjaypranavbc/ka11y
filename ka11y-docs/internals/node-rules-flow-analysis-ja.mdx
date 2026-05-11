@@ -4,12 +4,14 @@ description: "Node.js アクセシビリティ監査機能のエンドツーエ�
 ---
 
 > 生成日: 2026-04-08
-> スコープ: `ka11y-node/src/custom-checks/`（カスタム WCAG チェック 24 件）+ `ka11y-node/src/services/`
+> スコープ: `ka11y-node/src/custom-checks/`（カスタム WCAG チェック 28 件）+ `ka11y-node/src/services/`
 > スタック: Node.js + Express + Puppeteer + axe-core
 >
 > 更新日 2026-04-13: カスタムチェックはサービス層から共有ルールコンテキスト（`lang` + 共有設定）を受け取るようになりました。移行済みチェックは、ハードコードされた JS 配列ではなく `config/universal.yml` から EN/JA のヒューリスティックと一部の理由テンプレートを読み込みます。
 >
 > 更新日 2026-04-14: grouped / flat の両方の Node エンドポイントで `lang` が最後まで伝播し、`criterion_name`、`reason`、`suggested_fix` が日本語化されます。ベストプラクティス系メタデータも `i18n/locales/` の共有ロケールオーバーレイから読み込みます。
+>
+> 更新日 2026-04-24: Node ヒューリスティックのギャップ（F30/F13/F81/F58/F60/G125/G126/G127/G164/F114）を追加実装しました。
 
 ---
 
@@ -24,7 +26,7 @@ flowchart TD
 
     subgraph "並列監査パイプライン"
         F["axe-core エンジン"]
-        G["静的カスタムチェック 19 件"]
+        G["静的カスタムチェック 23 件"]
         H["インタラクティブカスタムチェック 5 件"]
     end
 
@@ -68,6 +70,8 @@ flowchart TD
         S17["表示方向（静的）"]
         S18["文字画像"]
         S19["発音"]
+        S20["ポインタージェスチャー"]
+        S21["モーションの作動"]
     end
 
     subgraph "インタラクティブチェック（順次実行）"
@@ -78,7 +82,7 @@ flowchart TD
         I5["キーボードトラップ"]
     end
 
-    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19
+    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21
     INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
 
@@ -127,6 +131,7 @@ flowchart TD
 |------|-----------------|
 | VTT / SRT トラック要素 | `<audio>` 内の `<track>` |
 | トランスクリプトリンク | 兄弟/親アンカーの "transcript" キーワード |
+| ファイル名のみリンク（F30） | `transcript.pdf` など説明不足ラベルをヒューリスティック検出 |
 | `<figcaption>` キャプション | figure 内の figcaption |
 | 折りたたみ details | トランスクリプト内容の `<details>` |
 | ARIA 説明参照 | `aria-describedby` → トランスクリプトブロック |
@@ -134,7 +139,7 @@ flowchart TD
 #### カバーできないケース
 | ケース | 理由 |
 |------|-----|
-| アコーディオン内トランスクリプト | 非表示コンテンツを評価しない |
+| トランスクリプト品質の妥当性 | 存在確認のみで、音声内容との同等性は検証しない |
 | 認証が必要なトランスクリプト | 外部リンク先を追わない |
 | iframe 内トランスクリプト | クロスオリジン iframe アクセス不可 |
 
@@ -230,11 +235,13 @@ flowchart TD
 #### カバーするケース
 - アンダーライン、border-bottom、アウトライン、背景色変化、font-weight 差分（≥100）、italic。
 - アンカー以外の祖先要素のコンピューテッドスタイルとの比較。
+- 必須項目の「色だけ」表示ヒューリスティック（`required`/`必須` 表示なし）。
+- 色名のみで状態を示す説明文ヒューリスティック。
 
 #### カバーできないケース
-- SVG テキスト要素内のリンク。
 - Shadow DOM 内のリンク。
 - Canvas 上のリンク。
+- チャート/地図の凡例は依然としてヒューリスティック評価（要手動確認）。
 
 ---
 
@@ -304,11 +311,14 @@ flowchart TD
 | ARIA ウィジェットの矢印トラップ | Tree、Grid、Listbox、Menu、Tablist、Radiogroup |
 | iframe Tab トラップ | クロスフレーム Tab ナビゲーションテスト |
 | Escape 確認 | トラップ確認前に ESC キー押下 |
+| モーダル F85 | Escape 後もフォーカスがモーダル内に残るケースを検出 |
+| F58 ヒューリスティック | `preventDefault()` による Tab/Escape/Arrow 抑止を検出 |
+| F60 ヒューリスティック | 非モーダルが Escape 後も閉じず close 手段がないケースを検出 |
 
 #### カバーできないケース
 | ケース | 理由 |
 |------|-----|
-| ESC で閉じるダイアログトラップ | ESC でトラップ脱出、違反としない |
+| バンドル済み外部スクリプト内のキー抑止 | 静的スニペットで観測できない場合がある |
 | Shadow DOM トラップ | Closed Shadow DOM アクセス不可 |
 | 動的フォーカス管理 | ページ読み込み後に追加されるフォーカスターゲット |
 
@@ -435,11 +445,10 @@ flowchart TD
 ```
 
 #### カバーするケース
-- パンくずナビ、`aria-current="page"`、アクティブなナビアイテム（`.active`、`[aria-selected]`）、サイトマップリンク、`aria-current="step"`、JSON-LD `BreadcrumbList`。
+- パンくずナビ、`aria-current="page"`、アクティブなナビアイテム（`.active`、`[aria-selected]`）、サイトマップリンク、目次（ToC）シグナル、`aria-current="step"`、JSON-LD `BreadcrumbList`。
 
 #### カバーできないケース
 - ページタイトルのみによる暗黙的な位置情報。
-- ARIA マークアップのない視覚的パンくずリスト。
 - ナビゲーション後の動的な位置情報更新。
 
 ---
@@ -734,7 +743,7 @@ flowchart TD
     FORM["ページ上のフォーム"] --> RISK{"高リスクコンテキスト？"}
     RISK -- "金融 / 法的 / 破壊的アクションのキーワード" --> SAFE{"セーフガードあり？"}
     RISK -- "なし" --> PASS["PASS"]
-    SAFE -- "確認テキスト / 確認チェックボックス / 確認ボタン / ステップ表示" --> PASS
+    SAFE -- "確認テキスト / 確認チェックボックス / 確認ボタン / ステップ表示 / Undo-Revert 表示" --> PASS
     SAFE -- "なし" --> FAIL["FAIL: 3.3.4 エラー防止メカニズムなし"]
 ```
 
@@ -747,6 +756,7 @@ flowchart TD
 | 確認セーフガード | テキスト/ボタンの "review"、"confirm" |
 | 確認チェックボックス | 送信ボタン近くの `input[type=checkbox]` |
 | マルチステップ表示 | ステップ/進捗表示の存在 |
+| Undo/Revert セーフガード | "undo"、"revert"、"restore"、`取り消し`、`元に戻す` シグナル |
 
 #### カバーできないケース
 | ケース | 理由 |
@@ -879,6 +889,7 @@ flowchart TD
 | 動的コンテキストの検出 | フォーム、検索、カート、通知セレクター |
 | `aria-atomic` の検証 | `role="alert"` 要素上 |
 | インラインバリデーションエラー | `[aria-invalid]` + メッセージ要素 |
+| ARIA なしトースト通知 | `custom-status-messages-toast` を出力 |
 
 #### カバーできないケース
 | ケース | 理由 |
@@ -904,7 +915,9 @@ flowchart TD
 | 2.4.8 | 現在位置情報 | location.check.js | 静的 | 静的 | 中 |
 | 2.4.9 | リンクの目的（リンクのみ） | link-purpose.check.js | 静的 | 静的 | 高 |
 | 2.4.13 | フォーカスの外観 | focus-appearance.check.js | インタラクティブ | インタラクティブ | 高 |
+| 2.5.1 | ポインタージェスチャー | src/audits/wcag-2.5.1/ | 静的 | 静的 | 中 |
 | 2.5.2 | ポインターキャンセル | pointer-cancellation.check.js | 静的 | 静的 | 中 |
+| 2.5.4 | モーションの作動 | src/audits/wcag-2.5.4/ | 静的 | 静的 | 低 |
 | 2.5.7 | ドラッグ操作 | dragging-movements.check.js | 静的 | 静的 | 中 |
 | 3.1.6 | 発音 | pronunciation.check.js | インタラクティブ | インタラクティブ | 高 |
 | 3.2.1 | フォーカス時の動作 | on-focus.check.js | インタラクティブ | インタラクティブ | 高 |

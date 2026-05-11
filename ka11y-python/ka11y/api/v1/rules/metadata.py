@@ -8,18 +8,27 @@ Response shape:
   {
     "version": "1.0",
     "lang":    "en",
+    "severities": { "critical": "Critical", ... },   // localized labels
+    "levels":     { "A": "Level A", ... },
+    "statuses":   { "pass": "Pass", ... },
     "rules": [
       {
-        "id":            "1.1.1",
-        "level":         "A",
-        "severity":      "critical",   // null for rules without a severity
-        "name":          "Non-text Content",
-        "description":   "...",
-        "suggested_fix": "..."
+        "id":             "1.1.1",
+        "level":          "A",
+        "level_label":    "Level A",
+        "severity":       "critical",   // null for rules without a severity
+        "severity_label": "Critical",   // null when severity is null
+        "name":           "Non-text Content",
+        "description":    "...",
+        "suggested_fix":  "..."
       },
       ...
     ]
   }
+
+`level`, `severity`, and `status` carry stable machine values; the
+`*_label` companions and the top-level dictionaries carry the localized
+display strings for the requested language.
 
 Rules are sorted numerically by SC ID (1.1.1 < 1.2.1 < ... < 4.1.3).
 """
@@ -31,7 +40,12 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
-from ka11y.i18n.loader import load_rules
+from ka11y.i18n.loader import (
+    get_level_label,
+    get_severity_label,
+    load_bundle,
+    load_rules,
+)
 
 router = APIRouter()
 
@@ -46,7 +60,9 @@ def _sc_sort_key(entry: Dict[str, Any]) -> tuple:
 
 @router.get("/wcag", summary="WCAG rules catalogue")
 async def get_wcag_rules(
-    lang: str = Query(default="en", description="BCP-47 language code (e.g. 'en', 'de', 'ja')"),
+    lang: str = Query(
+        default="en", description="BCP-47 language code (e.g. 'en', 'de', 'ja')"
+    ),
 ) -> JSONResponse:
     """
     Returns all WCAG success criteria with level, severity, name,
@@ -58,15 +74,18 @@ async def get_wcag_rules(
     # Sanitise lang — only allow [a-zA-Z-], max 10 chars
     safe_lang = "".join(c for c in lang if c.isalpha() or c == "-")[:10] or "en"
 
+    bundle = load_bundle(safe_lang)
     rules_map = load_rules(safe_lang)
 
     rules_list: List[Dict[str, Any]] = [
         {
-            "id":            entry.id,
-            "level":         entry.level,
-            "severity":      entry.severity,
-            "name":          entry.name,
-            "description":   entry.description,
+            "id": entry.id,
+            "level": entry.level,
+            "level_label": get_level_label(entry.level, safe_lang),
+            "severity": entry.severity,
+            "severity_label": get_severity_label(entry.severity, safe_lang),
+            "name": entry.name,
+            "description": entry.description,
             "suggested_fix": entry.suggested_fix,
         }
         for entry in rules_map.values()
@@ -77,7 +96,10 @@ async def get_wcag_rules(
     return JSONResponse(
         content={
             "version": "1.0",
-            "lang":    safe_lang,
-            "rules":   rules_list,
+            "lang": safe_lang,
+            "severities": dict(bundle.severities),
+            "levels": dict(bundle.levels),
+            "statuses": dict(bundle.statuses),
+            "rules": rules_list,
         }
     )

@@ -28,7 +28,7 @@ from typing import AsyncGenerator
 
 from .models import CombinedRequest, JobStatusResponse
 from .runner import _run_job
-from .store import _get_subscribers_lock, _jobs, _subscribers
+from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 
 # Private/reserved IP ranges that must never be fetched (SSRF guard for redirects).
 # These CIDR networks cover: loopback, RFC-1918 private, link-local, unique-local
@@ -240,9 +240,19 @@ async def submit_combined_audit(payload: CombinedRequest):
 @router.get("/{job_id}", response_model=JobStatusResponse)
 async def get_combined_audit(job_id: str):
     """Poll the status or retrieve the result of a combined audit job."""
-    job = _jobs.get(job_id)
-    if not job:
+    if job_id not in _jobs:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+    # Snapshot under the per-job lock so a concurrent runner._run_job() update
+    # cannot publish a half-applied state to a polling client. Shallow copy is
+    # sufficient because we only read top-level fields below.
+    async with _get_job_lock(job_id):
+        snapshot = _jobs.get(job_id)
+        if not snapshot:
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        job = dict(snapshot)
+        # `stages` is a list mutated by sync stage_events; snapshot it too.
+        if "stages" in job:
+            job["stages"] = list(job["stages"])
 
     # Inject image_url into image-backed reports so the frontend can load them.
     result = job.get("result") or {}
@@ -262,8 +272,14 @@ async def get_combined_audit(job_id: str):
             element = finding.get("element")
             if element and isinstance(element, dict):
                 src = element.get("image_src")
-                if src and not src.startswith("/api/v1/") and not src.startswith(("http://", "https://", "data:")):
-                    element["image_src"] = f"/api/v1/combined/{job_id}/image?path={quote(src, safe='')}"
+                if (
+                    src
+                    and not src.startswith("/api/v1/")
+                    and not src.startswith(("http://", "https://", "data:"))
+                ):
+                    element["image_src"] = (
+                        f"/api/v1/combined/{job_id}/image?path={quote(src, safe='')}"
+                    )
 
     return job
 
@@ -285,23 +301,43 @@ async def get_job_image(job_id: str, path: str):
     for report_key in ("contrast_report", "image_audit_report"):
         report = result.get(report_key) or {}
         valid_paths.update(
-            img["path"]
-            for img in report.get("images", [])
-            if img.get("path")
+            img["path"] for img in report.get("images", []) if img.get("path")
         )
 
-    if path not in valid_paths:
+    # Canonicalize the requested path to prevent path-traversal attacks.
+    # valid_paths are already canonical absolute paths stored by the auditor.
+    try:
+        canonical_path = Path(path).resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image path.")
+
+    canonical_valid = {str(Path(p).resolve()) for p in valid_paths}
+    if str(canonical_path) not in canonical_valid:
         raise HTTPException(
             status_code=403,
             detail="Image path is not associated with this job.",
         )
 
-    img_path = Path(path)
-    if not img_path.exists() or not img_path.is_file():
+    # Defence-in-depth: even if a (poisoned) auditor record stored a symlink
+    # pointing outside the job directory, refuse to serve content that escapes
+    # the job's own output_dir. This prevents the symlink-attack path noted in
+    # the security review.
+    job_output_dir = job.get("output_dir")
+    if job_output_dir:
+        try:
+            canonical_root = Path(job_output_dir).resolve()
+            canonical_path.relative_to(canonical_root)
+        except (ValueError, OSError):
+            raise HTTPException(
+                status_code=403,
+                detail="Image path escapes the job output directory.",
+            )
+
+    if not canonical_path.exists() or not canonical_path.is_file():
         raise HTTPException(status_code=404, detail="Image file not found on server.")
 
-    media_type, _ = mimetypes.guess_type(str(img_path))
-    return FileResponse(str(img_path), media_type=media_type or "image/png")
+    media_type, _ = mimetypes.guess_type(str(canonical_path))
+    return FileResponse(str(canonical_path), media_type=media_type or "image/png")
 
 
 @router.get("/{job_id}/stream")

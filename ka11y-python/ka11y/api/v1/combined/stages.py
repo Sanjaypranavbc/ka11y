@@ -18,10 +18,30 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+
+
+@dataclass
+class PythonStagesResult:
+    """Typed return value from :func:`_run_python_stages`.
+
+    Replaces the prior ``(all_findings, contrast_report, image_audit_report)``
+    positional tuple, which silently broke whenever a stage was added or
+    reordered (the caller's positional unpack would point at the wrong
+    object). Named fields make the contract explicit at the type level."""
+
+    findings: List[Dict[str, Any]] = field(default_factory=list)
+    contrast_report: Optional[Dict[str, Any]] = None
+    image_audit_report: Optional[Dict[str, Any]] = None
+
+    def as_tuple(self) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """Backwards-compatible accessor for any caller still using
+        positional unpacking. Prefer the named attributes."""
+        return self.findings, self.contrast_report, self.image_audit_report
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils.crawler_settings import (
@@ -37,6 +57,7 @@ from .findings import (
     OCR_RESULT_CONVERTERS,
     _build_contrast_report,
     _build_image_audit_report,
+    _contrast_capture_failed_to_findings,
     _crawler_text_spacing_to_findings,
     _focus_not_obscured_enh_to_findings,
     _focus_not_obscured_min_to_findings,
@@ -52,7 +73,12 @@ from .findings import (
     _ts_to_findings,
     _sensory_to_findings,
 )
-from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
+from .stage_events import (
+    _stage_complete,
+    _stage_error_and_warn,
+    _stage_start,
+    emit_stage_progress,
+)
 from .store import _jobs
 
 # Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
@@ -142,7 +168,9 @@ async def _call_node_flat(
     try:
         # 300s timeout to allow for heavy custom checks on complex pages
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(endpoint, json={"url": url, "level": wcag_level, "lang": lang})
+            resp = await client.post(
+                endpoint, json={"url": url, "level": wcag_level, "lang": lang}
+            )
             resp.raise_for_status()
             return resp.json().get("findings", [])
     except httpx.ConnectError:
@@ -210,6 +238,15 @@ async def _stage_image_audit(
         findings: List[Dict] = []
         ocr_paths: List[str] = []
 
+        # Emit a crawl-phase completion marker so the bar settles before OCR begins.
+        emit_stage_progress(
+            job_id,
+            "image_audit",
+            current=len(image_crawler.images_data),
+            total=len(image_crawler.images_data),
+            phase="crawl",
+        )
+
         if run_ocr:
             max_ocr_images = get_max_ocr_images_per_run()
             ocr_paths, skipped_ocr_paths = select_ocr_candidate_paths(
@@ -217,15 +254,15 @@ async def _stage_image_audit(
                 limit=max_ocr_images,
             )
             if skipped_ocr_paths:
-                warning = (
+                message = (
                     f"image_audit: OCR limited to {len(ocr_paths)} image(s); "
                     f"skipped {len(skipped_ocr_paths)} lower-priority screenshot(s)"
                 )
-                _jobs[job_id].setdefault("warnings", []).append(warning)
+                logger.info(message)
                 if step_logger:
                     step_logger.record(
                         step="image_audit",
-                        status="warning",
+                        status="info",
                         message="OCR budget applied",
                         context={
                             "selected_images": len(ocr_paths),
@@ -239,7 +276,21 @@ async def _stage_image_audit(
                 lang=lang,
                 include_paths=ocr_paths,
             )
+            emit_stage_progress(
+                job_id,
+                "image_audit",
+                current=0,
+                total=len(ocr_paths),
+                phase="ocr",
+            )
             await asyncio.to_thread(detector.scan_directory)
+            emit_stage_progress(
+                job_id,
+                "image_audit",
+                current=len(ocr_paths),
+                total=len(ocr_paths),
+                phase="ocr",
+            )
 
             saver = TextClassification(source_directory=image_crawler.output_dir)
             saver.results = detector.results
@@ -249,14 +300,32 @@ async def _stage_image_audit(
             contrast_report = _build_contrast_report(ocr_results)
             for _, converter in OCR_RESULT_CONVERTERS:
                 findings.extend(converter(ocr_results, url))
+            # 1.4.3/1.4.6 needs_review for images that failed screenshot capture
+            findings.extend(
+                _contrast_capture_failed_to_findings(image_crawler.images_data, url)
+            )
 
         if run_image_audit:
             auditor = AltTextAccessibilityAuditor()
+            emit_stage_progress(
+                job_id,
+                "image_audit",
+                current=0,
+                total=len(image_crawler.images_data),
+                phase="alt_audit",
+            )
             records = await asyncio.to_thread(
                 auditor.generate_audit_report,
                 images_data=image_crawler.images_data,
                 ocr_results=ocr_results,
                 output_dir=image_crawler.output_dir,
+            )
+            emit_stage_progress(
+                job_id,
+                "image_audit",
+                current=len(image_crawler.images_data),
+                total=len(image_crawler.images_data),
+                phase="alt_audit",
             )
             image_audit_report = _build_image_audit_report(records)
             for _, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
@@ -273,9 +342,9 @@ async def _stage_image_audit(
             extra={
                 "ocr_results": len(ocr_results),
                 "ocr_images_scanned": len(ocr_paths) if run_ocr else 0,
-                "contrast_regions": (contrast_report or {}).get("summary", {}).get(
-                    "total_regions_analysed", 0
-                ),
+                "contrast_regions": (contrast_report or {})
+                .get("summary", {})
+                .get("total_regions_analysed", 0),
             },
         )
 
@@ -344,12 +413,12 @@ async def _stage_form_audit(
 
 
 async def _stage_sensory_audit(
-        url: str,
-        output_dir: Path,
-        max_depth: int,
-        run_sensory_audit: bool,
-        job_id: str,
-        lang: str = "en",
+    url: str,
+    output_dir: Path,
+    max_depth: int,
+    run_sensory_audit: bool,
+    job_id: str,
+    lang: str = "en",
 ) -> List[Dict]:
     """
     Crawl text-bearing elements → 1.3.3 sensory-characteristics check.
@@ -786,12 +855,16 @@ async def _stage_form_audit_universal(
         return []
 
     try:
-        from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
+        from ka11y.accessibility.rules.forms.form_auditor import (
+            FormAccessibilityAuditor,
+        )
 
         snapshot = await snapshot_task
         form_auditor = FormAccessibilityAuditor(output_dir=str(output_dir))
         records = await asyncio.to_thread(
-            functools.partial(form_auditor.generate_audit_report, form_inputs=snapshot.forms)
+            functools.partial(
+                form_auditor.generate_audit_report, form_inputs=snapshot.forms
+            )
         )
         findings = _form_to_findings(records, url)
         _record_stage_metrics(
@@ -828,7 +901,9 @@ async def _stage_label_in_name_universal(
 
         snapshot = await snapshot_task
         auditor = LabelInNameAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.interactive)
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report, snapshot.interactive
+        )
         findings = _lin_to_findings(records, url)
         _record_stage_metrics(
             step_logger,
@@ -864,7 +939,9 @@ async def _stage_pause_stop_hide_universal(
 
         snapshot = await snapshot_task
         auditor = PauseStopHideAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.moving_content)
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report, snapshot.moving_content
+        )
         findings = _psh_to_findings(records, url)
         _record_stage_metrics(
             step_logger,
@@ -905,7 +982,9 @@ async def _stage_target_size_universal(
 
         snapshot = await snapshot_task
         auditor = TargetSizeAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.target_sizes)
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report, snapshot.target_sizes
+        )
         findings = _ts_to_findings(records, url)
         _record_stage_metrics(
             step_logger,
@@ -941,7 +1020,9 @@ async def _stage_text_spacing_universal(
 
         snapshot = await snapshot_task
         auditor = TextSpacingAuditor(output_dir=str(output_dir))
-        records = await asyncio.to_thread(auditor.generate_audit_report, snapshot.text_spacing)
+        records = await asyncio.to_thread(
+            auditor.generate_audit_report, snapshot.text_spacing
+        )
         findings = _crawler_text_spacing_to_findings(records, url)
         _record_stage_metrics(
             step_logger,
@@ -1040,8 +1121,8 @@ async def _stage_sensory_audit_universal(
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
 
-
 # ... [code stays the same up to _run_python_stages]
+
 
 async def _run_python_stages(
     *,
@@ -1067,15 +1148,12 @@ async def _run_python_stages(
     job_id: str,
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
-) -> Tuple[
-    List[Dict[str, Any]],
-    Optional[Dict[str, Any]],
-    Optional[Dict[str, Any]],
-]:
+) -> PythonStagesResult:
     """
     Run all Python audit stages concurrently.
 
-    Returns (all_findings, contrast_report, image_audit_report).
+    Returns a :class:`PythonStagesResult` with named ``findings``,
+    ``contrast_report``, and ``image_audit_report`` fields.
     """
 
     def _timed(coro):
@@ -1093,7 +1171,7 @@ async def _run_python_stages(
             run_sensory_audit,
         )
     )
-    
+
     # 1. Run universal snapshot first
     snapshot = None
     discovered_urls = [url]
@@ -1118,8 +1196,15 @@ async def _run_python_stages(
     results = await asyncio.gather(
         _timed(
             _stage_image_audit(
-                url, output_dir, max_depth, run_ocr, run_image_audit, job_id, lang, step_logger,
-                discovered_urls=discovered_urls
+                url,
+                output_dir,
+                max_depth,
+                run_ocr,
+                run_image_audit,
+                job_id,
+                lang,
+                step_logger,
+                discovered_urls=discovered_urls,
             )
         ),
         _timed(
@@ -1130,17 +1215,22 @@ async def _run_python_stages(
         # MUTED: _stage_label_in_name_universal is replaced by Pipeline 2.5.3
         _timed(
             _run_pipeline_stage(
-                url, 
-                job_id, 
-                run_image_audit=run_image_audit, 
+                url,
+                job_id,
+                run_image_audit=run_image_audit,
                 run_label_in_name_audit=run_label_in_name_audit,
                 run_target_size_audit=run_target_size_audit,
-                # Explicitly passing flags to orchestrate the new policies
+                lang=lang,
             )
         ),
         _timed(
             _stage_pause_stop_hide_universal(
-                url, output_dir, run_pause_stop_hide_audit, job_id, snapshot_task, step_logger
+                url,
+                output_dir,
+                run_pause_stop_hide_audit,
+                job_id,
+                snapshot_task,
+                step_logger,
             )
         ),
         # MUTED: _stage_target_size_universal is replaced by Pipeline 2.5.8
@@ -1151,7 +1241,12 @@ async def _run_python_stages(
         # ),
         _timed(
             _stage_text_spacing_universal(
-                url, output_dir, run_text_spacing_audit, job_id, snapshot_task, step_logger
+                url,
+                output_dir,
+                run_text_spacing_audit,
+                job_id,
+                snapshot_task,
+                step_logger,
             )
         ),
         _timed(
@@ -1167,7 +1262,7 @@ async def _run_python_stages(
                 run_focus_not_obscured_enh_audit,
                 job_id,
                 step_logger,
-                discovered_urls=discovered_urls
+                discovered_urls=discovered_urls,
             )
         ),
         _timed(
@@ -1177,10 +1272,15 @@ async def _run_python_stages(
         ),
         _timed(
             _stage_sensory_audit_universal(
-                url, output_dir, run_sensory_audit, job_id, lang, snapshot_task, step_logger
+                url,
+                output_dir,
+                run_sensory_audit,
+                job_id,
+                lang,
+                snapshot_task,
+                step_logger,
             )
         ),
-
         return_exceptions=True,
     )
 
@@ -1199,4 +1299,8 @@ async def _run_python_stages(
         if not isinstance(r, Exception):
             all_findings.extend(r)
 
-    return all_findings, contrast_report, image_audit_report
+    return PythonStagesResult(
+        findings=all_findings,
+        contrast_report=contrast_report,
+        image_audit_report=image_audit_report,
+    )

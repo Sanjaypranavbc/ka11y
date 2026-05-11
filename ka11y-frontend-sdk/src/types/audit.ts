@@ -127,6 +127,35 @@ export interface StageInfo {
   completed_at?: string;
   findings_count?: number;
   error?: string;
+  index?: number;
+  total?: number;
+  weight?: number;
+}
+
+export interface JobPlanStage {
+  key: string;
+  weight: number;
+}
+
+export interface JobPlan {
+  stages: JobPlanStage[];
+  total: number;
+  weight_total: number;
+  started_at: string;
+}
+
+export interface StageProgressInfo {
+  stage_name: string;
+  current: number;
+  total: number;
+  phase?: string;
+}
+
+export interface JobFailure {
+  error: string;
+  stage?: string;
+  location?: string;
+  traceback?: string;
 }
 
 export interface AuditResult {

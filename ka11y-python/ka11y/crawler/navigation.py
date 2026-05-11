@@ -29,6 +29,7 @@ _DNS_PRECHECK_ATTEMPTS = 3
 _NAVIGATION_ATTEMPTS = 3
 _NAVIGATION_BACKOFF_SECONDS = [1.0, 2.5, 5.0]
 
+
 class NavigationError(Exception):
     def __init__(
         self,
@@ -52,13 +53,16 @@ class NavigationError(Exception):
             f"{self.attempts} attempt(s). Original error: {self.original_message}"
         )
 
+
 def _host_from_url(url: str) -> str | None:
     parsed = urlparse(url)
     return parsed.hostname or None
 
+
 def _is_retryable_navigation_error(message: str) -> bool:
     upper = str(message or "").upper()
     return any(token in upper for token in _RETRYABLE_NAVIGATION_TOKENS)
+
 
 async def dns_preflight(url: str) -> None:
     host = _host_from_url(url)
@@ -80,7 +84,9 @@ async def dns_preflight(url: str) -> None:
             last_error = exc
             if attempt >= _DNS_PRECHECK_ATTEMPTS:
                 break
-            delay = _NAVIGATION_BACKOFF_SECONDS[min(attempt - 1, len(_NAVIGATION_BACKOFF_SECONDS) - 1)]
+            delay = _NAVIGATION_BACKOFF_SECONDS[
+                min(attempt - 1, len(_NAVIGATION_BACKOFF_SECONDS) - 1)
+            ]
             logger.warning(
                 "DNS preflight failed for %s on attempt %s/%s: %s. Retrying in %.1fs",
                 host,
@@ -101,6 +107,7 @@ async def dns_preflight(url: str) -> None:
         original_message=str(last_error or "unknown DNS resolution error"),
         attempts=_DNS_PRECHECK_ATTEMPTS,
     )
+
 
 async def navigate_with_resilience(
     page: Page,
@@ -128,7 +135,9 @@ async def navigate_with_resilience(
             if attempt >= _NAVIGATION_ATTEMPTS:
                 break
 
-            delay = _NAVIGATION_BACKOFF_SECONDS[min(attempt - 1, len(_NAVIGATION_BACKOFF_SECONDS) - 1)]
+            delay = _NAVIGATION_BACKOFF_SECONDS[
+                min(attempt - 1, len(_NAVIGATION_BACKOFF_SECONDS) - 1)
+            ]
             logger.warning(
                 "Page load failed for %s on attempt %s/%s: %s. Retrying in %.1fs",
                 url,

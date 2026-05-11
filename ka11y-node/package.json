@@ -1,5 +1,5 @@
 {
-  "name": "wcag-accessibility-api",
+  "name": "@ka11y-node/wcag-accessibility-api",
   "version": "1.0.0",
   "description": "Node.js Express API to evaluate HTML accessibility using axe-core and Puppeteer",
   "main": "server.js",

@@ -193,10 +193,9 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
               <Input
                 id="audit-max-depth"
                 type="number"
-                value={config.max_depth}
-                onChange={(e) => setConfig((c) => ({ ...c, max_depth: parseInt(e.target.value) || 0 }))}
-                className="mt-1.5 h-8 text-xs font-mono bg-[hsl(var(--input))] border-border focus-visible:ring-primary/50"
-                min={0}
+                value={0}
+                disabled
+                className="mt-1.5 h-8 text-xs font-mono bg-muted/50 border-border cursor-not-allowed opacity-70"
               />
             </div>
             <div>
@@ -250,7 +249,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
             onClick={() => {
               localStorage.setItem("ka11y_last_url", config.url);
               localStorage.setItem("ka11y_last_lang", config.lang);
-              onRunAudit(config);
+              onRunAudit({ ...config, max_depth: 0 });
             }}
             disabled={isRunning || !config.url}
             className={cn(

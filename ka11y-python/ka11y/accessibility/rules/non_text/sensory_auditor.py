@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import csv
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
@@ -60,43 +61,146 @@ from ka11y.crawler.sensory_crawler import SensoryElementData
 
 SENSORY_WORDS: Dict[str, Set[str]] = {
     "color": {
-        "blue", "red", "green", "yellow", "orange", "purple", "pink",
-        "black", "white", "grey", "gray", "cyan", "magenta", "brown",
-        "violet", "indigo", "teal", "navy", "maroon", "gold", "silver",
-        "colour", "color", "coloured", "colored", "highlighted",
+        "blue",
+        "red",
+        "green",
+        "yellow",
+        "orange",
+        "purple",
+        "pink",
+        "black",
+        "white",
+        "grey",
+        "gray",
+        "cyan",
+        "magenta",
+        "brown",
+        "violet",
+        "indigo",
+        "teal",
+        "navy",
+        "maroon",
+        "gold",
+        "silver",
+        "colour",
+        "color",
+        "coloured",
+        "colored",
+        "highlighted",
     },
     "shape": {
-        "round", "rounded", "square", "circular", "circle", "triangular",
-        "triangle", "rectangular", "oval", "hexagonal", "diamond",
-        "star", "star-shaped", "pill-shaped",
+        "round",
+        "rounded",
+        "square",
+        "circular",
+        "circle",
+        "triangular",
+        "triangle",
+        "rectangular",
+        "oval",
+        "hexagonal",
+        "diamond",
+        "star",
+        "star-shaped",
+        "pill-shaped",
     },
     "size": {
-        "big", "small", "large", "tiny", "huge", "little", "giant",
-        "wide", "narrow", "tall", "short", "smaller", "larger",
-        "biggest", "smallest",
+        "big",
+        "small",
+        "large",
+        "tiny",
+        "huge",
+        "little",
+        "giant",
+        "wide",
+        "narrow",
+        "tall",
+        "short",
+        "smaller",
+        "larger",
+        "biggest",
+        "smallest",
     },
     "position": {
-        "left", "right", "top", "bottom", "above", "below", "upper",
-        "lower", "corner", "center", "centre", "middle", "side",
-        "adjacent", "beside", "next", "nearby", "underneath", "beneath",
-        "leftmost", "rightmost", "topmost", "down", "up", "under",
-        "over", "inside", "outside",
+        "left",
+        "right",
+        "top",
+        "bottom",
+        "above",
+        "below",
+        "upper",
+        "lower",
+        "corner",
+        "center",
+        "centre",
+        "middle",
+        "side",
+        "adjacent",
+        "beside",
+        "next",
+        "nearby",
+        "underneath",
+        "beneath",
+        "leftmost",
+        "rightmost",
+        "topmost",
+        "down",
+        "up",
+        "under",
+        "over",
+        "inside",
+        "outside",
     },
     "orientation": {
-        "horizontal", "vertical", "landscape", "portrait", "clockwise",
-        "counterclockwise", "upward", "downward",
+        "horizontal",
+        "vertical",
+        "landscape",
+        "portrait",
+        "clockwise",
+        "counterclockwise",
+        "upward",
+        "downward",
     },
     "sound": {
-        "beep", "chime", "bell", "tone", "sound", "audio", "alarm",
-        "buzz", "ring", "ping", "notification",
+        "beep",
+        "chime",
+        "bell",
+        "tone",
+        "sound",
+        "audio",
+        "alarm",
+        "buzz",
+        "ring",
+        "ping",
+        "notification",
     },
     "brightness": {
-        "bright", "dark", "light", "dim", "shiny", "glowing", "faded",
-        "vivid", "dull", "luminous", "darker", "lighter", "brighter",
+        "bright",
+        "dark",
+        "light",
+        "dim",
+        "shiny",
+        "glowing",
+        "faded",
+        "vivid",
+        "dull",
+        "luminous",
+        "darker",
+        "lighter",
+        "brighter",
     },
     "texture": {
-        "rough", "smooth", "bumpy", "soft", "hard", "glossy", "matte",
-        "textured", "patterned", "striped", "dotted",
+        "rough",
+        "smooth",
+        "bumpy",
+        "soft",
+        "hard",
+        "glossy",
+        "matte",
+        "textured",
+        "patterned",
+        "striped",
+        "dotted",
     },
 }
 
@@ -106,42 +210,155 @@ SENSORY_WORDS: Dict[str, Set[str]] = {
 
 SENSORY_WORDS_JA: Dict[str, Set[str]] = {
     "color": {
-        "赤", "青", "緑", "黄", "橙", "紫", "ピンク", "黒", "白",
-        "灰色", "グレー", "金", "銀", "茶色", "水色", "藍", "紺",
-        "赤い", "青い", "緑色", "黄色", "黄色い", "白い", "黒い",
-        "色", "カラー", "色付き", "着色", "オレンジ", "ライトブルー",
+        "赤",
+        "青",
+        "緑",
+        "黄",
+        "橙",
+        "紫",
+        "ピンク",
+        "黒",
+        "白",
+        "灰色",
+        "グレー",
+        "金",
+        "銀",
+        "茶色",
+        "水色",
+        "藍",
+        "紺",
+        "赤い",
+        "青い",
+        "緑色",
+        "黄色",
+        "黄色い",
+        "白い",
+        "黒い",
+        "色",
+        "カラー",
+        "色付き",
+        "着色",
+        "オレンジ",
+        "ライトブルー",
     },
     "shape": {
-        "丸", "丸い", "円", "円形", "四角", "四角い", "長方形",
-        "三角", "三角形", "楕円", "星形", "ハート形", "形", "形状",
-        "正方形", "六角形", "ひし形",
+        "丸",
+        "丸い",
+        "円",
+        "円形",
+        "四角",
+        "四角い",
+        "長方形",
+        "三角",
+        "三角形",
+        "楕円",
+        "星形",
+        "ハート形",
+        "形",
+        "形状",
+        "正方形",
+        "六角形",
+        "ひし形",
     },
     "size": {
-        "大きい", "小さい", "巨大", "細い", "太い", "長い", "短い",
-        "広い", "狭い", "大きな", "小さな", "サイズ", "大", "小",
-        "大型", "小型", "大きめ", "小さめ",
+        "大きい",
+        "小さい",
+        "巨大",
+        "細い",
+        "太い",
+        "長い",
+        "短い",
+        "広い",
+        "狭い",
+        "大きな",
+        "小さな",
+        "サイズ",
+        "大",
+        "小",
+        "大型",
+        "小型",
+        "大きめ",
+        "小さめ",
     },
     "position": {
-        "左", "右", "上", "下", "中央", "中心", "隣", "横",
-        "上部", "下部", "左側", "右側", "真ん中", "そば", "近く",
-        "内側", "外側", "左上", "右上", "左下", "右下",
-        "手前", "奥", "前", "後ろ", "端", "角", "隅",
+        "左",
+        "右",
+        "上",
+        "下",
+        "中央",
+        "中心",
+        "隣",
+        "横",
+        "上部",
+        "下部",
+        "左側",
+        "右側",
+        "真ん中",
+        "そば",
+        "近く",
+        "内側",
+        "外側",
+        "左上",
+        "右上",
+        "左下",
+        "右下",
+        "手前",
+        "奥",
+        "前",
+        "後ろ",
+        "端",
+        "角",
+        "隅",
     },
     "orientation": {
-        "横向き", "縦向き", "水平", "垂直", "時計回り", "反時計回り",
-        "横", "縦", "斜め", "傾き",
+        "横向き",
+        "縦向き",
+        "水平",
+        "垂直",
+        "時計回り",
+        "反時計回り",
+        "横",
+        "縦",
+        "斜め",
+        "傾き",
     },
     "sound": {
-        "ビープ", "チャイム", "音", "通知音", "アラーム", "ベル",
-        "着信音", "サウンド", "音声", "ブザー", "効果音",
+        "ビープ",
+        "チャイム",
+        "音",
+        "通知音",
+        "アラーム",
+        "ベル",
+        "着信音",
+        "サウンド",
+        "音声",
+        "ブザー",
+        "効果音",
     },
     "brightness": {
-        "明るい", "暗い", "光る", "輝く", "鮮やか", "くすんだ",
-        "明度", "輝度", "明るめ", "暗め", "ぼんやり",
+        "明るい",
+        "暗い",
+        "光る",
+        "輝く",
+        "鮮やか",
+        "くすんだ",
+        "明度",
+        "輝度",
+        "明るめ",
+        "暗め",
+        "ぼんやり",
     },
     "texture": {
-        "滑らか", "粗い", "ざらざら", "つるつる", "光沢", "マット",
-        "テクスチャ", "縞模様", "水玉", "格子",
+        "滑らか",
+        "粗い",
+        "ざらざら",
+        "つるつる",
+        "光沢",
+        "マット",
+        "テクスチャ",
+        "縞模様",
+        "水玉",
+        "格子",
     },
 }
 
@@ -155,31 +372,147 @@ ALL_SENSORY: Set[str] = ALL_SENSORY_EN  # backward-compat alias
 # ─────────────────────────────────────────────────────────────────────────────
 
 IMPERATIVE_VERBS: Set[str] = {
-    "click", "press", "tap", "select", "choose", "go", "refer",
-    "find", "see", "use", "follow", "navigate", "scroll", "drag",
-    "hover", "open", "close", "expand", "collapse", "toggle",
-    "submit", "enter", "fill", "type", "search", "pick", "hit",
-    "push", "check", "uncheck", "enable", "disable", "tick",
-    "mark", "focus", "locate", "identify",
+    "click",
+    "press",
+    "tap",
+    "select",
+    "choose",
+    "go",
+    "refer",
+    "find",
+    "see",
+    "use",
+    "follow",
+    "navigate",
+    "scroll",
+    "drag",
+    "hover",
+    "open",
+    "close",
+    "expand",
+    "collapse",
+    "toggle",
+    "submit",
+    "enter",
+    "fill",
+    "type",
+    "search",
+    "pick",
+    "hit",
+    "push",
+    "check",
+    "uncheck",
+    "enable",
+    "disable",
+    "tick",
+    "mark",
+    "focus",
+    "locate",
+    "identify",
 }
 
 GENERIC_UI_NOUNS: Set[str] = {
-    "button", "icon", "link", "item", "element", "option",
-    "control", "widget", "field", "area", "section", "menu",
-    "panel", "bar", "box", "container", "form", "checkbox",
-    "radio", "radiobutton", "dropdown", "select", "listbox", "textbox",
-    "textfield", "input", "tab", "arrow", "step", "card", "dialog",
+    "button",
+    "icon",
+    "link",
+    "item",
+    "element",
+    "option",
+    "control",
+    "widget",
+    "field",
+    "area",
+    "section",
+    "menu",
+    "panel",
+    "bar",
+    "box",
+    "container",
+    "form",
+    "checkbox",
+    "radio",
+    "radiobutton",
+    "dropdown",
+    "select",
+    "listbox",
+    "textbox",
+    "textfield",
+    "input",
+    "tab",
+    "arrow",
+    "step",
+    "card",
+    "dialog",
 }
 
 STOP_WORDS: Set[str] = {
-    "the", "and", "for", "with", "from", "that", "this", "these", "those",
-    "you", "your", "his", "her", "its", "our", "their", "will", "can",
-    "may", "must", "should", "some", "any", "all", "each", "every",
-    "a", "an", "of", "to", "in", "on", "at", "by", "is", "are", "was", "were",
-    "please", "kindly", "just", "now", "simply", "merely", "be", "been",
-    "being", "as", "if", "when", "then", "there", "here", "shown", "show",
-    "displayed", "display", "indicated", "indicate", "marked", "mark",
-    "located", "positioned", "placed", "highlighted", "required", "optional",
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "that",
+    "this",
+    "these",
+    "those",
+    "you",
+    "your",
+    "his",
+    "her",
+    "its",
+    "our",
+    "their",
+    "will",
+    "can",
+    "may",
+    "must",
+    "should",
+    "some",
+    "any",
+    "all",
+    "each",
+    "every",
+    "a",
+    "an",
+    "of",
+    "to",
+    "in",
+    "on",
+    "at",
+    "by",
+    "is",
+    "are",
+    "was",
+    "were",
+    "please",
+    "kindly",
+    "just",
+    "now",
+    "simply",
+    "merely",
+    "be",
+    "been",
+    "being",
+    "as",
+    "if",
+    "when",
+    "then",
+    "there",
+    "here",
+    "shown",
+    "show",
+    "displayed",
+    "display",
+    "indicated",
+    "indicate",
+    "marked",
+    "mark",
+    "located",
+    "positioned",
+    "placed",
+    "highlighted",
+    "required",
+    "optional",
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -187,21 +520,88 @@ STOP_WORDS: Set[str] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 GENERIC_UI_NOUNS_JA: Set[str] = {
-    "ボタン", "アイコン", "リンク", "項目", "要素", "オプション",
-    "コントロール", "ウィジェット", "フィールド", "エリア", "セクション",
-    "メニュー", "パネル", "バー", "ボックス", "コンテナ", "フォーム",
-    "チェックボックス", "ラジオボタン", "ドロップダウン", "テキストボックス",
-    "入力欄", "タブ", "矢印", "ステップ", "カード", "ダイアログ", "モーダル",
-    "スイッチ", "スライダー", "トグル", "アコーディオン", "セレクトボックス",
+    "ボタン",
+    "アイコン",
+    "リンク",
+    "項目",
+    "要素",
+    "オプション",
+    "コントロール",
+    "ウィジェット",
+    "フィールド",
+    "エリア",
+    "セクション",
+    "メニュー",
+    "パネル",
+    "バー",
+    "ボックス",
+    "コンテナ",
+    "フォーム",
+    "チェックボックス",
+    "ラジオボタン",
+    "ドロップダウン",
+    "テキストボックス",
+    "入力欄",
+    "タブ",
+    "矢印",
+    "ステップ",
+    "カード",
+    "ダイアログ",
+    "モーダル",
+    "スイッチ",
+    "スライダー",
+    "トグル",
+    "アコーディオン",
+    "セレクトボックス",
 }
 
 STOP_WORDS_JA: Set[str] = {
-    "の", "に", "は", "を", "が", "で", "て", "と", "も", "な",
-    "い", "た", "か", "ら", "れ", "さ", "り", "る", "ます", "です",
-    "ある", "いる", "する", "なる", "から", "まで", "より",
-    "ため", "こと", "もの", "ところ", "とき", "ように", "ください",
-    "して", "でき", "あり", "これ", "それ", "あの", "この", "その",
-    "など", "という", "ており", "てい",
+    "の",
+    "に",
+    "は",
+    "を",
+    "が",
+    "で",
+    "て",
+    "と",
+    "も",
+    "な",
+    "い",
+    "た",
+    "か",
+    "ら",
+    "れ",
+    "さ",
+    "り",
+    "る",
+    "ます",
+    "です",
+    "ある",
+    "いる",
+    "する",
+    "なる",
+    "から",
+    "まで",
+    "より",
+    "ため",
+    "こと",
+    "もの",
+    "ところ",
+    "とき",
+    "ように",
+    "ください",
+    "して",
+    "でき",
+    "あり",
+    "これ",
+    "それ",
+    "あの",
+    "この",
+    "その",
+    "など",
+    "という",
+    "ており",
+    "てい",
 }
 
 # Minimum text length to bother analysing
@@ -235,11 +635,16 @@ def _detect_lang(element: SensoryElementData) -> str:
     lang = (getattr(element, "lang", None) or "").strip().lower()
     if lang:
         return lang[:2]
-    all_text = " ".join(filter(None, [
-        element.text,
-        element.aria_label,
-        getattr(element, "title", None),
-    ]))
+    all_text = " ".join(
+        filter(
+            None,
+            [
+                element.text,
+                element.aria_label,
+                getattr(element, "title", None),
+            ],
+        )
+    )
     if _is_cjk_text(all_text):
         return "ja"
     return "en"
@@ -286,7 +691,9 @@ _SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 # English imperative: start-of-sentence instruction signal
 _IMPERATIVE_RE = re.compile(
     r"^\s*(please|kindly|to|now|just)?\s*("
-    + "|".join(re.escape(word) for word in sorted(IMPERATIVE_VERBS, key=len, reverse=True))
+    + "|".join(
+        re.escape(word) for word in sorted(IMPERATIVE_VERBS, key=len, reverse=True)
+    )
     + r")\b",
     re.IGNORECASE,
 )
@@ -300,17 +707,19 @@ _PURPOSE_PHRASE_RE = re.compile(
 
 # English sensory word (used when stripping before label check)
 _SENSORY_RE = re.compile(
-    r"\b(" + "|".join(re.escape(w) for w in sorted(ALL_SENSORY_EN, key=len, reverse=True)) + r")\b",
+    r"\b("
+    + "|".join(re.escape(w) for w in sorted(ALL_SENSORY_EN, key=len, reverse=True))
+    + r")\b",
     re.IGNORECASE,
 )
 
 # Quoted text — English straight/curly quotes AND Japanese 「」 『』
 _QUOTED_RE = re.compile(
-    r'(?:'
+    r"(?:"
     r'["\u201c\u201d\u2018\u2019].+?["\u201c\u201d\u2018\u2019]'  # English/curly
-    r'|'
-    r'[\u300c\u300e].+?[\u300d\u300f]'                             # Japanese 「」『』
-    r')'
+    r"|"
+    r"[\u300c\u300e].+?[\u300d\u300f]"  # Japanese 「」『』
+    r")"
 )
 
 
@@ -329,14 +738,20 @@ for _w in list(GENERIC_UI_NOUNS):
     _GENERIC_TERMS.add(_pluralize(_w))
 
 _GENERIC_RE = re.compile(
-    r"\b(" + "|".join(re.escape(word) for word in sorted(_GENERIC_TERMS, key=len, reverse=True)) + r")\b",
+    r"\b("
+    + "|".join(
+        re.escape(word) for word in sorted(_GENERIC_TERMS, key=len, reverse=True)
+    )
+    + r")\b",
     re.IGNORECASE,
 )
 
 # English per-category regexes (with \b word boundaries)
 _CATEGORY_REGEXES: Dict[str, re.Pattern[str]] = {
     cat: re.compile(
-        r"\b(" + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)) + r")\b",
+        r"\b("
+        + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True))
+        + r")\b",
         re.IGNORECASE,
     )
     for cat, words in SENSORY_WORDS.items()
@@ -392,7 +807,7 @@ _INSTRUCTION_STRIP_JA = re.compile(
     # Unambiguous action verbs — optional verb suffix (never standalone UI labels)
     r"クリック(?:して|する|してください|します|しろ)?|"
     r"タップ(?:して|する|してください|します)?|"
-    r"押して(?:ください|みて)?|"          # te-form only; bare 押す can mean a push-label
+    r"押して(?:ください|みて)?|"  # te-form only; bare 押す can mean a push-label
     # Action verbs that also serve as UI labels — REQUIRE verb suffix to strip
     r"選択(?:して|する|してください|します)|"
     r"入力(?:して|する|してください|します)|"
@@ -400,10 +815,10 @@ _INSTRUCTION_STRIP_JA = re.compile(
     r"スクロール(?:して|する|してください)|"
     r"ドラッグ(?:して|する|してください)|"
     r"移動(?:して|する|してください)|"
-    r"開いて(?:ください)?|"              # te-form only
-    r"閉じて(?:ください)?|"              # te-form only
-    r"送信(?:して|する|してください)|"   # require suffix
-    r"確認(?:して|する|してください)|"   # require suffix (bare 確認 = "Confirm" label)
+    r"開いて(?:ください)?|"  # te-form only
+    r"閉じて(?:ください)?|"  # te-form only
+    r"送信(?:して|する|してください)|"  # require suffix
+    r"確認(?:して|する|してください)|"  # require suffix (bare 確認 = "Confirm" label)
     r"記入(?:して|する|してください)|"
     r"チェック(?:して|する|してください)|"
     r"有効(?:に)?(?:して|する)|無効(?:に)?(?:して|する)|"
@@ -418,23 +833,31 @@ _INSTRUCTION_PATTERN_JA = _INSTRUCTION_SIGNAL_JA
 
 # Japanese sensory word matcher (no word boundaries)
 _SENSORY_JA_RE = re.compile(
-    "(" + "|".join(re.escape(w) for w in sorted(ALL_SENSORY_JA, key=len, reverse=True)) + ")",
+    "("
+    + "|".join(re.escape(w) for w in sorted(ALL_SENSORY_JA, key=len, reverse=True))
+    + ")",
 )
 
 # Japanese generic UI noun matcher (no word boundaries)
 _GENERIC_JA_RE = re.compile(
-    "(" + "|".join(re.escape(w) for w in sorted(GENERIC_UI_NOUNS_JA, key=len, reverse=True)) + ")",
+    "("
+    + "|".join(re.escape(w) for w in sorted(GENERIC_UI_NOUNS_JA, key=len, reverse=True))
+    + ")",
 )
 
 # Japanese stop-word matcher (no word boundaries)
 _STOP_WORDS_JA_RE = re.compile(
-    "(" + "|".join(re.escape(w) for w in sorted(STOP_WORDS_JA, key=len, reverse=True)) + ")",
+    "("
+    + "|".join(re.escape(w) for w in sorted(STOP_WORDS_JA, key=len, reverse=True))
+    + ")",
 )
 
 # Japanese per-category regexes (no \b)
 _CATEGORY_REGEXES_JA: Dict[str, re.Pattern[str]] = {
     cat: re.compile(
-        "(" + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)) + ")",
+        "("
+        + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True))
+        + ")",
     )
     for cat, words in SENSORY_WORDS_JA.items()
 }
@@ -452,8 +875,8 @@ def _get_nlp(lang: str = "en"):
     Load and cache a spaCy model for the given language.
 
     English  — en_core_web_sm  (parser disabled; sentencizer added)
-    Japanese — ja_core_news_sm (parser KEPT for tokenisation; sentencizer added
-               only if no senter/sentencizer pipe already present)
+    Japanese — ja_core_news_lg preferred (94%+ POS accuracy on web text),
+               falls back to ja_core_news_sm; parser kept for tokenisation
     Others   — {lang}_core_news_sm with parser disabled
     """
     lang_key = (lang or "en")[:2]
@@ -465,25 +888,33 @@ def _get_nlp(lang: str = "en"):
         import spacy  # type: ignore
 
         if lang_key == "en":
-            model_name = "en_core_web_sm"
             disable = ["ner", "parser"]
+            try:
+                nlp = spacy.load("en_core_web_sm", disable=disable)
+            except OSError:
+                nlp = None
         elif lang_key == "ja":
-            # Japanese model needs tok2vec + morphologizer + parser for word
-            # segmentation (no spaces between words).
-            model_name = "ja_core_news_sm"
+            # Japanese needs tok2vec + morphologizer + parser for word segmentation.
+            # Prefer the large model (higher POS accuracy); fall back to small.
             disable = ["ner"]
+            for model_name in ("ja_core_news_lg", "ja_core_news_sm"):
+                try:
+                    nlp = spacy.load(model_name, disable=disable)
+                    break
+                except OSError:
+                    continue
         else:
-            model_name = f"{lang_key}_core_news_sm"
             disable = ["ner", "parser"]
+            try:
+                nlp = spacy.load(f"{lang_key}_core_news_sm", disable=disable)
+            except OSError:
+                nlp = None
 
-        try:
-            nlp = spacy.load(model_name, disable=disable)
+        if nlp is not None:
             # Add a sentencizer only when no sentence-boundary component exists
             has_senter = any(p in nlp.pipe_names for p in ("sentencizer", "senter"))
             if not has_senter:
                 nlp.add_pipe("sentencizer")
-        except OSError:
-            nlp = None
     except ImportError:
         nlp = None
 
@@ -532,20 +963,27 @@ def _sentence_text(sent: Any) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _normalize_text(text: str) -> str:
+    """NFKC-normalize text so that half-width katakana (ｶﾀｶﾅ) is converted
+    to full-width (カタカナ) before any NLP matching step."""
+    return unicodedata.normalize("NFKC", text)
+
+
 def _iter_text_sources(element: SensoryElementData) -> List[str]:
     """
     Collect all text fields from an element, deduplicated, in priority order:
       visible text → aria-label → title tooltip → placeholder → value
+    Text is NFKC-normalized so half-width katakana matches Japanese keyword lists.
     """
     sources: List[str] = []
     for raw in (
         element.text,
         element.aria_label,
-        getattr(element, "title", None),       # tooltip — carries instructions
+        getattr(element, "title", None),  # tooltip — carries instructions
         getattr(element, "placeholder", None),
         getattr(element, "value", None),
     ):
-        text = (raw or "").strip()
+        text = _normalize_text((raw or "").strip())
         if text and text not in sources:
             sources.append(text)
     return sources
@@ -609,7 +1047,8 @@ def _sensory_categories_in_text(text: str, lang: str = "en") -> List[str]:
     if lang == "ja" or _is_cjk_text(text):
         cats_ja = [cat for cat, pat in _CATEGORY_REGEXES_JA.items() if pat.search(text)]
         cats_en = [
-            cat for cat, pat in _CATEGORY_REGEXES.items()
+            cat
+            for cat, pat in _CATEGORY_REGEXES.items()
             if pat.search(text) and cat not in cats_ja
         ]
         return cats_ja + cats_en
@@ -651,23 +1090,50 @@ def _remaining_label_words(text: str) -> List[str]:
 
 def _has_meaningful_label_text_ja(text: str) -> bool:
     """
-    Japanese: strip sensory, generic UI, stop-word, and instruction tokens;
-    return True when CJK content words remain (= a specific identifier exists).
+    Japanese: return True when a non-sensory, non-generic identifier exists.
 
-    Example (PASS):  「送信」ボタンをクリック  → 送信 remains after stripping
+    Tries SudachiPy morpheme-level POS filtering first (more accurate);
+    falls back to the regex-strip approach when SudachiPy is unavailable.
+
+    Example (PASS):  「送信」ボタンをクリック  → 送信 remains
     Example (FAIL):  赤いボタンをクリックして  → nothing meaningful remains
     """
-    # Quoted content is always a meaningful label (「確認」, 『ホーム』, …)
     if _QUOTED_RE.search(text):
         return True
+
+    try:
+        import sudachipy  # type: ignore
+
+        tokenizer_obj = sudachipy.Dictionary().create()
+        morphemes = tokenizer_obj.tokenize(text)
+        for m in morphemes:
+            pos0 = m.part_of_speech()[0]
+            if pos0 not in ("名詞", "動詞", "形容詞", "形容動詞"):
+                continue
+            surface = m.surface()
+            if _SENSORY_JA_RE.search(surface):
+                continue
+            if _GENERIC_JA_RE.search(surface):
+                continue
+            if _STOP_WORDS_JA_RE.search(surface):
+                continue
+            if _INSTRUCTION_STRIP_JA.search(surface):
+                continue
+            if _CJK_CHAR_RE.search(surface) or re.search(r"[a-zA-Z]{3,}", surface):
+                return True
+        return False
+    except Exception:
+        pass
+
+    # Regex fallback when SudachiPy is not installed
     stripped = _SENSORY_JA_RE.sub("", text)
     stripped = _GENERIC_JA_RE.sub("", stripped)
     stripped = _STOP_WORDS_JA_RE.sub("", stripped)
-    stripped = _INSTRUCTION_STRIP_JA.sub("", stripped)  # conservative strip
-    # Remove punctuation and whitespace
+    stripped = _INSTRUCTION_STRIP_JA.sub("", stripped)
     stripped = re.sub(r"[\s。、！？・「」『』（）【】〔〕…—\-～＝＋]+", "", stripped)
-    # Meaningful if CJK content words remain, or Latin word ≥3 chars
-    return bool(_CJK_CHAR_RE.search(stripped)) or bool(re.search(r"[a-zA-Z]{3,}", stripped))
+    return bool(_CJK_CHAR_RE.search(stripped)) or bool(
+        re.search(r"[a-zA-Z]{3,}", stripped)
+    )
 
 
 def _has_meaningful_label_text(text: str, lang: str = "en") -> bool:
@@ -740,7 +1206,7 @@ def _violations_133(
                 cats_str = ", ".join(sensory_cats)
                 msg = (
                     f"1.3.3: Instruction relies solely on sensory characteristic(s) "
-                    f"[{cats_str}] — \"{sent_text.strip()[:120]}\" — "
+                    f'[{cats_str}] — "{sent_text.strip()[:120]}" — '
                     f"add a non-sensory identifier (e.g. button label or heading text)."
                 )
                 results.append((sent_text.strip(), msg, sensory_cats, "FAILED"))
@@ -821,24 +1287,26 @@ class SensoryCharacteristicsAuditor:
             for sent_text, msg, cats, status in viols:
                 records.append(
                     {
-                        "page_url":             el.page_url,
-                        "element_tag":          el.tag,
-                        "element_id":           el.element_id or "",
-                        "sentence":             sent_text[:300],
-                        "sensory_categories":   ", ".join(cats),
-                        "wcag_1_3_3_status":    status,
+                        "page_url": el.page_url,
+                        "element_tag": el.tag,
+                        "element_id": el.element_id or "",
+                        "sentence": sent_text[:300],
+                        "sensory_categories": ", ".join(cats),
+                        "wcag_1_3_3_status": status,
                         "wcag_1_3_3_violation": msg if status == "FAILED" else "",
-                        "overall_status":       status,
-                        "selector":             el.selector or "",
-                        "element_ref_id":       el.element_ref_id or "",
-                        "frame_path":           el.frame_path or "",
-                        "html_snippet":         el.html[:400],
+                        "overall_status": status,
+                        "selector": el.selector or "",
+                        "element_ref_id": el.element_ref_id or "",
+                        "frame_path": el.frame_path or "",
+                        "html_snippet": el.html[:400],
                     }
                 )
 
         total_elements_checked = len(elements)
-        total_violations       = sum(1 for r in records if r["overall_status"] == "FAILED")
-        unique_pages           = len({r["page_url"] for r in records if r["overall_status"] == "FAILED"})
+        total_violations = sum(1 for r in records if r["overall_status"] == "FAILED")
+        unique_pages = len(
+            {r["page_url"] for r in records if r["overall_status"] == "FAILED"}
+        )
 
         csv_path = self.output_dir / "audit_sensory_report.csv"
         with open(csv_path, "w", newline="", encoding="utf-8") as fh:
@@ -850,12 +1318,12 @@ class SensoryCharacteristicsAuditor:
             summary: Dict[str, Any] = {f: "" for f in self.CSV_FIELDS}
             summary.update(
                 {
-                    "page_url":          "── SUMMARY ──",
-                    "element_tag":       f"Elements checked : {total_elements_checked}",
-                    "element_id":        f"Violations found : {total_violations}",
-                    "sentence":          f"Affected pages : {unique_pages}",
+                    "page_url": "── SUMMARY ──",
+                    "element_tag": f"Elements checked : {total_elements_checked}",
+                    "element_id": f"Violations found : {total_violations}",
+                    "sentence": f"Affected pages : {unique_pages}",
                     "wcag_1_3_3_status": "FAILED" if total_violations > 0 else "PASSED",
-                    "overall_status":    "FAILED" if total_violations > 0 else "PASSED",
+                    "overall_status": "FAILED" if total_violations > 0 else "PASSED",
                 }
             )
             writer.writerow(summary)
@@ -869,8 +1337,14 @@ class SensoryCharacteristicsAuditor:
 
     @staticmethod
     def summarize(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-        total  = sum(1 for r in records if r["overall_status"] == "FAILED")
-        pages  = len({r.get("page_url", "") for r in records if r.get("overall_status") == "FAILED"})
+        total = sum(1 for r in records if r["overall_status"] == "FAILED")
+        pages = len(
+            {
+                r.get("page_url", "")
+                for r in records
+                if r.get("overall_status") == "FAILED"
+            }
+        )
         categories: Dict[str, int] = {}
         for r in records:
             if r.get("overall_status") == "FAILED":
@@ -879,8 +1353,8 @@ class SensoryCharacteristicsAuditor:
                     if cat:
                         categories[cat] = categories.get(cat, 0) + 1
         return {
-            "total_violations":    total,
-            "affected_pages":      pages,
+            "total_violations": total,
+            "affected_pages": pages,
             "by_sensory_category": categories,
         }
 

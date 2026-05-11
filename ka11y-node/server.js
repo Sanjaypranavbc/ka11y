@@ -47,9 +47,12 @@ app.use((req, res, next) => {
 
 // CORS
 app.use((req, res, next) => {
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',');
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
   const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
+  if (origin && origin.trim() && allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   }
   // N13 fix: do NOT set Access-Control-Allow-Origin: * for requests without an Origin

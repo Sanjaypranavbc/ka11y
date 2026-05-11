@@ -20,7 +20,9 @@ def not_implemented(func: Callable[P, R], /) -> Callable[P, R]: ...
 
 
 @overload
-def not_implemented(*, reason: str | None = None) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
+def not_implemented(
+    *, reason: str | None = None
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 def not_implemented(
@@ -41,6 +43,7 @@ def not_implemented(
         message = _build_message(target, reason)
 
         if inspect.iscoroutinefunction(target):
+
             @wraps(target)
             async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 raise NotImplementedError(message)

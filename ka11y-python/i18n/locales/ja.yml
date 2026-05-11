@@ -1,14 +1,210 @@
 # ============================================================
 # ka11y — Japanese (日本語) locale
 # ============================================================
-# Translate ONLY: name, description, suggested_fix
-# Do NOT include: level, severity (those come from rules.yml)
+# Translate the following sections — each key here overrides the
+# corresponding English entry in i18n/rules.yml. Leave a value blank or
+# omit a key to fall back to English.
 #
-# Leave a field blank or omit it to fall back to English.
+#   severities       — display labels for severity machine values
+#   levels           — display labels for WCAG conformance levels
+#   statuses         — display labels for finding status values
+#   rules.*.name / description / suggested_fix
+#   reason_templates — per-rule reason strings (see top of rules.yml)
+#
+# Stable machine fields (level, severity, status) come from rules.yml
+# and MUST NOT be redefined here.
 # ============================================================
 
 version: "1.0"
 lang: "ja"
+
+# Severity display labels
+severities:
+  critical: "重大"
+  high: "高"
+  medium: "中"
+  low: "低"
+  none: "なし"
+
+# WCAG level display labels
+levels:
+  A: "レベル A"
+  AA: "レベル AA"
+  AAA: "レベル AAA"
+
+# Finding status display labels
+statuses:
+  pass: "合格"
+  fail: "不合格"
+  needs_review: "要確認"
+  inapplicable: "対象外"
+
+# Per-finding reason templates (JA). Keys mirror i18n/rules.yml exactly.
+# Placeholders use {name} interpolation. Missing keys fall back to English.
+#
+# 文体ガイドライン:
+# - 監査レポートは開発者だけでなくコンテンツ担当・デザイナー・QA も読む
+#   ため、専門用語（DOM・ARIA・programmatic 等）に依存しない平易な表現で。
+# - 失敗時は「何が問題か」「誰に影響するか」「どう直すか」を順に書く。
+# - 手動確認時は「何が判定できなかったか」「何を確認すべきか」を書く。
+# - 円環的な「WCAG X.Y.Z に違反しています」は避け、実際に何が壊れているか
+#   を述べる。
+# - HTML 属性名（alt, aria-label など）はエディタで検索できるよう原文を
+#   そのまま残してよい。
+reason_templates:
+
+  "1.1.1":
+    capture_failed:       "画像をキャプチャできなかったため、説明テキストを OCR で検証できませんでした。監査を再実行するか、画像 URL がアクセス可能か確認してください。"
+    fail_missing_alt:     "画像に説明（alt 属性）が設定されていません。スクリーンリーダー利用者に内容が伝わりません。何が写っているか／何の操作かを説明する alt 属性を追加してください。"
+    pass:                 "画像にはスクリーンリーダーで読み上げ可能な説明があります。"
+    decorative_valid:     "装飾画像はスクリーンリーダーから正しく隠されているため、説明は不要です。"
+    decorative_invalid:   "装飾扱いの画像に説明テキストが残っています。alt=\"\" にするか、本来意味のある画像であれば aria-hidden / role=\"presentation\" を外してください。"
+    functional_redundant: "この画像はラベル付きのボタン／リンクの中にあり、別途の説明は冗長になります。"
+    missing_alt:          "画像に alt 属性自体がありません。スクリーンリーダーがファイル名を読み上げるか、画像をスキップしてしまいます。内容を説明する alt=\"…\" を追加してください（純粋な装飾なら alt=\"\"）。"
+    generic_alt:          "説明 \"{name}\" は曖昧でスクリーンリーダー利用者に内容が伝わりません。実際に何が写っているかを述べる説明に書き換えてください。"
+    logo_valid:           "ロゴの説明 \"{name}\" がブランドや遷移先を明確に示しています。"
+    logo_review:          "ロゴと判断されました。説明にブランド名を含めてください（例：「Acme Corp ロゴ」）。"
+    icon_terse:           "アイコンの説明 \"{name}\" は短すぎる／曖昧です。見た目ではなく、アイコンが実行する動作（例：「ダイアログを閉じる」）を説明してください。"
+    informative_valid:    "画像に明確な説明があります：\"{name}\"。"
+
+  "1.2.1":
+    fail_no_alt:        "収録済みの音声・動画に書き起こしや代替テキストがありません。聞こえない／見えない利用者には内容が伝わりません。書き起こしリンクや track 要素を追加してください。"
+    needs_review:       "書き起こしまたは代替が見つかりましたが、内容を実際にカバーしているかは目視で確認してください。"
+    pass:               "収録済みメディアには、代わりに読めるテキストが提供されています。"
+
+  "1.3.1":
+    table_context:        "要素はデータテーブルの一部として、行と列の関係がスクリーンリーダーに正しく認識されます。"
+    orphaned_input:       "このチェックボックス／ラジオボタンが関連コントロールとグループ化されていません（<fieldset> や role=\"group\" の中にない）。スクリーンリーダー利用者にどのグループに属するかが分かりません。"
+    missing_relationship: "フォームコントロールにスクリーンリーダーが読み上げられるラベルが関連付けられていません。<label> 要素、aria-label、aria-labelledby のいずれかを追加してください。"
+    valid_relationship:   "フォームコントロールにラベルが正しく関連付けられ、スクリーンリーダーが読み上げ可能です。"
+    not_applicable:       "この種別の要素には構造的関係性のチェックは不要です。"
+
+  "1.3.3":
+    fail_default:       "指示が知覚的な手がかり（{sensory_categories}）のみに依存しており、テキストでの識別子がありません。色・形・位置が分からない利用者には伝わりません。手がかりに加えてラベル（例：「画面下部の赤い『保存』ボタン」）を併記してください。"
+    pass_no_records:    "クロール対象に知覚的特性のみに依存する指示は検出されませんでした。"
+    pass:               "指示には知覚的な手がかりに加えて非感覚的な識別子も含まれているため、色・形・位置が分からない利用者にも伝わります。"
+
+  "1.3.4":
+    pass: "コンテンツは縦向き・横向きの両方で問題なく動作します。"
+
+  "1.4.3":
+    needs_review_unknown:  "画像 \"{filename}\" 内のテキストのコントラストを自動で検証できませんでした。手動確認が必要です。観測比：{ratio}（前景 {fg_hex} / 背景 {bg_hex}）。"
+    fail:                  "画像 \"{filename}\" 内のテキストのコントラスト比は {ratio} で、{text_type} の最小要件 {threshold}:1 を下回っています（前景 {fg_hex} / 背景 {bg_hex}）。色の差を強めて読みやすくしてください。"
+    pass:                  "{image_label} 内のテキストのコントラスト比は {ratio} で、AA の {text_type} 最小要件を満たしています（前景 {fg_hex} / 背景 {bg_hex}）。"
+    capture_failed:        "画像をキャプチャできなかったため（状態：{capture_status}{capture_error_suffix}）、コントラストを測定できませんでした。手動確認が必要です。"
+    no_text:               "要素に表示テキストがないため、テキストコントラストのルールは適用されません。"
+    contrast_exempt:       "ロゴ・装飾画像・無効状態のコントロールはテキストコントラストのルールから除外されます。"
+    transparent_bg:        "要素の背景が透明なため、レンダリングなしではテキストコントラストを計算できません。目視で確認してください。"
+    contrast_sufficient:   "テキストコントラスト比 {ratio}:1 は最小要件 {threshold}:1 を満たしており、可読性に問題ありません。"
+    contrast_insufficient: "テキストコントラスト比 {ratio}:1 は最小要件 {threshold}:1 を下回っており、ロービジョンの利用者には読みづらくなります。"
+
+  "1.4.4":
+    pass:            "200% に拡大してもテキストが折り返され、内容が見切れたり重なったりしません。"
+    pass_no_records: "テキストのサイズ変更に関する問題は検出されませんでした — 200% でもすべてのコンテンツが正常に表示されます。"
+
+  "1.4.5":
+    capture_failed:          "画像をキャプチャできなかったため、文字を含む画像か判定できませんでした。再実行するか目視で確認してください。"
+    fail:                    "この画像にはテキストが含まれています。CSS でスタイル付けした実テキストに置き換えると、利用者がリサイズ・色変更・翻訳できるようになります。"
+    pass:                    "画像にテキストは含まれていません（またはロゴ／必要不可欠な提示の例外が適用されます）。"
+    exemption_applies:       "この画像は文字画像ルールから除外されます（分類：{classification}）。"
+    video_thumbnail_exempt:  "動画のサムネイル／ポスター画像は表示上必要不可欠なため、このルールから除外されます。"
+    text_matches_alt:        "画像はテキストを含んでいますが、説明テキストが完全に一致しています。可能であれば実テキストに置き換えると、利用者がリサイズ・再装飾できるようになります。"
+    potential_image_of_text: "画像にテキストが含まれています（\"{snippet}…\"）。可能であれば CSS スタイル付きの実テキストに置き換えてください。利用者がリサイズ・色変更・翻訳できるようになります。"
+    no_text_detected:        "画像に意味のあるテキストは検出されませんでした。"
+
+  "1.4.6":
+    needs_review_unknown:           "画像 \"{filename}\" 内のテキストを AAA 強化コントラスト基準で検証できませんでした。手動確認が必要です。観測比：{ratio}（前景 {fg_hex} / 背景 {bg_hex}）。"
+    fail:                           "画像 \"{filename}\" 内のテキストのコントラスト比は {ratio} で、AAA 強化基準の {text_type} 最小要件 {threshold}:1 を下回っています（前景 {fg_hex} / 背景 {bg_hex}）。"
+    pass:                           "{image_label} 内のテキストのコントラスト比は {ratio} で、AAA 強化基準の {text_type} 最小要件を満たしています（前景 {fg_hex} / 背景 {bg_hex}）。"
+    capture_failed:                 "画像をキャプチャできなかったため（状態：{capture_status}{capture_error_suffix}）、AAA コントラストを測定できませんでした。手動確認が必要です。"
+    contrast_enhanced_sufficient:   "強化コントラスト比 {ratio}:1 は AAA の最小要件 {threshold}:1 を満たしています。"
+    contrast_enhanced_insufficient: "強化コントラスト比 {ratio}:1 は AAA の最小要件 {threshold}:1 を下回っています。"
+
+  "1.4.10":
+    pass:            "320 CSS ピクセル幅でも横スクロールなしでコンテンツが正しく折り返されます。"
+    pass_no_records: "リフローに関する問題は検出されませんでした — 狭いビューポートでも正常に表示されます。"
+
+  "1.4.11":
+    needs_review:             "このコントロールの境界コントラストを自動で測定できませんでした。境界線・塗り・影が背景に対して 3:1 以上で識別できることを目視で確認してください。"
+    fail:                     "コントロールの視覚的境界のコントラスト比が 3:1 を下回り、背景に紛れて見つけにくくなっています。境界線・塗り・影を強化してください。"
+    pass:                     "コントロールの視覚的境界が 3:1 の最小要件を満たしており、背景から識別できます。"
+    not_ui_component:         "要素はインタラクティブなコントロールでも意味のあるグラフィックでもないため、境界コントラスト 3:1 のルールは適用されません。"
+    inactive_exempt:          "無効状態のコントロールは境界コントラスト 3:1 のルールから除外されます。"
+    no_explicit_boundary:     "コントロールに測定可能な境界線・塗り・影がありません。エッジが背景から識別できることを目視で確認してください。"
+    boundary_contrast_review: "このコントロールの境界コントラストを自動で測定できませんでした。スクリーンショットを確認し、エッジが周囲に対して少なくとも 3:1 で識別できるか確認してください。"
+
+  "1.4.12":
+    fail:                 "利用者が文字／行間／段落間隔を上書きすると要素がテキストをクリッピングします。固定の高さと overflow:hidden をテキストコンテナで併用しないでください。"
+    needs_review_warning: "要素に固定の高さと overflow:hidden が指定されています。利用者が間隔を拡大した際にテキストがクリッピングする可能性があります。最大の間隔オーバーライドで目視確認してください。"
+    needs_review_info:    "要素に固定の高さが指定されています。利用者が文字／行／段落の間隔を拡大した際にテキストがクリッピングしないか確認してください。"
+    pass_static:          "テキストをクリッピングしうる固定高コンテナは検出されませんでした。"
+    pass_rendered:        "テキスト間隔の最大オーバーライド適用後もコンテンツが失われていません。"
+
+  "1.4.13":
+    pass:            "ホバー／フォーカスで表示されるツールチップやポップオーバーは、解除可能・ホバー可能・永続表示の要件を満たしています。"
+    pass_no_records: "監査対象のページでホバー／フォーカスによるコンテンツ表示に関する問題は検出されませんでした。"
+
+  "2.2.2":
+    fail:         "自動再生コンテンツに一時停止／停止の手段がありません。時間が必要な利用者やスクリーンリーダー利用者が止められません。目立つ位置に一時停止／停止ボタンを設置してください。"
+    needs_review: "動きのあるコンテンツが検出されましたが、再生時間を自動判定できませんでした。5 秒を超える場合は利用者が一時停止できることを確認してください。"
+    pass:         "動きのあるコンテンツは一時停止／停止／非表示にできるか、5 秒以内に自動停止します。"
+
+  "2.4.11":
+    pass:            "フォーカス中の要素が固定ヘッダー・フッター・オーバーレイによって完全に隠されることはありません。"
+    pass_no_records: "フォーカス隠蔽に関する問題は検出されませんでした — フォーカス中の要素はすべて表示されています。"
+
+  "2.4.12":
+    pass:            "フォーカス中の要素が固定／スティッキーオーバーレイによって部分的にも隠されることはありません。"
+    pass_no_records: "部分的なフォーカス隠蔽に関する問題は検出されませんでした — すべてのフォーカス中要素は遮られていません。"
+
+  "2.4.7":
+    no_focus_indicator:      "要素に視覚的なフォーカスインジケーターがありません — キーボード利用者がどこにフォーカスがあるか分かりません。:focus-visible スタイル（アウトライン・box-shadow・色変化）を追加してください。"
+    focus_indicator_present: "要素はキーボードフォーカス時に明確な視覚変化を示すため、キーボード利用者が現在位置を把握できます。"
+    not_focusable:           "要素はキーボードフォーカスを受け取らないため、フォーカス可視化のルールは適用されません。"
+    hidden_element:          "要素は非表示のため、フォーカスインジケーターは不要です。"
+
+  "2.4.13":
+    no_focus_indicator:        "要素に視覚的なフォーカスインジケーターが全くありません。アウトライン・影・色変化を追加して、キーボード利用者が現在位置を把握できるようにしてください。"
+    thin_focus_indicator:      "フォーカスアウトラインの太さが {thickness_px} px しかなく、最小要件 {min_px} px を下回っています。アウトラインを太くして見やすくしてください。"
+    unmeasured_focus_contrast: "フォーカスアウトラインのコントラストを自動で測定できませんでした。アウトラインが周囲に対して少なくとも 3:1 のコントラストを持つことを目視で確認してください。"
+    low_contrast_focus:        "フォーカスアウトラインのコントラスト比が {contrast}:1 で、最小要件 {min_contrast}:1 を下回っています。アウトラインと周囲の色の差を強めてください。"
+    valid_focus_appearance:    "フォーカスインジケーターは十分な太さと十分なコントラストを備えているため、キーボード利用者がどの要素にフォーカスがあるか明確に分かります。"
+    not_focusable:             "要素はキーボードフォーカスを受け取らないため、フォーカス外観のルールは適用されません。"
+
+  "2.5.3":
+    fail:                "見えているラベルとアクセシブル名が一致していません。音声操作の利用者が見えているテキストを読み上げてもこのコントロールを操作できません。アクセシブル名が見えているラベルで始まるか、それを含むようにしてください。"
+    pass:                "アクセシブル名に見えているラベルが含まれているため、音声操作の利用者が見えているテキストを読み上げてこのコントロールを操作できます。"
+    no_visible_label:    "要素に見えているラベルまたは比較対象のアクセシブル名がないため、このルールは適用されません。"
+    empty_visible_label: "見えているラベルが空または記号のみのため、比較対象がありません。"
+    label_contained:     "見えているラベル \"{visible_text}\" がアクセシブル名 \"{full_name}\" に含まれているため、音声操作の利用者が見えているテキストを読み上げて操作できます。"
+    label_mismatch:      "見えているラベル \"{visible_text}\" がアクセシブル名 \"{full_name}\" に含まれていません。\"{visible_text}\" と発話する音声操作利用者がこのコントロールを操作できません。"
+
+  "2.5.8":
+    fail:               "ターゲットのサイズが {width}×{height} px しかなく、最小要件 24×24 px を下回っています。手指の自由度が低い利用者には正確にタップしづらくなります。最低 24×24 px にするか、周囲に余白を追加してください。"
+    pass:               "ターゲットのサイズは {width}×{height} px で、最小要件 24×24 px を満たしているため快適にタップできます。"
+    undersized_target:  "ターゲットのサイズは {width}×{height} px しかなく、隣接要素との余白も不十分です。手指の自由度が低い利用者が誤タップする可能性があります。最低 24×24 px にするか、周囲に余白を追加してください。"
+    size_meets_minimum: "ターゲットのサイズは {width}×{height} px で、最小要件 24×24 px を満たしているため快適にタップできます。"
+    inline_exception:   "ターゲットはテキストブロック内のインラインリンクで、24×24 px の最小要件は適用されません。"
+    spacing_exception:  "ターゲットは 24×24 px より小さいですが、周囲に十分な余白があるため余白例外が適用されます。"
+    not_interactive:    "ターゲットサイズの最小要件は、ボタン・リンク・フォーム項目などインタラクティブなコントロールにのみ適用されます。"
+    no_bounding_box:    "このターゲットのサイズを自動で測定できませんでした。タップ可能領域が 24×24 px 以上であることを目視で確認してください。"
+
+  "3.3.1":
+    fail: "フォーム送信時にバリデーションエラーが明確に通知されていません。どのフィールドのどこが問題かを示す可視のエラーメッセージを表示してください（例：「メールアドレス：@ を含めてください」）。"
+    pass: "フォーム項目はバリデーションエラーを明確に通知するため、利用者が何を直せばよいか分かります。"
+
+  "3.3.2":
+    fail: "フォーム項目に可視のラベルや説明がないため、利用者が何を入力すべきか分かりません。入力欄の隣に <label> を、またはフォームの上に説明を追加してください。"
+    pass: "フォーム項目には可視のラベルまたは説明があるため、利用者が何を入力すべきか分かります。"
+
+  "4.1.2":
+    capture_failed: "機能的画像をキャプチャできなかったため、アクセシブル名を検証できませんでした。再実行するか目視で確認してください。"
+    fail:           "機能的画像（アイコンボタン・リンク画像など）に意味のあるアクセシブル名がありません。スクリーンリーダー利用者にはこれが何の操作か伝わりません。動作を表す alt または aria-label を追加してください。"
+    pass:           "機能的画像には動作を説明するアクセシブル名があります。"
+
+  "_generic":
+    fail_unknown:         "WCAG {wcag_sc} のチェックに失敗しました。要件と修正方法は WCAG {wcag_sc} のルールドキュメントを参照してください。"
+    needs_review_unknown: "WCAG {wcag_sc} は自動で判定できませんでした。WCAG {wcag_sc} の達成基準に対して、このページを目視で確認してください。"
 
 rules:
 
@@ -779,3 +975,95 @@ rules:
       動的に追加されるメッセージ（「送信しました」「エラーが発生しました」「読み込み中」等）は
       role="status" または role="alert"、aria-live="polite" または aria-live="assertive" を
       使用してスクリーンリーダーに通知してください。
+
+axe_rules:
+  accesskeys:
+    title: "accesskey の一意性"
+    suggested_fix: "各 accesskey 属性には一意の文字を割り当ててください。accesskey はブラウザーやスクリーンリーダーのショートカットと競合しやすいため、本当に必要かも見直してください。"
+  aria-allowed-role:
+    title: "要素に許可された ARIA ロール"
+    suggested_fix: "role 属性を削除するか、その要素で許可されているロールに置き換えてください。"
+  aria-dialog-name:
+    title: "ARIA ダイアログのアクセシブル名"
+    suggested_fix: "ダイアログ内の見出しを参照する aria-labelledby、または aria-label を追加してください。"
+  aria-text:
+    title: "フォーカス可能要素上の ARIA text ロール"
+    suggested_fix: "インタラクティブ要素やフォーカス可能な子要素を含む要素から role=\"text\" を削除してください。"
+  aria-treeitem-name:
+    title: "ARIA treeitem のアクセシブル名"
+    suggested_fix: "role=\"treeitem\" を持つ要素には、可視テキストまたは aria-label を追加してください。"
+  empty-heading:
+    title: "空の見出しなし"
+    suggested_fix: "すべての見出しに意味のあるテキストを入れてください。装飾目的だけなら見出し要素をやめて CSS を使ってください。"
+  empty-table-header:
+    title: "空の表見出しなし"
+    suggested_fix: "各 th 要素に説明的なテキストを追加してください。見えない見出しが必要なら空のままではなく visually-hidden クラスを使ってください。"
+  focus-order-semantics:
+    title: "フォーカス順とセマンティクス"
+    suggested_fix: "ネイティブのインタラクティブ要素を使うか、フォーカス可能な要素に適切な ARIA ロールを追加してください。"
+  frame-tested:
+    title: "axe でテスト可能な iframe"
+    suggested_fix: "iframe の内容は別途テストしてください。可能であれば同一オリジンで配信し、自動テストが到達できるようにしてください。"
+  heading-order:
+    title: "見出しレベルの順序"
+    suggested_fix: "見出しレベルは順番どおりに使用してください。見出しのレベルは見た目ではなく文書構造を表すものです。"
+  hidden-content:
+    title: "非表示コンテンツの確認"
+    suggested_fix: "非表示コンテンツを確認し、モーダルがフォーカスを適切に閉じ込めて通知されること、装飾要素だけが aria-hidden=\"true\" になっていることを確認してください。"
+  image-redundant-alt:
+    title: "冗長でない画像代替テキスト"
+    suggested_fix: "画像の役割と同じ可視テキストが隣接している場合、その画像には alt=\"\" を設定して重複読上げを避けてください。"
+  label-title-only:
+    title: "title のみのラベル禁止"
+    suggested_fix: "title 属性だけに頼らず、可視の label 要素を追加してください。title は補足情報として残して構いません。"
+  landmark-banner-is-top-level:
+    title: "トップレベルのバナーランドマーク"
+    suggested_fix: "header 要素または role=\"banner\" の要素を body 直下のトップレベルに移動してください。"
+  landmark-complementary-is-top-level:
+    title: "トップレベルの補足ランドマーク"
+    suggested_fix: "aside 要素は main の子ではなく、ページのトップレベルで main の兄弟要素として配置してください。"
+  landmark-contentinfo-is-top-level:
+    title: "トップレベルの contentinfo ランドマーク"
+    suggested_fix: "footer 要素または role=\"contentinfo\" の要素は、別のランドマークの中ではなく body 直下に配置してください。"
+  landmark-main-is-top-level:
+    title: "トップレベルの main ランドマーク"
+    suggested_fix: "main 要素を body の直接の子要素にしてください。"
+  landmark-no-duplicate-banner:
+    title: "重複するバナーランドマークなし"
+    suggested_fix: "複数のバナーランドマークは 1 つに統合してください。セクション内ヘッダーが必要なら div や文脈上の header を使ってください。"
+  landmark-no-duplicate-contentinfo:
+    title: "重複する contentinfo ランドマークなし"
+    suggested_fix: "フッター情報は 1 つの footer にまとめてください。article や section 内の文脈的フッターは許容されます。"
+  landmark-no-duplicate-main:
+    title: "重複する main ランドマークなし"
+    suggested_fix: "重複した main 要素を削除し、1 つだけ残してください。"
+  landmark-one-main:
+    title: "main ランドマークは 1 つ"
+    suggested_fix: "主たるコンテンツを main 要素で囲んでください。"
+  landmark-unique:
+    title: "一意なランドマークラベル"
+    suggested_fix: "同じ種類のランドマークを複数使う場合は、aria-label を一意にしてください。"
+  meta-viewport-large:
+    title: "大きなズームを許可する viewport"
+    suggested_fix: "maximum-scale の制限を削除するか、少なくとも 5 に設定してください。"
+  page-has-heading-one:
+    title: "ページに h1 がある"
+    suggested_fix: "ページの主題を示す h1 を 1 つ追加してください。"
+  presentation-role-conflict:
+    title: "フォーカス可能要素の presentation ロール"
+    suggested_fix: "フォーカス可能要素に role=\"presentation\" や role=\"none\" を付けないでください。必要なら role を削除するか、その要素をフォーカス不可にしてください。"
+  region:
+    title: "ランドマーク内のコンテンツ"
+    suggested_fix: "主要なコンテンツはランドマーク要素で囲んでください。主コンテンツは main、ナビゲーションは nav を使ってください。"
+  scope-attr-valid:
+    title: "有効な table header scope"
+    suggested_fix: "列見出しには scope=\"col\"、行見出しには scope=\"row\" を使ってください。グループ化見出しには rowgroup や colgroup を使用してください。"
+  skip-link:
+    title: "スキップリンク"
+    suggested_fix: "最初のフォーカス可能要素としてスキップリンクを追加し、リンク先 ID が存在することと、必要なら tabindex=\"-1\" でフォーカスできることを確認してください。"
+  tabindex:
+    title: "正の tabindex なし"
+    suggested_fix: "要素をタブ順に含めるなら tabindex=\"0\"、外すなら tabindex=\"-1\" を使ってください。正の tabindex ではなく DOM 構造を調整してください。"
+  table-duplicate-name:
+    title: "caption と summary の重複なし"
+    suggested_fix: "caption には簡潔な表題を、summary には表の構造説明を設定し、同じ内容の繰り返しを避けてください。"

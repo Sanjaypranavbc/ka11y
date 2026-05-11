@@ -9,6 +9,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from ka11y.i18n.loader import (
+    get_level_labels,
+    get_severity_labels,
+    get_status_labels,
+)
+
 
 def _build_report(
     url: str,
@@ -56,6 +62,11 @@ def _build_report(
         "url": url,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "lang": lang,
+        "labels": {
+            "severities": get_severity_labels(lang),
+            "levels": get_level_labels(lang),
+            "statuses": get_status_labels(lang),
+        },
         "summary": {
             "total_findings": len(all_findings),
             "violations": len(violations),

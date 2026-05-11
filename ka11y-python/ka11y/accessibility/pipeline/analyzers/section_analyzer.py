@@ -1,6 +1,7 @@
 from typing import List
 from ..models import SectionType
 
+
 class SectionAnalyzer:
     """
     Evaluates the DOM ancestry of an element to determine its macro-context.
@@ -26,19 +27,26 @@ class SectionAnalyzer:
     }
 
     @classmethod
-    def analyze(cls, ancestor_tags: List[str], ancestor_roles: List[str]) -> SectionType:
+    def analyze(
+        cls, ancestor_tags: List[str], ancestor_roles: List[str]
+    ) -> SectionType:
         """
         Takes an ordered list of ancestors (closest to furthest) and returns
         the most specific semantic section type.
         """
-        # Walk up the tree. The first matching landmark defines the immediate section.
-        for tag, role in zip(ancestor_tags, ancestor_roles):
+        # Walk up the tree. The first matching landmark defines the immediate
+        # section. zip_longest guards against an upstream length mismatch
+        # (e.g. when one ancestor has no role attribute) silently truncating
+        # the walk and missing a landmark match further up the tree.
+        from itertools import zip_longest
+
+        for tag, role in zip_longest(ancestor_tags, ancestor_roles, fillvalue=""):
             # Check role first as it is more specific
             if role:
                 r = role.lower()
                 if r in cls._LANDMARK_MAP:
                     return cls._LANDMARK_MAP[r]
-            
+
             if tag:
                 t = tag.lower()
                 if t in cls._LANDMARK_MAP:

@@ -21,10 +21,18 @@ function getCheckConfig(checkKey, context = {}) {
   return getSharedConfigValue(['checks', checkKey], {}, sharedContext.config) || {};
 }
 
+/**
+ * Normalize half-width katakana (ｶﾀｶﾅ) to full-width (カタカナ) via NFKC
+ * so that Japanese keyword lists match mixed-encoding input.
+ */
+function normalizeText(text) {
+  return typeof text === 'string' ? text.normalize('NFKC') : text;
+}
+
 function _normalizeStringList(values) {
   if (!Array.isArray(values)) return [];
   return values
-    .map((value) => String(value || '').trim())
+    .map((value) => normalizeText(String(value || '').trim()))
     .filter(Boolean);
 }
 
@@ -107,6 +115,7 @@ module.exports = {
   getKeywordList,
   getNumberConfig,
   getSharedRuleContext,
+  normalizeText,
   renderLocalizedText,
   renderReasonTemplate,
   sanitizeLang,

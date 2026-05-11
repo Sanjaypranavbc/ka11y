@@ -18,7 +18,12 @@ description: "Complete reference for the CombinedReport JSON structure returned 
 interface CombinedReport {
   url:             string;            // Canonical URL that was audited
   generated_at:    string;            // ISO-8601 UTC timestamp
-  lang:            string;            // Result language ("en" | "ja")
+  lang:            string;            // Result language ("en" | "ja" | "de" | ...)
+  labels:          {                  // Localized display labels for the active language
+    severities: Record<string, string>;  // e.g. { "critical": "重大", "high": "高", ... }
+    levels:     Record<string, string>;  // e.g. { "A": "レベル A", "AA": "レベル AA", ... }
+    statuses:   Record<string, string>;  // e.g. { "pass": "合格", "fail": "不合格", ... }
+  };
   warnings:        string[];          // Degradation messages (e.g. "axe-core stage failed")
   warning_details: WarningSample[];   // Sampled structured crawler warnings
   summary:         Summary;
@@ -29,6 +34,12 @@ interface CombinedReport {
   contrast_report: ContrastReport | null;  // Present when OCR is enabled and images are found
 }
 ```
+
+`lang` is the language requested via the `?lang=` query parameter (or `lang`
+field in the audit request body). `labels` is a self-contained mirror of
+`i18n/rules.yml` for the active language so the frontend can render the
+machine values (`severity`, `level`, `status`) without re-loading the
+rules catalogue.
 
 ---
 
@@ -73,12 +84,16 @@ interface Finding {
   source:         "axe" | "python" | "custom";
   rule_id:        string;           // e.g. "python_1_1_1_alt", axe rule id, or custom rule id
   wcag_sc:        string;           // e.g. "1.1.1"
-  criterion_name: string | null;    // e.g. "Non-text Content"
-  level:          "A" | "AA" | "AAA" | null;
-  severity:       "critical" | "high" | "medium" | "low" | null;
-  status:         "fail" | "pass" | "needs_review";
-  reason:         string;           // Human-readable explanation (localized where supported by the emitting rule)
-  suggested_fix:  string | null;    // Remediation hint — null for passes
+  criterion_name: string | null;    // Localized name, e.g. "Non-text Content" / "非テキストコンテンツ"
+  level:          "A" | "AA" | "AAA" | null;     // Stable machine value
+  level_label:    string | null;    // Localized label, e.g. "Level AA" / "レベル AA"
+  severity:       "critical" | "high" | "medium" | "low" | null;  // Stable machine value
+  severity_label: string | null;    // Localized label, e.g. "High" / "高" / "Hoch"
+  status:         "fail" | "pass" | "needs_review";  // Stable machine value
+  status_label:   string;           // Localized label, e.g. "Pass" / "合格" / "Bestanden"
+  reason:         string;           // Localized explanation rendered from i18n/rules.yml
+  reason_code:    string | null;    // Stable opaque code that selected the template (e.g. "fail_missing_alt")
+  suggested_fix:  string | null;    // Localized remediation hint — null for passes
   help_url:       string | null;    // axe or custom help URL when available
   element: {
     html:       string;             // First 600 chars of outerHTML
@@ -108,28 +123,36 @@ For Python rules the convention is `python_{sc_underscored}_{short_name}`:
 | `python_3_3_1_error_id` | 3.3.1 | FormAccessibilityAuditor |
 | `python_3_3_2_labels` | 3.3.2 | FormAccessibilityAuditor |
 
-**`severity`**
-Assigned per WCAG success criterion. Python-assigned severities:
+**`severity` and `severity_label`**
 
-| SC | Severity |
-|----|----------|
-| 1.1.1 | critical |
-| 2.2.2 | high |
-| 2.5.3 | high |
-| 2.5.8 | medium |
-| 3.3.1 | high |
-| 3.3.2 | high |
+`severity` is the stable machine enum (`critical | high | medium | low | null`). Filter UIs and dashboards should compare against this field — its values never change across languages.
 
-axe-core severities are passed through as-is from axe's `impact` field (`critical`, `serious` → `high`, `moderate` → `medium`, `minor` → `low`).
+`severity_label` is the localized display string for the same value, sourced from `i18n/rules.yml#severities` with optional overrides in `i18n/locales/<lang>.yml`. Render this directly in the UI without translation.
 
-**Localization**
+| `severity` | `severity_label` (en) | `severity_label` (ja) | `severity_label` (de) |
+|------------|------------------------|------------------------|------------------------|
+| `critical` | Critical | 重大 | Kritisch |
+| `high`     | High     | 高   | Hoch     |
+| `medium`   | Medium   | 中   | Mittel   |
+| `low`      | Low      | 低   | Niedrig  |
 
-- `criterion_name` is localized from shared WCAG i18n in both Node and Python
-- `suggested_fix` is localized from shared WCAG i18n in both Node and Python
-- Node `reason` strings are localized for axe findings and migrated custom checks
-- Python `reason` strings depend on the emitting auditor; some legacy auditors still emit English reason text even when `lang="ja"`
+axe-core's `impact` is normalized to severity (`critical`, `serious` → `high`, `moderate` → `medium`, `minor` → `low`). Python severities are configured in `i18n/rules.yml` per SC (e.g. 1.1.1 → critical, 2.5.8 → medium, 3.3.1 → high).
 
-**`status`**
+**`level` and `level_label`**
+
+`level` carries the WCAG conformance machine value (`A | AA | AAA`). `level_label` is the localized display (`Level AA` / `レベル AA` / `Stufe AA`).
+
+**`status` and `status_label`**
+
+`status` carries the stable machine value (`fail | pass | needs_review`). `status_label` is the localized display (`Pass` / `合格` / `Bestanden`).
+
+**`reason` and `reason_code`**
+
+`reason` is fully localized — every emitting rule passes a `reason_code` (e.g. `fail_missing_alt`, `capture_failed`, `needs_review_unknown`) plus optional placeholder parameters, and the reporter resolves them through the `reason_templates` map in `i18n/rules.yml` and the per-locale overlays.
+
+`reason_code` is exposed on the finding so frontends can match on the opaque code instead of brittle string comparisons. When a rule has no SC-specific template, the renderer falls back to the shared `_generic` block (`fail_unknown`, `needs_review_unknown`) which interpolates `{wcag_sc}` automatically.
+
+**`status` value semantics**
 
 | Value | Meaning |
 |-------|---------|
@@ -137,8 +160,21 @@ axe-core severities are passed through as-is from axe's `impact` field (`critica
 | `"pass"` | Element satisfies the criterion |
 | `"needs_review"` | Auditor cannot determine automatically — manual check required |
 
-**`reason`**
-Usually sourced from the auditor's raw violation text. When a Python converter has no rule-specific message, ka11y falls back to the localized WCAG `description` for that success criterion from `i18n/rules.yml`. Runtime-generated metric strings such as contrast ratios or target-size measurements are still emitted directly by the auditor.
+### Universally localized fields
+
+Setting `?lang=ja` on the audit endpoints yields a report where every text-bearing field comes from the YAML for that locale:
+
+| Field | Source |
+|-------|--------|
+| `criterion_name` | `rules.<sc>.name` |
+| `description` (rules catalogue) | `rules.<sc>.description` |
+| `suggested_fix` | `rules.<sc>.suggested_fix` |
+| `reason` | `reason_templates.<sc>.<reason_code>` (with `_generic` fallback) |
+| `severity_label` | `severities.<severity>` |
+| `level_label` | `levels.<level>` |
+| `status_label` | `statuses.<status>` |
+
+The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) never change across languages and are safe to compare or filter on.
 
 ---
 
@@ -148,6 +184,12 @@ Usually sourced from the auditor's raw violation text. When a Python converter h
 {
   "url": "https://example.com",
   "generated_at": "2025-11-04T10:22:31.000Z",
+  "lang": "ja",
+  "labels": {
+    "severities": { "critical": "重大", "high": "高", "medium": "中", "low": "低", "none": "なし" },
+    "levels":     { "A": "レベル A", "AA": "レベル AA", "AAA": "レベル AAA" },
+    "statuses":   { "pass": "合格", "fail": "不合格", "needs_review": "要確認", "inapplicable": "対象外" }
+  },
   "warnings": [],
   "warning_details": [],
   "summary": {
@@ -174,12 +216,16 @@ Usually sourced from the auditor's raw violation text. When a Python converter h
       "source": "python",
       "rule_id": "python_1_1_1_alt",
       "wcag_sc": "1.1.1",
-      "criterion_name": "Non-text Content",
+      "criterion_name": "非テキストコンテンツ",
       "level": "A",
+      "level_label": "レベル A",
       "severity": "critical",
+      "severity_label": "重大",
       "status": "fail",
-      "reason": "Image has no alt attribute.",
-      "suggested_fix": "Add a descriptive alt attribute: <img alt='Description'>. For decorative images use alt=''.",
+      "status_label": "不合格",
+      "reason": "画像に十分な alt 属性がありません。",
+      "reason_code": "fail_missing_alt",
+      "suggested_fix": "説明的なalt属性を追加してください: <img alt=\"画像の説明\">。",
       "help_url": null,
       "element": {
         "html": "<img src=\"/hero.jpg\" class=\"banner\">",
@@ -194,12 +240,16 @@ Usually sourced from the auditor's raw violation text. When a Python converter h
       "source": "python",
       "rule_id": "python_1_1_1_alt",
       "wcag_sc": "1.1.1",
-      "criterion_name": "Non-text Content",
+      "criterion_name": "非テキストコンテンツ",
       "level": "A",
+      "level_label": "レベル A",
       "severity": "critical",
+      "severity_label": "重大",
       "status": "needs_review",
-      "reason": "Alt text 'img' is suspiciously short or generic.",
-      "suggested_fix": "Replace generic alt text with a meaningful description of the image.",
+      "status_label": "要確認",
+      "reason": "画像のキャプチャに失敗しました — OCR で代替テキストを検証できませんでした。",
+      "reason_code": "capture_failed",
+      "suggested_fix": "説明的なalt属性を追加してください: <img alt=\"画像の説明\">。",
       "help_url": null,
       "element": {
         "html": "<img src=\"/product.png\" alt=\"img\">",
@@ -214,11 +264,15 @@ Usually sourced from the auditor's raw violation text. When a Python converter h
       "source": "python",
       "rule_id": "python_1_1_1_alt",
       "wcag_sc": "1.1.1",
-      "criterion_name": "Non-text Content",
+      "criterion_name": "非テキストコンテンツ",
       "level": "A",
+      "level_label": "レベル A",
       "severity": null,
+      "severity_label": null,
       "status": "pass",
-      "reason": "Image has a descriptive alt attribute.",
+      "status_label": "合格",
+      "reason": "画像には十分な代替テキストがあります。",
+      "reason_code": "pass",
       "suggested_fix": null,
       "help_url": null,
       "element": null

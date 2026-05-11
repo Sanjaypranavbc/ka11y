@@ -228,7 +228,9 @@ class RenderedLayoutCrawler:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    async def crawl(self, discovered_urls: List[str] | None = None) -> List[Dict[str, Any]]:
+    async def crawl(
+        self, discovered_urls: List[str] | None = None
+    ) -> List[Dict[str, Any]]:
         """
         Run all rendering scenarios and return a list of dicts (one per page),
         each containing the raw data consumed by evaluators.
@@ -264,7 +266,9 @@ class RenderedLayoutCrawler:
         path = self.output_dir / "rendered_layout_raw_all.json"
         with path.open("w", encoding="utf-8") as fh:
             json.dump(self._raw_results_list, fh, indent=2, ensure_ascii=False)
-        logger.info(f"[rendered] saved raw results for {len(self._raw_results_list)} pages to {path}")
+        logger.info(
+            f"[rendered] saved raw results for {len(self._raw_results_list)} pages to {path}"
+        )
 
     # ── Internal scenario runner ───────────────────────────────────────────────
 
@@ -352,14 +356,18 @@ class RenderedLayoutCrawler:
             )
         except PlaywrightTimeout:
             logger.warning(f"[rendered] goto timeout for {self.base_url}")
-            
+
         # ── Cookie Handling ──
         try:
             cookie_state = await handle_cookies(page)
-            logger.debug(f"[rendered] Cookie handling state for {self.base_url}: {cookie_state}")
+            logger.debug(
+                f"[rendered] Cookie handling state for {self.base_url}: {cookie_state}"
+            )
         except Exception as e:
-            logger.debug(f"[rendered] Cookie handling exception for {self.base_url}: {e}")
-            
+            logger.debug(
+                f"[rendered] Cookie handling exception for {self.base_url}: {e}"
+            )
+
         await stabilize(page)
 
     async def _snapshot_at_viewport(
@@ -466,7 +474,7 @@ class RenderedLayoutCrawler:
                 if el_data is None:
                     continue  # focus on body — skip
 
-                rect_d = el_data.get("rect", {})
+                rect_d = el_data.get("rect") or {}
                 focus_rect = rect_from_dict(rect_d)
 
                 # Skip zero-size / offscreen elements
@@ -536,11 +544,15 @@ class RenderedLayoutCrawler:
         html = cand.get("html", "")
         resolved_rect = await self._resolve_hover_candidate_box(page, cand)
         if not resolved_rect:
-            logger.debug(f"[rendered] skipping hover candidate with no visible box: {selector or cand_id or tag}")
+            logger.debug(
+                f"[rendered] skipping hover candidate with no visible box: {selector or cand_id or tag}"
+            )
             return None
 
         cx = float(resolved_rect.get("x", 0)) + float(resolved_rect.get("width", 1)) / 2
-        cy = float(resolved_rect.get("y", 0)) + float(resolved_rect.get("height", 1)) / 2
+        cy = (
+            float(resolved_rect.get("y", 0)) + float(resolved_rect.get("height", 1)) / 2
+        )
 
         try:
             # Collect baseline visible regions count
@@ -712,12 +724,12 @@ def run_all_evaluators(
         FocusStep,
         HoverInteractionResult,
     )
-    
+
     all_findings = []
 
     for raw in raw_list:
         current_url = raw.get("page_url", page_url)
-        
+
         def _snap(key: str) -> PageSnapshot:
             d = raw.get(key, {})
             try:
@@ -751,14 +763,19 @@ def run_all_evaluators(
         records = []
         if run_resize_text:
             from ka11y.accessibility.rendered.evaluators import evaluate_resize_text
-            records.extend(evaluate_resize_text(_snap("baseline"), _snap("resize_text_200")))
+
+            records.extend(
+                evaluate_resize_text(_snap("baseline"), _snap("resize_text_200"))
+            )
 
         if run_reflow:
             from ka11y.accessibility.rendered.evaluators import evaluate_reflow
+
             records.extend(evaluate_reflow(_snap("reflow_320")))
 
         if run_text_spacing:
             from ka11y.accessibility.rendered.evaluators import evaluate_text_spacing
+
             records.extend(
                 evaluate_text_spacing(
                     _snap("text_spacing_baseline"), _snap("text_spacing_override")
@@ -767,6 +784,7 @@ def run_all_evaluators(
 
         if run_orientation:
             from ka11y.accessibility.rendered.evaluators import evaluate_orientation
+
             records.extend(
                 evaluate_orientation(
                     _snap("orientation_portrait"), _snap("orientation_landscape")
@@ -774,17 +792,26 @@ def run_all_evaluators(
             )
 
         if run_hover_focus_content:
-            from ka11y.accessibility.rendered.evaluators import evaluate_hover_focus_content
+            from ka11y.accessibility.rendered.evaluators import (
+                evaluate_hover_focus_content,
+            )
+
             records.extend(evaluate_hover_focus_content(_hover_results()))
 
         if run_focus_not_obscured_min:
-            from ka11y.accessibility.rendered.evaluators import evaluate_focus_not_obscured_min
+            from ka11y.accessibility.rendered.evaluators import (
+                evaluate_focus_not_obscured_min,
+            )
+
             records.extend(evaluate_focus_not_obscured_min(_focus_steps()))
 
         if run_focus_not_obscured_enh:
-            from ka11y.accessibility.rendered.evaluators import evaluate_focus_not_obscured_enh
+            from ka11y.accessibility.rendered.evaluators import (
+                evaluate_focus_not_obscured_enh,
+            )
+
             records.extend(evaluate_focus_not_obscured_enh(_focus_steps()))
-            
+
         all_findings.extend([r.model_dump() for r in records])
 
     return all_findings

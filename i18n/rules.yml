@@ -4,15 +4,246 @@
 # SINGLE SOURCE OF TRUTH — edit only this file, then run:
 #   scripts/sync-i18n.sh
 #
-# Non-translatable fields (do NOT put in locale files):
+# Stable machine fields (do NOT put in locale files — they are filtered
+# on by clients and must remain identical across languages):
 #   level    — A | AA | AAA
 #   severity — critical | high | medium | low | null
 #
 # Translatable fields (copy to locales/<lang>.yml to translate):
 #   name, description, suggested_fix
+#   severities.<key>          — human-readable label for each severity
+#   levels.<key>              — human-readable label for each WCAG level
+#   statuses.<key>            — human-readable label for finding status
+#   reason_templates.<rule>.<code> — localized reason strings (see below)
+#
+# Reason templates
+# ----------------
+# Every per-finding `reason` string in both engines is rendered from a
+# template lookup in `reason_templates`.  The structure is:
+#
+#   reason_templates:
+#     "1.1.1":
+#       missing_alt: "Image is missing an alt attribute."
+#       generic_alt: "Alt text is generic: {alt}."
+#       passed: "Image has adequate alt text."
+#
+# Placeholders use {name} interpolation.  Locale files override individual
+# keys; keys not overridden fall back to English.
 # ============================================================
 
 version: "1.0"
+
+# Severity labels (translatable). The machine value (critical/high/medium/low)
+# is stable across languages; only the display label is localized.
+severities:
+  critical: "Critical"
+  high: "High"
+  medium: "Medium"
+  low: "Low"
+  none: "None"
+
+# WCAG conformance level labels (translatable).
+levels:
+  A: "Level A"
+  AA: "Level AA"
+  AAA: "Level AAA"
+
+# Finding status labels (translatable). The machine value (pass/fail/needs_review)
+# stays stable; only the display label is localized.
+statuses:
+  pass: "Pass"
+  fail: "Fail"
+  needs_review: "Needs Review"
+  inapplicable: "Not Applicable"
+
+# ============================================================
+# Per-finding reason templates (translatable)
+# ============================================================
+# Keyed by WCAG SC ID, then by an opaque code string used by the
+# emitting auditor.  Both ka11y-python and ka11y-node look up reason
+# strings from the same map; locale files override individual codes
+# without having to redeclare the rule body.
+#
+# Placeholders are written as {name} and resolved against per-call
+# parameters.  Missing placeholders render as empty.
+# ============================================================
+reason_templates:
+
+  # ── Authoring guidelines for reason text ─────────────────────────────
+  # Reasons appear in audit reports read by content authors, designers,
+  # QA, and product owners — most of whom are not developers. Keep the
+  # following in mind when adding or editing entries:
+  #
+  # - Lead with what's wrong (fail) or what's working (pass) in plain
+  #   language. A reader should not need to know what "DOM", "ARIA",
+  #   "semantics", or "programmatic" mean to understand the message.
+  # - Avoid circular phrasing like "violates WCAG X.Y.Z" — say what
+  #   actually broke and who is affected (e.g. "screen-reader users
+  #   won't hear …").
+  # - For failures, end with the action the author should take.
+  # - For needs-review, say what we couldn't determine and what to
+  #   verify by hand.
+  # - Keep technical terms ("alt", "aria-label", "tabindex") only when
+  #   they refer to the exact attribute the author has to type — we
+  #   want the message to be searchable in their editor.
+  # - Placeholders use {name} and resolve from the verdict's
+  #   reason_params dict. Missing values render as the empty string.
+
+  "1.1.1":
+    capture_failed:      "We couldn't capture this image to read its text, so we can't verify the description. Re-run the audit or check that the image URL is reachable."
+    fail_missing_alt:    "Image has no description (alt text). Screen-reader users won't know what it shows. Add an alt attribute that explains what the image is or what it does."
+    pass:                "Image has a description that screen-reader users will hear."
+    decorative_valid:    "Decorative image is correctly hidden from screen readers, so no description is needed."
+    decorative_invalid:  "This image is marked as decorative but still has a description. Either give it an empty alt (alt=\"\") or remove aria-hidden / role=\"presentation\" if it's actually meaningful."
+    functional_redundant: "This image sits inside a button or link that already has its own label, so a separate description would be redundant."
+    missing_alt:         "Image is missing the alt attribute entirely. Screen readers will read the file path or skip it. Add alt=\"…\" describing what the image conveys (or alt=\"\" if it's purely decorative)."
+    generic_alt:         "Description \"{name}\" is too generic to tell a screen-reader user anything useful. Replace it with a description of what the image actually shows."
+    logo_valid:          "Logo description \"{name}\" identifies the brand or destination clearly."
+    logo_review:         "This looks like a logo. Make sure its description includes the brand name (e.g. \"Acme Corp logo\")."
+    icon_terse:          "Icon description \"{name}\" is too short or vague. Describe the action the icon performs (e.g. \"Close dialog\") rather than its appearance."
+    informative_valid:   "Image has a clear description: \"{name}\"."
+
+  "1.2.1":
+    fail_no_alt:        "Pre-recorded audio or video has no transcript or text alternative. People who can't hear or see the media won't get the content. Add a transcript link or a track element."
+    needs_review:       "A transcript or alternative was found, but a person needs to confirm it actually covers everything in the media."
+    pass:               "Pre-recorded media has a text alternative people can read instead."
+
+  "1.3.3":
+    fail_default:       "Instruction relies only on sensory cues ({sensory_categories}) with no text identifier. People who can't see colour, shape, or position won't be able to follow it. Pair the cue with a label, e.g. \"the red Save button at the bottom\"."
+    pass_no_records:    "No sensory-characteristics-only instructions detected in the crawled content."
+    pass:               "Instruction pairs sensory cues with a text identifier, so people who can't see colour, shape, or position can still follow it."
+
+  "1.3.4":
+    pass: "Content works in both portrait and landscape orientations."
+
+  "1.4.3":
+    needs_review_unknown: "We couldn't verify the contrast of text in image \"{filename}\" automatically. Manual review required. Observed ratio: {ratio} (foreground {fg_hex} on background {bg_hex})."
+    fail:                 "Text in image \"{filename}\" has a contrast ratio of {ratio}, below the {threshold}:1 minimum required for {text_type}. Foreground {fg_hex} on background {bg_hex}. Increase the colour difference so the text is readable."
+    pass:                 "Text in {image_label} has a contrast ratio of {ratio} — meets the AA {text_type} minimum. Foreground {fg_hex} on background {bg_hex}."
+    capture_failed:       "We couldn't capture this image (status: {capture_status}{capture_error_suffix}), so contrast couldn't be measured. Manual review required."
+    no_text:              "Element contains no visible text, so the text-contrast rule does not apply."
+    contrast_exempt:      "Logos, decorative graphics, and disabled controls are exempt from the text-contrast rule."
+    transparent_bg:       "Element's background is transparent so we can't compute text contrast without rendering. Please review visually."
+    contrast_sufficient:  "Text contrast {ratio}:1 meets the {threshold}:1 minimum for readability."
+    contrast_insufficient: "Text contrast {ratio}:1 is below the {threshold}:1 minimum, making the text hard to read for people with low vision."
+
+  "1.4.4":
+    pass:            "Text scales correctly when zoomed to 200% — nothing is clipped or overlaps."
+    pass_no_records: "No text-resize problems detected — content scales cleanly at 200% zoom."
+
+  "1.4.5":
+    capture_failed:           "We couldn't capture this image, so we can't tell if it contains text that should be real text. Please re-run or review visually."
+    fail:                     "This image contains text. Replace it with real (CSS-styled) text so people can resize, recolour, and translate it."
+    pass:                     "Image does not contain text (or it qualifies for the logo / essential-presentation exception)."
+    exemption_applies:        "Image is exempt from the images-of-text rule (classification: {classification})."
+    video_thumbnail_exempt:   "Video posters and thumbnails are essential to the experience and are exempt from this rule."
+    text_matches_alt:         "Image contains text but its description matches the visible text exactly. Where possible, swap the image for real text so users can resize and restyle it."
+    potential_image_of_text:  "Image contains text (\"{snippet}…\"). Where possible, use real text styled with CSS instead — that way users can resize, recolour, and translate it."
+    no_text_detected:         "Image does not contain meaningful text."
+
+  "1.4.6":
+    needs_review_unknown:           "We couldn't verify the contrast of text in image \"{filename}\" against the AAA enhanced threshold. Manual review required. Observed ratio: {ratio} (foreground {fg_hex} on background {bg_hex})."
+    fail:                           "Text in image \"{filename}\" has a contrast ratio of {ratio}, below the AAA enhanced {threshold}:1 minimum for {text_type}. Foreground {fg_hex} on background {bg_hex}."
+    pass:                           "Text in {image_label} has a contrast ratio of {ratio} — meets the AAA enhanced {text_type} minimum. Foreground {fg_hex} on background {bg_hex}."
+    capture_failed:                 "We couldn't capture this image (status: {capture_status}{capture_error_suffix}), so AAA contrast couldn't be measured. Manual review required."
+    contrast_enhanced_sufficient:   "Enhanced contrast {ratio}:1 meets the AAA {threshold}:1 minimum."
+    contrast_enhanced_insufficient: "Enhanced contrast {ratio}:1 is below the AAA {threshold}:1 minimum."
+
+  "1.4.10":
+    pass:            "Content reflows correctly at 320 CSS px wide — no horizontal scrolling needed."
+    pass_no_records: "No reflow problems detected — content adapts cleanly to narrow viewports."
+
+  "1.4.11":
+    needs_review:              "We couldn't measure this control's boundary contrast automatically. Please confirm visually that its border or fill stands out from the surrounding background by at least 3:1."
+    fail:                      "Control's visual boundary has a contrast ratio below 3:1, so it's hard to spot against the background. Strengthen the border, fill, or shadow."
+    pass:                      "Control's visual boundary meets the 3:1 contrast minimum, so it's distinguishable from the surrounding background."
+    not_ui_component:          "Element is not an interactive control or meaningful graphic, so the 3:1 boundary-contrast rule does not apply."
+    inactive_exempt:           "Disabled controls are exempt from the 3:1 boundary-contrast rule."
+    no_explicit_boundary:      "Control has no visible border, fill, or shadow we can measure. Please confirm visually that its edges are distinguishable from the background."
+    boundary_contrast_review:  "We can't measure this control's boundary contrast automatically. Please review the screenshot and confirm the edge stands out at least 3:1 from its surroundings."
+
+  "1.4.12":
+    fail:                 "Element clips text when users override letter / line / paragraph spacing. Avoid fixed heights with overflow:hidden on text containers."
+    needs_review_warning: "Element has a fixed height with overflow:hidden, which may clip text when users increase spacing. Please verify visually with maximum text-spacing overrides."
+    needs_review_info:    "Element has a fixed height. Please confirm text doesn't clip when users increase letter / line / paragraph spacing."
+    pass_static:          "No fixed-height containers that would clip text were detected."
+    pass_rendered:        "No content was lost after applying maximum text-spacing overrides."
+
+  "1.3.1":
+    table_context:        "Element is part of a data table, and its row/column relationships are correctly identified for screen readers."
+    orphaned_input:       "This checkbox or radio button isn't grouped with related controls (e.g. inside a <fieldset> or role=\"group\"). Screen-reader users may not understand which group it belongs to."
+    missing_relationship: "Form control has no associated label that screen readers can announce. Add a <label>, an aria-label, or aria-labelledby."
+    valid_relationship:   "Form control is correctly linked to its label so screen readers can announce it."
+    not_applicable:       "Element type does not need a structural-relationship check."
+
+  "1.4.13":
+    pass:            "Tooltips and pop-overs that appear on hover or focus can be dismissed, hovered, and stay visible until the user moves away."
+    pass_no_records: "No hover/focus-triggered content issues detected on the audited page."
+
+  "2.2.2":
+    fail:         "Auto-playing content has no pause/stop mechanism. Users who need more time, or who use screen readers, can't stop it. Add a visible Pause/Stop control."
+    needs_review: "Moving content was detected but its duration couldn't be measured automatically. Please verify whether it runs longer than 5 seconds and, if so, that users can pause it."
+    pass:         "Moving content can be paused/stopped/hidden, or it stops on its own within 5 seconds."
+
+  "2.4.11":
+    pass:            "Focused elements are not entirely hidden behind sticky headers, footers, or other overlays."
+    pass_no_records: "No focus-obscuring issues detected — focused elements appear fully visible."
+
+  "2.4.12":
+    pass:            "Focused elements are not obscured at all by sticky/fixed overlays."
+    pass_no_records: "No partial focus-obscuring issues detected — all focused elements appear unobscured."
+
+  "2.4.7":
+    no_focus_indicator:      "Element has no visible focus indicator — keyboard users can't tell where they are. Add a visible :focus-visible style (outline, box-shadow, or colour change)."
+    focus_indicator_present: "Element shows a clear visual change when reached by the keyboard, so keyboard users can see their position."
+    not_focusable:           "Element cannot receive keyboard focus, so the focus-visible rule does not apply."
+    hidden_element:          "Element is hidden, so it does not need a focus indicator."
+
+  "2.4.13":
+    no_focus_indicator:         "Element has no visible focus indicator at all. Add a focus outline, shadow, or colour change so keyboard users know where they are."
+    thin_focus_indicator:       "Focus outline is only {thickness_px} px thick — below the {min_px} px minimum. Make the outline thicker so it's easy to see."
+    unmeasured_focus_contrast:  "We couldn't measure the focus-outline contrast automatically. Please confirm visually that the focus outline has at least 3:1 contrast against the surrounding pixels."
+    low_contrast_focus:         "Focus-outline contrast is {contrast}:1, below the {min_contrast}:1 minimum. Use a stronger colour difference between the outline and what's around it."
+    valid_focus_appearance:     "Focus indicator is prominent (thick enough and high enough contrast) so keyboard users can clearly see which element is focused."
+    not_focusable:              "Element cannot receive keyboard focus, so the focus-appearance rule does not apply."
+
+  "2.5.3":
+    fail:               "Visible label and accessible name don't match. Voice-control users who say the visible text won't be able to activate this control. Make sure the accessible name starts with or contains the visible label."
+    pass:               "Accessible name includes the visible label, so voice-control users can say the visible text to activate this control."
+    no_visible_label:   "Element has no visible label or no accessible name to compare, so this rule does not apply."
+    empty_visible_label: "Visible label is empty or contains only symbols, so there is nothing to compare."
+    label_contained:    "Visible label \"{visible_text}\" appears in the accessible name \"{full_name}\", so voice-control users can say the visible text to activate this control."
+    label_mismatch:     "Visible label \"{visible_text}\" is not found inside accessible name \"{full_name}\". Voice-control users who say \"{visible_text}\" won't be able to activate this control."
+
+  "2.5.8":
+    fail:               "Target is only {width}×{height} px — below the 24×24 px minimum. People with limited dexterity may struggle to tap it accurately. Make it at least 24×24 px or add space around it."
+    pass:               "Target is {width}×{height} px, which meets the 24×24 px minimum tap area."
+    undersized_target:  "Target is only {width}×{height} px and is too close to its neighbours. People with limited dexterity may tap the wrong control. Make it at least 24×24 px or add more space around it."
+    size_meets_minimum: "Target is {width}×{height} px — meets the 24×24 px minimum, so it's comfortable to tap."
+    inline_exception:   "Target is an inline link inside a text paragraph, where the 24×24 px minimum does not apply."
+    spacing_exception:  "Target is smaller than 24×24 px but has enough space around it that the spacing exception applies."
+    not_interactive:    "Target size minimum only applies to interactive controls (buttons, links, form fields)."
+    no_bounding_box:    "We couldn't measure this target's size automatically. Please confirm visually that the tappable area is at least 24×24 px."
+
+  "3.3.1":
+    fail: "When this form was submitted, the validation error wasn't announced clearly. Show a visible error message that names the field and explains what's wrong (e.g. \"Email: please include an @ sign\")."
+    pass: "Form field announces validation errors clearly, so users know what to fix."
+
+  "3.3.2":
+    fail: "Form field has no visible label or instructions, so users may not know what to enter. Add a <label> next to the input or instructions above the form."
+    pass: "Form field has a clear visible label or instructions, so users know what to enter."
+
+  "4.1.2":
+    capture_failed: "We couldn't capture this functional image, so its accessible name couldn't be verified. Please re-run or review visually."
+    fail:           "Functional image (icon button, link image, …) has no meaningful accessible name. Screen-reader users won't know what it does. Add an alt or aria-label that names the action."
+    pass:           "Functional image has an accessible name that explains its action."
+
+  # Generic catch-alls used by rendered-rule converters when the auditor
+  # did not emit a more specific reason. Keep these as actionable as
+  # possible — they're a fallback, not a synonym for "the test failed".
+  "_generic":
+    fail_unknown:         "WCAG {wcag_sc} check failed. Open the rule documentation for {wcag_sc} for the exact requirement and how to fix it."
+    needs_review_unknown: "WCAG {wcag_sc} couldn't be verified automatically. Please review this page against the WCAG {wcag_sc} success criterion by hand."
 
 rules:
 

@@ -1,74 +1,165 @@
 """
 ka11y/crawler/_ssrf_guard.py
 ==============================
-Bug 1 fix: shared Playwright SSRF route guard for all crawlers.
+Playwright route guard that blocks requests targeting non-public IPs.
 
-``build_ssrf_route_handler`` is defined in routes.py but was never actually
-wired into any Playwright page or browser context.  This module provides a
-standalone async route handler and a helper ``install_ssrf_guard(context)``
-that installs the guard on a Playwright browser context so it applies to every
-page created from that context (including redirect-following page navigations).
+Hardening (vs. the prior version):
 
-Usage::
+1. **Encoded-IP coverage.** `http://2130706433/`, `http://0x7f000001/`,
+   `http://0177.0.0.1/`, and IPv4-mapped IPv6 (`http://[::ffff:7f00:0001]/`)
+   all resolve to ``127.0.0.1``. The earlier dotted-quad regex matched none
+   of them. ``_resolve_host_to_ips`` now normalises every form via
+   :func:`ipaddress.ip_address` and ``int(host, 0)``.
 
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
-        context = await browser.new_context(...)
-        await install_ssrf_guard(context)   # ← one call per context
-        page = await context.new_page()
-        ...
+2. **Hostname resolution.** Even a perfectly innocuous hostname can resolve
+   to an internal IP (DNS rebinding, internal-routed cloud DNS, etc.). The
+   handler now performs a cached ``getaddrinfo`` for non-literal hosts and
+   blocks if **any** answer is private/reserved.
+
+3. **Single classification source.** ``_ip_is_blocked`` consults Python's
+   own address attributes plus an explicit blocklist *and* recurses into
+   ``ipv4_mapped`` for IPv6 forms, so attempts to launder via
+   ``::ffff:10.0.0.1`` are caught.
+
+The handler installed via ``install_ssrf_guard(context)`` runs for every
+request issued by every page in the context — including redirect targets,
+which Playwright dispatches as fresh requests.
 """
 
 from __future__ import annotations
 
 import ipaddress
-import re
+import socket
+from functools import lru_cache
+from typing import Optional
+from urllib.parse import urlparse
 
 _BLOCKED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),      # IPv4 loopback
-    ipaddress.ip_network("10.0.0.0/8"),        # RFC-1918 class A
-    ipaddress.ip_network("172.16.0.0/12"),     # RFC-1918 class B
-    ipaddress.ip_network("192.168.0.0/16"),    # RFC-1918 class C
-    ipaddress.ip_network("169.254.0.0/16"),    # IPv4 link-local
-    ipaddress.ip_network("100.64.0.0/10"),     # Shared address space (RFC 6598)
-    ipaddress.ip_network("192.0.0.0/24"),      # IETF protocol assignments
-    ipaddress.ip_network("192.0.2.0/24"),      # TEST-NET-1
-    ipaddress.ip_network("198.51.100.0/24"),   # TEST-NET-2
-    ipaddress.ip_network("203.0.113.0/24"),    # TEST-NET-3
-    ipaddress.ip_network("0.0.0.0/8"),         # "This" network
-    ipaddress.ip_network("::1/128"),           # IPv6 loopback
-    ipaddress.ip_network("fc00::/7"),          # IPv6 unique-local
-    ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
-    ipaddress.ip_network("::ffff:127.0.0.1/128"),  # IPv4-mapped loopback
+    ipaddress.ip_network("127.0.0.0/8"),  # IPv4 loopback
+    ipaddress.ip_network("10.0.0.0/8"),  # RFC-1918 class A
+    ipaddress.ip_network("172.16.0.0/12"),  # RFC-1918 class B
+    ipaddress.ip_network("192.168.0.0/16"),  # RFC-1918 class C
+    ipaddress.ip_network("169.254.0.0/16"),  # IPv4 link-local (incl. AWS metadata)
+    ipaddress.ip_network("100.64.0.0/10"),  # Shared address space (RFC 6598)
+    ipaddress.ip_network("192.0.0.0/24"),  # IETF protocol assignments
+    ipaddress.ip_network("192.0.2.0/24"),  # TEST-NET-1
+    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3
+    ipaddress.ip_network("0.0.0.0/8"),  # "This" network
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
+    ipaddress.ip_network("fc00::/7"),  # IPv6 unique-local
+    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
 ]
 
-# Regex to quickly detect literal IP hostnames in URLs (avoids DNS lookup in hot-path)
-_IP_HOST_RE = re.compile(r"https?://(\[?[0-9a-fA-F:.]+\]?)(?:[:/]|$)")
+
+def _classify_blocked(addr: ipaddress._BaseAddress) -> bool:
+    if (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
+    ):
+        return True
+    if any(addr in net for net in _BLOCKED_NETWORKS):
+        return True
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        return _classify_blocked(addr.ipv4_mapped)
+    return False
 
 
 def _ip_is_blocked(ip_str: str) -> bool:
-    """Return True if *ip_str* falls within any blocked private/reserved network."""
+    """True if *ip_str* (any literal form) belongs to a blocked range."""
     try:
         addr = ipaddress.ip_address(ip_str)
     except ValueError:
         return False
-    # Use Python's built-in address classification (covers multicast, reserved, etc.)
-    # in addition to the explicit CIDR network list for comprehensive coverage.
-    if addr.is_private or addr.is_loopback or addr.is_link_local or \
-       addr.is_multicast or addr.is_reserved or addr.is_unspecified:
+    return _classify_blocked(addr)
+
+
+def _parse_literal_ip(host: str) -> Optional[ipaddress._BaseAddress]:
+    """Return an IP address for any literal form of *host* — dotted quad,
+    IPv6, IPv4-mapped, or pure-decimal/hex/octal integer (the encodings the
+    old regex missed). Returns None if *host* is a hostname."""
+    if not host:
+        return None
+    cleaned = host.strip("[]")
+    try:
+        return ipaddress.ip_address(cleaned)
+    except ValueError:
+        pass
+    # Integer encodings: pure decimal (e.g. 2130706433) or explicit base
+    # prefix (0x.., 0o.., 0b..). Only these two shapes are accepted so a
+    # real hostname like ``cdn.example.com`` (which contains hex digits
+    # like ``e``) never accidentally parses as an integer.
+    is_pure_decimal = cleaned.isdigit()
+    has_base_prefix = (
+        len(cleaned) >= 2
+        and cleaned[0] == "0"
+        and cleaned[1] in "xXoObB"
+    )
+    if is_pure_decimal or has_base_prefix:
+        try:
+            value = int(cleaned, 0)
+        except ValueError:
+            return None
+        try:
+            return ipaddress.ip_address(value)
+        except (ValueError, OverflowError):
+            return None
+    return None
+
+
+@lru_cache(maxsize=4096)
+def _resolve_hostname(host: str) -> tuple[str, ...]:
+    """Cached DNS lookup. Returns the tuple of IP-string answers."""
+    try:
+        infos = socket.getaddrinfo(host, None, 0, socket.SOCK_STREAM)
+    except socket.gaierror:
+        return ()
+    seen: list[str] = []
+    for info in infos:
+        sockaddr = info[4]
+        if not sockaddr:
+            continue
+        ip = sockaddr[0]
+        if ip not in seen:
+            seen.append(ip)
+    return tuple(seen)
+
+
+def _host_is_blocked(host: str) -> bool:
+    """True if *host* (literal IP or hostname) resolves to any blocked IP."""
+    if not host:
+        return False
+    if host.lower() in ("localhost", "ip6-localhost", "ip6-loopback"):
         return True
-    return any(addr in net for net in _BLOCKED_NETWORKS)
+    literal = _parse_literal_ip(host)
+    if literal is not None:
+        return _classify_blocked(literal)
+    # Hostname: resolve and block if ANY answer is non-public.
+    for ip in _resolve_hostname(host):
+        try:
+            if _classify_blocked(ipaddress.ip_address(ip)):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 async def _ssrf_route_handler(route, request) -> None:
-    """Playwright route handler: abort requests to private/reserved IPs."""
-    url = request.url
-    m = _IP_HOST_RE.match(url)
-    if m:
-        host = m.group(1).strip("[]")
-        if _ip_is_blocked(host):
-            await route.abort("addressunreachable")
-            return
+    """Playwright route handler: abort requests to private/reserved IPs.
+
+    Redirect targets are delivered to this handler as new requests, so a
+    public page redirecting to ``http://169.254.169.254/`` is caught even
+    though only the original URL passed the entry-point check.
+    """
+    parsed = urlparse(request.url)
+    host = parsed.hostname or ""
+    if _host_is_blocked(host):
+        await route.abort("addressunreachable")
+        return
     await route.continue_()
 
 

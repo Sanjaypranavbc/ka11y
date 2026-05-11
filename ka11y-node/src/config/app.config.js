@@ -5,7 +5,10 @@ const { getSharedConfigValue } = require('../utils/sharedConfigLoader');
 function _envBool(name, fallback) {
   const raw = process.env[name];
   if (raw == null || raw === '') return fallback;
-  return ['1', 'true', 'yes', 'on'].includes(String(raw).trim().toLowerCase());
+  const val = String(raw).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(val)) return true;
+  if (['0', 'false', 'no', 'off'].includes(val)) return false;
+  return fallback;
 }
 
 /**

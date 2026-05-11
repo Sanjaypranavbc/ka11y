@@ -2,6 +2,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
+
 class SectionType(str, Enum):
     HEADER = "header"
     FOOTER = "footer"
@@ -16,11 +17,13 @@ class SectionType(str, Enum):
     GENERIC = "generic"
     UNKNOWN = "unknown"
 
+
 class VerdictStatus(str, Enum):
     PASS = "pass"
     FAIL = "fail"
     NEEDS_REVIEW = "needs_review"
     NOT_APPLICABLE = "not_applicable"
+
 
 class AccessibleNameSource(str, Enum):
     ARIA_LABEL = "aria-label"
@@ -31,20 +34,23 @@ class AccessibleNameSource(str, Enum):
     TITLE_ATTRIBUTE = "title_attribute"
     NONE = "none"
 
+
 class BoundingBox(BaseModel):
     x: float
     y: float
     width: float
     height: float
-    
+
     @property
     def area(self) -> float:
         return self.width * self.height
+
 
 class AccessibleName(BaseModel):
     name: str
     source: AccessibleNameSource
     is_visible: bool
+
 
 class VisualContext(BaseModel):
     is_visible: bool
@@ -53,13 +59,14 @@ class VisualContext(BaseModel):
     computed_styles: Dict[str, str] = Field(default_factory=dict)
     ocr_text: Optional[str] = None
     cv_classification: Optional[str] = None  # e.g., "logo", "decorative", "complex"
-    background_type: str = "solid"           # "solid", "gradient", "image", "mixed"
+    background_type: str = "solid"  # "solid", "gradient", "image", "mixed"
     resolved_background_color: str = "rgb(255, 255, 255)"
     has_bg_image: bool = False
     rendered_contrast: Optional[float] = None
     is_obscured_by_floating_element: bool = False
     visible_label_text: Optional[str] = None
     src: Optional[str] = None
+
 
 class SemanticContext(BaseModel):
     tag_name: str
@@ -79,6 +86,7 @@ class SemanticContext(BaseModel):
     is_in_labeled_control: bool = False
     is_video_context: bool = False
 
+
 class InteractionContext(BaseModel):
     is_focusable: bool = False
     tab_index: int = -1
@@ -89,6 +97,7 @@ class InteractionContext(BaseModel):
     focus_ring_contrast: Optional[float] = None
     clickable_area_px: float = 0.0
 
+
 class ElementContext(BaseModel):
     element_id: str
     xpath: Optional[str] = None
@@ -98,6 +107,7 @@ class ElementContext(BaseModel):
     interaction: InteractionContext
     accessible_name: Optional[AccessibleName] = None
 
+
 class RuleVerdict(BaseModel):
     rule_id: str
     wcag_sc: str
@@ -105,5 +115,6 @@ class RuleVerdict(BaseModel):
     confidence: float
     reason_code: str
     human_reason: str
+    reason_params: Dict[str, Any] = Field(default_factory=dict)
     evidence: Dict[str, Any] = Field(default_factory=dict)
     element: ElementContext

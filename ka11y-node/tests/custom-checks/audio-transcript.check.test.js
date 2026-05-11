@@ -49,6 +49,18 @@ describe('audio-transcript.check (WCAG 1.2.1)', () => {
     expect(result.rules[0].reason).toContain('2 of 3');
   });
 
+  test('surfaces filename-only transcript link hint (F30)', async () => {
+    const page = makePage({
+      audioCount: 1,
+      issues: [
+        { html: '<audio src="clip.mp3"></audio>', filename_only_transcript_link: true },
+      ],
+    });
+    const result = await run(page);
+    expect(result.rules[0].status).toBe('incomplete');
+    expect(result.rules[0].reason).toContain('filename-only transcript links');
+  });
+
   test('impact is null when passing', async () => {
     const page = makePage({ audioCount: 0, issues: [] });
     const result = await run(page);

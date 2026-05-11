@@ -28,8 +28,20 @@ function _formatViolationDetail(violation, context) {
     case 'grid-explicit-placement':
       return _t(
         context,
-        'Grid container has children with explicit grid-column-start or grid-row-start, potentially reordering visual presentation from DOM order',
-        'Grid コンテナ内で grid-column-start または grid-row-start が明示されている子要素があり、DOM 順序と異なる視覚順になる可能性があります。',
+        'Grid container has children with explicit grid-column or grid-row placement, potentially reordering visual presentation from DOM order',
+        'Grid コンテナ内で grid-column または grid-row が明示されている子要素があり、DOM 順序と異なる視覚順になる可能性があります。',
+      );
+    case 'grid-auto-flow-dense':
+      return _t(
+        context,
+        'Grid container uses grid-auto-flow: dense, which may place items out of DOM order to fill grid holes',
+        'Grid コンテナで grid-auto-flow: dense が使われており、グリッドの隙間を埋めるために DOM 順序外に要素が配置される可能性があります。',
+      );
+    case 'multi-column-layout':
+      return _t(
+        context,
+        'Element uses multi-column layout (column-count > 1); content may visually flow across columns in an order that diverges from DOM order',
+        '複数カラムレイアウト（column-count > 1）が使われており、コンテンツが DOM 順序と異なるカラム順で表示される可能性があります。',
       );
     case 'mixed-floats':
       return _t(
@@ -68,9 +80,26 @@ async function run(page, context = {}) {
 
       const isFlex = display === 'flex' || display === 'inline-flex';
       const isGrid = display === 'grid' || display === 'inline-grid';
-      if (!isFlex && !isGrid) continue;
-      // Only increment the container counter for actual flex/grid containers
+      const colCount = parseInt(style.columnCount, 10);
+      const isMultiCol = !isFlex && !isGrid && colCount > 1;
+      if (!isFlex && !isGrid && !isMultiCol) continue;
       if (containerCount++ >= maxC) break;
+
+      // Multi-column layout: visual reading order may diverge from DOM order
+      if (isMultiCol) {
+        results.push({
+          tagName: el.tagName.toLowerCase(),
+          element_id: el.id || null,
+          target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+          tag: el.tagName.toUpperCase(),
+          display,
+          flexDir: null,
+          orders: null,
+          reasonCode: 'multi-column-layout',
+          html: el.outerHTML.slice(0, 150),
+        });
+        continue;
+      }
 
       const children = Array.from(el.children).filter(ch => {
         // Only consider visible children — exclude all common hiding patterns
@@ -125,11 +154,31 @@ async function run(page, context = {}) {
         orderReorders = visualOrder.some((vi, di) => vi !== domIndices[di]);
       }
 
-      // Grid placement reordering: explicit grid-column/row-start on children
+      // Grid auto-flow dense: may place items out of DOM order
+      if (isGrid) {
+        const gridAutoFlow = style.gridAutoFlow || '';
+        if (gridAutoFlow.includes('dense')) {
+          results.push({
+            tagName: el.tagName.toLowerCase(),
+            element_id: el.id || null,
+            target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+            tag: el.tagName.toUpperCase(),
+            display,
+            flexDir: null,
+            orders: null,
+            reasonCode: 'grid-auto-flow-dense',
+            html: el.outerHTML.slice(0, 150),
+          });
+          continue;
+        }
+      }
+
+      // Grid explicit placement: grid-row or grid-column (start or end) on children
       if (isGrid) {
         const hasGridPlacement = children.some(ch => {
           const ccs = window.getComputedStyle(ch);
-          return ccs.gridColumnStart !== 'auto' || ccs.gridRowStart !== 'auto';
+          return ccs.gridColumnStart !== 'auto' || ccs.gridRowStart !== 'auto' ||
+                 ccs.gridColumnEnd   !== 'auto' || ccs.gridRowEnd   !== 'auto';
         });
         if (hasGridPlacement) {
           results.push({

@@ -49,6 +49,20 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
     expect(result.rules[0].reason).toContain('active navigation item');
   });
 
+  test('passes when table of contents is present', async () => {
+    const page = makePage({
+      hasBreadcrumb: false,
+      hasAriaCurrent: false,
+      hasActiveNavItem: false,
+      hasSiteMap: false,
+      hasTableOfContents: true,
+      hasLocationIndicator: true,
+    });
+    const result = await run(page);
+    expect(result.rules[0].status).toBe('pass');
+    expect(result.rules[0].reason).toContain('table of contents');
+  });
+
   test('returns incomplete when no location indicator is detected', async () => {
     const page = makePage({
       hasBreadcrumb:     false,
@@ -78,5 +92,6 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
   test('loads Japanese location keywords from shared universal config', () => {
     expect(getKeywordList('location', 'breadcrumb_keywords')).toContain('パンくず');
     expect(getKeywordList('location', 'sitemap_keywords')).toContain('サイトマップ');
+    expect(getKeywordList('location', 'toc_keywords')).toContain('目次');
   });
 });

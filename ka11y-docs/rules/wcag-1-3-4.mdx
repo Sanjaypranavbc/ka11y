@@ -70,3 +70,10 @@ Because essential-orientation exceptions legitimately exist, ambiguous cases ret
 | `level` | `AA` |
 | `severity` | `medium` |
 | `status` | `needs_review` \| `pass` (rarely `fail` — almost always uncertain) |
+
+## Known limitations
+
+- **JS orientation lock** — only inline/static `<script>` contents are scanned; imported modules calling `screen.orientation.lock()` are missed.
+- **Essential exemption** — not auto-detected (bank check deposit, virtual piano). False positives require manual annotation.
+
+See [Technique coverage for 1.3.4](/rules/coverage-matrix#1-3-4-orientation).

@@ -39,7 +39,8 @@ class CombinedRequest(BaseModel):
     url: HttpUrl
     # max_depth: 0 = single-page; capped at 5 to prevent exponential crawl DoS
     max_depth: int = Field(default=0, ge=0, le=5)
-    wcag_level: str = "AAA"  # "A" | "AA" | "AAA"
+    # Pattern + max_length on string fields prevents oversized-payload DoS
+    wcag_level: str = Field(default="AAA", pattern=r"^(A|AA|AAA)$")
     success_criteria_id: Optional[str] = Field(default=None, pattern=r"^\d+\.\d+\.\d+$")
     run_ocr: bool = True
     run_image_audit: bool = True
@@ -58,7 +59,7 @@ class CombinedRequest(BaseModel):
     run_focus_not_obscured_min_audit: bool = True
     run_focus_not_obscured_enh_audit: bool = True
     run_sensory_audit: bool = True
-    lang: str = "en"
+    lang: str = Field(default="en", max_length=20, pattern=r"^[A-Za-z][A-Za-z0-9_-]*$")
 
     @model_validator(mode="after")
     def validate_success_criteria_dependencies(self) -> "CombinedRequest":

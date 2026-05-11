@@ -91,4 +91,16 @@ describe('use-of-color.check (WCAG 1.4.1)', () => {
     const result = await run(page);
     expect(result.rules[0].reason).toMatch(/underline|border|non-color/i);
   });
+
+  test('returns incomplete when only non-link color-only indicators are detected', async () => {
+    const page = makePage({
+      violations: [],
+      nonLinkViolations: [{ html: '<input required style="border-color:red">', tag: 'INPUT' }],
+      checkedCount: 2,
+    });
+    const result = await run(page);
+    expect(result.rules[0].status).toBe('incomplete');
+    expect(result.rules[0].impact).toBe('moderate');
+    expect(result.rules[0].reason).toContain('non-link color-only');
+  });
 });

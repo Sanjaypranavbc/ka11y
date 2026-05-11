@@ -139,3 +139,12 @@ A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
   <button type="submit">Submit</button>
 </form>
 ```
+
+## Known limitations
+
+- **Form is not submitted** — errors that appear only after `submit` are not observed. Pre-submit static validation containers are detected.
+- **`<fieldset>` / `<legend>` grouping** — field grouping at the fieldset level is not audited (H90).
+- **`title`-only labelling** is accepted; there is no warning that `title` alone is a weak labelling technique.
+- **Custom ARIA comboboxes** — `aria-labelledby` that references a hidden or dynamically rendered node can miscompute accessible name.
+
+See [Technique coverage for 3.3.1 / 3.3.2](/rules/coverage-matrix#3-3-1-3-3-2-error-identification-labels-or-instructions).

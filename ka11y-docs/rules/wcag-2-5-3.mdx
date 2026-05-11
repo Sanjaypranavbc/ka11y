@@ -100,3 +100,11 @@ A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
 <span id="btn-label">Submit</span>
 <button aria-labelledby="btn-label extra-context">Submit</button>
 ```
+
+## Known limitations
+
+- **Icon-only controls** with no visible label cannot be flagged (WCAG-correct, but a badly named icon escapes detection).
+- **Shadow DOM** is not traversed — controls inside closed shadow roots are not audited.
+- **Punctuation normalisation** — visible "Sign up!" vs accessible "Sign up" passes substring even though the token differs.
+
+See [Technique coverage for 2.5.3](/rules/coverage-matrix#2-5-3-label-in-name).

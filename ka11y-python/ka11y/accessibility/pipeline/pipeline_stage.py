@@ -21,7 +21,17 @@ from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="pipeline_stage")
 
-async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_label_in_name_audit: bool, run_target_size_audit: bool = True, run_focus_audit: bool = True, run_contrast_audit: bool = True) -> List[Dict[str, Any]]:
+
+async def _run_pipeline_stage(
+    url: str,
+    job_id: str,
+    run_image_audit: bool,
+    run_label_in_name_audit: bool,
+    run_target_size_audit: bool = True,
+    run_focus_audit: bool = True,
+    run_contrast_audit: bool = True,
+    lang: str = "en",
+) -> List[Dict[str, Any]]:
     """
     Entry point for the new Unified Accessibility Pipeline.
     Evaluates context-aware WCAG rules using rich DOM/Visual context.
@@ -33,10 +43,10 @@ async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_
             browser = await p.chromium.launch(headless=True)
             context = await browser.new_context()
             page = await context.new_page()
-            
+
             page.set_default_timeout(30000)
             await page.goto(url, wait_until="domcontentloaded")
-            await page.wait_for_timeout(2000) 
+            await page.wait_for_timeout(2000)
 
             # 1. Extract raw element contexts
             element_contexts = await ElementContextExtractor.extract_contexts(page)
@@ -48,7 +58,9 @@ async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_
             # 3. Enrich with interaction states (e.g., Focus rings)
             if run_focus_audit:
                 # Execute batched JS to simulate focus across all interactive nodes natively
-                await InteractionStateRunner.batch_evaluate_focus(page, element_contexts)
+                await InteractionStateRunner.batch_evaluate_focus(
+                    page, element_contexts
+                )
 
             await browser.close()
 
@@ -69,7 +81,7 @@ async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_
                 policies["1.4.3"] = Policy143()
                 policies["1.4.6"] = Policy146()
                 policies["1.4.11"] = Policy1411()
-                
+
             engine = DecisionEngine(policies)
 
             # 4. Evaluate all elements
@@ -81,8 +93,10 @@ async def _run_pipeline_stage(url: str, job_id: str, run_image_audit: bool, run_
             logger.info(f"Pipeline generated {len(all_verdicts)} verdicts.")
 
             # 5. Format to legacy schema
-            legacy_findings = EvidenceFormatter.to_legacy_findings(all_verdicts)
-            
+            legacy_findings = EvidenceFormatter.to_legacy_findings(
+                all_verdicts, lang=lang
+            )
+
             # Ensure page_url is injected just like other stages
             for finding in legacy_findings:
                 if "element" in finding and finding["element"]:

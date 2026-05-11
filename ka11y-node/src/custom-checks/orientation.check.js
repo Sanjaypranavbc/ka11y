@@ -283,7 +283,7 @@ async function run(page, context = {}) {
         try {
           if (rule.type === CSSRule.MEDIA_RULE) {
             const mediaText   = rule.conditionText || rule.media?.mediaText || '';
-            const orientMatch = mediaText.match(/orientation\s*:\s*(portrait|landscape)/i);
+            const orientMatch = mediaText.match(/orientation\s*:\s*(portrait|landscape)|(?:max|min)-aspect-ratio/i);
             if (orientMatch) {
               // Emit one finding per inner style-rule that hides content.
               // Do NOT recurse further inside an orientation block — nesting
@@ -356,7 +356,7 @@ async function run(page, context = {}) {
         try {
           if (rule.type === CSSRule.MEDIA_RULE) {
             const mediaText   = rule.conditionText || rule.media?.mediaText || '';
-            const orientMatch = mediaText.match(/orientation\s*:\s*(portrait|landscape)/i);
+            const orientMatch = mediaText.match(/orientation\s*:\s*(portrait|landscape)|(?:max|min)-aspect-ratio/i);
             if (orientMatch) {
               for (const inner of (rule.cssRules || [])) {
                 if (inner.type === CSSRule.STYLE_RULE && STRUCTURAL_PROPS.test(inner.cssText)) {

@@ -55,6 +55,51 @@ async function run(page, context = {}) {
     return items;
   }, SELECTOR, MAX_ELEMENTS);
 
+  // Static CSS scan: detect global :focus { outline: none } resets without :focus-visible restoration
+  const cssFindings = await page.evaluate(() => {
+    const OUTLINE_RESET_RE = /outline\s*:\s*(?:none|0(?:px)?)\s*[;!]/i;
+    const focusSelectors    = new Set();
+    const focusVisSelectors = new Set();
+    const issues            = [];
+
+    function scanRules(rules) {
+      if (!rules) return;
+      for (const rule of rules) {
+        try {
+          if (rule.type === CSSRule.STYLE_RULE) {
+            const sel = rule.selectorText || '';
+            if (/:focus\b/.test(sel) && !/:focus-visible\b/.test(sel)) {
+              if (OUTLINE_RESET_RE.test(rule.cssText)) focusSelectors.add(sel);
+            }
+            if (/:focus-visible\b/.test(sel)) focusVisSelectors.add(sel);
+          } else if (rule.cssRules) {
+            scanRules(rule.cssRules);
+          }
+        } catch (_) {}
+      }
+    }
+
+    Array.from(document.styleSheets).forEach(sheet => {
+      try { scanRules(sheet.cssRules); } catch (_) {}
+    });
+
+    for (const sel of focusSelectors) {
+      const rootSel = sel.replace(/:focus\b[^,]*/g, '').trim().replace(/,\s*$/, '').trim();
+      const hasRestoration = [...focusVisSelectors].some(vs => {
+        const vsRoot = vs.replace(/:focus-visible\b[^,]*/g, '').trim().replace(/,\s*$/, '').trim();
+        return vsRoot === rootSel || vsRoot === '' || rootSel === '';
+      });
+      if (!hasRestoration) {
+        issues.push({
+          type: 'focus-outline-reset',
+          selector: sel,
+          message: `"${sel}" resets outline without a :focus-visible restoration`,
+        });
+      }
+    }
+    return issues;
+  });
+
   const violations = [];
 
   for (const el of elements) {
@@ -67,6 +112,7 @@ async function run(page, context = {}) {
       if (!e) return null;
       e.blur();
       const cs = window.getComputedStyle(e);
+      const csAfter = window.getComputedStyle(e, '::after');
       return {
         outlineWidth:    cs.outlineWidth,
         outlineStyle:    cs.outlineStyle,
@@ -77,6 +123,10 @@ async function run(page, context = {}) {
         backgroundColor: cs.backgroundColor,
         color:           cs.color,
         transform:       cs.transform,
+        afterContent:    csAfter.content,
+        afterBoxShadow:  csAfter.boxShadow,
+        afterBorder:     csAfter.border,
+        afterOpacity:    csAfter.opacity,
       };
     }, SELECTOR, el.idx, el.stableSel);
 
@@ -99,6 +149,7 @@ async function run(page, context = {}) {
         : Array.from(document.querySelectorAll(sel))[idx];
       if (!e) return null;
       const cs = window.getComputedStyle(e);
+      const csAfter = window.getComputedStyle(e, '::after');
       return {
         outlineWidth:    cs.outlineWidth,
         outlineStyle:    cs.outlineStyle,
@@ -109,6 +160,10 @@ async function run(page, context = {}) {
         backgroundColor: cs.backgroundColor,
         color:           cs.color,
         transform:       cs.transform,
+        afterContent:    csAfter.content,
+        afterBoxShadow:  csAfter.boxShadow,
+        afterBorder:     csAfter.border,
+        afterOpacity:    csAfter.opacity,
       };
     }, SELECTOR, el.idx, el.stableSel);
 
@@ -148,11 +203,15 @@ async function run(page, context = {}) {
     const bgChanged          = focused.backgroundColor !== unfocused.backgroundColor;
     const colorChanged       = focused.color           !== unfocused.color;
     const transformChanged   = focused.transform       !== unfocused.transform;
+    const afterChanged       = focused.afterContent    !== unfocused.afterContent ||
+                               focused.afterBoxShadow  !== unfocused.afterBoxShadow ||
+                               focused.afterBorder     !== unfocused.afterBorder ||
+                               focused.afterOpacity    !== unfocused.afterOpacity;
     // B16: opacity change alone is NOT a visible focus indicator — it reflects CSS animations
     // or transitions on child elements and produces false passes (e.g. a loading spinner
     // child transitioning 0→1 while the button itself has no focus style).
     const isVisible = hasVisibleOutline || outlineChanged || boxShadowChanged ||
-                      borderChanged || bgChanged || colorChanged || transformChanged;
+                      borderChanged || bgChanged || colorChanged || transformChanged || afterChanged;
 
     if (!isVisible) {
       violations.push({
@@ -166,10 +225,27 @@ async function run(page, context = {}) {
     }
   }
 
-  if (violations.length === 0) {
+  const cssRules = cssFindings.map(f => ({
+    ruleId:      `${RULE_ID}-css-reset`,
+    description: 'CSS :focus outline reset without :focus-visible restoration',
+    impact:      'serious',
+    status:      'incomplete',
+    reason:      _t(sharedContext, 'CSS rule "{selector}" removes the focus outline for all pointer/keyboard users without restoring it via :focus-visible. Add a :focus-visible rule to preserve keyboard focus styling.', 'CSS ルール "{selector}" はすべてのユーザーの focus アウトラインを削除していますが、:focus-visible で復元されていません。キーボードフォーカス表示を維持するには :focus-visible ルールを追加してください。', { selector: f.selector }),
+    selector:    f.selector,
+    helpUrl:     HELP_URL,
+  }));
+
+  if (violations.length === 0 && cssRules.length === 0) {
     return {
       successCriteriaId: SC,
       rules: [{ ruleId: RULE_ID, description: 'Focusable elements must have a visible focus indicator', impact: null, status: 'pass', reason: _t(sharedContext, 'All {count} sampled focusable elements have a visible focus indicator.', 'サンプリングしたフォーカス可能要素 {count} 件すべてに、視認できるフォーカスインジケーターがあります。', { count: elements.length }), helpUrl: HELP_URL }],
+    };
+  }
+
+  if (violations.length === 0 && cssRules.length > 0) {
+    return {
+      successCriteriaId: SC,
+      rules: cssRules,
     };
   }
 
@@ -191,7 +267,7 @@ async function run(page, context = {}) {
       ),
       elements: violations,
       helpUrl: HELP_URL,
-    }],
+    }, ...cssRules],
   };
 }
 

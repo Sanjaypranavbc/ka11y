@@ -117,3 +117,12 @@ A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
   });
 </script>
 ```
+
+## Known limitations
+
+- **Pause-button state verification is missing** — the check detects *existence* of a button with pause-like text within 2 DOM-ancestor levels but never clicks it; "fake" pause buttons pass.
+- **Custom carousels** using raw `setInterval` / `requestAnimationFrame` without standard library classes or data-attributes are invisible (Bootstrap/Swiper/Slick/Owl/Flickity/Glide/Splide are recognised).
+- **Pause-button DOM depth** — fixed at 2 ancestor levels; deeper component hierarchies miss buttons.
+- **F50 (script that cannot be paused)** is not detected beyond known library patterns.
+
+See [Technique coverage for 2.2.2](/rules/coverage-matrix#2-2-2-pause-stop-hide).

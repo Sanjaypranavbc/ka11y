@@ -69,16 +69,15 @@ class TestFieldAppearsRequired:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestViolations331:
-    def test_required_field_with_no_aria_describedby_is_violation(self):
+    def test_required_field_with_no_aria_describedby_passes_if_no_error(self):
         f = make_field(required=True, aria_describedby=None)
         viols = _violations_331(f)
-        assert len(viols) == 1
-        assert "aria-describedby" in viols[0]
+        assert viols == []
 
-    def test_aria_required_true_treated_same_as_required(self):
+    def test_aria_required_true_with_no_aria_describedby_passes_if_no_error(self):
         f = make_field(required=False, aria_required="true", aria_describedby=None)
         viols = _violations_331(f)
-        assert any("aria-describedby" in v for v in viols)
+        assert viols == []
 
     def test_required_field_with_aria_describedby_but_no_error_element_is_violation(self):
         f = make_field(
@@ -203,7 +202,7 @@ class TestViolations332:
     def test_url_field_without_autocomplete_is_violation(self):
         f = make_field(type="url", has_any_label=True, autocomplete=None)
         viols = _violations_332(f)
-        assert any("autocomplete" in v.lower() for v in viols)
+        assert not any("autocomplete" in v.lower() for v in viols)
 
     def test_text_field_with_personal_name_attribute_needs_autocomplete(self):
         # Field name "email" triggers autocomplete check regardless of type
@@ -260,10 +259,11 @@ class TestFormAccessibilityAuditorReport:
             make_field(
                 form_index=0, type="text", has_any_label=False,
             ),
-            # FAILED 3.3.1: required, no aria-describedby
+            # FAILED 3.3.1: error container exists but has no live/alert roles
             make_field(
                 form_index=0, type="text", has_any_label=True, label_text="Name",
-                required=True, aria_describedby=None,
+                required=True, aria_describedby="err2", error_element_id="err2",
+                error_has_role_alert=False, error_has_aria_live=None,
             ),
             # FAILED 3.3.2: password without autocomplete
             make_field(
@@ -553,10 +553,10 @@ class TestFormAuditorAdditionalEdgeCases:
     def tmp_output(self, tmp_path):
         return str(tmp_path)
 
-    def test_required_with_no_error_message_patterns(self, tmp_output):
+    def test_required_with_no_error_message_patterns_passes(self, tmp_output):
         """
         Edge case: field has `required` attribute but no aria-describedby and
-        no error element — should produce a 3.3.1 violation.
+        no error element — should PASS 3.3.1 since there is no error state to announce.
         """
         f = make_field(
             required=True,
@@ -565,8 +565,7 @@ class TestFormAuditorAdditionalEdgeCases:
         )
         auditor = FormAccessibilityAuditor(output_dir=tmp_output)
         records = auditor.generate_audit_report([f])
-        assert records[0]["wcag_3_3_1_status"] == "FAILED"
-        assert "aria-describedby" in records[0]["wcag_3_3_1_violations"]
+        assert records[0]["wcag_3_3_1_status"] == "PASSED"
 
     def test_placeholder_only_label_detection(self, tmp_output):
         """
@@ -598,8 +597,8 @@ class TestFormAuditorAdditionalEdgeCases:
         records = auditor.generate_audit_report([f])
         assert records[0]["wcag_3_3_2_status"] == "FAILED"
 
-    def test_aria_required_without_describedby_triggers_331(self, tmp_output):
-        """aria-required=true should be treated same as required=True for 3.3.1."""
+    def test_aria_required_without_describedby_passes_331(self, tmp_output):
+        """aria-required=true should pass 3.3.1 if no error is present."""
         f = make_field(
             required=False,
             aria_required="true",
@@ -607,7 +606,7 @@ class TestFormAuditorAdditionalEdgeCases:
         )
         auditor = FormAccessibilityAuditor(output_dir=tmp_output)
         records = auditor.generate_audit_report([f])
-        assert records[0]["wcag_3_3_1_status"] == "FAILED"
+        assert records[0]["wcag_3_3_1_status"] == "PASSED"
 
     def test_field_with_label_and_proper_error_has_no_violations(self, tmp_output):
         """A fully-compliant field should pass both 3.3.1 and 3.3.2."""

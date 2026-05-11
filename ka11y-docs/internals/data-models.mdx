@@ -127,11 +127,15 @@ interface Finding {
   source:         "axe" | "python" | "custom";
   rule_id:        string;           // e.g. "python_1_1_1_alt"
   wcag_sc:        string;           // e.g. "1.1.1"
-  criterion_name: string | null;
-  level:          "A" | "AA" | "AAA" | null;
-  severity:       "critical" | "high" | "medium" | "low" | null;
-  status:         "fail" | "pass" | "needs_review";
-  reason:         string;
+  criterion_name: string | null;    // localized name
+  level:          "A" | "AA" | "AAA" | null;     // stable machine value
+  level_label:    string | null;    // localized companion (e.g. "レベル AA")
+  severity:       "critical" | "high" | "medium" | "low" | null;  // stable machine value
+  severity_label: string | null;    // localized companion (e.g. "重大")
+  status:         "fail" | "pass" | "needs_review";  // stable machine value
+  status_label:   string;           // localized companion (e.g. "合格")
+  reason:         string;           // localized text rendered from i18n/rules.yml
+  reason_code:    string | null;    // stable opaque template key (e.g. "fail_missing_alt")
   suggested_fix:  string | null;    // null for passes
   help_url:       string | null;
   element:        {
@@ -143,6 +147,12 @@ interface Finding {
   } | null;                         // null for passes
 }
 ```
+
+The stable machine fields (`severity`, `level`, `status`, `reason_code`,
+`wcag_sc`) are identical across languages and safe to filter on. The
+`*_label` companions and the localized `criterion_name` / `reason` /
+`suggested_fix` fields are sourced entirely from `i18n/rules.yml` and the
+`i18n/locales/<lang>.yml` overlays.
 
 ---
 
@@ -186,6 +196,12 @@ Persisted to `combined_report.json` and included in `result`:
 interface CombinedReport {
   url:          string;
   generated_at: string;      // ISO-8601
+  lang:         string;      // active language ("en" | "ja" | "de" | ...)
+  labels: {                  // localized display labels for the active language
+    severities: Record<string, string>;  // e.g. { "critical": "重大", ... }
+    levels:     Record<string, string>;  // e.g. { "AA": "レベル AA", ... }
+    statuses:   Record<string, string>;  // e.g. { "pass": "合格", ... }
+  };
   warnings:     string[];
   warning_details?: WarningSample[];
   summary: {
@@ -286,6 +302,23 @@ interface ImageAuditImageDetail {
 
 ## Localization Notes
 
-- Node and Python both localize `criterion_name` and `suggested_fix` from shared repo-root i18n assets.
-- Node localizes `reason` for axe findings and all custom checks when `lang="ja"`. All custom checks now use centralized `config/universal.yml` keywords for localized heuristics.
-- Python `reason` localization depends on the auditor implementation; some legacy auditors still emit English reason text.
+Every text-bearing field in a finding is universally localized from the shared `i18n/rules.yml` and `i18n/locales/<lang>.yml` overlays. This applies to both Node and Python and covers every emit path:
+
+| Field | Source |
+|-------|--------|
+| `criterion_name` | `rules.<sc>.name` |
+| `description` (rules catalogue) | `rules.<sc>.description` |
+| `suggested_fix` | `rules.<sc>.suggested_fix` |
+| `reason` | `reason_templates.<sc>.<reason_code>` (with `_generic` block as catch-all) |
+| `severity_label` | `severities.<severity>` |
+| `level_label` | `levels.<level>` |
+| `status_label` | `statuses.<status>` |
+| Top-level `labels` | full `severities` / `levels` / `statuses` maps |
+
+The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) are guaranteed identical across locales and are the safe key to filter on.
+
+axe-core ships its own per-locale messages and is configured via `axe.configure({ locale })` before each run, so axe-derived `reason` strings are localized natively by the engine.
+
+Python emits a `reason_code` (e.g. `fail_missing_alt`, `capture_failed`, `needs_review_warning`) plus optional `reason_params`; the `_make_finding` factory resolves these through `i18n.loader.render_reason()`, which falls back to the shared `_generic` templates when an SC has no rule-specific template for the code.
+
+Node emits localized reasons through `renderRuleReason()` for axe and through `renderReasonTemplate()` / `_t()` helpers in custom checks. Both share the same YAML source as Python.

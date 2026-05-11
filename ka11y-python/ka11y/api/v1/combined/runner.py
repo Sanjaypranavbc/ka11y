@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 import time
+import traceback
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -27,9 +29,19 @@ from ka11y.utils.step_logger import ExecutionStepLogger
 from .findings import _lang_ctx
 from .models import CombinedRequest
 from .report import _build_report
-from .stage_events import _stage_complete, _stage_error_and_warn, _stage_start
-from .stages import _allowed_levels, _call_node_flat, _run_python_stages
-from .store import _broadcast, _close_subscribers, _jobs
+from .stage_events import (
+    _stage_complete,
+    _stage_error_and_warn,
+    _stage_start,
+    emit_job_plan,
+)
+from .stages import (
+    PythonStagesResult,
+    _allowed_levels,
+    _call_node_flat,
+    _run_python_stages,
+)
+from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -62,7 +74,9 @@ def _merge_findings(
             targets = [item for item in target if isinstance(item, str)]
         else:
             targets = []
-        cleaned = [" ".join(item.split()).strip().lower() for item in targets if item.strip()]
+        cleaned = [
+            " ".join(item.split()).strip().lower() for item in targets if item.strip()
+        ]
         if not cleaned:
             return ""
         return "||".join(dict.fromkeys(cleaned))
@@ -83,13 +97,22 @@ def _merge_findings(
         tag = (el.get("tag") or "").strip().lower()
         el_id = (el.get("element_id") or "").strip().lower()
         html_sig = _normalize_html_sig(str(el.get("html") or ""))
+        # image_src: Python image findings use the src URL as element_id, but axe
+        # findings for the same <img> use CSS selectors.  Provide a stable cross-service
+        # dedup key by normalising the image src when present (§3.2 fix).
+        image_src = (el.get("image_src") or "").strip().lower()
+        # Strip the el_id if it looks like a URL — use image_src path instead so it
+        # doesn't collide with a DOM element-id on a different element.
+        el_id_is_url = el_id.startswith(("http://", "https://", "//", "/"))
+        stable_el_id = el_id if not el_id_is_url else ""
 
         page_scope = "|".join(part for part in (page_url, frame_path) if part)
         ident = (
             (f"sel:{page_scope}|{selector}" if selector else "")
             or (f"target:{page_scope}|{target_sig}" if target_sig else "")
             or (f"ref:{page_scope}|{ref_id}" if ref_id else "")
-            or (f"id:{page_scope}|{tag}|{el_id}" if el_id else "")
+            or (f"id:{page_scope}|{tag}|{stable_el_id}" if stable_el_id else "")
+            or (f"img:{page_scope}|{image_src}" if image_src else "")
             or (f"html:{page_scope}|{tag}|{html_sig}" if html_sig else "")
         )
         return (f.get("wcag_sc", ""), f.get("status", ""), ident)
@@ -111,7 +134,9 @@ def _merge_findings(
     return list(merged.values()) + no_key
 
 
-async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None) -> None:
+async def _run_job(
+    job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
+) -> None:
     """
     Background task: run axe-core (Node) and Python stages in parallel.
 
@@ -150,8 +175,43 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
             step="combined_job",
             status="running",
             message="Combined audit job started",
-            context={"url": url, "lang": payload.lang, "wcag_level": payload.wcag_level},
+            context={
+                "url": url,
+                "lang": payload.lang,
+                "wcag_level": payload.wcag_level,
+            },
         )
+
+        # Announce the stage plan to SSE subscribers so the progress bar can render.
+        active_stages: list[str] = ["axe_core"]
+        if payload.run_ocr or payload.run_image_audit:
+            active_stages.append("image_audit")
+        # pipeline stage always runs; it handles 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
+        active_stages.append("pipeline")
+        if payload.run_form_audit:
+            active_stages.append("form_audit")
+        if payload.run_pause_stop_hide_audit:
+            active_stages.append("pause_stop_hide")
+        if payload.run_text_spacing_audit:
+            active_stages.append("text_spacing")
+        if any(
+            (
+                payload.run_resize_text_audit,
+                payload.run_reflow_audit,
+                payload.run_text_spacing_audit,
+                payload.run_orientation_audit,
+                payload.run_hover_focus_content_audit,
+                payload.run_focus_not_obscured_min_audit,
+                payload.run_focus_not_obscured_enh_audit,
+            )
+        ):
+            active_stages.append("rendered_layout_audit")
+        if payload.run_media_audit:
+            active_stages.append("media_audit")
+        if payload.run_sensory_audit:
+            active_stages.append("sensory_audit")
+        emit_job_plan(job_id, active_stages)
+
         # Fire axe-core and all Python stages concurrently
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
@@ -177,7 +237,7 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                 run_hover_focus_content_audit=payload.run_hover_focus_content_audit,
                 run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
-                run_sensory_audit= payload.run_sensory_audit,
+                run_sensory_audit=payload.run_sensory_audit,
                 lang=payload.lang,
                 job_id=job_id,
                 step_logger=step_logger,
@@ -209,7 +269,12 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
 
         if isinstance(python_result, Exception):
             pass  # all stages failed — warnings already recorded
+        elif isinstance(python_result, PythonStagesResult):
+            python_findings = python_result.findings
+            contrast_report = python_result.contrast_report
+            image_audit_report = python_result.image_audit_report
         elif isinstance(python_result, tuple) and len(python_result) == 3:
+            # Backwards-compat path: pre-dataclass callers / older test mocks.
             python_findings, contrast_report, image_audit_report = python_result
         else:
             # Unexpected return type — degrade gracefully rather than raising
@@ -260,13 +325,17 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(img['path'], safe='')}"
                         )
-                        
+
         for array_key in ("violations", "needs_review", "passes"):
             for finding in report.get(array_key, []):
                 element = finding.get("element")
                 if element and isinstance(element, dict):
                     src = element.get("image_src")
-                    if src and not src.startswith("/api/v1/") and not src.startswith(("http://", "https://", "data:")):
+                    if (
+                        src
+                        and not src.startswith("/api/v1/")
+                        and not src.startswith(("http://", "https://", "data:"))
+                    ):
                         element["image_src"] = (
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(src, safe='')}"
@@ -274,17 +343,20 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
-            json.dump(report, fh, indent=2, ensure_ascii=False, default=_json_serializer)
+            json.dump(
+                report, fh, indent=2, ensure_ascii=False, default=_json_serializer
+            )
 
-        _jobs[job_id].update(
-            {
-                "status": "completed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "report_path": str(report_path),
-                "result": report,
-                "current_stage": None,
-            }
-        )
+        async with _get_job_lock(job_id):
+            _jobs[job_id].update(
+                {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "report_path": str(report_path),
+                    "result": report,
+                    "current_stage": None,
+                }
+            )
 
         logger.info(
             f"[combined] job {job_id} completed — "
@@ -314,29 +386,65 @@ async def _run_job(job_id: str, payload: CombinedRequest, filter_rule: Optional[
         )
 
     except Exception as exc:
-        logger.error(f"[combined] job {job_id} failed: {exc}")
-        _jobs[job_id].update(
-            {
-                "status": "failed",
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-                "error": str(exc),
-                "current_stage": None,
-            }
+        tb = traceback.format_exc()
+        origin = (
+            traceback.extract_tb(exc.__traceback__)[-1] if exc.__traceback__ else None
         )
+        where = (
+            f"{origin.filename}:{origin.lineno} in {origin.name}()"
+            if origin
+            else "unknown"
+        )
+        err_type = type(exc).__name__
+        current_stage = _jobs[job_id].get("current_stage") or "post_processing"
+        # Internal-only diagnostic detail (file paths, exception type, traceback)
+        # is logged but never surfaced to API clients. Clients receive an opaque
+        # error_id which support staff can correlate against these logs.
+        error_id = uuid.uuid4().hex
+        logger.error(
+            f"[combined] job {job_id} (error_id={error_id}) failed during stage "
+            f"'{current_stage}' ({err_type}: {exc}) at {where}\n{tb}"
+        )
+        async with _get_job_lock(job_id):
+            _jobs[job_id].update(
+                {
+                    "status": "failed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": "Audit failed due to an internal error.",
+                    "error_id": error_id,
+                    "error_stage": current_stage,
+                    "current_stage": None,
+                }
+            )
         step_logger.finalize(
             status="error",
             message="Combined audit job failed",
-            context={"error": str(exc)},
+            context={
+                "error_type": err_type,
+                "error": str(exc),
+                "stage": current_stage,
+                "location": where,
+            },
         )
-        await _broadcast(job_id, "job_failed", {"job_id": job_id, "error": str(exc)})
+        await _broadcast(
+            job_id,
+            "job_failed",
+            {
+                "job_id": job_id,
+                "error": f"{err_type}: {exc}",
+                "stage": current_stage,
+                "location": where,
+            },
+        )
 
     finally:
-        # Bug 5 fix: stage-event broadcasts are scheduled via loop.create_task() and are
-        # not awaited by their callers. If _close_subscribers() runs before those tasks
-        # execute, subscriber queues are removed first and stage events are silently lost.
-        # Yielding to the event loop here lets all pending broadcast tasks deliver their
-        # events before the queues are closed. A single sleep(0) is sufficient because
-        # _broadcast() only performs queue puts (no further I/O awaits), so each task
-        # completes in one scheduling tick.
+        # Stage-event broadcasts are scheduled via loop.create_task() and are not
+        # awaited by their callers. If _close_subscribers() runs before those tasks
+        # execute, subscriber queues are removed first and stage events are silently
+        # lost. Two yields are used: the first allows the broadcast tasks to be
+        # scheduled; the second allows them to complete their queue puts, since each
+        # broadcast task itself does a single non-blocking put_nowait with no further
+        # awaits.
+        await asyncio.sleep(0)
         await asyncio.sleep(0)
         await _close_subscribers(job_id)

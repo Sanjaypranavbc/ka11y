@@ -92,3 +92,10 @@ p, li, dt, dd, blockquote {
 | `level` | `AA` |
 | `severity` | `high` |
 | `status` | `fail` \| `needs_review` \| `pass` |
+
+## Known limitations
+
+- **Override scoped to `<html>`** — stylesheets using `!important` on descendant selectors can defeat the spacing override; no stylesheet-level diff is emitted.
+- **Clipping detection is geometric** — uses `offsetWidth > scrollWidth`; padding-hidden text without overflow is missed.
+
+See [Technique coverage for 1.4.12](/rules/coverage-matrix#1-4-12-text-spacing).
