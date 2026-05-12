@@ -1,0 +1,195 @@
+{
+  "meta": {
+    "rule": "1.4.4",
+    "rule_name": "Resize Text",
+    "source_url": "synthetic",
+    "scraped_at": "2026-05-12",
+    "total_cases": 6,
+    "description": "Synthetic ground truth for WCAG 1.4.4 Resize Text. Tests whether text can be resized to 200% without loss of content."
+  },
+  "cases": [
+    {
+      "id": "c144-01",
+      "description": "Standard paragraph at 200% (Pass)",
+      "baseline": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          {
+            "tag": "p",
+            "text": "Normal text",
+            "text_clipped": false,
+            "visible": true,
+            "rect": { "x": 0, "y": 0, "width": 500, "height": 20, "top": 0, "right": 500, "bottom": 20, "left": 0 }
+          }
+        ]
+      },
+      "resized": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          {
+            "tag": "p",
+            "text": "Normal text",
+            "text_clipped": false,
+            "visible": true,
+            "rect": { "x": 0, "y": 0, "width": 500, "height": 40, "top": 0, "right": 500, "bottom": 40, "left": 0 }
+          }
+        ]
+      },
+      "expected": {
+        "status": "PASSED"
+      }
+    },
+    {
+      "id": "c144-02",
+      "description": "Text clipped at 200% (Fail)",
+      "baseline": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          {
+            "tag": "p",
+            "element_id": "clipped-div",
+            "text": "This text will be clipped when resized to two hundred percent.",
+            "text_clipped": false,
+            "visible": true,
+            "rect": { "x": 0, "y": 0, "width": 200, "height": 20, "top": 0, "right": 200, "bottom": 20, "left": 0 }
+          }
+        ]
+      },
+      "resized": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          {
+            "tag": "p",
+            "element_id": "clipped-div",
+            "text": "This text will be clipped when resized to two hundred percent.",
+            "text_clipped": true,
+            "scroll_width": 400,
+            "client_width": 200,
+            "overflow_x": "hidden",
+            "overflow_y": "hidden",
+            "visible": true,
+            "rect": { "x": 0, "y": 0, "width": 200, "height": 40, "top": 0, "right": 200, "bottom": 40, "left": 0 }
+          }
+        ]
+      },
+      "expected": {
+        "status": "FAILED",
+        "violation_match": "clipped"
+      }
+    },
+    {
+      "id": "c144-03",
+      "description": "Horizontal scroll introduced at 200% (Fail)",
+      "baseline": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": []
+      },
+      "resized": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": true,
+        "document_scroll_width": 1300,
+        "elements": []
+      },
+      "expected": {
+        "status": "FAILED",
+        "violation_match": "horizontal scroll"
+      }
+    },
+    {
+      "id": "c144-04",
+      "description": "Small text remains visible (Pass)",
+      "baseline": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          {
+            "tag": "span",
+            "text": "Tiny",
+            "text_clipped": false,
+            "visible": true,
+            "rect": { "x": 0, "y": 0, "width": 10, "height": 10, "top": 0, "right": 10, "bottom": 10, "left": 0 }
+          }
+        ]
+      },
+      "resized": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          {
+            "tag": "span",
+            "text": "Tiny",
+            "text_clipped": false,
+            "visible": true,
+            "rect": { "x": 0, "y": 0, "width": 20, "height": 20, "top": 0, "right": 20, "bottom": 20, "left": 0 }
+          }
+        ]
+      },
+      "expected": {
+        "status": "PASSED"
+      }
+    },
+    {
+      "id": "c144-05",
+      "description": "Container shrinks to zero (Fail)",
+      "baseline": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          {
+            "tag": "button",
+            "element_id": "btn-1",
+            "text": "Submit",
+            "text_clipped": false,
+            "visible": true,
+            "rect": { "x": 0, "y": 0, "width": 100, "height": 30, "top": 0, "right": 100, "bottom": 30, "left": 0 }
+          }
+        ]
+      },
+      "resized": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          {
+            "tag": "button",
+            "element_id": "btn-1",
+            "text": "Submit",
+            "text_clipped": false,
+            "visible": false,
+            "rect": { "x": 0, "y": 0, "width": 0, "height": 0, "top": 0, "right": 0, "bottom": 0, "left": 0 }
+          }
+        ]
+      },
+      "expected": {
+        "status": "PASSED"
+      }
+    },
+    {
+      "id": "c144-06",
+      "description": "Complex layout with wrap (Pass)",
+      "baseline": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          { "tag": "li", "text": "Item 1", "text_clipped": false, "visible": true, "rect": { "x": 0, "y": 0, "width": 100, "height": 20, "top": 0, "right": 100, "bottom": 20, "left": 0 } },
+          { "tag": "li", "text": "Item 2", "text_clipped": false, "visible": true, "rect": { "x": 100, "y": 0, "width": 100, "height": 20, "top": 0, "right": 200, "bottom": 20, "left": 0 } }
+        ]
+      },
+      "resized": {
+        "viewport_width": 1280,
+        "has_horizontal_scroll": false,
+        "elements": [
+          { "tag": "li", "text": "Item 1", "text_clipped": false, "visible": true, "rect": { "x": 0, "y": 0, "width": 200, "height": 40, "top": 0, "right": 200, "bottom": 40, "left": 0 } },
+          { "tag": "li", "text": "Item 2", "text_clipped": false, "visible": true, "rect": { "x": 0, "y": 40, "width": 200, "height": 40, "top": 40, "right": 200, "bottom": 80, "left": 0 } }
+        ]
+      },
+      "expected": {
+        "status": "PASSED"
+      }
+    }
+  ]
+}
