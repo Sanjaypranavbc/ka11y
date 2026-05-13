@@ -137,3 +137,79 @@ def test_orphan_sweep_keeps_recent_dir(output_root):
     cutoff = time.time() - 3600  # 1 hour ago — fresh dir mtime is now-ish
     combined_store._evict_orphan_output_dirs(cutoff)
     assert fresh.exists(), "recent dir was evicted"
+
+
+# ── Step 26: X-API-Key auth ───────────────────────────────────────────────────
+
+
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture
+def soft_mode_client(monkeypatch):
+    """KA11Y_API_KEYS unset -> middleware allows everything."""
+    monkeypatch.delenv("KA11Y_API_KEYS", raising=False)
+    # Rebuild the app so the middleware reads the env afresh.
+    import importlib
+    from ka11y import main as ka11y_main
+
+    importlib.reload(ka11y_main)
+    with TestClient(ka11y_main.app, raise_server_exceptions=False) as c:
+        yield c
+
+
+@pytest.fixture
+def hard_mode_client(monkeypatch):
+    monkeypatch.setenv("KA11Y_API_KEYS", "secret-key-1,secret-key-2")
+    import importlib
+    from ka11y import main as ka11y_main
+
+    importlib.reload(ka11y_main)
+    with TestClient(ka11y_main.app, raise_server_exceptions=False) as c:
+        yield c
+
+
+def test_soft_mode_allows_requests_without_key(soft_mode_client):
+    """When KA11Y_API_KEYS is unset, the API stays open (no break for
+    existing integrations on deploy)."""
+    resp = soft_mode_client.get("/api/v1/combined/does-not-exist")
+    # 404 (route works) is the success signal; what we're verifying is
+    # that we did NOT get a 401 from the auth middleware.
+    assert resp.status_code != 401
+
+
+def test_hard_mode_rejects_missing_key(hard_mode_client):
+    resp = hard_mode_client.get("/api/v1/combined/does-not-exist")
+    assert resp.status_code == 401
+    assert "api key" in resp.json()["detail"].lower()
+    assert resp.headers.get("www-authenticate", "").lower().startswith("apikey")
+
+
+def test_hard_mode_rejects_wrong_key(hard_mode_client):
+    resp = hard_mode_client.get(
+        "/api/v1/combined/does-not-exist",
+        headers={"X-API-Key": "wrong"},
+    )
+    assert resp.status_code == 401
+
+
+def test_hard_mode_accepts_valid_key(hard_mode_client):
+    resp = hard_mode_client.get(
+        "/api/v1/combined/does-not-exist",
+        headers={"X-API-Key": "secret-key-1"},
+    )
+    # Valid key passes auth; the 404 below is from the route layer.
+    assert resp.status_code == 404
+
+
+def test_hard_mode_options_preflight_passes(hard_mode_client):
+    """CORS preflight (OPTIONS) must not require auth, otherwise browsers
+    can't even talk to the API."""
+    resp = hard_mode_client.options(
+        "/api/v1/combined/does-not-exist",
+        headers={
+            "Origin": "https://example.com",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert resp.status_code != 401
