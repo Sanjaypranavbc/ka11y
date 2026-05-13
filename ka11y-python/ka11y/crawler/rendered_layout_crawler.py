@@ -67,6 +67,11 @@ _MAX_FOCUS_STEPS = get_max_focus_steps()
 _MAX_HOVER_CANDIDATES = get_max_hover_candidates()
 _PAGE_TIMEOUT_MS = 30_000
 
+# Outer cap on the 7-way scenario gather. Each snapshot opens its own
+# Playwright context/page; networkidle waits can otherwise hang the whole
+# audit. 5 minutes is generous for the slowest realistic page.
+_SCENARIOS_TIMEOUT_SECONDS = 300
+
 # ── CSS for text-spacing scenario (WCAG 1.4.12) ───────────────────────────────
 
 _TEXT_SPACING_CSS = """
@@ -273,17 +278,14 @@ class RenderedLayoutCrawler:
     # ── Internal scenario runner ───────────────────────────────────────────────
 
     async def _run_all_scenarios(self, browser: Browser) -> Dict[str, Any]:
-        """Run all scenarios concurrently and collect results."""
-        # Run layout scenarios concurrently
-        (
-            baseline_snap,
-            snap_320,
-            snap_text_spacing,
-            snap_text_spacing_baseline,
-            snap_resize,
-            snap_portrait,
-            snap_landscape,
-        ) = await asyncio.gather(
+        """Run all scenarios concurrently and collect results.
+
+        Bounded by ``_SCENARIOS_TIMEOUT_SECONDS``: if one snapshot hangs
+        (e.g. ``page.wait_for_load_state('networkidle')`` waiting on a
+        long-poll), the others are cancelled rather than blocking the
+        gather indefinitely.
+        """
+        scenarios = (
             self._snapshot_at_viewport(_DESKTOP_W, _DESKTOP_H, "baseline", browser),
             self._snapshot_at_viewport(_REFLOW_W, _REFLOW_H, "reflow_320", browser),
             self._snapshot_with_css(
@@ -305,8 +307,32 @@ class RenderedLayoutCrawler:
             self._snapshot_at_viewport(
                 _LANDSCAPE_W, _LANDSCAPE_H, "orientation_landscape", browser
             ),
-            return_exceptions=True,
         )
+        try:
+            (
+                baseline_snap,
+                snap_320,
+                snap_text_spacing,
+                snap_text_spacing_baseline,
+                snap_resize,
+                snap_portrait,
+                snap_landscape,
+            ) = await asyncio.wait_for(
+                asyncio.gather(*scenarios, return_exceptions=True),
+                timeout=_SCENARIOS_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            # All scenarios timed out together; report empties so downstream
+            # evaluators see absent-snapshot rather than a hung crawler.
+            (
+                baseline_snap,
+                snap_320,
+                snap_text_spacing,
+                snap_text_spacing_baseline,
+                snap_resize,
+                snap_portrait,
+                snap_landscape,
+            ) = (TimeoutError("rendered-layout scenarios exceeded budget"),) * 7
 
         # Focus and hover scans run sequentially (they interact with the page)
         focus_steps = await self._focus_scan(browser)

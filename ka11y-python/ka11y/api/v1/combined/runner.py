@@ -46,6 +46,31 @@ from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
 logger = setup_logger(name="KAC", tag="combined")
 
 
+# Outer audit budget — bounds the top-level asyncio.gather of axe+python so
+# a stuck inner branch cannot pin a worker forever. Each inner stage already
+# has a tighter _STAGE_TIMEOUT_SECONDS budget in stages.py.
+_JOB_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1200"))
+
+# Hard cap on concurrent _run_job() background tasks. Without this, every
+# accepted POST spawns a Chromium + axe-core run; at the rate-limiter's
+# 30 req/min ceiling that would launch ~150 browsers in 5 minutes. The
+# semaphore is initialised lazily because asyncio primitives must be bound
+# to a running event loop.
+_MAX_CONCURRENT_JOBS = int(os.environ.get("KA11Y_MAX_CONCURRENT_JOBS", "4"))
+_job_semaphore: asyncio.Semaphore | None = None
+_job_semaphore_loop: Any = None
+
+
+def _get_job_semaphore() -> asyncio.Semaphore:
+    """Lazy per-event-loop semaphore so module import never touches the loop."""
+    global _job_semaphore, _job_semaphore_loop
+    current = asyncio.get_event_loop()
+    if _job_semaphore is None or _job_semaphore_loop is not current:
+        _job_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_JOBS)
+        _job_semaphore_loop = current
+    return _job_semaphore
+
+
 def _merge_findings(
     node_findings: List[Dict], python_findings: List[Dict]
 ) -> List[Dict]:
@@ -148,7 +173,28 @@ async def _run_job(
     • If axe-core fails → Python-only report with a warning entry.
     • If a Python stage fails → other stages continue; warning entry added.
     • Job fails ONLY when both axe-core AND all Python stages return nothing.
+
+    Concurrency:
+    • Bounded by the module-level semaphore so the worker cannot launch more
+      Chromium processes than _MAX_CONCURRENT_JOBS at once. Jobs over the cap
+      wait in FIFO order; the job's status stays "pending" until the slot is
+      acquired so clients polling /combined/{job_id} can observe the queue.
     """
+    sem = _get_job_semaphore()
+    if sem.locked() and sem._value <= 0:  # noqa: SLF001
+        # Visible state when a job is admitted but is parked behind the cap.
+        async with _get_job_lock(job_id):
+            if _jobs.get(job_id, {}).get("status") == "pending":
+                _jobs[job_id]["status"] = "queued"
+
+    async with sem:
+        await _run_job_body(job_id, payload, filter_rule)
+
+
+async def _run_job_body(
+    job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
+) -> None:
+    """Original body of :func:`_run_job`, gated by the concurrency semaphore."""
     _jobs[job_id]["status"] = "running"
     url = str(payload.url)
     _lang_ctx.set(payload.lang)  # Inherited by all child tasks via context copy
@@ -243,9 +289,25 @@ async def _run_job(
             )
         )
 
-        node_result, python_result = await asyncio.gather(
-            node_task, python_task, return_exceptions=True
-        )
+        # Top-level audit cap: even if one branch hangs (e.g. a misbehaving
+        # remote axe service or a Playwright deadlock), the job must terminate
+        # rather than block the worker forever. The inner stage timeouts
+        # (_timed in stages.py) bound individual auditors; this is the outer
+        # safety net.
+        try:
+            node_result, python_result = await asyncio.wait_for(
+                asyncio.gather(node_task, python_task, return_exceptions=True),
+                timeout=_JOB_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            for t in (node_task, python_task):
+                if not t.done():
+                    t.cancel()
+            # Surface as a structured failure; the outer except path will
+            # scrub it before broadcasting.
+            raise TimeoutError(
+                f"audit exceeded {_JOB_TIMEOUT_SECONDS}s overall budget"
+            )
 
         # ── Resolve axe-core result ───────────────────────────────────────────
         if isinstance(node_result, Exception):
