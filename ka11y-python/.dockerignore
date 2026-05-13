@@ -19,25 +19,37 @@ env/
 tests/
 htmlcov/
 .coverage
+coverage/
+coverage.xml
 
 # IDE
 .idea/
 .vscode/
 *.iml
 
-# Output / generated files
+# Output / generated files (these can be hundreds of MB)
 crawled_images/
 logs/
+output/
+scripts/
 *.csv
-*.json
-!poetry.lock
-!pyproject.toml
+
+# Documentation / analysis (not needed in image)
+*.md
+docs/
 
 # Git
 .git/
 .gitignore
+.github/
 
 # Docker itself
 Dockerfile
 docker-compose.yml
 .dockerignore
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*.swo
+*~

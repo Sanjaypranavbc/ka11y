@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # =============================================================================
 # ka11y-node — Puppeteer + axe-core accessibility engine
 # =============================================================================
@@ -11,9 +12,9 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN echo "==> [deps 2/2] Installing production Node dependencies..." && \
-    npm install --omit=dev && \
-    echo "==> [deps 2/2] Node dependencies installed ($(du -sh node_modules | cut -f1) on disk)"
+# Cache mount for npm so repeat builds reuse the package tarball cache.
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev --prefer-offline --no-audit --no-fund
 
 
 # ── Stage 2: runtime image ────────────────────────────────────────────────────
@@ -22,7 +23,11 @@ FROM node:20-slim AS runtime
 LABEL org.opencontainers.image.title="ka11y-node"
 LABEL org.opencontainers.image.description="Puppeteer + axe-core WCAG accessibility engine"
 
-RUN echo "==> [1/4] Installing system Chromium..." && \
+# System Chromium + minimal runtime libs. Cache mounts keep apt downloads
+# across rebuilds, so this layer stays fast even if invalidated.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
     apt-get update -qq && \
     apt-get install -y --no-install-recommends \
         chromium \
@@ -38,27 +43,21 @@ RUN echo "==> [1/4] Installing system Chromium..." && \
         libgtk-3-0 \
         libnss3 \
         libxss1 \
-        libasound2 \
-    && rm -rf /var/lib/apt/lists/* \
-    && echo "==> [1/4] Chromium installed: $(chromium --version)"
+        libasound2
 
 WORKDIR /app
 
-RUN echo "==> [2/4] Copying node_modules from deps stage..."
 COPY --from=deps /app/node_modules ./node_modules
-RUN echo "==> [2/4] node_modules copied ($(du -sh node_modules | cut -f1))"
 
-RUN echo "==> [3/4] Copying application source..."
+# Source layer — changes often, kept last so dep/system layers stay cached.
 COPY package*.json ./
 COPY server.js     ./
 COPY src/          ./src/
 COPY i18n/         ./i18n/
-RUN echo "==> [3/4] Source copied"
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
-RUN echo "==> [4/4] Puppeteer configured to use system Chromium at $(which chromium)"
 
 EXPOSE 3000
 

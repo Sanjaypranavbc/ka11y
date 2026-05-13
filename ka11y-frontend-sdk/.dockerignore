@@ -1,8 +1,23 @@
 node_modules/
 dist/
+coverage/
 .git/
 .gitignore
+.github/
 *.md
 .env*
 .vscode/
 .idea/
+.DS_Store
+*.log
+
+# Alternate lockfiles — only package-lock.json is used in the image
+bun.lock
+bun.lockb
+yarn.lock
+pnpm-lock.yaml
+
+# Docker itself
+Dockerfile
+docker-compose.yml
+.dockerignore
