@@ -104,6 +104,6 @@ async def _run_pipeline_stage(
 
             return legacy_findings
 
-    except Exception as e:
-        logger.error(f"Unified Pipeline failed: {e}")
+    except Exception:
+        logger.exception("Unified Pipeline failed")
         return []

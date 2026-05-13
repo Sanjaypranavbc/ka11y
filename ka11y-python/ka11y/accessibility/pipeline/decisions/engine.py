@@ -34,9 +34,6 @@ class DecisionEngine:
 
             try:
                 verdict = policy.evaluate(element)
-                # Filter out NOT_APPLICABLE to keep report clean
-                if verdict.status != VerdictStatus.NOT_APPLICABLE:
-                    verdicts.append(verdict)
             except PolicyError as e:
                 verdicts.append(
                     RuleVerdict(
@@ -50,24 +47,10 @@ class DecisionEngine:
                         element=element,
                     )
                 )
-            except Exception:
-                # Unexpected: log full traceback so the bug is visible.
-                logger.exception(
-                    "engine fault evaluating SC %s on element %s",
-                    policy.wcag_sc,
-                    element.element_id,
-                )
-                verdicts.append(
-                    RuleVerdict(
-                        rule_id=policy.rule_id,
-                        wcag_sc=policy.wcag_sc,
-                        status=VerdictStatus.NEEDS_REVIEW,
-                        confidence=0.1,
-                        reason_code="engine_fault",
-                        human_reason="Evaluation failed due to an internal error.",
-                        evidence={},
-                        element=element,
-                    )
-                )
+                continue
+            # Anything other than PolicyError propagates: silent NEEDS_REVIEW
+            # masks real bugs in policies, so the caller should see the fault.
+            if verdict.status != VerdictStatus.NOT_APPLICABLE:
+                verdicts.append(verdict)
 
         return verdicts
