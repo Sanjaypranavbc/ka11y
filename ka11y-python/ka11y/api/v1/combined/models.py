@@ -47,6 +47,11 @@ class JobStatusResponse(BaseModel):
     report_path: Optional[str] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    # Opaque correlation id for failed jobs. Maps a 5xx response to the
+    # server-side log entry that holds the real traceback. Never contains
+    # exception type, message, file path, or any other internal detail.
+    error_id: Optional[str] = None
+    error_stage: Optional[str] = None
     current_stage: Optional[str] = None
     stages: List[Dict[str, Any]] = []
     warnings: List[str] = []
