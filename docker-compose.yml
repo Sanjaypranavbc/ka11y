@@ -2,24 +2,29 @@
 # ka11y — Docker Compose (project root)
 # Services: ka11y-node · ka11y-python · ka11y-frontend · ka11y-docs
 #
-# Port map
-#   host:8080  →  frontend (nginx)  →  internal:80
-#   host:3001  →  docs (Mintlify)   →  internal:3000
-#   host:8000  →  python (FastAPI)  →  internal:8000
-#   host:3000  →  node (axe-core)   →  internal:3000  (debug only; not needed by frontend)
+# Configuration:
+#   Operator settings live in `.env` (copy from `.env.example`). Compose
+#   substitutes ${VAR} references below at parse time.
+#
+# Port map (defaults — override via .env):
+#   host:8080  → frontend (nginx)     →  internal:80     [PUBLIC]
+#   host:8000  → python  (FastAPI)    →  internal:8000   [PUBLIC, X-API-Key gated]
+#   host:3000  → node    (axe-core)   →  internal:3000   [LOOPBACK ONLY]
+#   host:3001  → docs    (Mintlify)   →  internal:3000   [LOOPBACK ONLY]
 #
 # Usage:
-#   docker compose build --parallel        # build all images in parallel
-#   docker compose up                      # start all services
-#   docker compose up --build              # build + start
-#   docker compose logs -f                 # follow logs
-#   docker compose down                    # stop services
-#   rm -rf output/crawled_images output/logs  # optional: clear bind-mounted audit output
+#   cp .env.example .env && edit                # one-time setup
+#   docker compose build --parallel             # build all images in parallel
+#   docker compose up -d                        # start in background
+#   docker compose logs -f                      # follow logs
+#   docker compose down                         # stop services
 # =============================================================================
 
 services:
 
   # ── Node axe-core engine ───────────────────────────────────────────────────
+  # Internal-only on EC2: bound to loopback so the public internet cannot
+  # hit it. Python reaches it on the Docker network at http://node:3000.
   node:
     build:
       context: ./ka11y-node
@@ -28,6 +33,7 @@ services:
     container_name: ka11y-node
     restart: unless-stopped
     shm_size: '256m'
+    mem_limit: 1500m
 
     security_opt:
       - seccomp:unconfined
@@ -41,10 +47,8 @@ services:
       AXE_TIMEOUT_MS: "60000"
       BODY_LIMIT:     "10mb"
 
-    # Expose to host for local debugging only.
-    # The python service reaches node via the internal network (node:3000).
     ports:
-      - "0.0.0.0:3000:3000"
+      - "127.0.0.1:${NODE_HOST_PORT:-3000}:3000"
 
     healthcheck:
       test:         ["CMD", "curl", "-f", "http://localhost:3000/api/v1/health"]
@@ -61,17 +65,20 @@ services:
 
 
   # ── Python FastAPI auditors ────────────────────────────────────────────────
+  # Public on EC2 (browser hits it directly cross-origin). Protected by
+  # X-API-Key auth — set KA11Y_API_KEYS in .env to enforce.
   python:
     build:
       context: ./ka11y-python
       dockerfile: Dockerfile
       args:
-        # Set to "0" to skip sudachipy/sudachidict + ja_core_news_lg (~500MB).
-        INSTALL_JAPANESE: "1"
+        INSTALL_JAPANESE: "${INSTALL_JAPANESE:-1}"
+        WHISPER_MODEL_SIZE: "${WHISPER_MODEL_SIZE:-base}"
     image: ka11y-python:latest
     container_name: ka11y-python
     restart: unless-stopped
     shm_size: '256m'
+    mem_limit: 4g
 
     security_opt:
       - seccomp:unconfined
@@ -84,14 +91,13 @@ services:
       - ka11y-net
 
     environment:
-      NODE_BASE_URL:        "http://node:3000"
-      PYTHONUNBUFFERED:     "1"
+      NODE_BASE_URL:           "http://node:3000"
+      KA11Y_API_KEYS:          "${KA11Y_API_KEYS:-}"
+      PYTHONUNBUFFERED:        "1"
       PYTHONDONTWRITEBYTECODE: "1"
 
-    # Expose to host for local debugging / direct API calls.
-    # In production behind a reverse proxy this can be removed.
     ports:
-      - "0.0.0.0:8000:8000"
+      - "0.0.0.0:${PYTHON_HOST_PORT:-8000}:8000"
 
     volumes:
       - ./output/crawled_images:/app/crawled_images
@@ -113,15 +119,18 @@ services:
 
 
   # ── React + nginx frontend ─────────────────────────────────────────────────
+  # Public on EC2. VITE_API_URL is baked into the JS bundle at build time;
+  # rebuild required if it changes.
   frontend:
     build:
       context: ./ka11y-frontend-sdk
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: "http:localhost:8000/" #"https://a11y-api.bluecaffeine.in"
+        VITE_API_URL: "${VITE_API_URL:-http://localhost:8000}"
     image: ka11y-frontend:latest
     container_name: ka11y-frontend
     restart: unless-stopped
+    mem_limit: 256m
 
     depends_on:
       python:
@@ -131,7 +140,7 @@ services:
       - ka11y-net
 
     ports:
-      - "8080:80"
+      - "0.0.0.0:${FRONTEND_HOST_PORT:-8080}:80"
 
     healthcheck:
       test:         ["CMD", "wget", "-qO-", "http://localhost:80/"]
@@ -148,6 +157,8 @@ services:
 
 
   # ── Mintlify documentation site ────────────────────────────────────────────
+  # Internal-only on EC2 (loopback). Reach via SSH tunnel:
+  #   ssh -L 3001:127.0.0.1:3001 ec2-user@<host>
   docs:
     build:
       context: ./ka11y-docs
@@ -155,12 +166,13 @@ services:
     image: ka11y-docs:latest
     container_name: ka11y-docs
     restart: unless-stopped
+    mem_limit: 512m
 
     networks:
       - ka11y-net
 
     ports:
-      - "3001:3000"
+      - "127.0.0.1:${DOCS_HOST_PORT:-3001}:3000"
 
     volumes:
       - ./ka11y-docs:/docs
