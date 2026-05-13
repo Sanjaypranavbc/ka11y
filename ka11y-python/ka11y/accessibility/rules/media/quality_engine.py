@@ -29,12 +29,13 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import hashlib
+from datetime import datetime
 import httpx
 import nltk
 import spacy
 from jiwer import wer as compute_wer
 from nltk.tokenize import word_tokenize
-from deepgram import DeepgramClient, PrerecordedOptions, FileSource
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils import not_implemented
@@ -98,6 +99,38 @@ _MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 _DOWNLOAD_TIMEOUT = 60.0
 
 # WER thresholds for Check 1
+# < 15%: Excellent (Pass)
+# 15-40%: Moderate (Needs Review)
+# > 40%: Poor (Fail)
+_WER_PASS_THRESHOLD = 0.15
+_WER_FAIL_THRESHOLD = 0.40
+
+
+def _save_transcript_locally(text: str, media_url: str, output_dir: str = ""):
+    """Save the raw Deepgram transcript to a local file for audit verification."""
+    try:
+        # Create storage path: output/transcripts/
+        base_dir = Path(output_dir) if output_dir else Path.cwd()
+        storage_dir = base_dir / "output" / "transcripts"
+        storage_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate filename: timestamp_md5(url).txt
+        url_hash = hashlib.md5(media_url.encode()).hexdigest()[:10]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{url_hash}.txt"
+        file_path = storage_dir / filename
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(f"Source URL: {media_url}\n")
+            f.write(f"Audit Date: {datetime.now().isoformat()}\n")
+            f.write("-" * 40 + "\n")
+            f.write(text)
+
+        logger.info(f"[quality_engine] Saved raw transcript to {file_path}")
+        return str(file_path)
+    except Exception as exc:
+        logger.warning(f"[quality_engine] Failed to save transcript locally: {exc}")
+        return None
 _WER_PASS = 0.15  # WER ≤ 0.15 → 85%+ match → PASS
 _WER_FAIL = 0.40  # WER > 0.40 → <60% match → FAIL (summary, not transcript)
 
@@ -284,9 +317,15 @@ def _check_verbatim(
     Compares Whisper's local transcription against the developer's transcript
     using Word Error Rate (WER) — the industry standard for ASR evaluation.
     """
-    # Preprocess: lowercase, strip extra whitespace
-    ref = re.sub(r"\s+", " ", whisper_text.lower().strip())
-    hyp = re.sub(r"\s+", " ", dev_transcript.lower().strip())
+    # Preprocess: lowercase, strip extra whitespace, and remove dots from acronyms
+    def normalize(text):
+        text = text.lower().strip()
+        # Remove dots from acronyms (e.g., W.C.A.G. -> wcag)
+        text = re.sub(r'(?<=\b[a-z])\.(?=[a-z]\b|[a-z]\s|\s|$)', '', text)
+        return re.sub(r"\s+", " ", text)
+
+    ref = normalize(whisper_text)
+    hyp = normalize(dev_transcript)
 
     if not ref or not hyp:
         return _check_result(
@@ -310,29 +349,28 @@ def _check_verbatim(
 
     score = compute_wer(ref, hyp)
 
+    # Threshold Explanation for UI
+    metric_info = "Metrics: Excellent (<15%), Needs Review (15-40%), Poor (>40%)"
+
     if score <= _WER_PASS:
         return _check_result(
             "verbatim",
             "PASSED",
-            f"Transcript matches audio with WER={score:.2f} "
-            f"({(1 - score) * 100:.0f}% accuracy).",
+            f"Transcript matches audio accurately. (WER: {score:.2%}). {metric_info}",
             wer_score=round(score, 4),
         )
     elif score > _WER_FAIL:
         return _check_result(
             "verbatim",
             "FAILED",
-            f"Transcript significantly differs from audio (WER={score:.2f}, "
-            f"only {(1 - score) * 100:.0f}% accuracy). "
-            f"This appears to be a summary, not a verbatim transcript.",
+            f"Transcript is highly inaccurate. (WER: {score:.2%}). {metric_info}",
             wer_score=round(score, 4),
         )
     else:
         return _check_result(
             "verbatim",
             "NEEDS_REVIEW",
-            f"Transcript partially matches audio (WER={score:.2f}, "
-            f"{(1 - score) * 100:.0f}% accuracy). May be paraphrased.",
+            f"Transcript partially matches audio. (WER: {score:.2%}). {metric_info}",
             wer_score=round(score, 4),
         )
 
@@ -599,7 +637,7 @@ def _check_sequence(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _download_media(url: str, output_dir: str) -> Optional[str]:
+def _download_media(url: str, output_dir: str, media_type: str = "audio") -> Optional[str]:
     """
     Download media file to a temp path inside output_dir.
     Returns the file path, or None if download fails or exceeds size limit.
@@ -622,9 +660,18 @@ def _download_media(url: str, output_dir: str) -> Optional[str]:
                     )
                     return None
 
-                # Determine file extension from URL
+                # Determine file extension and final storage path
                 ext = Path(url.split("?")[0]).suffix or ".mp3"
-                out_path = Path(output_dir) / f"_media_temp{ext}"
+                
+                base_dir = Path(output_dir) if output_dir else Path.cwd()
+                sub_folder = "video" if "video" in media_type.lower() else "audio"
+                media_dir = base_dir / "output" / "media" / sub_folder
+                media_dir.mkdir(parents=True, exist_ok=True)
+
+                url_hash = hashlib.md5(url.encode()).hexdigest()[:10]
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"{timestamp}_{url_hash}{ext}"
+                out_path = media_dir / filename
 
                 total = 0
                 with open(out_path, "wb") as f:
@@ -635,7 +682,6 @@ def _download_media(url: str, output_dir: str) -> Optional[str]:
                                 "[quality_engine] Download exceeded size limit"
                             )
                             f.close()
-                            out_path.unlink(missing_ok=True)
                             return None
                         f.write(chunk)
 
@@ -652,7 +698,7 @@ def _download_media(url: str, output_dir: str) -> Optional[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _transcribe_audio(audio_path: str) -> Optional[Dict[str, Any]]:
+def _transcribe_audio(audio_path: str, media_url: str = "unknown_url", output_dir: str = "") -> Optional[Dict[str, Any]]:
     """
     Transcribe audio using Deepgram SDK.
 
@@ -671,55 +717,71 @@ def _transcribe_audio(audio_path: str) -> Optional[Dict[str, Any]]:
         return None
 
     try:
-        # Initialize the Deepgram client
-        deepgram = DeepgramClient(api_key)
-
-        with open(audio_path, "rb") as audio:
-            buffer_data = audio.read()
-
-        payload: FileSource = {"buffer": buffer_data}
-
-        # Configure options for our specific requirements
-        options = PrerecordedOptions(
-            model="nova-2",
-            smart_format=True,
-            utterances=True,
-            diarize=True,
-            punctuate=True,
-        )
-
-        response = deepgram.listen.rest.v("1").transcribe_file(payload, options)
-        
-        # Parse the response safely
-        results = response.results
-        if not results or not getattr(results, 'utterances', None):
-            logger.warning("[quality_engine] Deepgram returned no utterances.")
-            return None
-
-        utterances = results.utterances
-        segments = []
-        full_text = []
-        unique_speakers = set()
-
-        for u in utterances:
-            segments.append({
-                "start": u.start,
-                "end": u.end,
-                "text": u.transcript.strip(),
-                "speaker": u.speaker,
-            })
-            full_text.append(u.transcript.strip())
-            unique_speakers.add(u.speaker)
-
-        return {
-            "text": " ".join(full_text),
-            "segments": segments,
-            "segment_count": len(segments),
-            "speaker_count": len(unique_speakers),
+        import httpx
+        url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&utterances=true&diarize=true&punctuate=true"
+        headers = {
+            "Authorization": f"Token {api_key}"
         }
+        
+        with open(audio_path, "rb") as f:
+            audio_data = f.read()
+
+        with httpx.Client(timeout=120) as client:
+            resp = client.post(url, headers=headers, content=audio_data)
+        
+        resp.raise_for_status()
+        data = resp.json()
+        
+        results = data.get("results", {})
+        utterances = results.get("utterances", [])
+        
+        transcript_data = None
+        if not utterances:
+            channels = results.get("channels", [])
+            if not channels:
+                logger.warning("[quality_engine] Deepgram returned no channels.")
+                return None
+            alts = channels[0].get("alternatives", [])
+            if not alts:
+                return None
+            text = alts[0].get("transcript", "")
+            transcript_data = {
+                "text": text,
+                "segments": [],
+                "segment_count": 0,
+                "speaker_count": 0,
+            }
+        else:
+            segments = []
+            full_text = []
+            unique_speakers = set()
+
+            for u in utterances:
+                speaker = u.get("speaker", 0)
+                segments.append({
+                    "start": u.get("start", 0),
+                    "end": u.get("end", 0),
+                    "text": u.get("transcript", "").strip(),
+                    "speaker": speaker,
+                })
+                full_text.append(u.get("transcript", "").strip())
+                unique_speakers.add(speaker)
+
+            transcript_data = {
+                "text": " ".join(full_text),
+                "segments": segments,
+                "segment_count": len(segments),
+                "speaker_count": len(unique_speakers),
+            }
+
+        # Save locally for verification
+        if transcript_data and transcript_data["text"]:
+            _save_transcript_locally(transcript_data["text"], media_url, output_dir) 
+
+        return transcript_data
 
     except Exception as exc:
-        logger.warning(f"[quality_engine] Transcription failed via Deepgram: {exc}")
+        logger.warning(f"[quality_engine] Transcription failed via Deepgram API: {exc}")
         return None
 
 
@@ -773,12 +835,11 @@ def evaluate_transcript_quality(
 
     # ── Audio-only checks (1, 2, 3, 5) ───────────────────────────────────
     if media_type == "audio_only":
-        # Download and transcribe the audio
-        _out = output_dir or tempfile.gettempdir()
-        audio_path = _download_media(media_url, _out)
+        # Save media to output/media/
+        audio_path = _download_media(media_url, output_dir, media_type=media_type)
 
         if audio_path:
-            transcription = _transcribe_audio(audio_path)
+            transcription = _transcribe_audio(audio_path, media_url=media_url, output_dir=output_dir)
 
             if transcription:
                 # Check 1: Verbatim
@@ -813,10 +874,8 @@ def evaluate_transcript_quality(
                 checks.append(_check_non_speech_events(clean_transcript, lang=lang))
 
             # Clean up temp file
-            try:
-                Path(audio_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+            # Note: We NO LONGER unlink/delete audio_path as requested.
+            pass
         else:
             # Download failed — run text-only checks
             checks.append(
@@ -859,11 +918,114 @@ def evaluate_transcript_quality(
         review_checks = [c["check"] for c in checks if c["status"] == "NEEDS_REVIEW"]
         message = f"Quality check(s) require manual review: {', '.join(review_checks)}."
 
+    # Extract WER for diagnostics
+    verbatim_check = next((c for c in checks if c["check"] == "verbatim"), None)
+    wer_score = verbatim_check.get("wer_score") if verbatim_check else None
+
     return {
         "overall_status": overall,
         "message": message,
         "checks": checks,
+        "wer_score": wer_score,
+        "wer_thresholds": "Excellent < 15%, Moderate 15-40%, Poor > 40%"
     }
+
+
+def evaluate_captions_quality(
+    *,
+    media_url: str,
+    caption_text: str,
+    output_dir: str = "",
+    lang: str = "en",
+) -> Dict[str, Any]:
+    """
+    Evaluates 1.2.2 Synchronized Captions against Deepgram ground truth transcript.
+    """
+    if not caption_text or len(caption_text.strip()) < 5:
+        return {
+            "overall_status": "NEEDS_REVIEW",
+            "message": "Caption text is too short or empty for quality evaluation.",
+            "deepgram_transcript": None,
+            "wer_score": None,
+        }
+
+    audio_path = _download_media(media_url, output_dir, media_type="video")
+
+    if not audio_path:
+        return {
+            "overall_status": "NEEDS_REVIEW",
+            "message": "Could not download media file for transcription.",
+            "deepgram_transcript": None,
+            "wer_score": None,
+        }
+
+    transcription = _transcribe_audio(audio_path, media_url=media_url, output_dir=output_dir)
+    
+    # Note: We NO LONGER unlink/delete audio_path as requested.
+    pass
+
+    if not transcription:
+        return {
+            "overall_status": "NEEDS_REVIEW",
+            "message": "Could not transcribe audio (Deepgram failed or key missing).",
+            "deepgram_transcript": None,
+            "wer_score": None,
+        }
+
+    ground_truth = transcription["text"]
+    
+    try:
+        from jiwer import wer, Compose, ToLowerCase, RemovePunctuation, RemoveWhiteSpace
+        import string
+        
+        # Build simple cleaner if jiwer doesn't provide these specific transforms out of box
+        def clean_text(text):
+            text = text.lower()
+            text = text.translate(str.maketrans('', '', string.punctuation))
+            return " ".join(text.split())
+            
+        gt_clean = clean_text(ground_truth)
+        caption_clean = clean_text(caption_text)
+        
+        if not gt_clean.strip():
+            if not caption_clean.strip():
+                 status = "PASS"
+                 msg = "No speech detected in audio, and no captions provided."
+                 error_rate = 0.0
+            else:
+                 status = "NEEDS_REVIEW"
+                 msg = "No speech detected, but captions exist (possibly sound effects). Manual review recommended."
+                 error_rate = None
+        else:
+            error_rate = wer(gt_clean, caption_clean)
+            
+            # Threshold Explanation for UI
+            metric_info = "Metrics: Excellent (<15%), Needs Review (15-40%), Poor (>40%)"
+            
+            if error_rate < 0.15:
+                status = "PASS"
+                msg = f"Captions match audio accurately. (WER: {error_rate:.1%}). {metric_info}"
+            elif error_rate > 0.40:
+                status = "FAILED"
+                msg = f"Captions are highly inaccurate. (WER: {error_rate:.1%}). {metric_info}"
+            else:
+                status = "NEEDS_REVIEW"
+                msg = f"Captions match partially. (WER: {error_rate:.1%}). Manual review recommended. {metric_info}"
+            
+        return {
+            "overall_status": status,
+            "message": msg,
+            "deepgram_transcript": ground_truth,
+            "wer_score": float(error_rate) if error_rate is not None else None
+        }
+    except Exception as exc:
+        logger.error(f"[quality_engine] WER calculation failed: {exc}")
+        return {
+            "overall_status": "NEEDS_REVIEW",
+            "message": "Failed to compute Word Error Rate.",
+            "deepgram_transcript": ground_truth,
+            "wer_score": None,
+        }
 
 
 # ── SUMMARY ──────────────────────────────────────────────────────────────

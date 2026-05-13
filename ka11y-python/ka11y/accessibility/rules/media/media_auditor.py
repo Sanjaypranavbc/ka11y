@@ -329,6 +329,43 @@ def _gate_5_validate_track_url(track_url: str) -> Optional[Tuple[str, str, int]]
         return ("FAILED", f"Caption file URL is unreachable: {str(e)} (F8 violation)", 5)
         
     return None
+    
+
+def _download_and_parse_vtt(track_url: str) -> Optional[str]:
+    """
+    Downloads a VTT or SRT file and strips out timestamps, tags, and IDs to return pure spoken text.
+    """
+    try:
+        resp = requests.get(track_url, timeout=10)
+        resp.raise_for_status()
+        text = resp.text
+        
+        # Simple VTT/SRT parser
+        lines = text.splitlines()
+        spoken_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if line.upper() == "WEBVTT":
+                continue
+            # Match timestamp lines like 00:00:00.000 --> 00:00:02.000
+            if "-->" in line:
+                continue
+            # Match just numeric IDs
+            if line.isdigit():
+                continue
+            # Strip simple HTML tags like <b>, <i>, <font>
+            line = re.sub(r'<[^>]+>', '', line)
+            # Remove any inline styling like <c.color>
+            line = re.sub(r'<c[^>]*>', '', line)
+            line = line.replace('</c>', '')
+            spoken_lines.append(line)
+            
+        return " ".join(spoken_lines)
+    except Exception as e:
+        logger.warning(f"Failed to download and parse VTT from {track_url}: {e}")
+        return None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Auditor class
@@ -500,20 +537,39 @@ class MediaAuditor:
                 })
                 return base
                 
-            # Gate 6: Needs Review
+            # Gate 6: Deepgram Caption Verification
             track_kind = track_info["kind"]
-            review_msg = (
-                f"Video has a valid <track kind=\"{track_kind}\">. "
-                "Human review required to verify accuracy "
-            )
-            if track_kind == "subtitles":
-                review_msg += "and ensure non-speech audio cues (sound effects, speaker ID) are included."
-            else:
-                review_msg += "of the captions."
+            
+            # Fetch and parse the VTT/SRT text
+            caption_text = _download_and_parse_vtt(track_url)
+            media_url = item.get("src")
+            
+            if not caption_text or not media_url:
+                review_msg = (
+                    f"Video has a valid <track kind=\"{track_kind}\"> but we could not "
+                    "download the media or captions to automatically verify accuracy. "
+                    "Human review required."
+                )
+                base.update({
+                    "wcag_1_2_2_status": "NEEDS_REVIEW",
+                    "wcag_1_2_2_violation": review_msg, 
+                    "wcag_1_2_2_gate_reached": 6,
+                })
+                return base
                 
+            from ka11y.accessibility.rules.media.quality_engine import evaluate_captions_quality
+            
+            report = evaluate_captions_quality(
+                media_url=media_url,
+                caption_text=caption_text,
+                output_dir=str(self.output_dir),
+                lang=self.lang
+            )
+            
+            base["quality_report"] = report
             base.update({
-                "wcag_1_2_2_status": "NEEDS_REVIEW",
-                "wcag_1_2_2_violation": review_msg, 
+                "wcag_1_2_2_status": report["overall_status"],
+                "wcag_1_2_2_violation": report["message"],
                 "wcag_1_2_2_gate_reached": 6,
             })
             return base

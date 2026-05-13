@@ -62,8 +62,9 @@ def _make_finding(
     image_reference: Optional[str] = None,
     image_text: Optional[str] = None,
     page_url: str = "",
+    quality_report: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    is_pass = status == "pass"
+    is_pass = status in ("pass", "inapplicable")
     _lang = _lang_ctx.get()
     wcag_names = get_wcag_names(_lang)
     suggested_fixes = get_suggested_fixes(_lang)
@@ -111,6 +112,8 @@ def _make_finding(
             if has_element_data
             else None
         )
+        if element and quality_report:
+            element["quality_report"] = quality_report
     else:
         element = {
             "html": element_html[:600] if element_html else "",
@@ -125,6 +128,8 @@ def _make_finding(
             "image_text": image_text,
             "page_url": page_url,
         }
+        if quality_report:
+            element["quality_report"] = quality_report
 
     return {
         "source": source,
@@ -175,6 +180,7 @@ def _record_element_kwargs(
         "element_ref_id": record.get("element_ref_id"),
         "frame_path": record.get("frame_path"),
         "page_url": record.get("page_url") or page_url,
+        "quality_report": record.get("quality_report"),
     }
 
 
@@ -1453,7 +1459,7 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
             ))
         elif s_121 == "N/A":
             findings.append(_make_finding(
-                source="python", rule_id="python_1_2_1_media", wcag_sc="1.2.1", status="pass",
+                source="python", rule_id="python_1_2_1_media", wcag_sc="1.2.1", status="inapplicable",
                 reason=r.get("wcag_1_2_1_violation") or "Rule 1.2.1 evaluates to N/A for this element.",
                 severity=None, **_record_element_kwargs(r, page_url)
             ))
@@ -1480,7 +1486,7 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
             ))
         elif s_122 == "N/A":
             findings.append(_make_finding(
-                source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="pass",
+                source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="inapplicable",
                 reason=r.get("wcag_1_2_2_violation") or "Rule 1.2.2 evaluates to N/A for this element.",
                 severity=None, **_record_element_kwargs(r, page_url)
             ))

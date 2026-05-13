@@ -337,7 +337,7 @@ class TestQualityEngineTextChecks:
         from ka11y.accessibility.rules.media.quality_engine import _check_speaker_ids
 
         transcript = "Hello everyone, good morning. Today we discuss the topic."
-        result = _check_speaker_ids(transcript, whisper_segment_count=10)
+        result = _check_speaker_ids(transcript, whisper_segment_count=10, speaker_count=2)
         assert result["status"] == "FAILED"
 
     def test_speaker_ids_short_audio_review(self):
