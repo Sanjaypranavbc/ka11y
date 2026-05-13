@@ -24,6 +24,12 @@ Use this table first.
 
 ## 2. Current crawler architecture
 
+All ten ka11y crawlers share a single Chromium process via the
+`BrowserPool` (`ka11y-python/ka11y/crawler/browser_pool.py`). When you
+add or extend a crawler, **do not** open your own `async_playwright()`
+block — lease a context from the pool instead. See section 5 for the
+pattern.
+
 Think of the Python side as three main extraction families:
 
 ### Universal static path
@@ -315,6 +321,59 @@ If your change is universal-snapshot-heavy, also consider adding a focused regre
 - Mixing WCAG pass/fail logic into extraction code
 - Dropping selector or page provenance that later makes findings impossible to merge
 - Adding language-specific heuristics in many files instead of central config
+- **Calling `async_playwright()` directly instead of leasing from `BrowserPool`** — every Chromium launch must go through the pool so the host stays bounded under concurrent audits
+
+## 10. Browser pool — required pattern
+
+Every crawler shares one Chromium via `ka11y-python/ka11y/crawler/browser_pool.py`. Each crawler's `crawl()` method must lease either a single context or the warm browser:
+
+### Single-context pattern (most crawlers)
+
+```python
+from ka11y.crawler.browser_pool import leased_context
+
+async def crawl(self):
+    async with leased_context(
+        viewport={"width": 1440, "height": 900},
+        user_agent="…",
+    ) as context:
+        await self._crawl_page(context, self.base_url, depth=0)
+    return self.results
+```
+
+The context is closed on exit; the underlying Chromium stays warm for the next lease.
+
+### Many-contexts-per-browser pattern (rendered-layout fan-out)
+
+When a crawler needs to open several contexts in parallel off one browser (e.g. seven viewport scenarios), use `leased_browser` instead:
+
+```python
+from ka11y.crawler.browser_pool import leased_browser
+
+async def crawl(self):
+    async with leased_browser() as browser:
+        # _run_all_scenarios spawns its own contexts via browser.new_context()
+        return await self._run_all_scenarios(browser)
+```
+
+### Concurrency caps
+
+- `KA11Y_MAX_BROWSERS` (env, default `2`) — concurrent context leases. The pool's `asyncio.Semaphore` parks excess callers in FIFO order.
+- The pool is per-event-loop and rebuilt automatically when the loop changes (important for pytest's function-scoped loops).
+- `shutdown_pool()` is wired into the FastAPI lifespan so reloads do not leak Chromium processes.
+
+### Tests
+
+`tests/test_browser_pool.py` covers lease behaviour, browser reuse, semaphore serialisation, and verifies `forms_crawler` is wired through the pool. Add a similar check when adding a new crawler.
+
+## 11. Top-level concurrency caps
+
+The combined runner enforces two outer budgets in addition to per-stage timeouts:
+
+- `KA11Y_MAX_CONCURRENT_JOBS` (env, default `4`) — bounds simultaneous `_run_job()` background tasks. Excess jobs sit in status `queued` until a slot frees. See `ka11y-python/ka11y/api/v1/combined/runner.py:_get_job_semaphore`.
+- `KA11Y_JOB_TIMEOUT_SECONDS` (env, default `1200`) — outer cap on the top-level axe + Python `asyncio.gather`. On timeout both branches are cancelled and the scrubbed-error path emits an opaque `error_id`.
+
+Inner stage timeouts (`_STAGE_TIMEOUT_SECONDS=600` in `stages.py`) and rendered-layout's `_SCENARIOS_TIMEOUT_SECONDS=300` bound individual stages.
 
 ## 10. A good student workflow
 
