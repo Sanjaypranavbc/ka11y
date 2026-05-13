@@ -153,10 +153,10 @@ class TestLabelledNameCrossCheck:
     can locate that control by its name."""
 
     def test_red_button_violation_is_downgraded_when_red_button_exists(
-        self, monkeypatch
+        self, monkeypatch, tmp_path
     ):
         monkeypatch.setattr(sensory_module, "_get_nlp", lambda lang="en": None)
-        auditor = SensoryCharacteristicsAuditor(output_dir=".")
+        auditor = SensoryCharacteristicsAuditor(output_dir=str(tmp_path))
         # Page has an instructional paragraph mentioning "red", AND a real
         # focusable button literally named "Red Hat" — so the sensory token
         # "red" matches a labelled control and the instruction is fine.
@@ -181,10 +181,10 @@ class TestLabelledNameCrossCheck:
         )
 
     def test_red_button_violation_persists_when_no_red_button_exists(
-        self, monkeypatch
+        self, monkeypatch, tmp_path
     ):
         monkeypatch.setattr(sensory_module, "_get_nlp", lambda lang="en": None)
-        auditor = SensoryCharacteristicsAuditor(output_dir=".")
+        auditor = SensoryCharacteristicsAuditor(output_dir=str(tmp_path))
         elements = [
             make_element(text="Click the Red item.", tag="p"),
             make_element(
