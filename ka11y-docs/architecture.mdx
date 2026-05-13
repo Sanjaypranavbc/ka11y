@@ -152,6 +152,41 @@ graph LR
 
 The auditor never touches Playwright — it only processes the JSON the crawler writes. This keeps auditors fully unit-testable without a browser.
 
+### Shared `BrowserPool`
+
+All ten crawlers (image, media, sensory, forms, target-size, text-spacing, rendered-layout, interactive, moving-content, universal) share a single Chromium process via `ka11y-python/ka11y/crawler/browser_pool.py`. The pool:
+
+- Lazy-initialises a single Playwright instance per event loop.
+- Caps concurrent context leases via `asyncio.Semaphore(KA11Y_MAX_BROWSERS, default=2)`.
+- Reuses one warm Chromium across leases — each lease returns a fresh `BrowserContext` for isolation, but the underlying process is shared.
+- Tears down deterministically via `shutdown_pool()` wired into the FastAPI lifespan.
+
+Crawlers expose two leasing patterns:
+
+| Helper | Yields | Use when |
+|---|---|---|
+| `leased_context(**kwargs)` | `BrowserContext` | Standard single-context crawl (9 of 10 crawlers). |
+| `leased_browser()` | `Browser` | The crawler needs to fan out many parallel contexts from one warm browser (rendered-layout's 7 viewport scenarios). |
+
+### Concurrency model
+
+```mermaid
+graph TD
+    HTTP["POST /api/v1/combined"] -->|"async create_task"| JOB["_run_job(job_id)"]
+    JOB -->|"acquire"| SEMA["asyncio.Semaphore\nKA11Y_MAX_CONCURRENT_JOBS"]
+    SEMA -->|"slot held"| BODY["_run_job_body"]
+    BODY -->|"asyncio.gather + wait_for\nKA11Y_JOB_TIMEOUT_SECONDS"| GATHER["axe-core + Python stages"]
+    GATHER -->|"per-stage timeout\n_STAGE_TIMEOUT_SECONDS=600"| STAGES["stages.py _timed()"]
+    STAGES --> POOL["BrowserPool\nleased_context / leased_browser"]
+    POOL --> CHROME[("Chromium\nshared across crawlers")]
+```
+
+Job status reflects this:
+
+- `queued` — admitted but waiting for a slot in the `_run_job` semaphore.
+- `running` — slot held; stages executing.
+- `failed` — opaque `error_id` plus a generic message. Real traceback lives in the server log only.
+
 ### Unified Accessibility Pipeline (primary path)
 
 For rules that require shared DOM context (1.1.1, 2.5.3, 2.5.8, 1.4.5, etc.), a centralised five-stage pipeline eliminates false positives by giving all rules the same computed page state:
