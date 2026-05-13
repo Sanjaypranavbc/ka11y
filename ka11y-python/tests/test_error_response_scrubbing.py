@@ -111,8 +111,11 @@ def test_combined_failed_job_state_is_scrubbed(monkeypatch, client):
     """
     job_id = "test-job-scrubbed"
     combined_store._jobs[job_id] = {
+        "job_id": job_id,
         "status": "failed",
         "url": "https://example.com",
+        "submitted_at": "2026-05-13T00:00:00+00:00",
+        "lang": "en",
         "completed_at": "2026-05-13T00:00:00+00:00",
         "error": "Audit failed due to an internal error.",
         "error_id": "deadbeef",
