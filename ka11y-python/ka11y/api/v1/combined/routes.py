@@ -320,18 +320,47 @@ async def get_job_image(job_id: str, path: str):
         )
 
     # Defence-in-depth: even if a (poisoned) auditor record stored a symlink
-    # pointing outside the job directory, refuse to serve content that escapes
-    # the job's own output_dir. This prevents the symlink-attack path noted in
-    # the security review.
+    # pointing outside the configured output tree, refuse to serve content
+    # that escapes it. Bounding to the *configured* output root (rather than
+    # the per-job dir) is the right granularity here — the image crawler
+    # writes to ``{output_root}/{domain}_{ts}`` which is a SIBLING of the
+    # combined job's ``{output_root}/{domain}_{ts}_{job_id}_combined`` dir,
+    # so a per-job containment check rejects every legitimate image path
+    # ("image unavailable" everywhere in the UI). The original symlink-
+    # attack guard from the security review still holds: paths outside the
+    # configured root are refused.
+    from ka11y.utils.config_loader import load_config
+
+    try:
+        config = load_config()
+        configured_root = config.get("input", {}).get("output_dir")
+    except Exception:
+        configured_root = None
+
+    candidate_roots = []
+    if configured_root:
+        candidate_roots.append(Path(configured_root).resolve())
     job_output_dir = job.get("output_dir")
     if job_output_dir:
-        try:
-            canonical_root = Path(job_output_dir).resolve()
-            canonical_path.relative_to(canonical_root)
-        except (ValueError, OSError):
+        # Also accept the job's own dir (e.g. report.json) and its parent —
+        # gives us coverage for sibling crawler dirs without depending on
+        # the config being consistent with the runner's path.
+        candidate_roots.append(Path(job_output_dir).resolve())
+        candidate_roots.append(Path(job_output_dir).resolve().parent)
+
+    if candidate_roots:
+        contained = False
+        for root in candidate_roots:
+            try:
+                canonical_path.relative_to(root)
+                contained = True
+                break
+            except ValueError:
+                continue
+        if not contained:
             raise HTTPException(
                 status_code=403,
-                detail="Image path escapes the job output directory.",
+                detail="Image path escapes the configured output directory.",
             )
 
     if not canonical_path.exists() or not canonical_path.is_file():
