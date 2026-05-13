@@ -13,7 +13,10 @@ _evict_old_jobs() — background TTL cleanup task (called from lifespan)
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 from ka11y.config.logger import setup_logger
@@ -126,8 +129,92 @@ async def _close_subscribers(job_id: str) -> None:
 # ── TTL eviction ──────────────────────────────────────────────────────────────
 
 
+def _safe_rmtree(path: str | os.PathLike[str]) -> bool:
+    """Best-effort recursive delete. Returns True if anything was removed.
+
+    Refuses to touch a path outside the configured output root — otherwise
+    a poisoned job dict could trick eviction into deleting arbitrary trees.
+    Errors are swallowed (TTL is best-effort) but logged.
+    """
+    try:
+        from ka11y.utils.config_loader import load_config
+
+        config = load_config()
+        configured_root = config.get("input", {}).get("output_dir")
+    except Exception:
+        configured_root = None
+
+    target = Path(path).resolve()
+    if not target.is_dir():
+        return False
+
+    if configured_root:
+        try:
+            target.relative_to(Path(configured_root).resolve())
+        except ValueError:
+            logger.warning(
+                "[combined] TTL eviction refused to delete %s "
+                "(outside configured output root)",
+                target,
+            )
+            return False
+
+    try:
+        shutil.rmtree(target, ignore_errors=False)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "[combined] TTL eviction failed to remove %s: %s", target, exc
+        )
+        return False
+
+
+def _evict_orphan_output_dirs(cutoff: float) -> int:
+    """Sweep the configured output root for sub-directories older than
+    ``cutoff`` (mtime) that are not referenced by any live job's
+    ``output_dir`` field. Catches the sibling AsyncImageCrawler dirs
+    that are not part of any single job's ``_combined`` tree."""
+    try:
+        from ka11y.utils.config_loader import load_config
+
+        config = load_config()
+        configured_root = config.get("input", {}).get("output_dir")
+    except Exception:
+        configured_root = None
+    if not configured_root:
+        return 0
+
+    root = Path(configured_root)
+    if not root.is_dir():
+        return 0
+
+    live_paths = {
+        Path(j["output_dir"]).resolve()
+        for j in _jobs.values()
+        if j.get("output_dir")
+    }
+
+    removed = 0
+    for child in root.iterdir():
+        try:
+            if not child.is_dir():
+                continue
+            if child.resolve() in live_paths:
+                continue
+            if child.stat().st_mtime >= cutoff:
+                continue
+        except OSError:
+            continue
+        if _safe_rmtree(child):
+            removed += 1
+    return removed
+
+
 async def _evict_old_jobs() -> None:
-    """Background task: remove completed/failed jobs older than _JOB_TTL_SECONDS."""
+    """Background task: remove completed/failed jobs older than
+    ``_JOB_TTL_SECONDS`` and reclaim their on-disk output_dir, plus any
+    orphan sibling crawler dirs older than the same cutoff (Sprint 4 /
+    step 29)."""
     while True:
         await asyncio.sleep(300)  # run every 5 minutes
         cutoff = time.time() - _JOB_TTL_SECONDS
@@ -137,9 +224,23 @@ async def _evict_old_jobs() -> None:
             if job.get("status") in ("completed", "failed")
             and job.get("_created_at", 0) < cutoff
         ]
+        dirs_removed = 0
         for jid in expired:
-            _jobs.pop(jid, None)
+            job = _jobs.pop(jid, None) or {}
             _subscribers.pop(jid, None)
             _drop_job_lock(jid)
-        if expired:
-            logger.info(f"[combined] TTL eviction: removed {len(expired)} old jobs")
+            # Reclaim disk for the per-job _combined dir. Best-effort.
+            out_dir = job.get("output_dir")
+            if out_dir and _safe_rmtree(out_dir):
+                dirs_removed += 1
+
+        # Also sweep orphan sibling crawler dirs (AsyncImageCrawler writes
+        # outside the _combined tree). Cheap when output/ has few entries.
+        dirs_removed += _evict_orphan_output_dirs(cutoff)
+
+        if expired or dirs_removed:
+            logger.info(
+                "[combined] TTL eviction: removed %d job(s), %d on-disk dir(s)",
+                len(expired),
+                dirs_removed,
+            )
