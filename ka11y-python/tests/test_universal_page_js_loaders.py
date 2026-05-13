@@ -33,13 +33,34 @@ def test_js_dir_exists():
 
 @pytest.mark.parametrize(
     "name",
-    ["universal_extract.js", "link_extract.js", "lazy_load_trigger.js"],
+    [
+        "universal_extract.js",
+        "link_extract.js",
+        "lazy_load_trigger.js",
+        "background_images.js",
+    ],
 )
 def test_each_js_file_loads(name: str):
     path: Path = universal_page._JS_DIR / name
     assert path.is_file(), f"missing JS extractor: {path}"
     body = path.read_text(encoding="utf-8")
     assert body.strip(), f"{name} is empty"
+
+
+def test_page_snapshot_has_background_images_field():
+    """The Pydantic snapshot must expose the new field so audit consumers
+    can iterate without KeyError if no backgrounds were found."""
+    snap = universal_page.PageSnapshot(page_url="https://example.com")
+    assert hasattr(snap, "background_images")
+    assert snap.background_images == []
+
+
+def test_background_images_extractor_top_level_function():
+    """The extractor must return a function (frameMeta) => [...records]."""
+    body = universal_page._BACKGROUND_IMAGES_JS
+    assert "url(" in body  # parses url(...) tokens
+    assert "queryShadow" in body  # pierces shadow DOM
+    assert "has_text_alternative" in body  # surfaces signal for audit
 
 
 def test_combined_extractor_returns_expected_top_keys():

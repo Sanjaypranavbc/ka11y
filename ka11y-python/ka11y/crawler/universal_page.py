@@ -44,6 +44,10 @@ class PageSnapshot(BaseModel):
     media: List[Dict[str, Any]] = Field(default_factory=list)
     text_spacing: List[Dict[str, Any]] = Field(default_factory=list)
     sensory: List[Dict[str, Any]] = Field(default_factory=list)
+    # Elements with a CSS background-image URL. Populated by background_images.js
+    # so downstream image-audit hooks can flag informational backgrounds that
+    # lack a text alternative (Sprint 3 / step 15).
+    background_images: List[Dict[str, Any]] = Field(default_factory=list)
     warnings: List[Dict[str, Any]] = Field(default_factory=list)
     element_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     page_summaries: List[Dict[str, Any]] = Field(default_factory=list)
@@ -71,6 +75,8 @@ _COMBINED_EXTRACT_JS = _load_js("universal_extract.js")
 _LINK_EXTRACT_JS = _load_js("link_extract.js")
 
 _LAZY_LOAD_TRIGGER_JS = _load_js("lazy_load_trigger.js")
+
+_BACKGROUND_IMAGES_JS = _load_js("background_images.js")
 
 _DOM_STABILITY_JS = f"""(stabilityMs) => {{
     return new Promise((resolve) => {{
@@ -486,6 +492,23 @@ class UniversalPageLoader:
                     seen_refs=seen_refs,
                 )
                 combined[key].extend(records)
+
+            # Separate pass: extract CSS background-image URLs. Kept out of
+            # the universal extractor to avoid bloating its single page.evaluate
+            # payload (Sprint 3 / step 15).
+            try:
+                bg_records = await frame.evaluate(
+                    _BACKGROUND_IMAGES_JS,
+                    {
+                        "pageUrl": page_url,
+                        "framePath": frame_path,
+                        "documentUrl": frame.url or page_url,
+                    },
+                )
+            except Exception:
+                bg_records = []
+            if bg_records:
+                output.background_images.extend(bg_records)
 
         return combined
 

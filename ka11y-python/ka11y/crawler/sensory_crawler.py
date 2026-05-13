@@ -165,7 +165,33 @@ class AsyncSensoryCrawler:
             "span, div, h1, h2, h3, h4, h5, h6, " +
             "summary, figcaption, dt, dd"
         );
-        const elements = Array.from(document.querySelectorAll(SELECTOR));
+
+        // Pierce open shadow roots. document.querySelectorAll alone stops
+        // at the shadow boundary, so any sensory text inside a web
+        // component (e.g. <my-card> wrapping a <p>) is invisible to the
+        // sensory auditor without this walk. Closed shadow roots remain
+        // off-limits — that's a deliberate browser restriction.
+        function queryShadow(root, selector) {
+            const results = [];
+            const seen = new WeakSet();
+            const queue = [root];
+            while (queue.length) {
+                const current = queue.shift();
+                if (!current || !current.querySelectorAll) continue;
+                current.querySelectorAll(selector).forEach(el => {
+                    if (!seen.has(el)) {
+                        seen.add(el);
+                        results.push(el);
+                    }
+                });
+                current.querySelectorAll('*').forEach(el => {
+                    if (el.shadowRoot) queue.push(el.shadowRoot);
+                });
+            }
+            return results;
+        }
+
+        const elements = queryShadow(document, SELECTOR);
         const results  = [];
 
         for (const el of elements) {
