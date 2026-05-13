@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Loader2, Play, AlertCircle, CheckCircle, HelpCircle, XCircle } from "lucide-react";
+import { Loader2, Play, AlertCircle, CheckCircle, HelpCircle, XCircle, Download } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +61,15 @@ export function RuleEvaluatorTab() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExport = () => {
+    if (!results) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(results, null, 2));
+    const a = document.createElement("a");
+    a.href = dataStr;
+    a.download = `${ruleId}_evaluation_report.json`;
+    a.click();
   };
 
   return (
@@ -142,10 +151,18 @@ export function RuleEvaluatorTab() {
             <Label htmlFor="test-force" className="text-xs text-muted-foreground">Force Snapshot Refresh</Label>
           </div>
 
-          <Button onClick={handleTest} disabled={loading || !url} size="sm" className="w-32">
-            {loading ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-2" />}
-            {loading ? "Evaluating..." : "Evaluate Rule"}
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button onClick={handleTest} disabled={loading || !url} size="sm" className="w-32">
+              {loading ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-2" />}
+              {loading ? "Evaluating..." : "Evaluate Rule"}
+            </Button>
+            {results && (
+              <Button onClick={handleExport} variant="outline" size="sm">
+                <Download className="h-3.5 w-3.5 mr-2" />
+                Export JSON
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
