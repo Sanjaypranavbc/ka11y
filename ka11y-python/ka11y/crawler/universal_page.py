@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
-from playwright.async_api import BrowserContext, Page, async_playwright
+from playwright.async_api import BrowserContext, Page
 
 from ka11y.config.logger import setup_logger
-from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
 from ka11y.crawler.policy import CrawlPolicy
 from ka11y.crawler.cookie_handler import handle_cookies
@@ -1246,59 +1245,50 @@ class UniversalPageLoader:
         queue: deque[tuple[str, int]] = deque([(url, 0)])
         visited: set[str] = set()
 
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            context_kwargs: Dict[str, Any] = {
-                "viewport": {"width": 1440, "height": 900},
-                "user_agent": cls.USER_AGENT,
-            }
-            if record_har:
-                context_kwargs["record_har_path"] = str(har_file)
-                context_kwargs["record_har_url_filter"] = "**/*"
+        from ka11y.crawler.browser_pool import leased_context
 
-            context = await new_crawler_context(browser, **context_kwargs)
+        context_kwargs: Dict[str, Any] = {
+            "viewport": {"width": 1440, "height": 900},
+            "user_agent": cls.USER_AGENT,
+        }
+        if record_har:
+            context_kwargs["record_har_path"] = str(har_file)
+            context_kwargs["record_har_url_filter"] = "**/*"
 
-            try:
-                while queue:
-                    current_url, current_depth = queue.popleft()
-                    normalized_url = policy.normalize_url(current_url)
+        async with leased_context(**context_kwargs) as context:
+            while queue:
+                current_url, current_depth = queue.popleft()
+                normalized_url = policy.normalize_url(current_url)
 
-                    if normalized_url in visited:
-                        continue
-                    visited.add(normalized_url)
+                if normalized_url in visited:
+                    continue
+                visited.add(normalized_url)
 
-                    if not policy.is_allowed(normalized_url, url):
-                        logger.info(
-                            f"[universal] skipping off-origin/disallowed URL: {normalized_url}"
-                        )
-                        continue
-
-                    if snapshot.pages_crawled >= policy.max_pages:
-                        logger.warning(
-                            f"[universal] crawl budget exceeded ({policy.max_pages} pages)"
-                        )
-                        break
-
-                    new_links = await cls._crawl_one_url(
-                        context=context,
-                        root_url=url,
-                        url=normalized_url,
-                        depth=current_depth,
-                        policy=policy,
-                        output=snapshot,
-                        step_logger=step_logger,
+                if not policy.is_allowed(normalized_url, url):
+                    logger.info(
+                        f"[universal] skipping off-origin/disallowed URL: {normalized_url}"
                     )
+                    continue
 
-                    if current_depth < policy.max_depth:
-                        for link in new_links:
-                            queue.append((link, current_depth + 1))
+                if snapshot.pages_crawled >= policy.max_pages:
+                    logger.warning(
+                        f"[universal] crawl budget exceeded ({policy.max_pages} pages)"
+                    )
+                    break
 
-            finally:
-                await context.close()
-                await browser.close()
+                new_links = await cls._crawl_one_url(
+                    context=context,
+                    root_url=url,
+                    url=normalized_url,
+                    depth=current_depth,
+                    policy=policy,
+                    output=snapshot,
+                    step_logger=step_logger,
+                )
+
+                if current_depth < policy.max_depth:
+                    for link in new_links:
+                        queue.append((link, current_depth + 1))
 
         if record_har and har_file.exists():
             har_path = str(har_file)

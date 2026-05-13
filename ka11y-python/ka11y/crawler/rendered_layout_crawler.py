@@ -33,7 +33,6 @@ from playwright.async_api import (
     BrowserContext,
     Page,
     TimeoutError as PlaywrightTimeout,
-    async_playwright,
 )
 
 from ka11y.config.logger import setup_logger
@@ -243,25 +242,20 @@ class RenderedLayoutCrawler:
         urls = discovered_urls if discovered_urls else [self.base_url]
         all_results = []
 
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            try:
-                for url in urls:
-                    logger.info(f"[rendered] starting scenarios for {url}")
-                    # Temporarily override base_url for the scenario runners
-                    original_base = self.base_url
-                    self.base_url = url
-                    try:
-                        page_results = await self._run_all_scenarios(browser)
-                        page_results["page_url"] = url
-                        all_results.append(page_results)
-                    finally:
-                        self.base_url = original_base
-            finally:
-                await browser.close()
+        from ka11y.crawler.browser_pool import leased_browser
+
+        async with leased_browser() as browser:
+            for url in urls:
+                logger.info(f"[rendered] starting scenarios for {url}")
+                # Temporarily override base_url for the scenario runners
+                original_base = self.base_url
+                self.base_url = url
+                try:
+                    page_results = await self._run_all_scenarios(browser)
+                    page_results["page_url"] = url
+                    all_results.append(page_results)
+                finally:
+                    self.base_url = original_base
 
         self._raw_results_list = all_results
         return all_results
