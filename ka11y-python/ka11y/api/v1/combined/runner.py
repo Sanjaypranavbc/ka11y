@@ -425,14 +425,16 @@ async def _run_job(
                 "location": where,
             },
         )
+        # SSE broadcast: client gets opaque error_id + stage only. Exception
+        # type, message, and source location are server-side log signals.
         await _broadcast(
             job_id,
             "job_failed",
             {
                 "job_id": job_id,
-                "error": f"{err_type}: {exc}",
+                "error": "Audit failed due to an internal error.",
+                "error_id": error_id,
                 "stage": current_stage,
-                "location": where,
             },
         )
 
