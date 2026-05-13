@@ -45,47 +45,61 @@ from ka11y.crawler.forms_crawler import FormInputData
 
 def _violations_331(f: FormInputData) -> List[str]:
     """
-    WCAG 3.3.1 — Error Identification
-    Checks that error messages are:
-      (a) present (linked via aria-describedby)
-      (b) programmatically associated (role="alert" OR aria-live)
+    WCAG 3.3.1 — Error Identification.
+
+    Fires only when there is signal that an error is actually being communicated:
+      • aria-errormessage is set (unambiguously an error association), or
+      • aria-invalid="true" is set on the field.
+
+    aria-describedby alone is treated as help/instructional text and is NOT
+    flagged for missing live-region semantics — that is the largest historical
+    false-positive source.
     """
     viols = []
+    aria_invalid_true = (f.aria_invalid or "").strip().lower() == "true"
 
-    # (a) Required field with no error container at all
-    if f.required or (f.aria_required or "").strip().lower() == "true":
-        if not f.aria_describedby:
+    # aria-errormessage is unambiguously an error reference: target must exist
+    # and be announceable.
+    if f.aria_errormessage:
+        if not f.errormessage_element_id:
             viols.append(
-                "3.3.1: Required field has no aria-describedby — "
-                "error messages cannot be associated programmatically."
+                "3.3.1: aria-errormessage references an element that does not exist in the DOM."
             )
-        elif not f.error_element_id:
+        elif not f.errormessage_is_live:
             viols.append(
-                "3.3.1: aria-describedby references an element that does not exist in the DOM."
+                "3.3.1: aria-errormessage target (#"
+                + f.errormessage_element_id
+                + ') has no live-region semantics — add role="alert", role="status", '
+                'or aria-live="polite"/"assertive" so screen readers announce it.'
             )
 
-    # (b) Error container exists but missing role="alert" AND missing aria-live
-    if f.error_element_id:
-        has_live = f.error_has_role_alert or (
-            f.error_has_aria_live in ("assertive", "polite")
-        )
-        if not has_live:
+    # If the field reports an error state, it must be tied to an announceable message.
+    if aria_invalid_true:
+        linked_id = f.errormessage_element_id or f.error_element_id
+        if not linked_id:
             viols.append(
-                "3.3.1: Error container (#"
-                + f.error_element_id
-                + ') has neither role="alert" nor aria-live — '
-                "screen readers will not announce validation errors automatically."
+                '3.3.1: aria-invalid="true" but no aria-errormessage or aria-describedby '
+                "points to an error message — the error is not programmatically associated."
             )
+        else:
+            has_live_error = f.errormessage_is_live or f.error_is_live
+            if not has_live_error:
+                viols.append(
+                    '3.3.1: aria-invalid="true" but the associated error message (#'
+                    + linked_id
+                    + ") is not a live region — screen readers will not announce it."
+                )
 
     return viols
 
 
 def _violations_332(f: FormInputData) -> List[str]:
     """
-    WCAG 3.3.2 — Labels or Instructions
+    WCAG 3.3.2 — Labels or Instructions.
+
     Checks that every field has a visible / programmatic label,
-    required state is communicated, and autocomplete is set for
-    personal-data fields.
+    required state is communicated, and autocomplete is set (and not
+    suppressed) for personal-data fields.
     """
     viols = []
 
@@ -99,10 +113,9 @@ def _violations_332(f: FormInputData) -> List[str]:
     # (b) Required but not marked in HTML/ARIA
     is_marked_required = f.required or (f.aria_required or "").strip().lower() == "true"
     if not is_marked_required and _field_appears_required(f):
-        # heuristic: label or placeholder contains a required indicator (*, "(required)", 必須, etc.)
         viols.append(
             "3.3.2: Field appears required (label/placeholder contains a required indicator "
-            "such as *, '(required)', or '必須') "
+            "such as '*', '(required)', or '必須') "
             "but is not marked with required or aria-required='true' — "
             "screen readers cannot programmatically determine it is mandatory."
         )
@@ -114,40 +127,27 @@ def _violations_332(f: FormInputData) -> List[str]:
             "placeholders disappear on input; use a persistent <label> instead."
         )
 
-    # (d) Autocomplete missing for personal-data input types
-    PERSONAL_TYPES = {"email", "tel", "password"}
-    # Match these exactly or with standard prefixes/suffixes, not as loose substrings
-    PERSONAL_NAMES_EXACT = {
-        "email",
-        "phone",
-        "telephone",
-        "tel",
-        "password",
-        "username",
-        "fname",
-        "lname",
-        "firstname",
-        "lastname",
-        "address",
-        "city",
-        "zip",
-        "postcode",
-        "country",
-    }
-    
+    # (d) Autocomplete checks for personal-data fields (only on applicable types).
     field_type = (f.type or "").lower()
-    field_name = (f.name or "").lower()
-    
-    # Check if name is an exact match or a closely related variation (e.g., user_email, first-name)
-    name_parts = set(field_name.replace("-", "_").split("_"))
-    is_personal_name = bool(name_parts.intersection(PERSONAL_NAMES_EXACT))
+    field_name = (f.name or "")
+    field_id = (f.id or "")
 
-    if field_type in PERSONAL_TYPES or is_personal_name:
-        if not f.autocomplete:
+    if _autocomplete_applies(f.tag, field_type) and (
+        field_type in _PERSONAL_INPUT_TYPES
+        or _looks_like_personal_data(field_name)
+        or _looks_like_personal_data(field_id)
+    ):
+        ac_value = (f.autocomplete or "").strip().lower()
+        if not ac_value:
             viols.append(
                 "3.3.2: Personal-data field ("
-                + (field_type if field_type in PERSONAL_TYPES else "name attribute")
+                + (field_type or "name/id-based heuristic")
                 + ") is missing the autocomplete attribute (WCAG 1.3.5 / 3.3.2 best practice)."
+            )
+        elif ac_value == "off":
+            viols.append(
+                '3.3.2: Personal-data field has autocomplete="off" — this disables '
+                "browser autofill on a field WCAG 1.3.5 expects to expose an input purpose."
             )
 
     return viols
@@ -157,21 +157,23 @@ def _violations_332(f: FormInputData) -> List[str]:
 # Required-field heuristic patterns
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Covers the most common ways sites communicate "this field is required" in
-# label text or placeholder text — across multiple languages and conventions.
+# Tightened to avoid matching bare "required" inside unrelated phrases like
+# "Required reading list" — only fires when the required-indicator appears in
+# a marker-like position (e.g. at a boundary, followed by punctuation, or
+# wrapped in parentheses).
 _REQUIRED_PATTERN = re.compile(
     r"""
-    \*               |   # asterisk (most common)
-    \(required\)     |   # (required)
-    \brequired\b     |   # standalone word "required"
-    \breq(?:uired)?\s*: |  # "req:" or "required:" prefix
-    必須              |   # Japanese: required
-    必要              |   # Japanese: necessary
-    obligatoire      |   # French
-    obrigatório      |   # Portuguese
-    pflichtfeld      |   # German: mandatory field
-    erforderlich     |   # German: required
-    requerido            # Spanish
+    (?:^|\s)\*+(?:\s|$)                       # ✱ surrounded by whitespace / edges
+    | \(\s*required\s*\)                       # "(required)"
+    | \(\s*req\.?\s*\)                         # "(req)" / "(req.)"
+    | (?:^|\s)required\s*(?::|\.|,|$)          # "Required:" / "...required."
+    | (?:^|\s)mandatory\s*(?::|\.|,|$)
+    | 必須(?:項目)?                             # Japanese
+    | (?:^|\s)obligatoire(?:\s|:|\.|,|$)       # French
+    | (?:^|\s)obrigatório(?:\s|:|\.|,|$)       # Portuguese
+    | pflichtfeld                              # German (compound, no boundary issues)
+    | (?:^|\s)erforderlich(?:\s|:|\.|,|$)      # German
+    | (?:^|\s)requerido(?:\s|:|\.|,|$)         # Spanish
     """,
     re.IGNORECASE | re.VERBOSE,
 )
@@ -181,12 +183,105 @@ def _field_appears_required(f: FormInputData) -> bool:
     """
     Heuristic: label or placeholder text contains a required-field indicator.
 
-    Covers asterisk (*), "(required)", "required" keyword, Japanese 必須/必要,
+    Covers asterisk (✱), "(required)", "required" keyword, Japanese 必須/必要,
     and several other language variants used in practice.
     """
     label = (f.label_text or "").strip()
     ph = (f.placeholder or "").strip()
     return bool(_REQUIRED_PATTERN.search(label) or _REQUIRED_PATTERN.search(ph))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Autocomplete / personal-data heuristics
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Input types where autocomplete is meaningful (HTML spec).
+_AUTOCOMPLETE_INPUT_TYPES = {
+    "", "text", "search", "url", "tel", "email", "password",
+    "number", "month", "date", "week", "time", "datetime-local",
+}
+
+# Input types whose data is inherently personal — even if `name` is opaque.
+_PERSONAL_INPUT_TYPES = {"email", "tel", "password"}
+
+# Personal-data tokens for matching field name / id. Matched either as the
+# full normalized name (after stripping trailing digits and lowercasing) or
+# as the trailing segment of a hyphen/underscore/camelCase-split name.
+_PERSONAL_FULL_NAMES = {
+    "email", "e-mail", "emailaddress", "email-address",
+    "phone", "telephone", "tel", "phonenumber", "phone-number", "mobile",
+    "password", "passwd", "pwd",
+    "new-password", "newpassword", "current-password", "currentpassword",
+    "username", "user-name", "userid", "user-id", "user", "login",
+    "fname", "lname", "firstname", "lastname",
+    "first-name", "last-name", "middle-name",
+    "given-name", "family-name", "additional-name",
+    "fullname", "full-name", "name",
+    "address", "street-address", "streetaddress",
+    "address-line1", "address-line2", "address-line3",
+    "address1", "address2", "address3",
+    "city", "town", "state", "province", "region", "country", "country-name",
+    "zip", "zipcode", "zip-code", "postcode", "postal-code", "postalcode",
+    "organization", "company", "company-name",
+    "birthday", "bday", "dob", "birth-date", "birthdate", "date-of-birth",
+    "cc-number", "cc-name", "cc-exp", "cc-csc", "cc-cvc", "cc-cvv",
+    "creditcard", "credit-card", "card-number", "cardnumber",
+    "cvc", "cvv", "csc",
+    "ssn", "social-security",
+}
+
+# Trailing-segment tokens. We only flag if the last segment of a normalized
+# name is one of these — so `email_marketing_opt_in` (last="in") doesn't
+# match but `user_email` (last="email") does.
+_PERSONAL_TRAILING_TOKENS = {
+    "email", "mail", "phone", "telephone", "mobile", "password", "passwd",
+    "username", "userid",
+    "firstname", "lastname", "fname", "lname", "name",
+    "address", "street", "city", "state", "country",
+    "zip", "zipcode", "postcode", "postalcode",
+    "organization", "company",
+    "birthday", "bday", "dob", "birthdate",
+    "cvc", "cvv", "csc", "ssn",
+}
+
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+_TRAILING_DIGITS = re.compile(r"\d+$")
+
+
+def _autocomplete_applies(tag: str, input_type: str) -> bool:
+    """Autocomplete is only meaningful on a subset of form controls."""
+    tag_up = (tag or "").upper()
+    if tag_up in ("SELECT", "TEXTAREA"):
+        return True
+    if tag_up == "INPUT":
+        return (input_type or "").lower() in _AUTOCOMPLETE_INPUT_TYPES
+    return False
+
+
+def _looks_like_personal_data(raw: str) -> bool:
+    """
+    Tokenized check: does this field name/id read like a personal-data field?
+
+    Avoids the old false-positive on names like `email_marketing_opt_in` by
+    requiring the personal token to be the *final* segment of the normalized
+    name (or for the full normalized name itself to be a known token).
+    """
+    if not raw:
+        return False
+
+    # Normalize: insert hyphens at camelCase boundaries, lowercase, then drop
+    # trailing digits (so `email2` / `address1` map to `email` / `address`).
+    s = _CAMEL_BOUNDARY.sub("-", raw).lower().strip()
+    s_no_digits = _TRAILING_DIGITS.sub("", s)
+
+    if s in _PERSONAL_FULL_NAMES or s_no_digits in _PERSONAL_FULL_NAMES:
+        return True
+
+    parts = re.split(r"[-_]+", s_no_digits)
+    if parts and parts[-1] in _PERSONAL_TRAILING_TOKENS:
+        return True
+
+    return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
