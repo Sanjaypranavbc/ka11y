@@ -70,7 +70,34 @@ def _load_js(name: str) -> str:
     return (_JS_DIR / name).read_text(encoding="utf-8")
 
 
-_COMBINED_EXTRACT_JS = _load_js("universal_extract.js")
+# The universal extractor was historically one ~1000-line page.evaluate
+# payload covering all 7 categories — a single JS error took out every
+# category at once. It is now four focused extractors (structural, geometry,
+# dynamic, sensory) that share one helper preamble (extract/common.js) and run
+# as separate page.evaluate calls, so one failing extractor no longer poisons
+# the others.
+_EXTRACT_COMMON_JS = _load_js("extract/common.js")
+
+
+def _compose_extractor(category_file: str) -> str:
+    """Wrap a category extractor body with the shared helper preamble inside a
+    single ``(frameMeta) => { ... }`` arrow function."""
+    body = _load_js(f"extract/{category_file}")
+    return "(frameMeta) => {\n" + _EXTRACT_COMMON_JS + "\n" + body + "\n}"
+
+
+# (name, composed JS, top-level keys the extractor returns)
+_EXTRACTORS: List[tuple] = [
+    ("structural", _compose_extractor("structural.js"), ("forms", "interactive")),
+    ("geometry", _compose_extractor("geometry.js"), ("target_sizes",)),
+    ("dynamic", _compose_extractor("dynamic.js"), ("moving_content", "media")),
+    ("sensory", _compose_extractor("sensory.js"), ("text_spacing", "sensory")),
+]
+
+# Defensive cap: a pathological page (infinite list, runaway component) could
+# return an unbounded record array. Truncate per category before the data
+# crosses back into Python so one page cannot OOM the worker.
+_MAX_RECORDS_PER_CATEGORY = 8000
 
 _LINK_EXTRACT_JS = _load_js("link_extract.js")
 
@@ -247,7 +274,9 @@ class UniversalPageLoader:
             await cls._prepare_page(page, url, step_logger=step_logger)
 
             # Chunked extraction to combat virtualized DOMs (Infinite scroll)
-            await cls._extract_page_chunked(page, page_url=url, output=output)
+            await cls._extract_page_chunked(
+                page, page_url=url, output=output, policy=policy
+            )
 
             # Links extraction can just use the final state
             links = await cls._extract_links(page, root_url=url)
@@ -353,7 +382,9 @@ class UniversalPageLoader:
                 "networkidle", timeout=_NETWORKIDLE_TIMEOUT_MS
             )
         except Exception:
-            logger.debug(f"[universal] networkidle timeout for {url}")
+            # networkidle never settling is a real "page kept loading" signal
+            # (long-poll, tracking beacons, broken assets) — surface it.
+            logger.warning(f"[universal] networkidle timeout for {url}")
 
         await cls._wait_for_spa(page)
 
@@ -384,12 +415,18 @@ class UniversalPageLoader:
         *,
         page_url: str,
         output: PageSnapshot,
+        policy: CrawlPolicy | None = None,
     ) -> None:
-        """Extracts DOM in chunks by scrolling to bypass Virtualized DOMs."""
-        seen_refs = set()
+        """Extracts DOM in chunks by scrolling to bypass Virtualized DOMs.
 
-        # Read max scroll passes from config (fallback to 4)
-        max_passes = 4
+        Both the number of scroll passes and the size of the per-page dedup
+        set (``seen_refs``) are bounded by :class:`CrawlPolicy` so an
+        infinite-scroll page cannot grow memory without limit.
+        """
+        seen_refs: set[str] = set()
+
+        max_passes = policy.max_scroll_passes if policy else 4
+        max_seen_refs = policy.max_seen_refs if policy else 5000
 
         # Trigger initial lazy-load setup without scrolling
         initial_lazy_js = """async () => {
@@ -416,6 +453,17 @@ class UniversalPageLoader:
             await cls._extract_page(
                 page, page_url=page_url, output=output, seen_refs=seen_refs
             )
+
+            # 2a. Stop scrolling once the dedup set hits its cap — an
+            # infinite-scroll page would otherwise grow it without bound.
+            if len(seen_refs) >= max_seen_refs:
+                logger.warning(
+                    "[universal] seen_refs cap reached (%d) for %s; "
+                    "stopping chunked scroll early",
+                    len(seen_refs),
+                    page_url,
+                )
+                break
 
             # 3. Check if we hit the bottom of the page
             is_at_bottom = await page.evaluate(
@@ -459,27 +507,46 @@ class UniversalPageLoader:
                 if not frame.url or frame.url == "about:blank":
                     continue
 
-            try:
-                frame_data = await frame.evaluate(
-                    _COMBINED_EXTRACT_JS,
-                    {
-                        "pageUrl": page_url,
-                        "framePath": frame_path,
-                        "documentUrl": frame.url or page_url,
-                    },
-                )
-            except Exception as exc:
-                output.partial = True
-                warning = await cls._build_frame_warning(
-                    code="frame_extract_failed",
-                    page_url=page_url,
-                    frame=frame,
-                    frame_path=frame_path,
-                    message=str(exc),
-                    error_type=type(exc).__name__,
-                )
-                output.warnings.append(warning)
-                continue
+            frame_meta = {
+                "pageUrl": page_url,
+                "framePath": frame_path,
+                "documentUrl": frame.url or page_url,
+            }
+
+            # Run each focused extractor as its own page.evaluate. A JS error
+            # in one extractor records a warning and is skipped — the other
+            # categories still come back, instead of all 7 being lost to a
+            # single failure as with the old monolithic payload.
+            frame_data: Dict[str, List[Dict[str, Any]]] = {}
+            for extractor_name, extractor_js, extractor_keys in _EXTRACTORS:
+                try:
+                    part = await frame.evaluate(extractor_js, frame_meta)
+                except Exception as exc:
+                    output.partial = True
+                    warning = await cls._build_frame_warning(
+                        code="frame_extract_failed",
+                        page_url=page_url,
+                        frame=frame,
+                        frame_path=frame_path,
+                        message=f"{extractor_name} extractor: {exc}",
+                        error_type=type(exc).__name__,
+                    )
+                    output.warnings.append(warning)
+                    continue
+                for key in extractor_keys:
+                    records = part.get(key) or []
+                    if len(records) > _MAX_RECORDS_PER_CATEGORY:
+                        logger.warning(
+                            "[universal] %s '%s' returned %d records; "
+                            "truncating to %d",
+                            frame_path,
+                            key,
+                            len(records),
+                            _MAX_RECORDS_PER_CATEGORY,
+                        )
+                        records = records[:_MAX_RECORDS_PER_CATEGORY]
+                        output.partial = True
+                    frame_data[key] = records
 
             for key in combined:
                 records = frame_data.get(key) or []

@@ -34,10 +34,17 @@ def test_js_dir_exists():
 @pytest.mark.parametrize(
     "name",
     [
-        "universal_extract.js",
         "link_extract.js",
         "lazy_load_trigger.js",
         "background_images.js",
+        # The monolithic universal_extract.js was split into one shared helper
+        # preamble + four focused category extractors. universal_page.py
+        # composes them at import time into `(frameMeta) => { ... }` functions.
+        "extract/common.js",
+        "extract/structural.js",
+        "extract/geometry.js",
+        "extract/dynamic.js",
+        "extract/sensory.js",
     ],
 )
 def test_each_js_file_loads(name: str):
@@ -63,15 +70,34 @@ def test_background_images_extractor_top_level_function():
     assert "has_text_alternative" in body  # surfaces signal for audit
 
 
-def test_combined_extractor_returns_expected_top_keys():
-    """The Python side parses the JS evaluate() result by these keys —
-    if the JS top-level return shape changes the auditors silently
-    miss whole categories."""
-    body = universal_page._COMBINED_EXTRACT_JS
-    for key in _EXPECTED_TOP_KEYS:
-        assert key in body, (
-            f"_COMBINED_EXTRACT_JS no longer references top-level key '{key}'"
-        )
+def test_extractors_cover_expected_top_keys():
+    """The Python side parses each extractor's evaluate() result by these
+    keys — if an extractor's return shape changes the auditors silently
+    miss whole categories. Every expected key must be claimed by exactly
+    one extractor in _EXTRACTORS."""
+    claimed: dict[str, str] = {}
+    for name, _js, keys in universal_page._EXTRACTORS:
+        for key in keys:
+            assert key not in claimed, (
+                f"key '{key}' claimed by both {claimed[key]} and {name}"
+            )
+            claimed[key] = name
+    assert set(claimed) == set(_EXPECTED_TOP_KEYS), (
+        f"extractor key coverage drifted: {sorted(claimed)} "
+        f"!= {sorted(_EXPECTED_TOP_KEYS)}"
+    )
+
+
+def test_each_extractor_is_a_composed_arrow_function():
+    """Every extractor must be a single `(frameMeta) => { ... }` function
+    with the shared helper preamble inlined, and must reference its keys."""
+    for name, js, keys in universal_page._EXTRACTORS:
+        assert js.startswith("(frameMeta) => {"), name
+        assert js.rstrip().endswith("}"), name
+        # the shared preamble must be present (helpers the body relies on)
+        assert "function queryShadow(" in js, f"{name} missing helper preamble"
+        for key in keys:
+            assert key in js, f"{name} extractor no longer references '{key}'"
 
 
 def test_link_extractor_returns_href_list():

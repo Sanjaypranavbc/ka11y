@@ -63,11 +63,51 @@ class SemanticRelationshipEngine:
             // Detect video component wrappers
             const isVideoContext = !!el.closest('video, [class*="video" i], [class*="player" i], [data-video-id]');
 
+            // Data-table membership AND whether the containing cell has a
+            // programmatically determinable header association. 1.3.1 needs
+            // the latter: a <td> sitting in a <table> with no <th>/scope/
+            // headers relationship is NOT structurally sound.
+            let isInDataTable = false;
+            let hasTableHeaderAssociation = false;
+            const dataTable = el.closest(
+                'table:not([role="presentation"]):not([role="none"])'
+            );
+            if (dataTable) {
+                isInDataTable = true;
+                const cell = el.closest('th, td');
+                if (!cell) {
+                    // In the table but not in a cell (e.g. <caption>); the
+                    // per-cell rule does not apply, so don't flag it.
+                    hasTableHeaderAssociation = true;
+                } else if (cell.tagName === 'TH') {
+                    hasTableHeaderAssociation = true;
+                } else if ((cell.getAttribute('headers') || '').trim()) {
+                    hasTableHeaderAssociation = true;
+                } else {
+                    const row = cell.closest('tr');
+                    if (row && row.querySelector('th')) {
+                        hasTableHeaderAssociation = true;
+                    } else if (row) {
+                        // Column check: any row with a <th> at this cell index.
+                        const colIdx = Array.from(row.children).indexOf(cell);
+                        if (colIdx >= 0) {
+                            hasTableHeaderAssociation = Array.from(
+                                dataTable.querySelectorAll('tr')
+                            ).some(r => {
+                                const c = r.children[colIdx];
+                                return c && c.tagName === 'TH';
+                            });
+                        }
+                    }
+                }
+            }
+
             return {
                 described_by_text: describedByText,
                 group_name: groupName,
                 native_label_text: nativeLabelText,
-                is_in_data_table: !!el.closest('table:not([role="presentation"])'),
+                is_in_data_table: isInDataTable,
+                has_table_header_association: hasTableHeaderAssociation,
                 is_in_labeled_control: isInLabeledControl,
                 is_video_context: isVideoContext
             };
@@ -113,6 +153,9 @@ class SemanticRelationshipEngine:
                     )
                     context.semantics.is_in_data_table = relations.get(
                         "is_in_data_table", False
+                    )
+                    context.semantics.has_table_header_association = relations.get(
+                        "has_table_header_association", False
                     )
                     context.semantics.is_in_labeled_control = relations.get(
                         "is_in_labeled_control", False

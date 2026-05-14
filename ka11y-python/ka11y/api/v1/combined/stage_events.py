@@ -28,24 +28,52 @@ logger = setup_logger(name="KAC", tag="combined")
 _PROGRESS_MIN_INTERVAL_S = 0.2
 _progress_last_emit: dict[tuple[str, str, str], float] = {}
 
+# In-flight broadcast tasks, keyed by job_id. The stage-event helpers below
+# are synchronous (so callers don't need await boilerplate) but _broadcast is
+# a coroutine, so each call is scheduled as a task. We keep a strong reference
+# here — without one the event loop may garbage-collect the task before it
+# runs — and runner._run_job awaits drain_broadcasts() before closing the
+# subscriber queues, which replaces the old "await asyncio.sleep(0) twice and
+# hope" flush hack with a deterministic drain.
+_pending_broadcasts: dict[str, set[asyncio.Task]] = {}
+
 
 def _fire_broadcast(job_id: str, event_type: str, data: dict) -> None:
     """Schedule an async _broadcast() call from synchronous stage-event helpers.
 
     Stage-event helpers (_stage_start, _stage_complete, _stage_error) are
     called from async context but are themselves synchronous so they can be
-    used without await boilerplate.  We use asyncio.ensure_future() to enqueue
-    the coroutine onto the running event loop without blocking.
+    used without await boilerplate. The scheduled task is tracked in
+    ``_pending_broadcasts`` so :func:`drain_broadcasts` can await it before the
+    job's subscriber queues are torn down.
     """
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(_broadcast(job_id, event_type, data))
     except RuntimeError:
         # No running event loop (e.g. called from a thread) — best-effort only.
         logger.warning(
             f"[combined] _fire_broadcast: no running event loop; "
             f"SSE event '{event_type}' for job {job_id} will not be delivered."
         )
+        return
+
+    task = loop.create_task(_broadcast(job_id, event_type, data))
+    bucket = _pending_broadcasts.setdefault(job_id, set())
+    bucket.add(task)
+    task.add_done_callback(lambda t: bucket.discard(t))
+
+
+async def drain_broadcasts(job_id: str) -> None:
+    """Await every in-flight broadcast task for *job_id*.
+
+    Called from runner._run_job's ``finally`` block before _close_subscribers
+    so terminal stage events are guaranteed to reach subscriber queues rather
+    than being dropped when the queues are removed.
+    """
+    bucket = _pending_broadcasts.get(job_id)
+    if bucket:
+        await asyncio.gather(*list(bucket), return_exceptions=True)
+    _pending_broadcasts.pop(job_id, None)
 
 
 def _plan_index(

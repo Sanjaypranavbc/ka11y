@@ -24,6 +24,13 @@ class CrawlPolicy(BaseModel):
     # Retry budget
     max_retries: int = 3
 
+    # Chunked-extraction budget (virtualized / infinite-scroll DOMs).
+    # max_scroll_passes bounds how many scroll-and-extract iterations run per
+    # page; max_seen_refs caps the per-page dedup set so an infinite-scroll
+    # page cannot grow it without bound.
+    max_scroll_passes: int = 4
+    max_seen_refs: int = 5000
+
     # Common tracker/junk parameters to strip by default
     TRACKER_PARAMS: ClassVar[Set[str]] = {
         "utm_source",

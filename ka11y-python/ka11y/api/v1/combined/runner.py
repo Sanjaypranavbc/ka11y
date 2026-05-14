@@ -33,6 +33,7 @@ from .stage_events import (
     _stage_complete,
     _stage_error_and_warn,
     _stage_start,
+    drain_broadcasts,
     emit_job_plan,
 )
 from .stages import (
@@ -181,8 +182,11 @@ async def _run_job(
       acquired so clients polling /combined/{job_id} can observe the queue.
     """
     sem = _get_job_semaphore()
-    if sem.locked() and sem._value <= 0:  # noqa: SLF001
-        # Visible state when a job is admitted but is parked behind the cap.
+    # asyncio.Semaphore.locked() is True exactly when the semaphore cannot be
+    # acquired without blocking — i.e. all concurrency slots are in use. That
+    # is the public-API equivalent of the old `sem._value <= 0` check, so the
+    # job is parked behind the cap and we surface that as `queued`.
+    if sem.locked():
         async with _get_job_lock(job_id):
             if _jobs.get(job_id, {}).get("status") == "pending":
                 _jobs[job_id]["status"] = "queued"
@@ -501,13 +505,11 @@ async def _run_job_body(
         )
 
     finally:
-        # Stage-event broadcasts are scheduled via loop.create_task() and are not
-        # awaited by their callers. If _close_subscribers() runs before those tasks
-        # execute, subscriber queues are removed first and stage events are silently
-        # lost. Two yields are used: the first allows the broadcast tasks to be
-        # scheduled; the second allows them to complete their queue puts, since each
-        # broadcast task itself does a single non-blocking put_nowait with no further
-        # awaits.
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
+        # Stage-event broadcasts are scheduled via loop.create_task() and are
+        # not awaited by their (synchronous) callers. drain_broadcasts() awaits
+        # every in-flight broadcast task for this job so its queue puts land
+        # before _close_subscribers() removes the subscriber queues — a
+        # deterministic replacement for the old "await asyncio.sleep(0) twice"
+        # timing hack.
+        await drain_broadcasts(job_id)
         await _close_subscribers(job_id)

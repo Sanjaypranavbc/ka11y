@@ -1,33 +1,35 @@
 # ka11y — System-Wide Code Review
 
-**Date:** 2026-05-06
+**Date:** 2026-05-14
 **Branch:** `fix-patches`
 **Scope:** Full system — `ka11y-python` (FastAPI + Playwright + auditors), `ka11y-node` (axe-core + custom checks), API/orchestration glue.
-**Reviewer mode:** FAANG production-readiness, brutally honest. ~140 grounded, file-anchored findings collapsed into the structure below.
+**Reviewer mode:** FAANG production-readiness, brutally honest. Re-review of the 2026-05-06 audit after Sprints 1–5.
 
 ---
 
 ## 1. Executive Summary
 
-### Overall rating: **54 / 100**
+### Overall rating: **82 / 100** (was 54)
 
-The system *works* on the happy path for small pages. It does not yet behave like a production accessibility engine. The architecture is recognizably correct (separate Node/axe and Python AI layers, modular auditors, decision policies) but is undermined by:
+The system has moved from "works on the happy path" to "defensible production candidate." The five critical issues from the prior review are **all addressed**, and the bulk of Sprints 1–5 landed:
 
-- **Data-loss bugs** — finding-converter field mismatches silently downgrade entire WCAG SCs to `needs_review`.
-- **Engine-level exception swallowing** — every policy bug is rebadged as `confidence=0.1` `NEEDS_REVIEW`, hiding bugs in production.
-- **Heuristic accuracy weaknesses** — many checks fire on pretexts (color words = sensory violation, "Settings" link = motion-disable control) without verifying intent.
-- **Resource economics** — 5 browser launches per URL, 8 concurrent contexts per scenario, monolithic 2000-line `page.evaluate()` returning megabytes of JSON, unbounded de-dup sets, no per-frame timeouts. Will not survive 1000 concurrent crawls.
-- **Security gaps** — SSRF guard misses decimal/hex-encoded IPs and post-allow redirects; API leaks tracebacks; no per-user auth/rate-limit isolation.
+- **Engine no longer swallows bugs.** `engine.py:10,37` catches *only* `PolicyError`; anything else propagates and is logged with an opaque `error_id` at the job boundary (`runner.py:449-501`). Silent `confidence=0.1` decay is gone.
+- **One browser per audit.** Every crawler now leases from `crawler/browser_pool.py`; no crawler calls `async_playwright()` directly. `_MAX_BROWSERS=2`, `_MAX_CONCURRENT_JOBS=4` semaphores bound the host.
+- **SSRF substantially hardened.** `_ssrf_guard.py` covers decimal/hex/octal-encoded IPs, IPv4-mapped IPv6, hostname resolution, and redirect targets (installed on the *context*, so it fires per-request). The Node side mirrors it (`accessibility.service.js:11-66`).
+- **Data-loss class closed.** `auditor_field_map.py` is the single source of truth for `wcag_X_Y_Z_status` keys, paired with a CI test that fails on drift.
+- **Resource economics fixed.** `asyncio.gather` callsites are wrapped in `asyncio.wait_for` budgets; jobs have a `_JOB_TIMEOUT_SECONDS` cap with task cancellation; TTL eviction reclaims `_jobs` and on-disk dirs; `step_logger` writes under per-path locks; auth + per-identity rate limiting + security headers are in place.
 
-### Top 5 critical issues
+What keeps it from 90+: the **two-pipeline architecture** (`rules/*` auditors vs `pipeline/decisions/*` policies bridged by a 1543-line `findings.py`) is *mitigated* but not *resolved*; `universal_extract.js` is off-disk but still one 1079-line payload covering 7 categories; the job store is still in-process memory (no HA); and a layer of **dead/duplicated SSRF code** in `routes.py` actively contradicts the hardened guard.
+
+### Top 5 remaining issues
 
 | # | Issue | Impact |
 |---|---|---|
-| 1 | **Auditor → converter field-name mismatches** (`findings.py` expects `wcag_1_1_1_status`, auditor may emit different keys) → entire SC silently becomes `needs_review` | Whole rules report wrong; matches existing memory note for 1.1.1 |
-| 2 | **`DecisionEngine` swallows every `Exception` and emits `NEEDS_REVIEW` with confidence 0.1** (`engine.py:30-42`) → real policy bugs (e.g. `policy_1_4_6.py:13` enum/string compare always-false; `policy_2_5_8.py:34` None deref) become invisible | Hidden quality decay; impossible to debug in prod |
-| 3 | **SSRF guard bypass surface** — `_ssrf_guard.py` only matches dotted-quad IPs and only checks the *initial* URL; decimal `http://2130706433/`, hex `http://0x7f000001/`, and post-allow redirects to `169.254.169.254` slip through | Cloud-metadata exfil from a hosted scanner |
-| 4 | **Browser/resource economics broken** — each crawler (`crawler.py`, `media_crawler.py`, `sensory_crawler.py`, `rendered_layout_crawler.py`) launches its *own* Chromium; `rendered_layout_crawler` fans out 8 `_snapshot_at_viewport` contexts via `asyncio.gather` with no timeout and the page is *not* closed on the exception path; `universal_page._extract_page_chunked` keeps an unbounded `seen_refs` set across 4 scroll passes | OOM and hangs at scale; cost explosion |
-| 5 | **`universal_page._COMBINED_EXTRACT_JS` is a 2000-line monolithic `page.evaluate()`** that walks the DOM 7 times, serialises `outerHTML` for every element, and crosses the V8↔Python bridge with 8–15 MB JSON per page | Latency, memory, and a single JS bug breaks 7 categories at once |
+| 1 | **Dead, weaker SSRF code shadows the hardened guard.** `routes.py:90-120` still defines `build_ssrf_route_handler` with the *exact* weak `_IP_HOST_RE` regex the last review flagged; `_BLOCKED_NETWORKS`/`_is_non_public_ip` are duplicated between `routes.py:36-87` and `_ssrf_guard.py:37-78`. Unused today, but a future caller wiring the wrong one re-opens the hole. | Latent SSRF regression; guaranteed drift |
+| 2 | **`universal_page._extract_page_chunked` `seen_refs` is still unbounded** (`universal_page.py:389`), and `max_passes` is hardcoded to 4 despite a comment claiming it is config-driven. 4 passes × N elements × concurrent pages still accumulates without a cap. | Memory growth on infinite-scroll pages at scale |
+| 3 | **Two parallel rule systems, 1543-line translation layer.** `rules/*` auditors and `pipeline/decisions/*` policies still don't share a data model; `combined/findings.py` remains a hand-maintained bridge. The field-map registry stops *silent* drift but the dual model is the root maintenance tax. | Every rule change touches 3 files; high change-amplification |
+| 4 | **Job store is in-process memory.** `store.py:_jobs` is a module dict. TTL eviction and per-job locks are in place, but a process restart loses every running and recent job; no horizontal scaling. | No HA; restarts drop in-flight audits |
+| 5 | **Monolithic `universal_extract.js` (1079 lines, 7 categories).** Now loaded from disk and internally split into per-category IIFEs (`extractForms`…`extractSensory`), but still one `page.evaluate` payload — a top-level JS syntax error still takes out all 7 categories at once. | Single point of failure for structural extraction |
 
 ---
 
@@ -36,592 +38,328 @@ The system *works* on the happy path for small pages. It does not yet behave lik
 ### 2.1 Current architecture
 
 ```
-            ┌──────────────────────────┐
-            │  FastAPI app (main.py)   │
-            │  + _RateLimitMiddleware  │
-            └────────────┬─────────────┘
-                         │
-                         ▼
-        ┌──────────── api/v1 ──────────────┐
-        │  pipeline.py    (full pipeline)  │
-        │  combined/{routes,runner,        │
-        │           stages,findings}.py    │
-        │  rules/{run_router,metadata}.py  │
-        └────────────┬────────────┬────────┘
-                     │            │
-                     ▼            ▼
-   ┌────────────────────┐   ┌──────────────────────────────┐
-   │  Python crawlers   │   │  Node service (HTTP)         │
-   │  ─ crawler.py      │   │  src/services/accessibility  │
-   │  ─ media_crawler   │   │   ├ axe-core run            │
-   │  ─ sensory_crawler │   │   ├ custom-checks/*.check.js│
-   │  ─ rendered_layout │   │   └ audits/wcag-2.5.x/      │
-   │  ─ universal_page  │   └──────────────────────────────┘
-   └─────────┬──────────┘
+            ┌────────────────────────────────────┐
+            │  FastAPI app (main.py)             │
+            │  _AuthMiddleware → _RateLimit →    │
+            │  _SecurityHeaders → CORS           │
+            │  lifespan: _evict_old_jobs +       │
+            │            browser_pool shutdown   │
+            └────────────────┬───────────────────┘
+                             ▼
+        ┌──────────────── api/v1 ────────────────────┐
+        │  combined/  routes • runner • stages •      │
+        │             findings • report • store •    │
+        │             stage_events • auditor_field_map│
+        │  pipeline.py • crawl.py • rules/            │
+        └───────────────┬───────────────┬─────────────┘
+                        │               │
+                        ▼               ▼
+   ┌────────────────────────┐   ┌──────────────────────────────┐
+   │  Python crawlers       │   │  Node service (HTTP)         │
+   │  all lease from        │   │  accessibility.service.js    │
+   │  crawler/browser_pool  │   │   ├ axe-core run + locale    │
+   │  ├ universal_page      │   │   ├ custom-checks/*.check.js │
+   │  ├ crawler (images)    │   │   └ audits/wcag-2.5.x/       │
+   │  ├ media / sensory     │   │  SSRF: _assertPublicUrl +    │
+   │  ├ rendered_layout     │   │  request interception        │
+   │  └ forms / target_size │   └──────────────────────────────┘
+   └─────────┬──────────────┘
              ▼
    ┌──────────────────────────────────────────────────────────┐
    │ accessibility/                                           │
-   │  rules/ (auditors: alttext, sensory, contrast, media,    │
-   │          forms, target_size, text_spacing, …)            │
-   │  rendered/ (reflow, text_spacing evaluators)             │
-   │  pipeline/                                               │
-   │   ├ extractors/ (element_context_extractor,              │
-   │   │             semantic_relationship_engine)            │
-   │   ├ analyzers/ (section_analyzer)                        │
-   │   ├ runners/ (contrast_engine, interaction_state_runner) │
-   │   ├ decisions/ (engine + policy_X_Y_Z)                   │
-   │   └ formatters/ (evidence_formatter)                     │
+   │  rules/      (auditors: alttext, sensory, media, forms…) │
+   │  rendered/   (reflow, text_spacing, focus evaluators)    │
+   │  pipeline/   extractors • analyzers • runners •          │
+   │              decisions/{engine + policy_X_Y_Z} •         │
+   │              router • formatters                        │
    └──────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 Key flaws
+### 2.2 What was fixed (vs. the 2026-05-06 review)
 
-**F1 — Two parallel rule systems with no shared model.**
-`accessibility/rules/*` (large, image- and OCR-heavy auditors) and `accessibility/pipeline/decisions/*` (per-SC policy classes operating on `ElementContext`) both produce findings, but they don't share a data model. `combined/findings.py` is a 1000+ line translation layer that *must* know each auditor's idiosyncratic field names. This is the root cause of the data-loss bug class (Top-5 #1).
+- **F4 — engine swallowing.** Resolved. `engine.py` catches `PolicyError` only; everything else propagates to `runner.py`'s structured handler.
+- **F2 — crawler proliferation.** Largely resolved. `browser_pool.py` + `context_factory.py` (which installs the SSRF guard on every context) + `navigation.py` (shared resilient navigation) replace the duplicated launch/cleanup blocks. All ten crawlers lease from the pool.
+- **F3 — giant inline JS.** Partially resolved. Extractors are on disk (`crawler/js/*.js`, `_load_js`), restoring IDE tooling and syntax checks. Still one payload (see Top-5 #5).
+- **F1 — two rule systems.** Mitigated, not resolved. `auditor_field_map.py` + its CI smoke test eliminates the *silent* field-mismatch bug class; the dual data model remains.
+- **F7 — module-level singletons.** Improved. `config_loader.py` returns a `deepcopy` so callers can't mutate the cached config; job/subscriber locks are lazy and rebind per event loop (`store.py:_get_job_lock`). `combined/constants.py` still loads `_WCAG_NAMES` at import.
 
-**F2 — Crawler proliferation without a base class.**
-Four crawlers (`crawler.py` for images, `media_crawler.py`, `sensory_crawler.py`, `rendered_layout_crawler.py`) duplicate ~400 lines of browser launch / context creation / link extraction / cleanup. Each launches its *own* Chromium for the same URL.
+### 2.3 Remaining flaws
 
-**F3 — One giant `page.evaluate` for everything.**
-`universal_page._COMBINED_EXTRACT_JS` is 2000+ lines and extracts forms, interactive, target_sizes, moving_content, media, text_spacing, and sensory data in a single JS function. Single bug → all 7 categories die. JSON payload is 8–15 MB on a 500-element page.
+**F1′ — `combined/findings.py` is still 1543 lines.** It is a thinner bridge than before (registry-backed), but auditors still emit idiosyncratic record dicts and policies emit `RuleVerdict`s; the converter layer must know both shapes. The end state (auditors emit `Finding(...)` directly) is still a multi-week project.
 
-**F4 — `DecisionEngine` exception policy hides correctness bugs.**
-`engine.py:30-42` `except Exception → NEEDS_REVIEW(confidence=0.1)` masks every concrete bug in the policy classes (string-vs-enum, None deref, missing import). There is no observability for "policies-that-keep-throwing".
+**F5′ — Node custom-check / audit duplication.** `audits/wcag-2.5.1/` and `custom-checks/pointer-gestures.check.js` still coexist; selector banks (`multilingual-selectors.js` vs `axe-rule-pointer-gestures.js`) still duplicate definitions. Not regressed, not consolidated.
 
-**F5 — Custom-check / audit duplication in Node.**
-For 2.5.1 and 2.5.4, both `custom-checks/{pointer-gestures,motion-actuation}.check.js` *and* `audits/wcag-2.5.{1,4}/index.js` exist. The selector banks (`multilingual-selectors.js` vs `axe-rule-pointer-gestures.js:11–46`) duplicate definitions that drift over time.
+**F8 (new) — dead module files.** `api/v1/combined.py` is a **0-byte file** shadowed by the `combined/` package; `classifier/classfier.py` keeps its typo'd filename. Both are harmless today and both are landmines for the next reader.
 
-**F6 — Tight coupling between policies and concrete data shapes.**
-`policy_1_3_1.py:29` reads `element.visual.computed_styles.get("type")` — but `type` is an HTML attribute, not a CSS property. This is the kind of bug an `ElementSemantics`-vs-`ElementVisual` boundary should make impossible.
-
-**F7 — Module-level singletons everywhere.**
-`combined/constants.py` loads `_WCAG_NAMES = get_wcag_names("en")` at import. `utils/config_loader.py:35` does `config = load_config()`. `i18n/loader.py` caches via `lru_cache`. None can be reloaded without process restart, and none are language-correct for non-English audits.
-
-### 2.3 Suggested improved architecture
-
-Five targeted changes; everything else is downstream of these.
-
-1. **One `PageExtraction` shared model with versioned schema.** Auditors emit `Finding(rule_id, status, evidence, ...)` directly. `combined/findings.py` becomes a thin grouper, not a translation layer. Field-mismatch class of bugs ceases to exist.
-2. **`BaseCrawler`** with a single browser pool. Concrete crawlers override `extract_for_url(page)`. Replaces ~400 lines of duplication; single browser per audit; per-stage views over one extraction.
-3. **Split `_COMBINED_EXTRACT_JS` into 4 focused extractors** (structural, geometry, dynamic, sensory). Each is testable in isolation; one failure does not poison the others.
-4. **Typed `PolicyError` in `DecisionEngine`** — engine catches *only* `PolicyError` and falls through to `NEEDS_REVIEW`. Anything else logs a structured error and crashes the request; in CI, that means a failing test, in prod a 5xx with an opaque error_id.
-5. **Replace four-crawler-per-URL pattern with one universal crawl + downstream evaluators.** Image classification, media probing, sensory scanning, layout snapshots are all *evaluators* over a `BrowsedPage` artefact, not separate Chromium launches.
+**F9 (new) — duplicated security primitives.** `_BLOCKED_NETWORKS`, `_ip_is_blocked`, `_is_non_public_ip` exist in *both* `routes.py` and `_ssrf_guard.py`, with `routes.py` additionally carrying the obsolete regex-based `build_ssrf_route_handler`. One guard must be canonical; the rest deleted.
 
 ---
 
 ## 3. Performance & Computational Analysis
 
-Findings ranked by production blast radius. Each lists root cause, complexity, and a code-anchored fix.
+Most prior P-items are fixed. What remains:
 
-### P-01 (CRITICAL) — Monolithic JS extractor, megabyte JSON per page
-**File:** `ka11y-python/ka11y/crawler/universal_page.py:55-1134`
-**Problem:** `_COMBINED_EXTRACT_JS` runs 7 querySelectorAll loops, calls `getBoundingClientRect()` on every target (forced reflow per element), and serialises `outerHTML` for every element into a single returned object.
-**Complexity:** O(N) DOM walks ×7 categories with full reflow per element ⇒ effective O(N) reflows. JSON marshalling O(total_html_bytes).
-**Impact:** 8–15 MB JSON per 500-element page; 2–5 s Python-side parse; ~5 GB/day at 1k pages/day. Single JS error kills 7 outputs.
-**Fix:**
-```python
-# Split into focused extractors; run sequentially or in 2 batches
-forms        = await frame.evaluate(FORMS_JS)
-interactive  = await frame.evaluate(INTERACTIVE_JS)
-geometry     = await frame.evaluate(GEOMETRY_JS)   # the only one that touches getBoundingClientRect
-sensory      = await frame.evaluate(SENSORY_JS)
-# Cap each extractor's output size before returning
-```
-And inside each JS: hash `outerHTML` to a 16-byte digest server-side rather than shipping it raw.
+### P-01 (HIGH) — `seen_refs` unbounded across scroll passes
+**File:** `ka11y/crawler/universal_page.py:389-432`
+**Problem:** `_extract_page_chunked` allocates `seen_refs = set()` and runs `max_passes = 4` (hardcoded — the adjacent comment "Read max scroll passes from config" is stale) with no cap on set size. On infinite-scroll pages the dedup set grows with every element seen across all passes.
+**Fix:** Cap the set (`if len(seen_refs) > 5000: break`) and source `max_passes` from `CrawlPolicy`.
 
-### P-02 (CRITICAL) — Browser-per-crawler launches
-**Files:** `crawler.py:395-406`, `media_crawler.py:275-294`, `sensory_crawler.py:241-259`, `rendered_layout_crawler.py:242-259`
-**Problem:** Each of the four crawlers does `async with async_playwright() as p: browser = await p.chromium.launch(...)`. For one audit URL, that is **5 separate Chromium processes** (image + media + sensory + rendered_layout + universal), ~300 MB each = **~1.5 GB per URL**.
-**Fix:** Singleton `BrowserPool` in `app/main.py` lifespan; crawlers receive a `browser` and create only contexts.
+### P-02 (MEDIUM) — N+1 `img.evaluate` in the image crawler
+**File:** `ka11y/crawler/crawler.py` (~543-573)
+**Problem:** Each `<img>` triggers two separate `img.evaluate(...)` round-trips — one for `resolved_label` (aria-labelledby/aria-label), one for `el_context` (role/parent/clickable). 13 `.evaluate` callsites total in the file.
+**Fix:** Collapse the two per-image evaluates into a single `el => ({label, ctx})` call.
 
-### P-03 (CRITICAL) — `rendered_layout_crawler` fan-out without timeout
-**File:** `rendered_layout_crawler.py:275-308`
-**Problem:** `asyncio.gather(*7 _snapshot_at_viewport, return_exceptions=True)` — each opens its *own* context + page. `return_exceptions=True` catches errors but not hangs; one stuck `wait_for_load_state("networkidle")` blocks the gather forever.
-**Complexity:** 7 contexts × (load + 7 sub-snapshots) per URL.
-**Fix:**
-```python
-async with asyncio.timeout(120):
-    results = await asyncio.gather(*scenarios, return_exceptions=True)
-```
-And reuse one context across the 7 viewport snapshots — the `_make_context` per scenario is only required when the *device profile* changes.
+### P-03 (MEDIUM) — Monolithic `universal_extract.js` payload
+**File:** `ka11y/crawler/js/universal_extract.js` (1079 lines)
+**Problem:** One `page.evaluate` returns forms + interactive + target_sizes + moving_content + media + text_spacing + sensory. Internally modular (per-category IIFEs) but a single top-level parse error or a thrown exception outside an IIFE's own guard takes out all 7 categories.
+**Fix:** Split into 3–4 disk extractors run sequentially; cap each one's serialised output size.
 
-### P-04 (CRITICAL) — Page leak on exception path
-**File:** `rendered_layout_crawler.py:380-396`
-**Problem:** `_snapshot_at_viewport` opens a `page` inside `try`, but the exception handler returns before any explicit `page.close()`. Only `ctx.close()` runs in `finally`. Under load this races and pages accumulate.
-**Fix:** `page = None` before try; `if page: await page.close()` in finally.
+### P-04 (LOW) — `networkidle` timeout logged at `debug`
+**File:** `ka11y/crawler/universal_page.py:356`
+**Problem:** A `networkidle` timeout is a real "page never settled" signal but is logged at `debug`, invisible in production.
+**Fix:** `logger.warning`.
 
-### P-05 (HIGH) — Unbounded `seen_refs` in chunked extraction
-**File:** `universal_page.py:1488-1540`
-**Problem:** 4 scroll passes × N elements × dedup hash each — `seen_refs` grows without bound. 1k concurrent pages × 5k elements × 4 passes ≈ ~10 GB resident.
-**Fix:** Per-page cap (`if len(seen_refs) > 5000: break`) + flush dedup keys to disk between passes.
-
-### P-06 (HIGH) — N+1 `page.evaluate` per image
-**File:** `crawler.py:547-577`
-**Problem:** For each `<img>`, the code does ≥2 `evaluate(...)` round-trips (resolved label, parent context). 1000 images × 2 calls × ~10 ms = ~20 s overhead per page.
-**Fix:** Single `evaluate(el => ({label, ctx, title, ...}))`.
-
-### P-07 (HIGH) — N+1 `frame.evaluate` per relationship
-**File:** `pipeline/extractors/semantic_relationship_engine.py:89-94`
-**Problem:** `for context in contexts: relations = await frame.evaluate(_RELATIONSHIP_JS, context.element_id)` — one IPC per element.
-**Fix:** Pass list of IDs once: `frame.evaluate(JS, [ids])` returns `[{id, relations}]`.
-
-### P-08 (HIGH) — O(n²) adjacency scan in extractor
-**File:** `pipeline/extractors/element_context_extractor.py:165-178`
-**Problem:** Nested loops over interactive elements to compute neighbour gaps — quadratic in the number of focusables.
-**Fix:** Spatial bin (grid bucket on `Math.floor(x/64), Math.floor(y/64)`), check neighbours only.
-
-### P-09 (HIGH) — OCR result lookup is O(n·m)
-**File:** `accessibility/rules/non_text/alttext.py:787-802`
-**Problem:** `for img in images_data: _ocr_for_file(ocr_results, filename)` — inner function linearly scans `ocr_results`. With 1k images × 1k OCR rows = 1 M iterations, plus `Path` allocations per call.
-**Fix:** Build `ocr_by_filename = {Path(r.filename).name.lower(): r for r in ocr_results}` once.
-
-### P-10 (HIGH) — Hot regex compiled per call
-**Files:** `policy_1_1_1.py:74` (`re.search(r"[a-z]{2}|[^\x00-\x7F]", name)`), `policy_1_4_5.py:32` (`import re` inside method).
-**Fix:** Module-level `_DESCRIPTIVE_PATTERN = re.compile(...)`. Hoist `import`.
-
-### P-11 (MEDIUM) — Sensory regex sweep is O(text × categories)
-**File:** `accessibility/rules/non_text/sensory_auditor.py:1048`
-**Problem:** Per text token, iterates all 8 sensory category regexes.
-**Fix:** Single union regex: `_SENSORY_MEGA = re.compile("(" + "|".join(all_terms) + ")", re.IGNORECASE)` — one match call replaces N.
-
-### P-12 (MEDIUM) — Sequential snapshot then stages
-**File:** `combined/stages.py:1174-1286`
-**Problem:** `snapshot = await _load_universal_snapshot(...)` blocks the entire pipeline before stages start, even though `_stage_image_audit` does not need it.
-**Fix:** `snapshot_task = asyncio.create_task(...)`; pass the future into stages that need it; image audit runs immediately.
-
-### P-13 (MEDIUM) — Sync I/O on async route
-**File:** `api/v1/pipeline.py:299-572`
-**Problem:** `image_crawler.save_results()`, `detector.scan_directory()`, `save.save_reports()` are all blocking and called without `await`. Two concurrent users serialise on the event loop.
-**Fix:** `await asyncio.to_thread(image_crawler.save_results)` etc.
-
-### P-14 (MEDIUM) — Layout thrash in 2.5.4 motion detector
-**File:** `ka11y-node/src/audits/wcag-2.5.4/motion-event-detector.js:31`
-**Problem:** Reads `document.body.innerText` per regex pattern in a loop; each read forces layout.
-**Fix:** Read once into `const allText = document.body.innerText;`.
-
-### P-15 (MEDIUM) — DOM inspector 5k evaluate round-trips
-**File:** `ka11y-node/src/audits/wcag-2.5.1/dom-inspector.js:52-112`
-**Problem:** For each selector × match, calls `page.evaluate` to compute CSS path → up to 5k cross-process calls on heavy pages.
-**Fix:** Single `page.evaluate` that does selector iteration AND CSS-path computation server-side.
-
-### P-16 (LOW) — Locale cache + classifier cache unbounded
-**Files:** `ka11y-node/src/services/accessibility.service.js:104` (`_axeLocaleCache`), `ka11y-python/ka11y/crawler/crawler.py:589-591` (classifier cache).
-**Fix:** LRU with explicit cap.
+### P-05 (LOW) — Sensory mega-regex / OCR-index / batched evaluates already landed
+`sensory_auditor.py` now uses single-pass mega-regexes; `alttext._build_ocr_index` is O(1); `semantic_relationship_engine` and `element_context_extractor` batch their `frame.evaluate` calls; `policy_1_1_1`/`policy_1_4_5` regexes are hoisted. No action.
 
 ---
 
 ## 4. Accuracy Issues (WCAG-Specific)
 
-For each SC: failure scenarios and the file that needs to change.
+The prior review's concrete accuracy bugs are **fixed** — verified by reading the code:
 
-### 1.1.1 Non-text content
-- **`alttext.py:318-326`** — `_check_1_1_1_decorative` only validates `alt=""` for classifier-decorative images; ignores `aria-hidden="true"`, `role="presentation"`, `<figure>` with `<figcaption>`. Decorative images with `aria-hidden` and missing `alt` **fail incorrectly**.
-- **`alttext.py:451-454`** — icon alt-text rule rejects valid 2-char universal symbols ("ok", "x", "→") because of a 4-char minimum.
-- **`alttext.py:401-442`** — for multi-word brand alt ("Meta Platforms Inc. logotype"), `_LOGO_WORDS` doesn't include "logotype" / "wordmark" → false fail.
-- **CSS `background-image` content is never seen.** No crawler step extracts background URLs; informational hero images with rendered text are simply missing from the audit. **Major false-negative source.**
-- **Shadow DOM not pierced** — modern web components with `<img>` inside `shadowRoot` bypass `images_data`.
-- **Accessible-name priority wrong** in `pipeline/extractors/element_context_extractor.py:245-270` — order is aria-label → alt → title → text. The W3C accname-1.2 spec puts `aria-labelledby` *before* `aria-label`, and form-control native `<label for>` association before `title`. Both are missing. False negatives on labelled form controls.
+- **1.1.1** — `alttext._is_aria_hidden_from_at` (`alttext.py:312`) now honours `aria-hidden="true"` / `role="presentation"|"none"`; 2-letter uppercase abbreviations ("UI", "OK") are matched.
+- **1.3.1** — `policy_1_3_1.py:42` parses `type` from `html_snippet` via `_INPUT_TYPE_RE`, not from CSS `computed_styles`.
+- **1.4.3 / 1.4.6** — `contrast_engine.py` has an alpha-aware parser (`_NUMBER_RE` no longer splits `0.5`), Porter-Duff `composite_over`, and hex `#rgba`/`#rrggbbaa` support. `policy_1_4_6.py` cleanly subclasses `Policy143` and overrides thresholds — the always-false enum/string compare is gone. `policy_1_4_3._is_large_text` reads real `font-weight`.
+- **2.4.13** — `policy_2_4_13.py` fails on thin *or* low-contrast rings independently (the inverted AND/OR is fixed); `interaction_state_runner.py` extracts real ring thickness and leaves contrast `None` → `needs_review` instead of a fake passing value.
+- **2.5.3** — `policy_2_5_3.py` tokenises and does a contiguous-subsequence match; "signin" no longer matches inside "signinbeta".
+- **1.4.10** — `reflow.py:59` reads `snapshot_320.viewport_width` and validates it against `_REQUIRED_REFLOW_VIEWPORT_PX = 320`.
+- **2.5.1 (Node)** — `escape-hatch-validator.js` rejects `KNOWN_EMPTY_PATTERNS` (`void 0`, `return false`, …) and requires a non-trivial handler body.
+- **2.5.4 (Node)** — `disable-control-validator.js` only treats a "settings" link as evidence when motion keywords appear in the nearby subtree; bare settings links are "low" confidence and do not pass. `motion-listener-detector.js` clears `window.__motionRegistry` on read, so listeners no longer bleed across pages.
 
-### 1.2.x Time-based media
-- **`media_auditor.py:109-143`** `_gate_1_is_prerecorded` only checks `.m3u8` / `.mpd` for live. Streams via JS-replaced `<video src>` or MediaSource API are misclassified as prerecorded → false fail on missing transcript.
-- **`media_auditor.py:210-282`** `_gate_4_find_transcript` checks `<a>` / `<details>` / `aria-describedby` but ignores `<iframe>`-embedded transcripts and JS-revealed disclosure regions.
-- **WCAG 1.2.4 (live captions) — Node check insufficient** (`ka11y-node/src/custom-checks/captions-live.check.js`) — `<track kind="captions">` does not prove captions are *live*. A pre-recorded VTT will pass.
+### Remaining accuracy gaps
 
-### 1.3.1 Info & relationships
-- **`policy_1_3_1.py:29`** reads `element.visual.computed_styles.get("type")` — **fundamentally wrong**: `type` is an HTML attribute, not a CSS property. Always returns None for radio/checkbox. Form-grouping checks for radios silently never fire.
+**1.3.1 — data-table check is a rubber stamp.** `policy_1_3_1.py:28-35`: any element with `is_in_data_table` returns an unconditional `_pass("table_context")`. A `<td>` with no `<th>`/`scope`/`headers` association still passes. The check confirms membership, not relationships.
 
-### 1.3.3 Sensory characteristics
-- **`sensory_auditor.py:997-1032`** flags `"Press the Red button"` as sensory-only even when "Red" is the button's literal accessible name (e.g. Red Hat). Cross-check sensory token against the labelled element's name before flagging.
+**1.1.1 — incidental OCR text can cause false fails.** `alttext._check_1_1_1_informative` (`alttext.py:384`) fails an informative image when OCR finds text the alt doesn't echo. A street photo containing an incidental shop sign would be marked failing even though the sign is not the image's purpose. Needs a "is this text *salient*" gate.
 
-### 1.4.3 / 1.4.6 Contrast (Minimum / Enhanced)
-- **`policy_1_4_6.py:13`** `if verdict.status == "not_applicable" or verdict.status == "needs_review":` — `status` is `VerdictStatus` enum, comparison is **always False**. AAA enhanced contrast is silently never escalated.
-- **`thresholds.py:6-7`** defines `CONTRAST_NORMAL_AAA = 7.0` / `CONTRAST_LARGE_AAA = 4.5` but no policy imports them — 1.4.6 inherits 1.4.3 and re-hardcodes thresholds inline.
-- **`contrast_engine.py:10-23`** `parse_rgb` does `re.findall(r"\d+", ...)` — splits the alpha "0.5" of `rgba(255,0,0,0.5)` into `[0, 5]`; ignores alpha entirely (no compositing with background). Anti-aliased / semi-transparent text is mismeasured.
-- **`contrast_analyser.py:151-187`** large-text threshold uses an `is_bold` boolean, not the actual `font-weight` value. CSS `font-weight: 700` text without explicit bold flag uses 4.5:1 instead of 3:1 → false fail.
-- **`contrast_analyser.py:102-114`** uses `np.percentile(text_pixels, 90)` with no guard for empty / single-pixel arrays — divides by zero or returns inf, then is silently swallowed by an outer try/except.
+**2.5.1 — escape-hatch threshold is arbitrary.** `escape-hatch-validator.js` accepts a handler when `cleaned.length > 6`. A terse-but-real handler (`doZoom()`) is under the bar; a long junk handler is over it. The length proxy should be a "calls a function / dispatches an event" check.
 
-### 1.4.10 Reflow
-- **`rendered/evaluators/reflow.py:40-100`** assumes the snapshot was taken at 320 CSS pixels; never asserts `snapshot_320.viewport_width == 320`. If `rendered_layout_crawler` was misconfigured to 360, evaluation silently runs against the wrong viewport.
-- **`text_spacing_auditor.py:31-49`** flags every container with `height + overflow:hidden` as a 1.4.12 WARNING regardless of whether spacing deltas would actually overflow. Dashboards drown in noise.
-
-### 1.4.11 Non-text contrast
-- **`alttext.py:614-686`** fallback path measures contrast against a *cropped* OCR image instead of the surrounding page pixels. White button on white page can pass at 1.5:1 instead of failing at 1.0:1.
-
-### 2.4.13 Focus appearance
-- **`policy_2_4_13.py:28-52`** the AND/OR composition of "thickness < min" and "contrast < 3.0" is inverted relative to the SC. An element with 0.5 px focus ring and 5:1 contrast is incorrectly downgraded to `needs_review`. Combined with **`interaction_state_runner.py:88-89`** hardcoded fallback `focus_ring_thickness_px=2.0; focus_ring_contrast=4.5`, real failing rings overwritten with passing values → **false PASS**.
-
-### 2.5.1 Pointer gestures (Node)
-- **`audits/wcag-2.5.1/escape-hatch-validator.js:39-42`** treats any `onclick` presence as proof of a single-pointer alternative. `onclick="void 0"` or empty handlers pass.
-- **Selector bank duplicated** between `multilingual-selectors.js` and `axe-rule-pointer-gestures.js:11-46` — drift inevitable.
-
-### 2.5.3 Label-in-name
-- **`policy_2_5_3.py:23-29`** strips all punctuation before `in` test. Accessible name `"Sign-In (Beta)"` against visible `"Sign In"` gives `"signin" in "signinbeta"` → True; the variant where the visible is `"Sign Up"` and the accessible is `"Sign Up Now"` could also short-circuit. Use word-boundary or token-set comparison.
-
-### 2.5.4 Motion actuation (Node)
-- **`audits/wcag-2.5.4/disable-control-validator.js:32-41`** treats *any* link containing "settings" as evidence of a motion-disable control. Account-settings page → false PASS.
-- **`audits/wcag-2.5.4/index.js:72-115`** "UI alternative" requirement is satisfied by any `onclick` element with a verb-like label, even if disabled or hidden. Need explicit checks: enabled, focusable, label semantically aligned.
-- **Heuristic-based "essential motion" classification** — keyword match on page text ("fitness", "pedometer") is insufficient evidence the motion is essential per the SC. Should require explicit `data-wcag-motion-essential` opt-in.
-- **`motion-listener-detector.js:30`** monkey-patched `window.__motionRegistry` accumulates across pages within a Puppeteer session — false positives from previous pages' listeners.
-
-### 2.5.8 Target size
-- **`policy_2_5_8.py:34-37`** dereferences `element.interaction.effective_clickable_bbox.width` — but the field is `Optional[BoundingBox]` (per `models.py:93`). Throws `AttributeError`, gets caught by `engine.py` → silent `NEEDS_REVIEW(0.1)`.
-- **`policy_2_5_8.py:23-31`** inline-link exemption fires when `display:inline` or any `<p>` ancestor — including a `<p>` wrapper in a navigation. WCAG exemption requires *links inline within a sentence of text*, which the current heuristic does not verify.
-- **`target_size_auditor.py:86-97`** offset exception is ambiguous on whether both axes must meet the threshold; required offset is not clamped to ≥0 (`(24-25)/2 = -0.5` printed to users).
+**2.5.4 — still keyword-heuristic, no opt-in.** `disable-control-validator.js` / `essential-motion-classifier.js` remain keyword-driven. The prior review's recommendation of an explicit `data-wcag-motion-essential` opt-in was not adopted; residual false-positive surface remains (a design decision worth revisiting).
 
 ---
 
 ## 5. Code Quality Issues
 
-### 5.1 Anti-patterns
+### 5.1 Fixed
+- `except Exception → NEEDS_REVIEW` removed from the engine.
+- `policy_1_1_1` / `policy_1_4_5` regexes hoisted; the inline `import re` in `policy_1_4_5` is gone.
+- `rule_target_router.py` uses an order-preserving dedup, not `list(set(...))`.
+- `step_logger.py` appends under per-path `threading.Lock`s.
+- `config_loader.py` returns a defensive deepcopy.
+- Tuple-by-index stage returns replaced by `PythonStagesResult` dataclass (`runner.py:333`).
 
-- **Catch-Exception-and-shrug.** `engine.py:30-42`, `extractors/element_context_extractor.py:281-283`, `interaction_state_runner.py:71-81`, every `try/except Exception: pass` in the crawlers and several stages. These hide real bugs. Replace with: catch *named* exceptions; everything else bubbles or logs `ERROR` with traceback.
-- **Late imports** — `import re` inside method body (`policy_1_4_5.py:32`) — minor but a smell that says "I'm afraid of import cycles". If there is a cycle, fix it.
-- **Filename typo** — `ka11y/classifier/classfier.py` — keeps producing typo-prone imports.
-- **`zip` over differently-sized lists** — `section_analyzer.py:38` zips `ancestor_tags` and `ancestor_roles`. Use `zip_longest` or assert equal length.
-- **Non-deterministic dedup** — `rule_target_router.py:39 return list(set(rules))` — order varies. Use ordered-dedup pattern.
-- **Module-level singletons that read files at import time** — `combined/constants.py:25-34` (`_WCAG_NAMES = get_wcag_names("en")`), `utils/config_loader.py:35` (`config = load_config()`). Hard to test, can't reload, language-incorrect for non-English audits.
-- **Mutable default arguments smell** — `_make_finding(..., element_target=None)` is fine, but downstream callers pass `target` lists into multiple findings; copy the list before storing.
-- **String-typed enums.** `policy_1_4_6.py:13` compares enum to literal string. Either use `VerdictStatus.NEEDS_REVIEW` everywhere or rely on `.value`. Don't mix.
+### 5.2 Remaining anti-patterns
+- **Dead code.** `api/v1/combined.py` (0 bytes); `routes.py:90-120` `build_ssrf_route_handler` (unused, weaker than the real guard).
+- **Filename typo.** `classifier/classfier.py` — still produces typo-prone imports.
+- **Private-attribute access.** `runner.py:184` reads `sem._value` (`# noqa: SLF001`) to detect a full queue. Breaks silently if CPython renames the field.
+- **Fire-and-forget broadcast + sleep hack.** `stage_events._fire_broadcast` schedules `_broadcast` via `loop.create_task` and never awaits it; `runner.py:511-512` does `await asyncio.sleep(0)` *twice* to "flush" those tasks before `_close_subscribers`. This is timing-dependent by the author's own admission in the comment — a lost-event race under load.
+- **Crawler exception swallowing.** `universal_page.py` (13×), `rendered_layout_crawler.py` (12×), `crawler.py` (12×) still catch broad `Exception`. Many are legitimately defensive (cross-origin frames, detached contexts) but the volume makes real faults easy to miss; prefer named exceptions.
+- **Duplicated security constants** across `routes.py` and `_ssrf_guard.py` (see F9).
 
-### 5.2 Maintainability
-
-- **2000-line JS string in a Python file.** `universal_page._COMBINED_EXTRACT_JS`. No syntax checking, no test coverage of the JS path, IDE highlighting is gone. Move to `extractors/*.js`, load via `Path.read_text`.
-- **`api/v1/combined/findings.py` is a 1000+ line translation layer** with dozens of `r.get("wcag_X_Y_Z_status", "")` calls. One typo silently downgrades a whole SC. Replace with a registry: `AUDITOR_FIELD_MAP = {"1.1.1": ("wcag_1_1_1_status", "wcag_1_1_1_reason"), ...}` plus a unit test that asserts every key in the map exists in some auditor's output.
-- **Tests run against mocks of axe-core.** `ka11y-node/src/audits/wcag-2.5.4/__tests__/motion-actuation.test.js:88-121` builds `{body: {innerText: ''}, querySelectorAll: () => []}` instead of a Puppeteer fixture. Tests pass; production fails on real DOMs.
-- **No schema versioning between Node and Python.** `_call_node_flat` (`combined/stages.py:143-166`) just calls `resp.json()`. Any Node-side rename silently breaks Python parsing.
-
-### 5.3 Best-practice violations
-
-- **Dynamic `import re` inside functions** — see above.
-- **`re.VERBOSE` with inline `# comments`** in `form_auditor.py:154` — looks correct but a single accidental whitespace change in pattern silently mutates semantics. Either add an explicit unit test for the pattern, or expand it to a non-VERBOSE form.
-- **Bare `except` swallowing across the codebase** — at least 25 occurrences in the crawler files alone.
-- **Logging at debug for production-relevant warnings** — `universal_page.py:1462` `logger.debug("[universal] networkidle timeout for {url}")`. Networkidle timeout is a real signal; should be `warning`.
+### 5.3 Maintainability
+- `findings.py` (1543 lines) and `universal_extract.js` (1079 lines) and `stages.py` (1305 lines) are the three files that will dominate future churn.
+- Tests: 35 test files, 743 collected cases — real coverage, including `test_auditor_field_map.py` as a drift guard. Good. Node-side tests still mock the DOM in places (`audits/wcag-2.5.4/__tests__`), so production-vs-test divergence risk persists there.
 
 ---
 
 ## 6. Scalability Review
 
-### 6.1 Behaviour at 1k pages/day
+### 6.1 What's now bounded
+- **Browsers:** `_MAX_BROWSERS=2` (pool semaphore), one warm Chromium reused across leases.
+- **Jobs:** `_MAX_CONCURRENT_JOBS=4` semaphore; over-cap jobs sit in `queued` status (observable by pollers).
+- **Time:** every `asyncio.gather` has an `asyncio.wait_for` budget; `_JOB_TIMEOUT_SECONDS=1200` outer cap cancels stuck branches; per-stage `_STAGE_TIMEOUT_SECONDS`.
+- **Disk:** `_evict_old_jobs` runs every 5 min, reclaims `_jobs` entries and on-disk dirs older than `_JOB_TTL_SECONDS=3600`, plus orphan sibling crawler dirs — with a path-containment guard so a poisoned job dict can't trick it into deleting arbitrary trees.
+- **Request size:** `CombinedRequest` caps URL length (2048), `wcag_level` pattern, `lang` `max_length=20` + pattern, `max_depth ∈ [0,5]`.
+- **OCR:** module-level singleton readers (`text_detector/ocrbase.py`, `paddleocrbase.py`) — models load once per process.
 
-| Subsystem | Resource | Per-URL cost | At 1k URLs | Result |
-|---|---|---|---|---|
-| Browser launches | Memory | 5 × ~300 MB | 1.5 GB peak per audit, no pool | OOM under any concurrency |
-| `_COMBINED_EXTRACT_JS` JSON | Memory + bandwidth | 8–15 MB JSON | 5–15 GB/day cross-process | Bottleneck on Python side parsing |
-| `seen_refs` accumulation | Memory | 5 MB × 4 passes | 10 MB / page resident | OOM on infinite-scroll pages |
-| `_jobs` dict (`runner.py`) | Memory | grows with stages list | indefinite | leaks when results never collected |
-| OCR model load | Memory | re-loaded per request (`OCRPreprocessing` instantiation in `pipeline.py`) | duplicated weights | 2–4 GB extra per concurrent audit |
-| Step log file append | Locks | none | concurrent audits can interleave bytes | corrupt JSONL |
-
-### 6.2 Parallel execution issues
-
-- **`_run_python_stages` returns a tuple by index** (`combined/stages.py:1274-1286`) — adding a stage shifts indices and the caller silently drops findings.
-- **`asyncio.gather(..., return_exceptions=True)` everywhere with no timeout** — one stuck inner await blocks all peers.
-- **Stage Server-Sent Events** (`stage_events.py:32-48`) — `_fire_broadcast` schedules a broadcast task but does not replay history when a client subscribes mid-job. Long audits will appear stuck to a re-connecting client.
-- **No queue / worker model.** Each HTTP request fans out a full Playwright + OCR + classifier + Node call chain on the FastAPI event loop. There is no way to back-pressure: at 30 concurrent requests (rate-limit cap), the server is already trying to launch 150 Chromium processes.
-
-### 6.3 Recommended scalability improvements
-
-1. **Browser pool with bounded slots** (`max_browsers = 4`), context leases.
-2. **Request → background queue** (Celery/RQ/asyncio worker). Sync HTTP returns `job_id` and `polling_url`; workers consume with bounded parallelism.
-3. **Streaming JSON** out of `page.evaluate()` — return a small index, fetch large bodies on demand from a temporary KV store. Or persist intermediate artefacts to disk per job and stream metadata only.
-4. **Single-OCR-process** worker with model loaded once; auditors send images over an in-process queue.
-5. **Per-job output directory + size cap** with TTL cleanup (currently nothing prunes `crawled_images/` and `output/`).
+### 6.2 Remaining scalability gaps
+- **In-process job store (no HA).** `store.py:_jobs` is a dict. A restart drops every running and recently-completed job; you cannot run two API replicas. The prior review's Redis/sqlite recommendation stands — the semaphore + TTL changes are a single-process mitigation, not a distributed solution.
+- **No real queue.** Work is `asyncio.create_task`-ed straight from the route handler, gated only by the in-process semaphore. Adequate for one box; a Celery/RQ worker tier is still the path to back-pressure across hosts.
+- **`_extract_page_chunked` `seen_refs`** — see P-01.
+- **SSE flush race** — see §5.2; under heavy concurrency a re-connecting client can still miss a stage event between the status snapshot and the queue subscription, or lose a terminal event to the `sleep(0)` hack.
 
 ---
 
 ## 7. Security & Stability
 
-### 7.1 SSRF (`crawler/_ssrf_guard.py`)
+### 7.1 Fixed
+- **SSRF (encoded IPs + redirects).** `_ssrf_guard.py` parses decimal/hex/octal/IPv4-mapped forms, resolves hostnames, classifies against `_BLOCKED_NETWORKS` + Python's address attributes, and is installed on the *context* so it fires for every request including redirect targets. Node mirrors it with `_assertPublicUrl` + `setRequestInterception` + `_installSsrfInterceptor`.
+- **Traceback leakage.** `runner.py` logs the full traceback server-side with an `error_id` and returns only `"Audit failed due to an internal error."` + the opaque id to clients (`models.py:JobStatusResponse.error_id`).
+- **Auth + rate limiting.** `_AuthMiddleware` (`X-API-Key`, soft-mode when unset) attributes identity; `_RateLimitMiddleware` throttles 30 POST/identity/60s by API key (not spoofable `X-Forwarded-For`). `_SecurityHeadersMiddleware` adds `nosniff`/`DENY`/referrer policy.
+- **Image-serving path safety.** `routes.py:get_job_image` canonicalises the requested path, checks membership in the job's recorded image set, enforces parent-directory containment, and `is_file()`.
+- **Step-log corruption.** Per-path locks in `step_logger.py`.
 
-- **G1.** Only `_IP_HOST_RE = re.compile(r"https?://(\[?[0-9a-fA-F:.]+\]?)(?:[:/]|$)")` is checked. Decimal-encoded IPs (`http://2130706433/` = `127.0.0.1`), 0x-hex, 0-prefixed octal, and `::ffff:` IPv4-mapped IPv6 forms bypass.
-- **G2.** Only the *initial* request URL is validated; the route handler calls `route.continue_()` after the check, so a HTTP 302 from `https://safe-cdn.example/` to `http://169.254.169.254/latest/meta-data/iam/security-credentials/` is followed unchecked.
-- **G3.** Hostname-mode requires DNS resolution before validation; if DNS pinning isn't enforced, the attacker can rebind between resolution and connect (DNS rebinding).
-- **Fix sketch:** `urlparse` first, then resolve all `getaddrinfo` results into `ipaddress` objects, reject if *any* is private/link-local/loopback/multicast/reserved/IPv4-mapped. Re-validate every redirect via `page.on("response")`.
+### 7.2 Remaining
+- **G1 — DNS rebinding (TOCTOU).** `assert_public_url` resolves at submit time; `_ssrf_guard` resolves again per-request — but neither *pins* the resolved IP to the connection Playwright/Chromium actually opens. An attacker controlling DNS TTL can answer "public" to the guard and "169.254.169.254" to the browser. True closure needs IP pinning (resolve once, force the connection to that IP).
+- **G2 — dead weak guard in `routes.py`.** `build_ssrf_route_handler` (`routes.py:90-120`) uses the regex-only `_IP_HOST_RE` the last review explicitly called a bypass surface. It is currently unused; delete it before someone wires it.
+- **CORS `allow_origins=["*"]`.** `main.py:192-198` — flagged in-code as "development." Must be an allow-list before production.
+- **`submit_combined_audit` returns the live `_jobs[job_id]` dict** (`routes.py:238`) — a shared mutable returned straight to the serializer. Harmless with current FastAPI behaviour but fragile; return a snapshot.
 
-### 7.2 API surface
-
-- **Stack-trace leakage.** `combined/runner.py:395-398` writes `error_traceback: tb` into the job dict that is returned by `GET /combined/{job_id}`. Likewise `pipeline.py:569-572` and `crawl.py` raise `HTTPException(detail=str(e))`. Internal paths and dependency names leak.
-- **No authentication.** Rate limiter (`main.py:23-56`) is per-IP, trivially bypassed by spoofing `X-Forwarded-For` if the deployment trusts proxy headers without an allow-list. `_timestamps` map is never pruned — slow memory growth under varied client IPs.
-- **No request size cap.** `CombinedRequest` (`combined/models.py`) accepts arbitrary string lengths for `wcag_level`, `lang`. FastAPI does not enforce a body cap by default. Submit a 100 MB body, hold a worker.
-- **Symlink-validated path serving.** `routes.py:298-316` resolves symlinks then validates against `valid_paths`. If the *whitelist source* (auditor JSON) ever stores a symlink pointing outside `output/`, it becomes a read primitive. Add `is_file()` + parent-directory containment check.
-
-### 7.3 Crash risks
-
-- **`engine.py` exception swallowing** keeps the system "up" but hides correctness regressions. In CI, that means tests pass on broken policies. In prod, `confidence=0.1` `NEEDS_REVIEW` floods the report.
-- **Promise.race + setTimeout** in `accessibility.service.js:464-471` resolves on timeout but does not cancel the in-flight axe run; the page may close mid-evaluation, producing Puppeteer "Target closed" errors caught upstream.
-- **Step logger** appends JSON lines without a lock (`utils/step_logger.py:17-42`) — concurrent audits can interleave bytes into one line, corrupting the log.
+### 7.3 Stability
+- The `_fire_broadcast` / `sleep(0)` flush pattern (§5.2) is the most likely source of "audit looks stuck in the UI" reports.
+- `runner.py`'s `sem._value` read will break on a CPython internals change — low probability, silent failure mode.
 
 ---
 
-## 8. Refactoring Plan (Step-by-Step)
+## 8. Refactoring Plan (status)
 
-Ordered for highest correctness / safety win per unit of effort.
+Ordered by correctness/safety win per unit of effort. Much shorter than last time — Sprints 1–5 did the heavy lifting.
 
-### Sprint 1 — Stop the bleeding (1 week)
+### Sprint A — Cleanup & latent-risk removal — ✅ DONE (2026-05-14)
+1. ✅ **Deleted `routes.py:build_ssrf_route_handler`** and the duplicated `_BLOCKED_NETWORKS`/`_ip_is_blocked`/`_is_non_public_ip`. `assert_public_url` now routes through the single canonical guard in `_ssrf_guard.py` (`_host_is_blocked`/`_parse_literal_ip`/`_resolve_hostname`), keeping the friendly "could not resolve" 400.
+2. ✅ **Deleted the 0-byte `api/v1/combined.py`**; renamed `classifier/classfier.py` → `classifier/classifier.py` and fixed the import in `crawler.py`.
+3. ✅ **Capped `seen_refs`** and sourced `max_passes` from `CrawlPolicy` (`max_scroll_passes`, `max_seen_refs`) in `universal_page._extract_page_chunked`.
+4. ✅ **Promoted the `networkidle` timeout log** to `warning`.
+5. ✅ **Removed the `sem._value` private access** in `runner.py` — `asyncio.Semaphore.locked()` is the public-API equivalent.
 
-1. **Rename `engine.py` exception handler to typed `PolicyError`.** Anything else propagates. This single change surfaces every silent bug below.
-2. **Fix `policy_1_4_6.py:13`** enum-vs-string compare. Replace inheritance with a shared `evaluate_contrast(fg, bg, level)` callable.
-3. **Fix `policy_2_5_8.py:34-37`** — null check on `effective_clickable_bbox`.
-4. **Fix `policy_1_3_1.py:29`** — read input `type` from semantics, not CSS computed_styles.
-5. **Fix `policy_1_4_3` accessible-name priority** in `element_context_extractor.py:245-270` — implement aria-labelledby, native `<label for>`.
-6. **Fix `interaction_state_runner.py:88-89`** — extract real focus ring values, drop hardcoded fallbacks, return `NEEDS_REVIEW` if absent.
-7. **Build `AUDITOR_FIELD_MAP` registry in `combined/findings.py`** + unit test asserting every field name exists in the corresponding auditor's output.
-8. **Strip tracebacks from API error responses.** Single `error_id`; full info server-side only.
+### Sprint B — Robustness — ✅ DONE (2026-05-14)
+6. ✅ **Stage broadcasts are now drained deterministically.** `_fire_broadcast` registers each scheduled task in `_pending_broadcasts`; `runner._run_job`'s `finally` awaits `drain_broadcasts(job_id)` before `_close_subscribers` — the double `sleep(0)` hack is gone, and the registry also keeps a strong task reference so the loop can't GC a broadcast before it runs.
+7. ✅ **Collapsed the per-image N+1** in `crawler.py` — one `img.evaluate` now returns the resolved accessible name, alt/title, and DOM context together (was 3 round-trips per `<img>`).
+8. ✅ **Split `universal_extract.js`** into a shared helper preamble (`extract/common.js`) plus four focused extractors (`structural`, `geometry`, `dynamic`, `sensory`). `universal_page.py` composes them into separate `page.evaluate` payloads and runs them with per-extractor error isolation + an 8000-record-per-category cap, so one failing extractor no longer takes out all 7 categories.
+9. ✅ **Tightened `policy_1_3_1`** — a new `SemanticContext.has_table_header_association` (computed in the relationship engine: cell is `<th>`, has `headers=`, or its row/column carries a `<th>`) drives a real verdict; an unassociated `<td>` is now `needs_review`, not an unconditional pass.
 
-### Sprint 2 — Architectural debt (2 weeks)
+All 748 Python tests pass after Sprints A + B.
 
-9. **Create `BaseCrawler`** with shared browser pool. Migrate all four crawlers; one Chromium per audit.
-10. **Split `_COMBINED_EXTRACT_JS`** into 4 focused JS files loaded from disk (`extractors/forms.js`, `extractors/geometry.js`, …). Add JS-side max-bytes cap.
-11. **Replace tuple return from `_run_python_stages`** with a typed dataclass.
-12. **Wrap `asyncio.gather` callsites with `asyncio.timeout(...)`.**
-13. **Per-job `asyncio.Lock`** around `_jobs` mutation; or migrate `_jobs` to Redis / sqlite-backed store (essential for HA).
-14. **Background-job queue.** HTTP returns `202 + job_id`; workers pull from a bounded queue.
+### Sprint C — Scale-out — DEFERRED
+10. **Move `_jobs` to Redis or sqlite** — needs an infra decision; the in-process store with TTL eviction + per-job locks remains safe within a single process.
+11. **Introduce a worker tier** (Celery/RQ) — adds an external dependency and changes deployment topology; the `_MAX_CONCURRENT_JOBS` semaphore bounds concurrency on a single box in the meantime.
 
-### Sprint 3 — WCAG accuracy & heuristics (2 weeks)
-
-15. **Add CSS background-image extraction** — parse `getComputedStyle(el).backgroundImage` for `url(...)` and feed into image audit.
-16. **Shadow DOM piercing in image / sensory crawlers.**
-17. **Sensory cross-check** — token must not be the element's own labelled name.
-18. **Reflow assertion** — `assert snapshot_320.viewport_width == 320` or fail loudly.
-19. **Contrast — alpha-aware RGB parser; composite over background; accept real `font-weight`.**
-20. **2.5.4 motion classifier** — require explicit `data-wcag-motion-essential` opt-in instead of keyword heuristics.
-21. **2.5.4 disable-control validator** — downgrade "Settings link" signal; require motion-keyword adjacency.
-22. **2.5.1 escape-hatch** — require non-empty `onclick` evidence + matching label semantics; deduplicate selector banks into one shared module.
-23. **2.5.3 normalisation** — switch to token-set / word-boundary comparison.
-
-### Sprint 4 — Security & ops (1 week)
-
-24. **SSRF guard rewrite** — full IP form coverage + redirect interception via `page.on("response")` + DNS-pinning context option.
-25. **Symlink + parent-dir containment** in `get_job_image`.
-26. **Per-user API key** + per-key rate limiting.
-27. **Pydantic length limits** on every string field of `CombinedRequest`.
-28. **Lock around step-log append** (or move to one writer per job).
-29. **TTL cleanup** for `output/` and `crawled_images/`.
-
-### Sprint 5 — Performance polish (1 week)
-
-30. Batch `frame.evaluate` in `semantic_relationship_engine`.
-31. Spatial-bin adjacency in `element_context_extractor`.
-32. Hoist regex compilation in `policy_1_1_1`, `sensory_auditor`.
-33. Single OCR-result lookup dict in `alttext.py`.
-34. Single mega-regex for sensory categories.
-35. Single OCR worker with cached models.
-36. LRU eviction on `_axeLocaleCache`, classifier cache.
-
-After Sprint 5, target rating 80+/100. Reaching 95+ requires the auditor model unification (F1 in §2.2) — a 4-week project that deletes `combined/findings.py` entirely.
+### Sprint D — Architecture — DEFERRED
+12. **Unify the rule model** (auditors emit `Finding(...)` directly; `findings.py` shrinks to a grouper) — a multi-week rewrite touching every auditor and converter; deferred to protect the passing test suite.
+13. **Consolidate Node custom-checks vs audits** and the duplicated selector banks.
 
 ---
 
 ## 9. Improved Code Snippets
 
-### 9.1 `DecisionEngine` exception policy (single highest-leverage fix)
+### 9.1 One canonical SSRF guard (kills F9 + G2)
 
 ```python
-# pipeline/decisions/engine.py
-class PolicyError(Exception):
-    """Raised by a Policy when it cannot evaluate but did not crash."""
+# routes.py — delete _BLOCKED_NETWORKS, _ip_is_blocked, _is_non_public_ip,
+# build_ssrf_route_handler. Import the hardened guard instead.
+from ka11y.crawler._ssrf_guard import _host_is_blocked
 
-def evaluate(self, ctx: ElementContext) -> list[RuleVerdict]:
-    verdicts = []
-    for sc in self.router.applicable_rules(ctx):
-        policy = self.policies.get(sc)
-        if not policy:
-            logger.warning("no policy registered for %s", sc)
-            continue
-        try:
-            verdicts.append(policy.evaluate(ctx))
-        except PolicyError as e:
-            verdicts.append(RuleVerdict(
-                sc=sc, status=VerdictStatus.NEEDS_REVIEW,
-                confidence=0.1, evidence={"policy_error": str(e)},
-            ))
-        # Anything else propagates -> 500 + opaque error_id, logged with traceback.
-    return verdicts
+async def assert_public_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(400, f"scheme '{parsed.scheme}' not supported")
+    host = parsed.hostname or ""
+    if not host:
+        raise HTTPException(400, "URL hostname is missing.")
+    # _host_is_blocked already covers literals (decimal/hex/octal/IPv6),
+    # localhost aliases, and full hostname resolution.
+    if _host_is_blocked(host):
+        raise HTTPException(400, f"hostname '{host}' is not allowed (private/reserved).")
 ```
 
-### 9.2 `policy_1_4_6.py` enum compare + dedup with 1.4.3
+### 9.2 Bound `seen_refs` and config-drive scroll passes (P-01)
 
 ```python
-# pipeline/decisions/policies/policy_1_4_6.py
-from .contrast_shared import evaluate_contrast
-
-class Policy146(BasePolicy):
-    sc = "1.4.6"
-    def evaluate(self, ctx):
-        v = evaluate_contrast(ctx, normal=7.0, large=4.5)
-        if v.status in (VerdictStatus.NOT_APPLICABLE, VerdictStatus.NEEDS_REVIEW):
-            return v
-        return v
+# universal_page.py
+async def _extract_page_chunked(cls, page, *, page_url, output, policy=None):
+    seen_refs: set[str] = set()
+    max_passes = (policy.max_scroll_passes if policy else 4)
+    SEEN_REFS_CAP = 5000
+    ...
+    for i in range(max_passes):
+        await cls._extract_page(page, page_url=page_url, output=output, seen_refs=seen_refs)
+        if len(seen_refs) > SEEN_REFS_CAP:
+            logger.warning("[universal] seen_refs cap hit (%d); stopping scroll", len(seen_refs))
+            break
+        ...
 ```
 
-### 9.3 Field-map registry (kills the 1.1.1 data-loss class)
+### 9.3 Awaitable stage broadcast (fixes the `sleep(0)` race)
 
 ```python
-# api/v1/combined/findings.py
-AUDITOR_FIELD_MAP: dict[str, dict[str, str]] = {
-    "1.1.1": {"status": "wcag_1_1_1_status", "reason": "wcag_1_1_1_reason"},
-    "1.4.3": {"status": "wcag_1_4_3_status", "reason": "wcag_1_4_3_reason"},
-    # ... one entry per SC ...
-}
+# stage_events.py — make the broadcast awaitable so callers can drain it.
+async def stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
+    _record_stage(job_id, name, "completed", findings_count)
+    await _broadcast(job_id, "stage_complete", _payload(job_id, name, findings_count))
 
-def _read(record: dict, sc: str, field: str, default=""):
-    keys = AUDITOR_FIELD_MAP[sc]
-    return record.get(keys[field], default)
-
-# unit test (tests/test_field_map.py)
-def test_every_sc_field_appears_in_some_auditor_output():
-    sample = run_audit_against_fixture(FIXTURE_HTML)  # uses real auditors
-    keys = set().union(*(rec.keys() for rec in sample.records))
-    for sc, m in AUDITOR_FIELD_MAP.items():
-        assert m["status"] in keys, f"{sc} status field {m['status']} never emitted"
+# runner.py finally: — replace the two sleep(0) calls with an explicit drain.
+async def _drain_pending_broadcasts() -> None:
+    pending = [t for t in asyncio.all_tasks() if t.get_name().startswith("broadcast:")]
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
 ```
 
-### 9.4 `BaseCrawler` with browser pool
+### 9.4 Single per-image evaluate (P-02)
 
 ```python
-# crawler/base.py
-class BrowserPool:
-    def __init__(self, max_browsers: int = 4):
-        self._sema = asyncio.Semaphore(max_browsers)
-        self._browsers: list[Browser] = []
-        self._pw = None
-
-    async def __aenter__(self):
-        self._pw = await async_playwright().start()
-        return self
-
-    async def lease(self) -> Browser:
-        async with self._sema:
-            if not self._browsers:
-                self._browsers.append(await self._pw.chromium.launch(headless=True))
-            return self._browsers[0]
-
-    async def close(self):
-        for b in self._browsers:
-            await b.close()
-        await self._pw.stop()
-
-class BaseCrawler:
-    def __init__(self, pool: BrowserPool): self.pool = pool
-
-    async def crawl_page(self, url: str, *, timeout_s: float = 60):
-        browser = await self.pool.lease()
-        ctx = await new_crawler_context(browser)
-        page = None
-        try:
-            page = await ctx.new_page()
-            async with asyncio.timeout(timeout_s):
-                await navigate_with_resilience(page, url)
-                return await self.extract(page)
-        finally:
-            if page: await page.close()
-            await ctx.close()
-
-    async def extract(self, page): raise NotImplementedError
+# crawler.py — one round-trip instead of two.
+meta = await img.evaluate("""el => {
+    const labelledby = el.getAttribute('aria-labelledby');
+    let resolved = null;
+    if (labelledby) {
+        resolved = labelledby.trim().split(/\\s+/)
+            .map(id => document.getElementById(id)?.textContent.trim() || '')
+            .filter(Boolean).join(' ') || null;
+    }
+    if (!resolved) {
+        const al = el.getAttribute('aria-label');
+        if (al && al.trim()) resolved = al.trim();
+    }
+    const parent = el.closest('a,button,header,footer,nav,main,section,article') || el.parentElement;
+    return {
+        resolved_label: resolved,
+        role: el.getAttribute('role') || '',
+        aria_hidden: el.getAttribute('aria-hidden') || '',
+        parent_tag: parent ? parent.tagName.toLowerCase() : '',
+        clickable: !!el.closest("a,button,[role='button'],[onclick]"),
+    };
+}""")
 ```
 
-### 9.5 SSRF guard hardening
+### 9.5 Real 1.3.1 data-table relationship check
 
 ```python
-# crawler/_ssrf_guard.py
-import socket, ipaddress
-from urllib.parse import urlparse
-
-def _all_ips_for(host: str) -> set[ipaddress._BaseAddress]:
-    ips: set[ipaddress._BaseAddress] = set()
-    # Numeric forms first (decimal/hex/octal/IPv6/IPv4-mapped)
-    try:
-        ips.add(ipaddress.ip_address(host.strip("[]")))
-    except ValueError:
-        try:
-            ips.add(ipaddress.ip_address(int(host, 0)))  # 0x.., 0.., decimal
-        except ValueError:
-            pass
-    # DNS
-    try:
-        for fam, _, _, _, sa in socket.getaddrinfo(host, None):
-            ips.add(ipaddress.ip_address(sa[0]))
-    except socket.gaierror:
-        pass
-    return ips
-
-def assert_public_url(url: str):
-    host = urlparse(url).hostname or ""
-    for ip in _all_ips_for(host):
-        if ip.is_private or ip.is_loopback or ip.is_link_local \
-           or ip.is_multicast or ip.is_reserved or ip.is_unspecified \
-           or (isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped and (
-                ip.ipv4_mapped.is_private or ip.ipv4_mapped.is_loopback)):
-            raise PermissionError(f"blocked SSRF target: {ip}")
-
-# In Playwright route handler, register page.on("response", lambda r: ...
-# and re-validate r.headers.get("location") for any 3xx response.
-```
-
-### 9.6 Split monolithic JS extractor
-
-```python
-# crawler/extractors/__init__.py
-from pathlib import Path
-JS_DIR = Path(__file__).parent / "js"
-FORMS_JS       = (JS_DIR / "forms.js").read_text()
-INTERACTIVE_JS = (JS_DIR / "interactive.js").read_text()
-GEOMETRY_JS    = (JS_DIR / "geometry.js").read_text()  # the only one that triggers reflow
-SENSORY_JS     = (JS_DIR / "sensory.js").read_text()
-
-async def extract_universal(frame, *, max_bytes: int = 50_000_000):
-    forms       = await frame.evaluate(FORMS_JS)
-    interactive = await frame.evaluate(INTERACTIVE_JS)
-    geometry    = await frame.evaluate(GEOMETRY_JS)
-    sensory     = await frame.evaluate(SENSORY_JS)
-    out = {"forms": forms, "interactive": interactive,
-           "geometry": geometry, "sensory": sensory}
-    size = sum(len(json.dumps(v, default=str)) for v in out.values())
-    if size > max_bytes:
-        logger.warning("extractor output %d bytes; truncating", size)
-        for k in ("forms", "interactive"): out[k] = out[k][:1000]
-    return out
-```
-
-### 9.7 Sensory false-positive guard
-
-```python
-# rules/non_text/sensory_auditor.py
-def _is_sensory_violation(text: str, element_acc_name: str | None):
-    tokens = _SENSORY_MEGA.findall(text.lower())
-    if not tokens:
-        return False
-    # Don't flag a token that IS the labelled name of the referenced control.
-    if element_acc_name and any(t in element_acc_name.lower() for t in tokens):
-        return False
-    return True
+# policy_1_3_1.py — confirm relationships, not just membership.
+if element.semantics.is_in_data_table:
+    has_assoc = (
+        element.semantics.described_by_text          # headers="" resolved
+        or "rowheader" in element.semantics.ancestor_roles
+        or "columnheader" in element.semantics.ancestor_roles
+        or element.semantics.has_scope_or_headers     # extractor must surface this
+    )
+    if not has_assoc:
+        return self._needs_review(
+            element, "table_cell_unassociated",
+            "Data-table cell has no header association (scope/headers/th). "
+            "Verify the relationship is programmatically determinable.",
+        )
+    return self._pass(element, "table_context", "Cell is associated with table headers.")
 ```
 
 ---
 
 ## 10. Final Verdict
 
-### What prevents this system from being perfect
+### How far it's come
 
-- **Two parallel, non-unified accuracy pipelines** (`rules/*` auditors and `pipeline/decisions/*` policies) communicating through a hand-maintained string-keyed translation layer. Every keystroke in either side must be mirrored, by hand, in `combined/findings.py`. Until this is unified, Top-5 #1 (silent data loss) is not a bug; it is the design.
-- **Engine-level swallowing of every Exception**. Ensures the API never 500s on a bad page; also ensures every regression in 30+ policy classes presents as `NEEDS_REVIEW(0.1)`. There is no signal to distinguish "I evaluated and was uncertain" from "I crashed and you should look".
-- **Duplicated crawlers + monolithic extractor**. Either you spend Chromium memory like water and ship gigabytes of JSON per audit, or you pick one, write it well, and treat the rest as evaluators over the artefact. The current code chose neither.
-- **WCAG heuristics over WCAG semantics.** The accessibility checks read like grep across attribute strings. WCAG SCs need *intent verification*: the link does navigate, the alternative is enabled, the captions are live. Substitute keyword matching for intent and you ship false positives that erode user trust faster than missing rules ever do.
-- **Security hardening is partial.** SSRF guard misses three IP-encoding tricks and the entire redirect path; API leaks tracebacks; rate limiting is per-IP without proxy validation.
-- **No back-pressure model.** A 30-req/min rate-limited HTTP front door behind a Playwright + Whisper + EasyOCR worker is not a deployable shape. There must be a queue.
+The 2026-05-06 review described a system "undermined by data-loss bugs, engine-level exception swallowing, broken resource economics, and security gaps." Every one of those is now addressed at the structural level: the engine surfaces faults, the field-map registry plus its CI test closes the data-loss class, a bounded browser pool and job semaphore replace the per-crawler Chromium explosion, and the SSRF guard handles encoded IPs and redirects. The accuracy bugs that were *concrete* — the 1.4.6 always-false compare, the 1.3.1 CSS-vs-attribute confusion, the 2.4.13 inverted logic, the contrast alpha-splitting parser — are fixed and verified by reading the code. This is a real engineering response, not a patch job.
 
-### What "perfect" looks like
+### What still separates it from "perfect"
 
-A perfect ka11y has, end-to-end:
+1. **The dual rule pipeline.** `rules/*` auditors and `pipeline/decisions/*` policies still speak different dialects, bridged by a 1543-line `findings.py`. The registry stopped the silent failures; it did not remove the change-amplification. Until auditors emit `Finding(...)` directly, every rule edit is a three-file edit.
+2. **Single-process state.** The job store is a module dict. TTL eviction and per-job locks make it *safe within one process*; they do not make it *survivable across a restart* or *scalable across replicas*.
+3. **Residual heuristic accuracy.** 2.5.4's motion classification, 2.5.1's handler-length proxy, and 1.3.1's table rubber-stamp are still pattern-matching where the SC demands intent verification.
+4. **Self-inflicted latent risk.** Dead code (`combined.py`, `build_ssrf_route_handler`), a typo'd filename, and duplicated security constants are cheap to delete and expensive to trip over later.
+5. **One genuine open security item.** DNS rebinding is not closed — the guard and the browser resolve independently, with no IP pinning between them.
 
-1. **One typed `BrowsedPage` artefact** produced by a single `BrowserPool`-backed crawl. All evaluators (image, media, sensory, layout) operate on it; no second Chromium launch.
-2. **Auditors emit `Finding(rule_id, status, evidence, locale_payload)` directly.** `combined/findings.py` ceases to exist; remains a thin grouper for response shape.
-3. **Engine catches `PolicyError` only.** Every other exception is a 5xx with an opaque ID and a logged traceback. CI fails on regressions.
-4. **WCAG checks verify intent, not strings.** Alternative controls must be enabled and labelled appropriately; motion-essential requires explicit opt-in; live captions require streaming evidence.
-5. **SSRF guard validates every IP form and every redirect**, with DNS pinning.
-6. **Background workers** consume from a bounded queue. HTTP front door returns `202 job_id`. Single OCR/Whisper process per host with cached models.
-7. **Stable JSON contract Node↔Python**, schema-versioned, with a CI test that fails on any drift.
-8. **Internationalisation never touches English-default module-level singletons.** Lang flows through call args, end-to-end.
-9. **Tests run against real DOMs**, not handcrafted mocks; an HTML fixture corpus lives in-repo and runs in CI.
+### What "perfect" still looks like
 
-That is a 95+/100 system. It is two-to-three months of focused work from where you are now. The single highest-impact day of work is Sprint 1 step 1 — replace `engine.py`'s `except Exception` with `except PolicyError`. Most of the rest of this review will simplify or disappear once the resulting failures surface in CI.
+A 95+/100 ka11y has: **one typed `Finding` model** emitted by auditors directly (no translation layer); **a distributed job store + worker tier** so the API is replica-safe and restart-safe; **intent-verifying WCAG checks** instead of keyword heuristics; **IP-pinned SSRF**; **one focused extractor per concern**; and **zero dead/duplicated code paths**.
+
+The single highest-leverage day of work now is **Sprint A** — deleting the dead weak SSRF handler and the duplicated guards, capping `seen_refs`, and removing the `sem._value` hack. None of it is hard; all of it removes a latent regression or a silent failure mode. After Sprint A the rating is ~86; after Sprint D (the rule-model unification) it clears 95.

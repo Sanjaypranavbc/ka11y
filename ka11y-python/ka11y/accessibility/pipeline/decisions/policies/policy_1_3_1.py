@@ -26,12 +26,25 @@ class Policy131(WCAGPolicy):
 
         # 1. Evaluate Data Tables
         if element.semantics.is_in_data_table:
-            # A full data table relationship check requires a table-level extractor,
-            # but element-level we just confirm it's not orphaned.
-            return self._pass(
+            # Membership in a <table> is not enough — 1.3.1 requires the
+            # cell's header relationship to be programmatically determinable.
+            # has_table_header_association is True when the cell is a <th>,
+            # carries a `headers=` attribute, or its row/column contains a
+            # <th> (computed by the semantic relationship engine).
+            if element.semantics.has_table_header_association:
+                return self._pass(
+                    element,
+                    "table_context",
+                    "Data-table cell is associated with table headers "
+                    "(<th>, scope, or headers attribute).",
+                )
+            return self._needs_review(
                 element,
-                "table_context",
-                "Element is correctly identified within a data table.",
+                "table_cell_unassociated",
+                "Data-table cell has no programmatically determinable header "
+                "association (no <th> in its row/column and no headers "
+                "attribute). Verify the relationship is conveyed to assistive "
+                "technology.",
             )
 
         # 2. Evaluate Form Controls

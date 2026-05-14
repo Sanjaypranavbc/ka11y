@@ -83,6 +83,11 @@ class SemanticContext(BaseModel):
     owns_elements: List[str] = Field(default_factory=list)
     described_by_text: Optional[str] = None
     is_in_data_table: bool = False
+    # True when a data-table cell has a programmatically determinable header
+    # association: it is a <th>, carries a `headers=` attribute, or its
+    # row/column contains a <th>. Used by Policy 1.3.1 to distinguish a
+    # genuinely associated cell from one that merely sits inside a <table>.
+    has_table_header_association: bool = False
     is_in_labeled_control: bool = False
     is_video_context: bool = False
 

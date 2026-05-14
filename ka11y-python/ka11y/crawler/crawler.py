@@ -30,7 +30,7 @@ from rich import box
 
 from ka11y.crawler.models import ImageData, ImageMetadata
 from ka11y.config.logger import setup_logger
-from ka11y.classifier.classfier import ClassifyAssets
+from ka11y.classifier.classifier import ClassifyAssets
 from ka11y.utils.config_loader import load_config
 
 CONFIG = load_config()
@@ -538,10 +538,15 @@ class AsyncImageCrawler:
                             skipped_no_src += 1
                             continue
 
-                        alt = await img.get_attribute("alt")
-
-                        resolved_label = await img.evaluate("""el => {
+                        # A single page.evaluate round-trip pulls the resolved
+                        # accessible name, the alt/title attributes, and the
+                        # DOM context together. This used to be three separate
+                        # calls per <img> (resolved label, context, two
+                        # get_attribute reads) — an N+1 over every image on the
+                        # page.
+                        meta = await img.evaluate("""el => {
                             const labelledby = el.getAttribute("aria-labelledby");
+                            let resolved = null;
                             if (labelledby) {
                                 const text = labelledby.trim().split(/\\s+/)
                                     .map(id => {
@@ -550,20 +555,17 @@ class AsyncImageCrawler:
                                     })
                                     .filter(Boolean)
                                     .join(" ");
-                                if (text) return text;
+                                if (text) resolved = text;
                             }
-                            const ariaLabel = el.getAttribute("aria-label");
-                            if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
-                            return null;  // fall back to alt attribute
-                        }""")
-                        if resolved_label is not None:
-                            alt = resolved_label
-
-                        # Context extraction
-                        el_context = await img.evaluate("""el => {
+                            if (!resolved) {
+                                const ariaLabel = el.getAttribute("aria-label");
+                                if (ariaLabel && ariaLabel.trim()) resolved = ariaLabel.trim();
+                            }
                             const parent = el.closest("a, button, header, footer, nav, main, section, article") || el.parentElement;
-
                             return {
+                                resolved_label: resolved,
+                                alt: el.getAttribute("alt"),
+                                title: el.getAttribute("title") || "",
                                 role: el.getAttribute("role") || "",
                                 ariaHidden: el.getAttribute("aria-hidden") || "",
                                 parentTag: parent ? parent.tagName.toLowerCase() : "",
@@ -571,6 +573,14 @@ class AsyncImageCrawler:
                                 clickable: !!el.closest("a, button, [role='button'], [onclick]"),
                             };
                         }""")
+
+                        # resolved aria-labelledby / aria-label wins over the
+                        # raw alt attribute, matching the prior precedence.
+                        alt = meta["alt"]
+                        if meta["resolved_label"] is not None:
+                            alt = meta["resolved_label"]
+
+                        el_context = meta
 
                         # Dedup key
                         alt_for_key = alt.strip() if isinstance(alt, str) else ""
@@ -580,7 +590,7 @@ class AsyncImageCrawler:
                             continue
                         seen_images.add(dedup_key)
 
-                        title = await img.get_attribute("title") or ""
+                        title = meta["title"]
 
                         # ML Classification
                         cr_dict = await self.classifier.classify_image(img, page)
