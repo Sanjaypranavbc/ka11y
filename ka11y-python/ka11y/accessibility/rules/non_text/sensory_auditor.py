@@ -757,6 +757,18 @@ _CATEGORY_REGEXES: Dict[str, re.Pattern[str]] = {
     for cat, words in SENSORY_WORDS.items()
 }
 
+# Single mega-regex covering every English sensory category as a named group.
+# One finditer pass replaces N per-category .search() calls — each category
+# the text hits surfaces as a distinct `match.lastgroup`.
+_SENSORY_MEGA_RE: re.Pattern[str] = re.compile(
+    "|".join(
+        r"(?P<%s>\b(?:%s)\b)"
+        % (cat, "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)))
+        for cat, words in SENSORY_WORDS.items()
+    ),
+    re.IGNORECASE,
+)
+
 # ── Japanese patterns (NO \b — word boundaries do not work for CJK) ──────────
 
 # Japanese sentence splitter: split on Japanese full-stop punctuation
@@ -861,6 +873,16 @@ _CATEGORY_REGEXES_JA: Dict[str, re.Pattern[str]] = {
     )
     for cat, words in SENSORY_WORDS_JA.items()
 }
+
+# Japanese mega-regex — same single-pass idea as _SENSORY_MEGA_RE, without
+# \b word boundaries (they do not work for CJK).
+_SENSORY_MEGA_JA_RE: re.Pattern[str] = re.compile(
+    "|".join(
+        r"(?P<%s>%s)"
+        % (cat, "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)))
+        for cat, words in SENSORY_WORDS_JA.items()
+    ),
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1041,18 +1063,27 @@ def _sensory_categories_in_text(text: str, lang: str = "en") -> List[str]:
     """
     Return list of sensory category names present in *text*.
 
-    For Japanese / CJK text: uses the \b-free Japanese regexes first, then
-    also checks English regexes for code-mixed content (e.g. "右の blue ボタン").
+    For Japanese / CJK text: uses the \b-free Japanese regex first, then
+    also checks the English regex for code-mixed content (e.g. "右の blue ボタン").
+
+    Both paths use a single mega-regex finditer pass instead of one
+    .search() per category; results are re-ordered to the canonical
+    category order so downstream messages stay stable.
     """
     if lang == "ja" or _is_cjk_text(text):
-        cats_ja = [cat for cat, pat in _CATEGORY_REGEXES_JA.items() if pat.search(text)]
+        seen_ja = {
+            m.lastgroup for m in _SENSORY_MEGA_JA_RE.finditer(text) if m.lastgroup
+        }
+        cats_ja = [cat for cat in SENSORY_WORDS_JA if cat in seen_ja]
+        seen_en = {
+            m.lastgroup for m in _SENSORY_MEGA_RE.finditer(text) if m.lastgroup
+        }
         cats_en = [
-            cat
-            for cat, pat in _CATEGORY_REGEXES.items()
-            if pat.search(text) and cat not in cats_ja
+            cat for cat in SENSORY_WORDS if cat in seen_en and cat not in seen_ja
         ]
         return cats_ja + cats_en
-    return [cat for cat, pat in _CATEGORY_REGEXES.items() if pat.search(text)]
+    seen = {m.lastgroup for m in _SENSORY_MEGA_RE.finditer(text) if m.lastgroup}
+    return [cat for cat in SENSORY_WORDS if cat in seen]
 
 
 def _sensory_categories_in_sent(sent: Any, lang: str = "en") -> List[str]:
@@ -1189,19 +1220,11 @@ def _extract_sensory_tokens(text: str, lang: str = "en") -> Set[str]:
     "Red").
     """
     tokens: Set[str] = set()
-
-    def _add(matches: Iterable[Any]) -> None:
-        for m in matches:
-            if isinstance(m, tuple):
-                m = next((x for x in m if x), "")
-            if m:
-                tokens.add(m.lower())
-
     if lang == "ja" or _is_cjk_text(text):
-        for pat in _CATEGORY_REGEXES_JA.values():
-            _add(pat.findall(text))
-    for pat in _CATEGORY_REGEXES.values():
-        _add(pat.findall(text))
+        for m in _SENSORY_MEGA_JA_RE.finditer(text):
+            tokens.add(m.group(0).lower())
+    for m in _SENSORY_MEGA_RE.finditer(text):
+        tokens.add(m.group(0).lower())
     return tokens
 
 

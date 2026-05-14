@@ -1,4 +1,5 @@
 import json
+import re
 from typing import List, Dict, Any, Optional
 from playwright.async_api import Page
 from ..models import (
@@ -17,6 +18,10 @@ from ..analyzers.section_analyzer import SectionAnalyzer
 _FORM_CONTROL_TAGS = {"input", "select", "textarea"}
 _ALT_BEARING_TAGS = {"img", "area"}
 
+# Hoisted module-level so the per-element accessible-name resolution does not
+# recompile this on every call. Matches policy_1_3_1's inline-type parser.
+_INPUT_TYPE_RE = re.compile(r"\btype\s*=\s*[\"']?([A-Za-z]+)")
+
 
 def _resolve_accessible_name(data: Dict[str, Any]) -> Optional[AccessibleName]:
     """
@@ -33,8 +38,7 @@ def _resolve_accessible_name(data: Dict[str, Any]) -> Optional[AccessibleName]:
     snippet = data.get("html_snippet") or ""
     if tag == "input":
         # cheap inline lookup; matches policy_1_3_1's parser
-        import re as _re
-        m = _re.search(r"\btype\s*=\s*[\"']?([A-Za-z]+)", snippet)
+        m = _INPUT_TYPE_RE.search(snippet)
         input_type = m.group(1).lower() if m else "text"
 
     labelledby = data.get("raw_aria_labelledby")
@@ -262,20 +266,59 @@ class ElementContextExtractor:
             });
         });
         
-        // Compute Adjacent Spacing for 2.5.8 natively
+        // Compute Adjacent Spacing for 2.5.8 via spatial binning. A naive
+        // all-pairs scan is O(n^2) in the number of focusables; bucketing each
+        // element into a 64px grid and only comparing against the 3x3 cell
+        // neighbourhood makes it effectively O(n). 64px comfortably exceeds the
+        // 24px WCAG threshold, so any neighbour close enough to matter shares a
+        // candidate cell. An element with no neighbour in range reports a large
+        // gap (it is genuinely spacious, not crowded).
         const interactives = results.filter(r => r.is_focusable);
+        const CELL = 64;
+        const grid = new Map();
+        const cellKey = (cx, cy) => cx + ',' + cy;
+        function cellRange(r) {
+            return {
+                x0: Math.floor(r.bbox.x / CELL),
+                x1: Math.floor((r.bbox.x + r.bbox.width) / CELL),
+                y0: Math.floor(r.bbox.y / CELL),
+                y1: Math.floor((r.bbox.y + r.bbox.height) / CELL)
+            };
+        }
+        interactives.forEach((r, idx) => {
+            const cr = cellRange(r);
+            for (let cx = cr.x0; cx <= cr.x1; cx++) {
+                for (let cy = cr.y0; cy <= cr.y1; cy++) {
+                    const k = cellKey(cx, cy);
+                    let bucket = grid.get(k);
+                    if (!bucket) { bucket = []; grid.set(k, bucket); }
+                    bucket.push(idx);
+                }
+            }
+        });
         for (let i = 0; i < interactives.length; i++) {
-            let r = interactives[i];
-            let minGap = 9999;
-            for (let j = 0; j < interactives.length; j++) {
-                if (i === j) continue;
-                let other = interactives[j];
-                let dx = Math.max(0, Math.max(r.bbox.x - (other.bbox.x + other.bbox.width), other.bbox.x - (r.bbox.x + r.bbox.width)));
-                let dy = Math.max(0, Math.max(r.bbox.y - (other.bbox.y + other.bbox.height), other.bbox.y - (r.bbox.y + r.bbox.height)));
-                let dist = Math.max(dx, dy);
+            const r = interactives[i];
+            const cr = cellRange(r);
+            const candidates = new Set();
+            for (let cx = cr.x0 - 1; cx <= cr.x1 + 1; cx++) {
+                for (let cy = cr.y0 - 1; cy <= cr.y1 + 1; cy++) {
+                    const bucket = grid.get(cellKey(cx, cy));
+                    if (bucket) {
+                        for (const j of bucket) {
+                            if (j !== i) candidates.add(j);
+                        }
+                    }
+                }
+            }
+            let minGap = Infinity;
+            for (const j of candidates) {
+                const other = interactives[j];
+                const dx = Math.max(0, Math.max(r.bbox.x - (other.bbox.x + other.bbox.width), other.bbox.x - (r.bbox.x + r.bbox.width)));
+                const dy = Math.max(0, Math.max(r.bbox.y - (other.bbox.y + other.bbox.height), other.bbox.y - (r.bbox.y + r.bbox.height)));
+                const dist = Math.max(dx, dy);
                 if (dist < minGap) minGap = dist;
             }
-            r.adjacent_spacing_px = minGap === 9999 ? 0 : minGap;
+            r.adjacent_spacing_px = minGap === Infinity ? 9999 : minGap;
         }
 
         return results;

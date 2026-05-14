@@ -1,5 +1,17 @@
+import re
+
 from .base_policy import WCAGPolicy
 from ...models import ElementContext, RuleVerdict, VerdictStatus
+
+# Hoisted module-level so the OCR-vs-alt comparison does not recompile the
+# pattern on every element evaluation.
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
+
+
+def _clean(s: str) -> str:
+    """Lowercase and strip everything but ASCII alphanumerics for a
+    whitespace/punctuation-insensitive equality check."""
+    return _NON_ALNUM_RE.sub("", s.lower())
 
 
 class Policy145(WCAGPolicy):
@@ -29,12 +41,7 @@ class Policy145(WCAGPolicy):
             # it indicates a deliberate text alternative, which is technically allowed
             # if the visual presentation is essential.
             if element.accessible_name and element.accessible_name.name:
-                import re
-
-                def clean(s):
-                    return re.sub(r"[^a-z0-9]", "", s.lower())
-
-                if clean(element.visual.ocr_text) == clean(
+                if _clean(element.visual.ocr_text) == _clean(
                     element.accessible_name.name
                 ):
                     return self._pass(
