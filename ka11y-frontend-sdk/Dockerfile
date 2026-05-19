@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 # =============================================================================
 # ka11y-frontend — React (Vite) → nginx reverse proxy
 # Stage 1: build the React app
@@ -10,25 +9,30 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Dependency layer — cached unless package*.json changes.
+# ── [1/4] Install dependencies ────────────────────────────────────────────────
+RUN echo "==> [1/4] Copying package manifests..."
 COPY package.json package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline --no-audit --no-fund
+RUN echo "==> [1/4] Installing npm dependencies..." && \
+    npm ci --prefer-offline && \
+    echo "==> [1/4] Dependencies installed"
 
-# Source layer — kept last so npm ci stays cached across source edits.
+# ── [2/4] Copy source and build ───────────────────────────────────────────────
+RUN echo "==> [2/4] Copying application source..."
 COPY . .
+RUN echo "==> [2/4] Source copied"
 
-ARG VITE_API_URL
-ENV VITE_API_URL=${VITE_API_URL}
-
-RUN npm run build
+RUN echo "==> [3/4] Building React app (vite build)..." && \
+    npm run build && \
+    echo "==> [3/4] Build complete ($(du -sh dist | cut -f1))"
 
 
 # ── Stage 2: nginx runtime ────────────────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime
 
+RUN echo "==> [4/4] Copying build artefacts and nginx config..."
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN echo "==> [4/4] nginx image ready"
 
 EXPOSE 80
 

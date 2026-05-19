@@ -1,35 +1,30 @@
-# syntax=docker/dockerfile:1.7
 FROM python:3.13-slim
 
-# System libs needed for OpenCV / Playwright / ffmpeg / image decoding.
-# Use a cache mount so repeat builds don't re-download .deb packages.
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    rm -f /etc/apt/apt.conf.d/docker-clean && \
-    apt-get update && apt-get install -y --no-install-recommends \
-        curl \
-        ffmpeg \
-        libxcb1 \
-        libxext6 \
-        libxrender1 \
-        libx11-6 \
-        libglib2.0-0 \
-        libgl1 \
-        libsm6 \
-        libjpeg-dev \
-        libpng-dev \
-        zlib1g-dev
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
+    curl \
+    # faster-whisper audio decoding
+    ffmpeg \
+    # opencv / cv2 dependencies
+    libxcb1 \
+    libxext6 \
+    libxrender1 \
+    libx11-6 \
+    libglib2.0-0 \
+    libgl1 \
+    libsm6 \
+    # image format support
+    libjpeg-dev \
+    libpng-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# ── Dependency layer (cached unless poetry.lock / pyproject.toml change) ──────
-# Source code is intentionally NOT copied here so the heavy install / model
-# download layers below stay cached across source edits.
 COPY pyproject.toml poetry.lock ./
+COPY ka11y/ ./ka11y/
+COPY i18n/   ./i18n/
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install "poetry==2.3.2"
-
+RUN pip install --no-cache-dir "poetry==2.3.2"
 ENV POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=false \
     POETRY_CACHE_DIR=/root/.cache/pypoetry
@@ -38,9 +33,7 @@ ENV POETRY_NO_INTERACTION=1 \
 # Toggle off at build time for a smaller EN-only image:
 #   docker build --build-arg INSTALL_JAPANESE=0 .
 ARG INSTALL_JAPANESE=1
-RUN --mount=type=cache,target=/root/.cache/pypoetry \
-    --mount=type=cache,target=/root/.cache/pip \
-    if [ "$INSTALL_JAPANESE" = "1" ]; then \
+RUN if [ "$INSTALL_JAPANESE" = "1" ]; then \
         poetry install --only main -E japanese && \
         python -m spacy download ja_core_news_lg; \
     else \
@@ -70,10 +63,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # The python_logs Docker volume is mounted over this path at runtime;
 # if the volume is not configured the directory still exists and logs work.
 RUN mkdir -p /app/logs
-
-# ── Source layer (changes most often — keep last so above stays cached) ──────
-COPY ka11y/ ./ka11y/
-COPY i18n/   ./i18n/
 
 EXPOSE 8000
 

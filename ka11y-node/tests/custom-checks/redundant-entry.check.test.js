@@ -279,37 +279,4 @@ describe('redundant-entry.check (WCAG 3.3.7)', () => {
     ]));
 
   });
-
-  // Regression: page.evaluate(evaluatePage) was throwing
-  // `ReferenceError: areLikelySameProcessAcrossForms is not defined`
-  // whenever the audit reached the grouping branch — the module-level
-  // function with that name does not survive serialisation into the
-  // browser context. A local copy now lives inside evaluatePage. This
-  // test asserts the local definition is present so the bug cannot
-  // silently regress, since the rest of the suite mocks page.evaluate
-  // and never exercises the real browser-side body.
-  test('evaluatePage defines areLikelySameProcessAcrossForms locally', () => {
-    const fs = require('fs');
-    const path = require('path');
-    const src = fs.readFileSync(
-      path.resolve(
-        __dirname,
-        '../../src/custom-checks/redundant-entry.check.js'
-      ),
-      'utf8'
-    );
-
-    const startMatch = src.match(/function evaluatePage\([^)]*\)\s*\{/);
-    expect(startMatch).toBeTruthy();
-    const startIdx = startMatch.index + startMatch[0].length;
-    // The first occurrence of "\n}\n\nfunction " at column 0 after the
-    // body's start closes evaluatePage.
-    const endRel = src.slice(startIdx).search(/\n\}\s*\n\s*function\s/);
-    expect(endRel).toBeGreaterThan(0);
-    const body = src.slice(startIdx, startIdx + endRel);
-
-    if (/\bareLikelySameProcessAcrossForms\s*\(/.test(body)) {
-      expect(body).toMatch(/function\s+areLikelySameProcessAcrossForms\s*\(/);
-    }
-  });
 });

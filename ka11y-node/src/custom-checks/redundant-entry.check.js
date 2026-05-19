@@ -290,23 +290,6 @@ function evaluatePage(tokens, confirmSrc, reuseSrc, keywordPairs) {
   const jaccardSimilarity = _jaccardSimilarity;
   const inferProcessTypeFromTexts = _inferProcessTypeFromTexts;
   const EXPLICIT_DISTINCT_PURPOSE_RE = EXPLICIT_DISTINCT_PURPOSE_RE_LOCAL;
-
-  // The module-level areLikelySameProcessAcrossForms (line 208) does not
-  // survive serialisation into page.evaluate, so call sites at ~line 910
-  // threw `ReferenceError: areLikelySameProcessAcrossForms is not defined`
-  // the first time an audit reached the grouping branch. Define a local
-  // copy here using the already-aliased _unique so the browser-side body
-  // is self-contained.
-  function areLikelySameProcessAcrossForms(fields, pairwiseEvidence = {}) {
-    const purposeSignatures = _unique(
-      (fields || []).map((f) => f.purposeSignature).filter(Boolean)
-    );
-    if (purposeSignatures.length >= 2) return false;
-    return (
-      (pairwiseEvidence.samePurposePairs || 0) >
-      (pairwiseEvidence.distinctPurposePairs || 0)
-    );
-  }
   // ---- end helpers ----
 
   function isActuallyVisible(el) {
