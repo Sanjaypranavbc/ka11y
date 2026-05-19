@@ -88,8 +88,8 @@ async function run(page, context = {}) {
       }
     }
 
-    const hasVisibleLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasTableOfContents || hasAriaCurrentStep;
-    const hasWeakLocationIndicator = hasSiteMap || hasJsonLdBreadcrumb;
+    const hasVisibleLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasAriaCurrentStep;
+    const hasWeakLocationIndicator = hasSiteMap || hasJsonLdBreadcrumb || hasTableOfContents;
 
     return {
       hasBreadcrumb,
@@ -109,8 +109,7 @@ async function run(page, context = {}) {
       data.hasBreadcrumb && 'breadcrumb navigation',
       data.hasAriaCurrent && 'aria-current="page"',
       data.hasActiveNavItem && 'active navigation item',
-      data.hasSiteMap && 'sitemap link',
-      data.hasTableOfContents && 'table of contents',
+
       data.hasAriaCurrentStep && 'aria-current="step"',
     ].filter(Boolean).join(', ');
 
@@ -131,6 +130,7 @@ async function run(page, context = {}) {
     const weakMechanisms = [
       data.hasSiteMap && 'sitemap link',
       data.hasJsonLdBreadcrumb && 'JSON-LD BreadcrumbList',
+      data.hasTableOfContents && 'table of contents',
     ].filter(Boolean).join(', ');
 
     return {

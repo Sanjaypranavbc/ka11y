@@ -160,6 +160,9 @@ axe-core's `impact` is normalized to severity (`critical`, `serious` → `high`,
 | `"pass"` | Element satisfies the criterion |
 | `"needs_review"` | Auditor cannot determine automatically — manual check required |
 
+**`reason`**
+Usually sourced from the auditor's raw violation text. When a Python converter has no rule-specific message, ka11y falls back to the localized WCAG `description` for that success criterion from `i18n/rules.yml`. Runtime-generated metric strings such as contrast ratios or target-size measurements are still emitted directly by the auditor.
+
 ### Universally localized fields
 
 Setting `?lang=ja` on the audit endpoints yields a report where every text-bearing field comes from the YAML for that locale:

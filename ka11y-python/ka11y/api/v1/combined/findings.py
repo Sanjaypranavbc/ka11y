@@ -143,6 +143,7 @@ def _make_finding(
         "status": status,
         "status_label": get_status_label(status, _lang),
         "reason": reason_text,
+        "detected_by": ["python"],
         "reason_code": reason_code,
         "suggested_fix": None if is_pass else suggested_fixes.get(wcag_sc),
         "help_url": None,
@@ -1435,6 +1436,18 @@ def _focus_not_obscured_enh_to_findings(
 
 def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     """Convert MediaAuditor records to standard findings for WCAG 1.2.1 and 1.2.2."""
+    if not records:
+        return [
+            _make_finding(
+                source="python", rule_id="python_1_2_1_media", wcag_sc="1.2.1", status="pass",
+                reason="No media elements found on page.", severity=None, page_url=page_url
+            ),
+            _make_finding(
+                source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="pass",
+                reason="No media elements found on page.", severity=None, page_url=page_url
+            )
+        ]
+
     findings = []
     for r in records:
         # WCAG 1.2.1

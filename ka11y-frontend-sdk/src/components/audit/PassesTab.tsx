@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FindingElementCell } from "./FindingElementCell";
+import { EngineBadge } from "./EngineBadge";
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -239,10 +240,24 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
                         <TableCell className="text-xs text-muted-foreground max-w-xs">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span tabIndex={0} className="cursor-help truncate block max-w-xs">{p.reason}</span>
+                              <span tabIndex={0} className="cursor-help truncate block max-w-xs">
+                                {p.reason}
+                                {p.aiContext && <span className="text-purple-500 font-semibold ml-1">✨ AI</span>}
+                              </span>
                             </TooltipTrigger>
-                            <TooltipContent className="max-w-sm text-xs">{p.reason}</TooltipContent>
+                            <TooltipContent className="max-w-sm text-xs">
+                              <p>{p.reason}</p>
+                              {p.aiContext && (
+                                <div className="mt-2 text-purple-200 border-t border-purple-800/50 pt-2 flex flex-col">
+                                  <span className="font-semibold mb-1 text-purple-300">AccessLint AI Context:</span>
+                                  {p.aiContext}
+                                </div>
+                              )}
+                            </TooltipContent>
                           </Tooltip>
+                          {p.detected_by && p.detected_by.length > 0 && (
+                            <EngineBadge detectedBy={p.detected_by} />
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
