@@ -27,6 +27,7 @@ from ka11y.utils.config_loader import load_config
 from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import _lang_ctx
+from ka11y.utils.lang_detector import detect_page_language
 from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import (
@@ -197,7 +198,15 @@ async def _run_job_body(
     """Original body of :func:`_run_job`, gated by the concurrency semaphore."""
     _jobs[job_id]["status"] = "running"
     url = str(payload.url)
-    _lang_ctx.set(payload.lang)  # Inherited by all child tasks via context copy
+    # Auto-detect page language when user selects "auto"
+    if payload.lang == "auto":
+        resolved_lang = await detect_page_language(url)
+        logger.info(
+            f"[combined] job {job_id}: auto-detected language '{resolved_lang}' for {url}"
+        )
+    else:
+        resolved_lang = payload.lang
+    _lang_ctx.set(resolved_lang)
 
     config = load_config()
     node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
@@ -223,7 +232,7 @@ async def _run_job_body(
             message="Combined audit job started",
             context={
                 "url": url,
-                "lang": payload.lang,
+                "lang": resolved_lang,
                 "wcag_level": payload.wcag_level,
             },
         )
@@ -261,7 +270,7 @@ async def _run_job_body(
         # Fire axe-core and all Python stages concurrently
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
-            _call_node_flat(url, node_base_url, payload.wcag_level, payload.lang)
+            _call_node_flat(url, node_base_url, payload.wcag_level, resolved_lang)
         )
         python_task = asyncio.create_task(
             _run_python_stages(
@@ -283,7 +292,7 @@ async def _run_job_body(
                 run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
                 run_sensory_audit=payload.run_sensory_audit,
-                lang=payload.lang,
+                lang=resolved_lang,
                 job_id=job_id,
                 step_logger=step_logger,
             )
@@ -370,7 +379,7 @@ async def _run_job_body(
         report = _build_report(
             url,
             all_findings,
-            lang=payload.lang,
+            lang=resolved_lang,
             contrast_report=contrast_report,
             image_audit_report=image_audit_report,
         )

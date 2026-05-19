@@ -21,3 +21,12 @@ ka11y-python/scripts/live_stage_plan.example.yml
 
 /ka11y-python/ka11y/devtools/
 /ka11y-python/tests/test_dual_cli_chat.py
+
+# Protect Environment Variables
+.env
+
+# Auto-generated outputs
+combined_report_*.json
+reports/
+test_output/
+ka11y-node/axe_rules.json

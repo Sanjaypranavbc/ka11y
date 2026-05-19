@@ -74,7 +74,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
     url: localStorage.getItem("ka11y_last_url") ?? "",
     max_depth: 0,
     wcag_level: "AAA",
-    lang: uiLang,
+    lang: "auto" as "auto" | "en" | "ja",
     run_ocr: true,
     run_image_audit: true,
     run_form_audit: true,
@@ -92,9 +92,6 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
     run_focus_not_obscured_enh_audit: true,
   });
 
-  useEffect(() => {
-    setConfig((c) => ({ ...c, lang: uiLang }));
-  }, [uiLang]);
 
   const isRunning = jobStatus === "pending" || jobStatus === "running";
 
@@ -216,6 +213,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                 ))}
               </div>
             </div>
+
 
 
           </div>
