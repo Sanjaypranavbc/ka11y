@@ -1,0 +1,140 @@
+{
+  "meta": {
+    "rule": "1.4.2",
+    "rule_name": "Audio Control",
+    "source_url": "synthetic",
+    "scraped_at": "2026-05-12",
+    "total_cases": 8,
+    "description": "Synthetic ground truth for WCAG 1.4.2 Audio Control. Tests whether mechanisms exist to stop/pause audio playing automatically for >3s."
+  },
+  "cases": [
+    {
+      "id": "c142-01",
+      "description": "Audio plays < 3s (Pass)",
+      "dom_attributes": {
+        "tag_name": "audio",
+        "autoplay": true
+      },
+      "context": {
+        "duration": 2.5
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "short_duration"
+      }
+    },
+    {
+      "id": "c142-02",
+      "description": "Audio plays > 3s with native controls (Pass)",
+      "dom_attributes": {
+        "tag_name": "audio",
+        "autoplay": true,
+        "controls": true
+      },
+      "context": {
+        "duration": 10.0
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "has_native_controls"
+      }
+    },
+    {
+      "id": "c142-03",
+      "description": "Audio plays > 3s with no controls (Fail)",
+      "dom_attributes": {
+        "tag_name": "audio",
+        "autoplay": true,
+        "controls": false
+      },
+      "context": {
+        "duration": 10.0
+      },
+      "expected": {
+        "status": "fail",
+        "reason_code": "no_controls"
+      }
+    },
+    {
+      "id": "c142-04",
+      "description": "Video with audio > 3s with no controls (Fail)",
+      "dom_attributes": {
+        "tag_name": "video",
+        "autoplay": true,
+        "controls": false,
+        "muted": false
+      },
+      "context": {
+        "duration": 5.0
+      },
+      "expected": {
+        "status": "fail",
+        "reason_code": "no_controls"
+      }
+    },
+    {
+      "id": "c142-05",
+      "description": "Muted video > 3s with no controls (Pass)",
+      "dom_attributes": {
+        "tag_name": "video",
+        "autoplay": true,
+        "controls": false,
+        "muted": true
+      },
+      "context": {
+        "duration": 5.0
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "muted_media"
+      }
+    },
+    {
+      "id": "c142-06",
+      "description": "Audio plays > 3s with custom pause button in same region (Pass)",
+      "dom_attributes": {
+        "tag_name": "audio",
+        "autoplay": true,
+        "controls": false
+      },
+      "context": {
+        "duration": 10.0,
+        "has_external_pause_button": true
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "has_external_control"
+      }
+    },
+    {
+      "id": "c142-07",
+      "description": "Background audio via JS with no controls (Fail)",
+      "dom_attributes": {
+        "tag_name": "script"
+      },
+      "context": {
+        "plays_audio": true,
+        "duration": 60.0,
+        "has_controls": false
+      },
+      "expected": {
+        "status": "fail",
+        "reason_code": "hidden_audio_no_control"
+      }
+    },
+    {
+      "id": "c142-08",
+      "description": "No audio (Pass)",
+      "dom_attributes": {
+        "tag_name": "div"
+      },
+      "context": {
+        "plays_audio": false
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "no_audio"
+      }
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+
+{
+  "accuracy": 95.0,
+  "results": [
+    {
+      "id": "kao-133-01",
+      "description": "Instruction with label and color (PASS)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-02",
+      "description": "Instruction with color only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-03",
+      "description": "Instruction with shape and label (PASS)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-04",
+      "description": "Instruction with shape only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-05",
+      "description": "Instruction with position and label (PASS)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-06",
+      "description": "Instruction with position only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-07",
+      "description": "Instruction with size and label (PASS)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-08",
+      "description": "Instruction with size only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-09",
+      "description": "Japanese: Instruction with color and label (PASS)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-10",
+      "description": "Japanese: Instruction with color only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-11",
+      "description": "Instruction with orientation (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-12",
+      "description": "Instruction with sound only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "PASSED",
+      "match": false
+    },
+    {
+      "id": "kao-133-13",
+      "description": "Instruction with sound and purpose (PASS)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-14",
+      "description": "Instruction with brightness only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-15",
+      "description": "Instruction with texture only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-16",
+      "description": "Not an instruction (PASS/Not Applicable)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-17",
+      "description": "Instruction with multiple characteristics and label (PASS)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-18",
+      "description": "Instruction with multiple characteristics only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    },
+    {
+      "id": "kao-133-19",
+      "description": "Japanese: Instruction with position and label (PASS)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true
+    },
+    {
+      "id": "kao-133-20",
+      "description": "Japanese: Instruction with position only (FAIL)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true
+    }
+  ]
+}

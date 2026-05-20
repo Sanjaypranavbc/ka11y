@@ -18,15 +18,14 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field
 
 
-@dataclass
-class PythonStagesResult:
+class PythonStagesResult(BaseModel):
     """Typed return value from :func:`_run_python_stages`.
 
     Replaces the prior ``(all_findings, contrast_report, image_audit_report)``
@@ -34,14 +33,13 @@ class PythonStagesResult:
     reordered (the caller's positional unpack would point at the wrong
     object). Named fields make the contract explicit at the type level."""
 
-    findings: List[Dict[str, Any]] = field(default_factory=list)
+    # Findings entries are deeply nested heterogeneous dicts; we do not want
+    # Pydantic to deep-copy or revalidate them on every field assignment.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    findings: List[Dict[str, Any]] = Field(default_factory=list)
     contrast_report: Optional[Dict[str, Any]] = None
     image_audit_report: Optional[Dict[str, Any]] = None
-
-    def as_tuple(self) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
-        """Backwards-compatible accessor for any caller still using
-        positional unpacking. Prefer the named attributes."""
-        return self.findings, self.contrast_report, self.image_audit_report
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils.crawler_settings import (

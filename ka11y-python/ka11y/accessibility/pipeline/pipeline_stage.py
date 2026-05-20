@@ -1,6 +1,6 @@
-import asyncio
-from playwright.async_api import async_playwright, Page
 from typing import List, Dict, Any
+
+from ka11y.crawler.browser_pool import leased_context
 
 from .extractors.element_context_extractor import ElementContextExtractor
 from .extractors.semantic_relationship_engine import SemanticRelationshipEngine
@@ -39,11 +39,12 @@ async def _run_pipeline_stage(
     logger.info("Starting Unified Accessibility Pipeline...")
     try:
         legacy_findings = []
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
+        # Use the shared browser pool so the unified pipeline shares one
+        # Chromium with the other crawlers. new_crawler_context (via
+        # leased_context) also installs the SSRF guard, which the previous
+        # raw async_playwright() block was bypassing.
+        async with leased_context() as context:
             page = await context.new_page()
-
             page.set_default_timeout(30000)
             await page.goto(url, wait_until="domcontentloaded")
             await page.wait_for_timeout(2000)
@@ -62,48 +63,48 @@ async def _run_pipeline_stage(
                     page, element_contexts
                 )
 
-            await browser.close()
+        # Page/context torn down; browser remains warm in the pool.
 
-            # 4. Setup Decision Engine with active policies
-            policies = {}
-            if run_image_audit:
-                policies["1.1.1"] = Policy111()
-                policies["1.4.5"] = Policy145()
-            if run_label_in_name_audit:
-                policies["2.5.3"] = Policy253()
-                policies["1.3.1"] = Policy131()
-            if run_target_size_audit:
-                policies["2.5.8"] = Policy258()
-            if run_focus_audit:
-                policies["2.4.7"] = Policy247()
-                policies["2.4.13"] = Policy2413()
-            if run_contrast_audit:
-                policies["1.4.3"] = Policy143()
-                policies["1.4.6"] = Policy146()
-                policies["1.4.11"] = Policy1411()
+        # 4. Setup Decision Engine with active policies
+        policies = {}
+        if run_image_audit:
+            policies["1.1.1"] = Policy111()
+            policies["1.4.5"] = Policy145()
+        if run_label_in_name_audit:
+            policies["2.5.3"] = Policy253()
+            policies["1.3.1"] = Policy131()
+        if run_target_size_audit:
+            policies["2.5.8"] = Policy258()
+        if run_focus_audit:
+            policies["2.4.7"] = Policy247()
+            policies["2.4.13"] = Policy2413()
+        if run_contrast_audit:
+            policies["1.4.3"] = Policy143()
+            policies["1.4.6"] = Policy146()
+            policies["1.4.11"] = Policy1411()
 
-            engine = DecisionEngine(policies)
+        engine = DecisionEngine(policies)
 
-            # 4. Evaluate all elements
-            all_verdicts = []
-            for ctx in element_contexts:
-                verdicts = engine.evaluate_element(ctx)
-                all_verdicts.extend(verdicts)
+        # 5. Evaluate all elements
+        all_verdicts = []
+        for ctx in element_contexts:
+            verdicts = engine.evaluate_element(ctx)
+            all_verdicts.extend(verdicts)
 
-            logger.info(f"Pipeline generated {len(all_verdicts)} verdicts.")
+        logger.info(f"Pipeline generated {len(all_verdicts)} verdicts.")
 
-            # 5. Format to legacy schema
-            legacy_findings = EvidenceFormatter.to_legacy_findings(
-                all_verdicts, lang=lang
-            )
+        # 6. Format to legacy schema
+        legacy_findings = EvidenceFormatter.to_legacy_findings(
+            all_verdicts, lang=lang
+        )
 
-            # Ensure page_url is injected just like other stages
-            for finding in legacy_findings:
-                if "element" in finding and finding["element"]:
-                    finding["element"]["page_url"] = url
+        # Ensure page_url is injected just like other stages
+        for finding in legacy_findings:
+            if "element" in finding and finding["element"]:
+                finding["element"]["page_url"] = url
 
-            return legacy_findings
+        return legacy_findings
 
-    except Exception as e:
-        logger.error(f"Unified Pipeline failed: {e}")
+    except Exception:
+        logger.exception("Unified Pipeline failed")
         return []

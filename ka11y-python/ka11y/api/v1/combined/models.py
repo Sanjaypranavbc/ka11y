@@ -62,7 +62,7 @@ class CombinedRequest(BaseModel):
     # ── Node engine toggles ──────────────────────────────────────────────────
     run_axe: bool = True
     run_accesslint: bool = True
-    lang: str = Field(default="en", max_length=20, pattern=r"^[A-Za-z][A-Za-z0-9_-]*$")
+    lang: str = Field(default="auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$")
 
     @model_validator(mode="after")
     def validate_success_criteria_dependencies(self) -> "CombinedRequest":
@@ -93,6 +93,11 @@ class JobStatusResponse(BaseModel):
     report_path: Optional[str] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    # Opaque correlation id for failed jobs. Maps a 5xx response to the
+    # server-side log entry that holds the real traceback. Never contains
+    # exception type, message, file path, or any other internal detail.
+    error_id: Optional[str] = None
+    error_stage: Optional[str] = None
     current_stage: Optional[str] = None
     stages: List[Dict[str, Any]] = []
     warnings: List[str] = []

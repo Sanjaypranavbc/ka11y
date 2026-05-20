@@ -1,0 +1,95 @@
+{
+  "accuracy": 100.0,
+  "results": [
+    {
+      "id": "c141-01",
+      "description": "Link in paragraph with underline (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "color_plus_style",
+      "expected_reason_code": "color_plus_style"
+    },
+    {
+      "id": "c141-02",
+      "description": "Link in paragraph with only color (Fail)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "color_only_link",
+      "expected_reason_code": "color_only_link"
+    },
+    {
+      "id": "c141-03",
+      "description": "Required field indicated by color only (Fail)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "color_only_required",
+      "expected_reason_code": "color_only_required"
+    },
+    {
+      "id": "c141-04",
+      "description": "Required field indicated by color and asterisk (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "color_plus_indicator",
+      "expected_reason_code": "color_plus_indicator"
+    },
+    {
+      "id": "c141-05",
+      "description": "Error message in red text only (Fail)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "color_only_error",
+      "expected_reason_code": "color_only_error"
+    },
+    {
+      "id": "c141-06",
+      "description": "Error message with icon and red text (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "color_plus_icon",
+      "expected_reason_code": "color_plus_icon"
+    },
+    {
+      "id": "c141-07",
+      "description": "Active nav item indicated by color only (Fail)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "color_only_active",
+      "expected_reason_code": "color_only_active"
+    },
+    {
+      "id": "c141-08",
+      "description": "Active nav item with aria-current (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "color_plus_aria",
+      "expected_reason_code": "color_plus_aria"
+    },
+    {
+      "id": "c141-09",
+      "description": "Success message in green (Needs Review/Heuristic)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "color_semantic_pass",
+      "expected_reason_code": "color_semantic_pass"
+    },
+    {
+      "id": "c141-10",
+      "description": "Button with background color change on hover (Pass - usually okay if not only means)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "button_default",
+      "expected_reason_code": "button_default"
+    }
+  ]
+}

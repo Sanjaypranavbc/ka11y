@@ -185,19 +185,25 @@ After receiving this event the client should:
 
 ### `job_failed`
 
-Emitted when the job transitions to `failed` (all stages errored, nothing to report).
+Emitted when the job transitions to `failed` (all stages errored, or an unhandled exception escaped the runner).
 
 ```json
 {
   "job_id": "a1b2c3d4-...",
-  "error": "All audit stages failed. Check server logs for details."
+  "error": "Audit failed due to an internal error.",
+  "error_id": "deadbeefcafef00d",
+  "stage": "image_audit"
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `job_id` | string | UUID of the failed job |
-| `error` | string | Aggregated failure reason |
+| `error` | string | Fixed generic message — never contains exception type / file path / traceback |
+| `error_id` | string | Opaque UUID hex. Correlate with `logger.error("[combined] job ... (error_id=...) ...")` in the server log to retrieve the real traceback |
+| `stage` | string \| null | Name of the stage that was active when the failure happened |
+
+The same scrubbing contract applies to the polled `GET /api/v1/combined/{job_id}` response.
 
 ---
 

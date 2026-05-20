@@ -1,0 +1,190 @@
+{
+  "meta": {
+    "rule": "1.4.1",
+    "rule_name": "Use of Color",
+    "source_url": "synthetic",
+    "scraped_at": "2026-05-12",
+    "total_cases": 10,
+    "description": "Synthetic ground truth for WCAG 1.4.1 Use of Color. Tests whether color is the only visual means of conveying information."
+  },
+  "cases": [
+    {
+      "id": "c141-01",
+      "description": "Link in paragraph with underline (Pass)",
+      "dom_attributes": {
+        "tag_name": "a",
+        "text_content": "Click here",
+        "computed_styles": {
+          "color": "rgb(0, 0, 238)",
+          "text-decoration": "underline"
+        }
+      },
+      "context": {
+        "parent_tag": "p"
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "color_plus_style"
+      }
+    },
+    {
+      "id": "c141-02",
+      "description": "Link in paragraph with only color (Fail)",
+      "dom_attributes": {
+        "tag_name": "a",
+        "text_content": "Click here",
+        "computed_styles": {
+          "color": "rgb(0, 0, 238)",
+          "text-decoration": "none"
+        }
+      },
+      "context": {
+        "parent_tag": "p"
+      },
+      "expected": {
+        "status": "fail",
+        "reason_code": "color_only_link"
+      }
+    },
+    {
+      "id": "c141-03",
+      "description": "Required field indicated by color only (Fail)",
+      "dom_attributes": {
+        "tag_name": "label",
+        "text_content": "Email Address",
+        "computed_styles": {
+          "color": "rgb(255, 0, 0)"
+        }
+      },
+      "context": {
+        "is_required": true
+      },
+      "expected": {
+        "status": "fail",
+        "reason_code": "color_only_required"
+      }
+    },
+    {
+      "id": "c141-04",
+      "description": "Required field indicated by color and asterisk (Pass)",
+      "dom_attributes": {
+        "tag_name": "label",
+        "text_content": "Email Address *",
+        "computed_styles": {
+          "color": "rgb(255, 0, 0)"
+        }
+      },
+      "context": {
+        "is_required": true
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "color_plus_indicator"
+      }
+    },
+    {
+      "id": "c141-05",
+      "description": "Error message in red text only (Fail)",
+      "dom_attributes": {
+        "tag_name": "span",
+        "text_content": "Invalid email",
+        "computed_styles": {
+          "color": "rgb(255, 0, 0)"
+        }
+      },
+      "context": {
+        "role": "alert"
+      },
+      "expected": {
+        "status": "fail",
+        "reason_code": "color_only_error"
+      }
+    },
+    {
+      "id": "c141-06",
+      "description": "Error message with icon and red text (Pass)",
+      "dom_attributes": {
+        "tag_name": "span",
+        "text_content": "Invalid email",
+        "computed_styles": {
+          "color": "rgb(255, 0, 0)"
+        }
+      },
+      "context": {
+        "role": "alert",
+        "has_icon": true
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "color_plus_icon"
+      }
+    },
+    {
+      "id": "c141-07",
+      "description": "Active nav item indicated by color only (Fail)",
+      "dom_attributes": {
+        "tag_name": "a",
+        "text_content": "Home",
+        "computed_styles": {
+          "color": "rgb(255, 165, 0)"
+        }
+      },
+      "context": {
+        "is_active": true
+      },
+      "expected": {
+        "status": "fail",
+        "reason_code": "color_only_active"
+      }
+    },
+    {
+      "id": "c141-08",
+      "description": "Active nav item with aria-current (Pass)",
+      "dom_attributes": {
+        "tag_name": "a",
+        "text_content": "Home",
+        "aria_current": "page",
+        "computed_styles": {
+          "color": "rgb(255, 165, 0)"
+        }
+      },
+      "context": {
+        "is_active": true
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "color_plus_aria"
+      }
+    },
+    {
+      "id": "c141-09",
+      "description": "Success message in green (Needs Review/Heuristic)",
+      "dom_attributes": {
+        "tag_name": "div",
+        "text_content": "Success!",
+        "computed_styles": {
+          "color": "rgb(0, 128, 0)"
+        }
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "color_semantic_pass"
+      }
+    },
+    {
+      "id": "c141-10",
+      "description": "Button with background color change on hover (Pass - usually okay if not only means)",
+      "dom_attributes": {
+        "tag_name": "button",
+        "text_content": "Submit",
+        "computed_styles": {
+          "background-color": "rgb(0, 120, 212)"
+        }
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "button_default"
+      }
+    }
+  ]
+}

@@ -31,10 +31,8 @@ from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
 
-from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.crawler.context_factory import new_crawler_context
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data model
@@ -167,7 +165,33 @@ class AsyncSensoryCrawler:
             "span, div, h1, h2, h3, h4, h5, h6, " +
             "summary, figcaption, dt, dd"
         );
-        const elements = Array.from(document.querySelectorAll(SELECTOR));
+
+        // Pierce open shadow roots. document.querySelectorAll alone stops
+        // at the shadow boundary, so any sensory text inside a web
+        // component (e.g. <my-card> wrapping a <p>) is invisible to the
+        // sensory auditor without this walk. Closed shadow roots remain
+        // off-limits — that's a deliberate browser restriction.
+        function queryShadow(root, selector) {
+            const results = [];
+            const seen = new WeakSet();
+            const queue = [root];
+            while (queue.length) {
+                const current = queue.shift();
+                if (!current || !current.querySelectorAll) continue;
+                current.querySelectorAll(selector).forEach(el => {
+                    if (!seen.has(el)) {
+                        seen.add(el);
+                        results.push(el);
+                    }
+                });
+                current.querySelectorAll('*').forEach(el => {
+                    if (el.shadowRoot) queue.push(el.shadowRoot);
+                });
+            }
+            return results;
+        }
+
+        const elements = queryShadow(document, SELECTOR);
         const results  = [];
 
         for (const el of elements) {
@@ -238,25 +262,17 @@ class AsyncSensoryCrawler:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     async def crawl(self) -> List[SensoryElementData]:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            context = await new_crawler_context(
-                browser,
-                viewport={"width": 1440, "height": 900},
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-            )
-            try:
-                await self._crawl_page(context, self.base_url, depth=0)
-            finally:
-                await context.close()
-                await browser.close()
+        from ka11y.crawler.browser_pool import leased_context
+
+        async with leased_context(
+            viewport={"width": 1440, "height": 900},
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+        ) as context:
+            await self._crawl_page(context, self.base_url, depth=0)
 
         return self.results
 

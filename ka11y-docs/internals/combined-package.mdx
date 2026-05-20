@@ -73,6 +73,14 @@ Contains:
 - `_build_contrast_report()` — structures OCR results into the contrast report section
 - One `_xxx_to_findings(records, page_url)` function per auditor. Converters pass `reason_code=` (and optional `reason_params=`) instead of inline English strings; the factory renders the template via `i18n.loader.render_reason()` and falls back to the shared `_generic` block when an SC has no specific template.
 
+### `auditor_field_map.py`
+Single source of truth for the `(auditor record key) ↔ (WCAG SC)` mapping consumed by `findings.py`. Replaces the prior inline `r.get("wcag_X_Y_Z_status", "")` literals — a typo on either side used to silently downgrade an entire SC to `needs_review`. Use:
+
+- `status_key(sc)` / `reason_key(sc)` — canonical key names
+- `get_status(record, sc)` / `get_reason(record, sc)` — safe lookups
+
+`tests/test_auditor_field_map.py` scans `findings.py` for any `r.get("wcag_X_Y_Z_*")` literal and asserts the registry covers it; a new converter referencing an unregistered key fails CI.
+
 ### `report.py`
 `_build_report()` — groups flat findings into `violations`, `needs_review`, `passes`; computes `by_severity`, `by_level`, `by_wcag_sc`, `by_source` summary buckets. Also attaches the active `lang` and a top-level `labels` block (full `severities` / `levels` / `statuses` maps) so frontends can render any machine value in the active language without re-fetching the rules catalogue.
 
@@ -81,6 +89,25 @@ One `async def _stage_xxx(...)` coroutine per rule family. All are gathered conc
 
 ### `runner.py`
 `_run_job()` — the top-level background task. Fires axe-core and `_run_python_stages` in parallel, resolves results, applies WCAG level filter, writes `combined_report.json`, updates job status, broadcasts terminal SSE events.
+
+Concurrency and timeouts:
+
+- **`_get_job_semaphore()`** — lazy `asyncio.Semaphore(KA11Y_MAX_CONCURRENT_JOBS, default=4)` bound to the running event loop. `_run_job` acquires the semaphore before delegating to `_run_job_body`; over-cap jobs hold `status="queued"` until a slot frees.
+- **`_JOB_TIMEOUT_SECONDS`** (env `KA11Y_JOB_TIMEOUT_SECONDS`, default `1200`) — outer cap on the `asyncio.gather` of axe + Python. On timeout both tasks are cancelled and the scrubbed-error path emits an opaque `error_id`.
+
+Error scrubbing:
+
+- The except path generates a `uuid4().hex` `error_id`, logs `err_type: exc + traceback` server-side, and stores only `{error, error_id, error_stage}` in `_jobs[job_id]`. The SSE `job_failed` event carries the same opaque fields — never the exception type, message, or source location.
+
+### Decision engine (`accessibility/pipeline/decisions/engine.py`)
+The `DecisionEngine` catches the dedicated `PolicyError` for "policy could not evaluate" and a generic `Exception` for unexpected faults. The two paths emit distinguishable reason codes:
+
+| Caught | Verdict | Reason code | Confidence |
+|---|---|---|---|
+| `PolicyError` | `NEEDS_REVIEW` | `policy_uncertain` | 0.3 |
+| Other `Exception` | `NEEDS_REVIEW` | `engine_fault` | 0.1 (+ logged traceback) |
+
+This makes silent regressions in policy classes visible — `engine_fault` in the report is an alarm, not a normal outcome.
 
 ### `routes.py`
 Four FastAPI routes. Imports `_run_job` and schedules it via `asyncio.create_task`. Handles the SSE generator and image serving.

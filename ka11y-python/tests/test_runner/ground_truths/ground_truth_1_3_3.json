@@ -1,0 +1,232 @@
+{
+  "meta": {
+    "rule": "1.3.3",
+    "rule_name": "Sensory Characteristics",
+    "source_url": "https://www.kao.com/global/en/",
+    "scraped_at": "2026-05-11",
+    "total_cases": 20,
+    "description": "Ground truth for WCAG 1.3.3 Sensory Characteristics audit accuracy testing."
+  },
+  "cases": [
+    {
+      "id": "kao-133-01",
+      "description": "Instruction with label and color (PASS)",
+      "data": {
+        "text": "Click the red \"Search\" button.",
+        "tag": "p"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-02",
+      "description": "Instruction with color only (FAIL)",
+      "data": {
+        "text": "Click the red button.",
+        "tag": "p"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-03",
+      "description": "Instruction with shape and label (PASS)",
+      "data": {
+        "text": "Press the round \"Submit\" icon.",
+        "tag": "span"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-04",
+      "description": "Instruction with shape only (FAIL)",
+      "data": {
+        "text": "Press the round icon.",
+        "tag": "span"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-05",
+      "description": "Instruction with position and label (PASS)",
+      "data": {
+        "text": "Use the menu on the right \"Navigation\" bar.",
+        "tag": "li"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-06",
+      "description": "Instruction with position only (FAIL)",
+      "data": {
+        "text": "Click the link on the right.",
+        "tag": "li"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-07",
+      "description": "Instruction with size and label (PASS)",
+      "data": {
+        "text": "Click the small \"Close\" button.",
+        "tag": "button"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-08",
+      "description": "Instruction with size only (FAIL)",
+      "data": {
+        "text": "Click the small button.",
+        "tag": "button"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-09",
+      "description": "Japanese: Instruction with color and label (PASS)",
+      "data": {
+        "text": "赤い「送信」ボタンをクリックしてください。",
+        "tag": "p"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-10",
+      "description": "Japanese: Instruction with color only (FAIL)",
+      "data": {
+        "text": "赤いボタンをクリックしてください。",
+        "tag": "p"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-11",
+      "description": "Instruction with orientation (FAIL)",
+      "data": {
+        "text": "Follow the vertical arrow.",
+        "tag": "p"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-12",
+      "description": "Instruction with sound only (FAIL)",
+      "data": {
+        "text": "Wait for the beep.",
+        "tag": "div"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-13",
+      "description": "Instruction with sound and purpose (PASS)",
+      "data": {
+        "text": "Wait for the beep to complete your transaction.",
+        "tag": "div"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-14",
+      "description": "Instruction with brightness only (FAIL)",
+      "data": {
+        "text": "Click the bright area.",
+        "tag": "div"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-15",
+      "description": "Instruction with texture only (FAIL)",
+      "data": {
+        "text": "Tap the striped button.",
+        "tag": "button"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-16",
+      "description": "Not an instruction (PASS/Not Applicable)",
+      "data": {
+        "text": "The sky is blue and the grass is green.",
+        "tag": "p"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-17",
+      "description": "Instruction with multiple characteristics and label (PASS)",
+      "data": {
+        "text": "Click the small round green \"Go\" button.",
+        "tag": "button"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-18",
+      "description": "Instruction with multiple characteristics only (FAIL)",
+      "data": {
+        "text": "Click the small round green button.",
+        "tag": "button"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    },
+    {
+      "id": "kao-133-19",
+      "description": "Japanese: Instruction with position and label (PASS)",
+      "data": {
+        "text": "右側の「メニュー」リンクをクリックしてください。",
+        "tag": "li"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "PASSED"
+      }
+    },
+    {
+      "id": "kao-133-20",
+      "description": "Japanese: Instruction with position only (FAIL)",
+      "data": {
+        "text": "右側のリンクをクリックしてください。",
+        "tag": "li"
+      },
+      "expected": {
+        "wcag_1_3_3_status": "FAILED"
+      }
+    }
+  ]
+}

@@ -14,6 +14,84 @@ from ..models import (
 from ..analyzers.section_analyzer import SectionAnalyzer
 
 
+_FORM_CONTROL_TAGS = {"input", "select", "textarea"}
+_ALT_BEARING_TAGS = {"img", "area"}
+
+
+def _resolve_accessible_name(data: Dict[str, Any]) -> Optional[AccessibleName]:
+    """
+    Apply W3C accname-1.2 precedence to a single extracted node payload.
+
+    Returns the first non-empty source in priority order. Empty strings
+    (e.g. ``alt=""`` on a decorative image) are treated as *present and empty*,
+    which the spec uses to assert "intentionally has no name" — we propagate
+    that as a name with the empty string preserved so downstream policies can
+    distinguish "decorative" from "missing".
+    """
+    tag = (data.get("tag_name") or "").lower()
+    input_type = ""
+    snippet = data.get("html_snippet") or ""
+    if tag == "input":
+        # cheap inline lookup; matches policy_1_3_1's parser
+        import re as _re
+        m = _re.search(r"\btype\s*=\s*[\"']?([A-Za-z]+)", snippet)
+        input_type = m.group(1).lower() if m else "text"
+
+    labelledby = data.get("raw_aria_labelledby")
+    if labelledby:
+        return AccessibleName(
+            name=labelledby,
+            source=AccessibleNameSource.ARIA_LABELLEDBY,
+            is_visible=True,
+        )
+
+    aria_label = data.get("raw_aria_label")
+    if aria_label:
+        return AccessibleName(
+            name=aria_label,
+            source=AccessibleNameSource.ARIA_LABEL,
+            is_visible=False,
+        )
+
+    # Native <label for> association beats alt/title/text on form controls.
+    if tag in _FORM_CONTROL_TAGS:
+        visible_label = data.get("visible_label_text")
+        if visible_label:
+            return AccessibleName(
+                name=visible_label,
+                source=AccessibleNameSource.NATIVE_LABEL,
+                is_visible=True,
+            )
+
+    raw_alt = data.get("raw_alt")
+    if raw_alt is not None and tag in _ALT_BEARING_TAGS | {"input"}:
+        # img/area always; <input type="image"> also takes alt.
+        if tag != "input" or input_type == "image":
+            return AccessibleName(
+                name=raw_alt,
+                source=AccessibleNameSource.ALT_ATTRIBUTE,
+                is_visible=False,
+            )
+
+    text = (data.get("text_content") or "").strip()
+    if text:
+        return AccessibleName(
+            name=text,
+            source=AccessibleNameSource.TEXT_CONTENT,
+            is_visible=True,
+        )
+
+    raw_title = data.get("raw_title")
+    if raw_title:
+        return AccessibleName(
+            name=raw_title,
+            source=AccessibleNameSource.TITLE_ATTRIBUTE,
+            is_visible=False,
+        )
+
+    return None
+
+
 class ElementContextExtractor:
     """
     Injects a unified JS payload into the page to extract a complete,
@@ -115,6 +193,28 @@ class ElementContextExtractor:
             const rawAriaLabel = el.getAttribute('aria-label');
             const rawAlt = el.getAttribute('alt');
             const rawTitle = el.getAttribute('title');
+
+            // Resolve aria-labelledby ids → concatenated visible text. Per
+            // W3C accname-1.2, this is the highest-priority accessible-name
+            // source ahead of aria-label.
+            let rawAriaLabelledby = null;
+            const ariaLabelledbyAttr = el.getAttribute('aria-labelledby');
+            if (ariaLabelledbyAttr) {
+                const parts = [];
+                ariaLabelledbyAttr.trim().split(/\s+/).forEach(refId => {
+                    if (!refId) return;
+                    let ref = document.getElementById(refId);
+                    // Shadow-DOM fallback: walk roots until we find the id.
+                    if (!ref && el.getRootNode && el.getRootNode().getElementById) {
+                        ref = el.getRootNode().getElementById(refId);
+                    }
+                    if (ref) {
+                        const t = (ref.innerText || ref.textContent || '').trim();
+                        if (t) parts.push(t);
+                    }
+                });
+                if (parts.length) rawAriaLabelledby = parts.join(' ');
+            }
             
             let rawSrc = el.getAttribute('src');
             if (el.tagName === 'VIDEO') rawSrc = el.getAttribute('poster');
@@ -151,6 +251,7 @@ class ElementContextExtractor:
                 is_focusable: el.tabIndex >= 0 || ['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName),
                 tab_index: el.tabIndex,
                 raw_aria_label: rawAriaLabel,
+                raw_aria_labelledby: rawAriaLabelledby,
                 raw_alt: rawAlt,
                 raw_title: rawTitle,
                 text_content: el.innerText || '',
@@ -242,31 +343,15 @@ class ElementContextExtractor:
                         adjacent_spacing_px=data.get("adjacent_spacing_px", 0.0),
                     )
 
-                    acc_name = None
-                    if data.get("raw_aria_label"):
-                        acc_name = AccessibleName(
-                            name=data["raw_aria_label"],
-                            source=AccessibleNameSource.ARIA_LABEL,
-                            is_visible=False,
-                        )
-                    elif data.get("raw_alt") is not None:
-                        acc_name = AccessibleName(
-                            name=data["raw_alt"],
-                            source=AccessibleNameSource.ALT_ATTRIBUTE,
-                            is_visible=False,
-                        )
-                    elif data.get("raw_title"):
-                        acc_name = AccessibleName(
-                            name=data["raw_title"],
-                            source=AccessibleNameSource.TITLE_ATTRIBUTE,
-                            is_visible=False,
-                        )
-                    elif data.get("text_content"):
-                        acc_name = AccessibleName(
-                            name=data["text_content"].strip(),
-                            source=AccessibleNameSource.TEXT_CONTENT,
-                            is_visible=True,
-                        )
+                    # Accessible-name resolution follows W3C accname-1.2:
+                    #   1. aria-labelledby (resolved id-ref text)
+                    #   2. aria-label
+                    #   3. native label association (<label for>, wrapping
+                    #      <label>) — only meaningful on form controls
+                    #   4. alt   (only meaningful on <img>/<area>/<input type=image>)
+                    #   5. text content (button/link/heading content)
+                    #   6. title (last resort)
+                    acc_name = _resolve_accessible_name(data)
 
                     contexts.append(
                         ElementContext(

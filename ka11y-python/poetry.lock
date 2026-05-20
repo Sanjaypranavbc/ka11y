@@ -830,15 +830,15 @@ files = [
 
 [[package]]
 name = "deepgram-sdk"
-version = "7.1.0"
+version = "7.1.1"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.10"
 groups = ["main"]
 markers = "sys_platform == \"win32\" or sys_platform == \"emscripten\" or sys_platform != \"win32\" and sys_platform != \"emscripten\""
 files = [
-    {file = "deepgram_sdk-7.1.0-py3-none-any.whl", hash = "sha256:a55503ddbb975d3a22099200851d158348aaada767f42e2655f7642b6df4e9db"},
-    {file = "deepgram_sdk-7.1.0.tar.gz", hash = "sha256:896fb9aeed914d5bbe20a832c81d5c1a074643ea451456e24df10c3b1384c4a0"},
+    {file = "deepgram_sdk-7.1.1-py3-none-any.whl", hash = "sha256:97e609e1de665a84e1553dc38917ab3948a5b8896c2a66bd6c5eea6605842c24"},
+    {file = "deepgram_sdk-7.1.1.tar.gz", hash = "sha256:08b71374d1ae90234e179e7ff89e533b301e867da7452d60ebb7f5df372f2b63"},
 ]
 
 [package.dependencies]
@@ -5271,4 +5271,4 @@ japanese = ["sudachidict-core", "sudachipy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.15"
-content-hash = "0649080a9dd428674c60de94099e443a9530dd7008799b09d9a6b76dd92b9e32"
+content-hash = "f1ce88948741ea609de663489de2fbc9f58fcc1b56c56e5d2edfec9fbb743db9"

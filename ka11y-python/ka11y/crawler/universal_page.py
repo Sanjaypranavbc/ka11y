@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
-from playwright.async_api import BrowserContext, Page, async_playwright
+from playwright.async_api import BrowserContext, Page
 
 from ka11y.config.logger import setup_logger
-from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
 from ka11y.crawler.policy import CrawlPolicy
 from ka11y.crawler.cookie_handler import handle_cookies
@@ -45,6 +44,10 @@ class PageSnapshot(BaseModel):
     media: List[Dict[str, Any]] = Field(default_factory=list)
     text_spacing: List[Dict[str, Any]] = Field(default_factory=list)
     sensory: List[Dict[str, Any]] = Field(default_factory=list)
+    # Elements with a CSS background-image URL. Populated by background_images.js
+    # so downstream image-audit hooks can flag informational backgrounds that
+    # lack a text alternative (Sprint 3 / step 15).
+    background_images: List[Dict[str, Any]] = Field(default_factory=list)
     warnings: List[Dict[str, Any]] = Field(default_factory=list)
     element_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     page_summaries: List[Dict[str, Any]] = Field(default_factory=list)
@@ -912,7 +915,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         function getNearbyLinks(el) {
             const links = [];
             let container = el.parentElement;
-            for (let i = 0; i < 6 && container; i++) {
+            for (let i = 0; i < 3 && container; i++) {
                 queryShadow(container, 'a[href]').forEach(a => {
                     const href = a.getAttribute('href') || '';
                     const text = (a.innerText || a.textContent || '').trim();
@@ -963,6 +966,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         }
 
         queryShadow(document, 'audio, video').forEach(el => {
+            if (shouldIgnoreForSnapshot(el)) return;
             media.push({
                 ...metaFor(el),
                 element_index: media.length,
@@ -1033,7 +1037,7 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
 
         function isCJK(text) {
             if (!text) return false;
-            const matches = text.match(/[\u3000-\u9fff\uff00-\uffef\u3400-\u4dbf]/g) || [];
+            const matches = text.match(/[　-鿿＀-￯㐀-䶿]/g) || [];
             return matches.length / Math.max(text.length, 1) >= 0.15;
         }
 
@@ -1130,7 +1134,8 @@ _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
         text_spacing,
         sensory,
     };
-}"""
+}
+"""
 
 _LINK_EXTRACT_JS = r"""() => {
     function queryShadow(root, selector) {
@@ -1156,9 +1161,10 @@ _LINK_EXTRACT_JS = r"""() => {
     return queryShadow(document, 'a[href]')
         .map(a => a.href || a.getAttribute('href'))
         .filter(Boolean);
-}"""
+}
+"""
 
-_LAZY_LOAD_TRIGGER_JS = """async () => {
+_LAZY_LOAD_TRIGGER_JS = r"""async () => {
     document.querySelectorAll('[data-src],[data-lazy-src],[data-original],[loading="lazy"]').forEach(el => {
         ['lazyload', 'lazyloaded', 'lazy-load'].forEach(evt => el.dispatchEvent(new Event(evt, { bubbles: true })));
         if (el.dataset.src) el.src = el.dataset.src;
@@ -1173,7 +1179,148 @@ _LAZY_LOAD_TRIGGER_JS = """async () => {
         await new Promise(resolve => setTimeout(resolve, 200));
     }
     window.scrollTo(0, 0);
-}"""
+}
+"""
+
+_BACKGROUND_IMAGES_JS = r"""// Sprint 3 / step 15. The existing universal extractor records
+// `has_bg_image: bool` per form/interactive element but never extracts the
+// URL or surfaces non-form elements whose only image is a CSS background.
+// Informational hero divs / aria-labelled banner divs are therefore
+// invisible to the image audit (a known false-negative source).
+//
+// This pass walks every visible element (piercing open shadow roots),
+// extracts the URL list from computed-style `background-image`, and
+// reports the element's accessible-name signals so the audit can decide
+// whether a text alternative is required.
+
+(frameMeta) => {
+    const pageUrl = frameMeta?.pageUrl || location.href;
+    const framePath = frameMeta?.framePath || 'main';
+    const documentUrl = frameMeta?.documentUrl || location.href;
+
+    function queryShadow(root, selector) {
+        const results = [];
+        const seen = new WeakSet();
+        const queue = [root];
+        while (queue.length) {
+            const current = queue.shift();
+            if (!current || !current.querySelectorAll) continue;
+            current.querySelectorAll(selector).forEach(el => {
+                if (!seen.has(el)) {
+                    seen.add(el);
+                    results.push(el);
+                }
+            });
+            current.querySelectorAll('*').forEach(el => {
+                if (el.shadowRoot) queue.push(el.shadowRoot);
+            });
+        }
+        return results;
+    }
+
+    function isVisible(el) {
+        if (!el || !el.getBoundingClientRect) return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 4 || rect.height < 4) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        if (parseFloat(style.opacity || '1') === 0) return false;
+        return true;
+    }
+
+    function safeEscape(value) {
+        if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(value);
+        return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+    }
+
+    function buildSelector(el) {
+        const segments = [];
+        let cur = el;
+        while (cur && cur.nodeType === Node.ELEMENT_NODE && segments.length < 6) {
+            const tag = (cur.tagName || 'unknown').toLowerCase();
+            if (cur.id) {
+                segments.unshift(`${tag}#${safeEscape(cur.id)}`);
+                break;
+            }
+            const cls = Array.from(cur.classList || []).slice(0, 2)
+                .map(c => `.${safeEscape(c)}`).join('');
+            segments.unshift(`${tag}${cls}`);
+            cur = cur.parentElement;
+        }
+        return segments.join(' > ');
+    }
+
+    // Strip CSS gradients / variables / "none" / "initial" and pull only the
+    // url(...) tokens out of a (possibly multi-layered) background-image value.
+    function extractUrls(bgImage) {
+        if (!bgImage || bgImage === 'none' || bgImage === 'initial') return [];
+        const urls = [];
+        const re = /url\((?:"([^"]+)"|'([^']+)'|([^)]+))\)/g;
+        let m;
+        while ((m = re.exec(bgImage)) !== null) {
+            const raw = (m[1] || m[2] || m[3] || '').trim();
+            if (raw && !raw.startsWith('data:')) {
+                try {
+                    urls.push(new URL(raw, location.href).href);
+                } catch (_) {
+                    urls.push(raw);
+                }
+            }
+        }
+        return urls;
+    }
+
+    const results = [];
+    const seen = new Set();
+
+    queryShadow(document, '*').forEach(el => {
+        if (!isVisible(el)) return;
+        const style = window.getComputedStyle(el);
+        const urls = extractUrls(style.backgroundImage);
+        if (!urls.length) return;
+
+        const ariaLabel = (el.getAttribute('aria-label') || '').trim();
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        const ariaHidden = (el.getAttribute('aria-hidden') || '').toLowerCase() === 'true';
+        // Visible text inside the element counts as a text alternative for
+        // the background image (banner with copy doesn't need its bg
+        // duplicated as alt text).
+        const innerText = (el.innerText || el.textContent || '').trim();
+        const hasTextAlternative = !!(ariaLabel || (innerText && innerText.length > 1));
+
+        urls.forEach(url => {
+            const key = `${buildSelector(el)}::${url}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            results.push({
+                page_url: pageUrl,
+                document_url: documentUrl,
+                frame_path: framePath,
+                selector: buildSelector(el),
+                tag: (el.tagName || '').toLowerCase(),
+                element_id: el.id || null,
+                url: url,
+                role: role || null,
+                aria_label: ariaLabel || null,
+                aria_hidden: ariaHidden,
+                has_text_alternative: hasTextAlternative,
+                inner_text_snippet: innerText.slice(0, 120) || null,
+                bbox: (() => {
+                    const r = el.getBoundingClientRect();
+                    return {
+                        x: Math.round(r.left),
+                        y: Math.round(r.top),
+                        width: Math.round(r.width),
+                        height: Math.round(r.height),
+                    };
+                })(),
+            });
+        });
+    });
+
+    return results;
+}
+"""
 
 _DOM_STABILITY_JS = f"""(stabilityMs) => {{
     return new Promise((resolve) => {{
@@ -1245,59 +1392,50 @@ class UniversalPageLoader:
         queue: deque[tuple[str, int]] = deque([(url, 0)])
         visited: set[str] = set()
 
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            context_kwargs: Dict[str, Any] = {
-                "viewport": {"width": 1440, "height": 900},
-                "user_agent": cls.USER_AGENT,
-            }
-            if record_har:
-                context_kwargs["record_har_path"] = str(har_file)
-                context_kwargs["record_har_url_filter"] = "**/*"
+        from ka11y.crawler.browser_pool import leased_context
 
-            context = await new_crawler_context(browser, **context_kwargs)
+        context_kwargs: Dict[str, Any] = {
+            "viewport": {"width": 1440, "height": 900},
+            "user_agent": cls.USER_AGENT,
+        }
+        if record_har:
+            context_kwargs["record_har_path"] = str(har_file)
+            context_kwargs["record_har_url_filter"] = "**/*"
 
-            try:
-                while queue:
-                    current_url, current_depth = queue.popleft()
-                    normalized_url = policy.normalize_url(current_url)
+        async with leased_context(**context_kwargs) as context:
+            while queue:
+                current_url, current_depth = queue.popleft()
+                normalized_url = policy.normalize_url(current_url)
 
-                    if normalized_url in visited:
-                        continue
-                    visited.add(normalized_url)
+                if normalized_url in visited:
+                    continue
+                visited.add(normalized_url)
 
-                    if not policy.is_allowed(normalized_url, url):
-                        logger.info(
-                            f"[universal] skipping off-origin/disallowed URL: {normalized_url}"
-                        )
-                        continue
-
-                    if snapshot.pages_crawled >= policy.max_pages:
-                        logger.warning(
-                            f"[universal] crawl budget exceeded ({policy.max_pages} pages)"
-                        )
-                        break
-
-                    new_links = await cls._crawl_one_url(
-                        context=context,
-                        root_url=url,
-                        url=normalized_url,
-                        depth=current_depth,
-                        policy=policy,
-                        output=snapshot,
-                        step_logger=step_logger,
+                if not policy.is_allowed(normalized_url, url):
+                    logger.info(
+                        f"[universal] skipping off-origin/disallowed URL: {normalized_url}"
                     )
+                    continue
 
-                    if current_depth < policy.max_depth:
-                        for link in new_links:
-                            queue.append((link, current_depth + 1))
+                if snapshot.pages_crawled >= policy.max_pages:
+                    logger.warning(
+                        f"[universal] crawl budget exceeded ({policy.max_pages} pages)"
+                    )
+                    break
 
-            finally:
-                await context.close()
-                await browser.close()
+                new_links = await cls._crawl_one_url(
+                    context=context,
+                    root_url=url,
+                    url=normalized_url,
+                    depth=current_depth,
+                    policy=policy,
+                    output=snapshot,
+                    step_logger=step_logger,
+                )
+
+                if current_depth < policy.max_depth:
+                    for link in new_links:
+                        queue.append((link, current_depth + 1))
 
         if record_har and har_file.exists():
             har_path = str(har_file)
@@ -1556,7 +1694,9 @@ class UniversalPageLoader:
             "sensory": [],
         }
 
-        frames = await cls._collect_all_frames(page, page_url=page_url, output=output)
+        frames = await cls._collect_same_origin_frames(
+            page, page_url=page_url, output=output
+        )
         for frame, frame_path in frames:
             if frame.is_detached():
                 # Silently skip detached frames if they were just transient/blank
@@ -1596,6 +1736,23 @@ class UniversalPageLoader:
                     seen_refs=seen_refs,
                 )
                 combined[key].extend(records)
+
+            # Separate pass: extract CSS background-image URLs. Kept out of
+            # the universal extractor to avoid bloating its single page.evaluate
+            # payload (Sprint 3 / step 15).
+            try:
+                bg_records = await frame.evaluate(
+                    _BACKGROUND_IMAGES_JS,
+                    {
+                        "pageUrl": page_url,
+                        "framePath": frame_path,
+                        "documentUrl": frame.url or page_url,
+                    },
+                )
+            except Exception:
+                bg_records = []
+            if bg_records:
+                output.background_images.extend(bg_records)
 
         return combined
 
@@ -1663,7 +1820,7 @@ class UniversalPageLoader:
         return list(dict.fromkeys(resolved))
 
     @classmethod
-    async def _collect_all_frames(
+    async def _collect_same_origin_frames(
         cls,
         page: Page,
         *,

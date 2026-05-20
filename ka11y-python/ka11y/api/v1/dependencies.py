@@ -117,6 +117,7 @@ def get_form_crawler(
     url: str,
     max_depth: int,
     output_dir: Path = Depends(get_output_dir),
+    interactive_validation: bool = False,
 ) -> AsyncFormCrawler:
     """Provide an AsyncFormCrawler scoped to this request's output dir."""
     from ka11y.crawler.forms_crawler import AsyncFormCrawler
@@ -125,6 +126,7 @@ def get_form_crawler(
         base_url=url,
         output_dir=str(output_dir),
         max_depth=max_depth,
+        interactive_validation=interactive_validation,
     )
 
 

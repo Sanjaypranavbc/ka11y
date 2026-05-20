@@ -1,0 +1,77 @@
+{
+  "accuracy": 100.0,
+  "results": [
+    {
+      "id": "c142-01",
+      "description": "Audio plays < 3s (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "short_duration",
+      "expected_reason_code": "short_duration"
+    },
+    {
+      "id": "c142-02",
+      "description": "Audio plays > 3s with native controls (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "has_native_controls",
+      "expected_reason_code": "has_native_controls"
+    },
+    {
+      "id": "c142-03",
+      "description": "Audio plays > 3s with no controls (Fail)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "no_controls",
+      "expected_reason_code": "no_controls"
+    },
+    {
+      "id": "c142-04",
+      "description": "Video with audio > 3s with no controls (Fail)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "no_controls",
+      "expected_reason_code": "no_controls"
+    },
+    {
+      "id": "c142-05",
+      "description": "Muted video > 3s with no controls (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "muted_media",
+      "expected_reason_code": "muted_media"
+    },
+    {
+      "id": "c142-06",
+      "description": "Audio plays > 3s with custom pause button in same region (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "has_external_control",
+      "expected_reason_code": "has_external_control"
+    },
+    {
+      "id": "c142-07",
+      "description": "Background audio via JS with no controls (Fail)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "hidden_audio_no_control",
+      "expected_reason_code": "hidden_audio_no_control"
+    },
+    {
+      "id": "c142-08",
+      "description": "No audio (Pass)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "no_audio",
+      "expected_reason_code": "no_audio"
+    }
+  ]
+}

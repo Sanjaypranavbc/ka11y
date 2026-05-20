@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "rule": "1.3.2",
+    "rule_name": "Meaningful Sequence",
+    "source_url": "https://www.kao.com/global/en/",
+    "scraped_at": "2026-05-11",
+    "total_cases": 20,
+    "description": "Ground truth for WCAG 1.3.2 Meaningful Sequence audit accuracy testing."
+  },
+  "cases": [
+    {
+      "id": "kao-132-01",
+      "description": "Button with tabindex=0 (PASS)",
+      "dom_attributes": { "tag_name": "button" },
+      "interaction": { "tab_index": 0 },
+      "expected": { "status": "pass" }
+    },
+    {
+      "id": "kao-132-02",
+      "description": "Button with tabindex=1 (FAIL)",
+      "dom_attributes": { "tag_name": "button" },
+      "interaction": { "tab_index": 1 },
+      "expected": { "status": "fail" }
+    },
+    {
+      "id": "kao-132-03",
+      "description": "Link with no tabindex (PASS)",
+      "dom_attributes": { "tag_name": "a" },
+      "interaction": { "tab_index": -1 },
+      "expected": { "status": "pass" }
+    },
+    {
+      "id": "kao-132-04",
+      "description": "Link with tabindex=10 (FAIL)",
+      "dom_attributes": { "tag_name": "a" },
+      "interaction": { "tab_index": 10 },
+      "expected": { "status": "fail" }
+    },
+    { "id": "kao-132-05", "description": "Tabindex 0", "dom_attributes": {"tag_name": "div"}, "interaction": {"tab_index": 0}, "expected": {"status": "pass"}},
+    { "id": "kao-132-06", "description": "Tabindex 1", "dom_attributes": {"tag_name": "div"}, "interaction": {"tab_index": 1}, "expected": {"status": "fail"}},
+    { "id": "kao-132-07", "description": "Tabindex 2", "dom_attributes": {"tag_name": "div"}, "interaction": {"tab_index": 2}, "expected": {"status": "fail"}},
+    { "id": "kao-132-08", "description": "Tabindex -1", "dom_attributes": {"tag_name": "div"}, "interaction": {"tab_index": -1}, "expected": {"status": "pass"}},
+    { "id": "kao-132-09", "description": "Tabindex 0", "dom_attributes": {"tag_name": "input"}, "interaction": {"tab_index": 0}, "expected": {"status": "pass"}},
+    { "id": "kao-132-10", "description": "Tabindex 5", "dom_attributes": {"tag_name": "input"}, "interaction": {"tab_index": 5}, "expected": {"status": "fail"}},
+    { "id": "kao-132-11", "description": "Tabindex 0", "dom_attributes": {"tag_name": "span"}, "interaction": {"tab_index": 0}, "expected": {"status": "pass"}},
+    { "id": "kao-132-12", "description": "Tabindex 3", "dom_attributes": {"tag_name": "span"}, "interaction": {"tab_index": 3}, "expected": {"status": "fail"}},
+    { "id": "kao-132-13", "description": "Tabindex -1", "dom_attributes": {"tag_name": "img"}, "interaction": {"tab_index": -1}, "expected": {"status": "pass"}},
+    { "id": "kao-132-14", "description": "Tabindex 1", "dom_attributes": {"tag_name": "img"}, "interaction": {"tab_index": 1}, "expected": {"status": "fail"}},
+    { "id": "kao-132-15", "description": "Tabindex 0", "dom_attributes": {"tag_name": "form"}, "interaction": {"tab_index": 0}, "expected": {"status": "pass"}},
+    { "id": "kao-132-16", "description": "Tabindex 100", "dom_attributes": {"tag_name": "form"}, "interaction": {"tab_index": 100}, "expected": {"status": "fail"}},
+    { "id": "kao-132-17", "description": "Tabindex -1", "dom_attributes": {"tag_name": "h1"}, "interaction": {"tab_index": -1}, "expected": {"status": "pass"}},
+    { "id": "kao-132-18", "description": "Tabindex 1", "dom_attributes": {"tag_name": "h1"}, "interaction": {"tab_index": 1}, "expected": {"status": "fail"}},
+    { "id": "kao-132-19", "description": "Tabindex 0", "dom_attributes": {"tag_name": "section"}, "interaction": {"tab_index": 0}, "expected": {"status": "pass"}},
+    { "id": "kao-132-20", "description": "Tabindex 2", "dom_attributes": {"tag_name": "section"}, "interaction": {"tab_index": 2}, "expected": {"status": "fail"}}
+  ]
+}

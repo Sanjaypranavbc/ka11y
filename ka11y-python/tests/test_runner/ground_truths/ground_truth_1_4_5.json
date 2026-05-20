@@ -1,0 +1,174 @@
+{
+  "meta": {
+    "rule": "1.4.5",
+    "rule_name": "Images of Text",
+    "source_url": "synthetic",
+    "scraped_at": "2026-05-12",
+    "total_cases": 10,
+    "description": "Synthetic ground truth for WCAG 1.4.5 Images of Text. Tests whether text is used to convey information rather than images of text."
+  },
+  "cases": [
+    {
+      "id": "c145-01",
+      "description": "Logo with text (Pass - exempt)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": "Kao Logo"
+      },
+      "visual": {
+        "cv_classification": "logo",
+        "ocr_text": "Kao"
+      },
+      "expected": {
+        "status": "not_applicable",
+        "reason_code": "exemption_applies"
+      }
+    },
+    {
+      "id": "c145-02",
+      "description": "Decorative image with text (Pass - exempt)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": ""
+      },
+      "visual": {
+        "cv_classification": "decorative",
+        "ocr_text": "Random Background Text"
+      },
+      "expected": {
+        "status": "not_applicable",
+        "reason_code": "exemption_applies"
+      }
+    },
+    {
+      "id": "c145-03",
+      "description": "Banner with significant text (Needs Review/Fail candidate)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": "Promotional banner"
+      },
+      "visual": {
+        "cv_classification": "informative",
+        "ocr_text": "SUMMER SALE 50% OFF"
+      },
+      "expected": {
+        "status": "needs_review",
+        "reason_code": "potential_image_of_text"
+      }
+    },
+    {
+      "id": "c145-04",
+      "description": "Image with no text (Pass)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": "A cat"
+      },
+      "visual": {
+        "cv_classification": "informative",
+        "ocr_text": ""
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "no_text_detected"
+      }
+    },
+    {
+      "id": "c145-05",
+      "description": "Complex chart (Pass - exempt)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": "Annual growth chart"
+      },
+      "visual": {
+        "cv_classification": "complex",
+        "ocr_text": "2024 2025 2026"
+      },
+      "expected": {
+        "status": "not_applicable",
+        "reason_code": "exemption_applies"
+      }
+    },
+    {
+      "id": "c145-06",
+      "description": "Video poster with text (Pass - exempt)",
+      "dom_attributes": {
+        "tag_name": "video",
+        "poster": "thumbnail.jpg"
+      },
+      "semantics": {
+        "is_video_context": true
+      },
+      "visual": {
+        "ocr_text": "Movie Title"
+      },
+      "expected": {
+        "status": "not_applicable",
+        "reason_code": "video_thumbnail_exempt"
+      }
+    },
+    {
+      "id": "c145-07",
+      "description": "Image with text matching alt text (Pass/Low Risk)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": "Welcome to Kao"
+      },
+      "visual": {
+        "cv_classification": "informative",
+        "ocr_text": "Welcome to Kao"
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "text_matches_alt"
+      }
+    },
+    {
+      "id": "c145-08",
+      "description": "Small snippet of text < 3 chars (Pass)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": "Icon"
+      },
+      "visual": {
+        "cv_classification": "informative",
+        "ocr_text": "K"
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "no_text_detected"
+      }
+    },
+    {
+      "id": "c145-09",
+      "description": "Button image with text (Needs Review)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": "Action button"
+      },
+      "visual": {
+        "cv_classification": "functional",
+        "ocr_text": "SUBMIT"
+      },
+      "expected": {
+        "status": "needs_review",
+        "reason_code": "potential_image_of_text"
+      }
+    },
+    {
+      "id": "c145-10",
+      "description": "Informative image with Japanese text (Needs Review)",
+      "dom_attributes": {
+        "tag_name": "img",
+        "alt": "おしらせ"
+      },
+      "visual": {
+        "cv_classification": "informative",
+        "ocr_text": "おしらせ"
+      },
+      "expected": {
+        "status": "pass",
+        "reason_code": "text_matches_alt"
+      }
+    }
+  ]
+}

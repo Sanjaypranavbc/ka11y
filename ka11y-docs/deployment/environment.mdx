@@ -31,13 +31,26 @@ BODY_LIMIT=10mb
 |----------|---------|----------|-------------|
 | `NODE_BASE_URL` | `http://localhost:3000` | Yes (in Docker) | Base URL used by ka11y-python to reach the ka11y-node service |
 | `PYTHONUNBUFFERED` | — | Recommended | Set to `"1"` for real-time log output in Docker |
+| `KA11Y_MAX_BROWSERS` | `2` | No | Maximum concurrent Playwright context leases from `BrowserPool`. Bounds Chromium memory. See `ka11y-python/ka11y/crawler/browser_pool.py`. |
+| `KA11Y_MAX_CONCURRENT_JOBS` | `4` | No | Maximum concurrent `_run_job()` background tasks. Excess jobs sit in `status="queued"` until a slot frees. See `ka11y-python/ka11y/api/v1/combined/runner.py`. |
+| `KA11Y_JOB_TIMEOUT_SECONDS` | `1200` | No | Outer audit budget. Bounds the top-level `asyncio.gather` over axe + Python branches. On timeout both branches are cancelled and a scrubbed error is returned. |
 
 ### Example `.env` (Python)
 
 ```bash
 NODE_BASE_URL=http://node:3000
 PYTHONUNBUFFERED=1
+
+# Concurrency caps — tune for the host's memory budget.
+# Chromium ≈ 300 MB per process; one process per pool, multiple contexts per process.
+KA11Y_MAX_BROWSERS=2
+KA11Y_MAX_CONCURRENT_JOBS=4
+KA11Y_JOB_TIMEOUT_SECONDS=1200
 ```
+
+<Note>
+  Inner stage timeouts are hardcoded (not env-tunable) because they bound individual auditors with semantics that depend on each rule: `_STAGE_TIMEOUT_SECONDS=600` (per-stage in `stages.py`), `_SCENARIOS_TIMEOUT_SECONDS=300` (rendered-layout 7-way fan-out in `rendered_layout_crawler.py`).
+</Note>
 
 <Note>
   In Docker Compose the Python container resolves `node` by Docker's internal DNS — use `http://node:3000`. For local development outside Docker use `http://localhost:3000`.

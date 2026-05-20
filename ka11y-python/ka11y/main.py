@@ -80,9 +80,19 @@ logger.info("Configuration loaded successfully")
 async def lifespan(app: FastAPI):
     logger.info("ka11y API starting up")
     eviction_task = asyncio.create_task(_evict_old_jobs())
-    yield
-    eviction_task.cancel()
-    logger.info("ka11y API shutting down")
+    try:
+        yield
+    finally:
+        eviction_task.cancel()
+        # Sprint-2 (#9): tear down the shared Chromium pool on shutdown so
+        # the host doesn't leak browser processes between reloads.
+        try:
+            from ka11y.crawler.browser_pool import shutdown_pool
+
+            await shutdown_pool()
+        except Exception:  # noqa: BLE001
+            logger.exception("browser pool shutdown failed during lifespan teardown")
+        logger.info("ka11y API shutting down")
 
 
 app = FastAPI(

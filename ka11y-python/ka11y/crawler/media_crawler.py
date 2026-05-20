@@ -30,10 +30,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
-from playwright.async_api import async_playwright
 from pydantic import BaseModel
 
-from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="media_crawler")
@@ -272,26 +270,17 @@ class AsyncMediaCrawler:
         Navigate to base_url (and optionally linked pages up to max_depth),
         extract all media elements, and return a list of MediaElementData.
         """
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            context = await new_crawler_context(
-                browser,
-                viewport={"width": 1440, "height": 900},
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-            )
+        from ka11y.crawler.browser_pool import leased_context
 
-            try:
-                await self._crawl_page(context, self.base_url, depth=0)
-            finally:
-                await context.close()
-                await browser.close()
+        async with leased_context(
+            viewport={"width": 1440, "height": 900},
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+        ) as context:
+            await self._crawl_page(context, self.base_url, depth=0)
 
         logger.info(
             f"[media_crawler] found {len(self.results)} media element(s) "
