@@ -46,6 +46,7 @@ AUDITOR_FIELD_MAP: Dict[str, Dict[str, str]] = {
         for sc in (
             "1.1.1",
             "1.2.1",
+            "1.2.2",
             "1.3.3",
             "1.4.5",
             "1.4.11",
