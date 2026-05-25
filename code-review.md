@@ -83,7 +83,7 @@ Condensed verification of the 2026-05-06 findings. `FIXED` = verified resolved i
 | 1.1.1 | Shadow DOM not pierced | **FIXED** (`shadowRoot` in `universal_extract.js`, extractor) |
 | 1.1.1 | accname priority wrong | **FIXED** — accname-1.2 precedence (`element_context_extractor.py:21-56`) |
 | 1.2.1 | live-stream misclassification | **IMPROVED** — MediaSource/`srcObject`/`live` keyword (`media_auditor.py:110-139`) |
-| 1.2.2 | (captions) | **REGRESSION/OPEN** → **B-1** (field key not registered) |
+| 1.2.2 | (captions) | **FIXED** → **B-1** (field key now registered) |
 | 1.3.1 | reads `type` from CSS | **FIXED** — reads from `html_snippet` (`policy_1_3_1.py:9,42`) |
 | 1.3.3 | sensory flags labelled control name | **FIXED** — `_build_labelled_name_corpus` cross-check |
 | 1.4.6 | enum-vs-string compare always-False | **FIXED** (`policy_1_4_6.py:13`) |
@@ -122,7 +122,7 @@ The original review's deepest structural critique (F1) is **partially** resolved
 
 ## 5. Recommended Next Actions (prioritized)
 
-1. **B-1** — Register `1.2.2` + fix `_violation`→`_reason` key. Turns CI green, closes a live data-loss bug. *(minutes)*
+1. ~~**B-1** — Register `1.2.2`.~~ ✅ **Done (2026-05-25)** — suite green.
 2. **B-2** — Route `findings.py` through `get_status`/`get_reason`. Eliminates the data-loss class by construction. *(half day)*
 3. **B-4 / B-5** — Batch the two N+1 `evaluate` loops (images, relationships). Largest remaining per-page latency win. *(half day each)*
 4. **B-3** — Split `universal_extract.js` into focused extractors. *(1–2 days)*
@@ -135,11 +135,19 @@ After 1–3, the system is comfortably in the low-to-mid 80s. Reaching 90+ is th
 
 ## 6. Verification Note
 
-This re-review ran the fast (browser-free) guard tests during analysis:
+This re-review ran the fast (browser-free) guard tests. **Before** the B-1 fix:
 
 ```
 tests/test_auditor_field_map.py   1 FAILED, 2 passed   ← B-1
-tests/test_accessible_name_priority.py   12 passed
 ```
 
-The single failure is **B-1** and is reproduced verbatim in that row's evidence. All other status tags were verified by reading the cited source lines.
+**After** registering SC 1.2.2:
+
+```
+tests/test_auditor_field_map.py        3 passed
+tests/test_combined_findings.py       15 passed
+tests/test_accessible_name_priority.py 12 passed
+                                       30 passed
+```
+
+All other status tags were verified by reading the cited source lines.

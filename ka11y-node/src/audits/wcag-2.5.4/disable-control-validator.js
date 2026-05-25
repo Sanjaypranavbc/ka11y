@@ -43,15 +43,15 @@ async function validateDisableControl(page) {
             }
           }
 
+          // A settings/preferences link only counts as evidence of a
+          // motion-disable control when motion (or accessibility) keywords
+          // appear in the same subtree. A bare account-settings link is NOT
+          // evidence — recording it produced misleading "generic settings
+          // link" findings and false-confidence on unrelated pages.
           if (hasMotionNearby) {
             if (highestConfidence === 'none' || highestConfidence === 'low') {
               highestConfidence = 'medium';
               evidence.push(`Found settings link with motion-related context: ${a.href}`);
-            }
-          } else {
-            if (highestConfidence === 'none') {
-              highestConfidence = 'low';
-              evidence.push(`Found generic settings link: ${a.href}`);
             }
           }
         }

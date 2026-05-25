@@ -22,6 +22,11 @@ _NETWORKIDLE_TIMEOUT_MS = 15_000
 _DOM_STABILITY_MS = 600
 _DOM_STABILITY_TOTAL_MS = 12_000
 _POST_SCROLL_WAIT_MS = 1_500
+# Hard ceiling on the dedup set during chunked (infinite-scroll) extraction.
+# Without it, a page that lazy-loads thousands of elements per scroll pass
+# grows ``seen_refs`` unbounded across passes. Once we have catalogued this
+# many distinct elements we stop scrolling for more.
+_MAX_SEEN_REFS = 5_000
 
 _SPA_SIGNALS = [
     "window.__NEXT_DATA__",
@@ -417,14 +422,20 @@ class UniversalPageLoader:
                 page, page_url=page_url, output=output, seen_refs=seen_refs
             )
 
-            # 3. Check if we hit the bottom of the page
+            # 3. Stop if the dedup set has hit its ceiling — further scrolling
+            # on a pathological infinite-scroll page would only grow memory.
+            if len(seen_refs) >= _MAX_SEEN_REFS:
+                output.partial = True
+                break
+
+            # 4. Check if we hit the bottom of the page
             is_at_bottom = await page.evaluate(
                 "() => { const h = document.documentElement; return (window.innerHeight + window.scrollY) >= (h.scrollHeight - 100); }"
             )
             if is_at_bottom:
                 break
 
-            # 4. Scroll down
+            # 5. Scroll down
             await page.evaluate("window.scrollBy(0, window.innerHeight * 1.5)")
             await page.wait_for_timeout(_POST_SCROLL_WAIT_MS)
 

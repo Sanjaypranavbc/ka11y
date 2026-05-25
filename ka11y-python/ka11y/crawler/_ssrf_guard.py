@@ -30,9 +30,24 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from functools import lru_cache
+import threading
+import time
 from typing import Optional
 from urllib.parse import urlparse
+
+# DNS answers are cached for at most this many seconds. A *bounded* TTL is a
+# deliberate hardening choice: the prior implementation used an unbounded
+# ``lru_cache``, so once a hostname resolved to a public IP it was trusted for
+# the life of the process. An attacker controlling a domain could let it
+# resolve public on first contact, then rebind it to ``169.254.169.254``; the
+# guard would keep serving the stale "public" answer forever. Re-resolving on a
+# short TTL shrinks that DNS-rebinding window to a few seconds.
+#
+# This does NOT fully close the time-of-check/time-of-use gap against
+# Chromium's *own* resolver (Chromium resolves independently when it actually
+# connects); fully closing that requires fetching via a pinned IP. It does
+# prevent the guard itself from being permanently poisoned.
+_DNS_CACHE_TTL_SECONDS = 30.0
 
 _BLOCKED_NETWORKS = [
     ipaddress.ip_network("127.0.0.0/8"),  # IPv4 loopback
@@ -111,13 +126,27 @@ def _parse_literal_ip(host: str) -> Optional[ipaddress._BaseAddress]:
     return None
 
 
-@lru_cache(maxsize=4096)
+_dns_cache: dict[str, tuple[float, tuple[str, ...]]] = {}
+_dns_cache_lock = threading.Lock()
+
+
 def _resolve_hostname(host: str) -> tuple[str, ...]:
-    """Cached DNS lookup. Returns the tuple of IP-string answers."""
+    """TTL-bounded DNS lookup. Returns the tuple of IP-string answers.
+
+    Entries expire after :data:`_DNS_CACHE_TTL_SECONDS` so a host that rebinds
+    to a private IP after first contact is re-checked rather than trusted
+    indefinitely (see module docstring on the TTL).
+    """
+    now = time.monotonic()
+    with _dns_cache_lock:
+        cached = _dns_cache.get(host)
+        if cached is not None and (now - cached[0]) < _DNS_CACHE_TTL_SECONDS:
+            return cached[1]
+
     try:
         infos = socket.getaddrinfo(host, None, 0, socket.SOCK_STREAM)
     except socket.gaierror:
-        return ()
+        infos = []
     seen: list[str] = []
     for info in infos:
         sockaddr = info[4]
@@ -126,7 +155,15 @@ def _resolve_hostname(host: str) -> tuple[str, ...]:
         ip = sockaddr[0]
         if ip not in seen:
             seen.append(ip)
-    return tuple(seen)
+    answers = tuple(seen)
+
+    with _dns_cache_lock:
+        # Bound memory: drop the whole cache if it grows pathologically large
+        # rather than carrying an LRU; the working set of audited hosts is small.
+        if len(_dns_cache) > 4096:
+            _dns_cache.clear()
+        _dns_cache[host] = (now, answers)
+    return answers
 
 
 def _host_is_blocked(host: str) -> bool:

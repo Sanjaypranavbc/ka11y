@@ -9,9 +9,16 @@ class SemanticRelationshipEngine:
     and native HTML grouping mechanisms to provide complete context.
     """
 
-    _RELATIONSHIP_JS = r"""(elementId) => {
+    _RELATIONSHIP_JS = r"""(elementIds) => {
+      // Resolve relationships for an array of element ids in a SINGLE round
+      // trip. Returns a map { id: {relations} } containing only the ids that
+      // exist in this frame's document. Previously this ran one
+      // frame.evaluate() per element (N+1 IPC); batching collapses it to one
+      // call per frame.
+      const result = {};
+      for (const elementId of elementIds) {
         const el = document.getElementById(elementId);
-        if (!el) return null;
+        if (!el) continue;
 
         let describedByText = null;
         const describedBy = el.getAttribute('aria-describedby');
@@ -58,7 +65,7 @@ class SemanticRelationshipEngine:
         // Detect video component wrappers
         const isVideoContext = !!el.closest('video, [class*="video" i], [class*="player" i], [data-video-id]');
 
-        return {
+        result[elementId] = {
             described_by_text: describedByText,
             group_name: groupName,
             native_label_text: nativeLabelText,
@@ -66,6 +73,8 @@ class SemanticRelationshipEngine:
             is_in_labeled_control: isInLabeledControl,
             is_video_context: isVideoContext
         };
+      }
+      return result;
     }"""
 
     @classmethod
@@ -74,6 +83,15 @@ class SemanticRelationshipEngine:
         Mutates the ElementContext list in place, attaching resolved semantic
         relationships to each element's SemanticContext.
         """
+        # Index contexts by element_id once; the batched JS returns a map keyed
+        # by id, and a frame only resolves the ids that exist in its document.
+        by_id: Dict[str, ElementContext] = {
+            c.element_id: c for c in contexts if c.element_id
+        }
+        if not by_id:
+            return
+        element_ids = list(by_id.keys())
+
         for frame in page.frames:
             try:
                 if (
@@ -82,18 +100,17 @@ class SemanticRelationshipEngine:
                 ):
                     continue
 
-                # To minimize IPC calls, we could run the script for an array of IDs in the frame.
-                # However, we only care about contexts that actually exist in this frame.
-                # Since we don't have frame IDs on contexts, we'll just try to evaluate for all contexts.
-                # A more optimized approach is to batch evaluate in JS.
-                for context in contexts:
-                    if not context.element_id:
-                        continue
+                # One round trip per frame for ALL element ids, instead of one
+                # frame.evaluate() per element (was N+1 IPC).
+                relations_by_id: Dict[str, Any] = await frame.evaluate(
+                    cls._RELATIONSHIP_JS, element_ids
+                )
+                if not relations_by_id:
+                    continue
 
-                    relations = await frame.evaluate(
-                        cls._RELATIONSHIP_JS, context.element_id
-                    )
-                    if not relations:
+                for element_id, relations in relations_by_id.items():
+                    context = by_id.get(element_id)
+                    if context is None or not relations:
                         continue
 
                     context.semantics.described_by_text = relations.get(

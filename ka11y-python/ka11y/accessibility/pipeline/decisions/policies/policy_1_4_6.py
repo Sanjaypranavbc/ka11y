@@ -1,6 +1,7 @@
 from .policy_1_4_3 import Policy143
 from ...models import ElementContext, RuleVerdict, VerdictStatus
 from ...runners.contrast_engine import ContrastEngine
+from ...config.thresholds import CONTRAST_NORMAL_AAA, CONTRAST_LARGE_AAA
 
 
 class Policy146(Policy143):
@@ -20,8 +21,8 @@ class Policy146(Policy143):
         ratio = evidence["contrast_ratio"]
         is_large = evidence["is_large_text"]
 
-        # AAA Thresholds
-        threshold = 4.5 if is_large else 7.0
+        # AAA Thresholds (1.4.6 Enhanced) — sourced from config, not hardcoded.
+        threshold = CONTRAST_LARGE_AAA if is_large else CONTRAST_NORMAL_AAA
         evidence["required_threshold"] = threshold
 
         if ratio >= threshold:

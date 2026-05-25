@@ -30,7 +30,7 @@ from rich import box
 
 from ka11y.crawler.models import ImageData, ImageMetadata
 from ka11y.config.logger import setup_logger
-from ka11y.classifier.classfier import ClassifyAssets
+from ka11y.classifier.classifier import ClassifyAssets
 from ka11y.utils.config_loader import load_config
 
 CONFIG = load_config()
@@ -540,7 +540,13 @@ class AsyncImageCrawler:
 
                         alt = await img.get_attribute("alt")
 
-                        resolved_label = await img.evaluate("""el => {
+                        # Resolve the accessible label AND the surrounding
+                        # context in a single round trip. These were two
+                        # separate img.evaluate() calls (2 IPC hops per image);
+                        # merged into one to halve cross-process traffic on
+                        # image-heavy pages.
+                        probe = await img.evaluate("""el => {
+                            let resolvedLabel = null;
                             const labelledby = el.getAttribute("aria-labelledby");
                             if (labelledby) {
                                 const text = labelledby.trim().split(/\\s+/)
@@ -550,20 +556,16 @@ class AsyncImageCrawler:
                                     })
                                     .filter(Boolean)
                                     .join(" ");
-                                if (text) return text;
+                                if (text) resolvedLabel = text;
                             }
-                            const ariaLabel = el.getAttribute("aria-label");
-                            if (ariaLabel && ariaLabel.trim()) return ariaLabel.trim();
-                            return null;  // fall back to alt attribute
-                        }""")
-                        if resolved_label is not None:
-                            alt = resolved_label
+                            if (resolvedLabel === null) {
+                                const ariaLabel = el.getAttribute("aria-label");
+                                if (ariaLabel && ariaLabel.trim()) resolvedLabel = ariaLabel.trim();
+                            }
 
-                        # Context extraction
-                        el_context = await img.evaluate("""el => {
                             const parent = el.closest("a, button, header, footer, nav, main, section, article") || el.parentElement;
-
                             return {
+                                resolvedLabel: resolvedLabel,  // null → fall back to alt attribute
                                 role: el.getAttribute("role") || "",
                                 ariaHidden: el.getAttribute("aria-hidden") || "",
                                 parentTag: parent ? parent.tagName.toLowerCase() : "",
@@ -571,6 +573,11 @@ class AsyncImageCrawler:
                                 clickable: !!el.closest("a, button, [role='button'], [onclick]"),
                             };
                         }""")
+
+                        if probe.get("resolvedLabel") is not None:
+                            alt = probe["resolvedLabel"]
+
+                        el_context = probe
 
                         # Dedup key
                         alt_for_key = alt.strip() if isinstance(alt, str) else ""

@@ -1,5 +1,15 @@
+import re
+
 from .base_policy import WCAGPolicy
 from ...models import ElementContext, RuleVerdict, VerdictStatus
+
+# Strip everything but lowercase alphanumerics for a normalised comparison
+# between OCR text and the accessible name. Compiled once at import.
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9]")
+
+
+def _normalise(s: str) -> str:
+    return _NON_ALNUM_RE.sub("", s.lower())
 
 
 class Policy145(WCAGPolicy):
@@ -29,12 +39,7 @@ class Policy145(WCAGPolicy):
             # it indicates a deliberate text alternative, which is technically allowed
             # if the visual presentation is essential.
             if element.accessible_name and element.accessible_name.name:
-                import re
-
-                def clean(s):
-                    return re.sub(r"[^a-z0-9]", "", s.lower())
-
-                if clean(element.visual.ocr_text) == clean(
+                if _normalise(element.visual.ocr_text) == _normalise(
                     element.accessible_name.name
                 ):
                     return self._pass(
