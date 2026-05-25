@@ -311,8 +311,22 @@
         'combobox', 'listbox',
     ]);
 
+    // Per-category fault isolation (B-3): each extractor below runs inside its
+    // own try/catch. A runtime error in one category (e.g. a malformed node in
+    // the forms walk) no longer aborts the entire frame.evaluate — the other
+    // six categories still return their data, and the failure is reported via
+    // the `_errors` field rather than silently zeroing all seven outputs.
+    const _extractorErrors = {};
+    function _runExtractor(name, fn) {
+        try {
+            fn();
+        } catch (e) {
+            _extractorErrors[name] = String((e && e.message) || e);
+        }
+    }
+
     const forms = [];
-    (function extractForms() {
+    _runExtractor('forms', function extractForms() {
         const formEls = Array.from(queryShadow(document, 'form'));
         const formList = formEls.length ? formEls : [document.body].filter(Boolean);
 
