@@ -411,7 +411,7 @@
     })();
 
     const interactive = [];
-    (function extractInteractive() {
+    _runExtractor('interactive', function extractInteractive() {
         const seen = new WeakSet();
         function addInteractive(el) {
             if (shouldIgnoreForSnapshot(el)) return;
@@ -448,7 +448,7 @@
     })();
 
     const target_sizes = [];
-    (function extractTargetSizes() {
+    _runExtractor('target_sizes', function extractTargetSizes() {
         const MIN_PX = 24;
         const seen = new WeakSet();
         const raw = [];
@@ -565,7 +565,7 @@
     })();
 
     const moving_content = [];
-    (function extractMovingContent() {
+    _runExtractor('moving_content', function extractMovingContent() {
         const STATUS_ATTR_RE = /(^|[\s:_-])(spinner|loading|loader|progress|busy|skeleton|shimmer|throbber|preload|placeholder|buffer)([\s:_-]|$)/i;
         const STATUS_TEXT_RE = /(loading|please wait|working|processing|buffering|syncing|saving|uploading|読み込み|読み込み中|ロード中|処理中|進行中|お待ちください|同期中|保存中|アップロード中|通信中|送信中)/i;
         const STATUS_ROLE_SET = new Set(['progressbar', 'status']);
