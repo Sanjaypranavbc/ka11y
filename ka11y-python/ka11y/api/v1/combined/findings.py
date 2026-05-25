@@ -26,7 +26,7 @@ from ka11y.i18n.loader import (
     render_reason,
 )
 
-from .auditor_field_map import get_status, get_reason
+from .auditor_field_map import get_status, get_reason, status_key
 from .constants import _PYTHON_SEVERITY, _WCAG_LEVEL
 
 # Per-job language context — set in runner._run_job() before creating stage tasks.
@@ -973,13 +973,10 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         )
         if not element_kwargs["element_tag"]:
             element_kwargs["element_tag"] = r.get("tag", "INPUT")
-        for sc, status_key in [
-            ("3.3.1", "wcag_3_3_1_status"),
-            ("3.3.2", "wcag_3_3_2_status"),
-        ]:
+        for sc in ("3.3.1", "3.3.2"):
             # form_auditor.py stores plural "wcag_3_3_1_violations" / "wcag_3_3_2_violations"
-            violation_key = status_key.replace("_status", "_violations")
-            status_raw = r.get(status_key, "")
+            violation_key = status_key(sc).replace("_status", "_violations")
+            status_raw = get_status(r, sc, default="")
             rule_id = f"python_{sc.replace('.', '_')}"
             if status_raw == "FAILED":
                 findings.append(
