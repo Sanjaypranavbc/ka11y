@@ -278,7 +278,15 @@ class AccessibilityController {
    *               message: net::ERR_NAME_NOT_RESOLVED
   */
   async analyseUrlFlat(req, res) {
-    const { url, level = 'AA', lang = 'en', successCriteriaId = null } = req.body;
+    const {
+      url,
+      level = 'AA',
+      lang = 'en',
+      successCriteriaId = null,
+      maxDepth = 0,
+      internalLinks = true,
+      maxPages = 50,
+    } = req.body;
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'url field is required and must be a string' });
@@ -297,13 +305,26 @@ class AccessibilityController {
       return res.status(400).json({ error: 'successCriteriaId must match format X.Y.Z (e.g. "1.1.1")' });
     }
 
+    // Crawl controls. Clamp to safe ranges so a client can't request an
+    // unbounded crawl (depth capped at 5; pages at 200 → matches Python caps).
+    const safeMaxDepth = Math.min(Math.max(parseInt(maxDepth, 10) || 0, 0), 5);
+    const safeMaxPages = Math.min(Math.max(parseInt(maxPages, 10) || 50, 1), 200);
+    const safeInternalLinks = internalLinks !== false; // default true
+
     try {
       const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
       const filter = successCriteriaId ?? null;
       this._logger.info(
-        `analyseUrlFlat start url=${url} level=${wcagLevel} lang=${safeLang} successCriteriaId=${filter ?? 'none'}`
+        `analyseUrlFlat start url=${url} level=${wcagLevel} lang=${safeLang} ` +
+        `successCriteriaId=${filter ?? 'none'} maxDepth=${safeMaxDepth} ` +
+        `internalLinks=${safeInternalLinks} maxPages=${safeMaxPages}`
       );
-      const findings = await this._service.analyseUrlFlat(url, wcagLevel, safeLang, filter);
+      const findings = await this._service.analyseUrlFlat(url, wcagLevel, safeLang, {
+        maxDepth: safeMaxDepth,
+        maxPages: safeMaxPages,
+        internalLinks: safeInternalLinks,
+        successCriteriaId: filter,
+      });
       this._logger.info(`analyseUrlFlat done findings=${findings.length}`);
       res.json({ url, findings });
     } catch (err) {

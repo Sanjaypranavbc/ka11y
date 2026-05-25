@@ -137,46 +137,39 @@ class AsyncTextSpacingCrawler:
 
     async def crawl(self) -> List[TextSpacingData]:
         from ka11y.crawler.browser_pool import leased_context
+        from ka11y.crawler.bfs import bounded_bfs
+        from ka11y.crawler.policy import CrawlPolicy
+
+        policy = CrawlPolicy(max_depth=self.max_depth)
 
         async with leased_context(
             viewport={"width": 1440, "height": 900},
         ) as context:
-            await self._crawl_page(context, self.base_url, 0)
+            await bounded_bfs(
+                context=context,
+                base_url=self.base_url,
+                policy=policy,
+                visit=self._visit_page,
+                log_prefix="text_spacing_crawler",
+            )
 
         return self.results
 
-    async def _crawl_page(self, context, url: str, depth: int):
-        if url in self.visited:
-            return
-        self.visited.add(url)
+    async def _visit_page(self, page, url: str, depth: int) -> list:
+        """Extract text-spacing data from one page; return hrefs found.
 
-        page = await context.new_page()
+        :func:`bounded_bfs` owns traversal, the visited set, the global page
+        budget, and the exact-hostname filter (the prior recursion had no page
+        budget and re-followed links it had already queued)."""
+        await page.goto(url, wait_until="domcontentloaded")
 
-        try:
-            await page.goto(url, wait_until="domcontentloaded")
+        raw = await page.evaluate(self.EXTRACT_JS)
+        for item in raw:
+            self.results.append(TextSpacingData(page_url=url, **item))
 
-            raw = await page.evaluate(self.EXTRACT_JS)
-
-            for item in raw:
-                self.results.append(TextSpacingData(page_url=url, **item))
-
-            # Depth crawl
-            if depth < self.max_depth:
-                links = await page.eval_on_selector_all(
-                    "a[href]", "els => els.map(e => e.href)"
-                )
-
-                base_netloc = urlparse(self.base_url).netloc
-
-                for href in links:
-                    if urlparse(href).netloc == base_netloc:
-                        await self._crawl_page(context, href, depth + 1)
-
-        except Exception as e:
-            print(f"[TextSpacingCrawler] Error: {e}")
-
-        finally:
-            await page.close()
+        return await page.eval_on_selector_all(
+            "a[href]", "els => els.map(e => e.href)"
+        )
 
     def save_json(self):
         import json

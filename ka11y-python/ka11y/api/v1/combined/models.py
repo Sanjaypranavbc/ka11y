@@ -39,6 +39,13 @@ class CombinedRequest(BaseModel):
     url: HttpUrl
     # max_depth: 0 = single-page; capped at 5 to prevent exponential crawl DoS
     max_depth: int = Field(default=0, ge=0, le=5)
+    # internal_links: True (default) → crawl follows only exact-hostname
+    # (domain-specific) links; False also follows off-site links. Applies to
+    # both the Python crawl and the Node BFS.
+    internal_links: bool = True
+    # Hard page budget for the whole crawl (RAM/time ceiling), independent of
+    # depth. Capped at 200 to match the Node-side clamp.
+    max_pages: int = Field(default=50, ge=1, le=200)
     # Pattern + max_length on string fields prevents oversized-payload DoS
     wcag_level: str = Field(default="AAA", pattern=r"^(A|AA|AAA)$")
     success_criteria_id: Optional[str] = Field(default=None, pattern=r"^\d+\.\d+\.\d+$")

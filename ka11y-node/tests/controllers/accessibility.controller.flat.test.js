@@ -26,7 +26,7 @@ describe('AccessibilityController.analyseUrlFlat', () => {
     controller = new AccessibilityController(service, logger);
   });
 
-  test('forwards successCriteriaId to the service', async () => {
+  test('forwards successCriteriaId and crawl options to the service', async () => {
     const req = {
       body: {
         url: 'https://example.com',
@@ -41,13 +41,37 @@ describe('AccessibilityController.analyseUrlFlat', () => {
 
     await controller.analyseUrlFlat(req, res);
 
+    // successCriteriaId is now delivered inside the crawl-options object
+    // (alongside maxDepth/internalLinks/maxPages), not as a bare 4th arg.
     expect(service.analyseUrlFlat).toHaveBeenCalledWith(
       'https://example.com',
       'AA',
       'en',
-      '1.1.1',
+      { maxDepth: 0, internalLinks: true, maxPages: 50, successCriteriaId: '1.1.1' },
     );
     expect(res.json).toHaveBeenCalledWith({ url: 'https://example.com', findings });
+  });
+
+  test('forwards maxDepth / internalLinks / maxPages (clamped) to the service', async () => {
+    const req = {
+      body: {
+        url: 'https://example.com',
+        maxDepth: 99,          // clamped to 5
+        internalLinks: false,
+        maxPages: 9999,        // clamped to 200
+      },
+    };
+    const res = makeRes();
+    service.analyseUrlFlat.mockResolvedValue([]);
+
+    await controller.analyseUrlFlat(req, res);
+
+    expect(service.analyseUrlFlat).toHaveBeenCalledWith(
+      'https://example.com',
+      'AA',
+      'en',
+      { maxDepth: 5, internalLinks: false, maxPages: 200, successCriteriaId: null },
+    );
   });
 
   test('rejects invalid successCriteriaId format before calling the service', async () => {

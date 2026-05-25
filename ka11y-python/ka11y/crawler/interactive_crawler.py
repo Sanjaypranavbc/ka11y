@@ -235,6 +235,10 @@ class InteractiveElementCrawler:
 
     async def crawl(self) -> List[InteractiveElementData]:
         from ka11y.crawler.browser_pool import leased_context
+        from ka11y.crawler.bfs import bounded_bfs
+        from ka11y.crawler.policy import CrawlPolicy
+
+        policy = CrawlPolicy(max_depth=self.max_depth)
 
         async with leased_context(
             viewport={"width": 1440, "height": 900},
@@ -244,41 +248,33 @@ class InteractiveElementCrawler:
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
         ) as context:
-            await self._crawl_page(context, self.base_url, depth=0)
+            await bounded_bfs(
+                context=context,
+                base_url=self.base_url,
+                policy=policy,
+                visit=self._visit_page,
+                log_prefix="interactive_crawler",
+            )
         return self.results
 
-    async def _crawl_page(self, context, url: str, depth: int):
-        if url in self.visited:
-            return
-        self.visited.add(url)
+    async def _visit_page(self, page, url: str, depth: int) -> list:
+        """Extract interactive elements from one page; return hrefs found.
 
-        page = await context.new_page()
+        Traversal, visited set, global page budget, and exact-hostname filter
+        are owned by :func:`bounded_bfs`."""
         try:
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            except Exception:
-                await page.goto(url, wait_until="commit", timeout=15_000)
-            await page.wait_for_timeout(2000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        except Exception:
+            await page.goto(url, wait_until="commit", timeout=15_000)
+        await page.wait_for_timeout(2000)
 
-            raw: list = await page.evaluate(self.EXTRACT_JS)
-            for item in raw:
-                self.results.append(InteractiveElementData(page_url=url, **item))
+        raw: list = await page.evaluate(self.EXTRACT_JS)
+        for item in raw:
+            self.results.append(InteractiveElementData(page_url=url, **item))
 
-            if depth < self.max_depth:
-                links = await page.eval_on_selector_all(
-                    "a[href]", "els => els.map(e => e.href)"
-                )
-                base_netloc = urlparse(self.base_url).netloc
-                for href in links:
-                    if (
-                        urlparse(href).netloc == base_netloc
-                        and href not in self.visited
-                    ):
-                        await self._crawl_page(context, href, depth + 1)
-        except Exception as exc:
-            print(f"[InteractiveCrawler] Error on {url}: {exc}")
-        finally:
-            await page.close()
+        return await page.eval_on_selector_all(
+            "a[href]", "els => els.map(e => e.href)"
+        )
 
     def save_raw_json(self) -> str:
         path = self.output_dir / "interactive_elements_raw.json"

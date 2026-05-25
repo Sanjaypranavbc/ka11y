@@ -7,8 +7,14 @@ from urllib.parse import urlparse, urlunparse
 
 class CrawlPolicy(BaseModel):
     max_depth: int = 0
-    max_pages: int = 10
+    # Global page budget — the hard ceiling that keeps a deep crawl from
+    # exhausting RAM regardless of how many links each page has. 50 is the
+    # configured default (config.crawler.max_pages); BFS stops once hit.
+    max_pages: int = 50
     max_links_per_page: int = 50
+    # same_origin == "internal links only" (domain-specific). With
+    # include_subdomains False the filter is exact-hostname: crawling
+    # example.com follows only example.com links, never blog.example.com.
     same_origin: bool = True
     include_subdomains: bool = False
 
