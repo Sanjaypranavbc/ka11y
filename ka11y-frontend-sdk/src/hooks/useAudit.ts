@@ -84,6 +84,11 @@ function flattenFinding(f: Record<string, unknown>) {
   const imageSrc = (typeof element?.image_src === "string" ? element.image_src : null) || extractImageSrc(elementHtml);
   const imageReference = (typeof element?.image_reference === "string" ? element.image_reference : null) || inferImageReference(reason, imageSrc, idFromElement);
 
+  const pageUrl =
+    (typeof element?.page_url === "string" ? (element.page_url as string) : null) ||
+    (typeof f.page_url === "string" ? (f.page_url as string) : null) ||
+    (typeof f.pageUrl === "string" ? (f.pageUrl as string) : null);
+
   return {
     ...f,
     element_html: elementHtml,
@@ -93,6 +98,7 @@ function flattenFinding(f: Record<string, unknown>) {
     image_reference: imageReference,
     image_src: imageSrc,
     image_text: imageText,
+    page_url: pageUrl,
   };
 }
 
@@ -100,6 +106,27 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
   const report = (pollData.result as Record<string, unknown>) || {};
   const rawViolations = (report.violations as Record<string, unknown>[]) || [];
   const rawNeedsReview = (report.needs_review as Record<string, unknown>[]) || [];
+
+  // Per-page breakdown (max_depth > 0). Flatten the nested findings the same way
+  // as the flat lists so the UI renders them identically.
+  const rawPages = Array.isArray(report.pages) ? (report.pages as Record<string, unknown>[]) : [];
+  const pages = rawPages.map((p) => {
+    const summary = (p.summary as Record<string, unknown>) || {};
+    return {
+      page_url: (p.page_url as string) || "",
+      summary: {
+        total_findings: (summary.total_findings as number) ?? 0,
+        violations: (summary.violations as number) ?? 0,
+        needs_review: (summary.needs_review as number) ?? 0,
+        passes: (summary.passes as number) ?? 0,
+        by_severity: (summary.by_severity as Record<string, number>) ?? {},
+      },
+      violations: ((p.violations as Record<string, unknown>[]) || []).map(flattenFinding),
+      needs_review: ((p.needs_review as Record<string, unknown>[]) || []).map(flattenFinding),
+      passes: ((p.passes as Record<string, unknown>[]) || []).map(flattenFinding),
+    };
+  }) as AuditResult["pages"];
+
   return {
     job_id: (pollData.job_id as string) || "",
     status: "completed",
@@ -115,6 +142,7 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
     violations: rawViolations.map(flattenFinding) as AuditResult["violations"],
     needs_review: rawNeedsReview.map(flattenFinding) as AuditResult["needs_review"],
     passes: (((report.passes as Record<string, unknown>[]) || []).map(flattenFinding) as AuditResult["passes"]) || [],
+    pages,
     warnings: (report.warnings as string[]) || (pollData.warnings as string[]) || [],
     contrast_report: (report.contrast_report as ContrastReport) ?? null,
     image_audit_report: (report.image_audit_report as ImageAuditReport) ?? null,
@@ -372,6 +400,8 @@ export function useAudit() {
           body: JSON.stringify({
             url: config.url,
             max_depth: config.max_depth,
+            internal_links: config.internal_links,
+            max_pages: config.max_pages,
             wcag_level: config.wcag_level,
             lang: config.lang ?? "en",
             run_ocr: config.run_ocr,

@@ -262,6 +262,64 @@ class TestBuildReport:
         r = _build_report("https://x.com", self._findings())
         assert "A" in r["summary"]["by_level"]
 
+    # ── Page-wise breakdown ─────────────────────────────────────────────────
+
+    def _multi_page_findings(self):
+        return [
+            _make_finding(
+                source="axe", rule_id="r1", wcag_sc="1.1.1", status="fail",
+                severity="critical", reason="a", element_html="<img>",
+                page_url="https://x.com/a",
+            ),
+            _make_finding(
+                source="axe", rule_id="r2", wcag_sc="2.4.4", status="fail",
+                severity="high", reason="b", element_html="<a>",
+                page_url="https://x.com/b",
+            ),
+            _make_finding(
+                source="axe", rule_id="r3", wcag_sc="1.4.3", status="needs_review",
+                severity="medium", reason="c", element_html="<p>",
+                page_url="https://x.com/b",
+            ),
+            # element-less finding → attributed to the audited root URL
+            _make_finding(
+                source="python", rule_id="r4", wcag_sc="2.4.5", status="pass",
+                severity=None, reason="ok",
+            ),
+        ]
+
+    def test_by_page_counts(self):
+        r = _build_report("https://x.com", self._multi_page_findings())
+        by_page = r["summary"]["by_page"]
+        assert by_page["https://x.com/a"] == {"violations": 1, "needs_review": 0, "passes": 0}
+        assert by_page["https://x.com/b"] == {"violations": 1, "needs_review": 1, "passes": 0}
+        # element-less finding falls back to the root URL
+        assert by_page["https://x.com"] == {"violations": 0, "needs_review": 0, "passes": 1}
+        assert r["summary"]["page_count"] == 3
+
+    def test_pages_grouping_and_nested_findings(self):
+        r = _build_report("https://x.com", self._multi_page_findings())
+        pages = r["pages"]
+        assert [p["page_url"] for p in pages][0] in ("https://x.com/a", "https://x.com/b")
+        page_b = next(p for p in pages if p["page_url"] == "https://x.com/b")
+        assert page_b["summary"]["violations"] == 1
+        assert page_b["summary"]["needs_review"] == 1
+        assert page_b["summary"]["total_findings"] == 2
+        assert len(page_b["violations"]) == 1
+        assert len(page_b["needs_review"]) == 1
+
+    def test_pages_sorted_worst_first(self):
+        # /a and /b each have 1 violation; /b also has a needs_review → /b ranks first.
+        r = _build_report("https://x.com", self._multi_page_findings())
+        ranked = [p["page_url"] for p in r["pages"]]
+        assert ranked.index("https://x.com/b") < ranked.index("https://x.com")
+
+    def test_single_page_report_has_one_page_entry(self):
+        r = _build_report("https://x.com", self._findings())
+        assert r["summary"]["page_count"] == 1
+        assert r["pages"][0]["page_url"] == "https://x.com"
+        assert r["pages"][0]["summary"]["total_findings"] == 3
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Converter helpers

@@ -58,6 +58,80 @@ def _build_report(
             else:
                 bucket[key]["passes"] += 1
 
+    # ── Page-wise breakdown ──────────────────────────────────────────────────
+    # Multi-page crawls (max_depth > 0) attribute each finding to its source page
+    # via element.page_url. Element-less findings (page-level checks) fall back to
+    # the audited root URL. We expose both a `summary.by_page` count map (mirroring
+    # by_wcag_sc) and a `pages` array that groups the findings per page with its own
+    # summary, so clients can render a per-page view without re-scanning the flat
+    # lists. The page entries reference the same finding objects as the flat lists.
+    def _page_of(f: Dict) -> str:
+        element = f.get("element")
+        if isinstance(element, dict) and element.get("page_url"):
+            return element["page_url"]
+        return url
+
+    by_page: Dict[str, Dict[str, int]] = {}
+    page_buckets: Dict[str, Dict[str, List[Dict]]] = {}
+    page_order: List[str] = []
+    for f in all_findings:
+        page_url = _page_of(f)
+        if page_url not in by_page:
+            by_page[page_url] = {"violations": 0, "needs_review": 0, "passes": 0}
+            page_buckets[page_url] = {
+                "violations": [],
+                "needs_review": [],
+                "passes": [],
+            }
+            page_order.append(page_url)
+        status = f["status"]
+        bucket_key = (
+            "violations"
+            if status == "fail"
+            else "needs_review"
+            if status == "needs_review"
+            else "passes"
+        )
+        by_page[page_url][bucket_key] += 1
+        page_buckets[page_url][bucket_key].append(f)
+
+    pages: List[Dict[str, Any]] = []
+    for page_url in page_order:
+        buckets = page_buckets[page_url]
+        page_sev: Dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        for f in buckets["violations"] + buckets["needs_review"]:
+            sev = f.get("severity")
+            if sev in page_sev:
+                page_sev[sev] += 1
+        pages.append(
+            {
+                "page_url": page_url,
+                "summary": {
+                    "total_findings": (
+                        len(buckets["violations"])
+                        + len(buckets["needs_review"])
+                        + len(buckets["passes"])
+                    ),
+                    "violations": len(buckets["violations"]),
+                    "needs_review": len(buckets["needs_review"]),
+                    "passes": len(buckets["passes"]),
+                    "by_severity": page_sev,
+                },
+                "violations": buckets["violations"],
+                "needs_review": buckets["needs_review"],
+                "passes": buckets["passes"],
+            }
+        )
+
+    # Worst pages first (most violations, then most needs_review), URL as tiebreak.
+    pages.sort(
+        key=lambda p: (
+            -p["summary"]["violations"],
+            -p["summary"]["needs_review"],
+            p["page_url"],
+        )
+    )
+
     return {
         "url": url,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -76,10 +150,13 @@ def _build_report(
             "by_level": level_count,
             "by_wcag_sc": sc_count,
             "by_source": src_count,
+            "by_page": by_page,
+            "page_count": len(pages),
         },
         "violations": violations,
         "needs_review": needs_review,
         "passes": passes,
+        "pages": pages,
         "contrast_report": contrast_report,
         "image_audit_report": image_audit_report,
     }

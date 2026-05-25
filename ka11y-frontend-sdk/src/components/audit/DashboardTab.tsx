@@ -247,6 +247,54 @@ export function DashboardTab({ result }: DashboardTabProps) {
         </CardContent>
       </Card>
 
+      {/* Findings by Page — only meaningful for multi-page crawls (max_depth > 0) */}
+      {(result.pages?.length ?? 0) > 1 && (
+        <Card className="animate-fade-up delay-450">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">{t("dashboard.byPage")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                    <th className="py-1.5 pr-3 font-semibold">{t("dashboard.pageColumn")}</th>
+                    <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.violations")}</th>
+                    <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.needsReview")}</th>
+                    <th className="py-1.5 pl-2 text-right font-semibold">{t("dashboard.passes")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.pages!.map((p) => (
+                    <tr key={p.page_url} className="border-b border-border/50 last:border-0">
+                      <td className="py-1.5 pr-3 max-w-[280px] sm:max-w-[420px] truncate font-mono" title={p.page_url}>
+                        <a
+                          href={p.page_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-primary hover:underline"
+                        >
+                          {p.page_url}
+                        </a>
+                      </td>
+                      <td className="py-1.5 px-2 text-right font-mono" style={{ color: SOURCE_COLORS.violations }}>
+                        {p.summary.violations}
+                      </td>
+                      <td className="py-1.5 px-2 text-right font-mono" style={{ color: SOURCE_COLORS.needs_review }}>
+                        {p.summary.needs_review}
+                      </td>
+                      <td className="py-1.5 pl-2 text-right font-mono" style={{ color: SOURCE_COLORS.passes }}>
+                        {p.summary.passes}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Contrast report — rendered only when OCR produced contrast data */}
       {result.contrast_report && result.contrast_report.images.length > 0 && (
         <ContrastReportSection report={result.contrast_report} />

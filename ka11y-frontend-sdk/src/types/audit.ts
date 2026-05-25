@@ -8,6 +8,8 @@ interface AuditElementInfo {
   image_reference?: string | null;
   image_src?: string | null;
   image_text?: string | null;
+  // Page this finding was discovered on (multi-page crawls, max_depth > 0).
+  page_url?: string | null;
 }
 
 export interface AuditViolation extends AuditElementInfo {
@@ -158,6 +160,22 @@ export interface JobFailure {
   traceback?: string;
 }
 
+export interface PageSummary {
+  total_findings: number;
+  violations: number;
+  needs_review: number;
+  passes: number;
+  by_severity: Record<string, number>;
+}
+
+export interface PageBreakdown {
+  page_url: string;
+  summary: PageSummary;
+  violations: AuditViolation[];
+  needs_review: AuditNeedsReview[];
+  passes: AuditPass[];
+}
+
 export interface AuditResult {
   job_id: string;
   status: "pending" | "running" | "completed" | "failed";
@@ -171,6 +189,9 @@ export interface AuditResult {
   violations: AuditViolation[];
   needs_review: AuditNeedsReview[];
   passes: AuditPass[];
+  // Per-page breakdown for multi-page (max_depth > 0) crawls. One entry per
+  // crawled page, sorted worst-first. Single-page audits have exactly one entry.
+  pages?: PageBreakdown[];
   error?: string;
   warnings?: string[];
   current_stage?: string | null;
@@ -182,6 +203,10 @@ export interface AuditResult {
 export interface AuditConfig {
   url: string;
   max_depth: number;
+  // Crawl follows only same-domain links (always enforced); kept for API parity.
+  internal_links: boolean;
+  // Hard page budget for the whole crawl (RAM/time ceiling), 1–200.
+  max_pages: number;
   wcag_level: "A" | "AA" | "AAA";
   lang: "en" | "ja";
   run_ocr: boolean;

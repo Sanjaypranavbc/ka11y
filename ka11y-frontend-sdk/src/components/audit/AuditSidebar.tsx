@@ -76,6 +76,8 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
   const [config, setConfig] = useState<AuditConfig>({
     url: localStorage.getItem("ka11y_last_url") ?? "",
     max_depth: 0,
+    internal_links: true,
+    max_pages: 50,
     wcag_level: "AAA",
     lang: uiLang,
     run_ocr: true,
@@ -186,16 +188,58 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                 className="mt-1.5 h-8 text-xs font-mono bg-[hsl(var(--input))] border-border focus-visible:ring-primary/50"
               />
             </div>
-            <div>
-              <Label htmlFor="audit-max-depth" className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
-                {t("sidebar.maxDepth")}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="audit-max-depth" className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
+                  {t("sidebar.maxDepth")}
+                </Label>
+                <Input
+                  id="audit-max-depth"
+                  type="number"
+                  min={0}
+                  max={5}
+                  value={config.max_depth}
+                  onChange={(e) => {
+                    const n = Math.max(0, Math.min(5, Math.floor(Number(e.target.value) || 0)));
+                    setConfig((c) => ({ ...c, max_depth: n }));
+                  }}
+                  className="mt-1.5 h-8 text-xs font-mono bg-[hsl(var(--input))] border-border focus-visible:ring-primary/50"
+                />
+              </div>
+              <div>
+                <Label htmlFor="audit-max-pages" className="text-[9px] tracking-widest uppercase text-muted-foreground font-semibold">
+                  {t("sidebar.maxPages")}
+                </Label>
+                <Input
+                  id="audit-max-pages"
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={config.max_pages}
+                  disabled={config.max_depth === 0}
+                  onChange={(e) => {
+                    const n = Math.max(1, Math.min(200, Math.floor(Number(e.target.value) || 1)));
+                    setConfig((c) => ({ ...c, max_pages: n }));
+                  }}
+                  className="mt-1.5 h-8 text-xs font-mono bg-[hsl(var(--input))] border-border focus-visible:ring-primary/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                />
+              </div>
+            </div>
+            <p className="text-[9px] leading-tight text-muted-foreground">
+              {t("sidebar.crawlNote")}
+            </p>
+            <div className="flex items-center justify-between">
+              <Label
+                htmlFor="audit-internal-links"
+                className="text-[10px] font-medium text-muted-foreground cursor-pointer"
+              >
+                {t("sidebar.internalLinks")}
               </Label>
-              <Input
-                id="audit-max-depth"
-                type="number"
-                value={0}
-                disabled
-                className="mt-1.5 h-8 text-xs font-mono bg-muted/50 border-border cursor-not-allowed opacity-70"
+              <Switch
+                id="audit-internal-links"
+                checked={config.internal_links}
+                onCheckedChange={(v) => setConfig((c) => ({ ...c, internal_links: v }))}
+                className="scale-[0.7] data-[state=checked]:bg-primary"
               />
             </div>
             <div>
@@ -249,7 +293,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
             onClick={() => {
               localStorage.setItem("ka11y_last_url", config.url);
               localStorage.setItem("ka11y_last_lang", config.lang);
-              onRunAudit({ ...config, max_depth: 0 });
+              onRunAudit(config);
             }}
             disabled={isRunning || !config.url}
             className={cn(
