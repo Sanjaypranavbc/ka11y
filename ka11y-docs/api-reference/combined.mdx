@@ -329,7 +329,65 @@ Returns the full job record. Poll every 3 – 5 s until `status` is `"completed"
   "result": { /* Python-only findings */ }
 }
 ```
+
+```json Queued (concurrency cap hit)
+{
+  "job_id": "b5ea3ea7-...",
+  "status": "queued",
+  "url": "https://example.com",
+  "submitted_at": "2026-05-13T12:00:00Z",
+  "completed_at": null,
+  "current_stage": null,
+  "stages": [],
+  "warnings": []
+}
+```
+
+```json Failed (internal error — scrubbed)
+{
+  "job_id": "b5ea3ea7-...",
+  "status": "failed",
+  "url": "https://example.com",
+  "submitted_at": "2026-05-13T12:00:00Z",
+  "completed_at": "2026-05-13T12:01:14Z",
+  "error": "Audit failed due to an internal error.",
+  "error_id": "deadbeefcafef00d",
+  "error_stage": "image_audit",
+  "current_stage": null,
+  "stages": [
+    { "name": "axe_core",    "status": "completed", "findings_count": 42 },
+    { "name": "image_audit", "status": "error" }
+  ],
+  "warnings": []
+}
+```
 </ResponseExample>
+
+### Job status values
+
+| `status` | Meaning |
+|---|---|
+| `pending` | Accepted, not yet started |
+| `queued` | Admitted but parked behind the `KA11Y_MAX_CONCURRENT_JOBS` semaphore. Polling reveals queue depth implicitly |
+| `running` | A worker slot is held; one or more stages are executing |
+| `completed` | All stages finished (some may be `error` under graceful degradation) |
+| `failed` | Internal error; see `error_id` |
+
+### Error response contract
+
+Failed audits never leak exception type, message, file path, or traceback. The response carries:
+
+- `error` — a fixed generic string (`"Audit failed due to an internal error."`).
+- `error_id` — opaque UUID hex; operators correlate this with the server log to find the real traceback.
+- `error_stage` — name of the stage that was active when the failure happened.
+
+The same contract applies to:
+
+- The SSE `job_failed` event (carries `error_id` + `stage`, not exception details).
+- The `step_log.jsonl` summary (server-side only, not API-served).
+- `HTTPException(500)` responses from `/api/v1/crawl` and `/api/v1/pipeline` (`detail` is a `{message, error_id}` object).
+
+See `ka11y-python/tests/test_error_response_scrubbing.py` for the regression suite.
 
 <Note>
   `http://node:3000` is a Docker-internal hostname used by **ka11y-python** to reach **ka11y-node** inside Docker Compose. Browsers and the frontend should keep using `/api/*`, not `node:3000`.

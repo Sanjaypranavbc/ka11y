@@ -79,23 +79,58 @@ class TestViolations331:
         viols = _violations_331(f)
         assert viols == []
 
-    def test_required_field_with_aria_describedby_but_no_error_element_is_violation(self):
+    def test_aria_errormessage_pointing_to_missing_element_is_violation(self):
+        # aria-errormessage is unambiguously an error reference: if the target
+        # doesn't exist in the DOM, that's a 3.3.1 failure.
         f = make_field(
             required=True,
-            aria_describedby="err-msg",
-            error_element_id=None,   # element doesn't exist in DOM
+            aria_errormessage="err-msg",
+            errormessage_element_id=None,
         )
         viols = _violations_331(f)
         assert any("does not exist" in v for v in viols)
 
-    def test_error_element_exists_without_role_alert_and_no_aria_live_is_violation(self):
+    def test_aria_errormessage_target_without_live_semantics_is_violation(self):
         f = make_field(
-            error_element_id="err-1",
-            error_has_role_alert=False,
-            error_has_aria_live=None,
+            aria_errormessage="err-1",
+            errormessage_element_id="err-1",
+            errormessage_is_live=False,
         )
         viols = _violations_331(f)
-        assert any("aria-live" in v for v in viols)
+        assert any("live-region" in v or "live region" in v for v in viols)
+
+    def test_aria_invalid_true_with_no_error_reference_is_violation(self):
+        f = make_field(
+            aria_invalid="true",
+            aria_describedby=None,
+            aria_errormessage=None,
+            error_element_id=None,
+            errormessage_element_id=None,
+        )
+        viols = _violations_331(f)
+        assert any("aria-invalid" in v for v in viols)
+
+    def test_aria_invalid_true_with_non_live_error_reference_is_violation(self):
+        f = make_field(
+            aria_invalid="true",
+            aria_describedby="hint",
+            error_element_id="hint",
+            error_is_live=False,
+        )
+        viols = _violations_331(f)
+        assert any("aria-invalid" in v and "live region" in v for v in viols)
+
+    def test_describedby_help_text_alone_does_not_fail_331(self):
+        # Help text linked via aria-describedby is NOT an error message and
+        # must not be flagged for missing live-region semantics.
+        f = make_field(
+            aria_describedby="pwd-hint",
+            error_element_id="pwd-hint",
+            error_is_live=False,
+            aria_invalid=None,
+        )
+        viols = _violations_331(f)
+        assert viols == []
 
     def test_error_element_with_role_alert_passes_331(self):
         f = make_field(
@@ -147,9 +182,9 @@ class TestViolations331:
 
     def test_violation_message_includes_error_element_id(self):
         f = make_field(
-            error_element_id="my-error-box",
-            error_has_role_alert=False,
-            error_has_aria_live=None,
+            aria_errormessage="my-error-box",
+            errormessage_element_id="my-error-box",
+            errormessage_is_live=False,
         )
         viols = _violations_331(f)
         assert any("my-error-box" in v for v in viols)
@@ -259,11 +294,11 @@ class TestFormAccessibilityAuditorReport:
             make_field(
                 form_index=0, type="text", has_any_label=False,
             ),
-            # FAILED 3.3.1: error container exists but has no live/alert roles
+            # FAILED 3.3.1: aria-errormessage target exists but has no live/alert roles
             make_field(
                 form_index=0, type="text", has_any_label=True, label_text="Name",
-                required=True, aria_describedby="err2", error_element_id="err2",
-                error_has_role_alert=False, error_has_aria_live=None,
+                required=True, aria_errormessage="err2", errormessage_element_id="err2",
+                errormessage_is_live=False,
             ),
             # FAILED 3.3.2: password without autocomplete
             make_field(

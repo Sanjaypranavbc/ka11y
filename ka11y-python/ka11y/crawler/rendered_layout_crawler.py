@@ -33,7 +33,6 @@ from playwright.async_api import (
     BrowserContext,
     Page,
     TimeoutError as PlaywrightTimeout,
-    async_playwright,
 )
 
 from ka11y.config.logger import setup_logger
@@ -66,6 +65,11 @@ _LANDSCAPE_W, _LANDSCAPE_H = 844, 390
 _MAX_FOCUS_STEPS = get_max_focus_steps()
 _MAX_HOVER_CANDIDATES = get_max_hover_candidates()
 _PAGE_TIMEOUT_MS = 30_000
+
+# Outer cap on the 7-way scenario gather. Each snapshot opens its own
+# Playwright context/page; networkidle waits can otherwise hang the whole
+# audit. 5 minutes is generous for the slowest realistic page.
+_SCENARIOS_TIMEOUT_SECONDS = 300
 
 # ── CSS for text-spacing scenario (WCAG 1.4.12) ───────────────────────────────
 
@@ -238,25 +242,20 @@ class RenderedLayoutCrawler:
         urls = discovered_urls if discovered_urls else [self.base_url]
         all_results = []
 
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            try:
-                for url in urls:
-                    logger.info(f"[rendered] starting scenarios for {url}")
-                    # Temporarily override base_url for the scenario runners
-                    original_base = self.base_url
-                    self.base_url = url
-                    try:
-                        page_results = await self._run_all_scenarios(browser)
-                        page_results["page_url"] = url
-                        all_results.append(page_results)
-                    finally:
-                        self.base_url = original_base
-            finally:
-                await browser.close()
+        from ka11y.crawler.browser_pool import leased_browser
+
+        async with leased_browser() as browser:
+            for url in urls:
+                logger.info(f"[rendered] starting scenarios for {url}")
+                # Temporarily override base_url for the scenario runners
+                original_base = self.base_url
+                self.base_url = url
+                try:
+                    page_results = await self._run_all_scenarios(browser)
+                    page_results["page_url"] = url
+                    all_results.append(page_results)
+                finally:
+                    self.base_url = original_base
 
         self._raw_results_list = all_results
         return all_results
@@ -273,17 +272,14 @@ class RenderedLayoutCrawler:
     # ── Internal scenario runner ───────────────────────────────────────────────
 
     async def _run_all_scenarios(self, browser: Browser) -> Dict[str, Any]:
-        """Run all scenarios concurrently and collect results."""
-        # Run layout scenarios concurrently
-        (
-            baseline_snap,
-            snap_320,
-            snap_text_spacing,
-            snap_text_spacing_baseline,
-            snap_resize,
-            snap_portrait,
-            snap_landscape,
-        ) = await asyncio.gather(
+        """Run all scenarios concurrently and collect results.
+
+        Bounded by ``_SCENARIOS_TIMEOUT_SECONDS``: if one snapshot hangs
+        (e.g. ``page.wait_for_load_state('networkidle')`` waiting on a
+        long-poll), the others are cancelled rather than blocking the
+        gather indefinitely.
+        """
+        scenarios = (
             self._snapshot_at_viewport(_DESKTOP_W, _DESKTOP_H, "baseline", browser),
             self._snapshot_at_viewport(_REFLOW_W, _REFLOW_H, "reflow_320", browser),
             self._snapshot_with_css(
@@ -305,8 +301,32 @@ class RenderedLayoutCrawler:
             self._snapshot_at_viewport(
                 _LANDSCAPE_W, _LANDSCAPE_H, "orientation_landscape", browser
             ),
-            return_exceptions=True,
         )
+        try:
+            (
+                baseline_snap,
+                snap_320,
+                snap_text_spacing,
+                snap_text_spacing_baseline,
+                snap_resize,
+                snap_portrait,
+                snap_landscape,
+            ) = await asyncio.wait_for(
+                asyncio.gather(*scenarios, return_exceptions=True),
+                timeout=_SCENARIOS_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            # All scenarios timed out together; report empties so downstream
+            # evaluators see absent-snapshot rather than a hung crawler.
+            (
+                baseline_snap,
+                snap_320,
+                snap_text_spacing,
+                snap_text_spacing_baseline,
+                snap_resize,
+                snap_portrait,
+                snap_landscape,
+            ) = (TimeoutError("rendered-layout scenarios exceeded budget"),) * 7
 
         # Focus and hover scans run sequentially (they interact with the page)
         focus_steps = await self._focus_scan(browser)

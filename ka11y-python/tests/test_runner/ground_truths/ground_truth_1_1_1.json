@@ -1,0 +1,712 @@
+{
+  "meta": {
+    "rule": "1.1.1",
+    "rule_name": "Non-text Content",
+    "source_url": "https://www.kao.com/global/en/",
+    "scraped_at": "2026-04-24",
+    "total_cases": 20,
+    "description": "Element-wise ground truth for WCAG 1.1.1 audit accuracy testing. Each case captures real DOM attributes from kao.com and the human-reviewed expected verdict."
+  },
+  "cases": [
+    {
+      "id": "kao-01",
+      "description": "Kao header logo inside <a> link — alt='kao' lacks 'logo' keyword",
+      "dom_attributes": {
+        "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/kao_global_header_logo.png",
+        "alt": "kao",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "/global/en/",
+        "link_text": "",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "functional",
+        "sub_type": "logos",
+        "is_decorative": false,
+        "is_functional": true,
+        "is_logo": true,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Logo alt 'kao' does not include the word 'logo' or 'home' per WCAG 1.1.1 logo guidance"
+      }
+    },
+    {
+      "id": "kao-02",
+      "description": "Slogan SVG image — 'Kirei-Making Life Beautiful' — standalone informative image",
+      "dom_attributes": {
+        "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/img-slogan-en.svg",
+        "alt": "Kirei-Making Life Beautiful",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": false,
+        "in_button": false,
+        "link_href": null,
+        "link_text": null,
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "PASSED",
+        "reason": "Non-empty meaningful alt text describes the slogan content"
+      }
+    },
+    {
+      "id": "kao-03",
+      "description": "Showreel frame 1 — decorative background image with empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/showReel01.png?fmt=webp",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": false,
+        "in_button": false,
+        "link_href": null,
+        "link_text": null,
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "decorative",
+        "sub_type": "decorative",
+        "is_decorative": true,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "PASSED",
+        "reason": "Decorative image correctly has empty alt=''"
+      }
+    },
+    {
+      "id": "kao-04",
+      "description": "Showreel frame 2 — decorative background with empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/showReel02.png?fmt=webp",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": false,
+        "in_button": false,
+        "link_href": null,
+        "link_text": null,
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "decorative",
+        "sub_type": "decorative",
+        "is_decorative": true,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "PASSED",
+        "reason": "Decorative image correctly has empty alt=''"
+      }
+    },
+    {
+      "id": "kao-05",
+      "description": "Showreel frame 5 — decorative background with empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/showReel05.png?fmt=webp",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": false,
+        "in_button": false,
+        "link_href": null,
+        "link_text": null,
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "decorative",
+        "sub_type": "decorative",
+        "is_decorative": true,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "PASSED",
+        "reason": "Decorative image correctly has empty alt=''"
+      }
+    },
+    {
+      "id": "kao-06",
+      "description": "Page title background decoration — empty alt, no link",
+      "dom_attributes": {
+        "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/pageTitle-bg-index-lg.png",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": false,
+        "in_button": false,
+        "link_href": null,
+        "link_text": null,
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "decorative",
+        "sub_type": "decorative",
+        "is_decorative": true,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "PASSED",
+        "reason": "Decorative background image correctly has empty alt=''"
+      }
+    },
+    {
+      "id": "kao-07",
+      "description": "Topics card image — Financial Results — inside <a> with link_text, alt is empty",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-28.jpg?fmt=webp-alpha&wid=810",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/news/business-finance/2025/20250204-001/",
+        "link_text": "Release of Consolidated Financial Results for FY2024",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative image inside a link has empty alt — should describe the image content. The link_text provides link purpose but does not replace the need for image alt text per WCAG 1.1.1"
+      }
+    },
+    {
+      "id": "kao-08",
+      "description": "Topics card — Kao Stories sustainability — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-29.jpg?fmt=webp-alpha&wid=810",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/stories/",
+        "link_text": "Kao Stories — Our Journey Toward a More Sustainable Future",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative image with empty alt text — the image conveys content beyond what link_text provides"
+      }
+    },
+    {
+      "id": "kao-09",
+      "description": "Topics card — Kao at a Glance — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-25.jpg?fmt=webp-alpha&wid=810",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/corporate/at-a-glance/",
+        "link_text": "Kao at a Glance",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative image in link with empty alt — should describe image content"
+      }
+    },
+    {
+      "id": "kao-10",
+      "description": "Topics card — Integrated Report 2025 — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-11_202506.jpg?fmt=webp-alpha&wid=810",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/investor-relations/library/reports/",
+        "link_text": "Released the Kao Integrated Report 2025",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative image in link with empty alt"
+      }
+    },
+    {
+      "id": "kao-11",
+      "description": "Topics card — Sustainability Report 2025 — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-12_202506.jpg?fmt=webp-alpha&wid=810",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/sustainability/reports/",
+        "link_text": "Released the Kao Sustainability Report 2025",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative image in link with empty alt"
+      }
+    },
+    {
+      "id": "kao-12",
+      "description": "Topics card — DEI — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-10_202508.jpg?fmt=webp-alpha&wid=810",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/sustainability/walking-the-right-path/inclusive-diverse/dei/",
+        "link_text": "Kao's approach to Diversity, Equity and Inclusion",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative image in link with empty alt — image conveys content"
+      }
+    },
+    {
+      "id": "kao-13",
+      "description": "About Kao hero image — inside <a> card, empty alt, link_text has 'About Kao'",
+      "dom_attributes": {
+        "src": "https://kao-h.assetsadobe3.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-01-lg.jpg?fmt=webp",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/corporate/",
+        "link_text": "About Kao — We develop sustainable and high-quality products and services",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative hero image with empty alt — should describe visual content"
+      }
+    },
+    {
+      "id": "kao-14",
+      "description": "Our Brands hero image — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://kao-h.assetsadobe3.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-02-lg.jpg?fmt=webp",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/brands/",
+        "link_text": "Our Brands — We help people make more sustainable choices everyday through our brands",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative hero image with empty alt"
+      }
+    },
+    {
+      "id": "kao-15",
+      "description": "Innovation hero image — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://kao-h.assetsadobe3.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-03-lg_202501.jpg?fmt=webp",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/innovation/",
+        "link_text": "Innovation — We tackle difficult major social issues with Essential Research and Technology",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative hero image with empty alt — visual content not conveyed"
+      }
+    },
+    {
+      "id": "kao-16",
+      "description": "Careers hero image — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://kao-h.assetsadobe3.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/index-img-04-lg_202603.jpg?fmt=webp",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/careers/",
+        "link_text": "Careers — We cultivate an inclusive organizational culture where employees can authentically thrive",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative hero image with empty alt"
+      }
+    },
+    {
+      "id": "kao-17",
+      "description": "Sustainability section (small) image — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-05-md.jpg?fmt=webp&wid=750",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/sustainability/",
+        "link_text": "Sustainability — Promoting the Kirei Lifestyle Plan, our ESG strategy",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative image with empty alt"
+      }
+    },
+    {
+      "id": "kao-18",
+      "description": "Sustainability section (large) image — inside <a>, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-05-lg.jpg?fmt=webp&wid=2880",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/sustainability/",
+        "link_text": "Sustainability — Promoting the Kirei Lifestyle Plan, our ESG strategy",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "informative",
+        "sub_type": null,
+        "is_decorative": false,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "FAILED",
+        "reason": "Informative image with empty alt"
+      }
+    },
+    {
+      "id": "kao-19",
+      "description": "Sustainability background pattern — inside <a> but purely decorative, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-bg-02.png?fmt=webp-alpha&wid=2880",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": true,
+        "in_button": false,
+        "link_href": "https://www.kao.com/global/en/sustainability/",
+        "link_text": "Sustainability — Promoting the Kirei Lifestyle Plan",
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "decorative",
+        "sub_type": "decorative",
+        "is_decorative": true,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "PASSED",
+        "reason": "Decorative background pattern correctly has empty alt — even though it is inside a link, it is a CSS-like background not conveying content"
+      }
+    },
+    {
+      "id": "kao-20",
+      "description": "Showreel frame 8 — decorative, standalone, empty alt",
+      "dom_attributes": {
+        "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/showReel08.png?fmt=webp",
+        "alt": "",
+        "title": null,
+        "aria_label": null,
+        "aria_labelledby": null,
+        "role": null,
+        "aria_hidden": null
+      },
+      "context": {
+        "in_link": false,
+        "in_button": false,
+        "link_href": null,
+        "link_text": null,
+        "link_aria_label": null,
+        "button_text": null
+      },
+      "classifier_output": {
+        "classification": "decorative",
+        "sub_type": "decorative",
+        "is_decorative": true,
+        "is_functional": false,
+        "is_logo": false,
+        "is_icon": false,
+        "is_button": false
+      },
+      "ocr_result": null,
+      "expected": {
+        "wcag_1_1_1_status": "PASSED",
+        "reason": "Decorative image correctly has empty alt=''"
+      }
+    }
+  ]
+}

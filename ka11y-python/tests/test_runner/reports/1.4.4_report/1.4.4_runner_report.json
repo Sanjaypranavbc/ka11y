@@ -1,0 +1,57 @@
+{
+  "accuracy": 100.0,
+  "results": [
+    {
+      "id": "c144-01",
+      "description": "Standard paragraph at 200% (Pass)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "violations": []
+    },
+    {
+      "id": "c144-02",
+      "description": "Text clipped at 200% (Fail)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "violations": [
+        "<p> text is clipped after 200% text resize (scrollW=400 > clientW=200, overflow=hidden/hidden). Text: \"This text will be clipped when resized to two hundred percent.\""
+      ]
+    },
+    {
+      "id": "c144-03",
+      "description": "Horizontal scroll introduced at 200% (Fail)",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "violations": [
+        "Page requires horizontal scrolling after 200% text resize (scrollWidth=1300 px > viewport=1280 px). Content or functionality is lost \u2014 violates WCAG 1.4.4."
+      ]
+    },
+    {
+      "id": "c144-04",
+      "description": "Small text remains visible (Pass)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "violations": []
+    },
+    {
+      "id": "c144-05",
+      "description": "Container shrinks to zero (Fail)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "violations": []
+    },
+    {
+      "id": "c144-06",
+      "description": "Complex layout with wrap (Pass)",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "violations": []
+    }
+  ]
+}

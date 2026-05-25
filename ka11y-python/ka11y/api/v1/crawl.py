@@ -14,6 +14,7 @@ Dependencies are provided via FastAPI's DI system (see api/dependencies.py).
 """
 
 import traceback
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -205,6 +206,16 @@ async def run_crawler(
         )
 
     except Exception as e:
-        logger.error(f"Pipeline failed: {e}")
+        # Internal error context (exception type, message, traceback) is logged
+        # but NEVER returned to the client. The opaque error_id allows support
+        # staff to correlate a 500 response with the corresponding log entry.
+        error_id = uuid.uuid4().hex
+        logger.error(f"Crawl pipeline failed (error_id={error_id}): {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Crawl pipeline failed due to an internal error.",
+                "error_id": error_id,
+            },
+        )

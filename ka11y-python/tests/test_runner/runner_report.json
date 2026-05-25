@@ -1,0 +1,205 @@
+{
+  "accuracy": 100.0,
+  "results": [
+    {
+      "id": "kao-01",
+      "description": "Kao header logo inside <a> link \u2014 alt='kao' lacks 'logo' keyword",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Logo alt must include 'logo' or 'home' (or local equivalents). Found: 'kao'",
+      "dom_alt": "kao",
+      "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/kao_global_header_logo.png"
+    },
+    {
+      "id": "kao-02",
+      "description": "Slogan SVG image \u2014 'Kirei-Making Life Beautiful' \u2014 standalone informative image",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "actual_reason": "PASS [1.1.1] No OCR text detected; alt is non-empty (manual review recommended)",
+      "dom_alt": "Kirei-Making Life Beautiful",
+      "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/img-slogan-en.svg"
+    },
+    {
+      "id": "kao-03",
+      "description": "Showreel frame 1 \u2014 decorative background image with empty alt",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "actual_reason": "PASS [1.1.1] Decorative image correctly has empty alt",
+      "dom_alt": "",
+      "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/showReel01.png?fmt=webp"
+    },
+    {
+      "id": "kao-04",
+      "description": "Showreel frame 2 \u2014 decorative background with empty alt",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "actual_reason": "PASS [1.1.1] Decorative image correctly has empty alt",
+      "dom_alt": "",
+      "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/showReel02.png?fmt=webp"
+    },
+    {
+      "id": "kao-05",
+      "description": "Showreel frame 5 \u2014 decorative background with empty alt",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "actual_reason": "PASS [1.1.1] Decorative image correctly has empty alt",
+      "dom_alt": "",
+      "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/showReel05.png?fmt=webp"
+    },
+    {
+      "id": "kao-06",
+      "description": "Page title background decoration \u2014 empty alt, no link",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "actual_reason": "PASS [1.1.1] Decorative image correctly has empty alt",
+      "dom_alt": "",
+      "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/pageTitle-bg-index-lg.png"
+    },
+    {
+      "id": "kao-07",
+      "description": "Topics card image \u2014 Financial Results \u2014 inside <a> with link_text, alt is empty",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-28.jpg?fmt=webp-alpha&wid=810"
+    },
+    {
+      "id": "kao-08",
+      "description": "Topics card \u2014 Kao Stories sustainability \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-29.jpg?fmt=webp-alpha&wid=810"
+    },
+    {
+      "id": "kao-09",
+      "description": "Topics card \u2014 Kao at a Glance \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-25.jpg?fmt=webp-alpha&wid=810"
+    },
+    {
+      "id": "kao-10",
+      "description": "Topics card \u2014 Integrated Report 2025 \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-11_202506.jpg?fmt=webp-alpha&wid=810"
+    },
+    {
+      "id": "kao-11",
+      "description": "Topics card \u2014 Sustainability Report 2025 \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-12_202506.jpg?fmt=webp-alpha&wid=810"
+    },
+    {
+      "id": "kao-12",
+      "description": "Topics card \u2014 DEI \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/topix-1-10_202508.jpg?fmt=webp-alpha&wid=810"
+    },
+    {
+      "id": "kao-13",
+      "description": "About Kao hero image \u2014 inside <a> card, empty alt, link_text has 'About Kao'",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://kao-h.assetsadobe3.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-01-lg.jpg?fmt=webp"
+    },
+    {
+      "id": "kao-14",
+      "description": "Our Brands hero image \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://kao-h.assetsadobe3.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-02-lg.jpg?fmt=webp"
+    },
+    {
+      "id": "kao-15",
+      "description": "Innovation hero image \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://kao-h.assetsadobe3.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-03-lg_202501.jpg?fmt=webp"
+    },
+    {
+      "id": "kao-16",
+      "description": "Careers hero image \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://kao-h.assetsadobe3.com/is/image/content/dam/sites/kao/www-kao-com/global/en/index/index-img-04-lg_202603.jpg?fmt=webp"
+    },
+    {
+      "id": "kao-17",
+      "description": "Sustainability section (small) image \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-05-md.jpg?fmt=webp&wid=750"
+    },
+    {
+      "id": "kao-18",
+      "description": "Sustainability section (large) image \u2014 inside <a>, empty alt",
+      "expected_status": "FAILED",
+      "actual_status": "FAILED",
+      "match": true,
+      "actual_reason": "FAIL [1.1.1] Alt text is empty or generic",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-img-05-lg.jpg?fmt=webp&wid=2880"
+    },
+    {
+      "id": "kao-19",
+      "description": "Sustainability background pattern \u2014 inside <a> but purely decorative, empty alt",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "actual_reason": "PASS [1.1.1] Decorative image correctly has empty alt",
+      "dom_alt": "",
+      "src": "https://www.kao.com/is/image/content/dam/sites/kao/www-kao-com/jp/ja/index/index-bg-02.png?fmt=webp-alpha&wid=2880"
+    },
+    {
+      "id": "kao-20",
+      "description": "Showreel frame 8 \u2014 decorative, standalone, empty alt",
+      "expected_status": "PASSED",
+      "actual_status": "PASSED",
+      "match": true,
+      "actual_reason": "PASS [1.1.1] Decorative image correctly has empty alt",
+      "dom_alt": "",
+      "src": "https://www.kao.com/content/dam/sites/kao/www-kao-com/global/en/index/showReel08.png?fmt=webp"
+    }
+  ]
+}

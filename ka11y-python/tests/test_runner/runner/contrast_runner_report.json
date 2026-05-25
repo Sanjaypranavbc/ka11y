@@ -1,0 +1,322 @@
+{
+  "accuracy": 100.0,
+  "per_rule": {
+    "1.4.3": {
+      "total": 10,
+      "correct": 10,
+      "accuracy": 100.0
+    },
+    "1.4.6": {
+      "total": 10,
+      "correct": 10,
+      "accuracy": 100.0
+    },
+    "1.4.11": {
+      "total": 10,
+      "correct": 10,
+      "accuracy": 100.0
+    }
+  },
+  "results": [
+    {
+      "id": "c143-kao-01",
+      "rule": "1.4.3",
+      "description": "Kao logotype image \u2014 exempt as logo; aria_label present but contrast exempted",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 4.54,
+      "reason": "contrast_exempt \u2014 cv_classification='logo'"
+    },
+    {
+      "id": "c143-kao-02",
+      "rule": "1.4.3",
+      "description": "Decorative star/bullet span in product listing \u2014 exempt as decorative",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 2.32,
+      "reason": "contrast_exempt \u2014 cv_classification='decorative'"
+    },
+    {
+      "id": "c143-kao-03",
+      "rule": "1.4.3",
+      "description": "Disabled 'Subscribe' button on newsletter section \u2014 inactive exempt",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 2.84,
+      "reason": "contrast_exempt \u2014 disabled element"
+    },
+    {
+      "id": "c143-kao-04",
+      "rule": "1.4.3",
+      "description": "Primary body copy paragraph \u2014 black text on white background, maximum contrast",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 21.0,
+      "reason": "normal text \u2014 ratio=21.00, threshold=4.5"
+    },
+    {
+      "id": "c143-kao-05",
+      "rule": "1.4.3",
+      "description": "Navigation link text \u2014 borderline pass at #767676 on white",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 4.54,
+      "reason": "normal text \u2014 ratio=4.54, threshold=4.5"
+    },
+    {
+      "id": "c143-kao-06",
+      "rule": "1.4.3",
+      "description": "Footer secondary link \u2014 borderline fail at #777777 on white",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "actual_ratio": 4.48,
+      "reason": "normal text \u2014 ratio=4.48, threshold=4.5"
+    },
+    {
+      "id": "c143-kao-07",
+      "rule": "1.4.3",
+      "description": "Section heading \u2014 large text (24px regular), passes at lower 3.0 threshold",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 3.03,
+      "reason": "large text \u2014 ratio=3.03, threshold=3.0"
+    },
+    {
+      "id": "c143-kao-08",
+      "rule": "1.4.3",
+      "description": "Bold sub-heading \u2014 large bold text (19px 700), passes large text threshold",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 7.0,
+      "reason": "large text \u2014 ratio=7.00, threshold=3.0"
+    },
+    {
+      "id": "c143-kao-09",
+      "rule": "1.4.3",
+      "description": "White headline overlaid on dark navy hero banner \u2014 passes via high contrast",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 12.61,
+      "reason": "normal text \u2014 ratio=12.61, threshold=4.5"
+    },
+    {
+      "id": "c143-kao-10",
+      "rule": "1.4.3",
+      "description": "Text-over-image hero section \u2014 OCR detected text, sampled background, fails contrast",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "actual_ratio": 1.77,
+      "reason": "OCR path \u2014 ratio=1.77, threshold=4.5"
+    },
+    {
+      "id": "c146-kao-01",
+      "rule": "1.4.6",
+      "description": "Kao logotype \u2014 logo exemption, no AAA re-evaluation performed",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 4.54,
+      "reason": "contrast_exempt \u2014 cv_classification='logo'"
+    },
+    {
+      "id": "c146-kao-02",
+      "rule": "1.4.6",
+      "description": "Decorative icon span \u2014 exempt, AAA check skipped",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 2.32,
+      "reason": "contrast_exempt \u2014 cv_classification='decorative'"
+    },
+    {
+      "id": "c146-kao-03",
+      "rule": "1.4.6",
+      "description": "Primary body copy \u2014 black on white, well above AAA 7.0 threshold",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 21.0,
+      "reason": "AAA normal text \u2014 ratio=21.00, threshold=7.0"
+    },
+    {
+      "id": "c146-kao-04",
+      "rule": "1.4.6",
+      "description": "Navigation link \u2014 passes AA (#767676) but fails AAA (4.54 < 7.0)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "actual_ratio": 4.54,
+      "reason": "AAA normal text \u2014 ratio=4.54, threshold=7.0"
+    },
+    {
+      "id": "c146-kao-05",
+      "rule": "1.4.6",
+      "description": "Brand-red CTA text \u2014 passes AA (5.89) but fails AAA (5.89 < 7.0)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "actual_ratio": 5.89,
+      "reason": "AAA normal text \u2014 ratio=5.89, threshold=7.0"
+    },
+    {
+      "id": "c146-kao-06",
+      "rule": "1.4.6",
+      "description": "White headline on dark navy hero \u2014 passes AAA (12.61 \u2265 7.0)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 12.61,
+      "reason": "AAA normal text \u2014 ratio=12.61, threshold=7.0"
+    },
+    {
+      "id": "c146-kao-07",
+      "rule": "1.4.6",
+      "description": "Section heading \u2014 large text 24px, passes AAA large threshold 4.5 exactly",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 4.54,
+      "reason": "AAA large text \u2014 ratio=4.54, threshold=4.5"
+    },
+    {
+      "id": "c146-kao-08",
+      "rule": "1.4.6",
+      "description": "Product card sub-heading \u2014 large text 24px, fails AAA large threshold (3.03 < 4.5)",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "actual_ratio": 3.03,
+      "reason": "AAA large text \u2014 ratio=3.03, threshold=4.5"
+    },
+    {
+      "id": "c146-kao-09",
+      "rule": "1.4.6",
+      "description": "Bold large sub-heading 19px 700 \u2014 passes AAA large threshold exactly at 4.54",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 4.54,
+      "reason": "AAA large text \u2014 ratio=4.54, threshold=4.5"
+    },
+    {
+      "id": "c146-kao-10",
+      "rule": "1.4.6",
+      "description": "Text-over-image hero with OCR \u2014 white on sampled dark background, passes AAA (14.49 \u2265 7.0)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": 14.49,
+      "reason": "OCR path (AAA) \u2014 ratio=14.49, threshold=7.0"
+    },
+    {
+      "id": "c1411-kao-01",
+      "rule": "1.4.11",
+      "description": "Plain paragraph \u2014 not a UI component, no cv_classification \u2014 not_applicable",
+      "expected_status": "not_applicable",
+      "actual_status": "not_applicable",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "not_ui_component \u2014 not interactive, not a native UI tag, not an icon"
+    },
+    {
+      "id": "c1411-kao-02",
+      "rule": "1.4.11",
+      "description": "Non-focusable product image div \u2014 cv_classification informative, not icon \u2014 not_applicable",
+      "expected_status": "not_applicable",
+      "actual_status": "not_applicable",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "not_ui_component \u2014 not interactive, not a native UI tag, not an icon"
+    },
+    {
+      "id": "c1411-kao-03",
+      "rule": "1.4.11",
+      "description": "Static brand image \u2014 img tag, non-focusable, cv_classification informative \u2014 not_applicable",
+      "expected_status": "not_applicable",
+      "actual_status": "not_applicable",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "not_ui_component \u2014 not interactive, not a native UI tag, not an icon"
+    },
+    {
+      "id": "c1411-kao-04",
+      "rule": "1.4.11",
+      "description": "Disabled 'Search' button \u2014 inactive UI component, exempt from non-text contrast",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "inactive_exempt \u2014 disabled component"
+    },
+    {
+      "id": "c1411-kao-05",
+      "rule": "1.4.11",
+      "description": "Disabled email input on newsletter signup \u2014 inactive, exempt",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "inactive_exempt \u2014 disabled component"
+    },
+    {
+      "id": "c1411-kao-06",
+      "rule": "1.4.11",
+      "description": "Active CTA button with no background or border styling \u2014 no explicit boundary, needs_review",
+      "expected_status": "needs_review",
+      "actual_status": "needs_review",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "no_explicit_boundary \u2014 both background and border are transparent"
+    },
+    {
+      "id": "c1411-kao-07",
+      "rule": "1.4.11",
+      "description": "Navigation anchor link \u2014 focusable, no background or border \u2014 no_explicit_boundary",
+      "expected_status": "needs_review",
+      "actual_status": "needs_review",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "no_explicit_boundary \u2014 both background and border are transparent"
+    },
+    {
+      "id": "c1411-kao-08",
+      "rule": "1.4.11",
+      "description": "Primary 'Contact Us' CTA button with solid background \u2014 has explicit boundary, needs_review",
+      "expected_status": "needs_review",
+      "actual_status": "needs_review",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "boundary_contrast_review \u2014 explicit boundary found; screenshot analysis required"
+    },
+    {
+      "id": "c1411-kao-09",
+      "rule": "1.4.11",
+      "description": "Search text input with visible border only \u2014 has explicit boundary via border, needs_review",
+      "expected_status": "needs_review",
+      "actual_status": "needs_review",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "boundary_contrast_review \u2014 explicit boundary found; screenshot analysis required"
+    },
+    {
+      "id": "c1411-kao-10",
+      "rule": "1.4.11",
+      "description": "Hamburger menu icon div \u2014 non-focusable but cv_classification='icon', has bg \u2014 needs_review",
+      "expected_status": "needs_review",
+      "actual_status": "needs_review",
+      "match": true,
+      "actual_ratio": null,
+      "reason": "boundary_contrast_review \u2014 explicit boundary found; screenshot analysis required"
+    }
+  ]
+}

@@ -1,0 +1,185 @@
+{
+  "accuracy": 100.0,
+  "results": [
+    {
+      "id": "kao-131-01",
+      "description": "Global Header: Search input with programmatic aria-label",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-02",
+      "description": "Newsletter: Email input with visible label text (mocked)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-03",
+      "description": "Inquiry Form: Message textarea with aria-label",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-04",
+      "description": "Search: Orphaned input missing label, title, and visible text",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "missing_relationship",
+      "expected_reason_code": "missing_relationship"
+    },
+    {
+      "id": "kao-131-05",
+      "description": "Survey: Radio button inside a section marked as form_region",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-06",
+      "description": "Survey: Radio button inside a generic container with role='group'",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-07",
+      "description": "Survey: Radio button inside a dedicated role='radiogroup'",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-08",
+      "description": "Survey: Radio button associated via aria-describedby",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-09",
+      "description": "Survey: Radio button using aria-controls for relationship",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-10",
+      "description": "Survey: Radio button using aria-owns for relationship",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-11",
+      "description": "Survey: Orphaned Radio button with no semantic group",
+      "expected_status": "needs_review",
+      "actual_status": "needs_review",
+      "match": true,
+      "reason_code": "orphaned_input",
+      "expected_reason_code": "orphaned_input"
+    },
+    {
+      "id": "kao-131-12",
+      "description": "Privacy: Checkbox inside a form_region",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-13",
+      "description": "Privacy: Orphaned Checkbox with no semantic group",
+      "expected_status": "needs_review",
+      "actual_status": "needs_review",
+      "match": true,
+      "reason_code": "orphaned_input",
+      "expected_reason_code": "orphaned_input"
+    },
+    {
+      "id": "kao-131-14",
+      "description": "Region: Country selector dropdown with aria-label",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-15",
+      "description": "Region: Orphaned select element missing label",
+      "expected_status": "fail",
+      "actual_status": "fail",
+      "match": true,
+      "reason_code": "missing_relationship",
+      "expected_reason_code": "missing_relationship"
+    },
+    {
+      "id": "kao-131-16",
+      "description": "ESG Data: Table header cell (th)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "table_context",
+      "expected_reason_code": "table_context"
+    },
+    {
+      "id": "kao-131-17",
+      "description": "ESG Data: Table data cell (td)",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "table_context",
+      "expected_reason_code": "table_context"
+    },
+    {
+      "id": "kao-131-18",
+      "description": "Corporate Info: Standard paragraph (Not Applicable)",
+      "expected_status": "not_applicable",
+      "actual_status": "not_applicable",
+      "match": true,
+      "reason_code": "not_applicable",
+      "expected_reason_code": "not_applicable"
+    },
+    {
+      "id": "kao-131-19",
+      "description": "Inquiry: Submit input with value as label",
+      "expected_status": "pass",
+      "actual_status": "pass",
+      "match": true,
+      "reason_code": "valid_relationship",
+      "expected_reason_code": "valid_relationship"
+    },
+    {
+      "id": "kao-131-20",
+      "description": "Visual: Decorative image element (Not Applicable for 1.3.1 structural checks)",
+      "expected_status": "not_applicable",
+      "actual_status": "not_applicable",
+      "match": true,
+      "reason_code": "not_applicable",
+      "expected_reason_code": "not_applicable"
+    }
+  ]
+}

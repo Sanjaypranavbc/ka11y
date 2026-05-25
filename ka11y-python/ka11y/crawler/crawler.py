@@ -5,9 +5,7 @@ import hashlib
 import asyncio
 from collections import deque
 from urllib.parse import urljoin, urlparse
-from playwright.async_api import async_playwright
 
-from ka11y.crawler.context_factory import new_crawler_context
 from ka11y.crawler.navigation import navigate_with_resilience
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.crawler.policy import CrawlPolicy
@@ -396,18 +394,14 @@ class AsyncImageCrawler:
 
         self.visited_urls.clear()
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            context = await new_crawler_context(
-                browser,
-                viewport={
-                    "width": CONFIG["crawl_browser"]["width"],
-                    "height": CONFIG["crawl_browser"]["height"],
-                },
-            )
+        from ka11y.crawler.browser_pool import leased_context
+
+        async with leased_context(
+            viewport={
+                "width": CONFIG["crawl_browser"]["width"],
+                "height": CONFIG["crawl_browser"]["height"],
+            },
+        ) as context:
 
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=30)
@@ -452,9 +446,7 @@ class AsyncImageCrawler:
                     except Exception as e:
                         logger.error(f"Error crawling {normalized_url}: {e}")
 
-            await context.close()
-            await browser.close()
-
+            # Context close handled by leased_context's __aexit__.
             if not self.visited_urls:
                 raise ImageCrawlerNavigationError(
                     code="zero_pages_crawled",

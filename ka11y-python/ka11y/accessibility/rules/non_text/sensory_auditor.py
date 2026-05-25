@@ -51,7 +51,7 @@ import csv
 import re
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from ka11y.crawler.sensory_crawler import SensoryElementData
 
@@ -1167,16 +1167,90 @@ def _is_sensory_only(sent: Any, sensory_cats: List[str], lang: str = "en") -> bo
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Tags / roles whose accessible names count as page-level "labelled controls"
+# the user can find by name — so a sensory token that IS a labelled name is
+# not a sensory-only reference.
+_FOCUSABLE_TAGS_FOR_NAME_CORPUS = {
+    "button", "a", "input", "select", "textarea", "option",
+}
+_FOCUSABLE_ROLES_FOR_NAME_CORPUS = {
+    "button", "link", "checkbox", "radio", "menuitem", "tab", "switch", "option",
+}
+_NAME_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _extract_sensory_tokens(text: str, lang: str = "en") -> Set[str]:
+    """Return the set of sensory keywords that actually matched ``text``.
+
+    Used to cross-check a flagged sentence against the page's labelled-control
+    names: if every sensory token in the instruction is also the literal name
+    of a focusable element on the same page, the instruction is *not*
+    sensory-only ("Press the Red button" is fine if a button is labelled
+    "Red").
+    """
+    tokens: Set[str] = set()
+
+    def _add(matches: Iterable[Any]) -> None:
+        for m in matches:
+            if isinstance(m, tuple):
+                m = next((x for x in m if x), "")
+            if m:
+                tokens.add(m.lower())
+
+    if lang == "ja" or _is_cjk_text(text):
+        for pat in _CATEGORY_REGEXES_JA.values():
+            _add(pat.findall(text))
+    for pat in _CATEGORY_REGEXES.values():
+        _add(pat.findall(text))
+    return tokens
+
+
+def _build_labelled_name_corpus(
+    elements: Iterable["SensoryElementData"],
+) -> Set[str]:
+    """Lowercased word-token corpus drawn from the labelled names of every
+    focusable element seen on the audited pages. A sensory token in a flagged
+    sentence is forgiven if every such token appears here."""
+    corpus: Set[str] = set()
+    for el in elements:
+        tag = (getattr(el, "tag", "") or "").lower()
+        role = (getattr(el, "role", "") or "").lower()
+        if (
+            tag not in _FOCUSABLE_TAGS_FOR_NAME_CORPUS
+            and role not in _FOCUSABLE_ROLES_FOR_NAME_CORPUS
+        ):
+            continue
+        for src in (
+            getattr(el, "aria_label", None),
+            getattr(el, "value", None),
+            getattr(el, "text", None),
+            getattr(el, "title", None),
+        ):
+            if not src:
+                continue
+            for tok in _NAME_WORD_RE.findall(src.lower()):
+                if len(tok) > 1:
+                    corpus.add(tok)
+    return corpus
+
+
 def _violations_133(
     element: SensoryElementData,
     nlp: Any,
     lang: str = "en",
+    labelled_names: Optional[Set[str]] = None,
 ) -> List[Tuple[str, str, List[str], str]]:
     """
     Analyse one element's text for WCAG 1.3.3 violations.
 
     Returns a list of (sentence_text, message, sensory_categories, status)
     tuples for each instructional sentence found.  Status is "FAILED" or "PASSED".
+
+    When ``labelled_names`` is supplied (a token corpus from
+    :func:`_build_labelled_name_corpus`), a sentence that would otherwise be
+    flagged as sensory-only is downgraded to ``PASSED`` if every detected
+    sensory token also appears in the corpus — meaning the page has a
+    focusable element literally named by that token.
     """
     min_len = _MIN_TEXT_LEN_CJK if lang == "ja" else _MIN_TEXT_LEN
     texts_to_check = [
@@ -1203,6 +1277,16 @@ def _violations_133(
                 continue
 
             if _is_sensory_only(sent, sensory_cats, lang):
+                if labelled_names:
+                    sent_tokens = _extract_sensory_tokens(sent_text, lang)
+                    if sent_tokens and sent_tokens.issubset(labelled_names):
+                        msg = (
+                            "1.3.3: Instruction mentions sensory term(s), but the "
+                            "term(s) match the labelled name of a focusable control "
+                            "on the page — user can locate it by name."
+                        )
+                        results.append((sent_text.strip(), msg, sensory_cats, "PASSED"))
+                        continue
                 cats_str = ", ".join(sensory_cats)
                 msg = (
                     f"1.3.3: Instruction relies solely on sensory characteristic(s) "
@@ -1271,14 +1355,20 @@ class SensoryCharacteristicsAuditor:
         """
         records: List[Dict[str, Any]] = []
 
+        # Build a single page-level labelled-name corpus once per audit run.
+        # Used by both spaCy and regex paths to forgive instructions like
+        # "Press the Red button" when a focusable element is literally
+        # named "Red" (e.g. Red Hat product page).
+        labelled_names = _build_labelled_name_corpus(elements)
+
         for el in elements:
             el_lang = _detect_lang(el) or self.lang
             nlp = _get_nlp(el_lang)
 
             viols = (
-                _violations_133(el, nlp, el_lang)
+                _violations_133(el, nlp, el_lang, labelled_names=labelled_names)
                 if nlp is not None
-                else _violations_133_regex(el, el_lang)
+                else _violations_133_regex(el, el_lang, labelled_names=labelled_names)
             )
 
             if not viols:
@@ -1367,11 +1457,14 @@ class SensoryCharacteristicsAuditor:
 def _violations_133_regex(
     element: SensoryElementData,
     lang: str = "en",
+    labelled_names: Optional[Set[str]] = None,
 ) -> List[Tuple[str, str, List[str], str]]:
     """
     Pure-regex fallback when spaCy is unavailable.
     Less accurate (no morphological analysis) but zero-dependency.
     Supports both English and Japanese via _split_sentences_regex.
+
+    See :func:`_violations_133` for the meaning of ``labelled_names``.
     """
     min_len = _MIN_TEXT_LEN_CJK if lang == "ja" else _MIN_TEXT_LEN
     texts = [t for t in _iter_text_sources(element) if len(t) >= min_len]
@@ -1394,6 +1487,16 @@ def _violations_133_regex(
             has_label = _has_meaningful_label_text(sent_text, lang)
 
             if not has_label:
+                if labelled_names:
+                    sent_tokens = _extract_sensory_tokens(sent_text, lang)
+                    if sent_tokens and sent_tokens.issubset(labelled_names):
+                        msg = (
+                            "1.3.3: Instruction mentions sensory term(s), but the "
+                            "term(s) match the labelled name of a focusable control "
+                            "on the page — user can locate it by name."
+                        )
+                        results.append((sent_text, msg, cats, "PASSED"))
+                        continue
                 msg = (
                     f"1.3.3: Instruction relies solely on sensory characteristic(s) "
                     f"[{', '.join(cats)}] — \"{sent_text[:120]}\" — "
