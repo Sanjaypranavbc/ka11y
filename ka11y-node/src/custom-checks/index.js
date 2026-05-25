@@ -216,6 +216,37 @@ function _buildContext(context = {}) {
   };
 }
 
+/**
+ * Normalize the flexible 2nd/3rd arguments of the run* helpers.
+ *
+ * Accepts either:
+ *   - (page, criteriaId, context)  → criteriaId is a WCAG SC string ("1.1.1")
+ *   - (page, context)              → legacy form; context = { lang, config, criteriaId? }
+ *
+ * Returning a single criterion lets callers run ONLY the relevant check(s) for a
+ * single-SC audit instead of running all checks and filtering afterwards.
+ *
+ * @returns {{ criteriaId: string|null, context: object }}
+ */
+function _parseRunArgs(criteriaIdOrContext, context) {
+  if (criteriaIdOrContext && typeof criteriaIdOrContext === 'object') {
+    return { criteriaId: criteriaIdOrContext.criteriaId || null, context: criteriaIdOrContext };
+  }
+  if (typeof criteriaIdOrContext === 'string') {
+    return { criteriaId: criteriaIdOrContext || null, context: context || {} };
+  }
+  return { criteriaId: null, context: context || {} };
+}
+
+/**
+ * Filter a list of check definitions down to those mapped to `criteriaId`.
+ * A null/empty criterion means "run everything" (full audit).
+ */
+function _selectChecks(checkDefs, criteriaId) {
+  if (!criteriaId) return checkDefs;
+  return checkDefs.filter(d => d && d.check && d.check.SC === criteriaId);
+}
+
 async function _runChecks(checkDefs, page, context = {}) {
   const sharedContext = _buildContext(context);
   const results = await Promise.allSettled(checkDefs.map(d => d.check.run(page, sharedContext)));
@@ -231,16 +262,19 @@ async function _runChecks(checkDefs, page, context = {}) {
     .filter(r => r != null);
 }
 
-async function runStaticChecks(page, context = {}) {
-  return _runChecks(STATIC_CHECKS, page, context);
+async function runStaticChecks(page, criteriaIdOrContext = null, context = {}) {
+  const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
+  return _runChecks(_selectChecks(STATIC_CHECKS, criteriaId), page, ctx);
 }
 
-async function runInteractiveChecks(page, context = {}) {
+async function runInteractiveChecks(page, criteriaIdOrContext = null, context = {}) {
+  const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
   // Interactive checks must run sequentially (they mutate focus/keyboard/page state)
-  const sharedContext = _buildContext(context);
+  const sharedContext = _buildContext(ctx);
+  const selected = _selectChecks(INTERACTIVE_CHECKS, criteriaId);
   const results = [];
-  for (let i = 0; i < INTERACTIVE_CHECKS.length; i++) {
-    const checkDef = INTERACTIVE_CHECKS[i];
+  for (let i = 0; i < selected.length; i++) {
+    const checkDef = selected[i];
     try {
       results.push(await checkDef.check.run(page, sharedContext));
     } catch (err) {
@@ -252,11 +286,12 @@ async function runInteractiveChecks(page, context = {}) {
   return results;
 }
 
-async function runAll(page, context = {}) {
+async function runAll(page, criteriaIdOrContext = null, context = {}) {
+  const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
   // Deterministic order: static first, then interactive.
   // Running both in parallel on the same page can cause state interference.
-  const staticR = await runStaticChecks(page, context);
-  const interactiveR = await runInteractiveChecks(page, context);
+  const staticR = await runStaticChecks(page, criteriaId, ctx);
+  const interactiveR = await runInteractiveChecks(page, criteriaId, ctx);
   return [...staticR, ...interactiveR];
 }
 

@@ -19,7 +19,7 @@ import asyncio
 import functools
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
@@ -168,28 +168,31 @@ async def _call_node_flat(
     max_depth: int = 0,
     internal_links: bool = True,
     max_pages: int = 50,
+    success_criteria_id: Optional[str] = None,
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings.
 
     ``max_depth`` / ``internal_links`` make Node run its own bounded BFS so it
     covers the same deeper pages Python does (previously Node only ever audited
     the root URL, so max_depth had no effect on the axe-core side).
+    ``success_criteria_id`` lets Node run only the axe rules + custom checks for a
+    single WCAG SC, so a per-rule audit doesn't pay for the full rule set.
     """
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
+    payload_json: Dict[str, Any] = {
+        "url": url,
+        "level": wcag_level,
+        "lang": lang,
+        "maxDepth": max_depth,
+        "internalLinks": internal_links,
+        "maxPages": max_pages,
+    }
+    if success_criteria_id:
+        payload_json["successCriteriaId"] = success_criteria_id
     try:
         # 300s timeout to allow for heavy custom checks on complex pages
         async with httpx.AsyncClient(timeout=300.0) as client:
-            resp = await client.post(
-                endpoint,
-                json={
-                    "url": url,
-                    "level": wcag_level,
-                    "lang": lang,
-                    "maxDepth": max_depth,
-                    "internalLinks": internal_links,
-                    "maxPages": max_pages,
-                },
-            )
+            resp = await client.post(endpoint, json=payload_json)
             resp.raise_for_status()
             return resp.json().get("findings", [])
     except httpx.ConnectError:
@@ -217,6 +220,8 @@ async def _stage_image_audit(
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
     discovered_urls: List[str] | None = None,
+    max_pages: int = 50,
+    internal_links: bool = True,
 ) -> Tuple[List[Dict], Optional[Dict[str, Any]]]:
     """Crawl images → OCR → 1.1.1 alt-text + 1.4.3 contrast."""
     _stage_start(job_id, "image_audit")
@@ -237,7 +242,12 @@ async def _stage_image_audit(
             TextClassification,
         )
 
-        image_crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
+        image_crawler = AsyncImageCrawler(
+            base_url=url,
+            max_depth=max_depth,
+            max_pages=max_pages,
+            internal_links=internal_links,
+        )
 
         async def _crawl_and_save() -> None:
             await image_crawler.crawl_page(discovered_urls=discovered_urls)
@@ -1184,6 +1194,7 @@ async def _run_python_stages(
     step_logger: ExecutionStepLogger | None = None,
     internal_links: bool = True,
     max_pages: int = 50,
+    success_criteria_id: Optional[str] = None,
 ) -> PythonStagesResult:
     """
     Run all Python audit stages concurrently.
@@ -1208,10 +1219,26 @@ async def _run_python_stages(
         )
     )
 
+    # The rendered-layout stage does not crawl on its own — it audits exactly the
+    # pages in ``discovered_urls``, which come from the snapshot's bounded BFS. So
+    # at depth>0 it needs the snapshot to reach deeper pages. (The image stage has
+    # its own BFS, so an image-only deep audit does not need the snapshot.)
+    rendered_layout_enabled = any(
+        (
+            run_resize_text_audit,
+            run_reflow_audit,
+            run_text_spacing_audit,
+            run_orientation_audit,
+            run_hover_focus_content_audit,
+            run_focus_not_obscured_min_audit,
+            run_focus_not_obscured_enh_audit,
+        )
+    )
+
     # 1. Run universal snapshot first
     snapshot = None
     discovered_urls = [url]
-    if static_rules_enabled:
+    if static_rules_enabled or (rendered_layout_enabled and max_depth > 0):
         snapshot = await _load_universal_snapshot(
             url=url,
             output_dir=output_dir,
@@ -1243,6 +1270,8 @@ async def _run_python_stages(
                 lang,
                 step_logger,
                 discovered_urls=discovered_urls,
+                max_pages=max_pages,
+                internal_links=internal_links,
             )
         ),
         _timed(

@@ -41,13 +41,22 @@ async function run(page, context = {}) {
   page.on('framenavigated', onNavigated);
 
   try {
-    // Inject SPA navigation detection via pushState/replaceState interception
+    // Inject SPA navigation detection: wrap history.pushState/replaceState (and
+    // listen for popstate/hashchange) behind a per-page state object (__navChanges)
+    // so we can count programmatic navigations and later restore the originals.
     await page.evaluate(() => {
-      window.__navChanges = 0;
-      const orig = history.pushState.bind(history);
-      history.pushState = function(...args) { window.__navChanges++; return orig(...args); };
-      const origReplace = history.replaceState.bind(history);
-      history.replaceState = function(...args) { window.__navChanges++; return origReplace(...args); };
+      const stateKey = '__navChanges';
+      if (window[stateKey] && window[stateKey].originalPush) return;
+      const originalPush = history.pushState;
+      const originalReplace = history.replaceState;
+      const state = { count: 0, originalPush, originalReplace };
+      state.count = 0;
+      history.pushState = function (...args) { state.count++; return originalPush.apply(history, args); };
+      history.replaceState = function (...args) { state.count++; return originalReplace.apply(history, args); };
+      state.onPop = () => { state.count++; };
+      window.addEventListener('popstate', state.onPop);
+      window.addEventListener('hashchange', state.onPop);
+      window[stateKey] = state;
     });
 
     const focusable = await page.evaluate((sel, max) => {
@@ -87,11 +96,10 @@ async function run(page, context = {}) {
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      const spaNavChanged = await page.evaluate(() => window.__navChanges > 0).catch(() => false);
-      if (spaNavChanged) {
-        // Reset counter for next iteration
-        await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
-      }
+      const spaNavChanged = await page.evaluate(() => {
+        const s = window.__navChanges;
+        return !!(s && s.count > 0);
+      }).catch(() => false);
 
       // Only flag pathname/search changes — hash-only changes (skip-links, anchor navigation)
       // are not a WCAG 3.2.1 context change.
@@ -100,10 +108,27 @@ async function run(page, context = {}) {
         break; // page may have navigated; unsafe to continue testing other elements
       }
       // Reset SPA counter for next element
-      await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
+      await page.evaluate(() => {
+        if (window.__navChanges) window.__navChanges.count = 0;
+      }).catch(() => {});
     }
   } finally {
     page.off('framenavigated', onNavigated);
+    // Restore the original history methods and remove our listeners.
+    await page.evaluate(() => {
+      const stateKey = '__navChanges';
+      const s = window[stateKey];
+      if (!s) return;
+      try {
+        if (s.originalPush) history.pushState = s.originalPush;
+        if (s.originalReplace) history.replaceState = s.originalReplace;
+        if (s.onPop) {
+          window.removeEventListener('popstate', s.onPop);
+          window.removeEventListener('hashchange', s.onPop);
+        }
+      } catch (_) { /* best-effort restore */ }
+      delete window[stateKey];
+    }).catch(() => {});
   }
 
   if (violations.length === 0) {

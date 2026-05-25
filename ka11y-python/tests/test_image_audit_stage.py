@@ -109,9 +109,17 @@ async def test_stage_image_audit_surfaces_dns_resolution_warning():
     }
 
     class DummyCrawler:
-        def __init__(self, base_url: str, max_depth: int):
+        def __init__(
+            self,
+            base_url: str,
+            max_depth: int,
+            max_pages: int = 50,
+            internal_links: bool = True,
+        ):
             self.base_url = base_url
             self.max_depth = max_depth
+            self.max_pages = max_pages
+            self.internal_links = internal_links
             self.images_data = []
             self.output_dir = "/tmp/ka11y-image-audit-test"
 

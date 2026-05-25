@@ -78,7 +78,13 @@ async function boundedBfs({
   const visited = new Set();
   let pagesDone = 0;
 
-  const inScope = (url) => !internalLinksOnly || hostOf(url) === baseHost;
+  // Link-following is ALWAYS confined to the exact base hostname: we never follow
+  // off-host links, so a deep crawl stays on the audited domain and cannot be used
+  // to reach external/internal hosts via redirect-style hops (SSRF safety). The
+  // `internalLinksOnly` flag is retained for API parity but only ever tightens —
+  // it can never loosen — this same-host rule.
+  void internalLinksOnly;
+  const inScope = (url) => hostOf(url) === baseHost;
 
   while (queue.length > 0) {
     const [rawUrl, depth] = queue.shift();

@@ -39,9 +39,9 @@ class CombinedRequest(BaseModel):
     url: HttpUrl
     # max_depth: 0 = single-page; capped at 5 to prevent exponential crawl DoS
     max_depth: int = Field(default=0, ge=0, le=5)
-    # internal_links: True (default) → crawl follows only exact-hostname
-    # (domain-specific) links; False also follows off-site links. Applies to
-    # both the Python crawl and the Node BFS.
+    # internal_links: retained as a safeguard. The crawl ALWAYS follows only
+    # exact-hostname (domain-specific) links and never leaves the audited domain
+    # — in both the Python crawl and the Node BFS — regardless of this flag.
     internal_links: bool = True
     # Hard page budget for the whole crawl (RAM/time ceiling), independent of
     # depth. Capped at 200 to match the Node-side clamp.

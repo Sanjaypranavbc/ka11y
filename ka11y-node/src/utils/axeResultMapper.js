@@ -305,6 +305,40 @@ function _normalizeCriterionId(sc, ruleId, tags = []) {
   return null;
 }
 
+// Reverse map: WCAG SC id ("1.1.1") → [axe rule ids]. Built once at startup from
+// axe-core's own rule metadata (each rule's wcagNNN tag) plus the RULE_SC_FALLBACK
+// table, so a single-SC audit can run axe with `{ type: 'rule', values: [...] }`
+// instead of every rule for the level.
+const _SC_TO_AXE_RULES = (() => {
+  const map = {};
+  const add = (sc, ruleId) => {
+    if (!sc || !ruleId) return;
+    (map[sc] = map[sc] || []);
+    if (!map[sc].includes(ruleId)) map[sc].push(ruleId);
+  };
+  let rules = [];
+  try {
+    // require lazily so a broken axe-core install can't crash module load.
+    rules = require('axe-core').getRules() || [];
+  } catch (_) { rules = []; }
+  for (const r of rules) {
+    add(extractSuccessCriteriaId(r.tags || [], r.ruleId), r.ruleId);
+  }
+  for (const [ruleId, sc] of Object.entries(RULE_SC_FALLBACK)) add(sc, ruleId);
+  return map;
+})();
+
+/**
+ * Axe-core rule ids that cover a given WCAG Success Criterion.
+ *
+ * @param {string} criteriaId e.g. "1.1.1"
+ * @returns {string[]} axe rule ids (possibly empty for custom-only criteria)
+ */
+function axeRuleIdsForCriteria(criteriaId) {
+  if (!criteriaId) return [];
+  return (_SC_TO_AXE_RULES[criteriaId] || []).slice();
+}
+
 function _criterionName(sc, ruleId, fallbackName = null, lang = 'en') {
   if (!sc) return null;
   if (sc === BEST_PRACTICE_ID) {
@@ -707,4 +741,5 @@ module.exports = {
   mapCustomResultsFlat,
   formatSuccessCriterion,
   extractSuccessCriteriaId,
+  axeRuleIdsForCriteria,
 };

@@ -39,19 +39,27 @@ async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const violations = [];
   let navigationDetected = false;
-  const initialUrl = page.url();
 
   const onNavigated = () => { navigationDetected = true; };
   page.on('framenavigated', onNavigated);
 
   try {
-    // Inject SPA navigation detection via pushState/replaceState interception
+    // Inject SPA navigation detection: wrap history.pushState/replaceState (and
+    // listen for popstate/hashchange) behind a per-page state object so we can
+    // count programmatic navigations and later restore the originals cleanly.
     await page.evaluate(() => {
-      window.__navChanges = 0;
-      const orig = history.pushState.bind(history);
-      history.pushState = function(...args) { window.__navChanges++; return orig(...args); };
-      const origReplace = history.replaceState.bind(history);
-      history.replaceState = function(...args) { window.__navChanges++; return origReplace(...args); };
+      const stateKey = '__ka11yOnInputNavState';
+      if (window[stateKey] && window[stateKey].originalPush) return;
+      const originalPush = history.pushState;
+      const originalReplace = history.replaceState;
+      const state = { count: 0, originalPush, originalReplace };
+      state.count = 0;
+      history.pushState = function (...args) { state.count++; return originalPush.apply(history, args); };
+      history.replaceState = function (...args) { state.count++; return originalReplace.apply(history, args); };
+      state.onPop = () => { state.count++; };
+      window.addEventListener('popstate', state.onPop);
+      window.addEventListener('hashchange', state.onPop);
+      window[stateKey] = state;
     });
 
     const inputs = await page.evaluate((sel, max) => {
@@ -99,17 +107,19 @@ async function run(page, context = {}) {
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      const spaNavChanged = await page.evaluate(() => window.__navChanges > 0).catch(() => false);
-      if (spaNavChanged) {
-        await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
-      }
+      const spaNavChanged = await page.evaluate(() => {
+        const s = window.__ka11yOnInputNavState;
+        return !!(s && s.count > 0);
+      }).catch(() => false);
 
       if (navigationDetected || spaNavChanged || currentUrl !== urlBefore) {
         violations.push(inputInfo);
         break; // page may have navigated; can't continue safely
       }
       // Reset SPA counter for next element
-      await page.evaluate(() => { window.__navChanges = 0; }).catch(() => {});
+      await page.evaluate(() => {
+        if (window.__ka11yOnInputNavState) window.__ka11yOnInputNavState.count = 0;
+      }).catch(() => {});
 
       // Clean up: restore original state
       if (!inputInfo.isSelect && !inputInfo.isCheckboxOrRadio) {
@@ -126,6 +136,22 @@ async function run(page, context = {}) {
     }
   } finally {
     page.off('framenavigated', onNavigated);
+    // Restore the original history methods and remove our listeners so the page
+    // is left exactly as we found it (no leaked instrumentation between checks).
+    await page.evaluate(() => {
+      const stateKey = '__ka11yOnInputNavState';
+      const s = window[stateKey];
+      if (!s) return;
+      try {
+        if (s.originalPush) history.pushState = s.originalPush;
+        if (s.originalReplace) history.replaceState = s.originalReplace;
+        if (s.onPop) {
+          window.removeEventListener('popstate', s.onPop);
+          window.removeEventListener('hashchange', s.onPop);
+        }
+      } catch (_) { /* best-effort restore */ }
+      delete window[stateKey];
+    }).catch(() => {});
   }
 
   if (violations.length === 0) {

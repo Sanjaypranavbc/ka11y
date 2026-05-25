@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const dns = require('dns').promises;
-const { mapResults, mapResultsFlat, mapCustomResultsFlat } = require('../utils/axeResultMapper');
+const { mapResults, mapResultsFlat, mapCustomResultsFlat, axeRuleIdsForCriteria } = require('../utils/axeResultMapper');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 const { boundedBfs } = require('../utils/crawl');
 
@@ -116,6 +116,18 @@ function _tagsForLevel(level) {
   if (level === 'AA' || level === 'AAA') tags.push('wcag2aa', 'wcag21aa', 'wcag22aa');
   if (level === 'AAA') tags.push('wcag2aaa');
   return tags;
+}
+
+/**
+ * Pick the axe runOnly for a request. When a single WCAG SC is requested, run
+ * only the axe rules mapped to it (`{ type: 'rule', values: [...] }`) so axe does
+ * not waste time on unrelated rules. Falls back to `defaultRunOnly` when the
+ * criterion has no axe rules (custom-check-only SC) or when none is requested.
+ */
+function _runOnlyForCriteria(criteriaId, defaultRunOnly) {
+  if (!criteriaId) return defaultRunOnly;
+  const ruleIds = axeRuleIdsForCriteria(criteriaId);
+  return ruleIds.length ? { type: 'rule', values: ruleIds } : defaultRunOnly;
 }
 
 function _allowedLevels(level) {
@@ -371,7 +383,9 @@ class AccessibilityService {
       await this._configureAxeLocale(page, lang);
 
       this._logger.info('Running axe.run() analysis...');
-      const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs);
+      // When a single criterion is requested, run only the axe rules mapped to it.
+      const axeRunOnly = _runOnlyForCriteria(criteriaId, runOnly);
+      const axeResults = await this._runAxeWithTimeout(page, axeRunOnly, timeoutMs);
 
       this._logger.info(
         `axe.run() complete — violations: ${axeResults.violations.length}, ` +
@@ -380,13 +394,12 @@ class AccessibilityService {
       );
 
       this._logger.info('Running static custom checks...');
-      const customResults = await runStaticChecks(page, { lang });
-      const filteredCustom = criteriaId
-        ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
-        : customResults;
-      this._logger.info(`Custom checks complete — ${filteredCustom.length} SC(s) returned.`);
+      // Push the criterion into the runner so only the relevant check executes
+      // (preserves lang for full audits where no criterion is filtered).
+      const customResults = await runStaticChecks(page, criteriaId != null ? criteriaId : { lang });
+      this._logger.info(`Custom checks complete — ${customResults.length} SC(s) returned.`);
 
-      return mergeWithAxe(mapResults(axeResults, criteriaId), filteredCustom);
+      return mergeWithAxe(mapResults(axeResults, criteriaId), customResults);
     } catch (err) {
       this._logger.error('Error during accessibility analysis:', err.message);
       throw err;
@@ -446,7 +459,8 @@ class AccessibilityService {
       await this._configureAxeLocale(page, lang);
 
       this._logger.info('Running axe.run() analysis...');
-      const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs);
+      const axeRunOnly = _runOnlyForCriteria(criteriaId, runOnly);
+      const axeResults = await this._runAxeWithTimeout(page, axeRunOnly, timeoutMs);
 
       this._logger.info(
         `axe.run() complete — violations: ${axeResults.violations.length}, ` +
@@ -455,13 +469,10 @@ class AccessibilityService {
       );
 
       this._logger.info('Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page, { lang });
-      const filteredCustom = criteriaId
-        ? customResults.filter(r => r && r.successCriteriaId === criteriaId)
-        : customResults;
-      this._logger.info(`Custom checks complete — ${filteredCustom.length} SC(s) returned.`);
+      const customResults = await runAll(page, criteriaId != null ? criteriaId : { lang });
+      this._logger.info(`Custom checks complete — ${customResults.length} SC(s) returned.`);
 
-      return mergeWithAxe(mapResults(axeResults, criteriaId), filteredCustom);
+      return mergeWithAxe(mapResults(axeResults, criteriaId), customResults);
     } catch (err) {
       this._logger.error(`Error during URL accessibility analysis: ${err.message}`);
       throw err;

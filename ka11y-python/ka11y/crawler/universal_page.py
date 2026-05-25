@@ -132,7 +132,7 @@ class UniversalPageLoader:
         if policy is None:
             policy = CrawlPolicy(
                 max_depth=max_depth,
-                max_pages=20,  # Default safety cap
+                max_pages=50,  # Default page budget (matches request default)
                 max_links_per_page=50,
             )
 

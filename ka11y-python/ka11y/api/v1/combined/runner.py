@@ -269,6 +269,7 @@ async def _run_job_body(
                 max_depth=payload.max_depth,
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
+                success_criteria_id=payload.success_criteria_id,
             )
         )
         python_task = asyncio.create_task(
@@ -297,6 +298,7 @@ async def _run_job_body(
                 step_logger=step_logger,
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
+                success_criteria_id=payload.success_criteria_id,
             )
         )
 
@@ -371,8 +373,14 @@ async def _run_job_body(
 
         all_findings = _merge_findings(node_findings, python_findings)
 
-        if filter_rule:
-            all_findings = [f for f in all_findings if f.get("wcag_sc") == filter_rule]
+        # A single-SC audit can come either from the per-rule router (filter_rule)
+        # or directly on the request (payload.success_criteria_id); honour whichever
+        # is set so the final report contains only that criterion's findings.
+        effective_filter = filter_rule or payload.success_criteria_id
+        if effective_filter:
+            all_findings = [
+                f for f in all_findings if f.get("wcag_sc") == effective_filter
+            ]
 
         all_findings.sort(
             key=lambda f: {"fail": 0, "needs_review": 1, "pass": 2}.get(f["status"], 3)

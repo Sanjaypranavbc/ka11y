@@ -120,9 +120,27 @@ class ImageCrawlerNavigationError(RuntimeError):
 # ─────────────────────────────────────────────────────────────────────────────
 class AsyncImageCrawler:
 
-    def __init__(self, base_url: str, max_depth: int):
+    def __init__(
+        self,
+        base_url: str,
+        max_depth: int,
+        max_pages: int | None = None,
+        internal_links: bool = True,
+    ):
         self.base_url = base_url
         self.max_depth = max_depth
+        # Page budget is request-driven (default 50). The hard ceiling that keeps a
+        # deep crawl from exhausting RAM regardless of how many links each page has;
+        # falls back to the config value only when the caller passes nothing.
+        self.max_pages = (
+            max_pages
+            if max_pages is not None
+            else CONFIG.get("crawler", {}).get("max_pages", 50)
+        )
+        # internal_links is retained for API parity; link-following is always
+        # confined to the exact base hostname (see crawl_page's CrawlPolicy), so
+        # the crawler never leaves the audited domain regardless of this flag.
+        self.internal_links = internal_links
         self.include_invisible = CONFIG["crawler"]["include_invisible"]
         self.images_data: List[ImageData] = []
         self.images_metadata: List[ImageMetadata] = []
@@ -382,8 +400,12 @@ class AsyncImageCrawler:
         """
         policy = CrawlPolicy(
             max_depth=self.max_depth,
-            max_pages=CONFIG.get("crawler", {}).get("max_pages", 20),
+            max_pages=self.max_pages,
             max_links_per_page=CONFIG.get("crawler", {}).get("max_links_per_page", 50),
+            # Exact-hostname scope: only same-domain links are followed, never
+            # subdomains or external hosts (memory-bounded, no SSRF via deep hops).
+            same_origin=True,
+            include_subdomains=False,
         )
 
         if discovered_urls:

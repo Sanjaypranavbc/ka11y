@@ -45,6 +45,8 @@ def create_rule_handler(rule_id: str):
             url=str(payload.url),
             max_depth=payload.max_depth,
             lang=payload.lang,
+            internal_links=payload.internal_links,
+            max_pages=payload.max_pages,
         )
 
     return handler
@@ -68,6 +70,8 @@ async def _submit_rule_job(
     url: str,
     max_depth: int,
     lang: str,
+    internal_links: bool = True,
+    max_pages: int = 50,
 ):
     job_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -85,6 +89,8 @@ async def _submit_rule_job(
     combined_payload = CombinedRequest(
         url=url,
         max_depth=max_depth,
+        internal_links=internal_links,
+        max_pages=max_pages,
         lang=lang,
         **flags,
     )

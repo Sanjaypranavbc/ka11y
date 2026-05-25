@@ -55,6 +55,75 @@ function _formatIssueList(issues, context) {
   return issues.map(issue => _formatIssue(issue, context)).filter(Boolean).join('; ');
 }
 
+/**
+ * Relative luminance per WCAG 2.x formula.
+ * Input: "rgb(r, g, b)" or "rgba(r, g, b, a)" string; returns null if unparseable.
+ */
+function relativeLuminance(colorStr) {
+  if (!colorStr) return null;
+  const m = String(colorStr).match(/\d+\.?\d*/g);
+  if (!m || m.length < 3) return null;
+  const [r, g, b] = [parseFloat(m[0]), parseFloat(m[1]), parseFloat(m[2])].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(l1, l2) {
+  const lighter = Math.max(l1, l2) + 0.05;
+  const darker = Math.min(l1, l2) + 0.05;
+  return lighter / darker;
+}
+
+/**
+ * Split a CSS `box-shadow` value into its comma-separated layers, respecting
+ * parentheses so that `rgb(0, 95, 204)` colour functions are not split on their
+ * internal commas. Returns [] for "none"/empty.
+ *
+ * @param {string} boxShadow computed box-shadow string
+ * @returns {string[]} one entry per shadow layer
+ */
+function splitBoxShadowLayers(boxShadow) {
+  if (!boxShadow || boxShadow === 'none') return [];
+  const layers = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of String(boxShadow)) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) {
+      if (current.trim()) layers.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  if (current.trim()) layers.push(current.trim());
+  return layers;
+}
+
+/**
+ * Extract the spread radius and indicator colour from a single box-shadow layer.
+ * CSS length order is offset-x, offset-y, blur-radius, spread-radius, so the
+ * spread is the 4th length token (lengths may be unitless `0` or e.g. `3px`).
+ *
+ * @param {string} layer a single shadow layer (from splitBoxShadowLayers)
+ * @returns {{ spread: number, color: string|null }}
+ */
+function extractBoxShadowMetrics(layer) {
+  if (!layer) return { spread: 0, color: null };
+  const colorMatch = String(layer).match(/(rgba?\([^)]*\)|hsla?\([^)]*\)|#[0-9a-fA-F]{3,8})/);
+  const color = colorMatch ? colorMatch[0] : null;
+  const lengths = (String(layer)
+    .replace(/(rgba?\([^)]*\)|hsla?\([^)]*\))/g, ' ')
+    .match(/-?\d*\.?\d+(?:px)?/g) || [])
+    .map(parseFloat)
+    .filter((n) => !Number.isNaN(n));
+  const spread = lengths.length >= 4 ? Math.abs(lengths[3]) : 0;
+  return { spread, color };
+}
+
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   // Snapshot element styles before/after focus in separate evaluate calls
@@ -105,26 +174,6 @@ async function run(page, context = {}) {
 
   const violations = [];
   const passes = [];
-
-  /**
-   * Relative luminance per WCAG 2.x formula.
-   * Input: "rgb(r, g, b)" or "rgba(r, g, b, a)" string.
-   */
-  function relativeLuminance(colorStr) {
-    const m = colorStr.match(/\d+\.?\d*/g);
-    if (!m || m.length < 3) return null;
-    const [r, g, b] = [parseFloat(m[0]), parseFloat(m[1]), parseFloat(m[2])].map(c => {
-      const s = c / 255;
-      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-    });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  }
-
-  function contrastRatio(l1, l2) {
-    const lighter = Math.max(l1, l2) + 0.05;
-    const darker  = Math.min(l1, l2) + 0.05;
-    return lighter / darker;
-  }
 
   for (const el of elements) {
     // Capture unfocused styles — resolve element via stable selector first, then DOM index fallback
@@ -205,6 +254,7 @@ async function run(page, context = {}) {
     // For box-shadow: spread radius ≥ MIN_OUTLINE_WIDTH_PX (B4: was always true when no outline).
     // For border change: border-width ≥ MIN_OUTLINE_WIDTH_PX counts as area met.
     let meetsAreaReq;
+    let boxShadowColor = null;
     if (hasVisibleOutline) {
       const outlineWidth = outlineWidthPx;
       const spreadRadius = 0; // not relevant here
@@ -213,10 +263,17 @@ async function run(page, context = {}) {
       const areaMet = outlineWidth >= MIN_OUTLINE_WIDTH_PX || spreadRadius >= MIN_OUTLINE_WIDTH_PX || (borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX);
       meetsAreaReq = areaMet;
     } else if (boxShadowAdded) {
-      // Extract spread radius (4th px-length) from box-shadow first layer
-      const firstLayer = (focused.boxShadow || '').split(',')[0];
-      const pxVals = (firstLayer.match(/-?[\d.]+px/g) || []).map(parseFloat);
-      const spreadRadius = pxVals.length >= 4 ? Math.abs(pxVals[3]) : 0;
+      // A box-shadow can have multiple comma-separated layers; the spread radius
+      // (4th length) of the *largest* layer is what visually encloses the element,
+      // so pick the best spread across all layers (was: only the first layer, which
+      // also broke when the colour function contained commas, e.g. rgb(0,95,204)).
+      const metrics = splitBoxShadowLayers(focused.boxShadow).map(extractBoxShadowMetrics);
+      const best = metrics.reduce(
+        (acc, m) => (m.spread > acc.spread ? m : acc),
+        { spread: 0, color: null },
+      );
+      boxShadowColor = best.color;
+      const spreadRadius = best.spread;
       const borderWidth = parseFloat(focused.borderWidth) || 0;
       const borderChangedForArea = focused.borderWidth !== unfocused.borderWidth;
       const areaMet = outlineWidthPx >= MIN_OUTLINE_WIDTH_PX || spreadRadius >= MIN_OUTLINE_WIDTH_PX || (borderChangedForArea && borderWidth >= MIN_OUTLINE_WIDTH_PX);
@@ -233,7 +290,13 @@ async function run(page, context = {}) {
     // B5: when element background is transparent, fall back to the page body background
     // rather than treating transparent as black (which produced wrong contrast ratios).
     let meetsContrast = true; // assume pass if we can't measure
-    const focusColor = hasVisibleOutline ? focused.outlineColor : focused.borderColor;
+    // The indicator colour we measure depends on which indicator was detected:
+    // outline → outlineColor; box-shadow → the shadow's own colour; otherwise the
+    // (changed) border colour. Using the box-shadow colour fixes false low-contrast
+    // failures where a coloured shadow sat over an unchanged (e.g. black) border.
+    const focusColor = hasVisibleOutline
+      ? focused.outlineColor
+      : (boxShadowAdded && boxShadowColor ? boxShadowColor : focused.borderColor);
     const isTransparent = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
     const bgColor = !isTransparent(focused.backgroundColor)
       ? focused.backgroundColor
