@@ -13,7 +13,9 @@ _evict_old_jobs() — background TTL cleanup task (called from lifespan)
 from __future__ import annotations
 
 import asyncio
+import shutil
 import time
+from pathlib import Path
 from typing import Any, Dict, List
 
 from ka11y.config.logger import setup_logger
@@ -138,6 +140,24 @@ async def _close_subscribers(job_id: str) -> None:
 # ── TTL eviction ──────────────────────────────────────────────────────────────
 
 
+def _safe_remove_job_dir(output_dir: str | None) -> None:
+    """Delete a job's on-disk artefact directory when its TTL expires.
+
+    Guards against deleting anything other than a per-job combined directory:
+    the path must exist, be a directory, and follow the runner's
+    ``..._combined`` naming convention (see runner.py). This keeps memory-TTL
+    and disk-TTL in lockstep so ``output/`` does not grow unbounded (B-12).
+    """
+    if not output_dir:
+        return
+    try:
+        path = Path(output_dir)
+        if path.is_dir() and path.name.endswith("_combined"):
+            shutil.rmtree(path, ignore_errors=True)
+    except Exception:  # noqa: BLE001 — cleanup must never crash eviction
+        logger.debug("disk cleanup failed for %s", output_dir, exc_info=True)
+
+
 async def _evict_old_jobs() -> None:
     """Background task: remove completed/failed jobs older than _JOB_TTL_SECONDS."""
     while True:
@@ -150,8 +170,12 @@ async def _evict_old_jobs() -> None:
             and job.get("_created_at", 0) < cutoff
         ]
         for jid in expired:
+            # Capture the artefact dir before dropping the job, then prune disk
+            # off the event loop so a large rmtree can't stall broadcasts.
+            output_dir = (_jobs.get(jid) or {}).get("output_dir")
             _jobs.pop(jid, None)
             _subscribers.pop(jid, None)
             _drop_job_lock(jid)
+            await asyncio.to_thread(_safe_remove_job_dir, output_dir)
         if expired:
             logger.info(f"[combined] TTL eviction: removed {len(expired)} old jobs")
