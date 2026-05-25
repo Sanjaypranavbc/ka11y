@@ -78,6 +78,7 @@ from .stage_events import (
     emit_stage_progress,
 )
 from .store import _jobs
+from ka11y.crawler.universal_page import UniversalPageLoader
 
 # Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
 _STAGE_TIMEOUT_SECONDS = 600
@@ -785,8 +786,10 @@ async def _load_universal_snapshot(
     step_logger: ExecutionStepLogger | None,
 ):
     from ka11y.crawler.snapshot_normalizer import SnapshotNormalizer
-    from ka11y.crawler.universal_page import UniversalPageLoader
 
+    # UniversalPageLoader is imported at module level so tests can patch
+    # `stages.UniversalPageLoader`; the call site below resolves it from the
+    # module namespace.
     raw_snapshot = await UniversalPageLoader.load(
         url=url,
         output_dir=output_dir,
