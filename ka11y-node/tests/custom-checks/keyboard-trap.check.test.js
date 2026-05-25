@@ -254,7 +254,7 @@ describe('keyboard-trap.check (WCAG 2.1.2)', () => {
       require('path').resolve(__dirname, '../../src/custom-checks/keyboard-trap.check.js'),
       'utf8'
     );
-    expect(src).toContain('arrowTrapRoles');
+    expect(src).toContain('arrowTrapFindings');
     expect(src).toContain('ArrowDown');
     expect(src).toContain('arrow-key-trap');
   });

@@ -121,10 +121,10 @@ describe('link-purpose.check (WCAG 2.4.9 AAA)', () => {
     expect(failResult.rules[0].description).toContain('determinable from link text alone');
   });
 
-  test('evaluate is called with MAX_LINKS (100) and GENERIC_LINK_RE', async () => {
+  test('evaluate is called with MAX_LINKS (2000) and GENERIC_LINK_RE', async () => {
     const page = makePage({ violations: [], checkedCount: 0 });
     await run(page);
-    expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), 100, expect.any(String));
+    expect(page.evaluate).toHaveBeenCalledWith(expect.any(Function), 2000, expect.any(String));
   });
 
   test('successCriteriaId is 2.4.9 for fail path too', async () => {

@@ -14,7 +14,7 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:    false,
       hasActiveNavItem:  false,
       hasSiteMap:        false,
-      hasLocationIndicator: true,
+      hasVisibleLocationIndicator: true,
     });
     const result = await run(page);
     expect(result.successCriteriaId).toBe('2.4.8');
@@ -29,7 +29,7 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:    true,
       hasActiveNavItem:  false,
       hasSiteMap:        false,
-      hasLocationIndicator: true,
+      hasVisibleLocationIndicator: true,
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('pass');
@@ -42,7 +42,7 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:    false,
       hasActiveNavItem:  true,
       hasSiteMap:        false,
-      hasLocationIndicator: true,
+      hasVisibleLocationIndicator: true,
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('pass');
@@ -56,7 +56,7 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasActiveNavItem: false,
       hasSiteMap: false,
       hasTableOfContents: true,
-      hasLocationIndicator: true,
+      hasVisibleLocationIndicator: true,
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('pass');
@@ -69,7 +69,7 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:    false,
       hasActiveNavItem:  false,
       hasSiteMap:        false,
-      hasLocationIndicator: false,
+      hasVisibleLocationIndicator: false,
     });
     const result = await run(page);
     expect(result.rules[0].status).toBe('incomplete');
@@ -83,7 +83,7 @@ describe('location.check (WCAG 2.4.8 AAA)', () => {
       hasAriaCurrent:       false,
       hasActiveNavItem:     false,
       hasSiteMap:           false,
-      hasLocationIndicator: true,
+      hasVisibleLocationIndicator: true,
     });
     const result = await run(page);
     expect(result.rules[0].impact).toBeNull();
