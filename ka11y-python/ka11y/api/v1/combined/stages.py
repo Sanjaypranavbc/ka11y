@@ -160,15 +160,35 @@ def _allowed_levels(wcag_level: str) -> set:
 
 
 async def _call_node_flat(
-    url: str, node_base_url: str, wcag_level: str = "AAA", lang: str = "en"
+    url: str,
+    node_base_url: str,
+    wcag_level: str = "AAA",
+    lang: str = "en",
+    *,
+    max_depth: int = 0,
+    internal_links: bool = True,
+    max_pages: int = 50,
 ) -> List[Dict]:
-    """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings."""
+    """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings.
+
+    ``max_depth`` / ``internal_links`` make Node run its own bounded BFS so it
+    covers the same deeper pages Python does (previously Node only ever audited
+    the root URL, so max_depth had no effect on the axe-core side).
+    """
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
     try:
         # 300s timeout to allow for heavy custom checks on complex pages
         async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(
-                endpoint, json={"url": url, "level": wcag_level, "lang": lang}
+                endpoint,
+                json={
+                    "url": url,
+                    "level": wcag_level,
+                    "lang": lang,
+                    "maxDepth": max_depth,
+                    "internalLinks": internal_links,
+                    "maxPages": max_pages,
+                },
             )
             resp.raise_for_status()
             return resp.json().get("findings", [])
@@ -784,8 +804,20 @@ async def _load_universal_snapshot(
     max_depth: int,
     job_id: str,
     step_logger: ExecutionStepLogger | None,
+    internal_links: bool = True,
+    max_pages: int = 50,
 ):
     from ka11y.crawler.snapshot_normalizer import SnapshotNormalizer
+    from ka11y.crawler.policy import CrawlPolicy
+
+    # Build the crawl policy explicitly so the request's internal_links /
+    # max_pages controls reach the universal BFS: same_origin == internal-only
+    # (exact hostname), max_pages is the hard RAM/time budget.
+    policy = CrawlPolicy(
+        max_depth=max_depth,
+        max_pages=max_pages,
+        same_origin=internal_links,
+    )
 
     # UniversalPageLoader is imported at module level so tests can patch
     # `stages.UniversalPageLoader`; the call site below resolves it from the
@@ -796,6 +828,7 @@ async def _load_universal_snapshot(
         max_depth=max_depth,
         record_har=False,
         step_logger=step_logger,
+        policy=policy,
     )
     await asyncio.to_thread(UniversalPageLoader.save_snapshot, raw_snapshot, output_dir)
     normalized = await asyncio.to_thread(
@@ -1149,6 +1182,8 @@ async def _run_python_stages(
     job_id: str,
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
+    internal_links: bool = True,
+    max_pages: int = 50,
 ) -> PythonStagesResult:
     """
     Run all Python audit stages concurrently.
@@ -1183,6 +1218,8 @@ async def _run_python_stages(
             max_depth=max_depth,
             job_id=job_id,
             step_logger=step_logger,
+            internal_links=internal_links,
+            max_pages=max_pages,
         )
         discovered_urls = [s["page_url"] for s in snapshot.page_summaries]
         if not discovered_urls:

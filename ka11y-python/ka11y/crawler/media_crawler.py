@@ -269,8 +269,15 @@ class AsyncMediaCrawler:
         """
         Navigate to base_url (and optionally linked pages up to max_depth),
         extract all media elements, and return a list of MediaElementData.
+
+        Uses the shared memory-bounded BFS (queue + global page budget +
+        exact-hostname filter) instead of unbounded recursion.
         """
         from ka11y.crawler.browser_pool import leased_context
+        from ka11y.crawler.bfs import bounded_bfs
+        from ka11y.crawler.policy import CrawlPolicy
+
+        policy = CrawlPolicy(max_depth=self.max_depth)
 
         async with leased_context(
             viewport={"width": 1440, "height": 900},
@@ -280,7 +287,13 @@ class AsyncMediaCrawler:
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
         ) as context:
-            await self._crawl_page(context, self.base_url, depth=0)
+            await bounded_bfs(
+                context=context,
+                base_url=self.base_url,
+                policy=policy,
+                visit=self._visit_page,
+                log_prefix="media_crawler",
+            )
 
         logger.info(
             f"[media_crawler] found {len(self.results)} media element(s) "
@@ -298,48 +311,33 @@ class AsyncMediaCrawler:
 
     # ── Internal page crawler ─────────────────────────────────────────────
 
-    async def _crawl_page(self, context, url: str, depth: int) -> None:
-        """Extract media elements from a single page."""
-        if url in self._visited:
-            return
-        self._visited.add(url)
+    async def _visit_page(self, page, url: str, depth: int) -> list:
+        """Extract media elements from a single page; return hrefs found.
 
-        page = await context.new_page()
+        Called by :func:`bounded_bfs`, which owns traversal, the visited set,
+        the global page budget, and page lifecycle.
+        """
+        # Retry pattern — same as MovingContentCrawler
         try:
-            # Retry pattern — same as MovingContentCrawler
+            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        except Exception:
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             except Exception:
-                try:
-                    await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                except Exception:
-                    await page.goto(url, wait_until="commit", timeout=15_000)
+                await page.goto(url, wait_until="commit", timeout=15_000)
 
-            # Wait for JS-driven media players to initialise
-            await page.wait_for_timeout(2000)
+        # Wait for JS-driven media players to initialise
+        await page.wait_for_timeout(2000)
 
-            # Extract all media elements in one evaluate() call
-            raw: list = await page.evaluate(self.EXTRACT_JS)
-            for item in raw:
-                self.results.append(MediaElementData(page_url=url, **item))
+        # Extract all media elements in one evaluate() call
+        raw: list = await page.evaluate(self.EXTRACT_JS)
+        for item in raw:
+            self.results.append(MediaElementData(page_url=url, **item))
 
-            # Optionally crawl linked pages (same-origin only)
-            if depth < self.max_depth:
-                links = await page.eval_on_selector_all(
-                    "a[href]", "els => els.map(e => e.href)"
-                )
-                base_netloc = urlparse(self.base_url).netloc
-                for href in links:
-                    if (
-                        urlparse(href).netloc == base_netloc
-                        and href not in self._visited
-                    ):
-                        await self._crawl_page(context, href, depth + 1)
-
-        except Exception as exc:
-            logger.error(f"[media_crawler] Error on {url}: {exc}")
-        finally:
-            await page.close()
+        # Return all hrefs; bounded_bfs applies the internal-link filter + budget.
+        return await page.eval_on_selector_all(
+            "a[href]", "els => els.map(e => e.href)"
+        )
 
 
 # ── SUMMARY ──────────────────────────────────────────────────────────────

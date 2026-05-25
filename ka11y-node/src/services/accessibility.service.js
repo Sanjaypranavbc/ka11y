@@ -5,6 +5,7 @@ const path = require('path');
 const dns = require('dns').promises;
 const { mapResults, mapResultsFlat, mapCustomResultsFlat } = require('../utils/axeResultMapper');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
+const { boundedBfs } = require('../utils/crawl');
 
 // Bug 3 fix: expanded from narrow RFC-1918/loopback/link-local set to include all
 // non-public ranges matched by the Python-side guard (0.0.0.0/8, shared-address
@@ -480,15 +481,24 @@ class AccessibilityService {
    * @param {string} url - Fully-qualified URL
    * @returns {Promise<Array<object>>} Flat findings array
    */
-  async analyseUrlFlat(url, level = 'AA', lang = 'en') {
+  async analyseUrlFlat(url, level = 'AA', lang = 'en', options = {}) {
+    const {
+      maxDepth = 0,
+      maxPages = 50,
+      internalLinks = true,
+      successCriteriaId = null,
+    } = options;
+
     const { timeoutMs } = this._config.axe;
-    const runOnly = { type: 'tag', values: _tagsForLevel(level) };
     let browser = null;
 
     await _assertPublicUrl(url);
     await this._acquireSlot();
     try {
-      this._logger.info(`[flat] Launching browser for URL: ${url} level=${level}`);
+      this._logger.info(
+        `[flat] Launching browser for URL: ${url} level=${level} ` +
+        `maxDepth=${maxDepth} internalLinks=${internalLinks} maxPages=${maxPages}`
+      );
       browser = await this._puppeteer.launch({
         headless:       this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
@@ -496,7 +506,68 @@ class AccessibilityService {
         args:           this._config.browser.args,
       });
 
-      const page = await browser.newPage();
+      // Single browser is reused across all crawled pages (one Chromium, many
+      // pages) so deep crawls don't spawn a process per URL.
+      const allFindings = [];
+      const seen = new Set(); // cross-page dedup of identical findings
+
+      const pagesCrawled = await boundedBfs({
+        baseUrl: url,
+        maxDepth,
+        maxPages,
+        internalLinksOnly: internalLinks,
+        log: (msg) => this._logger.info(`[flat][crawl] ${msg}`),
+        visit: async (pageUrl /*, depth */) => {
+          const { findings, links } = await this._auditPageFlat(
+            browser, pageUrl, level, lang, successCriteriaId
+          );
+          for (const f of findings) {
+            // Dedup across pages by (pageUrl, ruleId, selector, status).
+            const key = `${f.pageUrl || pageUrl}|${f.ruleId || f.rule_id || ''}|${f.selector || f.target || ''}|${f.status}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            allFindings.push(f);
+          }
+          return links;
+        },
+      });
+
+      const ORDER = { fail: 0, needs_review: 1, pass: 2 };
+      allFindings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
+      this._logger.info(
+        `[flat] done: ${allFindings.length} finding(s) across ${pagesCrawled} page(s).`
+      );
+      return allFindings;
+    } catch (err) {
+      this._logger.error(`[flat] Error: ${err.message}`);
+      throw err;
+    } finally {
+      if (browser) {
+        await browser.close();
+        this._logger.info('[flat] Browser closed.');
+      }
+      this._releaseSlot();
+    }
+  }
+
+  /**
+   * Audit ONE page (axe + custom checks) and return flat findings plus the
+   * in-page hrefs (for the crawler to follow). Tags every finding with
+   * `pageUrl` so multi-page reports attribute findings to the right page.
+   *
+   * @param {import('puppeteer').Browser} browser  Shared browser instance.
+   * @param {string} url
+   * @param {string} level
+   * @param {string} lang
+   * @param {string|null} successCriteriaId  Optional SC filter.
+   * @returns {Promise<{findings: object[], links: string[]}>}
+   */
+  async _auditPageFlat(browser, url, level = 'AA', lang = 'en', successCriteriaId = null) {
+    const { timeoutMs } = this._config.axe;
+    const runOnly = { type: 'tag', values: _tagsForLevel(level) };
+
+    const page = await browser.newPage();
+    try {
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
       await page.setBypassCSP(true);
@@ -507,28 +578,23 @@ class AccessibilityService {
         }
       });
 
-      // Bug 2 fix: enable request interception to block redirect-time SSRF hops.
+      // Block redirect-time SSRF hops.
       await page.setRequestInterception(true);
       _installSsrfInterceptor(page);
 
       this._logger.info(`[flat] Navigating to ${url}...`);
-      // Use networkidle2 for parity with audit runner requirements and better JS coverage.
       await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
 
-      this._logger.info('[flat] Injecting axe-core...');
       await this._injectAxe(page, '[flat]');
       await this._configureAxeLocale(page, lang, '[flat]');
 
-      this._logger.info('[flat] Running axe.run()...');
       const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs, '[flat]');
-
       this._logger.info(
-        `[flat] axe.run() complete — violations: ${axeResults.violations.length}, ` +
+        `[flat] axe.run() ${url} — violations: ${axeResults.violations.length}, ` +
         `passes: ${axeResults.passes.length}, ` +
         `incomplete: ${(axeResults.incomplete || []).length}`
       );
 
-      this._logger.info('[flat] Running all custom checks (static + interactive)...');
       let customResults = [];
       const customChecksTimeoutMs = 180000; // 3 minutes budget for custom checks
       let timeoutId;
@@ -538,28 +604,44 @@ class AccessibilityService {
         });
         customResults = await Promise.race([runAll(page, { lang }), timeoutPromise]);
       } catch (err) {
-        this._logger.warn(`[flat] Custom checks failed or timed out: ${err.message}`);
+        this._logger.warn(`[flat] Custom checks failed or timed out for ${url}: ${err.message}`);
       } finally {
         clearTimeout(timeoutId);
       }
+
       const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);
       const allowedLevels = _allowedLevels(level);
-      const customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
-      this._logger.info(`[flat] Custom checks complete — ${customFindings.length} finding(s).`);
+      let customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
 
-      const findings = [...mapResultsFlat(axeResults, url, lang), ...customFindings];
-      const ORDER = { fail: 0, needs_review: 1, pass: 2 };
-      findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
-      return findings;
-    } catch (err) {
-      this._logger.error(`[flat] Error: ${err.message}`);
-      throw err;
-    } finally {
-      if (browser) {
-        await browser.close();
-        this._logger.info('[flat] Browser closed.');
+      let findings = [...mapResultsFlat(axeResults, url, lang), ...customFindings];
+
+      // Optional SC filter (now honoured in flat mode too).
+      if (successCriteriaId) {
+        findings = findings.filter(
+          f => (f.successCriteriaId || f.success_criteria_id || f.wcag_sc) === successCriteriaId
+        );
       }
-      this._releaseSlot();
+
+      // Ensure every finding records the page it came from (multi-page reports).
+      for (const f of findings) {
+        if (!f.pageUrl) f.pageUrl = url;
+      }
+
+      // Collect same-page hrefs for the crawler to consider.
+      let links = [];
+      try {
+        links = await page.$$eval('a[href]', els => els.map(e => e.href));
+      } catch {
+        links = [];
+      }
+
+      return { findings, links };
+    } finally {
+      try {
+        await page.close();
+      } catch (e) {
+        this._logger.debug(`[flat] page close raised for ${url}: ${e.message}`);
+      }
     }
   }
 }

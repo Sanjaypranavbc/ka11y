@@ -261,7 +261,15 @@ async def _run_job_body(
         # Fire axe-core and all Python stages concurrently
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
-            _call_node_flat(url, node_base_url, payload.wcag_level, payload.lang)
+            _call_node_flat(
+                url,
+                node_base_url,
+                payload.wcag_level,
+                payload.lang,
+                max_depth=payload.max_depth,
+                internal_links=payload.internal_links,
+                max_pages=payload.max_pages,
+            )
         )
         python_task = asyncio.create_task(
             _run_python_stages(
@@ -287,6 +295,8 @@ async def _run_job_body(
                 lang=payload.lang,
                 job_id=job_id,
                 step_logger=step_logger,
+                internal_links=payload.internal_links,
+                max_pages=payload.max_pages,
             )
         )
 
