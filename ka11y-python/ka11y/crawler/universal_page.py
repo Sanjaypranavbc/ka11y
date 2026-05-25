@@ -504,6 +504,23 @@ class UniversalPageLoader:
                 )
                 combined[key].extend(records)
 
+            # Per-category extractor faults (B-3). The universal extractor now
+            # isolates each category in its own try/catch, so a failure in one
+            # no longer zeroes all seven. Surface any that failed as warnings
+            # instead of losing the signal.
+            extractor_errors = frame_data.get("_errors") or {}
+            for category, err in extractor_errors.items():
+                output.partial = True
+                warning = await cls._build_frame_warning(
+                    code="category_extract_failed",
+                    page_url=page_url,
+                    frame=frame,
+                    frame_path=frame_path,
+                    message=f"{category} extractor failed: {err}",
+                    error_type="ExtractorError",
+                )
+                output.warnings.append(warning)
+
             # Separate pass: extract CSS background-image URLs. Kept out of
             # the universal extractor to avoid bloating its single page.evaluate
             # payload (Sprint 3 / step 15).
