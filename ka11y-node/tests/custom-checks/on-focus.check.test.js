@@ -119,8 +119,10 @@ describe('on-focus.check (WCAG 3.2.1)', () => {
       }),
       url: jest.fn().mockImplementation(() => {
         callCount++;
-        // First call (urlBefore) returns original, second call (currentUrl) returns different path
-        return callCount <= 1 ? 'https://example.com/page1' : 'https://example.com/page2';
+        // The check calls url() three times for one element: initialUrl (1),
+        // urlBefore (2, inside loop), currentUrl (3, after focus). We need
+        // urlBefore !== currentUrl, so flip the path on the 3rd call.
+        return callCount <= 2 ? 'https://example.com/page1' : 'https://example.com/page2';
       }),
       on: jest.fn(),
       off: jest.fn(),
@@ -172,13 +174,16 @@ describe('on-focus.check (WCAG 3.2.1)', () => {
     expect(SELECTOR).toContain('textarea');
   });
 
-  test('source contains cleanup logic', () => {
+  test('source contains SPA-navigation detection + cleanup logic', () => {
     const src = require('fs').readFileSync(
       require('path').resolve(__dirname, '../../src/custom-checks/on-focus.check.js'),
       'utf8'
     );
-    expect(src).toContain('originalPush');
-    expect(src).toContain('delete window[stateKey]');
+    // Current implementation detects SPA navigation via a pushState counter
+    // (__navChanges) plus the framenavigated event, and cleans up the listener
+    // with page.off('framenavigated', ...).
+    expect(src).toContain('__navChanges');
+    expect(src).toContain('framenavigated');
   });
 
   // ── urlPathAndSearch ───────────────────────────────────────────────────────
