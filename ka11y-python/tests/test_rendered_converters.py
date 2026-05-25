@@ -247,7 +247,11 @@ def test_crawler_vs_rendered_have_distinct_rule_ids():
     assert static_f[0]["wcag_sc"] == rendered_f[0]["wcag_sc"] == "1.4.12"
 
 
-def test_rendered_pass_reason_uses_catalogue_description():
+def test_rendered_reflow_pass_reason_is_specific():
+    """A 1.4.10 reflow PASS renders the rule-specific localized message (it
+    tells the user *what* passed — content reflows at 320 CSS px), not the
+    generic SC catalogue description. The message still comes from i18n YAML
+    via reason_code, so localization remains centralized."""
     token = _lang_ctx.set("ja")
     try:
         records = [{
@@ -261,6 +265,8 @@ def test_rendered_pass_reason_uses_catalogue_description():
         findings = _reflow_to_findings(records, PAGE_URL)
         assert len(findings) == 1
         assert findings[0]["status"] == "pass"
-        assert findings[0]["reason"].startswith("コンテンツは情報または機能を損なうことなく")
+        assert findings[0]["reason"].startswith(
+            "320 CSS ピクセル幅でも横スクロールなしでコンテンツが正しく折り返されます"
+        )
     finally:
         _lang_ctx.reset(token)
