@@ -867,7 +867,7 @@
     })();
 
     const media = [];
-    (function extractMedia() {
+    _runExtractor('media', function extractMedia() {
         function getNearbyLinks(el) {
             const links = [];
             let container = el.parentElement;
@@ -947,7 +947,7 @@
     })();
 
     const text_spacing = [];
-    (function extractTextSpacing() {
+    _runExtractor('text_spacing', function extractTextSpacing() {
         let index = 0;
         const ignored = new Set(['html', 'head', 'body', 'script', 'style', 'img', 'svg', 'canvas']);
         queryShadow(document, '*').forEach(el => {
@@ -984,7 +984,7 @@
     })();
 
     const sensory = [];
-    (function extractSensory() {
+    _runExtractor('sensory', function extractSensory() {
         const selector = [
             'p', 'li', 'label', 'legend', 'button', 'input', 'textarea', 'select', 'option',
             'a', 'caption', 'th', 'td', 'span', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
