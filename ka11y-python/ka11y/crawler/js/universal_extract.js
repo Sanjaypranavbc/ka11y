@@ -408,7 +408,7 @@
                 });
             });
         });
-    })();
+    });
 
     const interactive = [];
     _runExtractor('interactive', function extractInteractive() {
@@ -445,7 +445,7 @@
             if (['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName.toUpperCase())) return;
             addInteractive(el);
         });
-    })();
+    });
 
     const target_sizes = [];
     _runExtractor('target_sizes', function extractTargetSizes() {
@@ -562,7 +562,7 @@
             const { _left, _right, _top, _bottom, ...rest } = cur;
             target_sizes.push(rest);
         }
-    })();
+    });
 
     const moving_content = [];
     _runExtractor('moving_content', function extractMovingContent() {
@@ -864,7 +864,7 @@
                 html_snippet: outerHTML(el, 400),
             });
         });
-    })();
+    });
 
     const media = [];
     _runExtractor('media', function extractMedia() {
@@ -944,7 +944,7 @@
                 nearby_details: getNearbyDetails(el),
             });
         });
-    })();
+    });
 
     const text_spacing = [];
     _runExtractor('text_spacing', function extractTextSpacing() {
@@ -981,7 +981,7 @@
                 is_clipped: isClipped,
             });
         });
-    })();
+    });
 
     const sensory = [];
     _runExtractor('sensory', function extractSensory() {
@@ -1079,7 +1079,7 @@
                 html: outerHTML(el, 500),
             });
         });
-    })();
+    });
 
     return {
         forms,
@@ -1089,5 +1089,7 @@
         media,
         text_spacing,
         sensory,
+        // Per-category extractor errors (empty object when all succeeded).
+        _errors: _extractorErrors,
     };
 }
