@@ -26,6 +26,7 @@ from ka11y.i18n.loader import (
     render_reason,
 )
 
+from .auditor_field_map import get_status, get_reason
 from .constants import _PYTHON_SEVERITY, _WCAG_LEVEL
 
 # Per-job language context — set in runner._run_job() before creating stage tasks.
@@ -394,14 +395,14 @@ def _build_image_audit_report(records: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "has_ocr_text": bool(record.get("has_ocr_text")),
                 "detected_text": record.get("detected_text") or "",
                 "contrast_violations_count": contrast_violations_count,
-                "wcag_1_1_1_status": record.get("wcag_1_1_1_status"),
-                "wcag_4_1_2_status": record.get("wcag_4_1_2_status"),
-                "wcag_1_4_5_status": record.get("wcag_1_4_5_status"),
-                "wcag_1_4_11_status": record.get("wcag_1_4_11_status"),
-                "wcag_1_1_1_reason": record.get("wcag_1_1_1_reason") or "",
-                "wcag_4_1_2_reason": record.get("wcag_4_1_2_reason") or "",
-                "wcag_1_4_5_reason": record.get("wcag_1_4_5_reason") or "",
-                "wcag_1_4_11_reason": record.get("wcag_1_4_11_reason") or "",
+                "wcag_1_1_1_status": get_status(record, "1.1.1", default=None),
+                "wcag_4_1_2_status": get_status(record, "4.1.2", default=None),
+                "wcag_1_4_5_status": get_status(record, "1.4.5", default=None),
+                "wcag_1_4_11_status": get_status(record, "1.4.11", default=None),
+                "wcag_1_1_1_reason": get_reason(record, "1.1.1"),
+                "wcag_4_1_2_reason": get_reason(record, "4.1.2"),
+                "wcag_1_4_5_reason": get_reason(record, "1.4.5"),
+                "wcag_1_4_11_reason": get_reason(record, "1.4.11"),
             }
         )
 
