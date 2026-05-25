@@ -27,10 +27,22 @@ FINDINGS_PATH = (
 # Matches r.get("wcag_1_1_1_status"), r.get('wcag_4_1_2_reason'), etc.
 _FIELD_RE = re.compile(r"""wcag_(\d+)_(\d+)_(\d+)_(status|reason)""")
 
+# Matches get_status(record, "1.1.1") / get_reason(r, "2.5.3", default=...).
+# After the B-2 migration, converters read through these helpers rather than
+# raw key literals, so the SC argument is what now needs registry coverage.
+_HELPER_CALL_RE = re.compile(
+    r"""get_(?:status|reason)\(\s*[^,]+,\s*["'](\d+\.\d+\.\d+)["']"""
+)
+
 
 def _keys_referenced_in_findings() -> set[str]:
     src = FINDINGS_PATH.read_text(encoding="utf-8")
     return {match.group(0) for match in _FIELD_RE.finditer(src)}
+
+
+def _sc_args_in_findings() -> set[str]:
+    src = FINDINGS_PATH.read_text(encoding="utf-8")
+    return {match.group(1) for match in _HELPER_CALL_RE.finditer(src)}
 
 
 def _keys_declared_in_registry() -> set[str]:
@@ -61,6 +73,21 @@ def test_registry_status_keys_match_canonical_shape():
         suffix = sc.replace(".", "_")
         assert mapping["status"] == f"wcag_{suffix}_status", sc
         assert mapping["reason"] == f"wcag_{suffix}_reason", sc
+
+
+def test_every_helper_call_sc_is_registered():
+    """Every SC passed to get_status()/get_reason() in findings.py MUST be a
+    key in AUDITOR_FIELD_MAP. After the B-2 migration this is the primary
+    guard: an unregistered SC raises KeyError at runtime, and this test makes
+    that a CI failure instead. Also asserts the migration actually happened
+    (helpers are in use), so we don't silently regress to raw key reads."""
+    sc_args = _sc_args_in_findings()
+    assert sc_args, "expected findings.py to call get_status/get_reason with SC literals"
+    missing = sc_args - set(afm.AUDITOR_FIELD_MAP)
+    assert not missing, (
+        "findings.py calls get_status/get_reason with SCs not in "
+        f"AUDITOR_FIELD_MAP: {sorted(missing)}"
+    )
 
 
 def test_helpers_read_through_registry():

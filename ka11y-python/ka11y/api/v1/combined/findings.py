@@ -425,7 +425,7 @@ def _build_image_audit_report(records: List[Dict[str, Any]]) -> Dict[str, Any]:
 def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
-        status_raw = r.get("wcag_1_1_1_status", "")
+        status_raw = get_status(r, "1.1.1", default="")
         if status_raw not in ("FAILED", "PASSED", "INCOMPLETE"):
             continue
 
@@ -507,7 +507,7 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
     findings = []
     sev = _PYTHON_SEVERITY.get("4.1.2")
     for r in records:
-        status_raw = r.get("wcag_4_1_2_status", "")
+        status_raw = get_status(r, "4.1.2", default="")
         if status_raw in ("N/A", ""):
             continue
 
@@ -805,7 +805,7 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
     findings: List[Dict] = []
     sev = _PYTHON_SEVERITY.get("1.4.5")
     for r in records:
-        status_raw = r.get("wcag_1_4_5_status", "N/A")
+        status_raw = get_status(r, "1.4.5", default="N/A")
         if status_raw == "N/A":
             continue
         reason = r.get("wcag_1_4_5_reason") or ""
@@ -884,7 +884,7 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
     findings: List[Dict] = []
     sev = _PYTHON_SEVERITY.get("1.4.11")
     for r in records:
-        status_raw = r.get("wcag_1_4_11_status", "N/A")
+        status_raw = get_status(r, "1.4.11", default="N/A")
         reason = r.get("wcag_1_4_11_reason") or ""
         needs_review = status_raw == "INCOMPLETE" or (
             status_raw == "N/A" and _is_incomplete_reason(reason)
@@ -1009,7 +1009,7 @@ def _form_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
 def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
-        status_raw = r.get("wcag_2_5_3_status", "")
+        status_raw = get_status(r, "2.5.3", default="")
         if status_raw == "N/A":
             continue
         if status_raw == "FAILED":
@@ -1043,7 +1043,7 @@ def _lin_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
 def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
-        status_raw = r.get("wcag_2_2_2_status", "")
+        status_raw = get_status(r, "2.2.2", default="")
         if status_raw == "FAILED":
             findings.append(
                 _make_finding(
@@ -1088,7 +1088,7 @@ def _psh_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
 def _ts_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
-        status_raw = r.get("wcag_2_5_8_status", "")
+        status_raw = get_status(r, "2.5.8", default="")
         if status_raw == "N/A":
             continue
         w = r.get("rendered_width_px", 0)
@@ -1239,7 +1239,7 @@ def _crawler_text_spacing_to_findings(records: List[Dict], page_url: str) -> Lis
     findings: List[Dict] = []
     sev = _PYTHON_SEVERITY.get("1.4.12")
     for r in records:
-        status_raw = r.get("wcag_1_4_12_status", "")
+        status_raw = get_status(r, "1.4.12", default="")
         if status_raw == "N/A":
             continue
         violation = r.get("wcag_1_4_12_violation", "")
@@ -1325,7 +1325,7 @@ def _sensory_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         ]
 
     for r in records:
-        status_raw = r.get("wcag_1_3_3_status", "")
+        status_raw = get_status(r, "1.3.3", default="")
 
         if status_raw == "FAILED":
             findings.append(
@@ -1436,7 +1436,7 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
     findings = []
     for r in records:
         # WCAG 1.2.1
-        s_121 = r.get("wcag_1_2_1_status", "")
+        s_121 = get_status(r, "1.2.1", default="")
         if s_121 == "FAILED":
             findings.append(_make_finding(
                 source="python", rule_id="python_1_2_1_media", wcag_sc="1.2.1", status="fail",
@@ -1463,7 +1463,7 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
             ))
 
         # WCAG 1.2.2
-        s_122 = r.get("wcag_1_2_2_status", "")
+        s_122 = get_status(r, "1.2.2", default="")
         if s_122 == "FAILED":
             findings.append(_make_finding(
                 source="python", rule_id="python_1_2_2_media", wcag_sc="1.2.2", status="fail",
