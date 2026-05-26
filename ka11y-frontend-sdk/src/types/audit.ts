@@ -165,6 +165,9 @@ export interface PageSummary {
   violations: number;
   needs_review: number;
   passes: number;
+  // Pass-rate compliance score 0–100 = passes / (passes + violations).
+  // needs_review is excluded from the ratio.
+  score: number;
   by_severity: Record<string, number>;
 }
 
@@ -186,6 +189,9 @@ export interface AuditResult {
   violations_count: number;
   needs_review_count: number;
   passes_count: number;
+  // Overall compliance score 0–100 aggregated across all crawled pages
+  // (passes / (passes + violations)). needs_review excluded.
+  score: number;
   violations: AuditViolation[];
   needs_review: AuditNeedsReview[];
   passes: AuditPass[];

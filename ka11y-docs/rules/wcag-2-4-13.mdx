@@ -1,0 +1,79 @@
+---
+title: "2.4.13 Focus Appearance"
+description: "WCAG 2.4.13 — focus indicators have sufficient area and contrast"
+---
+
+<Info>
+  **Level AAA** · WCAG 2.2 · **Primary Engine:** Unified Pipeline (`Policy2413`) · **Secondary Engine:** `focus-appearance.check.js` (Node) · **Mode:** Interactive
+</Info>
+
+## What it checks
+
+WCAG 2.4.13 (Focus Appearance) requires that the keyboard focus indicator has:
+1.  **Sufficient Area**: A minimum area that is at least as large as the area of a 2 CSS pixel thick perimeter of the unfocused component.
+2.  **Sufficient Contrast**: A contrast ratio of at least 3:1 between the focus indicator and the background.
+
+## How it works (Unified Pipeline)
+
+The Unified Pipeline performs a rigorous geometric and colorimetric analysis of the focus indicator:
+
+1.  **Interaction Simulation**: `InteractionStateRunner` focuses each element and captures the visual delta.
+2.  **Area Calculation**: The engine measures the thickness of the focus ring (supporting `outline`, `box-shadow`, and `border` changes) and compares it against the perimeter-based area requirement.
+3.  **Contrast Analysis**: The `ContrastEngine` samples the color of the focus indicator and the background color (including resolved backgrounds from upward DOM traversal) to compute the relative luminance.
+4.  **Policy Evaluation**: `Policy2413` evaluates both the area and contrast independently.
+
+### False Positive Protection
+
+*   **Inversion Support**: Pure contrast inversion (e.g., swapping background and text colors) is natively supported as a valid focus indicator.
+*   **Shadow and Blur Handling**: The engine correctly parses complex `box-shadow` spreads and blurs to determine the "effective" thickness of the indicator.
+*   **Resolution of Transparencies**: Correctly handles indicators with partial opacity by blending them with the underlying background color before calculating contrast.
+
+## Node Engine Implementation (`focus-appearance.check.js`)
+
+The Node engine provides a secondary, measurement-focused layer:
+1.  **Style Capture**: Measures the `outline-width` and `box-shadow` spread of a focused element.
+2.  **Minimums Enforcement**: Flags indicators with a width below 2px or a contrast ratio below 3:1 against the computed background.
+
+## Status Semantics
+
+*   **FAIL**: The indicator is too thin (area requirement) or too faint (contrast requirement).
+*   **PASS**: Both area and contrast requirements are satisfied.
+*   **NEEDS_REVIEW**: Emitted when the contrast cannot be accurately measured (e.g., against a complex background image).
+
+## Common violations
+
+| Violation | Example |
+|-----------|-----------|
+| Thin outline | A 1px dotted outline (fails the 2px area equivalent). |
+| Faint shadow | A light grey box-shadow on a white background with < 3:1 contrast. |
+| Incomplete check | A focus ring appearing over a hero image where the background color is variable. |
+
+## Suggested fix
+
+Use a thick, high-contrast focus indicator.
+
+```css
+/* FAILED - Too thin and low contrast */
+button:focus {
+  outline: 1px solid #ddd;
+}
+
+/* PASSED - High visibility */
+button:focus {
+  outline: 3px solid #000;
+  outline-offset: 2px;
+}
+
+/* PASSED - Contrast inversion */
+a:focus {
+  background-color: #000;
+  color: #fff;
+}
+```
+
+## Known limitations
+
+*   **Variable Backgrounds**: Indicators appearing over complex gradients or images may result in `NEEDS_REVIEW`.
+*   **3D Transforms**: Indicators that rely purely on 3D transforms or perspective shifts may be missed by the current 2D geometric analyzer.
+
+See [Technique coverage for 2.4.13](/rules/coverage-matrix#2-4-13-focus-appearance).
