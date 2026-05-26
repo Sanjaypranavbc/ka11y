@@ -4,16 +4,33 @@ description: "WCAG 1.1.1 — alt-text quality check with OCR and ML image classi
 ---
 
 <Info>
-  **Level A** · Auditor: `AltTextAccessibilityAuditor` · File: `ka11y/accessibility/rules/non_text/alttext.py`
+  **Level A** · **Primary Engine:** Unified Pipeline (`Policy111`) · **Secondary Engine:** `AltTextAccessibilityAuditor` (Multimodal) · **Supplemental Check:** `custom-background-image-content` (Node)
 </Info>
 
 ## What it checks
 
-WCAG 1.1.1 requires that all non-text content has a text alternative. ka11y goes far beyond checking that `alt` is present — it classifies each image and validates whether the alt text is **semantically appropriate** for that classification.
+WCAG 1.1.1 requires that all non-text content has a text alternative. ka11y goes far beyond checking that `alt` is present — it uses the **Unified Accessibility Pipeline** and ML classification to validate whether the alt text is **semantically appropriate** and not redundant.
+
+## How it works (Unified Pipeline)
+
+The Unified Pipeline evaluates images in their full DOM and visual context:
+
+1.  **Context Extraction**: `ElementContextExtractor` captures the image's role, computed styles, and relationship to its parent containers.
+2.  **Semantic Enrichment**: `SemanticRelationshipEngine` determines if the image is part of a larger control (e.g., a button or link) that already has an accessible name.
+3.  **Visual Analysis**: The image is classified (Logo, Icon, Informative, Decorative) and OCR'd to detect embedded text.
+4.  **Policy Evaluation**: `Policy111` applies specific logic based on this rich context.
+
+### False Positive Protection
+
+To reduce noise and ensure high accuracy, the pipeline includes several specific protections:
+
+*   **Functional Redundancy Check**: If an image is inside an already-labeled `<button>`, `<a>`, or `[role="button"]`, it is automatically marked as **PASSED**. WCAG does not require redundant alt text if the container provides sufficient context.
+*   **Word-Boundary OCR Matching**: When validating alt text against OCR-detected text, the engine uses word-boundary regex (`\b`) to ensure semantically meaningful matches, preventing naive substring hits (e.g., "search" matching "research").
+*   **Decorative Bypass**: Images classified as `decorative` or marked with `role="presentation"` bypass text-of-image tests, correctly allowing for decorative graphics that might contain incidental text.
 
 ## Image classification
 
-Before auditing, every image passes through a deterministic classification cascade (`ClassifyAssets`):
+Before auditing, every image passes through a deterministic classification cascade:
 
 | Category | Examples |
 |----------|---------|

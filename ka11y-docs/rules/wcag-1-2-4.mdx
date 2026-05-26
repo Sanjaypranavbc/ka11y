@@ -1,0 +1,60 @@
+---
+title: "1.2.4 Captions (Live)"
+description: "WCAG 1.2.4 — providing captions for all live audio content in synchronized media"
+---
+
+<Info>
+  **Level AA** · **Engine:** `captions-live.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 1.2.4 requires that captions are provided for all live audio content in synchronized media. This ensures that users who are deaf or hard of hearing can access live broadcasts or streams.
+
+## How it works
+
+The Node engine heuristically identifies live media surfaces and checks for captioning signals:
+
+1.  **Live Surface Detection**: Detects HLS (`.m3u8`) or DASH sources, `data-live="true"` attributes, and "live" / "直播" / "生放送" badges or labels.
+2.  **Platform-Specific Signals**:
+    *   **YouTube**: Recognizes the `cc_load_policy=1` URL parameter as an intent to provide captions.
+    *   **Vimeo**: Recognizes the `texttrack=...` URL parameter.
+3.  **CART Stream Detection**: Searches for adjacent `[aria-live]` regions whose label or text content matches "caption", "transcript", "字幕", or "文字起こし". This identifies sites using Communication Access Real-time Translation (CART).
+4.  **Native Tracks**: Checks for `<track kind="captions">` elements being actively populated.
+
+## Status Semantics
+
+*   **PASS**: A valid live captioning mechanism (URL parameter, native track, or CART region) is detected.
+*   **FAIL**: A live stream is identified but no captioning signals are found.
+*   **INCOMPLETE**: Emitted for cross-origin embeds (YouTube/Vimeo) where captions are not explicitly opted-in via URL parameters, as the auditor cannot inspect the player's internal state.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Live stream, no captions | An HLS video player broadcasting a live event with no visible captions or CART region. |
+| Unverified embed | A live YouTube embed without the `cc_load_policy` parameter. |
+
+## Suggested fix
+
+Ensure that live streams include synchronized captions. If using a third-party platform, enable default captioning or provide a secondary live text stream (CART).
+
+```html
+<!-- YouTube embed with captions enabled -->
+<iframe src="https://www.youtube.com/embed/live_id?cc_load_policy=1"></iframe>
+
+<!-- Implementation with adjacent CART region -->
+<div id="live-stream-container">
+  <video src="live.m3u8"></video>
+  <div role="status" aria-live="polite" aria-label="Live Captions">
+    <!-- Live text populated here by CART service -->
+  </div>
+</div>
+```
+
+## Known limitations
+
+*   **Heuristic Detection**: "Live" identification depends on observable DOM signals; back-end scheduled streams without clear front-end markers may be missed.
+*   **Cross-Origin Privacy**: The auditor cannot confirm if a user has manually enabled captions within a third-party player's settings menu.
+
+See [Technique coverage for 1.2.4](/rules/coverage-matrix#1-2-4-captions-live).

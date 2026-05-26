@@ -4,55 +4,33 @@ description: "WCAG 1.4.3 — text-in-image contrast check via OCR and per-region
 ---
 
 <Info>
-  **Level AA** · Auditor: OCR contrast pipeline · Files: `ka11y/api/v1/combined/findings.py` and `ka11y/accessibility/rules/non_text/contrast_analyser.py`
+  **Level AA** · **Primary Engine:** Unified Pipeline (`Policy143` + `ContrastEngine`) · **Secondary Engine:** OCR contrast pipeline (multimodal)
 </Info>
 
 ## What it checks
 
-WCAG 1.4.3 requires that text has sufficient contrast against its background. ka11y audits **text embedded inside images** — content that axe-core cannot reach because it is rendered pixel-by-pixel rather than as DOM text nodes.
+WCAG 1.4.3 requires that text has sufficient contrast against its background. ka11y audits both standard DOM text and **text embedded inside images** using a combination of the Unified Accessibility Pipeline and an OCR-backed multimodal analysis.
 
-The pipeline:
-1. PaddleOCR detects text regions within each crawled image when available, with EasyOCR as the runtime fallback
-2. Each region's foreground and background colours are sampled
-3. The WCAG contrast ratio is computed and checked against the AA thresholds
-4. Regions that fail are aggregated into a `ContrastReport` attached to the audit result
+## How it works (Unified Pipeline)
 
-The same OCR pipeline also feeds **WCAG 1.4.6 Contrast (Enhanced)** at AAA. Those `1.4.6` findings are present when the audit runs with `wcag_level="AAA"`.
+The Unified Pipeline evaluates DOM-based text contrast with higher accuracy than heuristic-only checkers:
 
-## Contrast thresholds (WCAG AA)
+1.  **Computed Style Extraction**: `ElementContextExtractor` captures the exact `font-size`, `font-weight`, and `color` of every text node.
+2.  **Background Color Resolution**: The `ContrastEngine` performs an upward DOM traversal to find the true, solid painted background color, correctly handling transparent `rgba(..., 0)` wrappers that often cause false failures in other tools.
+3.  **Dynamic Thresholds**: The engine dynamically adjusts the required ratio (4.5:1 vs 3.0:1) based on the element's rendered font size and weight.
 
-| Text size | Required contrast ratio |
-|-----------|------------------------|
-| Normal text (< 18 pt / < 14 pt bold) | **4.5 : 1** |
-| Large text (≥ 18 pt / ≥ 14 pt bold) | **3 : 1** |
+### False Positive Protection
 
-## OCR pipeline
+*   **Opacity Blending**: The engine calculates the effective color by blending foreground and background opacities, preventing false positives on semi-transparent elements.
+*   **Classification Exemptions**: Images and graphics classified as `logo` or `decorative` are automatically exempt, complying with WCAG 2.1 exceptions.
+*   **Disabled State Detection**: Elements marked as `:disabled` or carrying `aria-disabled="true"` are gracefully handled.
 
-```text
-Downloaded images
-      │
-      ▼
-OCRPreprocessing  ── OCR engine ──▶  detected text regions
-                                         │
-                                         ▼
-                              TextClassification
-                              (foreground / background colour sampling)
-                                         │
-                                         ▼
-                              Contrast ratio calculation
-                              (WCAG relative luminance formula)
-                                         │
-                          ┌──────────────┴───────────────┐
-                          ▼                               ▼
-                    aa_normal = True               aa_normal = False
-                    → pass finding                 → violation finding
-```
+## Multimodal OCR Pipeline (for Images of Text)
 
-Each detected region produces one finding in `violations`, `passes`, or `needs_review`. If the OCR pipeline cannot determine compliance (for example because contrast metadata is missing), ka11y emits `needs_review` instead of silently dropping the detection.
-
-For `lang: "ja"` requests, OCR runs with Japanese-aware recognition for mixed Japanese/Latin text in images. The report schema does not change.
-
-## Output: ContrastReport
+For text rendered inside images, ka11y uses a separate pipeline:
+1.  **Detection**: PaddleOCR/EasyOCR identifies text regions within images.
+2.  **Sampling**: Each region's foreground and background colors are sampled directly from the pixels.
+3.  **Analysis**: The WCAG contrast ratio is computed for these sampled values.
 
 When OCR is enabled and images are found, the audit result includes a top-level `contrast_report` key:
 

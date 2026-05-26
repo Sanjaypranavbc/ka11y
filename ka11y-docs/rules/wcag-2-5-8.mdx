@@ -4,16 +4,26 @@ description: "WCAG 2.5.8 — interactive elements must be at least 24 × 24 CSS 
 ---
 
 <Info>
-  **Level AA** · WCAG 2.2 · Auditor: `TargetSizeAuditor` · File: `ka11y/accessibility/rules/input_modalities/target_size_auditor.py`
+  **Level AA** · WCAG 2.2 · **Primary Engine:** Unified Pipeline (`Policy258`) · **Secondary Engine:** `TargetSizeAuditor` (Python Static)
 </Info>
 
 ## What it checks
 
 Every interactive element must have a **rendered size** of at least **24 × 24 CSS pixels**, or must have sufficient spacing around it so that the 24 × 24 target area does not overlap with another target.
 
-<Note>
-  axe-core has no rule for WCAG 2.5.8. This check is **Python-only**.
-</Note>
+## How it works (Unified Pipeline)
+
+The Unified Pipeline performs a more sophisticated analysis of clickable areas than standard static checkers:
+
+1.  **Effective Clickable Area Calculation**: `ElementContextExtractor` merges the bounding box of small native inputs (like a 12x12px radio button) with their wrapping `<label>` or `<button>` padding.
+2.  **Spatial Indexing**: The engine uses a Chebyshev distance algorithm (O(N²)) inside the browser to calculate the exact pixel distance to the nearest adjacent interactive element.
+3.  **Policy Evaluation**: `Policy258` applies the 24x24 rule and its exceptions based on this merged geometry.
+
+### False Positive Protection
+
+*   **Label Merging**: A classic false positive is a tiny native input that is part of a large, easy-to-tap label. The pipeline correctly identifies this as a single **Effective Clickable Area** and evaluates the merged box, which usually passes the rule.
+*   **Dynamic Spacing Exceptions**: WCAG 2.5.8 exception 5 allows for undersized targets if they have sufficient surrounding spacing. The pipeline's spatial index proves exactly how far apart nodes are, correctly applying this exception.
+*   **UA-Controlled Detection**: The engine accurately detects native inputs where CSS `appearance` has not been overridden, correctly applying the User-Agent exception (Exception 4).
 
 ## Measured dimensions
 

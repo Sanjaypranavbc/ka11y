@@ -50,7 +50,7 @@ flowchart TD
     SVC --> STAT["runStaticChecks(page)"]
     SVC --> INTER["runInteractiveChecks(page)"]
 
-    subgraph "Static Checks (Parallel) — 23 checks"
+    subgraph "Static Checks (Parallel) — 27 checks"
         S1["HTML Parsing"]
         S2["Status Messages"]
         S3["Multiple Ways"]
@@ -66,16 +66,18 @@ flowchart TD
         S13["Use of Color"]
         S14["Audio Transcript"]
         S15["Captions Prerecorded ★"]
-        S16["Audio Description ★"]
-        S17["Audio Control ★"]
-        S18["Link Purpose"]
-        S19["Location"]
-        S20["Orientation (Static)"]
-        S21["Images of Text"]
-        S22["Background Image Content ★"]
-        S23["Pronunciation"]
-        S24["Pointer Gestures ★"]
-        S25["Motion Actuation ★"]
+        S16["Captions Live ★"]
+        S17["Audio Description ★"]
+        S18["Audio Control ★"]
+        S19["Link Purpose"]
+        S20["Location"]
+        S21["Orientation (Static)"]
+        S22["Images of Text"]
+        S23["Background Image Content ★"]
+        S24["Pronunciation"]
+        S25["Pointer Gestures ★"]
+        S26["Motion Actuation ★"]
+        S27["Language of Parts ★"]
     end
 
     subgraph "Interactive Checks (Sequential) — 5 checks"
@@ -86,7 +88,7 @@ flowchart TD
         I5["Keyboard Trap"]
     end
 
-    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21 & S22 & S23 & S24 & S25
+    STAT --> S1 & S2 & S3 & S4 & S5 & S6 & S7 & S8 & S9 & S10 & S11 & S12 & S13 & S14 & S15 & S16 & S17 & S18 & S19 & S20 & S21 & S22 & S23 & S24 & S25 & S26 & S27
     INTER --> I1 --> I2 --> I3 --> I4 --> I5
 ```
 
@@ -1091,3 +1093,4 @@ flowchart TD
 | 3.3.8 | Accessible Authentication | accessible-auth.check.js | Static | Static | High |
 | 4.1.1 | Parsing | html-parsing.check.js | Static | Static | High |
 | 4.1.3 | Status Messages | status-messages.check.js | Static | Static | High |
+c | Static | High |
