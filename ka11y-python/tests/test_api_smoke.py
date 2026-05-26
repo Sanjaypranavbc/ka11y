@@ -347,13 +347,19 @@ class TestConverterHelpers:
         findings = _alt_text_to_findings(records, self.PAGE)
         assert findings == []
 
-    def test_alt_text_fallback_reason_uses_localised_rule_description(self):
+    def test_alt_text_fallback_reason_uses_specific_missing_alt_template(self):
+        # A status-only FAILED record (no explicit reason) resolves the specific
+        # `fail_missing_alt` reason template — preferred over the generic rule
+        # description because it tells the user exactly what to fix. The reason
+        # is still localised from the active (ja) context.
         token = _lang_ctx.set("ja")
         try:
             records = [{"wcag_1_1_1_status": "FAILED", "src": "x.png"}]
             findings = _alt_text_to_findings(records, self.PAGE)
             assert len(findings) == 1
-            assert findings[0]["reason"].startswith("利用者に提示されるすべての非テキストコンテンツ")
+            assert findings[0]["reason_code"] == "fail_missing_alt"
+            # Localised (Japanese) and specific to the missing-alt case.
+            assert findings[0]["reason"].startswith("画像")
         finally:
             _lang_ctx.reset(token)
 

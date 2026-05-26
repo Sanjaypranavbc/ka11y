@@ -1,15 +1,16 @@
 # ka11y — System-Wide Code Review (Re-Review)
 
 **Original review:** 2026-05-06 (branch `fix-patches`)
-**This re-review:** 2026-05-25 (branch `pranav-v2`)
+**Re-review:** 2026-05-25 (branch `pranav-v2`) — B-1…B-12 fix verification
+**Latest pass:** 2026-05-26 (branch `pranav-v2`) — feature code that landed after the B-fix pass: multi-page per-page reporting, auto-language detection, page-wise image reports.
 **Scope:** Full system — `ka11y-python` (FastAPI + Playwright + auditors), `ka11y-node` (axe-core + custom checks), API/orchestration glue.
-**Method:** Every finding from the 2026-05-06 review was re-verified against current code, file-by-file, line-by-line. Status tags below (`FIXED` / `IMPROVED` / `OPEN`) are grounded in the present source, not the prior report.
+**Method:** Every finding from the 2026-05-06 review was re-verified against current code, file-by-file, line-by-line. The 2026-05-26 pass reads the new feature modules (`report.py`, `runner.py`, `lang_detector.py`, `findings.py`, `stages.py`) against the current source and runs the browser-free test suite. Status tags below (`FIXED` / `IMPROVED` / `OPEN` / new `N-*`) are grounded in the present source, not the prior report.
 
 ---
 
 ## 1. Executive Summary
 
-### Overall rating: **84 / 100** (was 54 → 78 → **84** after B-1…B-12 fixes)
+### Overall rating: **85 / 100** (54 → 78 → 84 after B-1…B-12; dipped to 80 on the 2026-05-26 feature pass (N-1/N-2), **restored to 85** after N-1…N-3 were fixed the same day)
 
 The remediation work between `fix-patches` and `pranav-v2` is substantial and real. **Every one of the original Top-5 criticals has been addressed**, and the bulk of the high/medium findings are fixed. Concretely, since the last review:
 
@@ -21,6 +22,10 @@ The remediation work between `fix-patches` and `pranav-v2` is substantial and re
 - A long list of accuracy bugs were fixed: contrast alpha compositing, accname-1.2 precedence, 1.3.1 input-type read, 2.4.13 focus-appearance composition, 2.5.3 token comparison, 1.1.1 decorative/`aria-hidden`/shadow-DOM/CSS-background coverage, sensory cross-check, reflow viewport assertion.
 
 **Update (2026-05-25): all twelve open bugs (B-1…B-12) have now been fixed and verified** (Section 2). This pass eliminated the data-loss class by construction (B-2), gave the JS extractor per-category fault isolation (B-3), removed two N+1 IPC loops (B-4/B-5), bounded the SSRF resolver TTL (B-6), capped `seen_refs` (B-7), and cleared the quality backlog (B-8…B-12). What remains for a 90+ score is no longer a bug list but the architectural unification (§4): collapsing the two parallel rule systems so `findings.py` stops being a translation layer at all.
+
+**Update (2026-05-26): reviewed the feature work that landed after the B-fix pass** — multi-page **per-page reporting** (`report.py` builds a `pages[]` breakdown + `summary.by_page`/`score`/`page_count`), **auto-language detection** (`lang_detector.py`, wired in `runner.py`), and **page-wise image reports** (`page_url` attached to every `contrast_report`/`image_audit_report` image). The per-page reporting and image-attribution code is **clean and correct** (§2A) — findings are grouped without copying, the per-page buckets reference the same objects so the runner's `image_url`/`image_src` rewrites propagate to them, and the image→page map is built defensively. The feature pass *did* introduce two regressions — **N-1** (the auto-language detector reopened the SSRF hole on the default request path) and **N-2** (the browser-free suite went red) — which briefly dropped the score to 80.
+
+**Update (2026-05-26, later): N-1, N-2, and N-3 are all fixed and verified.** `lang_detector.py` now validates every request hop (initial URL + each redirect) through the shared SSRF classifier with manual redirect-following, backed by a 7-case regression suite that proves no fetch is attempted for blocked hosts; the stale alt-text test now asserts the stable `reason_code`; and a per-host TTL cache removes the repeat pre-flight fetch. Browser-free suite: **749 passed, 3 skipped, 0 failed.** Score **restored to 85/100.** The architectural unification (§4) remains the lever to 90+.
 
 ---
 
@@ -47,6 +52,23 @@ Severity legend: **P0** = ship-blocker / CI-red / correctness, **P1** = correctn
 
 ---
 
+## 2A. New Findings — 2026-05-26 feature pass (N-1 … N-3)
+
+These are **new** issues found in code that landed *after* the B-fix pass (multi-page reporting, auto-language detection, page-wise image reports). They are not regressions of B-1…B-12; they are defects in the new feature work.
+
+| # | Sev | Bug | Location | Evidence / Fix |
+|---|-----|-----|----------|----------------|
+| **N-1** | ~~P1 (security)~~ **FIXED** | **Auto-language detection bypassed the SSRF guard — on the default path.** `runner._run_job_body()` calls `detect_page_language(url)` whenever `payload.lang == "auto"`, and **`lang` defaults to `"auto"`** (`models.py:69`), so this fired on essentially every audit. The old `detect_page_language()` did a raw `httpx.AsyncClient(..., follow_redirects=True).stream("GET", url)` with **no SSRF validation**, before any browser (and its context-level guard) started — an unguarded server-side request to an attacker URL (`HttpUrl` doesn't block `169.254.169.254`/`localhost`/RFC-1918; `follow_redirects=True` let a public host 30x inward). **Resolved (2026-05-26):** rewrote `lang_detector.py` to (a) validate **every hop** (initial URL + each redirect) with the shared `_host_is_blocked` classifier from `_ssrf_guard.py`, run off-loop via `asyncio.to_thread`; (b) set `follow_redirects=False` and follow manually (max 5 hops), validating each `Location` before connecting; (c) return the safe default + skip the fetch entirely for blocked hosts. New regression suite `tests/test_lang_detector_ssrf.py` (7 cases incl. metadata IP, localhost, RFC-1918, IPv6 loopback, decimal-encoded `2130706433`) asserts **`.stream()` is never called** for a blocked host. *Residual:* same OS-resolver TOCTOU as B-6 — documented, needs pinned-IP fetch to fully close. | `ka11y/utils/lang_detector.py` (`_safe_fetch_head`, `_host_is_blocked` import); `tests/test_lang_detector_ssrf.py` | ✅ Done. |
+| **N-2** | ~~P0 (CI-red)~~ **FIXED** | **Browser-free suite was red.** `test_alt_text_fallback_reason_uses_localised_rule_description` expected the JA reason to start with the generic **rule description**, but `_alt_text_to_findings` now passes `reason=None` + `reason_code="fail_missing_alt"`, so the renderer resolves the **specific** template (`画像に説明（alt 属性）が…`). The specific reason is the **better** behaviour → stale test, not a logic bug. **Resolved (2026-05-26):** renamed to `test_alt_text_fallback_reason_uses_specific_missing_alt_template` and now asserts `reason_code == "fail_missing_alt"` (stable machine value) plus a localised JA reason — robust against future wording tweaks. | `tests/test_api_smoke.py:350-364`; `findings.py:492-510` | ✅ Done. |
+| **N-3** | ~~P2 (perf)~~ **FIXED (mitigated)** | **Auto-lang added a second pre-flight fetch on the default path** (a full extra round-trip, ≤16 KB, ≤10 s, before the crawl loads the same page). **Resolved (2026-05-26):** added a bounded per-host TTL cache (`_LANG_CACHE`, 600 s) so repeated audits of the same host — and the common case of multiple pages on one domain — skip the fetch; blocked hosts are cached too. *Residual:* the first audit of a host still does one lightweight pre-flight fetch; fully eliminating it would require reading `<html lang>` from the universal snapshot (deferred — the cache removes the repeat cost). | `lang_detector.py` (`_LANG_CACHE`, `_cache_get/_cache_put`) | ✅ Done. |
+
+### New feature code that is clean (reviewed, no action)
+
+- **Per-page reporting (`report.py`).** `_build_report` groups findings by `element.page_url` (falling back to the root URL for document-level findings), emits a worst-first `pages[]` array plus `summary.by_page`/`score`/`page_count`, and the flat `violations`/`needs_review`/`passes` stay aggregated. The per-page buckets hold **references to the same finding dicts**, so the runner's later `image_url` injection and `element.image_src` rewrite (`runner.py:411-434`) propagate into the page buckets for free — no divergence between the flat and per-page views. Score is the documented pass-rate; the empty-denominator case returns 100. ✅
+- **Page-wise image reports (`findings.py`/`stages.py`).** `_build_image_audit_report` exposes `page_url = record["url"]` (the page the image was found on); `_build_contrast_report(ocr_results, page_by_filename)` attaches `page_url` per image, with `page_by_filename` built defensively in `_stage_image_audit` from `image_crawler.images_data` via `getattr` and matched on filename then screenshot basename, falling back to `None`. Additive and backward-compatible. ✅
+
+---
+
 ## 3. Remediation Status of the Original Review
 
 Condensed verification of the 2026-05-06 findings. `FIXED` = verified resolved in current source.
@@ -56,7 +78,7 @@ Condensed verification of the 2026-05-06 findings. `FIXED` = verified resolved i
 |---|-------------------|--------|-------|
 | 1 | Auditor→converter field-name mismatch silently downgrades SCs | **IMPROVED** (registry + guard test added; but see **B-1**, **B-2**) | `auditor_field_map.py`, `tests/test_auditor_field_map.py` |
 | 2 | `DecisionEngine` swallows every `Exception` → `NEEDS_REVIEW(0.1)` | **FIXED** — `except PolicyError` only; anything else propagates | `decisions/engine.py:10-56` |
-| 3 | SSRF guard misses encoded IPs / redirects | **FIXED** (DNS-rebinding residual → **B-6**) | `_ssrf_guard.py` |
+| 3 | SSRF guard misses encoded IPs / redirects | **FIXED** for the browser path (DNS-rebinding residual → **B-6**); the auto-lang httpx path was briefly unguarded (N-1) and is **now also fixed** (shared classifier + manual redirect validation + regression suite) | `_ssrf_guard.py`; `lang_detector.py`; `tests/test_lang_detector_ssrf.py` (see §2A N-1) |
 | 4 | 5 Chromium per URL; fan-out without timeout; page leak | **FIXED** — pool + `asyncio.wait_for` + `finally: ctx.close()` | `browser_pool.py`, `rendered_layout_crawler.py:314-317,400-416` |
 | 5 | 2000-line monolithic `page.evaluate()` | **IMPROVED** — extracted to disk, but still one file → **B-3** | `js/universal_extract.js` |
 
@@ -122,10 +144,13 @@ The original review's deepest structural critique (F1) is now **mostly** resolve
 
 ## 5. Recommended Next Actions (prioritized)
 
-**B-1 … B-12 are all complete (2026-05-25).** What's left is no longer a bug backlog:
+**B-1 … B-12 are all complete (2026-05-25); N-1 … N-3 are all complete (2026-05-26).**
 
-1. **Auditor-model unification** — take B-2 to its conclusion: have auditors emit `Finding(...)` objects directly so `combined/findings.py` (1562 lines) can be deleted instead of maintained. This is the single biggest lever from 84 → 90+. *(multi-week)*
-2. **Close the residual SSRF TOCTOU** (B-6) properly: fetch via a pinned IP / resolver hook so Chromium connects to the validated address. *(1–2 days)*
+0a. ~~**[N-1, P1 security] Guard the auto-language fetch.**~~ ✅ **Done (2026-05-26).** `lang_detector.py` validates every hop (initial + redirects) via the shared `_host_is_blocked` classifier, follows redirects manually with `follow_redirects=False`, and skips the fetch for blocked hosts. Regression suite `tests/test_lang_detector_ssrf.py` (7 cases) proves no stream is opened to a blocked host.
+0b. ~~**[N-2, P0 CI] Make the suite green.**~~ ✅ **Done (2026-05-26).** Test updated to assert the stable `reason_code == "fail_missing_alt"`. Browser-free suite: **749 passed, 3 skipped, 0 failed.**
+
+1. **Auditor-model unification** — take B-2 to its conclusion: have auditors emit `Finding(...)` objects directly so `combined/findings.py` (now 1587 lines) can be deleted instead of maintained. This is the single biggest lever from 85 → 90+. *(multi-week)*
+2. **Close the residual SSRF TOCTOU** (B-6) properly: fetch via a pinned IP / resolver hook so Chromium connects to the validated address. *(1–2 days)* — note this is **separate** from N-1: B-6 is the browser-path DNS-rebind window; N-1 is a brand-new unguarded httpx path.
 3. ~~**Fix the pre-existing Python test failures.**~~ ✅ **Done (2026-05-25).** `test_rendered_converters.py` updated to assert the rule-specific reflow PASS message (the intended behavior; renamed `test_rendered_reflow_pass_reason_is_specific`). `stages.py` hoists `UniversalPageLoader` to module level so the patch target resolves; the 3 `test_combined_stages.py` tests assert a removed `max_depth` snapshot-gating architecture and are now `@pytest.mark.skip`-ed with a reason, pending a rewrite against the current `static_rules_enabled` / `*_universal` control flow. **Python browser-free suite: 279 passed, 3 skipped, 0 failed.**
 4. **Node test backlog (separate, pre-existing).** ~22 failures across 8 unrelated custom-check suites (location, keyboard-trap, focus-appearance, on-focus/on-input, link-purpose, index, criteria-filter). Common pattern: checks now return `incomplete` (manual-review) where tests expect `pass` — i.e. AAA checks became conservative and the tests went stale. Each is a per-check test-vs-source decision; **not** related to B-1…B-12. Recommend triaging as its own batch.
 5. **Cosmetic:** physical 4-file split of `universal_extract.js`; job-association for the standalone `crawled_images/` so it can be TTL-swept too. *(optional)*
@@ -149,3 +174,180 @@ The original review's deepest structural critique (F1) is now **mostly** resolve
 All other status tags were verified by reading the cited source lines. Note: this environment auto-commits each edit, so the working tree shows clean against `HEAD` — all B-1…B-12 changes are committed.
 
 **Pre-existing-failure cleanup (2026-05-25):** the 4 Python failures surfaced above are resolved — `test_rendered_converters.py` now asserts the specific reflow PASS message; `stages.py` hoists the `UniversalPageLoader` import (patch target resolves) and the 3 obsolete-architecture `test_combined_stages.py` tests are skipped with a documented reason. Final Python browser-free run: **279 passed, 3 skipped, 0 failed.** The ~22 Node failures remain (separate pre-existing backlog, §5 item 4).
+
+---
+
+## 7. 2026-05-26 pass — verification
+
+**Before the N-fixes**, the full browser-free suite was `741 passed, 1 failed, 3 skipped` (the failure = N-2), and N-1 was confirmed by source inspection (`models.py:69` defaults `lang="auto"`; `runner.py:207-210` calls `detect_page_language`; the old `lang_detector` fetched with a bare `httpx` client that never touched the Playwright-context-level `install_ssrf_guard`).
+
+**After the N-fixes (current source):**
+
+```
+pytest tests/ -k "not browser"  →  749 passed, 3 skipped, 0 failed
+```
+
+- **N-1 fixed & tested.** `lang_detector.py` now imports `_host_is_blocked` and validates the initial URL **and every redirect hop** before connecting (`asyncio.to_thread` so the blocking `getaddrinfo` stays off the loop); `follow_redirects=False` with a manual 5-hop loop. New `tests/test_lang_detector_ssrf.py` — 7 parametrised cases (`169.254.169.254`, `localhost`, `127.0.0.1`, `10.0.0.5`, `192.168.1.1`, `[::1]`, decimal `2130706433`) — monkeypatches `httpx.AsyncClient` to fail if `.stream()` is ever called, and asserts each returns the safe `"en"` default with **zero** fetch attempts.
+- **N-2 fixed.** Test renamed and now asserts the stable `reason_code == "fail_missing_alt"` + a localised JA reason.
+- **N-3 mitigated.** Per-host TTL cache (`_LANG_CACHE`, 600 s) verified by reading the source; the first audit of a host still does one lightweight fetch.
+- **New feature modules** (per-page report build, image `page_url` wiring) reviewed by reading the cited source lines — correct and additive; existing `test_combined_findings` / image-audit / contrast suites stay green with the added field.
+
+> Net effect on score: B-1…B-12 and N-1…N-3 are all fixed; the unification debt (§4) is unchanged. Score is back to **85/100**; the path to 90+ is still the auditor-model unification.
+
+---
+
+## 8. Plan — Durable run history in SQLite (for the next session)
+
+### 8.1 Problem & goal
+
+Today a finished audit lives in **two places, both ephemeral**:
+
+1. **In-memory** `_jobs[job_id]` (`combined/store.py`) — evicted on a TTL.
+2. **On disk** `crawled_images/{domain}_{ts}_{jobid}_combined/combined_report.json` — and **B-12** deletes that whole `output_dir` when the job is TTL-evicted.
+
+So **old reports are lost by design** once the TTL fires; there is no run history, no way to list past audits, and no time-series of how a site's score moved. The container's working dir is also not guaranteed to survive a redeploy.
+
+**Goal:** add a small **SQLite durability layer** that permanently records, per run: the request metadata, the final summary/score, the full report JSON, and a **per-stage timing log** — stored on a **mounted volume** so history survives TTL eviction, container restarts, and redeploys. The in-memory `_jobs` + disk `output_dir` stay as the *hot/working* layer (unchanged, still TTL-swept); SQLite becomes the *cold/durable* layer.
+
+### 8.2 Why SQLite (not Postgres, not "just keep the JSON files")
+
+- **Single-file, zero-ops, mountable.** One `*.db` file on a Docker volume = trivially persistent and backup-able (`cp`/`sqlite3 .backup`). No extra service in `docker-compose`.
+- **Queryable history** the JSON-on-disk approach can't give: "last 50 runs", "score trend for host X", "all runs with violations of SC 1.4.3", "slowest stage last week".
+- **Concurrency is fine at our scale.** Writes are bounded by `KA11Y_MAX_CONCURRENT_JOBS` (4) and are short; **WAL mode** handles concurrent readers + one writer comfortably. If we ever outgrow it, the repository interface (§8.6) lets us swap the backend without touching call sites.
+
+### 8.3 Schema (DDL)
+
+`runs` stays narrow for fast listing; the heavy JSON and the timing rows live in child tables (1‑to‑many / 1‑to‑1).
+
+```sql
+PRAGMA journal_mode = WAL;        -- concurrent readers + 1 writer
+PRAGMA synchronous  = NORMAL;     -- durable enough for WAL; fast
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS runs (
+  job_id          TEXT PRIMARY KEY,
+  url             TEXT NOT NULL,
+  host            TEXT NOT NULL,            -- urlparse(url).netloc, for trend queries
+  lang_requested  TEXT NOT NULL,            -- "auto" | "en" | "ja" | ...
+  lang_resolved   TEXT,                     -- what auto resolved to
+  wcag_level      TEXT NOT NULL,            -- A | AA | AAA
+  max_depth       INTEGER NOT NULL,
+  max_pages       INTEGER NOT NULL,
+  success_criteria_id TEXT,                 -- single-SC runs (nullable)
+  status          TEXT NOT NULL,            -- pending|running|completed|failed
+  submitted_at    TEXT NOT NULL,            -- ISO-8601 UTC
+  started_at      TEXT,
+  completed_at    TEXT,
+  duration_ms     INTEGER,                  -- completed_at - started_at
+  score           REAL,                     -- summary.score (nullable on fail)
+  total_findings  INTEGER,
+  violations      INTEGER,
+  needs_review    INTEGER,
+  passes          INTEGER,
+  page_count      INTEGER,
+  warnings_count  INTEGER DEFAULT 0,
+  error_id        TEXT,                     -- opaque id on failure (matches logs)
+  error_stage     TEXT,
+  report_path     TEXT,                     -- last-known on-disk path (may be TTL-deleted)
+  schema_version  INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_runs_host_time  ON runs(host, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_status     ON runs(status);
+CREATE INDEX IF NOT EXISTS idx_runs_submitted  ON runs(submitted_at DESC);
+
+-- Full report JSON, 1:1 with runs. Separate table so history listing never
+-- pulls multi-MB blobs. Store compressed to keep the DB small.
+CREATE TABLE IF NOT EXISTS run_reports (
+  job_id        TEXT PRIMARY KEY REFERENCES runs(job_id) ON DELETE CASCADE,
+  report_json   BLOB NOT NULL,             -- zlib-compressed UTF-8 JSON
+  compression   TEXT NOT NULL DEFAULT 'zlib',
+  byte_size     INTEGER NOT NULL,          -- compressed size, for budgeting
+  created_at    TEXT NOT NULL
+);
+
+-- Time-wise per-stage log, many rows per run. One row per stage transition set.
+CREATE TABLE IF NOT EXISTS run_stage_timings (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id        TEXT NOT NULL REFERENCES runs(job_id) ON DELETE CASCADE,
+  stage         TEXT NOT NULL,             -- axe_core|image_audit|pipeline|...
+  status        TEXT NOT NULL,             -- completed|error
+  started_at    TEXT NOT NULL,
+  completed_at  TEXT,
+  duration_ms   INTEGER,
+  findings_count INTEGER,
+  error         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_stage_job ON run_stage_timings(job_id);
+```
+
+> Optional 4th table `run_step_events` (mirror of the `ExecutionStepLogger` JSONL) only if we want the fine-grained step log queryable; otherwise leave the JSONL on disk and just store its path.
+
+### 8.4 Where the writes hook in (minimal, additive)
+
+New module `ka11y/api/v1/combined/db.py` (a thin repository; see §8.6). Call sites:
+
+| Event | Source today | New write |
+|-------|--------------|-----------|
+| Job accepted | `routes.submit_combined_audit` (`routes.py:233`) | `runs` row `INSERT` with `status='pending'`, request metadata, `submitted_at` |
+| Job starts | `runner._run_job_body` (`runner.py:199`) | `UPDATE runs SET status='running', started_at=…, lang_resolved=…` |
+| Stage completes / errors | `stage_events._stage_complete` / `_stage_error_and_warn` | `INSERT run_stage_timings` (stage, status, started/completed, duration, findings_count) — the timestamps already exist in the `_jobs[job_id]["stages"]` list |
+| Job completes | `runner._run_job_body` success block (`runner.py:442`) | `UPDATE runs` (status, completed_at, duration_ms, score, counts, page_count) + `INSERT run_reports` (zlib-compressed `report` JSON) |
+| Job fails | `runner` except block (`runner.py:500`) | `UPDATE runs SET status='failed', error_id=…, error_stage=…, completed_at=…` |
+
+All writes wrapped in `try/except` that **logs and continues** — persistence must never fail an audit (same philosophy as the step logger). Stage timings can also be back-filled in one shot from `_jobs[job_id]["stages"]` at completion instead of per-transition, which is simpler and avoids extra writes on the hot path.
+
+### 8.5 Read surface (new endpoints in `routes.py`)
+
+- `GET /api/v1/combined/history?host=&status=&limit=50&offset=0` → page of `runs` rows (no blobs) — powers a "past audits" view in the frontend.
+- `GET /api/v1/combined/history/{job_id}` → the full stored report (decompress `run_reports.report_json`) — lets the dashboard reopen an old report even after the on-disk copy was TTL-swept. The existing `GET /combined/{job_id}` keeps serving the hot in-memory result; it should **fall back to SQLite** when the job is no longer in `_jobs`.
+- `GET /api/v1/combined/history/{job_id}/timings` → `run_stage_timings` rows for a run (the time-wise log).
+- (Optional) `GET /api/v1/combined/trends?host=` → `job_id, submitted_at, score` series for charting a site over time.
+
+### 8.6 Concurrency & connection model
+
+- One module-level connection opened with `check_same_thread=False`, guarded by a `threading.Lock` for writes; or open a short-lived connection per write via `asyncio.to_thread` (DB calls are blocking → never run them directly on the event loop). Prefer **`asyncio.to_thread(_repo.write, …)`** so the loop never blocks.
+- `PRAGMA journal_mode=WAL` once at bootstrap. Readers (history endpoints) never block the writer.
+- Repository interface (`RunRepository` with `record_submitted/started/stage/completed/failed/get/list`) so the storage backend is swappable and unit-testable with an in-memory `sqlite3.connect(":memory:")`.
+
+### 8.7 Mounting & persistence (the "no loss" requirement)
+
+The DB file **must** live on a mounted volume, not in the container's ephemeral layer.
+
+- **Path:** `KA11Y_DB_PATH` env, default `/data/ka11y.db` (new) — keep it separate from `crawled_images/` so report blobs survive even when B-12 sweeps the image dirs.
+- **`docker-compose.yml`:** add a named volume and mount it on the `ka11y-python` service:
+  ```yaml
+  services:
+    ka11y-python:
+      environment:
+        - KA11Y_DB_PATH=/data/ka11y.db
+      volumes:
+        - ka11y_db:/data            # durable, survives `down`/redeploy
+  volumes:
+    ka11y_db:
+  ```
+  (WAL creates `ka11y.db-wal` / `ka11y.db-shm` siblings — they live in `/data` too, so the volume covers them.)
+- **Bootstrap:** run the DDL (`CREATE TABLE IF NOT EXISTS …`) at app startup (FastAPI lifespan), idempotent. Mkdir the parent of `KA11Y_DB_PATH` first.
+- **Backups:** `sqlite3 $KA11Y_DB_PATH ".backup '/data/backups/ka11y-$(date +%F).db'"` on a cron; the file is portable.
+
+### 8.8 Retention & size
+
+- **Metadata (`runs`, `run_stage_timings`) is kept indefinitely** — it's tiny (hundreds of bytes/run).
+- **Report blobs (`run_reports`) are the only heavy rows.** Add `KA11Y_DB_REPORT_RETENTION_DAYS` (default e.g. 180): a periodic task `DELETE FROM run_reports WHERE created_at < …` keeps the queryable history (counts, score, timings) forever while bounding blob storage. `runs` rows stay so trends remain complete even after a blob is pruned.
+- zlib compression typically shrinks the report JSON 8–15×; budget ~tens of KB/run compressed.
+- Decouple from B-12: B-12 deletes the working `output_dir`; the SQLite copy is independent and is what the history endpoints read.
+
+### 8.9 Rollout (phased, low-risk)
+
+1. **Schema + repo + bootstrap** (`db.py`, lifespan DDL, `:memory:` unit tests). No behaviour change.
+2. **Write hooks** in `routes`/`runner`/`stage_events`, all `try/except`-guarded. Verify a run produces one `runs` row + one `run_reports` blob + N `run_stage_timings`.
+3. **Read endpoints** + `GET /combined/{job_id}` SQLite fallback.
+4. **docker-compose volume + `KA11Y_DB_PATH`** + a startup log line confirming the resolved DB path.
+5. **Retention task** + docs (`internals/output-format.mdx` "where the output lives" table gains a SQLite row; `deployment/` gets a "persistent run history" note).
+
+### 8.10 Testing
+
+- Unit: repository against `sqlite3.connect(":memory:")` — insert→list→get round-trip, decompress equality, cascade delete, WAL pragma set.
+- Integration: a mocked completed job writes exactly one `runs` + one `run_reports` + the expected `run_stage_timings`; a failed job writes status `failed` + `error_id` and **no** `run_reports`.
+- Resilience: a DB write raising must **not** fail the audit (assert the job still completes and the report is still returned from memory).
+
+> This plan is intentionally additive: it does not change how an in-flight audit runs or what `GET /combined/{job_id}` returns for a live job — it only adds a durable, mounted, queryable shadow copy so history survives. Implement in the order of §8.9.

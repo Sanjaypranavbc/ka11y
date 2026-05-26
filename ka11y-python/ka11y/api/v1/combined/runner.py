@@ -28,6 +28,7 @@ from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import _lang_ctx
 from ka11y.utils.lang_detector import detect_page_language
+from ka11y.utils.run_timing import log_run_timing
 from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import (
@@ -197,6 +198,9 @@ async def _run_job_body(
 ) -> None:
     """Original body of :func:`_run_job`, gated by the concurrency semaphore."""
     _jobs[job_id]["status"] = "running"
+    # Wall-clock start of real work (before lang detection + stages). Used by
+    # the run-timing logger to separate queue wait from execution time.
+    _jobs[job_id]["run_started_at"] = datetime.now(timezone.utc).isoformat()
     url = str(payload.url)
 
     # Resolve the effective language once, up front. When the user selects
@@ -450,6 +454,21 @@ async def _run_job_body(
                 }
             )
 
+        # Append a per-run timing block to logs/run_timings.log (durations are
+        # derived from the timestamps already recorded; no extra measurement).
+        job_rec = _jobs.get(job_id, {})
+        log_run_timing(
+            job_id=job_id,
+            url=url,
+            status="completed",
+            stages=job_rec.get("stages", []),
+            submitted_at=job_rec.get("submitted_at"),
+            run_started_at=job_rec.get("run_started_at"),
+            completed_at=job_rec.get("completed_at"),
+            lang=resolved_lang,
+            summary=report.get("summary"),
+        )
+
         logger.info(
             f"[combined] job {job_id} completed — "
             f"{report['summary']['violations']} violations, "
@@ -508,6 +527,21 @@ async def _run_job_body(
                     "current_stage": None,
                 }
             )
+
+        # Record timing for the failed run too, so the log shows where time went
+        # before the failure (and which stage failed).
+        job_rec = _jobs.get(job_id, {})
+        log_run_timing(
+            job_id=job_id,
+            url=url,
+            status="failed",
+            stages=job_rec.get("stages", []),
+            submitted_at=job_rec.get("submitted_at"),
+            run_started_at=job_rec.get("run_started_at"),
+            completed_at=job_rec.get("completed_at"),
+            lang=_jobs.get(job_id, {}).get("lang"),
+            error_stage=current_stage,
+        )
         step_logger.finalize(
             status="error",
             message="Combined audit job failed",
