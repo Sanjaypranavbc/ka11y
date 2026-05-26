@@ -352,7 +352,7 @@ auditing with the following improvements:
 ---
 
 ## 2.4.7 Focus Visible
-**Engine:** `policy_2_4_7.py` + `focus-visible.check.js`.
+**Engine:** `ka11y-python` pipeline (`policy_2_4_7.py`) + `focus-visible.check.js`.
 
 | Technique | Kind | Status |
 |---|---|---|
@@ -360,6 +360,10 @@ auditing with the following improvements:
 | G165 / G195 Author focus | Sufficient | Covered |
 | C15 `:focus` styling | Sufficient | Covered |
 | F55 `outline:0` without replacement | Failure | Covered |
+
+**Visual Delta Simulation.** The engine natively simulates focus and captures the
+rendered CSS delta (box-shadow, border, background, color, transform) to prove
+visibility, correctly passing custom indicators that do not use the `outline` property.
 
 ---
 
@@ -397,21 +401,19 @@ auditing with the following improvements:
 ---
 
 ## 2.4.13 Focus Appearance
-**Engine:** `policy_2_4_13.py` + `focus-appearance.check.js`.
+**Engine:** `ka11y-python` pipeline (`policy_2_4_13.py`) + `focus-appearance.check.js`.
 
 | Technique | Kind | Status |
 |---|---|---|
 | G195 Author focus indicator | Sufficient | Covered |
-| Area ≥ perimeter × 2 | Requirement | Partial |
+| Area ≥ perimeter × 2 | Requirement | Covered |
 | ≥ 3:1 contrast | Requirement | Covered |
-| F78 Focus indicator insufficient contrast | Failure | Partial |
+| F78 Focus indicator insufficient contrast | Failure | Covered |
 
-**Failure semantics.** Both the thickness and contrast requirements are
-evaluated independently — either failure produces a `fail` verdict. (The
-prior implementation only failed when *both* dimensions were below threshold,
-which let a 0.5 px ring at 5:1 contrast pass spuriously.) When the focus
-contrast cannot be measured for an element, the verdict is `needs_review`
-rather than a hardcoded passing fallback.
+**Comprehensive Evaluation.** Both the thickness and contrast requirements are
+evaluated independently. The engine supports pure contrast inversion and accounts
+for semi-transparent indicators by blending them with the resolved background.
+If focus contrast cannot be measured, the verdict is `needs_review`.
 
 ---
 
@@ -514,6 +516,31 @@ significantly reducing false positives on properly wrapped inputs.
 **Spatial Spacing Proof.** Uses a Chebyshev distance algorithm to prove exact
 pixel distances to adjacent interactive elements, accurately applying the
 spacing exception.
+
+---
+
+## 3.1.1 Language of Page
+**Engine:** axe-core.
+
+| Technique | Status |
+|---|---|
+| H57 `lang` on `<html>` | Covered |
+
+---
+
+## 3.1.2 Language of Parts
+**Engine:** `ka11y-node/language-of-parts.check.js`.
+
+| Technique | Kind | Status |
+|---|---|---|
+| H58 `lang` on passages | Sufficient | Covered |
+| BCP47 validation | Requirement | Covered |
+| F2 HTML `lang` invalid | Failure | Covered |
+
+**Unannotated CJK Detection.** The auditor includes a heuristic scan for Japanese,
+Chinese, and Korean character ranges. If these characters are found on a page
+declared as a non-CJK language without a specific `lang` override, it is flagged
+for manual review.
 
 ---
 

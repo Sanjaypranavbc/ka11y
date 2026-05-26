@@ -18,15 +18,15 @@ Legend:
 > Everything that conveys meaning to assistive technology depends on this foundation.
 
 ```
-4.1.1  Parsing                             (A)  [✓] axe-core
-└── 4.1.2  Name, Role, Value               (A)  [✓] axe-core
-    ├── 1.3.1  Info and Relationships       (A)  [✓] axe-core + py-static
-    │   ├── 1.3.2  Meaningful Sequence      (A)  [✓] axe-core
+4.1.1  Parsing                             (A)  [✓] node-custom
+└── 4.1.2  Name, Role, Value               (A)  [✓] axe-core + py-pipeline
+    ├── 1.3.1  Info and Relationships       (A)  [✓] py-pipeline
+    │   ├── 1.3.2  Meaningful Sequence      (A)  [✓] node-custom
     │   │   └── 2.4.6  Headings and Labels (AA)  [✓] axe-core
-    │   └── 1.3.3  Sensory Characteristics  (A)  [✓] axe-core + py-static (NLP)
+    │   └── 1.3.3  Sensory Characteristics  (A)  [✓] py-static (NLP)
     ├── 3.1.1  Language of Page             (A)  [✓] axe-core
-    │   └── 3.1.2  Language of Parts       (AA)  [✓] axe-core
-    └── 4.1.3  Status Messages             (AA)  [✓] axe-core
+    │   └── 3.1.2  Language of Parts       (AA)  [✓] node-custom
+    └── 4.1.3  Status Messages             (AA)  [✓] node-custom
 ```
 
 **Why**: `4.1.1` ensures the DOM is valid so assistive technologies can parse it.
@@ -39,12 +39,12 @@ Legend:
 > Non-text content must have a text equivalent before contrast or image checks apply.
 
 ```
-1.1.1  Non-text Content                    (A)  [✓] py-static
-├── 1.4.5  Images of Text                 (AA)  [✓] py-static
-│   └── 1.4.3  Contrast (Minimum)         (AA)  [✓] axe-core + py-static (OCR)
-│       ├── 1.4.6  Contrast (Enhanced)    (AAA) [✓] axe-core + py-static (OCR)
-│       └── 1.4.11  Non-text Contrast     (AA)  [✓] py-static (image buttons/icons)
-└── 1.3.3  Sensory Characteristics         (A)  [✓] axe-core + py-static (NLP)
+1.1.1  Non-text Content                    (A)  [✓] py-pipeline
+├── 1.4.5  Images of Text                 (AA)  [✓] py-pipeline + node-custom
+│   └── 1.4.3  Contrast (Minimum)         (AA)  [✓] py-pipeline (ContrastEngine)
+│       ├── 1.4.6  Contrast (Enhanced)    (AAA) [✓] py-pipeline (ContrastEngine)
+│       └── 1.4.11  Non-text Contrast     (AA)  [✓] py-pipeline (boundary check)
+└── 1.3.3  Sensory Characteristics         (A)  [✓] py-static (NLP)
 ```
 
 **Why**: You can only audit contrast of text that exists. Embedded text in images
