@@ -24,6 +24,17 @@ const config = {
 
   axe: {
     timeoutMs: parseInt(process.env.AXE_TIMEOUT_MS) || 30_000,
+    // Per-page custom-checks budget (ms). Modest so one page can't dominate a
+    // multi-page crawl. Was 180_000 hard-coded; lowered + made tunable.
+    customChecksTimeoutMs: parseInt(process.env.CUSTOM_CHECKS_TIMEOUT_MS) || 60_000,
+    // Overall multi-page (flat) crawl budget (ms). MUST stay below the Python
+    // combined runner's _call_node_flat HTTP timeout (300s) so a deep crawl
+    // returns partial findings instead of the caller timing out and discarding
+    // everything.
+    flatCrawlBudgetMs: parseInt(process.env.FLAT_CRAWL_BUDGET_MS) || 255_000,
+    // Per-page hard cap (ms) for the flat crawl; clamped to the remaining
+    // overall budget so the loop stays responsive when a single page hangs.
+    flatPerPageMs: parseInt(process.env.FLAT_PER_PAGE_MS) || 120_000,
     defaultTags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'],
     runOnly: {
       type: 'tag',

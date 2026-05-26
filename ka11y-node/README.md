@@ -1,54 +1,77 @@
-# WCAG Accessibility API
+# ka11y-node — High-Performance Accessibility Engine
 
-A Node.js REST API that analyzes raw HTML for accessibility issues using [axe-core](https://github.com/dequelabs/axe-core) and [Puppeteer](https://pptr.dev/). It maps each result back to its WCAG Success Criterion and returns structured JSON that is easy to integrate into CI pipelines or developer tooling.
+A Node.js REST API that analyzes raw HTML and live URLs for accessibility issues using [axe-core](https://github.com/dequelabs/axe-core) and [Puppeteer](https://pptr.dev/). This service serves as the "technical auditor" for the ka11y platform, providing deep DOM analysis and interactive WCAG checks.
+
+---
+
+## 🚀 Getting Started
+
+If you are a new developer on this project, please read our [**Getting Started Guide**](./GETTING_STARTED.md) for a full architectural deep-dive and contribution instructions.
 
 ---
 
 ## Features
 
-- Analyzes any HTML string for WCAG 2.0 / 2.1 Level A & AA violations, passes, and incomplete checks
-- Filters results by a specific WCAG Success Criterion (e.g. `1.1.1`, `4.1.2`)
-- Returns rule ID, description, impact, status, reason, and a documentation link for every rule
-- Interactive API documentation via Swagger UI at `/api-docs`
-- Structured file-based logging organized by date (`logs/YYYY/MM/DD/`)
+- **Standard & Custom Audits**: Combines 100+ standard `axe-core` rules with **32+ specialized custom checks** (focus traps, color-only links, accessible auth, etc.).
+- **URL Crawling**: Robust multi-page crawling using a Breadth-First Search (BFS) strategy with configurable `max_depth`.
+- **SSRF Protection**: Hardened security layer to prevent auditing requests from reaching internal infrastructure.
+- **Unified Reporting**: Returns structured JSON mapped directly to WCAG Success Criteria.
+- **Multilingual**: Native support for English and Japanese localized results.
+- **Interactive API Docs**: Explore the endpoints via Swagger UI at `/api-docs`.
 
 ---
 
 ## Project Structure
 
 ```
-wcag/
-├── server.js                        # Express app entry point
-├── selftest.js                      # Axe-core rule coverage self-test
-├── package.json
-├── .env                             # Environment variable overrides
-├── Dockerfile
-├── src/
-│   ├── config/
-│   │   ├── app.config.js            # Centralised configuration
-│   │   └── swagger.config.js        # OpenAPI / Swagger setup
-│   ├── controllers/
-│   │   ├── accessibility.controller.js
-│   │   ├── health.controller.js
-│   │   ├── rules.controller.js
-│   │   └── rulesGuide.controller.js
-│   ├── services/
-│   │   ├── accessibility.service.js # Puppeteer + axe-core orchestration
-│   │   └── rules.service.js
-│   └── utils/
-│       ├── axeResultMapper.js       # Maps axe results to WCAG criteria
-│       ├── logger.js                # File + console logger
-│       ├── rulesGuide.js
-│       └── wcagCriteriaNames.js
-└── logs/                            # Auto-created at runtime
-    └── YYYY/
-        └── MM/
-            └── DD/
-                ├── info.log
-                ├── warn.log
-                ├── error.log
-                └── debug.log
+src/
+├── controllers/          # Request validation and routing logic
+├── services/             # Puppeteer orchestration and axe-core execution
+├── custom-checks/        # Specialized WCAG auditors beyond axe-core
+├── config/               # Centralized app and Swagger configuration
+└── utils/                # Mapping logic, logging, and crawl helpers
 ```
+
+---
+
+## Quick Start
+
+### Installation
+
+```bash
+npm install
+```
+
+### Running
+
+```bash
+# Development
+npm run dev
+
+# Production
+npm start
+```
+
+---
+
+## API Summary
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/v1/analyse-url` | Crawl a URL and run standard + custom checks |
+| POST | `/api/v1/analyse-url-flat` | Like above, but returns a flat array of element-wise findings |
+| POST | `/api/v1/analyze-accessibility` | Audit raw HTML string |
+| GET | `/api/v1/rules/wcag` | Get the full catalogue of supported WCAG rules |
+
+---
+
+## Development Tools
+
+- **Linting**: `npm run lint` (includes `jsx-a11y` accessibility rules)
+- **Accessibility Linting**: `npm run accesslint`
+- **Testing**: `npm run test`
+- **Self-Test**: `npm run selftest` (validates rule coverage against a known fixture)
+
 
 ---
 

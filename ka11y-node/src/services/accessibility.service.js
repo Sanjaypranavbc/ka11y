@@ -527,6 +527,11 @@ class AccessibilityService {
         maxDepth,
         maxPages,
         internalLinksOnly: internalLinks,
+        // Keep the whole crawl under the Python caller's HTTP timeout so a deep
+        // crawl returns partial findings instead of the caller timing out and
+        // discarding everything; per-page cap keeps the loop responsive.
+        maxTotalMs: this._config.axe.flatCrawlBudgetMs,
+        perPageMs: this._config.axe.flatPerPageMs,
         log: (msg) => this._logger.info(`[flat][crawl] ${msg}`),
         visit: async (pageUrl /*, depth */) => {
           const { findings, links } = await this._auditPageFlat(
@@ -607,7 +612,9 @@ class AccessibilityService {
       );
 
       let customResults = [];
-      const customChecksTimeoutMs = 180000; // 3 minutes budget for custom checks
+      // Per-page custom-checks budget. Kept modest so one page can't dominate a
+      // multi-page crawl's overall time budget (see boundedBfs maxTotalMs).
+      const customChecksTimeoutMs = this._config.axe.customChecksTimeoutMs;
       let timeoutId;
       try {
         const timeoutPromise = new Promise((_, reject) => {
