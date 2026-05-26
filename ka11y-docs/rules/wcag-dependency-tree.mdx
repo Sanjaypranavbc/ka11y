@@ -59,13 +59,13 @@ Legend:
 
 ```
 2.1.1  Keyboard                            (A)  [✓] axe-core
-├── 2.1.2  No Keyboard Trap               (A)  [✓] axe-core + node-custom
+├── 2.1.2  No Keyboard Trap               (A)  [✓] node-interactive
 │
 └── 2.4.3  Focus Order                     (A)  [✓] axe-core
-    └── 2.4.7  Focus Visible              (AA)  [✓] axe-core + node-custom
+    └── 2.4.7  Focus Visible              (AA)  [✓] py-pipeline (simulated)
         ├── 2.4.11  Focus Not Obscured    (AA)  [✓] py-rendered   ← Minimum: not fully hidden
         │   └── 2.4.12  Focus Not Obscured (AAA) [✓] py-rendered  ← Enhanced: no overlap at all
-        └── 2.4.13  Focus Appearance     (AAA)  [✓] node-custom   ← size + contrast of indicator
+        └── 2.4.13  Focus Appearance     (AAA)  [✓] py-pipeline (simulated)
 ```
 
 **Why**: If an element is not keyboard reachable (`2.1.1`), checking whether its
@@ -153,8 +153,8 @@ messages identify the field (`3.3.1`). Error suggestion (`3.3.3`) and prevention
 > Pointer rules share the common prerequisite that the interaction exists.
 
 ```
-2.5.1  Pointer Gestures                    (A)  [✓] axe-core
-└── 2.5.2  Pointer Cancellation            (A)  [✓] axe-core + node-custom
+2.5.1  Pointer Gestures                    (A)  [✓] node-custom
+└── 2.5.2  Pointer Cancellation            (A)  [✓] node-custom
     └── 2.5.7  Dragging Movements         (AA)  [✓] node-custom
 
 2.5.4  Motion Actuation                    (A)  [✓] node-custom
@@ -172,7 +172,7 @@ messages identify the field (`3.3.1`). Error suggestion (`3.3.3`) and prevention
 ├── 1.2.2  Captions (Prerecorded)           (A)  [✓] node-custom
 │   └── 1.2.4  Captions (Live)            (AA)  [✓] node-custom
 ├── 1.2.3  Audio Description or Alt Media   (A)  [✓] node-custom
-│   └── 1.2.5  Audio Description           (AA)  [✓] node-custom
+│   └── 1.2.5  Audio Description           (AA)  [—]
 └── 1.4.2  Audio Control                    (A)  [✓] node-custom
 ```
 

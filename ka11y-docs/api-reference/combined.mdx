@@ -16,7 +16,9 @@ If you want a **full production-style run**, omit the optional `run_*` booleans 
 </ParamField>
 
 <ParamField body="max_depth" type="integer" default="0">
-  How many link-levels deep to crawl. `0` audits only the submitted URL. `1` follows internal links one level deep. Keep low (≤ 2) to avoid long runtimes.
+  How many link-levels deep to crawl. `0` audits only the submitted URL. `1` follows internal links one level deep. 
+  
+  ka11y performs a **synchronized crawl**: this parameter is passed to both the Python multimodal engine and the Node engine, ensuring consistent WCAG coverage across all discovered pages. Keep low (≤ 2) to avoid long runtimes.
 </ParamField>
 
 <ParamField body="wcag_level" type="string" default="AAA">

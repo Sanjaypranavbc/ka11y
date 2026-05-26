@@ -1,0 +1,63 @@
+---
+title: "1.3.2 Meaningful Sequence"
+description: "WCAG 1.3.2 — when the order in which content is presented affects its meaning, a correct reading sequence can be programmatically determined"
+---
+
+<Info>
+  **Level A** · **Engine:** `meaningful-sequence.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 1.3.2 requires that when the order in which content is presented affects its meaning, a correct reading sequence can be programmatically determined. This ensures that screen readers and other assistive technologies present content in the intended logical order.
+
+ka11y flags CSS techniques that reorder content visually in a way that differs from the underlying DOM order.
+
+## How it works
+
+The Node engine scans layout containers (Flexbox, Grid, and floats) to detect visual-vs-DOM order mismatches:
+
+1.  **Container Discovery**: Identifies up to 500 Flex and Grid containers on the page.
+2.  **RTL Exemption**: Correctly recognizes Right-to-Left (RTL) documents (`dir="rtl"` or BCP47 codes for Arabic, Hebrew, Farsi) and exempts standard `row-reverse` patterns which are often used correctly for RTL localization.
+3.  **Reordering Detection**:
+    *   **Flex Reversal**: Flags `flex-direction: row-reverse` or `column-reverse` on LTR pages.
+    *   **CSS Order**: Flags non-zero values for the `order` property, which explicitly moves elements out of their DOM sequence.
+    *   **Grid Placement**: Detects explicit `grid-column` or `grid-row` assignments that cause children to render in a different sequence than they appear in the HTML.
+    *   **Float Mixing**: Identifies containers where floated and non-floated siblings are mixed, often leading to unpredictable reading orders.
+
+## Status Semantics
+
+*   **PASS**: Layout containers use standard DOM-based ordering.
+*   **INCOMPLETE**: Heuristic evidence of visual reordering (e.g., non-zero `order` values). Since reordering is sometimes purely decorative, manual review is required to confirm if meaning is affected.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Visual-only swap | Using `order: -1` on a "Submit" button to move it to the top of a form visually while it remains at the bottom in the DOM. |
+| Reverse Flex | A "News" list where the newest item is first visually but last in the DOM due to `flex-direction: column-reverse`. |
+
+## Suggested fix
+
+Always ensure that the DOM order matches the logical reading order. Use visual CSS styling only for layout, not for sequencing content.
+
+```html
+<!-- FAILED - Visual swap using CSS order -->
+<div style="display: flex;">
+  <div style="order: 2;">Step 2</div>
+  <div style="order: 1;">Step 1</div>
+</div>
+
+<!-- PASSED - DOM order matches reading order -->
+<div style="display: flex;">
+  <div>Step 1</div>
+  <div>Step 2</div>
+</div>
+```
+
+## Known limitations
+
+*   **Absolute Positioning**: Reordering achieved via `position: absolute` and coordinate offsets is currently not scanned by this check.
+*   **Transform-based Moves**: Visual moves using `transform: translate()` are not inspected.
+
+See [Technique coverage for 1.3.2](/rules/coverage-matrix#1-3-2-meaningful-sequence).
