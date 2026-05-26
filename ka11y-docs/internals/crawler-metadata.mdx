@@ -373,6 +373,73 @@ AccessibilityService
 
 </AccordionGroup>
 
+<Accordion title="1.2.2 — Captions Prerecorded (custom-captions-prerecorded) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `<video>` elements | `querySelectorAll('video')` | Target for caption check |
+| `<track>` children | child elements | Checks for `kind="captions|subtitles"` with `src` + `srclang` |
+| `aria-describedby` | attribute | Linkage to text alternative |
+| Cross-origin iframes | `page.frames()` | Identifies YouTube/Vimeo for INCOMPLETE status |
+
+**Violations detected:** Prerecorded video with no detectable captions or alternatives.
+
+</Accordion>
+
+<Accordion title="1.2.3 — Audio Description (custom-audio-description) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `<video>` elements | `querySelectorAll('video')` | Target for description check |
+| `<track>` children | child elements | Checks for `kind="descriptions"` |
+| Secondary audio | `querySelectorAll('audio')` | Matches description keywords in `title` or `data-kind` |
+| Nearby links | ancestor containers | Transcript/description keywords in link text |
+
+**Violations detected:** Prerecorded synchronized media with no description or text alternative.
+
+</Accordion>
+
+<Accordion title="1.2.4 — Captions Live (custom-captions-live) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Live streams | `video src` matching `.m3u8` / `.mpd` | Identifies live surfaces |
+| `cc_load_policy` | `iframe[src]` query param | YouTube caption opt-in |
+| CART regions | `[aria-live]` with caption keywords | Real-time translation detection |
+| Live badges | text matching "live" / "直播" / "生放送" | Heuristic live identification |
+
+**Violations detected:** Live synchronized media with no captioning signal.
+
+</Accordion>
+
+<Accordion title="1.4.2 — Audio Control (custom-audio-control) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Autoplay media | `[autoplay]`, `[data-autoplay]` | Target for control check |
+| `muted` state | `media.muted` | Exemption for silent media |
+| `duration` | `media.duration` | Exemption for media ≤ 3s |
+| Native controls | `media.hasAttribute('controls')` | Direct compliance signal |
+| External buttons | sibling/ancestor buttons | Pause/stop/mute keyword matching |
+
+**Violations detected:** Unmuted autoplay media (> 3s) with no user-accessible controls.
+
+</Accordion>
+
+<Accordion title="3.1.2 — Language of Parts (custom-language-of-parts) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `lang` attributes | `querySelectorAll('[lang]')` | Target for validation |
+| CJK characters | Unicode range regex | Detects unannotated passages |
+| `html lang` | `document.documentElement.lang` | Baseline for passage comparison |
+
+**Violations detected:** Empty `lang=""`, invalid BCP47 codes, or unannotated CJK text on non-CJK pages.
+
+</Accordion>
+
+</AccordionGroup>
+
 ---
 
 ## ka11y-python — Unified Pipeline (April 2026)
