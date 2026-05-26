@@ -54,31 +54,60 @@ flowchart TD
     Q --> R["combined_report.json + step logs"]
 ```
 
-### カスタムチェックの実行モデル
+### 統合アクセシビリティパイプライン (Unified Accessibility Pipeline)
+
+孤立した要素評価による誤検知を排除するため、Python エンジンは再設計されました。個別のルールクローラーが独立して実行される代わりに、**中央集中型コンテキストパイプライン**が使用されます。
+
+1.  **ElementContextExtractor**: 単一の Playwright スクリプトが、計算済みスタイル、ARIA 属性、バウンディングボックスを含む DOM 全体を抽出します。
+2.  **Semantic Enrichment**:
+    *   **SectionAnalyzer**: 要素のマクロコンテキスト（`HEADER`、`FORM_REGION`、`DATA_TABLE`など）を決定します。
+    *   **SemanticRelationshipEngine**: ARIA ポインタ（`aria-describedby`、`aria-labelledby`）とネイティブ HTML グループメカニズム（`<fieldset>`、`<label>`）を解決します。
+3.  **Interaction Simulation**: `InteractionStateRunner` がネイティブにインタラクション（`.focus()`など）をシミュレートし、レンダリングされた CSS プロパティ（`box-shadow`や`background-color`など）のデルタをキャプチャして、視覚的な状態変化を証明します。
+4.  **Decision Engine**: 豊富な `ElementContext` を登録済みの `WCAGPolicy` クラスに対して評価します。
+    *   **Policy111**: 1.1.1 非テキストコンテンツ（機能的冗長性チェック付き）
+    *   **Policy131**: 1.3.1 情報及び関係性（コンテキスト認識型の孤立入力チェック）
+    *   **Policy143 / 146**: 1.4.3 / 1.4.6 コントラスト (最低限/強化) - 動的なフォントサイズ閾値適用
+    *   **Policy145**: 1.4.5 文字画像 (OCRベース)
+    *   **Policy1411**: 1.4.11 非テキストのコントラスト (レンダリング境界チェック)
+    *   **Policy247 / 2413**: 2.4.7 / 2.4.13 フォーカスの可視性及び外観 (視覚的デルタシミュレーション)
+    *   **Policy253**: 2.5.3 名前の中のラベル (NFC正規化一致)
+    *   **Policy258**: 2.5.8 ターゲットのサイズ (有効クリック領域の計算)
+5.  **Evidence Formatter**: 内部パイプラインの `RuleVerdict` をフロントエンドが期待する従来の JSON スキーマにマッピングします。
 
 ```mermaid
 flowchart TD
-    Index["Combined Request"] --> Static["Universal Static オーディター"]
-    Index --> Rendered["Rendered / Stateful 評価器"]
-    Index --> Multi["Multimodal / CV オーディター"]
+    A[HTTP POST /api/v1/combined] --> B["runner._run_job()"]
+    B --> C["ka11y-node: axe-core + custom checks"]
+    B --> D["ka11y-python: _run_python_stages()"]
 
-    subgraph "Universal Static 経路"
-        S1["UniversalPageLoader"]
-        S2["SnapshotNormalizer"]
-        S3["正規化済みモデルに対する既存オーディター"]
+    subgraph "統合コンテキストパイプライン"
+        UP1["ElementContextExtractor (DOM/CSS/BBox)"]
+        UP2["SemanticRelationshipEngine (ARIA/Groups)"]
+        UP3["InteractionStateRunner (Focus Simulation)"]
+        UP4["DecisionEngine (WCAG Policies)"]
+        UP5["EvidenceFormatter (JSON Output)"]
+        
+        UP1 --> UP2 --> UP3 --> UP4 --> UP5
     end
 
-    subgraph "Rendered 経路"
-        R1["RenderedLayoutCrawler"]
-        R2["viewport / CSS mutation / focus / hover"]
-        R3["評価レコード -> findings"]
+    subgraph "レガシー / レンダリング経路"
+        E["UniversalPageLoader (Text Spacing, PSH, Media)"]
+        F["AsyncImageCrawler (OCR generation)"]
+        G["RenderedLayoutCrawler (Reflow, Resize)"]
     end
 
-    subgraph "Image 経路"
-        M1["AsyncImageCrawler"]
-        M2["OCR budget + OCR extraction"]
-        M3["Alt / contrast / image-of-text validation"]
-    end
+    D --> UP1
+    D --> E
+    D --> F
+    D --> G
+
+    C --> M["Node findings"]
+    E --> N["Static rule findings"]
+    UP5 --> O["Pipeline findings (1.1.1, 1.4.3, 2.5.3, 2.5.8...)"]
+    G --> P["Rendered findings"]
+
+    M & N & O & P --> Q["マージ + 重複排除 + レベルフィルタ + warning 付与"]
+    Q --> R["combined_report.json + step logs"]
 ```
 
 ### 現在の Python ステージ構成
