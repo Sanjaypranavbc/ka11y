@@ -38,9 +38,9 @@ This builds and starts four services:
 
 ## 2 — Run an audit via the dashboard
 
-Open **http://localhost:8080**, enter a URL in the sidebar, and click **Run Audit**.
+Open **http://localhost:8080**, enter a URL in the audit form on the start screen, and click **Run Audit**. Optional check modules (OCR, image audit, media, rendered-layout, etc.) live under the collapsible **Advanced checks** group; set **Max Depth > 0** to crawl and score multiple same-domain pages. After a run, re-run or tweak settings from the **New audit** button (top bar / sidebar), which opens the form in a slide-over drawer.
 
-The dashboard streams live stage progress as each auditor completes. When the job finishes, violations, needs-review items, and passes are shown across the four tabs.
+The dashboard streams live stage progress as each auditor completes. When the job finishes, violations, needs-review items, and passes are shown across the tabs. Multi-page crawls add a **page selector + per-page summary bar** to those views, alongside the aggregated totals.
 
 Dashboard rule/result language defaults to **EN** (including Japanese websites). To get Japanese-localized results, use the **EN / JA** switcher in the top-right header, select **JA**, then start the audit. The next submitted job uses `lang: "ja"`.
 

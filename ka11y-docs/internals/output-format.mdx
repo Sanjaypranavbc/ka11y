@@ -27,9 +27,10 @@ interface CombinedReport {
   warnings:        string[];          // Degradation messages (e.g. "axe-core stage failed")
   warning_details: WarningSample[];   // Sampled structured crawler warnings
   summary:         Summary;
-  violations:      Finding[];
+  violations:      Finding[];        // Aggregate across ALL crawled pages
   needs_review:    Finding[];
   passes:          Finding[];
+  pages:           PageBreakdown[];  // Per-page grouping — one entry per crawled page, worst-first
   image_audit_report: ImageAuditReport | null; // Present when run_image_audit=true and images were audited
   contrast_report: ContrastReport | null;  // Present when OCR is enabled and images are found
 }
@@ -47,10 +48,11 @@ rules catalogue.
 
 ```typescript
 interface Summary {
-  total_findings:  number;      // violations + needs_review + passes
+  total_findings:  number;      // violations + needs_review + passes — summed across ALL crawled pages
   violations:      number;
   needs_review:    number;
   passes:          number;
+  score:           number;      // Compliance pass-rate 0–100 = 100 * passes / (passes + violations); needs_review excluded, 100 when nothing failed
   by_severity: {
     critical: number;
     high:     number;
@@ -70,8 +72,51 @@ interface Summary {
     axe:    { violations: number; needs_review: number; passes: number };
     python: { violations: number; needs_review: number; passes: number };
   };
+  by_page: {
+    [page_url: string]: { violations: number; needs_review: number; passes: number };
+  };
+  page_count: number;           // Number of distinct crawled pages (1 for single-page audits)
 }
 ```
+
+`score` is the headline compliance number the dashboard renders; `total_findings`
+already aggregates every crawled page, so use it directly for the depth-aggregated
+total. `by_page` and `page_count` summarise the multi-page crawl; the full per-page
+findings live in [`pages`](#per-page-breakdown-pages).
+
+---
+
+## Per-page breakdown (`pages`)
+
+Multi-page crawls (`max_depth > 0`) attribute every finding to the page it was
+discovered on via `element.page_url`; element-less, document-level findings fall
+back to the audited root URL. The top-level `violations` / `needs_review` /
+`passes` arrays stay **aggregated across all crawled pages**, and the `pages`
+array groups the very same `Finding` objects per page so a client can render a
+per-page view without re-scanning the flat lists. Single-page audits
+(`max_depth = 0`) contain exactly one entry.
+
+```typescript
+interface PageBreakdown {
+  page_url: string;
+  summary: {
+    total_findings: number;
+    violations:     number;
+    needs_review:   number;
+    passes:         number;
+    score:          number;   // Per-page pass-rate (same formula as the top-level score)
+    by_severity: { critical: number; high: number; medium: number; low: number };
+  };
+  violations:   Finding[];    // Same Finding objects referenced by the flat lists
+  needs_review: Finding[];
+  passes:       Finding[];
+}
+```
+
+Pages are sorted **worst-first** (most violations, then most needs_review, then
+URL as tiebreak). The frontend exposes this as a page selector + per-page summary
+bar on the Violations / Needs Review / Passes / Image Visualiser views; the
+selector is hidden for single-page audits.
 
 ---
 
@@ -197,6 +242,7 @@ The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_s
     "violations": 1,
     "needs_review": 1,
     "passes": 1,
+    "score": 50.0,
     "by_severity": { "critical": 1, "high": 0, "medium": 0, "low": 0 },
     "by_level": {
       "A":   { "violations": 1, "needs_review": 1, "passes": 1 },
@@ -209,7 +255,11 @@ The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_s
     "by_source": {
       "axe":    { "violations": 0, "needs_review": 0, "passes": 0 },
       "python": { "violations": 1, "needs_review": 1, "passes": 1 }
-    }
+    },
+    "by_page": {
+      "https://example.com": { "violations": 1, "needs_review": 1, "passes": 1 }
+    },
+    "page_count": 1
   },
   "violations": [
     {
@@ -278,6 +328,22 @@ The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_s
       "element": null
     }
   ],
+  "pages": [
+    {
+      "page_url": "https://example.com",
+      "summary": {
+        "total_findings": 3,
+        "violations": 1,
+        "needs_review": 1,
+        "passes": 1,
+        "score": 50.0,
+        "by_severity": { "critical": 1, "high": 0, "medium": 0, "low": 0 }
+      },
+      "violations":   [ /* same Finding objects as the flat list */ ],
+      "needs_review": [ /* ... */ ],
+      "passes":       [ /* ... */ ]
+    }
+  ],
   "image_audit_report": {
     "summary": {
       "total_images": 2,
@@ -291,6 +357,7 @@ The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_s
         "filename": "banner.jpg",
         "path": "/app/crawled_images/example_com/abc123/images/banner.jpg",
         "image_url": "/api/v1/combined/abc123/image?path=%2Fapp%2Fcrawled_images%2Fexample_com%2Fabc123%2Fimages%2Fbanner.jpg",
+        "page_url": "https://example.com",
         "classification": "image",
         "overall_status": "FAILED",
         "wcag_1_1_1_reason": "Image has no alt attribute."
@@ -319,6 +386,7 @@ The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_s
         "filename": "banner.jpg",
         "path": "/app/crawled_images/example_com/abc123/images/banner.jpg",
         "image_url": "/api/v1/combined/abc123/image?path=%2Fapp%2Fcrawled_images%2Fexample_com%2Fabc123%2Fimages%2Fbanner.jpg",
+        "page_url": "https://example.com",
         "contrast_violations_count": 2,
         "detections": [ /* ... */ ]
       }
@@ -349,6 +417,7 @@ interface ContrastImageDetail {
   filename:                  string;
   path:                      string;   // Absolute server-side filesystem path
   image_url:                 string;   // Pre-built URL: GET /api/v1/combined/{job_id}/image?path=...
+  page_url:                  string | null;  // Page the image was found on (drives the per-page image visualiser); null on older reports
   contrast_violations_count: number;
   detections:                ContrastDetection[];
 }
@@ -403,6 +472,7 @@ interface ImageAuditImageDetail {
   image_url:                 string;   // Pre-built URL: GET /api/v1/combined/{job_id}/image?path=...
   src?:                      string | null;
   url?:                      string | null;
+  page_url?:                 string | null;  // Page the image was found on (= url); drives the per-page image visualiser
   alt_text?:                 string | null;
   title?:                    string | null;
   classification:            "button" | "icon" | "logo" | "image" | "chart" | "informative" | "decorative" | "other";

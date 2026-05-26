@@ -251,17 +251,21 @@ Returns the full job record. Poll every 3 – 5 s until `status` is `"completed"
       "violations": 20,
       "needs_review": 7,
       "passes": 45,
+      "score": 69.2,
       "by_severity": { "critical": 2, "high": 8, "medium": 7, "low": 3 },
       "by_level": { "A": { "violations": 14 }, "AA": { "violations": 6 }, "AAA": { "violations": 2 } },
       "by_wcag_sc": { "1.1.1": { "violations": 8 }, "4.1.2": { "violations": 5 } },
       "by_source": {
         "axe":    { "violations": 12, "needs_review": 7, "passes": 35 },
         "python": { "violations": 8,  "needs_review": 0, "passes": 10 }
-      }
+      },
+      "by_page": { "https://example.com": { "violations": 20, "needs_review": 7, "passes": 45 } },
+      "page_count": 1
     },
-    "violations": [ /* ... finding objects ... */ ],
+    "violations": [ /* ... finding objects (aggregated across all pages) ... */ ],
     "needs_review": [ /* ... */ ],
     "passes": [ /* ... */ ],
+    "pages": [ /* per-page breakdown — see Output Format → Per-page breakdown */ ],
     "warnings": [],
     "image_audit_report": {
       "summary": {
@@ -276,6 +280,7 @@ Returns the full job record. Poll every 3 – 5 s until `status` is `"completed"
           "filename": "icon.svg",
           "path": "/app/crawled_images/example_com/b5ea3ea7-.../functional/icons/icon.svg",
           "image_url": "/api/v1/combined/b5ea3ea7-.../image?path=%2Fapp%2Fcrawled_images%2F...",
+          "page_url": "https://example.com",
           "classification": "icon",
           "overall_status": "FAILED",
           "wcag_1_1_1_reason": "Missing alt text"
@@ -295,6 +300,7 @@ Returns the full job record. Poll every 3 – 5 s until `status` is `"completed"
           "filename": "hero.jpg",
           "path": "/app/crawled_images/example_com/b5ea3ea7-.../images/hero.jpg",
           "image_url": "/api/v1/combined/b5ea3ea7-.../image?path=%2Fapp%2Fcrawled_images%2F...",
+          "page_url": "https://example.com",
           "contrast_violations_count": 3,
           "detections": [ /* ... */ ]
         }

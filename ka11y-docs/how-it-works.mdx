@@ -155,10 +155,20 @@ Every finding, regardless of source, looks the same:
 
 **Summary statistics** at the top of every report:
 
+- A single **compliance score** (0–100) — the pass rate `passes / (passes + violations)`, with needs-review excluded
 - Total findings broken down by status (violations / needs review / passes)
 - Breakdown by severity (critical → low)
 - Breakdown by WCAG conformance level (A / AA / AAA)
 - Breakdown by WCAG success criterion
+
+**Per-page reporting (multi-page crawls).** When you raise **Max Depth above 0**,
+ka11y crawls multiple same-domain pages and attributes every finding to the page
+it was found on. The report stays aggregated at the top (the headline counts and
+score cover the whole crawl), and a `pages` array carries the same findings grouped
+per page — each with its own score and severity breakdown, sorted worst-first. In
+the dashboard this surfaces as a **page selector + per-page summary bar** on the
+Violations, Needs Review, Passes, and Image Visualiser views; the selector is hidden
+for single-page audits. See [Output Format → Per-page breakdown](/internals/output-format#per-page-breakdown-pages).
 
 ---
 
