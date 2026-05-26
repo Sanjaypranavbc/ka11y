@@ -126,6 +126,7 @@
       "pages": [
         "guides/adding-a-rule",
         "guides/automated-testing",
+        "guides/accesslint-performance-and-scaling",
         "guides/crawlers",
         "guides/auditors",
         "guides/sse-integration"
