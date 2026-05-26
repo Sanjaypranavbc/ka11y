@@ -69,24 +69,33 @@ except LookupError:
     nltk.download("averaged_perceptron_tagger_eng", quiet=True)
 
 # ── Load spaCy models ─────────────────────────────────────────────────────────
+# Candidate spaCy models per language, tried in order. Japanese prefers the
+# large model — that is what the Docker image installs (`spacy download
+# ja_core_news_lg`) — and falls back to the small one if only it is present.
+# English uses en_core_web_sm (also installed in the image).
 _SPACY_MODELS = {
-    "en": "en_core_web_sm",
-    "ja": "ja_core_news_sm",
+    "en": ("en_core_web_sm",),
+    "ja": ("ja_core_news_lg", "ja_core_news_sm"),
 }
 _nlp_cache = {}
 
 
 def _get_nlp(lang: str):
     if lang not in _nlp_cache:
-        model_name = _SPACY_MODELS.get(lang, _SPACY_MODELS["en"])
-        try:
-            _nlp_cache[lang] = spacy.load(model_name)
-        except Exception:
-            # Fallback if model not found
+        candidates = _SPACY_MODELS.get(lang, _SPACY_MODELS["en"])
+        nlp = None
+        for model_name in candidates:
+            try:
+                nlp = spacy.load(model_name)
+                break
+            except Exception:
+                continue
+        if nlp is None:
             logger.warning(
-                f"spaCy model {model_name} not found. Some checks may be less accurate."
+                f"No spaCy model available for lang='{lang}' "
+                f"(tried {', '.join(candidates)}). Some checks may be less accurate."
             )
-            _nlp_cache[lang] = None
+        _nlp_cache[lang] = nlp
     return _nlp_cache[lang]
 
 
