@@ -20,9 +20,10 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
 
 WORKDIR /app
 
+# Copy only dependency manifests first. `package-mode = false` means none of the
+# install/download steps below need the application source, so copying the source
+# later keeps these expensive layers cached across code-only changes.
 COPY pyproject.toml poetry.lock ./
-COPY ka11y/ ./ka11y/
-COPY i18n/   ./i18n/
 
 RUN pip install --no-cache-dir "poetry==2.3.2"
 ENV POETRY_NO_INTERACTION=1 \
@@ -54,6 +55,11 @@ ENV NLTK_DATA=/usr/share/nltk_data
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     playwright install chromium --with-deps
+
+# Application source + i18n bundles come last: a code-only change rebuilds only
+# these cheap layers, not the dependency/model/browser layers above.
+COPY ka11y/ ./ka11y/
+COPY i18n/   ./i18n/
 
 # Pre-create the logs directory so it exists in the image layer.
 # The python_logs Docker volume is mounted over this path at runtime;

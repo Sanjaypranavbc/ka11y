@@ -294,6 +294,7 @@ async def _run_job_body(
                 run_form_audit=payload.run_form_audit,
                 run_label_in_name_audit=payload.run_label_in_name_audit,
                 run_media_audit=payload.run_media_audit,
+                run_captions_audit=payload.run_captions_audit,
                 run_pause_stop_hide_audit=payload.run_pause_stop_hide_audit,
                 run_target_size_audit=payload.run_target_size_audit,
                 run_resize_text_audit=payload.run_resize_text_audit,
