@@ -208,7 +208,7 @@ export interface AuditConfig {
   // Hard page budget for the whole crawl (RAM/time ceiling), 1–200.
   max_pages: number;
   wcag_level: "A" | "AA" | "AAA";
-  lang: "en" | "ja";
+  lang: "auto" | "en" | "ja";
   run_ocr: boolean;
   run_image_audit: boolean;
   run_form_audit: boolean;

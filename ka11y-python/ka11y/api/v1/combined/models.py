@@ -66,7 +66,7 @@ class CombinedRequest(BaseModel):
     run_focus_not_obscured_min_audit: bool = True
     run_focus_not_obscured_enh_audit: bool = True
     run_sensory_audit: bool = True
-    lang: str = Field(default="en", max_length=20, pattern=r"^[A-Za-z][A-Za-z0-9_-]*$")
+    lang: str = Field(default="auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$")
 
     @model_validator(mode="after")
     def validate_success_criteria_dependencies(self) -> "CombinedRequest":

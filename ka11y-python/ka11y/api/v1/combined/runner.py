@@ -27,6 +27,7 @@ from ka11y.utils.config_loader import load_config
 from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import _lang_ctx
+from ka11y.utils.lang_detector import detect_page_language
 from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import (
@@ -282,7 +283,6 @@ async def _run_job_body(
                 run_form_audit=payload.run_form_audit,
                 run_label_in_name_audit=payload.run_label_in_name_audit,
                 run_media_audit=payload.run_media_audit,
-                run_captions_audit=payload.run_captions_audit,
                 run_pause_stop_hide_audit=payload.run_pause_stop_hide_audit,
                 run_target_size_audit=payload.run_target_size_audit,
                 run_resize_text_audit=payload.run_resize_text_audit,
@@ -293,7 +293,7 @@ async def _run_job_body(
                 run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
                 run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
                 run_sensory_audit=payload.run_sensory_audit,
-                lang=payload.lang,
+                lang=resolved_lang,
                 job_id=job_id,
                 step_logger=step_logger,
                 internal_links=payload.internal_links,
@@ -389,7 +389,7 @@ async def _run_job_body(
         report = _build_report(
             url,
             all_findings,
-            lang=payload.lang,
+            lang=resolved_lang,
             contrast_report=contrast_report,
             image_audit_report=image_audit_report,
         )
