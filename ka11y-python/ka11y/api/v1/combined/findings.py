@@ -14,6 +14,7 @@ HOW TO ADD A NEW CONVERTER
 from __future__ import annotations
 
 import contextvars
+import os
 from typing import Any, Dict, List, Optional
 
 from ka11y.config.logger import setup_logger
@@ -213,9 +214,17 @@ def _infer_classification(path: str) -> str:
 # ── Contrast report builder ───────────────────────────────────────────────────
 
 
-def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
+def _build_contrast_report(
+    ocr_results: list,
+    page_by_filename: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     """
     Extract contrast data from OCR results into a structured report.
+
+    ``page_by_filename`` maps a saved image filename → the page URL it was found
+    on (built from the crawler's ``images_data``). It lets the UI group/filter
+    the image visualiser per page on multi-page crawls (max_depth > 0). When the
+    map is absent or has no entry for an image, ``page_url`` falls back to None.
 
     Returns
     -------
@@ -226,6 +235,20 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
         "images":  [ per-image nested detail ],
     }
     """
+    page_by_filename = page_by_filename or {}
+
+    def _page_for(result: Any) -> Optional[str]:
+        # Match on the saved filename first, then the screenshot basename.
+        fn = getattr(result, "filename", None)
+        if fn and fn in page_by_filename:
+            return page_by_filename[fn]
+        orig = getattr(result, "original_path", None)
+        if orig:
+            base = os.path.basename(str(orig))
+            if base in page_by_filename:
+                return page_by_filename[base]
+        return None
+
     table_rows: List[Dict[str, Any]] = []
     images_detail: List[Dict[str, Any]] = []
     total_violations = 0
@@ -320,6 +343,7 @@ def _build_contrast_report(ocr_results: list) -> Dict[str, Any]:
                 {
                     "filename": result.filename,
                     "path": result.original_path,
+                    "page_url": _page_for(result),
                     "classification": _infer_classification(result.original_path),
                     "contrast_violations_count": local_violations_count,
                     "detections": image_detections,
@@ -387,6 +411,9 @@ def _build_image_audit_report(records: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "path": record.get("screenshot_path"),
                 "src": record.get("src"),
                 "url": record.get("url"),
+                # Page the image was discovered on — drives the per-page image
+                # visualiser on multi-page crawls (max_depth > 0).
+                "page_url": record.get("url"),
                 "alt_text": record.get("alt_text"),
                 "title": record.get("title"),
                 "classification": classification,

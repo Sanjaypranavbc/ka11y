@@ -60,6 +60,8 @@ export interface ContrastImageDetail {
   filename: string;
   path: string;
   image_url: string;          // injected by backend: /api/v1/combined/{job_id}/image?path=...
+  // Page the image was discovered on (multi-page crawls, max_depth > 0).
+  page_url?: string | null;
   classification: ImageClassification; // derived from storage path by backend
   contrast_violations_count: number;
   detections: ContrastDetection[];
@@ -82,6 +84,8 @@ export interface ImageAuditImageDetail {
   image_url: string;
   src?: string | null;
   url?: string | null;
+  // Page the image was discovered on (multi-page crawls, max_depth > 0).
+  page_url?: string | null;
   alt_text?: string | null;
   title?: string | null;
   classification: ImageClassification;

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /*
- * ka11y — Clean White / Electric Blue
+ * kao a11y — Clean White / Electric Blue
  * Pure white base · electric blue primary · IBM Plex Sans + IBM Plex Mono
  */
 
@@ -150,6 +150,9 @@
 
   html {
     font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    /* Global base font bump — scales every rem-based size up ~10% so the
+       dense dashboard reads comfortably without retuning each component. */
+    font-size: 110%;
   }
 
   body {

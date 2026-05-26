@@ -1,5 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { AuditViolation } from "@/types/audit";
+import { AuditViolation, PageBreakdown } from "@/types/audit";
+import { PageScopeBar, ALL_PAGES } from "./PageScopeBar";
+import { buildPageOptions, scopedFindings, scopedSummary, ScopeSummary } from "@/lib/page-scope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +25,8 @@ import { useLanguage } from "@/i18n/LanguageContext";
 
 interface ViolationsTabProps {
   violations: AuditViolation[];
+  pages?: PageBreakdown[];
+  overall: ScopeSummary;
   pageSize?: number;
 }
 
@@ -40,7 +44,7 @@ const sourceColors: Record<string, string> = {
   unknown: "bg-muted text-muted-foreground border-border",
 };
 
-export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps) {
+export function ViolationsTab({ violations, pages, overall, pageSize = 50 }: ViolationsTabProps) {
   const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string[]>([]);
@@ -48,22 +52,31 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
   const [scFilter, setScFilter] = useState<string[]>([]);
   const [modalData, setModalData] = useState<AuditViolation | null>(null);
   const [visibleCount, setVisibleCount] = useState(pageSize);
+  const [scope, setScope] = useState<string>(ALL_PAGES);
+
+  // Page-scoped findings: aggregated for ALL_PAGES, else just the selected page.
+  const pageOptions = useMemo(() => buildPageOptions(pages), [pages]);
+  const summary = scopedSummary(scope, overall, pages);
+  const scoped = useMemo(
+    () => scopedFindings(scope, violations, pages, "violations"),
+    [scope, violations, pages]
+  );
 
   const allSeverities = useMemo(() => {
     const preferred = ["critical", "high", "medium", "low"];
-    const present = [...new Set(violations.map((v) => v.severity).filter(Boolean))] as string[];
+    const present = [...new Set(scoped.map((v) => v.severity).filter(Boolean))] as string[];
     const ordered = preferred.filter((s) => present.includes(s));
     const extras = present.filter((s) => !preferred.includes(s)).sort();
     return [...ordered, ...extras];
-  }, [violations]);
+  }, [scoped]);
   const allSources = useMemo(
-    () => [...new Set(violations.map((v) => v.source).filter(Boolean))].sort(),
-    [violations]
+    () => [...new Set(scoped.map((v) => v.source).filter(Boolean))].sort(),
+    [scoped]
   );
-  const allScs = useMemo(() => [...new Set(violations.map((v) => v.wcag_sc).filter(Boolean))].sort() as string[], [violations]);
+  const allScs = useMemo(() => [...new Set(scoped.map((v) => v.wcag_sc).filter(Boolean))].sort() as string[], [scoped]);
 
   const filtered = useMemo(() => {
-    return violations.filter((v) => {
+    return scoped.filter((v) => {
       if (severityFilter.length && !severityFilter.includes(v.severity)) return false;
       if (sourceFilter.length && !sourceFilter.includes(v.source)) return false;
       if (scFilter.length && !scFilter.includes(v.wcag_sc)) return false;
@@ -82,7 +95,7 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
       }
       return true;
     });
-  }, [violations, severityFilter, sourceFilter, scFilter, search]);
+  }, [scoped, severityFilter, sourceFilter, scFilter, search]);
 
   const toggleFilter = (arr: string[], val: string, setter: (v: string[]) => void) => {
     setter(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
@@ -101,16 +114,28 @@ export function ViolationsTab({ violations, pageSize = 50 }: ViolationsTabProps)
 
   useEffect(() => {
     setVisibleCount(pageSize);
-  }, [pageSize]);
+  }, [pageSize, scope]);
 
   const hasFilters = search || severityFilter.length || sourceFilter.length || scFilter.length;
 
-  const showingText = filtered.length !== violations.length
-    ? t("violations.showingFiltered", { visible: Math.min(visibleCount, filtered.length), total: filtered.length, all: violations.length })
+  const showingText = filtered.length !== scoped.length
+    ? t("violations.showingFiltered", { visible: Math.min(visibleCount, filtered.length), total: filtered.length, all: scoped.length })
     : t("violations.showing", { visible: Math.min(visibleCount, filtered.length), total: filtered.length });
 
   return (
     <div className="p-3 sm:p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
+      <PageScopeBar
+        pages={pageOptions}
+        value={scope}
+        onChange={setScope}
+        chips={[
+          { label: t("pageScope.score"), value: summary.score, tone: "score" },
+          { label: t("pageScope.violations"), value: summary.violations, tone: "violations" },
+          { label: t("pageScope.needsReview"), value: summary.needs_review, tone: "needsReview" },
+          { label: t("pageScope.passes"), value: summary.passes, tone: "passes" },
+        ]}
+      />
+
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
           placeholder={t("table.searchPlaceholder")}

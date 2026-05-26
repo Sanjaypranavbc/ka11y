@@ -125,6 +125,18 @@ export const translations = {
     "dashboard.scoreColumn":       "Score",
     "dashboard.scoreHint":         "Pass rate = passes / (passes + violations); needs-review excluded.",
     "dashboard.scoreAcrossPages":  "Aggregated across {n} crawled pages",
+    "dashboard.findingsColumn":    "Findings",
+
+    // ── Page scope selector (multi-page crawls, max_depth > 0) ───────────────
+    "pageScope.label":         "Page",
+    "pageScope.allPages":      "All pages (aggregated)",
+    "pageScope.pagesCrawled":  "{n} pages crawled",
+    "pageScope.score":         "Score",
+    "pageScope.findings":      "Findings",
+    "pageScope.violations":    "Violations",
+    "pageScope.needsReview":   "Needs review",
+    "pageScope.passes":        "Passes",
+    "pageScope.images":        "Images",
 
     // ── Table shared ─────────────────────────────────────────────────────────
     "table.severity":         "Severity",
@@ -336,6 +348,18 @@ export const translations = {
     "dashboard.scoreColumn":       "スコア",
     "dashboard.scoreHint":         "合格率 = 合格 /（合格＋違反）。要確認は除外。",
     "dashboard.scoreAcrossPages":  "クロールした{n}ページ全体の集計",
+    "dashboard.findingsColumn":    "検出数",
+
+    // ── Page scope selector (multi-page crawls, max_depth > 0) ───────────────
+    "pageScope.label":         "ページ",
+    "pageScope.allPages":      "全ページ（集計）",
+    "pageScope.pagesCrawled":  "{n}ページをクロール",
+    "pageScope.score":         "スコア",
+    "pageScope.findings":      "検出数",
+    "pageScope.violations":    "違反",
+    "pageScope.needsReview":   "要確認",
+    "pageScope.passes":        "合格",
+    "pageScope.images":        "画像",
 
     // ── Table shared ─────────────────────────────────────────────────────────
     "table.severity":         "重大度",

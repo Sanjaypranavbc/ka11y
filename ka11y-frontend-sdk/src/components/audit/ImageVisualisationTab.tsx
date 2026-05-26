@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, ReactNode } from "react";
 import {
   ContrastImageDetail,
   ContrastReport,
@@ -6,6 +6,8 @@ import {
   ImageAuditReport,
   ImageClassification,
 } from "@/types/audit";
+import { PageScopeBar, ALL_PAGES, formatPageLabel } from "./PageScopeBar";
+import { useLanguage } from "@/i18n/LanguageContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,9 +90,44 @@ export function ImageVisualisationTab({
   contrastReport,
   imageAuditReport,
 }: ImageVisualisationTabProps) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
+  const [scope, setScope] = useState<string>(ALL_PAGES);
   const hasContrastImages = Boolean(contrastReport && contrastReport.images.length > 0);
   const hasAuditImages = Boolean(imageAuditReport && imageAuditReport.images.length > 0);
+
+  // Page-scope options from the union of both image sets (multi-page crawls).
+  const pageOptions = useMemo(() => {
+    const urls = new Set<string>();
+    contrastReport?.images.forEach((i) => { if (i.page_url) urls.add(i.page_url); });
+    imageAuditReport?.images.forEach((i) => { if (i.page_url) urls.add(i.page_url); });
+    return [...urls].sort().map((u) => ({ value: u, label: formatPageLabel(u) }));
+  }, [contrastReport, imageAuditReport]);
+
+  // Reports narrowed to the selected page (aggregated for ALL_PAGES). Summaries
+  // are recomputed so the in-view tiles match the filtered image set.
+  const scopedContrast = useMemo<ContrastReport | null | undefined>(() => {
+    if (!contrastReport || scope === ALL_PAGES) return contrastReport;
+    return { ...contrastReport, images: contrastReport.images.filter((i) => i.page_url === scope) };
+  }, [contrastReport, scope]);
+
+  const scopedAudit = useMemo<ImageAuditReport | null | undefined>(() => {
+    if (!imageAuditReport || scope === ALL_PAGES) return imageAuditReport;
+    const imgs = imageAuditReport.images.filter((i) => i.page_url === scope);
+    const failed = imgs.filter((i) => i.overall_status !== "PASSED").length;
+    return {
+      ...imageAuditReport,
+      images: imgs,
+      summary: {
+        ...imageAuditReport.summary,
+        total_images: imgs.length,
+        failed,
+        passed: imgs.length - failed,
+        with_ocr_text: imgs.filter((i) => i.has_ocr_text).length,
+        with_contrast_violations: imgs.filter((i) => (i.contrast_violations_count || 0) > 0).length,
+      },
+    };
+  }, [imageAuditReport, scope]);
 
   if (!hasContrastImages && !hasAuditImages) {
     return (
@@ -106,12 +143,42 @@ export function ImageVisualisationTab({
     );
   }
 
-  if (!hasContrastImages && hasAuditImages && imageAuditReport) {
-    return <ImageAuditFallbackView imageAuditReport={imageAuditReport} search={search} setSearch={setSearch} />;
+  const scopedHasContrast = Boolean(scopedContrast && scopedContrast.images.length > 0);
+  const scopedHasAudit = Boolean(scopedAudit && scopedAudit.images.length > 0);
+
+  // Scope bar + summary chips for the active selection.
+  const contrastViolations = scopedContrast ? summariseContrastReport(scopedContrast).total_violations : 0;
+  const imagesCount = scopedAudit?.images.length ?? scopedContrast?.images.length ?? 0;
+  const violationsCount = scopedContrast ? contrastViolations : (scopedAudit?.summary.failed ?? 0);
+  const scopeBar = (
+    <PageScopeBar
+      pages={pageOptions}
+      value={scope}
+      onChange={setScope}
+      chips={[
+        { label: t("pageScope.images"), value: imagesCount, tone: "default" },
+        { label: t("pageScope.violations"), value: violationsCount, tone: "violations" },
+      ]}
+    />
+  );
+
+  // No contrast images for the scope, but audited images exist → fallback view.
+  if (!scopedHasContrast && scopedHasAudit && scopedAudit) {
+    return <ImageAuditFallbackView imageAuditReport={scopedAudit} search={search} setSearch={setSearch} topSlot={scopeBar} />;
   }
 
-  const summary = summariseContrastReport(contrastReport);
-  const { images } = contrastReport;
+  // Scoping emptied both sets (e.g. a page with no audited images).
+  if (!scopedHasContrast && !scopedHasAudit) {
+    return (
+      <div className="p-3 sm:p-5 space-y-6 grid-bg min-h-full animate-fade-up">
+        {scopeBar}
+        <p className="text-xs text-muted-foreground py-4 pl-1">No images for this page.</p>
+      </div>
+    );
+  }
+
+  const summary = summariseContrastReport(scopedContrast!);
+  const { images } = scopedContrast!;
 
   const filtered = search
     ? images.filter((img) => img.filename.toLowerCase().includes(search.toLowerCase()))
@@ -124,6 +191,7 @@ export function ImageVisualisationTab({
 
   return (
     <div className="p-3 sm:p-5 space-y-6 grid-bg min-h-full animate-fade-up">
+      {scopeBar}
       {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SummaryTile label="Regions Analysed"    value={summary.total_regions_analysed} />
@@ -166,7 +234,7 @@ export function ImageVisualisationTab({
               classification={cls}
               images={failedByClass.get(cls)!}
               variant="failed"
-              imageAuditReport={imageAuditReport}
+              imageAuditReport={scopedAudit}
             />
           ))}
         </section>
@@ -197,7 +265,7 @@ export function ImageVisualisationTab({
               classification={cls}
               images={passedByClass.get(cls)!}
               variant="passed"
-              imageAuditReport={imageAuditReport}
+              imageAuditReport={scopedAudit}
             />
           ))}
         </section>
@@ -210,10 +278,12 @@ function ImageAuditFallbackView({
   imageAuditReport,
   search,
   setSearch,
+  topSlot,
 }: {
   imageAuditReport: ImageAuditReport;
   search: string;
   setSearch: (value: string) => void;
+  topSlot?: ReactNode;
 }) {
   const { summary, images } = imageAuditReport;
   const filtered = search
@@ -230,6 +300,7 @@ function ImageAuditFallbackView({
 
   return (
     <div className="p-3 sm:p-5 space-y-6 grid-bg min-h-full animate-fade-up">
+      {topSlot}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SummaryTile label="Audited Images" value={summary.total_images} />
         <SummaryTile

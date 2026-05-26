@@ -124,7 +124,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
         <div className="px-5 py-5 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-extrabold tracking-[-0.04em] text-foreground leading-none">
-              ka<span className="text-primary">11</span>y
+              kao <span className="text-primary">a11y</span>
             </h1>
             <p className="text-[9px] font-mono tracking-[0.2em] uppercase text-muted-foreground mt-1 select-none">
               {t("sidebar.tagline")}

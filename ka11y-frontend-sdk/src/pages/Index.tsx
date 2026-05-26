@@ -53,6 +53,16 @@ const Index = () => {
 
   const isLoading = jobStatus === "pending" || jobStatus === "running";
 
+  // Aggregated summary across all crawled pages — the default "All pages" scope
+  // for the per-page selector in the finding tabs.
+  const overallSummary = {
+    score: result.score,
+    violations: result.violations_count,
+    needs_review: result.needs_review_count,
+    passes: result.passes_count,
+    total: result.total,
+  };
+
   const handleMaxRowsChange = (value: number) => {
     const clamped = Math.max(10, Math.min(500, value));
     setMaxRows(clamped);
@@ -176,7 +186,7 @@ const Index = () => {
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-4">
                 <h1 className="text-5xl font-extrabold tracking-[-0.04em] text-foreground leading-none">
-                  ka<span className="text-primary">11</span>y
+                  kao <span className="text-primary">a11y</span>
                 </h1>
                 <p className="text-sm text-muted-foreground max-w-xs">
                   {t("state.welcomeHint")}
@@ -197,9 +207,9 @@ const Index = () => {
                 </div>
               )}
               {activeTab === "dashboard"           && <DashboardTab result={result} />}
-              {activeTab === "violations"          && <ViolationsTab violations={result.violations} pageSize={maxRows} />}
-              {activeTab === "needs-review"        && <NeedsReviewTab items={result.needs_review} pageSize={maxRows} />}
-              {activeTab === "passes"              && <PassesTab passes={result.passes} pageSize={maxRows} />}
+              {activeTab === "violations"          && <ViolationsTab violations={result.violations} pages={result.pages} overall={overallSummary} pageSize={maxRows} />}
+              {activeTab === "needs-review"        && <NeedsReviewTab items={result.needs_review} pages={result.pages} overall={overallSummary} pageSize={maxRows} />}
+              {activeTab === "passes"              && <PassesTab passes={result.passes} pages={result.pages} overall={overallSummary} pageSize={maxRows} />}
               {activeTab === "image-visualisation" && (
                 <ImageVisualisationTab
                   contrastReport={result.contrast_report}

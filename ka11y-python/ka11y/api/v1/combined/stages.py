@@ -331,7 +331,15 @@ async def _stage_image_audit(
             await asyncio.to_thread(saver.save_reports)
 
             ocr_results = detector.results
-            contrast_report = _build_contrast_report(ocr_results)
+            # filename → source page URL, so the contrast report can be grouped
+            # per page in the image visualiser on multi-page crawls.
+            page_by_filename: Dict[str, str] = {}
+            for _img in image_crawler.images_data:
+                _fn = getattr(_img, "filename", None)
+                _pg = getattr(_img, "url", None)
+                if _fn and _pg:
+                    page_by_filename[_fn] = _pg
+            contrast_report = _build_contrast_report(ocr_results, page_by_filename)
             for _, converter in OCR_RESULT_CONVERTERS:
                 findings.extend(converter(ocr_results, url))
             # 1.4.3/1.4.6 needs_review for images that failed screenshot capture

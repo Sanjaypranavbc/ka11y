@@ -291,6 +291,7 @@ export function DashboardTab({ result }: DashboardTabProps) {
                   <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
                     <th className="py-1.5 pr-3 font-semibold">{t("dashboard.pageColumn")}</th>
                     <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.scoreColumn")}</th>
+                    <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.findingsColumn")}</th>
                     <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.violations")}</th>
                     <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.needsReview")}</th>
                     <th className="py-1.5 pl-2 text-right font-semibold">{t("dashboard.passes")}</th>
@@ -311,6 +312,9 @@ export function DashboardTab({ result }: DashboardTabProps) {
                       </td>
                       <td className="py-1.5 px-2 text-right font-mono font-semibold" style={{ color: scoreColor(p.summary.score) }}>
                         {p.summary.score}%
+                      </td>
+                      <td className="py-1.5 px-2 text-right font-mono font-semibold text-foreground">
+                        {p.summary.total_findings}
                       </td>
                       <td className="py-1.5 px-2 text-right font-mono" style={{ color: SOURCE_COLORS.violations }}>
                         {p.summary.violations}
