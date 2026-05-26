@@ -144,9 +144,39 @@ Expected poll response once complete:
 
 ---
 
-## 5 — View the interactive API docs
+## 6 — Automated Testing with Jest
 
-FastAPI auto-generates Swagger UI at **http://localhost:8000/docs** and ReDoc at **http://localhost:8000/redoc**.
+ka11y components can be integrated into your own test suites using `@accesslint/jest`. This allows you to run accessibility audits as part of your CI/CD pipeline.
+
+### Installation
+
+```bash
+npm install --save-dev @accesslint/jest
+```
+
+### Usage
+
+In your Jest test files, extend `expect` and use the `toBeAccessible` matcher:
+
+```javascript
+const { toBeAccessible } = require('@accesslint/jest');
+expect.extend({ toBeAccessible });
+
+describe('My Component', () => {
+  it('should have no accessibility violations', async () => {
+    const html = '<button>Submit</button>';
+    await expect(html).toBeAccessible();
+  });
+
+  it('should fail if there are violations', async () => {
+    const html = '<img src="logo.png">'; // Missing alt text
+    await expect(html).toBeAccessible();
+  });
+});
+```
+
+This matcher internally uses axe-core (the same engine powering ka11y-node) to validate your HTML strings or DOM elements.
+
 
 ---
 

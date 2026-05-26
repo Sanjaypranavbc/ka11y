@@ -125,6 +125,7 @@
       "group": "Developer Guides",
       "pages": [
         "guides/adding-a-rule",
+        "guides/automated-testing",
         "guides/crawlers",
         "guides/auditors",
         "guides/sse-integration"

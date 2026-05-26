@@ -15,10 +15,12 @@ description: "ka11y — AI-powered WCAG accessibility auditing for the web"
 
 | Engine | What it checks |
 |--------|---------------|
-| **axe-core + Node custom checks** (Node.js) | DOM structure, ARIA semantics, focus/input interactions, keyboard behavior, parsing, use-of-color, authentication, status-message heuristics, and 24 shipped custom checks |
+| **axe-core + Node custom checks** (Node.js) | DOM structure, ARIA semantics, focus/input interactions, keyboard behavior, parsing, use-of-color, authentication, status-message heuristics, and 32 shipped custom checks |
 | **Python auditors** | OCR-backed image/text checks, forms, label-in-name, moving content, target size, and rendered-layout WCAG checks |
 
-The two engines run **in parallel** for every audit. Results are merged into a single flat findings list, summarized by WCAG success criterion, and returned via a REST job API with real-time Server-Sent Events (SSE) progress streaming.
+Beyond the core audit platform, ka11y provides **developer-first tooling** to ensure accessibility is baked into the development lifecycle:
+*   **AccessLint Integration**: Use `@accesslint/jest` to run accessibility assertions directly in your unit and integration tests.
+*   **Static Analysis**: ESLint plugins (`jsx-a11y`) for catch issues before they reach production.
 
 ---
 
@@ -69,7 +71,7 @@ The two engines run **in parallel** for every audit. Results are merged into a s
 
 ### Additional Node Custom Checks
 
-ka11y also ships **24** Node-side custom checks inside the `axe_core` stage. They cover criteria that plain axe-core does not cover well or does not cover at all:
+ka11y also ships **32** Node-side custom checks inside the `axe_core` stage. They cover criteria that plain axe-core does not cover well or does not cover at all:
 
 | Group | Criteria |
 |-------|----------|

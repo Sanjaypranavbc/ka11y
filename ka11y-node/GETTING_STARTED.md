@@ -106,7 +106,18 @@ npm run selftest
 ```
 
 ### Tests
-We use **Jest** for unit and integration testing.
+We use **Jest** for unit and integration testing. We have also integrated `@accesslint/jest` to allow for easy accessibility assertions within our test suite.
 ```bash
 npm test
 ```
+
+Example usage in a test:
+```javascript
+const { toBeAccessible } = require('@accesslint/jest');
+expect.extend({ toBeAccessible });
+
+test('it is accessible', async () => {
+  await expect('<button>Click me</button>').toBeAccessible();
+});
+```
+
