@@ -10,19 +10,51 @@ import { ImageVisualisationTab } from "@/components/audit/ImageVisualisationTab"
 import { SettingsTab, ThemePreference } from "@/components/audit/SettingsTab";
 import { WcagRulesTab } from "@/components/audit/WcagRulesTab";
 import { RuleEvaluatorTab } from "@/components/audit/RuleEvaluatorTab";
+import { AuditForm } from "@/components/audit/AuditForm";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TabValue } from "@/types/audit";
-import { AlertTriangle } from "lucide-react";
+import { AuditConfig, TabValue } from "@/types/audit";
+import { AlertTriangle, Plus } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { AuditProgress } from "@/components/audit/AuditProgress";
 
 const MAX_ROWS_STORAGE_KEY = "ka11y_max_rows";
 const THEME_STORAGE_KEY = "ka11y_theme";
 
+const DEFAULT_CONFIG: AuditConfig = {
+  url: "",
+  max_depth: 0,
+  internal_links: true,
+  max_pages: 50,
+  wcag_level: "AAA",
+  lang: "auto",
+  run_ocr: true,
+  run_image_audit: true,
+  run_form_audit: true,
+  run_label_in_name_audit: true,
+  run_pause_stop_hide_audit: true,
+  run_target_size_audit: true,
+  run_media_audit: true,
+  run_captions_audit: true,
+  run_sensory_audit: true,
+  run_resize_text_audit: true,
+  run_reflow_audit: true,
+  run_text_spacing_audit: true,
+  run_orientation_audit: true,
+  run_hover_focus_content_audit: true,
+  run_focus_not_obscured_min_audit: true,
+  run_focus_not_obscured_enh_audit: true,
+};
+
 const Index = () => {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabValue>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
+  const [config, setConfig] = useState<AuditConfig>(() => ({
+    ...DEFAULT_CONFIG,
+    url: localStorage.getItem("ka11y_last_url") ?? "",
+  }));
   const [maxRows, setMaxRows] = useState<number>(() => {
     const raw = localStorage.getItem(MAX_ROWS_STORAGE_KEY);
     const parsed = raw ? parseInt(raw, 10) : 50;
@@ -31,7 +63,7 @@ const Index = () => {
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
     const raw = localStorage.getItem(THEME_STORAGE_KEY);
     if (raw === "light" || raw === "dark" || raw === "system") return raw;
-    return "system";
+    return "dark";
   });
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() =>
     typeof window !== "undefined" ? window.matchMedia("(prefers-color-scheme: dark)").matches : false
@@ -104,9 +136,7 @@ const Index = () => {
       <AuditSidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onRunAudit={runAudit}
-        jobStatus={jobStatus}
-        currentStage={currentStage}
+        onNewAudit={() => setAuditDrawerOpen(true)}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -118,6 +148,7 @@ const Index = () => {
           reportLang={result.lang}
           activeRun={activeRun}
           onExportJSON={exportJSON}
+          onNewAudit={() => setAuditDrawerOpen(true)}
           onToggleSidebar={() => setSidebarOpen(true)}
           isDarkMode={isDarkMode}
           onToggleTheme={handleToggleTheme}
@@ -183,14 +214,29 @@ const Index = () => {
                 onThemePreferenceChange={setThemePreference}
               />
             ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-4">
-                <h1 className="text-5xl font-extrabold tracking-[-0.04em] text-foreground leading-none">
-                  kao <span className="text-primary">a11y</span>
-                </h1>
-                <p className="text-sm text-muted-foreground max-w-xs">
-                  {t("state.welcomeHint")}
-                </p>
+            <div className="flex items-start justify-center min-h-full p-4 sm:p-8">
+              <div className="w-full max-w-lg space-y-6 animate-fade-up">
+                <div className="text-center space-y-3 pt-2 sm:pt-6">
+                  <div
+                    className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-primary to-emerald-400 shadow"
+                    aria-hidden="true"
+                  />
+                  <h1 className="text-4xl sm:text-5xl font-extrabold tracking-[-0.04em] text-foreground leading-none">
+                    kao <span className="text-primary">a11y</span>
+                  </h1>
+                  <p className="text-sm text-muted-foreground max-w-xs mx-auto">
+                    {t("state.welcomeHint")}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm">
+                  <AuditForm
+                    config={config}
+                    onConfigChange={setConfig}
+                    onRunAudit={runAudit}
+                    jobStatus={jobStatus}
+                    currentStage={currentStage}
+                  />
+                </div>
               </div>
             </div>
             )
@@ -229,6 +275,28 @@ const Index = () => {
           )}
         </main>
       </div>
+
+      {/* New-audit drawer — re-run / tweak config without leaving the report */}
+      <Sheet open={auditDrawerOpen} onOpenChange={setAuditDrawerOpen}>
+        <SheetContent side="right" className="w-[min(92vw,30rem)] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Plus className="h-4 w-4 text-primary" aria-hidden="true" />
+              {t("sidebar.newAudit")}
+            </SheetTitle>
+          </SheetHeader>
+          <div className="mt-5">
+            <AuditForm
+              config={config}
+              onConfigChange={setConfig}
+              onRunAudit={runAudit}
+              jobStatus={jobStatus}
+              currentStage={currentStage}
+              onSubmitted={() => setAuditDrawerOpen(false)}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };

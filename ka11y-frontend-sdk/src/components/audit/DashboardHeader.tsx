@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Download, Menu, ExternalLink, Moon, Sun } from "lucide-react";
+import { Download, Menu, ExternalLink, Moon, Sun, Plus } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { Lang } from "@/i18n/translations";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ interface DashboardHeaderProps {
   reportLang?: string;
   activeRun?: { url: string; lang: string; submitted_at: string } | null;
   onExportJSON: () => void;
+  onNewAudit: () => void;
   onToggleSidebar: () => void;
   isDarkMode: boolean;
   onToggleTheme: () => void;
@@ -21,6 +22,7 @@ export function DashboardHeader({
   reportLang,
   activeRun,
   onExportJSON,
+  onNewAudit,
   onToggleSidebar,
   isDarkMode,
   onToggleTheme,
@@ -118,6 +120,16 @@ export function DashboardHeader({
           {isDarkMode ? <Sun className="h-3 w-3 sm:mr-1.5" aria-hidden="true" /> : <Moon className="h-3 w-3 sm:mr-1.5" aria-hidden="true" />}
           <span className="hidden sm:inline">{isDarkMode ? t("header.light") : t("header.dark")}</span>
         </Button>
+        {url && (
+          <Button
+            size="sm"
+            onClick={onNewAudit}
+            className="h-7 text-[10px] font-mono tracking-wider uppercase bg-primary text-primary-foreground hover:bg-primary/90 border-0 px-2 sm:px-3"
+          >
+            <Plus className="h-3 w-3 sm:mr-1.5" aria-hidden="true" />
+            <span className="hidden sm:inline">{t("header.newAudit")}</span>
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"

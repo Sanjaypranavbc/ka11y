@@ -59,6 +59,12 @@ export const translations = {
     "toggle.focusObscured":   "Focus Obscured",
     "toggle.focusObscuredPlus": "Focus Obscured+",
 
+    // ── Advanced checks group ─────────────────────────────────────────────────
+    "checks.advanced":        "Advanced checks",
+    "checks.enabled":         "({n} enabled)",
+    "checks.all":             "All",
+    "checks.none":            "None",
+
     // ── Job status ───────────────────────────────────────────────────────────
     "status.pending":         "pending",
     "status.running":         "running",
@@ -97,7 +103,7 @@ export const translations = {
     // ── States ───────────────────────────────────────────────────────────────
     "state.auditFailed":      "Audit Failed",
     "state.unknownError":     "An unknown error occurred.",
-    "state.welcomeHint":      "Enter a URL in the sidebar and run an audit to see accessibility findings.",
+    "state.welcomeHint":      "Enter a URL and run an audit to see accessibility findings.",
     "state.warnings":         "Warnings",
 
     // ── Header ───────────────────────────────────────────────────────────────
@@ -108,6 +114,7 @@ export const translations = {
     "header.light":           "Light",
     "header.dark":            "Dark",
     "header.export":          "Export",
+    "header.newAudit":        "New audit",
     "header.reportLanguage":  "Report language",
 
     // ── Dashboard ────────────────────────────────────────────────────────────
@@ -282,6 +289,12 @@ export const translations = {
     "toggle.focusObscured":   "フォーカス隠蔽",
     "toggle.focusObscuredPlus": "フォーカス隠蔽+",
 
+    // ── Advanced checks group ─────────────────────────────────────────────────
+    "checks.advanced":        "詳細チェック",
+    "checks.enabled":         "（{n}件有効）",
+    "checks.all":             "すべて",
+    "checks.none":            "なし",
+
     // ── Job status ───────────────────────────────────────────────────────────
     "status.pending":         "待機中",
     "status.running":         "実行中",
@@ -320,7 +333,7 @@ export const translations = {
     // ── States ───────────────────────────────────────────────────────────────
     "state.auditFailed":      "監査に失敗しました",
     "state.unknownError":     "不明なエラーが発生しました。",
-    "state.welcomeHint":      "サイドバーにURLを入力して監査を実行し、アクセシビリティの検出結果を確認してください。",
+    "state.welcomeHint":      "URLを入力して監査を実行し、アクセシビリティの検出結果を確認してください。",
     "state.warnings":         "警告",
 
     // ── Header ───────────────────────────────────────────────────────────────
@@ -331,6 +344,7 @@ export const translations = {
     "header.light":           "ライト",
     "header.dark":            "ダーク",
     "header.export":          "エクスポート",
+    "header.newAudit":        "新規監査",
     "header.reportLanguage":  "レポート言語",
 
     // ── Dashboard ────────────────────────────────────────────────────────────
