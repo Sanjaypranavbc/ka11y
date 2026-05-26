@@ -32,6 +32,8 @@ export const translations = {
     "sidebar.maxPages":       "Max Pages",
     "sidebar.internalLinks":  "Internal links only",
     "sidebar.crawlNote":      "Depth 0 audits the single URL. Depth > 0 crawls same-domain links up to Max Pages.",
+    "sidebar.depthHintSingle": "Single page only — raise Max Depth to crawl and score linked pages.",
+    "sidebar.depthHintMulti":  "Multi-page crawl: up to {pages} same-domain pages, {depth} level(s) deep.",
     "sidebar.wcagLevel":      "WCAG Level",
     "sidebar.wcagLevelNote":  "`1.4.6 Contrast (Enhanced)` is AAA. Selecting `AA` or `A` hides higher-level findings.",
     "sidebar.runAudit":       "Run Audit",
@@ -119,6 +121,10 @@ export const translations = {
     "dashboard.pageColumn":        "Page",
     "dashboard.levelBreakdown":    "WCAG Level Breakdown",
     "dashboard.topFailing":        "Top Failing WCAG Criteria",
+    "dashboard.score":             "Compliance Score",
+    "dashboard.scoreColumn":       "Score",
+    "dashboard.scoreHint":         "Pass rate = passes / (passes + violations); needs-review excluded.",
+    "dashboard.scoreAcrossPages":  "Aggregated across {n} crawled pages",
 
     // ── Table shared ─────────────────────────────────────────────────────────
     "table.severity":         "Severity",
@@ -237,6 +243,8 @@ export const translations = {
     "sidebar.maxPages":       "最大ページ数",
     "sidebar.internalLinks":  "同一ドメインのみ",
     "sidebar.crawlNote":      "深度0は単一URLを監査します。深度1以上は同一ドメインのリンクを最大ページ数までクロールします。",
+    "sidebar.depthHintSingle": "単一ページのみ — 最大深度を上げるとリンク先ページもクロールしてスコア化します。",
+    "sidebar.depthHintMulti":  "複数ページクロール：同一ドメイン最大{pages}ページ、深度{depth}レベル。",
     "sidebar.wcagLevel":      "WCAGレベル",
     "sidebar.wcagLevelNote":  "「1.4.6 コントラスト（強化）」はAAA。AAまたはAを選択すると上位レベルの検出が非表示になります。",
     "sidebar.runAudit":       "監査実行",
@@ -324,6 +332,10 @@ export const translations = {
     "dashboard.pageColumn":        "ページ",
     "dashboard.levelBreakdown":    "WCAGレベル内訳",
     "dashboard.topFailing":        "上位失敗WCAGクライテリア",
+    "dashboard.score":             "準拠スコア",
+    "dashboard.scoreColumn":       "スコア",
+    "dashboard.scoreHint":         "合格率 = 合格 /（合格＋違反）。要確認は除外。",
+    "dashboard.scoreAcrossPages":  "クロールした{n}ページ全体の集計",
 
     // ── Table shared ─────────────────────────────────────────────────────────
     "table.severity":         "重大度",

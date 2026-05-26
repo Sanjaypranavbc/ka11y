@@ -1,0 +1,59 @@
+---
+title: "3.3.8 Accessible Authentication (Minimum)"
+description: "WCAG 3.3.8 — authentication does not rely solely on cognitive function tests"
+---
+
+<Info>
+  **Level AA** · WCAG 2.2 · **Engine:** `accessible-auth.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 3.3.8 requires that a cognitive function test (such as remembering a password or solving a puzzle) is not required for any step in an authentication process unless that step provides at least one of the following:
+1.  **Alternative**: Another authentication method that does not rely on a cognitive function test.
+2.  **Mechanism**: A mechanism to assist the user in completing the cognitive function test (e.g., allowing password managers or copy-paste).
+
+## How it works
+
+The Node engine identifies authentication forms and evaluates the presence of barriers or alternatives:
+
+1.  **Auth Form Detection**: Searches for password fields or forms with "login" / "sign in" keywords.
+2.  **CAPTCHA Analysis**: Detects common CAPTCHA providers (Google reCAPTCHA, hCaptcha, Cloudflare Turnstile) and evaluates if an accessible alternative (like an audio CAPTCHA) is provided.
+3.  **Paste Blocking Check**: Scans for `onpaste` or `oncopy` handlers and attempts a synthetic paste interaction. Blocking paste is a violation as it prevents the use of password managers.
+4.  **Cognitive Test Detection**: Scans form text for patterns indicating math puzzles, visual puzzles (e.g., "Select all images with traffic lights"), or word scrambles.
+5.  **Alternative Discovery**: Searches for enhanced authentication options such as **Passkeys** or **WebAuthn** (`credentials.create()` calls or "Passkey" keywords).
+
+## Status Semantics
+
+*   **FAIL**: Strong evidence of a CAPTCHA without an alternative or a password field that blocks pasting.
+*   **PASS**: An authentication form is detected but includes accessible alternatives or supports password managers.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Paste blocked | A login field that prevents users from pasting their password from a manager. |
+| CAPTCHA only | A login process that requires solving a visual puzzle with no audio or email-link alternative. |
+| Memory test | A login step that requires the user to remember and type a specific sequence of characters from a grid (e.g., "Enter the 2nd, 5th, and 9th characters of your secret word"). |
+
+## Suggested fix
+
+Support password managers and provide non-cognitive alternatives like email magic links or Passkeys.
+
+```html
+<!-- FAILED - Blocking paste -->
+<input type="password" onpaste="return false;">
+
+<!-- PASSED - Standard field (allows managers) -->
+<input type="password" autocomplete="current-password">
+
+<!-- Recommended: Passkey support -->
+<button id="passkey-btn">Sign in with a Passkey</button>
+```
+
+## Known limitations
+
+*   **Invisible CAPTCHAs**: Modern "invisible" CAPTCHAs (like reCAPTCHA v3) that do not require user interaction may not be flagged.
+*   **External Providers**: If the authentication process redirects to an external site (e.g., Auth0 or Okta), the auditor can only evaluate the starting page.
+
+See [Technique coverage for 3.3.8](/rules/coverage-matrix#3-3-8-accessible-authentication-minimum).

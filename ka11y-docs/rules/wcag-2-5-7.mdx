@@ -1,0 +1,62 @@
+---
+title: "2.5.7 Dragging Movements"
+description: "WCAG 2.5.7 — all functionality that uses a dragging movement for operation can be achieved by a single pointer without dragging"
+---
+
+<Info>
+  **Level AA** · WCAG 2.2 · **Engine:** `dragging-movements.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 2.5.7 requires that all functionality that uses a dragging movement for operation can be achieved by a single pointer without dragging, unless dragging is essential or the functionality is determined by the user agent and not modified by the author.
+
+## How it works
+
+The Node engine scans the DOM for elements that likely support dragging and searches for single-pointer alternatives:
+
+1.  **Native Drag Detection**: Identifies elements with the `draggable="true"` attribute.
+2.  **Library Fingerprinting**: Scans for markers from common drag-and-drop libraries:
+    *   `react-beautiful-dnd` (`[data-rbd-draggable-id]`)
+    *   `dnd-kit` (`[data-dndkit-draggable]`)
+    *   `Sortable.js` (`.sortable-item`)
+    *   `jQuery UI` (`.ui-draggable`)
+3.  **Alternative Discovery**: For each draggable element, the engine searches for nearby single-pointer alternatives (like `<button>` or `<a>` tags in the same or parent container) that could serve as a click-based equivalent.
+
+## Status Semantics
+
+*   **PASS**: Draggable elements are detected and at least one single-pointer alternative is found nearby.
+*   **FAIL**: Clear evidence of a dragging-based UI (like a sortable list) with no detectable click-based alternatives.
+*   **INCOMPLETE**: Heuristic matches for library-based DnD that require manual confirmation of alternative coverage.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Drag-to-sort only | A "Tasks" list where the only way to reorder items is to click and drag them. |
+| Slider without buttons | A range slider where you must drag the handle and cannot click on the track or use arrow buttons to change value. |
+
+## Suggested fix
+
+Always provide buttons or a menu to perform actions that are traditionally handled by dragging.
+
+```html
+<!-- FAILED - Drag only -->
+<li draggable="true">Item 1</li>
+
+<!-- PASSED - Drag + Buttons -->
+<li>
+  <span>Item 1</span>
+  <div class="controls">
+    <button aria-label="Move Item 1 Up">↑</button>
+    <button aria-label="Move Item 1 Down">↓</button>
+  </div>
+</li>
+```
+
+## Known limitations
+
+*   **Shadow DOM**: Drag handlers inside shadow roots are inaccessible to the current DOM traversal logic.
+*   **Custom Drag (No Attribute)**: Custom implementations that use raw pointer events without the `draggable` attribute may not be detected unless library markers are present.
+
+See [Technique coverage for 2.5.7](/rules/coverage-matrix#2-5-7-dragging-movements).

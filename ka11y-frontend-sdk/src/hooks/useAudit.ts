@@ -119,6 +119,7 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
         violations: (summary.violations as number) ?? 0,
         needs_review: (summary.needs_review as number) ?? 0,
         passes: (summary.passes as number) ?? 0,
+        score: (summary.score as number) ?? 100,
         by_severity: (summary.by_severity as Record<string, number>) ?? {},
       },
       violations: ((p.violations as Record<string, unknown>[]) || []).map(flattenFinding),
@@ -126,6 +127,16 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
       passes: ((p.passes as Record<string, unknown>[]) || []).map(flattenFinding),
     };
   }) as AuditResult["pages"];
+
+  const reportSummary = (report.summary as Record<string, unknown>) || {};
+  const passesCount = (report.passes as unknown[])?.length || 0;
+  // Prefer the backend's aggregate score; fall back to computing the same
+  // pass-rate locally so older reports still render a score.
+  const overallScore =
+    (reportSummary.score as number) ??
+    (passesCount + rawViolations.length > 0
+      ? Math.round((1000 * passesCount) / (passesCount + rawViolations.length)) / 10
+      : 100);
 
   return {
     job_id: (pollData.job_id as string) || "",
@@ -138,7 +149,8 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
       ((report.passes as unknown[])?.length || 0),
     violations_count: rawViolations.length,
     needs_review_count: rawNeedsReview.length,
-    passes_count: (report.passes as unknown[])?.length || 0,
+    passes_count: passesCount,
+    score: overallScore,
     violations: rawViolations.map(flattenFinding) as AuditResult["violations"],
     needs_review: rawNeedsReview.map(flattenFinding) as AuditResult["needs_review"],
     passes: (((report.passes as Record<string, unknown>[]) || []).map(flattenFinding) as AuditResult["passes"]) || [],

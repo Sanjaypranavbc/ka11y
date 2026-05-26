@@ -1,0 +1,62 @@
+---
+title: "4.1.1 Parsing"
+description: "WCAG 4.1.1 — ensuring HTML is properly parsed by assistive technologies"
+---
+
+<Info>
+  **Level A** · **Note:** This criterion was obsoleted in WCAG 2.2 but is maintained for backward compatibility. · **Engine:** `html-parsing.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 4.1.1 requires that in content implemented using markup languages, elements have complete start and end tags, elements are nested according to their specifications, elements do not contain duplicate attributes, and any IDs are unique, except where the specifications allow these features.
+
+## How it works
+
+The Node engine performs a structural scan of the DOM to identify parsing-related issues:
+
+1.  **Duplicate ID Detection**: Scans the entire DOM for elements sharing the same `id` attribute. Duplicate IDs are a common cause of broken ARIA relationships and incorrect screen reader behavior.
+2.  **Broken ARIA References**: Validates that all ID references in ARIA attributes (`aria-labelledby`, `aria-describedby`, `aria-controls`, `aria-owns`) point to an existing element in the DOM.
+3.  **Orphaned Labels**: Identifies `<label for="...">` elements that do not have a corresponding input with a matching ID.
+
+## Status Semantics
+
+*   **FAIL**: Clear evidence of duplicate IDs, broken ARIA references, or orphaned labels.
+*   **PASS**: All IDs are unique and structural relationships are valid.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Duplicate ID | Two buttons on the same page both carrying `id="submit-btn"`. |
+| Broken reference | `<input aria-describedby="hint-text">` where no element with `id="hint-text"` exists. |
+| Orphaned label | `<label for="username">` but the input ID is actually `user_name`. |
+
+## Suggested fix
+
+Ensure all IDs are unique and all ARIA references are valid.
+
+```html
+<!-- FAILED - Duplicate IDs -->
+<div id="card">Item 1</div>
+<div id="card">Item 2</div>
+
+<!-- PASSED - Unique IDs -->
+<div id="card-1">Item 1</div>
+<div id="card-2">Item 2</div>
+
+<!-- FAILED - Broken Reference -->
+<button aria-controls="menu-123">Menu</button>
+<!-- element with id="menu-123" is missing -->
+
+<!-- PASSED - Valid Reference -->
+<button aria-controls="menu-123">Menu</button>
+<div id="menu-123">...</div>
+```
+
+## Known limitations
+
+*   **Attribute Duplication**: Standard DOM parsers (like the one used by Puppeteer) automatically resolve duplicate attributes, so the auditor can only see the "resolved" state of the element.
+*   **Complex Nesting**: Deeply nested, specification-violating HTML is better caught by a full HTML validator (like the W3C Validator) rather than a runtime DOM check.
+
+See [Technique coverage for 4.1.1](/rules/coverage-matrix#4-1-1-parsing).

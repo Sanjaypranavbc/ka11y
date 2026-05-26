@@ -222,6 +222,17 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                 />
               </div>
             </div>
+            <p
+              className={`text-[9px] leading-tight rounded px-2 py-1 ${
+                config.max_depth === 0
+                  ? "text-muted-foreground bg-muted/40"
+                  : "text-primary bg-primary/10 font-medium"
+              }`}
+            >
+              {config.max_depth === 0
+                ? t("sidebar.depthHintSingle")
+                : t("sidebar.depthHintMulti", { pages: config.max_pages, depth: config.max_depth })}
+            </p>
             <p className="text-[9px] leading-tight text-muted-foreground">
               {t("sidebar.crawlNote")}
             </p>

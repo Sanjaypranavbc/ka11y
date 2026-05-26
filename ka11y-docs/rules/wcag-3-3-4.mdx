@@ -1,0 +1,70 @@
+---
+title: "3.3.4 Error Prevention (Legal, Financial, Data)"
+description: "WCAG 3.3.4 — high-risk submissions are reversible, checked, or confirmed"
+---
+
+<Info>
+  **Level AA** · **Engine:** `error-prevention.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 3.3.4 requires that for Web pages that cause legal commitments or financial transactions for the user to occur, that modify or delete user-controllable data in data storage systems, or that submit user test responses, at least one of the following is true:
+
+1.  **Reversible**: Submissions are reversible.
+2.  **Checked**: Data entered by the user is checked for input errors and the user is provided an opportunity to correct them.
+3.  **Confirmed**: A mechanism is available for reviewing, confirming, and correcting information before finalizing the submission.
+
+## How it works
+
+The Node engine heuristically identifies high-risk forms and searches for safeguards:
+
+1.  **Risk Classification**: Analyzes form headings and button text for high-risk keywords:
+    *   **Financial**: payment, purchase, checkout, billing, 支払い, 購入.
+    *   **Legal**: agreement, terms, contract, privacy, 利用規約.
+    *   **Destructive**: delete, remove, cancel account, 削除.
+2.  **Safeguard Detection**: Searches for evidence of error prevention mechanisms:
+    *   **Review/Confirm**: Keywords like "review", "confirm", "preview", "確認" in text or buttons.
+    *   **Confirmation Checkbox**: Required checkboxes near the submit button.
+    *   **Multi-step Indicators**: Progress bars, "Step 1 of 3", or "Next" buttons instead of immediate "Submit".
+    *   **Undo/Revert**: Signals of an undo window or revert action.
+
+## Status Semantics
+
+*   **FAIL**: A high-risk form is identified but no recognizable safeguard (review step, confirmation checkbox, etc.) is detected.
+*   **PASS**: A high-risk form is identified and a clear safeguard is found.
+*   **INCOMPLETE**: Heuristic matches that require manual verification to confirm if the safeguard is sufficient.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Immediate deletion | A "Delete Account" button that immediately deletes data without a confirmation step. |
+| One-click purchase | A "Buy Now" button on a financial form that processes a payment with no preceding review page. |
+
+## Suggested fix
+
+Always provide a review step or a confirmation dialog for high-stakes actions.
+
+```html
+<!-- Recommended: Review Step -->
+<h2>Review your order</h2>
+<div class="order-summary">...</div>
+<button type="submit">Place Order</button>
+
+<!-- Alternative: Confirmation Checkbox -->
+<form action="/delete-data" method="post">
+  <label>
+    <input type="checkbox" required>
+    I understand that this action is permanent and cannot be undone.
+  </label>
+  <button type="submit">Delete All Data</button>
+</form>
+```
+
+## Known limitations
+
+*   **Modal Dialogs**: Safeguards that appear only in a dynamic modal after clicking a button may be missed by the static DOM scan.
+*   **Backend Reversibility**: The auditor cannot detect if a submission is "reversible" on the server-side (e.g., a "Delete" that actually just archives data for 30 days).
+
+See [Technique coverage for 3.3.4](/rules/coverage-matrix#3-3-4-error-prevention-legal-financial-data).
