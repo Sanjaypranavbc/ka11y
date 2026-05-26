@@ -198,7 +198,18 @@ async def _run_job_body(
     """Original body of :func:`_run_job`, gated by the concurrency semaphore."""
     _jobs[job_id]["status"] = "running"
     url = str(payload.url)
-    _lang_ctx.set(payload.lang)  # Inherited by all child tasks via context copy
+
+    # Resolve the effective language once, up front. When the user selects
+    # "auto" (the default), detect it from the page's <html lang>; otherwise
+    # honour the explicit request. Used for the i18n context, the node/axe
+    # call, the Python stages, and the final report so every stage localises
+    # consistently instead of leaking the literal string "auto".
+    if payload.lang == "auto":
+        resolved_lang = await detect_page_language(url)
+    else:
+        resolved_lang = payload.lang
+
+    _lang_ctx.set(resolved_lang)  # Inherited by all child tasks via context copy
 
     config = load_config()
     node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
@@ -224,7 +235,7 @@ async def _run_job_body(
             message="Combined audit job started",
             context={
                 "url": url,
-                "lang": payload.lang,
+                "lang": resolved_lang,
                 "wcag_level": payload.wcag_level,
             },
         )
@@ -266,7 +277,7 @@ async def _run_job_body(
                 url,
                 node_base_url,
                 payload.wcag_level,
-                payload.lang,
+                resolved_lang,
                 max_depth=payload.max_depth,
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
