@@ -49,6 +49,7 @@ from ka11y.utils.crawler_settings import (
 )
 from ka11y.accessibility.pipeline.pipeline_stage import _run_pipeline_stage
 from ka11y.utils.step_logger import ExecutionStepLogger
+from ka11y.utils.crawler_timing import time_crawler
 
 from .findings import (
     IMAGE_AUDIT_RECORD_CONVERTERS,
@@ -250,7 +251,11 @@ async def _stage_image_audit(
         )
 
         async def _crawl_and_save() -> None:
-            await image_crawler.crawl_page(discovered_urls=discovered_urls)
+            async with time_crawler(
+                output_dir, "image", url,
+                pages_getter=lambda: len(image_crawler.images_data),
+            ):
+                await image_crawler.crawl_page(discovered_urls=discovered_urls)
             await asyncio.to_thread(image_crawler.save_results)
 
         try:
@@ -421,7 +426,10 @@ async def _stage_form_audit(
         form_crawler = AsyncFormCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        form_inputs = await form_crawler.crawl()
+        async with time_crawler(
+            output_dir, "form", url, pages_getter=lambda: len(form_inputs or [])
+        ):
+            form_inputs = await form_crawler.crawl()
         await asyncio.to_thread(form_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -481,7 +489,10 @@ async def _stage_sensory_audit(
             output_dir=str(output_dir),
             max_depth=max_depth,
         )
-        elements = await sensory_crawler.crawl()
+        async with time_crawler(
+            output_dir, "sensory", url, pages_getter=lambda: len(elements or [])
+        ):
+            elements = await sensory_crawler.crawl()
         await asyncio.to_thread(sensory_crawler.save_raw_json)
 
         # ── Audit ──────────────────────────────────────────────────────────
@@ -526,7 +537,11 @@ async def _stage_label_in_name(
         interactive_crawler = InteractiveElementCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        interactive_elements = await interactive_crawler.crawl()
+        async with time_crawler(
+            output_dir, "interactive", url,
+            pages_getter=lambda: len(interactive_elements or []),
+        ):
+            interactive_elements = await interactive_crawler.crawl()
         await asyncio.to_thread(interactive_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -566,7 +581,11 @@ async def _stage_pause_stop_hide(
         moving_crawler = MovingContentCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        moving_items = await moving_crawler.crawl()
+        async with time_crawler(
+            output_dir, "pause_stop_hide", url,
+            pages_getter=lambda: len(moving_items or []),
+        ):
+            moving_items = await moving_crawler.crawl()
         await asyncio.to_thread(moving_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -606,7 +625,10 @@ async def _stage_target_size(
         ts_crawler = TargetSizeCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        ts_items = await ts_crawler.crawl()
+        async with time_crawler(
+            output_dir, "target_size", url, pages_getter=lambda: len(ts_items or [])
+        ):
+            ts_items = await ts_crawler.crawl()
         await asyncio.to_thread(ts_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -646,7 +668,10 @@ async def _stage_text_spacing(
         ts_crawler = AsyncTextSpacingCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        items = await ts_crawler.crawl()
+        async with time_crawler(
+            output_dir, "text_spacing", url, pages_getter=lambda: len(items or [])
+        ):
+            items = await ts_crawler.crawl()
         await asyncio.to_thread(ts_crawler.save_json)
 
         findings: List[Dict] = []
@@ -702,7 +727,11 @@ async def _stage_rendered_layout_audit(
         )
 
         crawler = RenderedLayoutCrawler(base_url=url, output_dir=str(output_dir))
-        raw = await crawler.crawl(discovered_urls=discovered_urls)
+        async with time_crawler(
+            output_dir, "rendered_layout", url,
+            pages_getter=lambda: len(discovered_urls or []),
+        ):
+            raw = await crawler.crawl(discovered_urls=discovered_urls)
         await asyncio.to_thread(crawler.save_raw_json)
 
         records = await asyncio.to_thread(
@@ -788,7 +817,10 @@ async def _stage_media_audit(
         media_crawler = AsyncMediaCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        media_items = await media_crawler.crawl()
+        async with time_crawler(
+            output_dir, "media", url, pages_getter=lambda: len(media_items or [])
+        ):
+            media_items = await media_crawler.crawl()
         await asyncio.to_thread(media_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -832,14 +864,18 @@ async def _load_universal_snapshot(
     # UniversalPageLoader is imported at module level so tests can patch
     # `stages.UniversalPageLoader`; the call site below resolves it from the
     # module namespace.
-    raw_snapshot = await UniversalPageLoader.load(
-        url=url,
-        output_dir=output_dir,
-        max_depth=max_depth,
-        record_har=False,
-        step_logger=step_logger,
-        policy=policy,
-    )
+    async with time_crawler(
+        output_dir, "universal_snapshot", url,
+        pages_getter=lambda: len(getattr(raw_snapshot, "page_summaries", []) or []),
+    ):
+        raw_snapshot = await UniversalPageLoader.load(
+            url=url,
+            output_dir=output_dir,
+            max_depth=max_depth,
+            record_har=False,
+            step_logger=step_logger,
+            policy=policy,
+        )
     await asyncio.to_thread(UniversalPageLoader.save_snapshot, raw_snapshot, output_dir)
     normalized = await asyncio.to_thread(
         SnapshotNormalizer.normalize,
