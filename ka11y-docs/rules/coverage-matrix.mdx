@@ -45,6 +45,11 @@ PASSES when the element is hidden from assistive tech (`aria-hidden="true"` or
 crawler through `ImageData` to the auditor; without the AT-hidden signal,
 missing-alt remains a violation.
 
+**Functional Redundancy.** Images contained within an already-labeled `<button>`,
+`<a>`, or `[role="button"]` are automatically marked as **PASSED**. The
+`SemanticRelationshipEngine` resolves these containers to prevent redundant
+alt-text findings.
+
 **Logo / brand vocabulary.** The logo-name gate accepts `logo`, `logotype`,
 `wordmark`, `brandmark`, `home`, plus localised equivalents (`ロゴ`, `標榜`, `ホーム`, `トップ`).
 
@@ -134,11 +139,16 @@ Detects live media surfaces (HLS / m3u8, `data-live` attributes, "live" badges, 
 | F14 Identify content only by shape/location | Failure | Covered (EN) / Partial (JA) |
 | F26 Graphical symbol alone | Failure | Missed — requires visual grounding |
 
-**Japanese-specific limitations**
-- `ja_core_news_sm` (12 MB model) tokenizes web-register Japanese at ~91% POS accuracy. Mixed kanji/kana/ASCII text common on Japanese sites causes token boundary errors that propagate to false passes.
-- `_remaining_label_words` uses CJK character-class stripping (regex) rather than morpheme-level stop-word filtering — particles and postpositions (は, が, を) can survive the filter as phantom "content" words.
-- `SENSORY_WORDS` is English-primary. Japanese sensory terms (`右`, `左`, `上`, `下`, `赤い`, `青い`, `丸い`, `点滅`, `形`, `色`) are not included — sensory-only JA instructions pass without flagging.
-- When `<html lang="en">` but body text is Japanese, the English spaCy pipeline is used and JA tokens become unknowns.
+**Japanese-specific support.** The auditor has been hardened for Japanese-language
+auditing with the following improvements:
+- **Large Model Preference.** Prefers `ja_core_news_lg` (94%+ POS accuracy) over smaller models for better web-register text analysis.
+- **SudachiPy Morpheme Filtering.** Uses SudachiPy for tokenization and morpheme-level stop-word filtering, preventing Japanese particles from surviving as phantom "content" words.
+- **NFKC Normalization.** Automatically normalizes half-width katakana and full-width alphanumeric characters before processing.
+- **Expanded Taxonomy.** Includes a comprehensive Japanese sensory word taxonomy (e.g., 赤, 青, 丸, 四角, 右, 左).
+
+**Known limitations**
+- **lang attribute drift.** Language routing uses `<html lang="...">`. Mixed-language pages that declare `lang="en"` but contain Japanese body text load the English pipeline — JA characters are processed as unknown tokens.
+- **Semantic disconnect.** Validates instruction phrasing only, not whether the real button has a visible non-sensory label.
 
 ---
 
@@ -437,13 +447,21 @@ rather than a hardcoded passing fallback.
 ---
 
 ## 2.5.3 Label in Name
-**Engine:** `label_in_name_auditor.py`.
+**Engine:** `ka11y-python` pipeline (`policy_2_5_3.py`).
 
 | Technique | Kind | Status |
 |---|---|---|
 | G208 Visible label in accessible name | Sufficient | Covered |
 | G211 Match visible label | Sufficient | Covered |
 | F96 Accessible name missing visible label | Failure | Covered |
+
+**String Normalization.** The engine uses Unicode NFC normalization and casefolding
+before comparison to ensure accurate matching across different character encodings
+and casing.
+
+**Contiguous Substring Logic.** Validates that the visible label is a contiguous
+substring of the accessible name, properly supporting legally compliant
+variations where the accessible name adds context.
 
 ---
 
@@ -479,7 +497,7 @@ button pass spuriously.
 ---
 
 ## 2.5.8 Target Size (Minimum)
-**Engine:** `target_size_auditor.py`.
+**Engine:** `ka11y-python` pipeline (`policy_2_5_8.py`).
 
 | Exception | Status |
 |---|---|
@@ -489,9 +507,13 @@ button pass spuriously.
 | Essential | Missed — judgment |
 | Equivalent | Missed — judgment |
 
-**Known limitations**
-- Viewport-coupled at 1440 px; mobile size issues unmeasured.
-- Iframe contents not traversed.
+**Effective Clickable Area.** The pipeline merges small native inputs (like radios)
+with their wrapping `<label>` padding to evaluate the true clickable area,
+significantly reducing false positives on properly wrapped inputs.
+
+**Spatial Spacing Proof.** Uses a Chebyshev distance algorithm to prove exact
+pixel distances to adjacent interactive elements, accurately applying the
+spacing exception.
 
 ---
 
