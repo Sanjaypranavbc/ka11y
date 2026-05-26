@@ -1,0 +1,75 @@
+---
+title: "2.4.5 Multiple Ways"
+description: "WCAG 2.4.5 — more than one way is available to locate a Web page within a set of Web pages"
+---
+
+<Info>
+  **Level AA** · **Engine:** `multiple-ways.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 2.4.5 requires that more than one way is available to locate a Web page within a set of Web pages, except where the Web Page is the result of, or a step in, a process.
+
+Typical "ways" include:
+*   A Site Map
+*   A Search function
+*   A Table of Contents
+*   A Navigation menu
+*   Breadcrumbs
+
+## How it works
+
+The Node engine performs a structural and keyword-based scan of the page to identify available navigation mechanisms:
+
+1.  **Search Detection**: Checks for `<input type="search">`, `[role="search"]`, or links with multi-language search keywords ("search", "検索", "buscar").
+2.  **Sitemap Detection**: Identifies links to sitemaps via `a[href*="sitemap"]`.
+3.  **Navigation Count**: Counts distinct `<nav>` elements or `[role="navigation"]` regions.
+4.  **Breadcrumb Detection**: Recognizes breadcrumb indicators using ARIA labels, class names, or Schema.org `BreadcrumbList` microdata.
+5.  **Table of Contents**: Identifies `aria-label="table of contents"` or `class="toc"`.
+
+## Status Semantics
+
+*   **PASS**: At least 2 distinct navigation mechanisms are detected on the page.
+*   **INCOMPLETE**: Only 1 or 0 mechanisms are found. Since this is a site-level requirement, a single page's audit result is advisory.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Single nav only | A page with a top navigation menu but no search bar, no sitemap link, and no breadcrumbs. |
+| Process exception | A multi-step checkout form (usually exempt, but flagged for manual review if mechanisms are missing). |
+
+## Suggested fix
+
+Ensure that users have multiple ways to find content. A common compliant pattern is a **Top Navigation Menu** paired with a **Search Bar** or a **Footer Sitemap Link**.
+
+```html
+<!-- Way 1: Global Navigation -->
+<nav aria-label="Main">
+  <ul>
+    <li><a href="/">Home</a></li>
+    <li><a href="/products">Products</a></li>
+  </ul>
+</nav>
+
+<!-- Way 2: Search Bar -->
+<form role="search">
+  <label for="search-input">Search site</label>
+  <input type="search" id="search-input">
+  <button type="submit">Go</button>
+</form>
+
+<!-- Way 3: Sitemap (Footer) -->
+<footer>
+  <a href="/sitemap.xml">Site Map</a>
+</footer>
+```
+
+## Known limitations
+
+*   **Single-Page Scope**: This criterion is inherently site-wide. The auditor can only see the mechanisms present on the current page.
+*   **Dynamic Menus**: Navigation components loaded asynchronously or hidden behind "Hamburger" buttons that require interaction to render may be missed by the static scan.
+*   **Skip Links**: Standard "Skip to main content" links are not currently counted as one of the "Multiple Ways".
+
+See [Technique coverage for 2.4.5](/rules/coverage-matrix#2-4-5-multiple-ways).

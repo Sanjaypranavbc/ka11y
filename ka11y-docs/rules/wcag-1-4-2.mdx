@@ -1,0 +1,59 @@
+---
+title: "1.4.2 Audio Control"
+description: "WCAG 1.4.2 — providing a mechanism to pause or stop audio that plays automatically"
+---
+
+<Info>
+  **Level A** · **Engine:** `audio-control.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 1.4.2 requires that if any audio on a Web page plays automatically for more than 3 seconds, a mechanism is available to pause or stop the audio, or a mechanism is available to control audio volume independently from the overall system volume level.
+
+## How it works
+
+The Node engine scans for `<audio>` and `<video>` elements and applies the following logic:
+
+1.  **Autoplay Detection**: Identifies elements with the `autoplay` attribute or `data-autoplay="true"`.
+2.  **Muted Exemption**: Muted media (`muted` attribute or property) is automatically marked as **PASSED** because it does not produce audible sound.
+3.  **Duration Check**: If the duration is known and is ≤ 3 seconds, it is marked as **PASSED**.
+4.  **Control Verification**:
+    *   **Native Controls**: Checks for the presence of the `controls` attribute.
+    *   **External Controls**: Scans nearby containers (parent `figure`, `article`, or `section`) for buttons with labels matching "pause", "stop", "mute", or "volume" (including Japanese: 一時停止, 停止, 消音).
+
+## Status Semantics
+
+*   **PASS**: The media is muted, short-lived, or has a detectable control mechanism.
+*   **FAIL**: Unmuted autoplaying media lasting > 3s is detected with no identifiable controls.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Autoplay music | A background track that starts as soon as the page loads with no "stop" button. |
+| Unlabeled slider | A volume slider that uses only a custom graphic and lacks an accessible name. |
+
+## Suggested fix
+
+Avoid autoplaying audio. If you must use it, provide clear, easy-to-find controls.
+
+```html
+<!-- Recommended: User-initiated playback -->
+<audio src="intro.mp3" controls></audio>
+
+<!-- If autoplaying: ensure controls are present -->
+<video src="hero.mp4" autoplay loop controls muted></video>
+
+<!-- Or provide external controls -->
+<button id="mute-btn">Mute background music</button>
+<audio id="bg-music" src="music.mp3" autoplay loop></audio>
+```
+
+## Known limitations
+
+*   **Dynamic Playback**: Audio triggered by JavaScript after the initial page load (without an `autoplay` attribute) may be missed.
+*   **Web Audio API**: Background music generated via the Web Audio API (rather than standard media elements) is currently not detected.
+*   **Unlabeled Controls**: Custom controls that lack a text label or ARIA name will not be recognized as valid mechanisms.
+
+See [Technique coverage for 1.4.2](/rules/coverage-matrix#1-4-2-audio-control).

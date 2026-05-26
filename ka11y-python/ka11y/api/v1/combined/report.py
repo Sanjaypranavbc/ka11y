@@ -95,6 +95,17 @@ def _build_report(
         by_page[page_url][bucket_key] += 1
         page_buckets[page_url][bucket_key].append(f)
 
+    # Compliance score: pass-rate = passes / (passes + violations), as a 0–100
+    # percentage. needs_review is deliberately excluded (it is neither a pass nor
+    # a confirmed failure). A page/crawl with no pass-or-fail findings scores 100
+    # (nothing failed). Both the overall crawl and each individual page expose it
+    # so the UI can show one headline score plus a per-page column.
+    def _score(passes_n: int, violations_n: int) -> float:
+        denom = passes_n + violations_n
+        if denom == 0:
+            return 100.0
+        return round(100.0 * passes_n / denom, 1)
+
     pages: List[Dict[str, Any]] = []
     for page_url in page_order:
         buckets = page_buckets[page_url]
@@ -115,6 +126,9 @@ def _build_report(
                     "violations": len(buckets["violations"]),
                     "needs_review": len(buckets["needs_review"]),
                     "passes": len(buckets["passes"]),
+                    "score": _score(
+                        len(buckets["passes"]), len(buckets["violations"])
+                    ),
                     "by_severity": page_sev,
                 },
                 "violations": buckets["violations"],
@@ -146,6 +160,7 @@ def _build_report(
             "violations": len(violations),
             "needs_review": len(needs_review),
             "passes": len(passes),
+            "score": _score(len(passes), len(violations)),
             "by_severity": sev_count,
             "by_level": level_count,
             "by_wcag_sc": sc_count,

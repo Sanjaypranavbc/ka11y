@@ -1,0 +1,64 @@
+---
+title: "2.4.8 Location"
+description: "WCAG 2.4.8 — information about the user's location within a set of Web pages is available"
+---
+
+<Info>
+  **Level AAA** · **Engine:** `location.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 2.4.8 requires that information about the user's location within a set of Web pages is available. This helps users understand where they are in a website's hierarchy.
+
+## How it works
+
+The Node engine scans the page for common "wayfinding" indicators:
+
+1.  **Breadcrumb Detection**: Recognizes breadcrumb navigation via ARIA labels (`aria-label="breadcrumb"`), CSS classes (`.breadcrumb`, `.path`), or Schema.org `BreadcrumbList` microdata.
+2.  **Active Navigation**: Identifies active menu items in `<nav>` regions using `aria-current="page"` or classes like `.active` and `[aria-selected="true"]`.
+3.  **Sitemap Links**: Checks for links to a sitemap (`a[href*="sitemap"]`).
+4.  **Step Indicators**: Recognizes `aria-current="step"` in multi-step processes or wizards.
+5.  **Metadata Analysis**: Scans for JSON-LD structured data that declares a `BreadcrumbList`.
+
+## Status Semantics
+
+*   **PASS**: Clear visual and programmatic location indicators (like breadcrumbs or active nav items) are detected.
+*   **INCOMPLETE**: No high-confidence location indicators are found. Since location can be implicitly understood from page content/titles, this requires manual review to confirm if the context is sufficient.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| No breadcrumbs | A deep sub-page with no breadcrumb trail to return to parent categories. |
+| Inactive navigation | A global sidebar where the link for the current page is not visually or programmatically distinguished. |
+
+## Suggested fix
+
+Implement a breadcrumb trail and ensure the current page is highlighted in all navigation menus.
+
+```html
+<!-- Way 1: Breadcrumbs (Recommended) -->
+<nav aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Home</a></li>
+    <li><a href="/products">Products</a></li>
+    <li><a href="/products/shoes" aria-current="page">Shoes</a></li>
+  </ol>
+</nav>
+
+<!-- Way 2: Active Navigation -->
+<nav aria-label="Main">
+  <ul>
+    <li><a href="/">Home</a></li>
+    <li><a href="/about" class="active" aria-current="page">About Us</a></li>
+  </ul>
+</nav>
+```
+
+## Known limitations
+
+*   **Implicit Location**: The auditor does not evaluate if the page `<h1>` or `<title>` provides sufficient implicit location information.
+*   **Dynamic State**: Location indicators that are injected or updated via JavaScript after page load may be missed.
+
+See [Technique coverage for 2.4.8](/rules/coverage-matrix#2-4-8-location).
