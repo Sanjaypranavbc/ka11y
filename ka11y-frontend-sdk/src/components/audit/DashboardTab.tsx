@@ -1,5 +1,6 @@
-import { AuditResult } from "@/types/audit";
+import { AuditResult, RunTiming } from "@/types/audit";
 import { ContrastReportSection } from "./ContrastReportSection";
+import { StageTimingsCard } from "./StageTimingsCard";
 import { MetricCard } from "./MetricCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -12,6 +13,7 @@ import { useLanguage } from "@/i18n/LanguageContext";
 
 interface DashboardTabProps {
   result: AuditResult;
+  timing?: RunTiming | null;
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -40,7 +42,7 @@ function scoreColor(score: number): string {
   return "hsl(0, 84%, 58%)";
 }
 
-export function DashboardTab({ result }: DashboardTabProps) {
+export function DashboardTab({ result, timing }: DashboardTabProps) {
   const isMobile = useIsMobile();
   const { t } = useLanguage();
 
@@ -333,6 +335,9 @@ export function DashboardTab({ result }: DashboardTabProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Stage timings — same data as logs/run_timings.log */}
+      <StageTimingsCard timing={timing ?? null} />
 
       {/* Contrast report — rendered only when OCR produced contrast data */}
       {result.contrast_report && result.contrast_report.images.length > 0 && (

@@ -157,6 +157,36 @@ export interface StageProgressInfo {
   phase?: string;
 }
 
+// Per-stage timing from GET /combined/{job_id}/timings — the same data the
+// backend appends to logs/run_timings.log. duration_s is null for stages that
+// have not finished (mid-run polls).
+export interface StageTiming {
+  name: string | null;
+  status: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_s: number | null;
+  findings_count: number | null;
+}
+
+export interface RunTiming {
+  job_id: string;
+  url: string;
+  status: string;
+  lang: string | null;
+  error_stage: string | null;
+  submitted_at: string | null;
+  run_started_at: string | null;
+  completed_at: string | null;
+  // queue_wait = submitted→start, run = start→completed, wall = submitted→done.
+  // Null until the relevant timestamps exist.
+  queue_wait_s: number | null;
+  run_s: number | null;
+  wall_s: number | null;
+  stages: StageTiming[];
+  summary?: Record<string, unknown> | null;
+}
+
 export interface JobFailure {
   error: string;
   stage?: string;

@@ -134,6 +134,14 @@ export const translations = {
     "dashboard.scoreAcrossPages":  "Aggregated across {n} crawled pages",
     "dashboard.findingsColumn":    "Findings",
 
+    // ── Stage timings (GET /combined/{job_id}/timings) ───────────────────────
+    "timing.title":            "Stage Timings",
+    "timing.queueWait":        "Queue wait",
+    "timing.runTime":          "Run",
+    "timing.wallTime":         "Wall",
+    "timing.findings":         "findings",
+    "timing.hint":             "Wall is the real elapsed time. Stages overlap (axe-core and the Python checks run concurrently), so per-stage durations don't add up to it. Same data as the server's run_timings.log.",
+
     // ── Page scope selector (multi-page crawls, max_depth > 0) ───────────────
     "pageScope.label":         "Page",
     "pageScope.allPages":      "All pages (aggregated)",
@@ -363,6 +371,14 @@ export const translations = {
     "dashboard.scoreHint":         "合格率 = 合格 /（合格＋違反）。要確認は除外。",
     "dashboard.scoreAcrossPages":  "クロールした{n}ページ全体の集計",
     "dashboard.findingsColumn":    "検出数",
+
+    // ── Stage timings (GET /combined/{job_id}/timings) ───────────────────────
+    "timing.title":            "ステージ処理時間",
+    "timing.queueWait":        "待機時間",
+    "timing.runTime":          "実行",
+    "timing.wallTime":         "全体",
+    "timing.findings":         "件",
+    "timing.hint":             "「全体」が実際の経過時間です。ステージは並行実行（axe-core とPythonチェックが同時実行）されるため、各ステージの合計とは一致しません。サーバーの run_timings.log と同じデータです。",
 
     // ── Page scope selector (multi-page crawls, max_depth > 0) ───────────────
     "pageScope.label":         "ページ",

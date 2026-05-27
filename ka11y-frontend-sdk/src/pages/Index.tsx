@@ -81,6 +81,7 @@ const Index = () => {
     stageProgress,
     warnings,
     activeRun,
+    timing,
   } = useAudit();
 
   const isLoading = jobStatus === "pending" || jobStatus === "running";
@@ -252,7 +253,7 @@ const Index = () => {
                   ))}
                 </div>
               )}
-              {activeTab === "dashboard"           && <DashboardTab result={result} />}
+              {activeTab === "dashboard"           && <DashboardTab result={result} timing={timing} />}
               {activeTab === "violations"          && <ViolationsTab violations={result.violations} pages={result.pages} overall={overallSummary} pageSize={maxRows} />}
               {activeTab === "needs-review"        && <NeedsReviewTab items={result.needs_review} pages={result.pages} overall={overallSummary} pageSize={maxRows} />}
               {activeTab === "passes"              && <PassesTab passes={result.passes} pages={result.pages} overall={overallSummary} pageSize={maxRows} />}

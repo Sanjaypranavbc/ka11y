@@ -6,6 +6,7 @@ import {
   ImageAuditReport,
   JobFailure,
   JobPlan,
+  RunTiming,
   StageInfo,
   StageProgressInfo,
 } from "@/types/audit";
@@ -174,6 +175,7 @@ export function useAudit() {
   const [stageProgress, setStageProgress] = useState<StageProgressInfo | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [activeRun, setActiveRun] = useState<{ url: string; lang: string; submitted_at: string } | null>(null);
+  const [timing, setTiming] = useState<RunTiming | null>(null);
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sseRef = useRef<EventSource | null>(null);
@@ -192,6 +194,22 @@ export function useAudit() {
     if (sseRef.current) {
       sseRef.current.close();
       sseRef.current = null;
+    }
+  }, []);
+
+  // ── Stage timings ───────────────────────────────────────────────────────
+  // Fetch the per-stage timing breakdown (same data as logs/run_timings.log).
+  // Called once a job reaches a terminal state; ignores stale jobs.
+  const fetchTiming = useCallback(async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/v1/combined/${jobId}/timings`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as RunTiming;
+      if (activeJobRef.current === jobId) setTiming(data);
+    } catch {
+      /* timing is best-effort — never block the report on it */
     }
   }, []);
 
@@ -220,12 +238,14 @@ export function useAudit() {
             setJobStatus("completed");
             setCurrentStage("");
             setActiveRun(null);
+            fetchTiming(jobId);
           } else if (pollData.status === "failed") {
             stopPolling();
             setJobStatus("failed");
             setError(pollData.error || "Audit failed");
             setCurrentStage("");
             setActiveRun(null);
+            fetchTiming(jobId);
           }
         } catch (e) {
           stopPolling();
@@ -235,7 +255,7 @@ export function useAudit() {
         }
       }, 3000);
     },
-    [stopPolling],
+    [stopPolling, fetchTiming],
   );
 
   // ── SSE connection ────────────────────────────────────────────────────────
@@ -349,6 +369,9 @@ export function useAudit() {
           .catch(() => {
             setJobStatus("completed");
             setActiveRun(null);
+          })
+          .finally(() => {
+            fetchTiming(data.job_id as string);
           });
       });
 
@@ -369,6 +392,7 @@ export function useAudit() {
         setCurrentStage("");
         setStageProgress(null);
         setActiveRun(null);
+        fetchTiming(jobId);
       });
 
       es.onerror = () => {
@@ -382,7 +406,7 @@ export function useAudit() {
         }
       };
     },
-    [closeSSE, stopPolling, startPollingFallback],
+    [closeSSE, stopPolling, startPollingFallback, fetchTiming],
   );
 
   // ── Run audit ─────────────────────────────────────────────────────────────
@@ -396,6 +420,7 @@ export function useAudit() {
       setPlan(null);
       setStageProgress(null);
       setWarnings([]);
+      setTiming(null);
       stopPolling();
       closeSSE();
       configRef.current = config;
@@ -488,6 +513,7 @@ export function useAudit() {
     stageProgress,
     warnings,
     activeRun,
+    timing,
   };
 }
 
