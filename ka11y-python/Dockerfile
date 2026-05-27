@@ -47,8 +47,24 @@ RUN python -m spacy download en_core_web_sm
 
 # Pre-download NLTK corpora used by media quality_engine so EC2/air-gapped
 # runs don't stall on first request.
-RUN python -m nltk.downloader -d /usr/share/nltk_data \
-        punkt punkt_tab averaged_perceptron_tagger_eng stopwords
+#
+# The NLTK source (raw.githubusercontent.com) intermittently fails DNS / rate-
+# limits mid-download. Without a guard, the downloader drops into an interactive
+# "Retry? [n/y/e]" prompt that EOFs in a non-TTY build and aborts. So: feed
+# </dev/null (prompt fails fast instead of hanging), retry the whole set up to 5
+# times with linear backoff (already-fetched packages are skipped on re-run),
+# then assert all four corpora are present so a truly-down network still fails
+# the build loudly rather than shipping a half-populated image.
+RUN for attempt in 1 2 3 4 5; do \
+        python -m nltk.downloader -d /usr/share/nltk_data \
+            punkt punkt_tab averaged_perceptron_tagger_eng stopwords </dev/null \
+        && break; \
+        echo "[nltk] download attempt $attempt failed; retrying in $((attempt * 10))s..."; \
+        sleep $((attempt * 10)); \
+    done; \
+    python -c "import nltk; nltk.data.path.insert(0, '/usr/share/nltk_data'); \
+[nltk.data.find(p) for p in ['tokenizers/punkt', 'tokenizers/punkt_tab', \
+'taggers/averaged_perceptron_tagger_eng', 'corpora/stopwords']]"
 ENV NLTK_DATA=/usr/share/nltk_data
 
 # Install Playwright's Chromium browser + all system dependencies
