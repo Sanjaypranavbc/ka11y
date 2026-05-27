@@ -76,6 +76,26 @@ class TestAppStartup:
         assert get.status_code == 200
         assert get.json()["job_id"] == job_id
 
+    def test_combined_timings_unknown_job_returns_404(self, client):
+        resp = client.get("/api/v1/combined/nonexistent-job-id/timings")
+        assert resp.status_code == 404
+
+    def test_combined_timings_known_job_returns_structured_timing(self, client):
+        # Submit a job, then immediately fetch its timing breakdown. The job is
+        # still pending/running so totals may be null, but the structure must be
+        # present and match the job_id — same data that lands in run_timings.log.
+        post = client.post("/api/v1/combined/", json={"url": "https://example.com"})
+        job_id = post.json()["job_id"]
+        resp = client.get(f"/api/v1/combined/{job_id}/timings")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["job_id"] == job_id
+        assert body["url"] == "https://example.com/"
+        # Timing keys exposed for the frontend, mirroring the log block.
+        for key in ("queue_wait_s", "run_s", "wall_s", "stages", "submitted_at"):
+            assert key in body
+        assert isinstance(body["stages"], list)
+
     def test_combined_post_rejects_invalid_success_criteria_id(self, client):
         resp = client.post(
             "/api/v1/combined/",

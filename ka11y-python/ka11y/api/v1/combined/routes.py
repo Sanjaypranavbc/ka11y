@@ -5,6 +5,7 @@ FastAPI route handlers for the combined audit endpoint.
 
   POST /combined/                  202  Submit audit job
   GET  /combined/{job_id}          200  Poll status / retrieve result
+  GET  /combined/{job_id}/timings  200  Per-stage timing breakdown (JSON)
   GET  /combined/{job_id}/stream   200  SSE real-time stage events
   GET  /combined/{job_id}/image         Serve a job's image artifact
 """
@@ -25,6 +26,8 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from typing import AsyncGenerator
+
+from ka11y.utils.run_timing import compute_run_timing
 
 from .models import CombinedRequest, JobStatusResponse
 from .runner import _run_job
@@ -282,6 +285,40 @@ async def get_combined_audit(job_id: str):
                     )
 
     return job
+
+
+@router.get("/{job_id}/timings")
+async def get_combined_audit_timings(job_id: str):
+    """
+    Return the per-stage timing breakdown for a combined audit job as JSON.
+
+    This is the same data appended to ``logs/run_timings.log`` when the job
+    finishes (queue wait, per-stage durations, run/wall totals), derived from
+    the timestamps the runner/stage-events already recorded — so the API and
+    the log file never drift. Safe to poll mid-run: unfinished stages report
+    ``duration_s: null`` and the run/wall totals fill in once the job completes.
+    """
+    async with _get_job_lock(job_id):
+        snapshot = _jobs.get(job_id)
+        if not snapshot:
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        job = dict(snapshot)
+        if "stages" in job:
+            job["stages"] = [dict(s) for s in job["stages"]]
+
+    result = job.get("result") or {}
+    return compute_run_timing(
+        job_id=job_id,
+        url=job.get("url", ""),
+        status=job.get("status", "unknown"),
+        stages=job.get("stages", []),
+        submitted_at=job.get("submitted_at"),
+        run_started_at=job.get("run_started_at"),
+        completed_at=job.get("completed_at"),
+        lang=job.get("lang"),
+        summary=result.get("summary"),
+        error_stage=job.get("error_stage"),
+    )
 
 
 @router.get("/{job_id}/image")

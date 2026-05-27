@@ -76,6 +76,112 @@ def _fmt_dur(seconds: Optional[float]) -> str:
     return "—" if seconds is None else f"{seconds:.2f}s"
 
 
+def _round(seconds: Optional[float]) -> Optional[float]:
+    return None if seconds is None else round(seconds, 2)
+
+
+def compute_run_timing(
+    *,
+    job_id: str,
+    url: str,
+    status: str,
+    stages: list[dict[str, Any]],
+    submitted_at: Optional[str],
+    run_started_at: Optional[str],
+    completed_at: Optional[str],
+    lang: Optional[str] = None,
+    summary: Optional[dict[str, Any]] = None,
+    error_stage: Optional[str] = None,
+) -> dict[str, Any]:
+    """Build the structured timing for a run from already-recorded timestamps.
+
+    This is the single source of truth shared by :func:`log_run_timing` (which
+    formats it into the text log) and the ``GET /combined/{job_id}/timings``
+    API endpoint (which returns it as JSON), so the file and the API never drift.
+
+    Measures nothing itself — it only derives durations from the timestamps the
+    runner/stage-events already captured, so it is safe to call at any time
+    (including mid-run, where unfinished stages report ``duration_s: null``).
+    """
+    stage_rows: list[dict[str, Any]] = []
+    for s in stages or []:
+        stage_rows.append(
+            {
+                "name": s.get("name"),
+                "status": s.get("status"),
+                "started_at": s.get("started_at"),
+                "completed_at": s.get("completed_at"),
+                "duration_s": _round(_delta_s(s.get("started_at"), s.get("completed_at"))),
+                "findings_count": s.get("findings_count"),
+            }
+        )
+
+    return {
+        "job_id": job_id,
+        "url": url,
+        "status": status,
+        "lang": lang,
+        "error_stage": error_stage,
+        "submitted_at": submitted_at,
+        "run_started_at": run_started_at,
+        "completed_at": completed_at,
+        "queue_wait_s": _round(_delta_s(submitted_at, run_started_at)),
+        "run_s": _round(_delta_s(run_started_at, completed_at)),
+        "wall_s": _round(_delta_s(submitted_at, completed_at)),
+        "stages": stage_rows,
+        "summary": summary or None,
+    }
+
+
+def _format_run_timing_block(data: dict[str, Any]) -> str:
+    """Render a :func:`compute_run_timing` dict into one human-readable block."""
+    summary = data.get("summary") or {}
+    score = summary.get("score")
+    score_s = "—" if score is None else f"{score}"
+
+    lines: list[str] = []
+    lines.append("=" * 78)
+    lines.append(
+        f"RUN {data.get('completed_at') or datetime.utcnow().isoformat()}  "
+        f"job={str(data.get('job_id', ''))[:8]}  status={data.get('status')}  "
+        f"lang={data.get('lang') or '—'}"
+    )
+    lines.append(f"  url={data.get('url')}")
+    if summary:
+        lines.append(
+            f"  score={score_s}  findings={summary.get('total_findings', '—')} "
+            f"(V={summary.get('violations', '—')} "
+            f"NR={summary.get('needs_review', '—')} "
+            f"P={summary.get('passes', '—')})  "
+            f"pages={summary.get('page_count', '—')}"
+        )
+    if data.get("error_stage"):
+        lines.append(f"  failed_stage={data['error_stage']}")
+
+    # Per-stage table
+    lines.append(
+        f"  {'Stage':<{_W_STAGE}}{'Status':<{_W_STATUS}}"
+        f"{'Duration':>{_W_DUR}}{'Findings':>{_W_FIND}}"
+    )
+    lines.append(f"  {'-' * (_W_STAGE + _W_STATUS + _W_DUR + _W_FIND)}")
+    for s in data.get("stages") or []:
+        name = str(s.get("name", "?"))[:_W_STAGE - 1]
+        st = str(s.get("status", "?"))[:_W_STATUS - 1]
+        fc = s.get("findings_count")
+        fc_s = "—" if fc is None else str(fc)
+        lines.append(
+            f"  {name:<{_W_STAGE}}{st:<{_W_STATUS}}"
+            f"{_fmt_dur(s.get('duration_s')):>{_W_DUR}}{fc_s:>{_W_FIND}}"
+        )
+
+    lines.append(f"  {'-' * (_W_STAGE + _W_STATUS + _W_DUR + _W_FIND)}")
+    lines.append(f"  queue_wait (submitted→start) : {_fmt_dur(data.get('queue_wait_s'))}")
+    lines.append(f"  RUN        (start→completed) : {_fmt_dur(data.get('run_s'))}")
+    lines.append(f"  WALL       (submitted→done)  : {_fmt_dur(data.get('wall_s'))}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 def log_run_timing(
     *,
     job_id: str,
@@ -95,57 +201,23 @@ def log_run_timing(
     measure anything itself, so it adds no overhead to the audit path.
     """
     try:
-        queue_wait = _delta_s(submitted_at, run_started_at)
-        run_dur = _delta_s(run_started_at, completed_at)
-        wall = _delta_s(submitted_at, completed_at)
-
-        summary = summary or {}
-        score = summary.get("score")
-        score_s = "—" if score is None else f"{score}"
-
-        lines: list[str] = []
-        lines.append("=" * 78)
-        head = (
-            f"RUN {completed_at or datetime.utcnow().isoformat()}  "
-            f"job={job_id[:8]}  status={status}  lang={lang or '—'}"
+        data = compute_run_timing(
+            job_id=job_id,
+            url=url,
+            status=status,
+            stages=stages,
+            submitted_at=submitted_at,
+            run_started_at=run_started_at,
+            completed_at=completed_at,
+            lang=lang,
+            summary=summary,
+            error_stage=error_stage,
         )
-        lines.append(head)
-        lines.append(f"  url={url}")
-        if summary:
-            lines.append(
-                f"  score={score_s}  findings={summary.get('total_findings', '—')} "
-                f"(V={summary.get('violations', '—')} "
-                f"NR={summary.get('needs_review', '—')} "
-                f"P={summary.get('passes', '—')})  "
-                f"pages={summary.get('page_count', '—')}"
-            )
-        if error_stage:
-            lines.append(f"  failed_stage={error_stage}")
+        wall = data["wall_s"]
+        run_dur = data["run_s"]
+        queue_wait = data["queue_wait_s"]
 
-        # Per-stage table
-        lines.append(
-            f"  {'Stage':<{_W_STAGE}}{'Status':<{_W_STATUS}}"
-            f"{'Duration':>{_W_DUR}}{'Findings':>{_W_FIND}}"
-        )
-        lines.append(f"  {'-' * (_W_STAGE + _W_STATUS + _W_DUR + _W_FIND)}")
-        for s in stages or []:
-            name = str(s.get("name", "?"))[:_W_STAGE - 1]
-            st = str(s.get("status", "?"))[:_W_STATUS - 1]
-            dur = _delta_s(s.get("started_at"), s.get("completed_at"))
-            fc = s.get("findings_count")
-            fc_s = "—" if fc is None else str(fc)
-            lines.append(
-                f"  {name:<{_W_STAGE}}{st:<{_W_STATUS}}"
-                f"{_fmt_dur(dur):>{_W_DUR}}{fc_s:>{_W_FIND}}"
-            )
-
-        lines.append(f"  {'-' * (_W_STAGE + _W_STATUS + _W_DUR + _W_FIND)}")
-        lines.append(f"  queue_wait (submitted→start) : {_fmt_dur(queue_wait)}")
-        lines.append(f"  RUN        (start→completed) : {_fmt_dur(run_dur)}")
-        lines.append(f"  WALL       (submitted→done)  : {_fmt_dur(wall)}")
-        lines.append("")
-
-        block = "\n".join(lines) + "\n"
+        block = _format_run_timing_block(data)
         path = _log_path()
         with _write_lock:
             path.parent.mkdir(parents=True, exist_ok=True)
