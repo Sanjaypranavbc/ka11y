@@ -1279,10 +1279,22 @@ async def _run_python_stages(
         )
     )
 
-    # 1. Run universal snapshot first
+    # 1. Run universal snapshot first.
+    #
+    # The snapshot now ALSO carries per-page pipeline contexts, so building it
+    # at ``max_depth > 0`` is the only way the unified pipeline (1.1.1, 1.4.3,
+    # 1.4.5, 1.4.6, 1.4.11, 2.4.7, 2.4.13, 2.5.3, 2.5.8) covers more than the
+    # entry URL. Without that, deep pages were silently losing every pipeline
+    # finding even though the BFS visited them. The image-only ``max_depth=0``
+    # path remains snapshot-free (the pipeline falls back to its single-URL
+    # navigation, which preserves the previous behaviour for that case).
     snapshot = None
     discovered_urls = [url]
-    if static_rules_enabled or (rendered_layout_enabled and max_depth > 0):
+    if (
+        static_rules_enabled
+        or (rendered_layout_enabled and max_depth > 0)
+        or max_depth > 0
+    ):
         snapshot = await _load_universal_snapshot(
             url=url,
             output_dir=output_dir,
@@ -1323,7 +1335,9 @@ async def _run_python_stages(
                 url, output_dir, run_form_audit, job_id, snapshot_task, step_logger
             )
         ),
-        # MUTED: _stage_label_in_name_universal is replaced by Pipeline 2.5.3
+        # MUTED: _stage_label_in_name_universal is replaced by Pipeline 2.5.3.
+        # Snapshot is passed so the pipeline evaluates every BFS-discovered page,
+        # not just the entry URL; with no snapshot it falls back to single-URL mode.
         _timed(
             _run_pipeline_stage(
                 url,
@@ -1332,6 +1346,7 @@ async def _run_python_stages(
                 run_label_in_name_audit=run_label_in_name_audit,
                 run_target_size_audit=run_target_size_audit,
                 lang=lang,
+                snapshot=snapshot,
             )
         ),
         _timed(

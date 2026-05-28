@@ -9,11 +9,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from ka11y.crawler.policy import CrawlPolicy
 from ka11y.i18n.loader import (
     get_level_labels,
     get_severity_labels,
     get_status_labels,
 )
+
+# Single shared policy used purely for URL canonicalization in the report.
+# Mirrors the BFS defaults so the page table groups variants of the same page
+# (http vs https, trailing-slash, tracker params) into one row.
+_REPORT_URL_POLICY = CrawlPolicy()
 
 
 def _build_report(
@@ -67,9 +73,16 @@ def _build_report(
     # lists. The page entries reference the same finding objects as the flat lists.
     def _page_of(f: Dict) -> str:
         element = f.get("element")
-        if isinstance(element, dict) and element.get("page_url"):
-            return element["page_url"]
-        return url
+        raw = (
+            element["page_url"]
+            if isinstance(element, dict) and element.get("page_url")
+            else url
+        )
+        # Canonicalize the URL the same way the BFS does so http://x/ and
+        # https://x and https://x/ all bucket into the same page row instead
+        # of appearing as separate rows in the page table.
+        normalized = _REPORT_URL_POLICY.normalize_url(raw)
+        return normalized or raw
 
     by_page: Dict[str, Dict[str, int]] = {}
     page_buckets: Dict[str, Dict[str, List[Dict]]] = {}
