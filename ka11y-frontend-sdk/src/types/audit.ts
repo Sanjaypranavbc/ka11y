@@ -166,6 +166,7 @@ export interface StageTiming {
   started_at: string | null;
   completed_at: string | null;
   duration_s: number | null;
+  crawler_duration_s: number | null;
   findings_count: number | null;
 }
 

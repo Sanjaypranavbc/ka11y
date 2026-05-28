@@ -95,6 +95,11 @@ export function StageTimingsCard({ timing }: Props) {
                         {s.findings_count} {t("timing.findings")}
                       </span>
                     )}
+                    {s.crawler_duration_s !== null && s.crawler_duration_s !== undefined && (
+                      <span className="hidden sm:inline mr-3 text-muted-foreground/70">
+                        {t("timing.crawler")}: {fmt(s.crawler_duration_s)}
+                      </span>
+                    )}
                     <span className="text-foreground font-semibold">{fmt(s.duration_s)}</span>
                   </span>
                 </div>

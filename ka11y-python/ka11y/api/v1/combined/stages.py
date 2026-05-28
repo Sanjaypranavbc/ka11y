@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -47,7 +48,11 @@ from ka11y.utils.crawler_settings import (
     get_max_warning_samples,
     select_ocr_candidate_paths,
 )
-from ka11y.accessibility.pipeline.pipeline_stage import _run_pipeline_stage
+from ka11y.accessibility.pipeline.pipeline_stage import (
+    _run_pipeline_stage as _real_run_pipeline_stage,
+)
+
+
 from ka11y.utils.step_logger import ExecutionStepLogger
 from ka11y.utils.crawler_timing import time_crawler
 
@@ -73,6 +78,7 @@ from .findings import (
     _sensory_to_findings,
 )
 from .stage_events import (
+    _record_crawler_time,
     _stage_complete,
     _stage_error_and_warn,
     _stage_start,
@@ -80,6 +86,48 @@ from .stage_events import (
 )
 from .store import _jobs
 from ka11y.crawler.universal_page import UniversalPageLoader
+
+
+async def _run_pipeline_stage(
+    url: str,
+    job_id: str,
+    run_image_audit: bool,
+    run_label_in_name_audit: bool,
+    run_target_size_audit: bool = True,
+    run_focus_audit: bool = True,
+    run_contrast_audit: bool = True,
+    lang: str = "en",
+    snapshot: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
+    """Wrapper to record stage lifecycle and crawler time for the pipeline."""
+    _stage_start(job_id, "pipeline")
+    if snapshot:
+        crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+        if crawl_dur:
+            _record_crawler_time(job_id, "pipeline", crawl_dur)
+    else:
+        # Single-URL fallback timing is handled inside _real_run_pipeline_stage
+        # but we don't have an easy way to get it back without modifying it.
+        # For now, if no snapshot, we just let it report 0 or the full duration.
+        pass
+
+    try:
+        findings = await _real_run_pipeline_stage(
+            url=url,
+            job_id=job_id,
+            run_image_audit=run_image_audit,
+            run_label_in_name_audit=run_label_in_name_audit,
+            run_target_size_audit=run_target_size_audit,
+            run_focus_audit=run_focus_audit,
+            run_contrast_audit=run_contrast_audit,
+            lang=lang,
+            snapshot=snapshot,
+        )
+        _stage_complete(job_id, "pipeline", len(findings))
+        return findings
+    except Exception as e:
+        _stage_error_and_warn(job_id, "pipeline", e)
+        return []
 
 # Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
 _STAGE_TIMEOUT_SECONDS = 600
@@ -251,11 +299,13 @@ async def _stage_image_audit(
         )
 
         async def _crawl_and_save() -> None:
+            start_crawl = time.perf_counter()
             async with time_crawler(
                 output_dir, "image", url,
                 pages_getter=lambda: len(image_crawler.images_data),
             ):
                 await image_crawler.crawl_page(discovered_urls=discovered_urls)
+            _record_crawler_time(job_id, "image_audit", time.perf_counter() - start_crawl)
             await asyncio.to_thread(image_crawler.save_results)
 
         try:
@@ -434,10 +484,12 @@ async def _stage_form_audit(
         form_crawler = AsyncFormCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
+        start_crawl = time.perf_counter()
         async with time_crawler(
             output_dir, "form", url, pages_getter=lambda: len(form_inputs or [])
         ):
             form_inputs = await form_crawler.crawl()
+        _record_crawler_time(job_id, "form_audit", time.perf_counter() - start_crawl)
         await asyncio.to_thread(form_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -497,10 +549,12 @@ async def _stage_sensory_audit(
             output_dir=str(output_dir),
             max_depth=max_depth,
         )
+        start_crawl = time.perf_counter()
         async with time_crawler(
             output_dir, "sensory", url, pages_getter=lambda: len(elements or [])
         ):
             elements = await sensory_crawler.crawl()
+        _record_crawler_time(job_id, "sensory_audit", time.perf_counter() - start_crawl)
         await asyncio.to_thread(sensory_crawler.save_raw_json)
 
         # ── Audit ──────────────────────────────────────────────────────────
@@ -545,11 +599,13 @@ async def _stage_label_in_name(
         interactive_crawler = InteractiveElementCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
+        start_crawl = time.perf_counter()
         async with time_crawler(
             output_dir, "interactive", url,
             pages_getter=lambda: len(interactive_elements or []),
         ):
             interactive_elements = await interactive_crawler.crawl()
+        _record_crawler_time(job_id, "label_in_name", time.perf_counter() - start_crawl)
         await asyncio.to_thread(interactive_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -589,11 +645,13 @@ async def _stage_pause_stop_hide(
         moving_crawler = MovingContentCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
+        start_crawl = time.perf_counter()
         async with time_crawler(
             output_dir, "pause_stop_hide", url,
             pages_getter=lambda: len(moving_items or []),
         ):
             moving_items = await moving_crawler.crawl()
+        _record_crawler_time(job_id, "pause_stop_hide", time.perf_counter() - start_crawl)
         await asyncio.to_thread(moving_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -633,10 +691,12 @@ async def _stage_target_size(
         ts_crawler = TargetSizeCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
+        start_crawl = time.perf_counter()
         async with time_crawler(
             output_dir, "target_size", url, pages_getter=lambda: len(ts_items or [])
         ):
             ts_items = await ts_crawler.crawl()
+        _record_crawler_time(job_id, "target_size", time.perf_counter() - start_crawl)
         await asyncio.to_thread(ts_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -676,10 +736,12 @@ async def _stage_text_spacing(
         ts_crawler = AsyncTextSpacingCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
+        start_crawl = time.perf_counter()
         async with time_crawler(
             output_dir, "text_spacing", url, pages_getter=lambda: len(items or [])
         ):
             items = await ts_crawler.crawl()
+        _record_crawler_time(job_id, "text_spacing", time.perf_counter() - start_crawl)
         await asyncio.to_thread(ts_crawler.save_json)
 
         findings: List[Dict] = []
@@ -735,11 +797,13 @@ async def _stage_rendered_layout_audit(
         )
 
         crawler = RenderedLayoutCrawler(base_url=url, output_dir=str(output_dir))
+        start_crawl = time.perf_counter()
         async with time_crawler(
             output_dir, "rendered_layout", url,
             pages_getter=lambda: len(discovered_urls or []),
         ):
             raw = await crawler.crawl(discovered_urls=discovered_urls)
+        _record_crawler_time(job_id, "rendered_layout_audit", time.perf_counter() - start_crawl)
         await asyncio.to_thread(crawler.save_raw_json)
 
         records = await asyncio.to_thread(
@@ -825,10 +889,12 @@ async def _stage_media_audit(
         media_crawler = AsyncMediaCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
+        start_crawl = time.perf_counter()
         async with time_crawler(
             output_dir, "media", url, pages_getter=lambda: len(media_items or [])
         ):
             media_items = await media_crawler.crawl()
+        _record_crawler_time(job_id, "media_audit", time.perf_counter() - start_crawl)
         await asyncio.to_thread(media_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -872,6 +938,7 @@ async def _load_universal_snapshot(
     # UniversalPageLoader is imported at module level so tests can patch
     # `stages.UniversalPageLoader`; the call site below resolves it from the
     # module namespace.
+    start_crawl = time.perf_counter()
     async with time_crawler(
         output_dir, "universal_snapshot", url,
         pages_getter=lambda: len(getattr(raw_snapshot, "page_summaries", []) or []),
@@ -884,6 +951,8 @@ async def _load_universal_snapshot(
             step_logger=step_logger,
             policy=policy,
         )
+    crawl_dur = time.perf_counter() - start_crawl
+    _jobs[job_id]["universal_crawler_duration_s"] = round(crawl_dur, 2)
     await asyncio.to_thread(UniversalPageLoader.save_snapshot, raw_snapshot, output_dir)
     normalized = await asyncio.to_thread(
         SnapshotNormalizer.normalize,
@@ -938,6 +1007,10 @@ async def _stage_form_audit_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "form_audit")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "form_audit", crawl_dur)
+
     if not run_form_audit:
         _stage_complete(job_id, "form_audit", 0)
         return []
@@ -978,6 +1051,10 @@ async def _stage_label_in_name_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "label_in_name")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "label_in_name", crawl_dur)
+
     if not run_label_in_name_audit:
         _stage_complete(job_id, "label_in_name", 0)
         return []
@@ -1016,6 +1093,10 @@ async def _stage_pause_stop_hide_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "pause_stop_hide")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "pause_stop_hide", crawl_dur)
+
     if not run_pause_stop_hide_audit:
         _stage_complete(job_id, "pause_stop_hide", 0)
         return []
@@ -1059,6 +1140,10 @@ async def _stage_target_size_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "target_size")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "target_size", crawl_dur)
+
     if not run_target_size_audit:
         _stage_complete(job_id, "target_size", 0)
         return []
@@ -1097,6 +1182,10 @@ async def _stage_text_spacing_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "text_spacing")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "text_spacing", crawl_dur)
+
     if not run_text_spacing_audit:
         _stage_complete(job_id, "text_spacing", 0)
         return []
@@ -1137,6 +1226,10 @@ async def _stage_media_audit_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "media_audit")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "media_audit", crawl_dur)
+
     if not run_media_audit and not run_captions_audit:
         _stage_complete(job_id, "media_audit", 0)
         return []
@@ -1177,6 +1270,10 @@ async def _stage_sensory_audit_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "sensory_audit")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "sensory_audit", crawl_dur)
+
     if not run_sensory_audit:
         _stage_complete(job_id, "sensory_audit", 0)
         return []

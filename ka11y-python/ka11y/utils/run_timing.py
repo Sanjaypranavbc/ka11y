@@ -42,6 +42,7 @@ _write_lock = threading.Lock()
 _W_STAGE = 26
 _W_STATUS = 11
 _W_DUR = 10
+_W_CRAWL = 10
 _W_FIND = 9
 
 
@@ -112,6 +113,7 @@ def compute_run_timing(
                 "started_at": s.get("started_at"),
                 "completed_at": s.get("completed_at"),
                 "duration_s": _round(_delta_s(s.get("started_at"), s.get("completed_at"))),
+                "crawler_duration_s": s.get("crawler_duration_s"),
                 "findings_count": s.get("findings_count"),
             }
         )
@@ -161,20 +163,22 @@ def _format_run_timing_block(data: dict[str, Any]) -> str:
     # Per-stage table
     lines.append(
         f"  {'Stage':<{_W_STAGE}}{'Status':<{_W_STATUS}}"
-        f"{'Duration':>{_W_DUR}}{'Findings':>{_W_FIND}}"
+        f"{'Duration':>{_W_DUR}}{'Crawl':>{_W_CRAWL}}{'Findings':>{_W_FIND}}"
     )
-    lines.append(f"  {'-' * (_W_STAGE + _W_STATUS + _W_DUR + _W_FIND)}")
+    lines.append(f"  {'-' * (_W_STAGE + _W_STATUS + _W_DUR + _W_CRAWL + _W_FIND)}")
     for s in data.get("stages") or []:
-        name = str(s.get("name", "?"))[:_W_STAGE - 1]
-        st = str(s.get("status", "?"))[:_W_STATUS - 1]
+        name = str(s.get("name", "?"))[: _W_STAGE - 1]
+        st = str(s.get("status", "?"))[: _W_STATUS - 1]
         fc = s.get("findings_count")
         fc_s = "—" if fc is None else str(fc)
+        crawl = s.get("crawler_duration_s")
+        crawl_s = _fmt_dur(crawl) if crawl is not None else "—"
         lines.append(
             f"  {name:<{_W_STAGE}}{st:<{_W_STATUS}}"
-            f"{_fmt_dur(s.get('duration_s')):>{_W_DUR}}{fc_s:>{_W_FIND}}"
+            f"{_fmt_dur(s.get('duration_s')):>{_W_DUR}}{crawl_s:>{_W_CRAWL}}{fc_s:>{_W_FIND}}"
         )
 
-    lines.append(f"  {'-' * (_W_STAGE + _W_STATUS + _W_DUR + _W_FIND)}")
+    lines.append(f"  {'-' * (_W_STAGE + _W_STATUS + _W_DUR + _W_CRAWL + _W_FIND)}")
     lines.append(f"  queue_wait (submitted→start) : {_fmt_dur(data.get('queue_wait_s'))}")
     lines.append(f"  RUN        (start→completed) : {_fmt_dur(data.get('run_s'))}")
     lines.append(f"  WALL       (submitted→done)  : {_fmt_dur(data.get('wall_s'))}")

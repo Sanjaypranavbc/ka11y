@@ -230,3 +230,18 @@ def _stage_warn(job_id: str, message: str) -> None:
     """
     logger.warning(f"[combined] {message}")
     _jobs[job_id].setdefault("warnings", []).append(message)
+
+
+def _record_crawler_time(job_id: str, stage_name: str, duration_s: float) -> None:
+    """Record the duration of the crawler pass for a given stage.
+
+    Visible in the timing breakdown on the frontend and the run_timings.log.
+    """
+    job = _jobs.get(job_id)
+    if not job:
+        return
+    for s in job.get("stages", []):
+        # We target the 'running' stage of this name (usually current).
+        if s.get("name") == stage_name and s.get("status") == "running":
+            s["crawler_duration_s"] = round(duration_s, 2)
+            break

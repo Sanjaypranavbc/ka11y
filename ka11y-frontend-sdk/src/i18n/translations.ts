@@ -85,6 +85,7 @@ export const translations = {
 
     // ── Stage labels (progress panel full) ───────────────────────────────────
     "stageFull.axe_core":              "axe-core WCAG scan",
+    "stageFull.pipeline":              "Unified pipeline",
     "stageFull.image_audit":           "Image alt-text (1.1.1)",
     "stageFull.form_audit":            "Form fields (3.3.1 / 3.3.2)",
     "stageFull.label_in_name":         "Label in name (2.5.3)",
@@ -139,6 +140,7 @@ export const translations = {
     "timing.queueWait":        "Queue wait",
     "timing.runTime":          "Run",
     "timing.wallTime":         "Wall",
+    "timing.crawler":          "Crawl",
     "timing.findings":         "findings",
     "timing.hint":             "Wall is the real elapsed time. Stages overlap (axe-core and the Python checks run concurrently), so per-stage durations don't add up to it. Same data as the server's run_timings.log.",
 
@@ -323,6 +325,7 @@ export const translations = {
 
     // ── Stage labels (progress panel full) ───────────────────────────────────
     "stageFull.axe_core":              "axe-core WCAGスキャン",
+    "stageFull.pipeline":              "統合パイプライン",
     "stageFull.image_audit":           "画像代替テキスト (1.1.1)",
     "stageFull.form_audit":            "フォームフィールド (3.3.1 / 3.3.2)",
     "stageFull.label_in_name":         "名前内のラベル (2.5.3)",
@@ -377,6 +380,7 @@ export const translations = {
     "timing.queueWait":        "待機時間",
     "timing.runTime":          "実行",
     "timing.wallTime":         "全体",
+    "timing.crawler":          "クロール",
     "timing.findings":         "件",
     "timing.hint":             "「全体」が実際の経過時間です。ステージは並行実行（axe-core とPythonチェックが同時実行）されるため、各ステージの合計とは一致しません。サーバーの run_timings.log と同じデータです。",
 
