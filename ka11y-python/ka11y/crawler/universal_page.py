@@ -342,8 +342,12 @@ class UniversalPageLoader:
                 page=page, page_url=url, output=output, step_logger=step_logger
             )
 
-            # Links extraction can just use the final state
-            links = await cls._extract_links(page, root_url=url)
+            # Links extraction can just use the final state. We hand the
+            # active CrawlPolicy in so its normalize_url drives href dedup;
+            # the previous code called ``cls._normalize_url`` which never
+            # existed and silently returned an empty list, so the universal
+            # BFS only ever visited the entry URL even at max_depth>0.
+            links = await cls._extract_links(page, root_url=url, policy=policy)
 
             # Limit links per page
             if len(links) > policy.max_links_per_page:
@@ -736,7 +740,9 @@ class UniversalPageLoader:
             }
 
     @classmethod
-    async def _extract_links(cls, page: Page, root_url: str) -> List[str]:
+    async def _extract_links(
+        cls, page: Page, root_url: str, policy: CrawlPolicy
+    ) -> List[str]:
         try:
             raw_links: List[str] = await page.evaluate(_LINK_EXTRACT_JS)
         except Exception:
@@ -745,8 +751,10 @@ class UniversalPageLoader:
         resolved: List[str] = []
         for href in raw_links:
             try:
-                url = cls._normalize_url(urljoin(page.url or root_url, href))
+                url = policy.normalize_url(urljoin(page.url or root_url, href))
             except Exception:
+                continue
+            if not url:
                 continue
             if not cls._is_same_origin(root_url, url):
                 continue

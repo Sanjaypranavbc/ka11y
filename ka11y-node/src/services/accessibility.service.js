@@ -611,20 +611,19 @@ class AccessibilityService {
         `incomplete: ${(axeResults.incomplete || []).length}`
       );
 
-      let customResults = [];
       // Per-page custom-checks budget. Kept modest so one page can't dominate a
       // multi-page crawl's overall time budget (see boundedBfs maxTotalMs).
+      // The budget is now handed to runAll which splits it between the static
+      // and interactive phases — previously a single Promise.race over runAll
+      // forfeited *all* completed work when the timer fired, so on heavy deep
+      // pages we lost focus-visible / focus-appearance / on-focus / on-input
+      // / keyboard-trap findings entirely. Splitting preserves partial work.
       const customChecksTimeoutMs = this._config.axe.customChecksTimeoutMs;
-      let timeoutId;
+      let customResults = [];
       try {
-        const timeoutPromise = new Promise((_, reject) => {
-          timeoutId = setTimeout(() => reject(new Error('Custom checks timed out')), customChecksTimeoutMs);
-        });
-        customResults = await Promise.race([runAll(page, { lang }), timeoutPromise]);
+        customResults = await runAll(page, { lang, timeoutMs: customChecksTimeoutMs });
       } catch (err) {
-        this._logger.warn(`[flat] Custom checks failed or timed out for ${url}: ${err.message}`);
-      } finally {
-        clearTimeout(timeoutId);
+        this._logger.warn(`[flat] Custom checks failed for ${url}: ${err.message}`);
       }
 
       const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);

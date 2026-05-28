@@ -24,9 +24,14 @@ const config = {
 
   axe: {
     timeoutMs: parseInt(process.env.AXE_TIMEOUT_MS) || 30_000,
-    // Per-page custom-checks budget (ms). Modest so one page can't dominate a
-    // multi-page crawl. Was 180_000 hard-coded; lowered + made tunable.
-    customChecksTimeoutMs: parseInt(process.env.CUSTOM_CHECKS_TIMEOUT_MS) || 60_000,
+    // Per-page custom-checks budget (ms). Split 60/40 inside runAll between
+    // static and interactive phases so partial results survive a timeout (the
+    // previous single-budget Promise.race forfeited every check on a slow page).
+    // 90s default keeps the multi-page crawl bounded while giving heavy pages
+    // like kao.com/global/en enough headroom for the interactive focus checks
+    // to surface 2.4.7 / 2.4.13 findings. Was 60_000; bumped after observing
+    // deep-page coverage drops on real sites.
+    customChecksTimeoutMs: parseInt(process.env.CUSTOM_CHECKS_TIMEOUT_MS) || 90_000,
     // Overall multi-page (flat) crawl budget (ms). MUST stay below the Python
     // combined runner's _call_node_flat HTTP timeout (300s) so a deep crawl
     // returns partial findings instead of the caller timing out and discarding
