@@ -75,10 +75,11 @@ async def bounded_bfs(
         url = policy.normalize_url(raw_url)
         if not url or url in visited:
             continue
-        visited.add(url)
 
         if not policy.is_allowed(url, base_url):
             # Off-origin / external link — skipped when internal_links is on.
+            # Keep it out of ``visited`` so the dedup set tracks only URLs we
+            # actually attempted to crawl.
             continue
 
         if pages_done >= policy.max_pages:
@@ -88,6 +89,11 @@ async def bounded_bfs(
                 policy.max_pages,
             )
             break
+
+        # Mark visited only when we're about to crawl: ``len(visited)`` then
+        # equals the number of pages actually attempted (was previously
+        # ``max_pages + 1`` after the final iteration).
+        visited.add(url)
 
         page = await context.new_page()
         links: List[str] = []

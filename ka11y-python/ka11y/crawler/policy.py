@@ -51,9 +51,20 @@ class CrawlPolicy(BaseModel):
 
         parsed = urlparse(url)
 
-        # 1. Scheme and netloc to lowercase
+        # 1. Build netloc from hostname + port (drops user:pass@ userinfo so
+        # credentials never leak into the visited set, logs, or report URLs).
+        # IPv6 hostnames need to be wrapped in square brackets when re-emitted
+        # in a netloc; `parsed.hostname` strips brackets and userinfo for us.
         scheme = parsed.scheme.lower()
-        netloc = parsed.netloc.lower()
+        host = (parsed.hostname or "").lower()
+        if host and ":" in host:
+            host_for_netloc = f"[{host}]"
+        else:
+            host_for_netloc = host
+        if parsed.port is not None and host_for_netloc:
+            netloc = f"{host_for_netloc}:{parsed.port}"
+        else:
+            netloc = host_for_netloc
         path = parsed.path
 
         # 2. Strip fragments
