@@ -438,15 +438,17 @@ class AsyncImageCrawler:
                     url, depth = queue.popleft()
                     normalized_url = policy.normalize_url(url)
 
-                    if normalized_url in self.visited_urls:
+                    if not normalized_url or normalized_url in self.visited_urls:
                         continue
-                    self.visited_urls.add(normalized_url)
-
-                    if len(self.visited_urls) > policy.max_pages:
+                    # Budget check runs BEFORE visited.add so visited_urls
+                    # tracks only URLs we actually attempted (was previously
+                    # ``max_pages + 1`` after the final break).
+                    if len(self.visited_urls) >= policy.max_pages:
                         logger.warning(
                             f"[image-crawler] Budget reached ({policy.max_pages} pages)"
                         )
                         break
+                    self.visited_urls.add(normalized_url)
 
                     console.print(
                         Panel(
