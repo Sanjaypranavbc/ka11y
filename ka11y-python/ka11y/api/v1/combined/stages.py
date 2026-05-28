@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -101,15 +102,18 @@ async def _run_pipeline_stage(
 ) -> List[Dict[str, Any]]:
     """Wrapper to record stage lifecycle and crawler time for the pipeline."""
     _stage_start(job_id, "pipeline")
+    start_crawl: Optional[float] = None
     if snapshot:
+        # Snapshot path: pipeline reuses the universal crawler's pass, so we
+        # report that same duration here rather than re-timing CPU work.
         crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
         if crawl_dur:
             _record_crawler_time(job_id, "pipeline", crawl_dur)
     else:
-        # Single-URL fallback timing is handled inside _real_run_pipeline_stage
-        # but we don't have an easy way to get it back without modifying it.
-        # For now, if no snapshot, we just let it report 0 or the full duration.
-        pass
+        # Single-URL fallback: ``_real_run_pipeline_stage`` opens its own page
+        # via ``_extract_contexts_for_url``. Time the call so the timing log
+        # shows the real browser work instead of an empty cell.
+        start_crawl = time.perf_counter()
 
     try:
         findings = await _real_run_pipeline_stage(
@@ -123,9 +127,13 @@ async def _run_pipeline_stage(
             lang=lang,
             snapshot=snapshot,
         )
+        if start_crawl is not None:
+            _record_crawler_time(job_id, "pipeline", time.perf_counter() - start_crawl)
         _stage_complete(job_id, "pipeline", len(findings))
         return findings
     except Exception as e:
+        if start_crawl is not None:
+            _record_crawler_time(job_id, "pipeline", time.perf_counter() - start_crawl)
         _stage_error_and_warn(job_id, "pipeline", e)
         return []
 
@@ -137,6 +145,40 @@ _STAGE_TIMEOUT_SECONDS = 600
 # Button/icon screenshots are now capped at 5 s each (crawler.py), so 300 s
 # handles up to ~60 stuck elements before we cut over to OCR on partial images.
 _CRAWL_TIMEOUT_SECONDS = 300
+
+# Process-wide queue for browser-heavy crawler stages. ``image_audit`` and
+# ``rendered_layout_audit`` each open their own Playwright contexts + image
+# buffers; with _MAX_CONCURRENT_JOBS=4 an unguarded depth>0 audit can spawn
+# 8 simultaneous BFS crawls and OOM-kill the container. The semaphore is
+# global (not per-job) so the surplus parks until a slot frees, regardless
+# of which job they belong to. Queue wait does NOT count against the stage
+# timeout — ``_heavy`` arms ``asyncio.wait_for`` only after acquiring the
+# slot, so a parked stage isn't killed for waiting its turn.
+_HEAVY_STAGE_CONCURRENCY = int(os.environ.get("KA11Y_HEAVY_STAGE_CONCURRENCY", "2"))
+_heavy_stage_sem: asyncio.Semaphore | None = None
+_heavy_stage_sem_loop: Any = None
+
+
+def _get_heavy_stage_sem() -> asyncio.Semaphore:
+    """Lazy per-event-loop semaphore so module import never touches the loop."""
+    global _heavy_stage_sem, _heavy_stage_sem_loop
+    current = asyncio.get_event_loop()
+    if _heavy_stage_sem is None or _heavy_stage_sem_loop is not current:
+        _heavy_stage_sem = asyncio.Semaphore(_HEAVY_STAGE_CONCURRENCY)
+        _heavy_stage_sem_loop = current
+    return _heavy_stage_sem
+
+
+async def _heavy(coro, *, timeout: float = _STAGE_TIMEOUT_SECONDS):
+    """Run ``coro`` while holding the global heavy-stage slot.
+
+    Replaces ``_timed`` for browser-heavy stages: the per-stage deadline is
+    armed *after* the semaphore is acquired so a stage queued behind another
+    heavy stage isn't penalised for the wait.
+    """
+    async with _get_heavy_stage_sem():
+        return await asyncio.wait_for(coro, timeout=timeout)
+
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -1412,7 +1454,7 @@ async def _run_python_stages(
         snapshot_task.set_result(None)
 
     results = await asyncio.gather(
-        _timed(
+        _heavy(
             _stage_image_audit(
                 url,
                 output_dir,
@@ -1472,7 +1514,7 @@ async def _run_python_stages(
                 step_logger,
             )
         ),
-        _timed(
+        _heavy(
             _stage_rendered_layout_audit(
                 url,
                 output_dir,
