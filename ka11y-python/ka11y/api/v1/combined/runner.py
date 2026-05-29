@@ -29,6 +29,7 @@ from ka11y.utils.step_logger import ExecutionStepLogger
 from .findings import _lang_ctx
 from ka11y.utils.lang_detector import detect_page_language
 from ka11y.utils.run_timing import log_run_timing
+from ka11y.utils.stage_timing import emit_summary as emit_stage_timing_summary
 from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import (
@@ -468,6 +469,9 @@ async def _run_job_body(
             lang=resolved_lang,
             summary=report.get("summary"),
         )
+        # Render the low-level per-(page, stage, rule) summary alongside the JSONL.
+        # Never raises — safe on missing rows.
+        emit_stage_timing_summary(job_id)
 
         logger.info(
             f"[combined] job {job_id} completed — "
@@ -542,6 +546,7 @@ async def _run_job_body(
             lang=_jobs.get(job_id, {}).get("lang"),
             error_stage=current_stage,
         )
+        emit_stage_timing_summary(job_id)
         step_logger.finalize(
             status="error",
             message="Combined audit job failed",

@@ -87,6 +87,7 @@ from .stage_events import (
 )
 from .store import _jobs
 from ka11y.crawler.universal_page import UniversalPageLoader
+from ka11y.utils import stage_timing
 
 
 async def _run_pipeline_stage(
@@ -338,6 +339,7 @@ async def _stage_image_audit(
             max_depth=max_depth,
             max_pages=max_pages,
             internal_links=internal_links,
+            job_id=job_id,
         )
 
         async def _crawl_and_save() -> None:
@@ -409,7 +411,13 @@ async def _stage_image_audit(
                 total=len(ocr_paths),
                 phase="ocr",
             )
-            await asyncio.to_thread(detector.scan_directory)
+            async with stage_timing.time_stage_async(
+                job_id,
+                "image_audit",
+                sub_stage="ocr_scan",
+                extra={"image_count": len(ocr_paths)},
+            ):
+                await asyncio.to_thread(detector.scan_directory)
             emit_stage_progress(
                 job_id,
                 "image_audit",
@@ -420,7 +428,12 @@ async def _stage_image_audit(
 
             saver = TextClassification(source_directory=image_crawler.output_dir)
             saver.results = detector.results
-            await asyncio.to_thread(saver.save_reports)
+            async with stage_timing.time_stage_async(
+                job_id,
+                "image_audit",
+                sub_stage="ocr_save_reports",
+            ):
+                await asyncio.to_thread(saver.save_reports)
 
             ocr_results = detector.results
             # filename → source page URL, so the contrast report can be grouped
@@ -432,8 +445,21 @@ async def _stage_image_audit(
                 if _fn and _pg:
                     page_by_filename[_fn] = _pg
             contrast_report = _build_contrast_report(ocr_results, page_by_filename)
-            for _, converter in OCR_RESULT_CONVERTERS:
-                findings.extend(converter(ocr_results, url))
+            # D-1 fix: thread page_by_filename through so contrast findings (1.4.3,
+            # 1.4.6) are stamped with the page the image actually came from, not
+            # the root URL. Without this, every contrast finding on a multi-page
+            # crawl collapses to the root URL and child pages silently lose them.
+            for rule_sc, converter in OCR_RESULT_CONVERTERS:
+                with stage_timing.time_stage(
+                    job_id,
+                    "image_audit",
+                    sub_stage="ocr_converter",
+                    rule=rule_sc,
+                    extra={"input_count": len(ocr_results)},
+                ):
+                    findings.extend(
+                        converter(ocr_results, url, page_by_filename=page_by_filename)
+                    )
             # 1.4.3/1.4.6 needs_review for images that failed screenshot capture
             findings.extend(
                 _contrast_capture_failed_to_findings(image_crawler.images_data, url)
@@ -462,8 +488,21 @@ async def _stage_image_audit(
                 phase="alt_audit",
             )
             image_audit_report = _build_image_audit_report(records)
-            for _, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
-                findings.extend(converter(records, url))
+            for status_key, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
+                # Strip the wcag_X_Y_Z_status prefix → "X.Y.Z" for the rule field.
+                _rule = (
+                    status_key.replace("wcag_", "")
+                    .replace("_status", "")
+                    .replace("_", ".")
+                )
+                with stage_timing.time_stage(
+                    job_id,
+                    "image_audit",
+                    sub_stage="image_audit_converter",
+                    rule=_rule,
+                    extra={"input_count": len(records)},
+                ):
+                    findings.extend(converter(records, url))
         else:
             records = []
 

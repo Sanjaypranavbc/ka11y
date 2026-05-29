@@ -131,7 +131,11 @@ class AsyncImageCrawler:
         max_depth: int,
         max_pages: int | None = None,
         internal_links: bool = True,
+        job_id: str | None = None,
     ):
+        # job_id is optional so existing callers (tests, scripts) don't break.
+        # When set, per-page timing rows are emitted to logs/timings/<job_id>.jsonl.
+        self.job_id = job_id
         self.base_url = base_url
         self.max_depth = max_depth
         # Page budget is request-driven (default 50). The hard ceiling that keeps a
@@ -414,10 +418,20 @@ class AsyncImageCrawler:
         )
 
         if discovered_urls:
-            # Seed the queue with pre-discovered URLs at depth 0
+            # D-3 fix: snapshot-fed mode. The universal snapshot already did BFS
+            # (bounded by max_depth + max_pages), so re-enqueuing children here
+            # would double the effective depth and exhaust max_pages before
+            # every snapshot URL is visited. We treat discovered_urls as the
+            # final, exact list of pages to crawl and turn off further BFS.
             queue: deque[Tuple[str, int]] = deque([(u, 0) for u in discovered_urls])
+            snapshot_fed = True
+            logger.info(
+                f"[image-crawler] snapshot-fed mode: {len(discovered_urls)} URL(s); "
+                f"BFS disabled, max_pages={self.max_pages}"
+            )
         else:
             queue: deque[Tuple[str, int]] = deque([(self.base_url, 0)])
+            snapshot_fed = False
 
         self.visited_urls.clear()
 
@@ -442,10 +456,18 @@ class AsyncImageCrawler:
                         continue
                     # Budget check runs BEFORE visited.add so visited_urls
                     # tracks only URLs we actually attempted (was previously
-                    # ``max_pages + 1`` after the final break).
-                    if len(self.visited_urls) >= policy.max_pages:
+                    # ``max_pages + 1`` after the final break). In snapshot-fed
+                    # mode the snapshot is the source of truth; the budget
+                    # ceiling is max(policy.max_pages, len(discovered_urls)) so
+                    # a low default cannot silently clip discovered pages.
+                    effective_max = (
+                        max(policy.max_pages, len(discovered_urls))
+                        if snapshot_fed
+                        else policy.max_pages
+                    )
+                    if len(self.visited_urls) >= effective_max:
                         logger.warning(
-                            f"[image-crawler] Budget reached ({policy.max_pages} pages)"
+                            f"[image-crawler] Budget reached ({effective_max} pages)"
                         )
                         break
                     self.visited_urls.add(normalized_url)
@@ -460,14 +482,29 @@ class AsyncImageCrawler:
                     )
 
                     try:
+                        # Per-page timing row for the image crawl (no-op when
+                        # KA11Y_STAGE_TIMING_DISABLE=1 or job_id is None).
+                        from ka11y.utils import stage_timing as _st
+
+                        _t0 = time.perf_counter()
                         new_links = await self._crawl_one_page(
                             context=context,
                             url=normalized_url,
                             depth=depth,
                             download_session=download_session,
                         )
+                        if self.job_id:
+                            _st.record(
+                                self.job_id,
+                                stage="image_audit",
+                                sub_stage="image_crawl_page",
+                                page_url=normalized_url,
+                                depth=depth,
+                                duration_ms=(time.perf_counter() - _t0) * 1000.0,
+                                item_count=len(new_links),
+                            )
 
-                        if depth < self.max_depth:
+                        if not snapshot_fed and depth < self.max_depth:
                             for link in new_links:
                                 if policy.is_allowed(link, self.base_url):
                                     queue.append((link, depth + 1))
@@ -475,6 +512,38 @@ class AsyncImageCrawler:
                     except Exception as e:
                         logger.error(f"Error crawling {normalized_url}: {e}")
 
+            # D-4: emit a single budget-summary row so reviewers can see when a
+            # crawl was clipped by max_pages without grep'ing the warning log.
+            if self.job_id:
+                try:
+                    from ka11y.utils import stage_timing as _st
+
+                    discovered_count = (
+                        len(discovered_urls) if discovered_urls else None
+                    )
+                    visited_count = len(self.visited_urls)
+                    clipped = (
+                        max(0, (discovered_count or 0) - visited_count)
+                        if discovered_count is not None
+                        else None
+                    )
+                    _st.record(
+                        self.job_id,
+                        stage="image_audit",
+                        sub_stage="image_crawl_budget",
+                        duration_ms=0.0,
+                        status="warning" if (clipped and clipped > 0) else "ok",
+                        item_count=visited_count,
+                        extra={
+                            "discovered": discovered_count,
+                            "audited": visited_count,
+                            "clipped": clipped,
+                            "max_pages": self.max_pages,
+                            "snapshot_fed": snapshot_fed,
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
             # Context close handled by leased_context's __aexit__.
             if not self.visited_urls:
                 raise ImageCrawlerNavigationError(

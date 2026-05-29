@@ -609,9 +609,18 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
     return findings
 
 
-def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
+def _contrast_to_findings(
+    ocr_results: list,
+    page_url: str,
+    page_by_filename: Optional[Dict[str, str]] = None,
+) -> List[Dict]:
+    # page_by_filename maps OCR result.filename → the page the image was scraped
+    # from; without it every contrast finding on a multi-page crawl collapses to
+    # the root page_url and child pages silently lose 1.4.3 findings in the UI.
     findings = []
+    _by_fn = page_by_filename or {}
     for result in ocr_results:
+        _pu = _by_fn.get(result.filename) or page_url
         if not result.has_text:
             continue
 
@@ -673,7 +682,7 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                         image_src=result.original_path,
                         image_reference=result.filename,
                         image_text=det.text,
-                        page_url=page_url,
+                        page_url=_pu,
                     )
                 )
                 continue
@@ -693,7 +702,7 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                         image_src=result.original_path,
                         image_reference=result.filename,
                         image_text=det.text,
-                        page_url=page_url,
+                        page_url=_pu,
                     )
                 )
             else:
@@ -712,15 +721,21 @@ def _contrast_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
                         image_src=result.original_path,
                         image_reference=result.filename,
                         image_text=det.text,
-                        page_url=page_url,
+                        page_url=_pu,
                     )
                 )
     return findings
 
 
-def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dict]:
+def _contrast_enhanced_to_findings(
+    ocr_results: list,
+    page_url: str,
+    page_by_filename: Optional[Dict[str, str]] = None,
+) -> List[Dict]:
     findings = []
+    _by_fn = page_by_filename or {}
     for result in ocr_results:
+        _pu = _by_fn.get(result.filename) or page_url
         if not result.has_text:
             continue
 
@@ -782,7 +797,7 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
                         image_src=result.original_path,
                         image_reference=result.filename,
                         image_text=det.text,
-                        page_url=page_url,
+                        page_url=_pu,
                     )
                 )
                 continue
@@ -802,7 +817,7 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
                         image_src=result.original_path,
                         image_reference=result.filename,
                         image_text=det.text,
-                        page_url=page_url,
+                        page_url=_pu,
                     )
                 )
             else:
@@ -821,7 +836,7 @@ def _contrast_enhanced_to_findings(ocr_results: list, page_url: str) -> List[Dic
                         image_src=result.original_path,
                         image_reference=result.filename,
                         image_text=det.text,
-                        page_url=page_url,
+                        page_url=_pu,
                     )
                 )
     return findings
