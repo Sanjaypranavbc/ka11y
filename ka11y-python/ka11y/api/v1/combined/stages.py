@@ -139,7 +139,7 @@ async def _run_pipeline_stage(
         return []
 
 # Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
-_STAGE_TIMEOUT_SECONDS = 600
+_STAGE_TIMEOUT_SECONDS = 1200
 # Maximum seconds for the crawler pass only.  OCR always runs on whatever
 # images were saved before this deadline, so a slow/stuck target never
 # prevents contrast analysis from completing.

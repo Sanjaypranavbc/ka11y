@@ -612,29 +612,41 @@ _MIN_TEXT_LEN_CJK = 2  # CJK characters carry more meaning per character
 # CJK / language detection helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-_CJK_CHAR_RE = re.compile(r"[\u3000-\u9fff\uff00-\uffef\u3400-\u4dbf]")
+# Refined CJK regex: includes Hiragana, Katakana, and common Kanji.
+# Excludes \uff00-\uffef (Fullwidth Forms) which often contains fullwidth Latin/punctuation
+# that shouldn't trigger Japanese-specific logic in an English audit.
+_CJK_CHAR_RE = re.compile(r"[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf\u3400-\u4dbf]")
 
 
 def _is_cjk_text(text: str) -> bool:
-    """Return True when ≥15% of characters are CJK (Japanese/Chinese/Korean)."""
+    """Return True when ≥15% of characters are actual CJK content characters
+    (Hiragana, Katakana, or Kanji)."""
     if not text:
         return False
     cjk = sum(1 for c in text if _CJK_CHAR_RE.match(c))
     return cjk / max(len(text), 1) >= 0.15
 
 
-def _detect_lang(element: SensoryElementData) -> str:
+def _detect_lang(element: SensoryElementData, audit_lang: str = "auto") -> str:
     """
     Return a 2-character language code for the element.
 
     Priority:
       1. element.lang attribute (set by crawler from closest lang= ancestor)
-      2. CJK character-density heuristic across all text fields
-      3. Default: 'en'
+      2. If global audit_lang is "en", stick to "en" (skip heuristic)
+      3. CJK character-density heuristic across all text fields
+      4. Default: 'en'
     """
     lang = (getattr(element, "lang", None) or "").strip().lower()
     if lang:
         return lang[:2]
+
+    # If the user explicitly requested an English audit, we ignore the CJK
+    # heuristic to avoid loading heavy Japanese dependencies (like SudachiPy)
+    # for stray fullwidth characters or mixed content.
+    if audit_lang == "en":
+        return "en"
+
     all_text = " ".join(
         filter(
             None,
@@ -868,6 +880,23 @@ _CATEGORY_REGEXES_JA: Dict[str, re.Pattern[str]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _nlp_cache: Dict[str, Any] = {}
+_sudachi_tokenizer: Any = None
+
+
+def _get_sudachi_tokenizer():
+    """Lazy-load and cache the SudachiPy tokenizer for Japanese POS analysis."""
+    global _sudachi_tokenizer
+    if _sudachi_tokenizer is not None:
+        return _sudachi_tokenizer
+    try:
+        import sudachipy  # type: ignore
+
+        # Create once and cache. Dictionary().create() is expensive as it loads
+        # system-wide dictionary files from disk.
+        _sudachi_tokenizer = sudachipy.Dictionary().create()
+        return _sudachi_tokenizer
+    except Exception:
+        return None
 
 
 def _get_nlp(lang: str = "en"):
@@ -1101,31 +1130,30 @@ def _has_meaningful_label_text_ja(text: str) -> bool:
     if _QUOTED_RE.search(text):
         return True
 
-    try:
-        import sudachipy  # type: ignore
+    tokenizer_obj = _get_sudachi_tokenizer()
+    if tokenizer_obj:
+        try:
+            morphemes = tokenizer_obj.tokenize(text)
+            for m in morphemes:
+                pos0 = m.part_of_speech()[0]
+                if pos0 not in ("名詞", "動詞", "形容詞", "形容動詞"):
+                    continue
+                surface = m.surface()
+                if _SENSORY_JA_RE.search(surface):
+                    continue
+                if _GENERIC_JA_RE.search(surface):
+                    continue
+                if _STOP_WORDS_JA_RE.search(surface):
+                    continue
+                if _INSTRUCTION_STRIP_JA.search(surface):
+                    continue
+                if _CJK_CHAR_RE.search(surface) or re.search(r"[a-zA-Z]{3,}", surface):
+                    return True
+            return False
+        except Exception:
+            pass
 
-        tokenizer_obj = sudachipy.Dictionary().create()
-        morphemes = tokenizer_obj.tokenize(text)
-        for m in morphemes:
-            pos0 = m.part_of_speech()[0]
-            if pos0 not in ("名詞", "動詞", "形容詞", "形容動詞"):
-                continue
-            surface = m.surface()
-            if _SENSORY_JA_RE.search(surface):
-                continue
-            if _GENERIC_JA_RE.search(surface):
-                continue
-            if _STOP_WORDS_JA_RE.search(surface):
-                continue
-            if _INSTRUCTION_STRIP_JA.search(surface):
-                continue
-            if _CJK_CHAR_RE.search(surface) or re.search(r"[a-zA-Z]{3,}", surface):
-                return True
-        return False
-    except Exception:
-        pass
-
-    # Regex fallback when SudachiPy is not installed
+    # Regex fallback when SudachiPy is not installed or fails
     stripped = _SENSORY_JA_RE.sub("", text)
     stripped = _GENERIC_JA_RE.sub("", stripped)
     stripped = _STOP_WORDS_JA_RE.sub("", stripped)
@@ -1229,7 +1257,9 @@ def _build_labelled_name_corpus(
             if not src:
                 continue
             for tok in _NAME_WORD_RE.findall(src.lower()):
-                if len(tok) > 1:
+                # For CJK, even single characters carry enough meaning to serve
+                # as a label (e.g. "赤" for red button, "上" for up).
+                if len(tok) > 1 or (len(tok) == 1 and _is_cjk_text(tok)):
                     corpus.add(tok)
     return corpus
 
@@ -1362,7 +1392,7 @@ class SensoryCharacteristicsAuditor:
         labelled_names = _build_labelled_name_corpus(elements)
 
         for el in elements:
-            el_lang = _detect_lang(el) or self.lang
+            el_lang = _detect_lang(el, self.lang)
             nlp = _get_nlp(el_lang)
 
             viols = (

@@ -39,6 +39,7 @@ const TOGGLE_ITEMS: { key: keyof AuditConfig; labelKey: TranslationKey }[] = [
   { key: "run_hover_focus_content_audit",    labelKey: "toggle.hoverFocus"      },
   { key: "run_focus_not_obscured_min_audit", labelKey: "toggle.focusObscured"   },
   { key: "run_focus_not_obscured_enh_audit", labelKey: "toggle.focusObscuredPlus" },
+  { key: "run_node_audit",                   labelKey: "toggle.runNodeAudit"    },
 ];
 
 const STATUS_KEYS: Record<string, TranslationKey> = {

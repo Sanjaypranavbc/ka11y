@@ -15,7 +15,7 @@ description: "All environment variables for each ka11y service"
 | `FLAT_PER_PAGE_MS` | `120000` | No | Per-page hard cap (ms) inside the flat crawl loop, clamped to the remaining overall budget. |
 | `BODY_LIMIT` | `10mb` | No | Express request body size limit |
 | `PUPPETEER_EXECUTABLE_PATH` | `/usr/bin/chromium` | No | Path to the Chromium binary (auto-set in Dockerfile) |
-| `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD` | `true` | No | Prevents Puppeteer from downloading its own Chromium (auto-set in Dockerfile) |
+| `PUPPETEER_SKIP_DOWNLOAD` | `true` | No | Prevents Puppeteer from downloading its own Chromium (auto-set in Dockerfile) |
 
 ### Example `.env` (Node)
 
@@ -41,7 +41,7 @@ CUSTOM_CHECKS_TIMEOUT_MS=30000
 | `PYTHONUNBUFFERED` | — | Recommended | Set to `"1"` for real-time log output in Docker |
 | `KA11Y_MAX_BROWSERS` | `2` | No | Maximum concurrent Playwright context leases from `BrowserPool`. Bounds Chromium memory. See `ka11y-python/ka11y/crawler/browser_pool.py`. |
 | `KA11Y_MAX_CONCURRENT_JOBS` | `4` | No | Maximum concurrent `_run_job()` background tasks. Excess jobs sit in `status="queued"` until a slot frees. See `ka11y-python/ka11y/api/v1/combined/runner.py`. |
-| `KA11Y_JOB_TIMEOUT_SECONDS` | `1200` | No | Outer audit budget. Bounds the top-level `asyncio.gather` over axe + Python branches. On timeout both branches are cancelled and a scrubbed error is returned. |
+| `KA11Y_JOB_TIMEOUT_SECONDS` | `1800` | No | Outer audit budget. Bounds the top-level `asyncio.gather` over axe + Python branches. On timeout both branches are cancelled and a scrubbed error is returned. |
 | `KA11Y_HEAVY_STAGE_CONCURRENCY` | `2` | No | Process-wide cap on concurrent browser-heavy stages (`image_audit`, `rendered_layout_audit`). Excess stages park on a semaphore — the queue wait does **not** count against `_STAGE_TIMEOUT_SECONDS`. See `ka11y-python/ka11y/api/v1/combined/stages.py`. |
 | `KA11Y_STAGE_TIMING_DIR` | `ka11y-python/logs/timings/` | No | Override the directory where per-(page, stage, rule) timing files (`<run_id>.jsonl` + `<run_id>.summary.log`) are written. See [Stage timing](/internals/stage-timing). |
 | `KA11Y_STAGE_TIMING_DISABLE` | — | No | Set to `1` / `true` to skip all stage-timing writes. Existing `crawler_timings.log` and `run_timings.log` are unaffected. |
@@ -56,7 +56,7 @@ PYTHONUNBUFFERED=1
 # Chromium ≈ 300 MB per process; one process per pool, multiple contexts per process.
 KA11Y_MAX_BROWSERS=2
 KA11Y_MAX_CONCURRENT_JOBS=4
-KA11Y_JOB_TIMEOUT_SECONDS=1200
+KA11Y_JOB_TIMEOUT_SECONDS=1800
 KA11Y_HEAVY_STAGE_CONCURRENCY=2
 
 # Low-level per-(page, stage, rule) timing logs. Comment out the DISABLE line

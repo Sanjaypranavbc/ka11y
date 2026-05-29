@@ -5,7 +5,7 @@
 # ── Stage 1: dependency installer ────────────────────────────────────────────
 FROM node:20-slim AS deps
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 WORKDIR /app
 
@@ -55,7 +55,7 @@ COPY src/          ./src/
 COPY i18n/         ./i18n/
 RUN echo "==> [3/4] Source copied"
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
 RUN echo "==> [4/4] Puppeteer configured to use system Chromium at $(which chromium)"
