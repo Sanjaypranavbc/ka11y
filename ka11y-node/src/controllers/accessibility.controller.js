@@ -1,6 +1,7 @@
 'use strict';
 
 const { SsrfGuardError } = require('../services/accessibility.service');
+const { StageTimings } = require('../utils/stageTimings');
 
 /**
  * AccessibilityController — SRP: handles HTTP requests for accessibility analysis.
@@ -286,6 +287,16 @@ class AccessibilityController {
       maxDepth = 0,
       internalLinks = true,
       maxPages = 50,
+      // Optional: when supplied, every per-page sub-stage is collected and
+      // returned to the Python caller so it can mirror the rows into its
+      // shared logs/timings/<jobId>.jsonl file. Untrusted clients can omit
+      // this; the field is informational only and never written to disk here.
+      jobId = null,
+      // R-1: pre-discovered page URLs from the Python caller's universal
+      // snapshot. When non-empty we audit exactly that set; when empty we
+      // fall back to our own boundedBfs. The list is canonicalised by the
+      // caller — we don't re-validate URLs here beyond a type check.
+      discoveredUrls = [],
     } = req.body;
 
     if (!url || typeof url !== 'string') {
@@ -319,14 +330,29 @@ class AccessibilityController {
         `successCriteriaId=${filter ?? 'none'} maxDepth=${safeMaxDepth} ` +
         `internalLinks=${safeInternalLinks} maxPages=${safeMaxPages}`
       );
+      // Collector is gated on a non-null jobId so unsolicited Node calls
+      // (curl, smoke tests) don't pay the cost of carrying timing rows back
+      // in the response. The Python caller always sends jobId.
+      const timings = jobId ? new StageTimings({ enabled: true }) : null;
+      // Defence: clamp discoveredUrls to plain strings and a safe upper bound
+      // so a malicious caller can't blow memory by sending a huge array.
+      const safeDiscoveredUrls = Array.isArray(discoveredUrls)
+        ? discoveredUrls
+            .filter((u) => typeof u === 'string' && u.length > 0 && u.length < 2048)
+            .slice(0, safeMaxPages)
+        : [];
       const findings = await this._service.analyseUrlFlat(url, wcagLevel, safeLang, {
         maxDepth: safeMaxDepth,
         maxPages: safeMaxPages,
         internalLinks: safeInternalLinks,
         successCriteriaId: filter,
+        timings: timings || undefined,
+        discoveredUrls: safeDiscoveredUrls,
       });
       this._logger.info(`analyseUrlFlat done findings=${findings.length}`);
-      res.json({ url, findings });
+      const response = { url, findings };
+      if (timings) response.timings = timings.toArray();
+      res.json(response);
     } catch (err) {
       // Bug 4 fix: SSRF guard failures are caused by invalid/private URLs submitted by the
       // client — they are not server faults. Return 400 so clients classify them correctly

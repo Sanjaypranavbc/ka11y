@@ -321,21 +321,34 @@ async function runAll(page, criteriaIdOrContext = null, context = {}) {
   }
 
   let staticR = [];
+  const staticStart = Date.now();
   try {
     staticR = await _withTimeout(
       runStaticChecks(page, criteriaId, ctx), staticBudget, 'static custom checks'
     );
   } catch (err) {
-    console.warn(`[custom-checks] static phase: ${err && err.message || err}`);
+    // Note: the WARN level makes this visible in the timing summary as the
+    // reason a page only returned partial custom-check findings. The
+    // split-budget design (60/40) ensures the other phase still ran.
+    console.warn(
+      `[custom-checks] static phase hit ${staticBudget}ms cap after ` +
+      `${Date.now() - staticStart}ms — partial results returned. ` +
+      `Increase CUSTOM_CHECKS_TIMEOUT_MS if this site needs full coverage.`
+    );
   }
 
   let interactiveR = [];
+  const interactiveStart = Date.now();
   try {
     interactiveR = await _withTimeout(
       runInteractiveChecks(page, criteriaId, ctx), interactiveBudget, 'interactive custom checks'
     );
   } catch (err) {
-    console.warn(`[custom-checks] interactive phase: ${err && err.message || err}`);
+    console.warn(
+      `[custom-checks] interactive phase hit ${interactiveBudget}ms cap after ` +
+      `${Date.now() - interactiveStart}ms — partial results returned. ` +
+      `Increase CUSTOM_CHECKS_TIMEOUT_MS if this site needs full coverage.`
+    );
   }
 
   return [...staticR, ...interactiveR];

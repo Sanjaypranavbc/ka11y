@@ -15,6 +15,7 @@ from ka11y.i18n.loader import (
     get_severity_labels,
     get_status_labels,
 )
+from ka11y.utils.url_canonical import canonicalize_url as _canonicalize_url
 
 # Single shared policy used purely for URL canonicalization in the report.
 # Mirrors the BFS defaults so the page table groups variants of the same page
@@ -71,18 +72,25 @@ def _build_report(
     # by_wcag_sc) and a `pages` array that groups the findings per page with its own
     # summary, so clients can render a per-page view without re-scanning the flat
     # lists. The page entries reference the same finding objects as the flat lists.
+    # R-2: canonicalise the root URL once up front so the element-less
+    # fallback path produces the same key as element-stamped findings (which
+    # were canonicalised in _make_finding). Without this, `https://x.com` and
+    # `https://x.com/` end up as separate page rows in the by_page table.
+    canonical_root = _canonicalize_url(url) if url else url
+
     def _page_of(f: Dict) -> str:
         element = f.get("element")
         raw = (
             element["page_url"]
             if isinstance(element, dict) and element.get("page_url")
-            else url
+            else canonical_root
         )
-        # Canonicalize the URL the same way the BFS does so http://x/ and
-        # https://x and https://x/ all bucket into the same page row instead
-        # of appearing as separate rows in the page table.
+        # Apply both layers of normalisation: the CrawlPolicy step keeps the
+        # report grouping bug-compatible with older runs (strips tracker
+        # params etc.), and the canonicalise step keeps Python + Node + the
+        # snapshot all in agreement.
         normalized = _REPORT_URL_POLICY.normalize_url(raw)
-        return normalized or raw
+        return _canonicalize_url(normalized) if normalized else (normalized or raw)
 
     by_page: Dict[str, Dict[str, int]] = {}
     page_buckets: Dict[str, Dict[str, List[Dict]]] = {}

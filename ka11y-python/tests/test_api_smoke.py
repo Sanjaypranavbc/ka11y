@@ -313,8 +313,9 @@ class TestBuildReport:
         by_page = r["summary"]["by_page"]
         assert by_page["https://x.com/a"] == {"violations": 1, "needs_review": 0, "passes": 0}
         assert by_page["https://x.com/b"] == {"violations": 1, "needs_review": 1, "passes": 0}
-        # element-less finding falls back to the root URL
-        assert by_page["https://x.com"] == {"violations": 0, "needs_review": 0, "passes": 1}
+        # element-less finding falls back to the root URL. R-2: root is now
+        # canonicalised so the key carries its trailing slash.
+        assert by_page["https://x.com/"] == {"violations": 0, "needs_review": 0, "passes": 1}
         assert r["summary"]["page_count"] == 3
 
     def test_pages_grouping_and_nested_findings(self):
@@ -332,12 +333,15 @@ class TestBuildReport:
         # /a and /b each have 1 violation; /b also has a needs_review → /b ranks first.
         r = _build_report("https://x.com", self._multi_page_findings())
         ranked = [p["page_url"] for p in r["pages"]]
-        assert ranked.index("https://x.com/b") < ranked.index("https://x.com")
+        # R-2: root URL is canonicalised; element-less findings bucket under
+        # "https://x.com/" not "https://x.com".
+        assert ranked.index("https://x.com/b") < ranked.index("https://x.com/")
 
     def test_single_page_report_has_one_page_entry(self):
         r = _build_report("https://x.com", self._findings())
         assert r["summary"]["page_count"] == 1
-        assert r["pages"][0]["page_url"] == "https://x.com"
+        # R-2: the page entry's URL is the canonicalised form.
+        assert r["pages"][0]["page_url"] == "https://x.com/"
         assert r["pages"][0]["summary"]["total_findings"] == 3
 
 

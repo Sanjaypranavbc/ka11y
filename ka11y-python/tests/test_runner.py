@@ -26,7 +26,7 @@ async def test_python_result_non_tuple_does_not_raise():
     """
     from ka11y.api.v1.combined import store
 
-    job_id = "runner-test-non-tuple"
+    job_id = "runner-test-non-tuple-EXPECTED-FAILURE"
     store._jobs[job_id] = {
         "job_id": job_id,
         "status": "running",
@@ -241,7 +241,7 @@ async def test_python_result_exception_degrades_gracefully():
     """
     from ka11y.api.v1.combined import store
 
-    job_id = "runner-test-exception"
+    job_id = "runner-test-exception-EXPECTED-FAILURE"
     store._jobs[job_id] = {
         "job_id": job_id,
         "status": "running",

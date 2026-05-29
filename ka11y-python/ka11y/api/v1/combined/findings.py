@@ -18,6 +18,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from ka11y.config.logger import setup_logger
+from ka11y.utils.url_canonical import canonicalize_url as _canonicalize_url
 from ka11y.i18n.loader import (
     get_level_label,
     get_severity_label,
@@ -66,6 +67,11 @@ def _make_finding(
     page_url: str = "",
     quality_report: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    # R-2: canonicalise the page_url at the central choke point so dedup keys
+    # in _merge_findings and the per-page UI grouping see identical strings
+    # across stages and engines. Idempotent — safe to call here even if a
+    # caller already canonicalised.
+    page_url = _canonicalize_url(page_url) if page_url else page_url
     is_pass = status in ("pass", "inapplicable")
     _lang = _lang_ctx.get()
     wcag_names = get_wcag_names(_lang)

@@ -275,7 +275,22 @@ async def _run_job_body(
             active_stages.append("sensory_audit")
         emit_job_plan(job_id, active_stages)
 
-        # Fire axe-core and all Python stages concurrently
+        # Fire axe-core and all Python stages concurrently.
+        #
+        # R-1: When ``max_depth > 0`` the Python stage builds a universal
+        # snapshot that enumerates all pages to audit. Node's independent
+        # ``boundedBfs`` has a hard ``flatCrawlBudgetMs`` cap (255 s by
+        # default) which on big sites like kao.com was clipping the crawl to
+        # 3 pages and silently dropping axe findings on every page beyond
+        # that. We share the snapshot's URL list via a small event/container
+        # pair: Python signals as soon as the snapshot is ready, Node waits
+        # briefly, then audits exactly the same pages — no BFS, no clip.
+        snapshot_urls_event: asyncio.Event | None = None
+        snapshot_urls_container: dict | None = None
+        if payload.max_depth > 0:
+            snapshot_urls_event = asyncio.Event()
+            snapshot_urls_container = {"urls": None}
+
         _stage_start(job_id, "axe_core")
         node_task = asyncio.create_task(
             _call_node_flat(
@@ -287,6 +302,9 @@ async def _run_job_body(
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
                 success_criteria_id=payload.success_criteria_id,
+                job_id=job_id,
+                snapshot_urls_event=snapshot_urls_event,
+                snapshot_urls_container=snapshot_urls_container,
             )
         )
         python_task = asyncio.create_task(
@@ -316,6 +334,8 @@ async def _run_job_body(
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
                 success_criteria_id=payload.success_criteria_id,
+                snapshot_urls_event=snapshot_urls_event,
+                snapshot_urls_container=snapshot_urls_container,
             )
         )
 

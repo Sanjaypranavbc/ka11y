@@ -16,7 +16,9 @@ from ka11y.api.v1.combined.findings import _sensory_to_findings
 from ka11y.api.v1.combined.models import CombinedRequest
 from ka11y.api.v1.combined.stages import _allowed_levels
 
-PAGE_URL = "https://example.com"
+# R-2: canonical form of the root URL keeps the trailing slash (WHATWG URL).
+# Tests should use the canonical form so equality assertions don't churn.
+PAGE_URL = "https://example.com/"
 
 
 def _ocr_result(*, compliance: dict | None = None) -> SimpleNamespace:

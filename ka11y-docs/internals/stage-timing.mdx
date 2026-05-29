@@ -80,6 +80,11 @@ Each line in `<run_id>.jsonl` is a JSON object:
 | `image_audit` | `image_crawl_page` | Per page visited by the image crawler |
 | `image_audit` | `image_crawl_budget` | One row at crawl end with `extra.discovered` / `audited` / `clipped` |
 | _any stage_ | _omitted_ | The auto-recorded row written by `_stage_complete` / `_stage_error` |
+| `axe_core` | `page_navigate` | Node — `page.goto()` per crawled page |
+| `axe_core` | `inject_axe` | Node — axe-core script injection + locale config |
+| `axe_core` | `axe_run` | Node — `axe.run()` against the page |
+| `axe_core` | `custom_checks` | Node — `runAll()` over custom check plugins |
+| `axe_core` | `result_mapping` | Node — `mapResultsFlat` + `mapCustomResultsFlat` |
 
 Every other stage in `_run_python_stages_combined` (`form_audit`,
 `pause_stop_hide_audit`, `text_spacing_audit`, `rendered_layout_audit`,
@@ -128,6 +133,14 @@ wall time is in `run_timings.log`.
 - **Auto-recorded** at every stage boundary by `_stage_complete` / `_stage_error`
   in `ka11y/api/v1/combined/stage_events.py`. Every stage gets a per-stage row
   for free — adding a new stage does not require any timing wiring.
+- **Node engine rows are mirrored back** through the HTTP response. Python's
+  `_call_node_flat` forwards the `job_id` as `jobId` in the request body; Node
+  builds a per-request `StageTimings` collector (`ka11y-node/src/utils/stageTimings.js`),
+  wraps `page_navigate` / `inject_axe` / `axe_run` / `custom_checks` / `result_mapping`
+  in each visited page, and returns the rows as `timings: [...]` alongside
+  `findings`. Each row is then appended to the shared JSONL with
+  `extra.source = "node"` so you can tell engines apart. Node and Python share
+  no volume — the response payload is the channel.
 - **Manual per-page / per-rule rows** are added with the helper context managers
   in `ka11y/utils/stage_timing.py`:
 

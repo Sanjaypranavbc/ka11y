@@ -261,6 +261,11 @@ async def _call_node_flat(
     internal_links: bool = True,
     max_pages: int = 50,
     success_criteria_id: Optional[str] = None,
+    job_id: Optional[str] = None,
+    discovered_urls: Optional[List[str]] = None,
+    snapshot_urls_event: Optional[asyncio.Event] = None,
+    snapshot_urls_container: Optional[Dict[str, Any]] = None,
+    snapshot_wait_timeout: float = 90.0,
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings.
 
@@ -269,8 +274,38 @@ async def _call_node_flat(
     the root URL, so max_depth had no effect on the axe-core side).
     ``success_criteria_id`` lets Node run only the axe rules + custom checks for a
     single WCAG SC, so a per-rule audit doesn't pay for the full rule set.
+
+    ``job_id`` (when supplied) is forwarded to Node which collects per-page
+    timing rows and returns them in the response. Each row is then mirrored
+    into the same ``logs/timings/<job_id>.jsonl`` file the Python stages write
+    to, so the per-(page, stage) summary covers both engines.
     """
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
+
+    # R-1: prefer snapshot-fed mode. If the caller passed a coordination event,
+    # the Python snapshot task will fill ``snapshot_urls_container["urls"]``
+    # and signal the event when the snapshot finishes (or set it to None if
+    # snapshot was skipped/failed). We wait up to ``snapshot_wait_timeout``
+    # seconds — long enough for kao-sized snapshots, short enough that a
+    # crashed Python task doesn't strand Node forever. On timeout or empty,
+    # we fall back to the legacy independent-BFS behaviour.
+    if snapshot_urls_event is not None and snapshot_urls_container is not None and not discovered_urls:
+        try:
+            await asyncio.wait_for(
+                snapshot_urls_event.wait(), timeout=snapshot_wait_timeout
+            )
+            urls = snapshot_urls_container.get("urls") or []
+            # Drop the entry URL when it's the only thing the snapshot found
+            # — that's the "no snapshot needed" sentinel and Node already
+            # audits it through its own single-page path.
+            if urls and not (len(urls) == 1 and urls[0] == url):
+                discovered_urls = list(urls)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[combined] axe_core: snapshot URL wait timed out after "
+                f"{snapshot_wait_timeout}s — falling back to independent BFS"
+            )
+
     payload_json: Dict[str, Any] = {
         "url": url,
         "level": wcag_level,
@@ -281,12 +316,26 @@ async def _call_node_flat(
     }
     if success_criteria_id:
         payload_json["successCriteriaId"] = success_criteria_id
+    if job_id:
+        payload_json["jobId"] = job_id
+    if discovered_urls:
+        # R-1: when Python's snapshot has already enumerated the pages, send
+        # the full list so Node skips its own BFS (which was capped by
+        # flatCrawlBudgetMs=255s and was the source of the kao.com 3-page
+        # truncation that left a2 unaudited by axe).
+        payload_json["discoveredUrls"] = discovered_urls
     try:
         # 300s timeout to allow for heavy custom checks on complex pages
         async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(endpoint, json=payload_json)
             resp.raise_for_status()
-            return resp.json().get("findings", [])
+            body = resp.json()
+            # Mirror Node-side per-page timing rows into our shared JSONL so
+            # the run summary attributes time to both engines. Failure here
+            # never breaks the audit — the findings already returned cleanly.
+            if job_id:
+                _mirror_node_timings(job_id, body.get("timings") or [])
+            return body.get("findings", [])
     except httpx.ConnectError:
         raise RuntimeError(f"axe_core: Node engine unreachable at {node_base_url}")
     except httpx.TimeoutException:
@@ -297,6 +346,32 @@ async def _call_node_flat(
         raise RuntimeError(f"axe_core: Node engine returned {e.response.status_code}")
     except Exception as e:
         raise RuntimeError(f"axe_core: unexpected error calling Node: {e}")
+
+
+def _mirror_node_timings(job_id: str, rows: List[Dict[str, Any]]) -> None:
+    """Append Node-engine timing rows to the shared JSONL via stage_timing.
+
+    Row shape from Node mirrors the Python schema (`stage`, `sub_stage`,
+    `page_url`, `depth`, `rule`, `duration_ms`, `item_count`, `status`,
+    `error`, `extra`). Anything malformed is skipped silently.
+    """
+    for row in rows:
+        try:
+            stage_timing.record(
+                job_id,
+                stage=str(row.get("stage") or "axe_core"),
+                duration_ms=float(row.get("duration_ms") or 0.0),
+                status=str(row.get("status") or "ok"),
+                page_url=row.get("page_url"),
+                depth=row.get("depth"),
+                sub_stage=row.get("sub_stage"),
+                rule=row.get("rule"),
+                item_count=row.get("item_count"),
+                error=row.get("error"),
+                extra={**(row.get("extra") or {}), "source": "node"},
+            )
+        except Exception:  # noqa: BLE001 — never let mirroring break a run
+            continue
 
 
 # ── Individual stage coroutines ───────────────────────────────────────────────
@@ -1417,12 +1492,20 @@ async def _run_python_stages(
     internal_links: bool = True,
     max_pages: int = 50,
     success_criteria_id: Optional[str] = None,
+    snapshot_urls_event: Optional[asyncio.Event] = None,
+    snapshot_urls_container: Optional[Dict[str, Any]] = None,
 ) -> PythonStagesResult:
     """
     Run all Python audit stages concurrently.
 
     Returns a :class:`PythonStagesResult` with named ``findings``,
     ``contrast_report``, and ``image_audit_report`` fields.
+
+    ``snapshot_urls_event`` / ``snapshot_urls_container`` (R-1) let a sibling
+    Node task wait for the universal snapshot's discovered URL list before
+    starting its own crawl. We always signal the event before returning so a
+    crash here cannot strand Node — see the ``finally`` block at the bottom
+    of this function.
     """
 
     def _timed(coro):
@@ -1468,23 +1551,33 @@ async def _run_python_stages(
     # navigation, which preserves the previous behaviour for that case).
     snapshot = None
     discovered_urls = [url]
-    if (
-        static_rules_enabled
-        or (rendered_layout_enabled and max_depth > 0)
-        or max_depth > 0
-    ):
-        snapshot = await _load_universal_snapshot(
-            url=url,
-            output_dir=output_dir,
-            max_depth=max_depth,
-            job_id=job_id,
-            step_logger=step_logger,
-            internal_links=internal_links,
-            max_pages=max_pages,
-        )
-        discovered_urls = [s["page_url"] for s in snapshot.page_summaries]
-        if not discovered_urls:
-            discovered_urls = [url]
+    try:
+        if (
+            static_rules_enabled
+            or (rendered_layout_enabled and max_depth > 0)
+            or max_depth > 0
+        ):
+            snapshot = await _load_universal_snapshot(
+                url=url,
+                output_dir=output_dir,
+                max_depth=max_depth,
+                job_id=job_id,
+                step_logger=step_logger,
+                internal_links=internal_links,
+                max_pages=max_pages,
+            )
+            discovered_urls = [s["page_url"] for s in snapshot.page_summaries]
+            if not discovered_urls:
+                discovered_urls = [url]
+    finally:
+        # R-1: always release the sibling Node task waiting on the snapshot,
+        # even if the snapshot load raised. Without this `finally` an
+        # exception here would leave Node blocked on `Event.wait()` until the
+        # 90-second fallback timeout, doubling failure latency.
+        if snapshot_urls_container is not None:
+            snapshot_urls_container["urls"] = list(discovered_urls)
+        if snapshot_urls_event is not None and not snapshot_urls_event.is_set():
+            snapshot_urls_event.set()
 
     snapshot_task = asyncio.Future()
     if snapshot:

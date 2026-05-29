@@ -79,6 +79,7 @@
 'use strict';
 
 const rulesGuide = require('./rulesGuide');
+const { canonicalizeUrl } = require('./canonicalUrl');
 const {
   BEST_PRACTICE_ID,
   BEST_PRACTICE_NAME,
@@ -407,6 +408,11 @@ function _localizedGuideEntry(ruleId, lang = 'en') {
  * @returns {Array<object>}
  */
 function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter = null) {
+  // R-2: canonicalise the page URL once on entry so every element stamped
+  // inside this call carries the unified form. Mirrors the Python
+  // _make_finding behaviour — keeps merge dedup keys consistent between
+  // engines.
+  if (pageUrl) pageUrl = canonicalizeUrl(pageUrl);
   const findings = [];
 
   const IMPACT_TO_SEVERITY = {
@@ -558,6 +564,9 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter 
  * @returns {Array<object>}
  */
 function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
+  // R-2: same canonicalisation as mapResultsFlat — keep custom-check finding
+  // pageUrls aligned with axe findings so dedup works across both sources.
+  if (pageUrl) pageUrl = canonicalizeUrl(pageUrl);
   const findings = [];
 
   const IMPACT_TO_SEVERITY = {

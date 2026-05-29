@@ -27,11 +27,19 @@ const config = {
     // Per-page custom-checks budget (ms). Split 60/40 inside runAll between
     // static and interactive phases so partial results survive a timeout (the
     // previous single-budget Promise.race forfeited every check on a slow page).
-    // 90s default keeps the multi-page crawl bounded while giving heavy pages
-    // like kao.com/global/en enough headroom for the interactive focus checks
-    // to surface 2.4.7 / 2.4.13 findings. Was 60_000; bumped after observing
-    // deep-page coverage drops on real sites.
-    customChecksTimeoutMs: parseInt(process.env.CUSTOM_CHECKS_TIMEOUT_MS) || 90_000,
+    //
+    // Default dropped from 90s → 30s on 2026-05-29. Profiling kao.com showed
+    // per-page wall time was ≥95s (3s axe.run + ~90s custom-checks), so the
+    // 255s overall budget always clipped multi-page crawls at 3 pages. The
+    // split-budget cooperative timeout already preserves whichever phase
+    // finishes first, so a 30s cap surfaces violations the heavy passes
+    // would have found anyway while letting the snapshot-fed crawl actually
+    // visit every discovered page. Tune up via the env var if a specific
+    // site needs the longer per-page interactive coverage.
+    //
+    // See ka11y-docs/internals/stage-timing.mdx for how to read which phase
+    // hit the cap in the per-(page, stage) summary log.
+    customChecksTimeoutMs: parseInt(process.env.CUSTOM_CHECKS_TIMEOUT_MS) || 30_000,
     // Overall multi-page (flat) crawl budget (ms). MUST stay below the Python
     // combined runner's _call_node_flat HTTP timeout (300s) so a deep crawl
     // returns partial findings instead of the caller timing out and discarding

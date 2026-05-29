@@ -45,11 +45,32 @@ def test_crawl_route_scrubs_exception_message(monkeypatch, client, caplog):
 
     secret = "INTERNAL_PATH_/srv/secret/key.pem_DO_NOT_LEAK"
 
-    async def _boom(*args, **kwargs):
-        raise RuntimeError(secret)
+    # A fake crawler that raises a CLEAR, INTENT-LABELED error when crawl_page
+    # is awaited. The earlier version of this test patched get_image_crawler to
+    # return a bare function, which meant the route hit AttributeError on
+    # `crawler.crawl_page()` before the intentional RuntimeError ever fired —
+    # the scrubbing path still ran, but KAC_*.log filled with confusing
+    # "'function' object has no attribute 'crawl_page'" lines that looked like
+    # production bugs. With this fake the log line is explicit.
+    class _IntentionalTestCrawlerFailure:
+        def __init__(self, *a, **k):
+            self.output_dir = "/tmp/ka11y-scrubbing-test"
+            self.images_data: list = []
+            self.visited_urls: set = set()
 
-    # Patch the image crawler entry point used inside /crawl.
-    monkeypatch.setattr(crawl_api, "get_image_crawler", lambda *a, **k: _boom)
+        async def crawl_page(self, *a, **k):
+            raise RuntimeError(
+                f"intentional test failure (response-scrubbing test): {secret}"
+            )
+
+        def save_results(self):
+            pass
+
+    monkeypatch.setattr(
+        crawl_api,
+        "get_image_crawler",
+        lambda *a, **k: _IntentionalTestCrawlerFailure(),
+    )
 
     # We don't care if the request actually fires the patched callable —
     # what matters is that any exception thrown inside the route is scrubbed.

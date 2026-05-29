@@ -43,11 +43,20 @@ describe('AccessibilityController.analyseUrlFlat', () => {
 
     // successCriteriaId is now delivered inside the crawl-options object
     // (alongside maxDepth/internalLinks/maxPages), not as a bare 4th arg.
+    // timings is undefined when no jobId is supplied; discoveredUrls defaults
+    // to an empty array (R-1) and is forwarded so the service can choose
+    // snapshot-fed vs legacy BFS mode.
     expect(service.analyseUrlFlat).toHaveBeenCalledWith(
       'https://example.com',
       'AA',
       'en',
-      { maxDepth: 0, internalLinks: true, maxPages: 50, successCriteriaId: '1.1.1' },
+      expect.objectContaining({
+        maxDepth: 0,
+        internalLinks: true,
+        maxPages: 50,
+        successCriteriaId: '1.1.1',
+        discoveredUrls: [],
+      }),
     );
     expect(res.json).toHaveBeenCalledWith({ url: 'https://example.com', findings });
   });
@@ -70,8 +79,47 @@ describe('AccessibilityController.analyseUrlFlat', () => {
       'https://example.com',
       'AA',
       'en',
-      { maxDepth: 5, internalLinks: false, maxPages: 200, successCriteriaId: null },
+      expect.objectContaining({
+        maxDepth: 5,
+        internalLinks: false,
+        maxPages: 200,
+        successCriteriaId: null,
+        discoveredUrls: [],
+      }),
     );
+  });
+
+  test('R-1: clamps + forwards discoveredUrls to the service when provided', async () => {
+    const req = {
+      body: {
+        url: 'https://example.com',
+        maxPages: 5,
+        discoveredUrls: [
+          'https://example.com/a',
+          'https://example.com/b',
+          'https://example.com/c',
+          'https://example.com/d',
+          'https://example.com/e',
+          'https://example.com/f', // beyond maxPages — should be dropped
+          12345,                   // wrong type — should be dropped
+          '',                      // empty — should be dropped
+          'x'.repeat(3000),        // too long — should be dropped
+        ],
+      },
+    };
+    const res = makeRes();
+    service.analyseUrlFlat.mockResolvedValue([]);
+
+    await controller.analyseUrlFlat(req, res);
+
+    const callArgs = service.analyseUrlFlat.mock.calls[0][3];
+    expect(callArgs.discoveredUrls).toEqual([
+      'https://example.com/a',
+      'https://example.com/b',
+      'https://example.com/c',
+      'https://example.com/d',
+      'https://example.com/e',
+    ]);
   });
 
   test('rejects invalid successCriteriaId format before calling the service', async () => {
