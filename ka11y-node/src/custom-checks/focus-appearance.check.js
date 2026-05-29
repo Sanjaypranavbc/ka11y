@@ -176,60 +176,69 @@ async function run(page, context = {}) {
   const passes = [];
 
   for (const el of elements) {
-    // Capture unfocused styles — resolve element via stable selector first, then DOM index fallback
-    const unfocused = await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (!e) return null;
-      e.blur();
-      const cs = window.getComputedStyle(e);
-      return {
-        outlineWidth:    cs.outlineWidth,
-        outlineStyle:    cs.outlineStyle,
-        outlineColor:    cs.outlineColor,
-        boxShadow:       cs.boxShadow,
-        backgroundColor: cs.backgroundColor,
-        borderColor:     cs.borderColor,
-        borderWidth:     cs.borderWidth,
-      };
-    }, SELECTOR, el.idx, el.stableSel);
+    // ── L-2: collapsed per-element round-trip (mirrors L-1 in focus-visible) ──
+    // One `page.evaluate` runs the full unfocused-capture → focus → settle →
+    // focused-capture → blur cycle browser-side. CDP cost: 1 RT instead of 3.
+    // SETTLE_MS waits stay inside the page context so CSS transitions still
+    // get to resolve. Also captures body background in the same pass for the
+    // transparent-element fallback (B5).
+    const sample = await page.evaluate(
+      ({ sel, idx, stableSel, settleMs }) => {
+        const findEl = () =>
+          stableSel
+            ? (document.querySelector(stableSel) ||
+               Array.from(document.querySelectorAll(sel))[idx])
+            : Array.from(document.querySelectorAll(sel))[idx];
 
-    if (!unfocused) continue;
+        const captureBox = (node) => {
+          const cs = window.getComputedStyle(node);
+          return {
+            outlineWidth:    cs.outlineWidth,
+            outlineStyle:    cs.outlineStyle,
+            outlineColor:    cs.outlineColor,
+            boxShadow:       cs.boxShadow,
+            backgroundColor: cs.backgroundColor,
+            borderColor:     cs.borderColor,
+            borderWidth:     cs.borderWidth,
+          };
+        };
 
-    // Settle before focusing
-    await new Promise(r => setTimeout(r, SETTLE_MS));
+        const e1 = findEl();
+        if (!e1) return null;
 
-    // Capture focused styles; also capture body background for transparent-element fallback (B5)
-    const focused = await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (!e) return null;
-      e.focus({ preventScroll: true });
-      const cs = window.getComputedStyle(e);
-      return {
-        outlineWidth:    cs.outlineWidth,
-        outlineStyle:    cs.outlineStyle,
-        outlineColor:    cs.outlineColor,
-        boxShadow:       cs.boxShadow,
-        backgroundColor: cs.backgroundColor,
-        borderColor:     cs.borderColor,
-        borderWidth:     cs.borderWidth,
-        bodyBg:          window.getComputedStyle(document.body).backgroundColor,
-      };
-    }, SELECTOR, el.idx, el.stableSel);
+        e1.blur();
+        const unfocused = captureBox(e1);
 
-    // Settle then blur
-    await new Promise(r => setTimeout(r, SETTLE_MS));
-    await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (e) e.blur();
-    }, SELECTOR, el.idx, el.stableSel);
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            const e2 = findEl();
+            if (!e2) {
+              resolve({ unfocused, focused: null });
+              return;
+            }
+            e2.focus({ preventScroll: true });
+            setTimeout(() => {
+              const e3 = findEl();
+              if (!e3) {
+                resolve({ unfocused, focused: null });
+                return;
+              }
+              const focused = {
+                ...captureBox(e3),
+                bodyBg: window.getComputedStyle(document.body).backgroundColor,
+              };
+              e3.blur();
+              resolve({ unfocused, focused });
+            }, settleMs);
+          }, settleMs);
+        });
+      },
+      { sel: SELECTOR, idx: el.idx, stableSel: el.stableSel, settleMs: SETTLE_MS },
+    );
 
-    if (!focused) continue;
+    if (!sample) continue;
+    const { unfocused, focused } = sample;
+    if (!unfocused || !focused) continue;
 
     // ── Check 1: Does a visible focus indicator appear? ──────────────────────
     const outlineWidthPx = parseFloat(focused.outlineWidth) || 0;
