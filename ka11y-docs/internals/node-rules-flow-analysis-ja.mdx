@@ -14,6 +14,8 @@ description: "Node.js アクセシビリティ監査機能のエンドツーエ�
 
 ## アーキテクチャ & リクエストフロー
 
+Node.js エンジンは、統合監査 API の `run_node_audit` フラグを介して切り替えることができます。無効にすると、Python オーケストレーションエンジンは Node サービスへの呼び出しを完全にスキップします。
+
 ```mermaid
 flowchart TD
     A["HTTP POST /api/v1/analyse-url"] --> B["コントローラー: 入力バリデーション + SSRF ガード"]

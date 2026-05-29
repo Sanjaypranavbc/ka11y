@@ -11,7 +11,8 @@ The short version:
 - Put language-specific Node behavior keywords and reason templates in `config/universal.yml`
 - Put DOM-only checks in `ka11y-node/src/custom-checks/`
 - Put crawler + auditor stages in `ka11y-python/ka11y/`
-- If the rule should appear as an optional stage, update both Python request models and frontend audit config
+- If the rule should appear as an optional stage, update `CombinedRequest` in `ka11y-python/ka11y/api/v1/combined/models.py` and the frontend audit config.
+- The Node.js engine can now be toggled via the `run_node_audit` flag in the API.
 
 ## 1. Pick the correct path first
 
@@ -268,6 +269,7 @@ Before you create a new crawler, check whether the data already exists in:
 1.  **Add/Update Auditor**: Auditors live under `ka11y-python/ka11y/accessibility/rules/`.
 2.  **Convert to Findings**: Edit `ka11y-python/ka11y/api/v1/combined/findings.py` to add a converter function.
 3.  **Wire the Stage**: Edit `ka11y-python/ka11y/api/v1/combined/stages.py` to call your auditor.
+4.  **Register Stage**: Update `active_stages` in `ka11y-python/ka11y/api/v1/combined/runner.py` and `STAGE_WEIGHTS` in `ka11y-python/ka11y/api/v1/combined/constants.py` to ensure the stage is included in the job plan and progress reporting.
 
 ### Step 3: Write tests
 
@@ -395,5 +397,7 @@ Before you call the rule finished, check this list:
 - failing Node checks return structured `elements`
 - Python findings include real element data when available
 - tests cover English and Japanese behavior
-- optional stage toggles are wired end-to-end
+- optional stage toggles are wired end-to-end (update `CombinedRequest` and `runner.py`)
 - the report looks correct in the frontend, not just in raw JSON
+- `STAGE_WEIGHTS` in `constants.py` is updated for accurate progress reporting
+- the stage is added to `active_stages` in `runner.py` based on the request flags

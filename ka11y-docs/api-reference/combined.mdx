@@ -38,6 +38,10 @@ If you want a **full production-style run**, omit the optional `run_*` booleans 
   Stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) never change across languages; filter and group on those.
 </ParamField>
 
+<ParamField body="run_node_audit" type="boolean" default="true">
+  Enable the Node.js audit engine (axe-core + custom checks). Disabling this runs only the Python visual auditors. This flag provides a foundation for future enhancements where different audit engines can be toggled independently.
+</ParamField>
+
 <ParamField body="run_ocr" type="boolean" default="true">
   Run EasyOCR on crawled images to detect embedded text and compute image-text contrast. This powers Python findings for `1.4.3`, `1.4.6`, and the OCR-backed parts of `1.1.1`, `1.4.5`, and `1.4.11`.
 </ParamField>

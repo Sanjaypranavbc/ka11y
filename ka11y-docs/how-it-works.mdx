@@ -5,14 +5,14 @@ description: "A plain-language guide to ka11y's two-engine audit model, WCAG rul
 
 ## What happens when you submit a URL
 
-You provide a URL. ka11y launches two specialised engines simultaneously — one that analyses the **rendered visual page** and one that analyses the **underlying code structure**. Both engines crawl the same URL in parallel, then their findings are merged into a single unified report.
+You provide a URL. ka11y launches two specialised engines — one that analyses the **rendered visual page** and one that analyses the **underlying code structure**. Both engines crawl the same URL in parallel (unless the Node engine is disabled via the `run_node_audit` flag), then their findings are merged into a single unified report.
 
 ```mermaid
 graph LR
     U(["You submit a URL"]) --> K["ka11y Platform"]
 
     K --> PE["Python Engine\nVisual + Rendered Analysis"]
-    K --> NE["Node Engine\nDOM + Code Analysis"]
+    K --> NE["Node Engine\nDOM + Code Analysis\n(Optional)"]
 
     PE --> T(["Target Website"])
     NE --> T
@@ -23,7 +23,7 @@ graph LR
     M --> R(["Combined Accessibility Report\nViolations · Needs Review · Passes"])
 ```
 
-The two engines complement each other — neither alone gives the full picture. Together they cover **37 WCAG 2.1 / 2.2 success criteria** across conformance levels A, AA, and AAA.
+The two engines complement each other — neither alone gives the full picture. Together they cover **37 WCAG 2.1 / 2.2 success criteria** across conformance levels A, AA, and AAA. If you only need visual/multimodal analysis, the Node engine can be toggled off to reduce audit duration.
 
 ---
 

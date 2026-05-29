@@ -246,7 +246,9 @@ async def _run_job_body(
         )
 
         # Announce the stage plan to SSE subscribers so the progress bar can render.
-        active_stages: list[str] = ["axe_core"]
+        active_stages: list[str] = []
+        if payload.run_node_audit:
+            active_stages.append("axe_core")
         if payload.run_ocr or payload.run_image_audit:
             active_stages.append("image_audit")
         # pipeline stage always runs; it handles 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
@@ -291,22 +293,25 @@ async def _run_job_body(
             snapshot_urls_event = asyncio.Event()
             snapshot_urls_container = {"urls": None}
 
-        _stage_start(job_id, "axe_core")
-        node_task = asyncio.create_task(
-            _call_node_flat(
-                url,
-                node_base_url,
-                payload.wcag_level,
-                resolved_lang,
-                max_depth=payload.max_depth,
-                internal_links=payload.internal_links,
-                max_pages=payload.max_pages,
-                success_criteria_id=payload.success_criteria_id,
-                job_id=job_id,
-                snapshot_urls_event=snapshot_urls_event,
-                snapshot_urls_container=snapshot_urls_container,
+        node_task = None
+        if payload.run_node_audit:
+            _stage_start(job_id, "axe_core")
+            node_task = asyncio.create_task(
+                _call_node_flat(
+                    url,
+                    node_base_url,
+                    payload.wcag_level,
+                    resolved_lang,
+                    max_depth=payload.max_depth,
+                    internal_links=payload.internal_links,
+                    max_pages=payload.max_pages,
+                    success_criteria_id=payload.success_criteria_id,
+                    job_id=job_id,
+                    snapshot_urls_event=snapshot_urls_event,
+                    snapshot_urls_container=snapshot_urls_container,
+                )
             )
-        )
+
         python_task = asyncio.create_task(
             _run_python_stages(
                 url=url,
@@ -345,14 +350,22 @@ async def _run_job_body(
         # (_timed in stages.py) bound individual auditors; this is the outer
         # safety net.
         try:
-            node_result, python_result = await asyncio.wait_for(
-                asyncio.gather(node_task, python_task, return_exceptions=True),
+            tasks = [python_task]
+            if node_task:
+                tasks.append(node_task)
+
+            gathered = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
                 timeout=_JOB_TIMEOUT_SECONDS,
             )
+            python_result = gathered[0]
+            node_result = gathered[1] if node_task else []
+
         except asyncio.TimeoutError:
-            for t in (node_task, python_task):
-                if not t.done():
-                    t.cancel()
+            if node_task and not node_task.done():
+                node_task.cancel()
+            if not python_task.done():
+                python_task.cancel()
             # Surface as a structured failure; the outer except path will
             # scrub it before broadcasting.
             raise TimeoutError(
@@ -360,18 +373,19 @@ async def _run_job_body(
             )
 
         # ── Resolve axe-core result ───────────────────────────────────────────
-        if isinstance(node_result, Exception):
-            _stage_error_and_warn(job_id, "axe_core", node_result)
-            node_findings: List[Dict] = []
-        else:
-            node_findings = node_result
-            _stage_complete(job_id, "axe_core", len(node_findings))
-            step_logger.record(
-                step="axe_core_summary",
-                status="completed",
-                message="axe-core results recorded",
-                context={"finding_count": len(node_findings)},
-            )
+        node_findings: List[Dict] = []
+        if payload.run_node_audit:
+            if isinstance(node_result, Exception):
+                _stage_error_and_warn(job_id, "axe_core", node_result)
+            else:
+                node_findings = node_result
+                _stage_complete(job_id, "axe_core", len(node_findings))
+                step_logger.record(
+                    step="axe_core_summary",
+                    status="completed",
+                    message="axe-core results recorded",
+                    context={"finding_count": len(node_findings)},
+                )
 
         # ── Resolve Python result ─────────────────────────────────────────────
         python_findings: List[Dict] = []

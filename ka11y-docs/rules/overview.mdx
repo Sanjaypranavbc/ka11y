@@ -136,6 +136,8 @@ See [WCAG Technique Coverage Matrix — Language Support](/rules/coverage-matrix
 
 ## Two audit engines
 
+ka11y uses a dual-engine architecture to achieve comprehensive WCAG coverage. Both engines can be configured independently, and the Node engine can be toggled off via the `run_node_audit` flag if only visual/multimodal auditing is required.
+
 ### Static auditors
 Use Playwright to extract DOM data, then apply rule logic in Python without re-rendering. Fast, deterministic, good for structural checks (alt text, form labels, target sizes).
 
