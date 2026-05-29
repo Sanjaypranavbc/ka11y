@@ -238,7 +238,7 @@ async function run(page, context = {}) {
           };
         }, widget.selector, role);
 
-        if (!focusBeforeArrows.insideWidget) continue;
+        if (!focusBeforeArrows || !focusBeforeArrows.insideWidget) continue;
 
         // Press ArrowDown then ArrowUp — if either changes active element, arrows work
         await page.keyboard.press('ArrowDown');
