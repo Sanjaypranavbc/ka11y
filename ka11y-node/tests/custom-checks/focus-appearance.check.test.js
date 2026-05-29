@@ -1,41 +1,25 @@
 'use strict';
 
 const { run, SC, RULE_ID, HELP_URL } = require('../../src/custom-checks/focus-appearance.check');
+const { RESULT_CACHE } = require('../../src/custom-checks/sharedAssets');
 
 /**
  * Creates a mock page for focus-appearance tests.
  *
- * The run() function does:
- *   1. page.evaluate(collectElements)  → array of element descriptors
- *   2. For each element:
- *      a. page.evaluate(captureUnfocused) → { outlineWidth, outlineStyle, ... }
- *      b. setTimeout (SETTLE_MS)
- *      c. page.evaluate(captureFocused)  → { outlineWidth, outlineStyle, ... }
- *      d. setTimeout (SETTLE_MS)
- *      e. page.evaluate(blurElement)     → void
+ * Each element now uses ONE evaluate returning both style snapshots.
  *
- * @param {Array} elements   - Array of element descriptors returned by the first evaluate call
  * @param {Array} styleSeq   - Array of [unfocused, focused] style pairs, one per element.
  */
-function makePage(elements, styleSeq = []) {
+function makePage(styleSeq = []) {
   let evaluateIdx = 0;
-  const responses = [];
-
-  // First evaluate: return elements list
-  responses.push(elements);
-
-  // For each element: unfocused styles, focused styles, blur (undefined)
-  for (const [unfocused, focused] of styleSeq) {
-    responses.push(unfocused);   // captureUnfocused
-    responses.push(focused);     // captureFocused
-    responses.push(undefined);   // blur
-  }
-
   return {
     evaluate: jest.fn().mockImplementation(() => {
-      const val = responses[evaluateIdx] !== undefined ? responses[evaluateIdx] : null;
-      evaluateIdx++;
-      return Promise.resolve(val);
+      const pair = styleSeq[evaluateIdx++];
+      if (!pair) return Promise.resolve(null);
+      return Promise.resolve({
+        unfocused: pair[0],
+        focused: pair[1],
+      });
     }),
   };
 }
@@ -75,17 +59,18 @@ const SAMPLE_ELEMENTS = [
 
 /**
  * Helper: run() and advance fake timers concurrently.
- * run() awaits multiple setTimeouts internally; we use runAllTimersAsync() to
- * advance them without blocking the async flow.
  */
-async function runWithTimers(page, context = {}) {
-  const resultPromise = run(page, context);
+async function runWithTimers(page, elements = SAMPLE_ELEMENTS, context = {}) {
+  const resultPromise = run(page, { ...context, focusableElements: elements });
   await jest.runAllTimersAsync();
   return resultPromise;
 }
 
 describe('focus-appearance.check (WCAG 2.4.13)', () => {
-  beforeEach(() => jest.useFakeTimers());
+  beforeEach(() => {
+    jest.useFakeTimers();
+    RESULT_CACHE.clear();
+  });
   afterEach(() => jest.useRealTimers());
 
   // ── Module exports ─────────────────────────────────────────────────────────
@@ -95,8 +80,8 @@ describe('focus-appearance.check (WCAG 2.4.13)', () => {
 
   // ── Pass paths ─────────────────────────────────────────────────────────────
   test('successCriteriaId is 2.4.13', async () => {
-    const page = makePage([], []);
-    const result = await runWithTimers(page);
+    const page = makePage([]);
+    const result = await runWithTimers(page, []);
     expect(result.successCriteriaId).toBe('2.4.13');
   });
 

@@ -9,7 +9,16 @@ const SC = '3.2.1';
 const RULE_ID = 'custom-on-focus';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
 
-const { FOCUSABLE_SELECTOR: SELECTOR } = require('./sharedAssets');
+const SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+  '[contenteditable="true"]',
+  '[contenteditable=""]',
+].join(', ');
 
 // Compare only pathname + search (not hash) to avoid false positives on skip-links
 // and hash-based anchor navigation (B7), while still catching real navigations (B10).
@@ -25,7 +34,7 @@ async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const violations = [];
   let navigationDetected = false;
-  const onNavigated = () => { navigationDetected = true; };
+  function onNavigated() { navigationDetected = true; }
   page.on('framenavigated', onNavigated);
 
   // Technique #3: Use pre-discovered elements from context

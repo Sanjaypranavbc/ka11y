@@ -1,6 +1,7 @@
 'use strict';
 
 const { run } = require('../../src/custom-checks/focus-visible.check');
+const { RESULT_CACHE } = require('../../src/custom-checks/sharedAssets');
 
 // Base style object matching what getComputedStyle returns for a default unfocused element
 const BASE_STYLES = {
@@ -56,7 +57,10 @@ function makePage({ elements = [], unfocusedStyles = BASE_STYLES, focusedStyles 
 }
 
 // Use fake timers so SETTLE_MS delays don't slow the test suite
-beforeEach(() => jest.useFakeTimers());
+beforeEach(() => {
+  jest.useFakeTimers();
+  RESULT_CACHE.clear();
+});
 afterEach(() => {
   jest.runAllTimers();
   jest.useRealTimers();

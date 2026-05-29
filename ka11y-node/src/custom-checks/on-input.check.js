@@ -9,7 +9,13 @@ const SC = '3.2.2';
 const RULE_ID = 'custom-on-input';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
 
-const { INPUT_SELECTOR } = require('./sharedAssets');
+const SELECTOR = [
+  'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled])',
+  'textarea:not([disabled])',
+  'select:not([disabled])',
+  '[contenteditable="true"]',
+  '[contenteditable=""]',
+].join(', ');
 
 // Safe test values per input type — use syntactically valid values to avoid
 // triggering browser validation events that could cause false-positive navigations (B9).
@@ -28,8 +34,7 @@ async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const violations = [];
   let navigationDetected = false;
-
-  const onNavigated = () => { navigationDetected = true; };
+  function onNavigated() { navigationDetected = true; }
   page.on('framenavigated', onNavigated);
 
   try {

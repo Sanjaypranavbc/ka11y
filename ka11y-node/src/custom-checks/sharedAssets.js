@@ -57,7 +57,7 @@ async function settle(page, ms = 80) {
  */
 async function discoverPageElements(page, selector, max = 2000) {
   return page.evaluate((sel, limit) => {
-    const items = [];
+    const results = [];
     const seen = new Set();
     const idCounts = {};
     const hashBuckets = {};
@@ -88,7 +88,7 @@ async function discoverPageElements(page, selector, max = 2000) {
         stableSel = `#${CSS.escape(el.id)}`;
       }
 
-      items.push({
+      results.push({
         idx: i, // DOM order index
         stableSel,
         tag: el.tagName.toUpperCase(),
@@ -107,9 +107,9 @@ async function discoverPageElements(page, selector, max = 2000) {
         inputType: (el.getAttribute('type') || el.tagName).toLowerCase(),
       });
 
-      if (items.length >= limit) break;
+      if (results.length >= limit) break;
     }
-    return items;
+    return results;
   }, selector, max);
 }
 

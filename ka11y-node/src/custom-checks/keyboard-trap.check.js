@@ -221,17 +221,14 @@ async function run(page, context = {}) {
         // Skip trivially empty widgets
         if (widget.childCount === 0) continue;
 
-        // Focus first focusable descendant or the widget itself
-        await page.evaluate((sel, r) => {
-          const root = sel ? document.querySelector(sel) : document.querySelector(`[role="${r}"]`);
-          if (!root) return;
-          const first = root.querySelector('[tabindex], button, a[href], input, select, textarea, [role="option"], [role="treeitem"], [role="menuitem"], [role="tab"], [role="row"], [role="gridcell"]');
-          (first || root).focus({ preventScroll: true });
-        }, widget.selector, role);
-        await settle(page, 60);
-
         const focusBeforeArrows = await page.evaluate((sel, r) => {
           const root = sel ? document.querySelector(sel) : document.querySelector(`[role="${r}"]`);
+          if (!root) return { key: null, insideWidget: false };
+          
+          // Focus first focusable descendant or the widget itself
+          const first = root.querySelector('[tabindex], button, a[href], input, select, textarea, [role="option"], [role="treeitem"], [role="menuitem"], [role="tab"], [role="row"], [role="gridcell"]');
+          (first || root).focus({ preventScroll: true });
+
           const el = document.activeElement;
           if (!el) return { key: null, insideWidget: false };
           const allEls = Array.from(document.querySelectorAll('*'));
@@ -552,7 +549,7 @@ async function run(page, context = {}) {
       rules: [{
         ruleId: RULE_ID,
         description: 'Keyboard focus must not be trapped in a component',
-        impact: 'serious',
+        impact: 'critical',
         status: 'fail',
         reason: _t(
           sharedContext,
