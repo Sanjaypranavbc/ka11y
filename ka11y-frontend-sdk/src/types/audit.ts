@@ -267,6 +267,7 @@ export interface AuditConfig {
   run_hover_focus_content_audit: boolean;
   run_focus_not_obscured_min_audit: boolean;
   run_focus_not_obscured_enh_audit: boolean;
+  run_node_audit: boolean;
 }
 
 export type TabValue = "dashboard" | "violations" | "needs-review" | "passes" | "image-visualisation" | "wcag-rules" | "settings" | "rule-evaluator";

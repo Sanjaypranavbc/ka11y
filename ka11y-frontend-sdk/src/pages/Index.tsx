@@ -44,6 +44,7 @@ const DEFAULT_CONFIG: AuditConfig = {
   run_hover_focus_content_audit: true,
   run_focus_not_obscured_min_audit: true,
   run_focus_not_obscured_enh_audit: true,
+  run_node_audit: true,
 };
 
 const Index = () => {

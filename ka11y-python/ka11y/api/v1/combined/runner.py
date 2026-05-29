@@ -52,7 +52,7 @@ logger = setup_logger(name="KAC", tag="combined")
 # Outer audit budget — bounds the top-level asyncio.gather of axe+python so
 # a stuck inner branch cannot pin a worker forever. Each inner stage already
 # has a tighter _STAGE_TIMEOUT_SECONDS budget in stages.py.
-_JOB_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1200"))
+_JOB_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1800"))
 
 # Hard cap on concurrent _run_job() background tasks. Without this, every
 # accepted POST spawns a Chromium + axe-core run; at the rate-limiter's

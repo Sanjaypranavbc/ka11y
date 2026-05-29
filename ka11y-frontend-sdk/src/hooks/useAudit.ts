@@ -457,6 +457,7 @@ export function useAudit() {
             run_media_audit: config.run_media_audit,
             run_captions_audit: config.run_captions_audit,
             run_sensory_audit: config.run_sensory_audit,
+            run_node_audit: config.run_node_audit,
           }),
         });
 

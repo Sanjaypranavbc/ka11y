@@ -868,6 +868,23 @@ _CATEGORY_REGEXES_JA: Dict[str, re.Pattern[str]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _nlp_cache: Dict[str, Any] = {}
+_sudachi_tokenizer: Any = None
+
+
+def _get_sudachi_tokenizer():
+    """Lazy-load and cache the SudachiPy tokenizer for Japanese POS analysis."""
+    global _sudachi_tokenizer
+    if _sudachi_tokenizer is not None:
+        return _sudachi_tokenizer
+    try:
+        import sudachipy  # type: ignore
+
+        # Create once and cache. Dictionary().create() is expensive as it loads
+        # system-wide dictionary files from disk.
+        _sudachi_tokenizer = sudachipy.Dictionary().create()
+        return _sudachi_tokenizer
+    except Exception:
+        return None
 
 
 def _get_nlp(lang: str = "en"):
@@ -1101,31 +1118,30 @@ def _has_meaningful_label_text_ja(text: str) -> bool:
     if _QUOTED_RE.search(text):
         return True
 
-    try:
-        import sudachipy  # type: ignore
+    tokenizer_obj = _get_sudachi_tokenizer()
+    if tokenizer_obj:
+        try:
+            morphemes = tokenizer_obj.tokenize(text)
+            for m in morphemes:
+                pos0 = m.part_of_speech()[0]
+                if pos0 not in ("名詞", "動詞", "形容詞", "形容動詞"):
+                    continue
+                surface = m.surface()
+                if _SENSORY_JA_RE.search(surface):
+                    continue
+                if _GENERIC_JA_RE.search(surface):
+                    continue
+                if _STOP_WORDS_JA_RE.search(surface):
+                    continue
+                if _INSTRUCTION_STRIP_JA.search(surface):
+                    continue
+                if _CJK_CHAR_RE.search(surface) or re.search(r"[a-zA-Z]{3,}", surface):
+                    return True
+            return False
+        except Exception:
+            pass
 
-        tokenizer_obj = sudachipy.Dictionary().create()
-        morphemes = tokenizer_obj.tokenize(text)
-        for m in morphemes:
-            pos0 = m.part_of_speech()[0]
-            if pos0 not in ("名詞", "動詞", "形容詞", "形容動詞"):
-                continue
-            surface = m.surface()
-            if _SENSORY_JA_RE.search(surface):
-                continue
-            if _GENERIC_JA_RE.search(surface):
-                continue
-            if _STOP_WORDS_JA_RE.search(surface):
-                continue
-            if _INSTRUCTION_STRIP_JA.search(surface):
-                continue
-            if _CJK_CHAR_RE.search(surface) or re.search(r"[a-zA-Z]{3,}", surface):
-                return True
-        return False
-    except Exception:
-        pass
-
-    # Regex fallback when SudachiPy is not installed
+    # Regex fallback when SudachiPy is not installed or fails
     stripped = _SENSORY_JA_RE.sub("", text)
     stripped = _GENERIC_JA_RE.sub("", stripped)
     stripped = _STOP_WORDS_JA_RE.sub("", stripped)
@@ -1229,7 +1245,9 @@ def _build_labelled_name_corpus(
             if not src:
                 continue
             for tok in _NAME_WORD_RE.findall(src.lower()):
-                if len(tok) > 1:
+                # For CJK, even single characters carry enough meaning to serve
+                # as a label (e.g. "赤" for red button, "上" for up).
+                if len(tok) > 1 or (len(tok) == 1 and _is_cjk_text(tok)):
                     corpus.add(tok)
     return corpus
 

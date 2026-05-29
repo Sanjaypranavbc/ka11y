@@ -58,6 +58,7 @@ export const translations = {
     "toggle.hoverFocus":      "Hover/Focus",
     "toggle.focusObscured":   "Focus Obscured",
     "toggle.focusObscuredPlus": "Focus Obscured+",
+    "toggle.runNodeAudit":    "axe-core (Node)",
 
     // ── Advanced checks group ─────────────────────────────────────────────────
     "checks.advanced":        "Advanced checks",
@@ -298,6 +299,7 @@ export const translations = {
     "toggle.hoverFocus":      "ホバー/フォーカス",
     "toggle.focusObscured":   "フォーカス隠蔽",
     "toggle.focusObscuredPlus": "フォーカス隠蔽+",
+    "toggle.runNodeAudit":    "axe-core (Node)監査",
 
     // ── Advanced checks group ─────────────────────────────────────────────────
     "checks.advanced":        "詳細チェック",
