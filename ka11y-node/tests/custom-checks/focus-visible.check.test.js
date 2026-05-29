@@ -32,11 +32,12 @@ const FOCUSED_TRANSPARENT_OUTLINE = {
 };
 
 /**
- * Build a mock page where:
+ * Build a mock page matching the L-1 collapsed evaluate pattern:
  *  - First evaluate() call returns `elements` (element list)
- *  - Subsequent calls per element follow the 4-call pattern:
- *      [0] unfocused styles, [1] focus action (null), [2] focused styles, [3] blur action (null)
- *  - All elements share the same unfocusedStyles and focusedStyles for simplicity
+ *  - Second evaluate() call returns `cssFindings` (static CSS scan)
+ *  - One evaluate() per element returns `{ unfocused, focused }`
+ *
+ * All elements share the same unfocusedStyles / focusedStyles for simplicity.
  */
 function makePage({ elements = [], unfocusedStyles = BASE_STYLES, focusedStyles = BASE_STYLES } = {}) {
   let callNum = 0;
@@ -45,11 +46,11 @@ function makePage({ elements = [], unfocusedStyles = BASE_STYLES, focusedStyles 
       callNum++;
       if (callNum === 1) return Promise.resolve(elements);
       if (callNum === 2) return Promise.resolve([]); // cssFindings
-      // Each element uses 4 evaluate calls (unfocused, focus, focused, blur)
-      const callInGroup = (callNum - 3) % 4;
-      if (callInGroup === 0) return Promise.resolve({ ...unfocusedStyles }); // unfocused styles
-      if (callInGroup === 2) return Promise.resolve({ ...focusedStyles });   // focused styles
-      return Promise.resolve(null);  // focus/blur actions
+      // Each element now uses ONE evaluate returning both style snapshots.
+      return Promise.resolve({
+        unfocused: { ...unfocusedStyles },
+        focused: { ...focusedStyles },
+      });
     }),
   };
 }

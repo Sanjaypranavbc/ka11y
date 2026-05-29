@@ -103,80 +103,83 @@ async function run(page, context = {}) {
   const violations = [];
 
   for (const el of elements) {
-    // ── Step 1: Capture unfocused styles ─────────────────────────────────────
-    // Use stable selector when available to survive DOM mutations caused by focus (B11).
-    const unfocused = await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (!e) return null;
-      e.blur();
-      const cs = window.getComputedStyle(e);
-      const csAfter = window.getComputedStyle(e, '::after');
-      return {
-        outlineWidth:    cs.outlineWidth,
-        outlineStyle:    cs.outlineStyle,
-        outlineColor:    cs.outlineColor,
-        boxShadow:       cs.boxShadow,
-        borderColor:     cs.borderColor,
-        borderWidth:     cs.borderWidth,
-        backgroundColor: cs.backgroundColor,
-        color:           cs.color,
-        transform:       cs.transform,
-        afterContent:    csAfter.content,
-        afterBoxShadow:  csAfter.boxShadow,
-        afterBorder:     csAfter.border,
-        afterOpacity:    csAfter.opacity,
-      };
-    }, SELECTOR, el.idx, el.stableSel);
+    // ── L-1: collapsed per-element round-trip ─────────────────────────────────
+    // The original implementation made FOUR `page.evaluate()` calls per element
+    // — capture-unfocused, focus, capture-focused, blur — each paying the CDP
+    // round-trip cost (~10–50 ms over the wire). With 5 interactive checks ×
+    // hundreds of elements that's the dominant per-page cost on heavy sites
+    // (see ka11y-docs/internals/stage-timing.mdx; this was the kao.com
+    // bottleneck).
+    //
+    // The whole dance now runs browser-side in ONE evaluate. The two
+    // SETTLE_MS waits are kept (CSS transitions / React re-renders still
+    // need them) but they happen inside the page context, so the cost is
+    // 1 CDP RT + 160 ms wait instead of 4 CDP RTs + 160 ms wait.
+    //
+    // Stable-selector + idx fallback is preserved verbatim (B11: DOM index
+    // shifts when focus triggers mutations).
+    const sample = await page.evaluate(
+      ({ sel, idx, stableSel, settleMs }) => {
+        const findEl = () =>
+          stableSel
+            ? (document.querySelector(stableSel) ||
+               Array.from(document.querySelectorAll(sel))[idx])
+            : Array.from(document.querySelectorAll(sel))[idx];
 
-    if (!unfocused) continue;
+        const capture = (node) => {
+          const cs = window.getComputedStyle(node);
+          const csAfter = window.getComputedStyle(node, '::after');
+          return {
+            outlineWidth:    cs.outlineWidth,
+            outlineStyle:    cs.outlineStyle,
+            outlineColor:    cs.outlineColor,
+            boxShadow:       cs.boxShadow,
+            borderColor:     cs.borderColor,
+            borderWidth:     cs.borderWidth,
+            backgroundColor: cs.backgroundColor,
+            color:           cs.color,
+            transform:       cs.transform,
+            afterContent:    csAfter.content,
+            afterBoxShadow:  csAfter.boxShadow,
+            afterBorder:     csAfter.border,
+            afterOpacity:    csAfter.opacity,
+          };
+        };
 
-    // ── Step 2: Focus the element and wait for transitions to settle ──────────
-    await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (e) e.focus({ preventScroll: true });
-    }, SELECTOR, el.idx, el.stableSel);
+        const e1 = findEl();
+        if (!e1) return null;
 
-    await new Promise(r => setTimeout(r, SETTLE_MS));
+        // Unfocused snapshot (post-blur) — preserves original semantics.
+        e1.blur();
+        const unfocused = capture(e1);
 
-    // ── Step 3: Capture focused styles ────────────────────────────────────────
-    const focused = await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (!e) return null;
-      const cs = window.getComputedStyle(e);
-      const csAfter = window.getComputedStyle(e, '::after');
-      return {
-        outlineWidth:    cs.outlineWidth,
-        outlineStyle:    cs.outlineStyle,
-        outlineColor:    cs.outlineColor,
-        boxShadow:       cs.boxShadow,
-        borderColor:     cs.borderColor,
-        borderWidth:     cs.borderWidth,
-        backgroundColor: cs.backgroundColor,
-        color:           cs.color,
-        transform:       cs.transform,
-        afterContent:    csAfter.content,
-        afterBoxShadow:  csAfter.boxShadow,
-        afterBorder:     csAfter.border,
-        afterOpacity:    csAfter.opacity,
-      };
-    }, SELECTOR, el.idx, el.stableSel);
+        // Focus and wait for transitions to settle.
+        e1.focus({ preventScroll: true });
 
-    // Blur and wait before next element
-    await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (e) e.blur();
-    }, SELECTOR, el.idx, el.stableSel);
-    await new Promise(r => setTimeout(r, SETTLE_MS));
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            // Re-resolve the element after the focus mutation in case the
+            // page's onfocus handler re-rendered subtree (the original
+            // stableSel-fallback path was specifically for this case).
+            const e2 = findEl();
+            if (!e2) {
+              resolve({ unfocused, focused: null });
+              return;
+            }
+            const focused = capture(e2);
+            e2.blur();
+            // Second settle so the NEXT iteration's `unfocused` capture
+            // isn't tainted by the still-propagating focus removal.
+            setTimeout(() => resolve({ unfocused, focused }), settleMs);
+          }, settleMs);
+        });
+      },
+      { sel: SELECTOR, idx: el.idx, stableSel: el.stableSel, settleMs: SETTLE_MS },
+    );
 
-    if (!focused) continue;
+    if (!sample) continue;
+    const { unfocused, focused } = sample;
+    if (!unfocused || !focused) continue;
 
     // ── Step 4: Determine if a visual change occurred ─────────────────────────
     // Verify the focused outline is not transparent before counting it visible.
