@@ -26,6 +26,8 @@ function makePage({ focusable = [], url = 'https://example.com', navigates = fal
       if (src.includes('delete window[stateKey]')) return Promise.resolve(undefined);
       // focusable element query
       if (src.includes('results.push({')) return Promise.resolve(focusable);
+      // merged focus and nav check
+      if (src.includes('spaNavChanged')) return Promise.resolve({ spaNavChanged: navigates && src.includes('count > 0') });
       // focus on element
       if (src.includes('el.focus(')) return Promise.resolve(undefined);
       return Promise.resolve(undefined);

@@ -15,7 +15,8 @@ function makePage({ inputs = [], url = 'https://example.com', urlAfterFocus = nu
     url: jest.fn().mockReturnValue(urlAfterFocus || url),
     evaluate: jest.fn().mockImplementation((fn) => {
       const src = String(fn);
-      if (src.includes('isCheckboxOrRadio')) return Promise.resolve(inputs);
+      if (src.includes('isCheckboxOrRadio') || src.includes('results.push({')) return Promise.resolve(inputs);
+      if (src.includes('spaNavChanged')) return Promise.resolve({ spaNavChanged: spaNav && src.includes('count > 0') });
       if (src.includes('__ka11yOnInputNavState') && src.includes('count > 0')) return Promise.resolve(spaNav);
       return Promise.resolve(undefined);
     }),
