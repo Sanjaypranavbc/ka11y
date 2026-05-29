@@ -33,17 +33,33 @@ ENV POETRY_NO_INTERACTION=1 \
 # Japanese NLP support (sudachipy + sudachidict + spaCy ja_core_news_lg).
 # Toggle off at build time for a smaller EN-only image:
 #   docker build --build-arg INSTALL_JAPANESE=0 .
+#
+# spaCy resolves model URLs through raw.githubusercontent.com, which DNS-flakes
+# mid-build the same way the NLTK mirror does. Same defence: retry up to 5
+# times with linear backoff, then assert the model loads so a truly-down
+# network fails the build loudly instead of shipping a half-populated image.
 ARG INSTALL_JAPANESE=1
 RUN if [ "$INSTALL_JAPANESE" = "1" ]; then \
         poetry install --only main -E japanese && \
-        python -m spacy download ja_core_news_lg; \
+        for attempt in 1 2 3 4 5; do \
+            python -m spacy download ja_core_news_lg && break; \
+            echo "[spacy] ja_core_news_lg download attempt $attempt failed; retrying in $((attempt * 10))s..."; \
+            sleep $((attempt * 10)); \
+        done && \
+        python -c "import spacy; spacy.load('ja_core_news_lg')"; \
     else \
         poetry install --only main; \
     fi
 
 # English spaCy model (~12MB) — loaded by sensory_auditor + quality_engine
 # regardless of the Japanese toggle; without it English falls back to regex/NLTK.
-RUN python -m spacy download en_core_web_sm
+# Same retry guard as the JA model above (same flaky upstream host).
+RUN for attempt in 1 2 3 4 5; do \
+        python -m spacy download en_core_web_sm && break; \
+        echo "[spacy] en_core_web_sm download attempt $attempt failed; retrying in $((attempt * 10))s..."; \
+        sleep $((attempt * 10)); \
+    done; \
+    python -c "import spacy; spacy.load('en_core_web_sm')"
 
 # Pre-download NLTK corpora used by media quality_engine so EC2/air-gapped
 # runs don't stall on first request.
