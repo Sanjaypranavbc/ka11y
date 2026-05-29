@@ -126,51 +126,8 @@ function extractBoxShadowMetrics(layer) {
 
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
-  // Snapshot element styles before/after focus in separate evaluate calls
-  // to allow the browser to settle between focus state changes.
-
-  const SELECTOR = [
-    'a[href]',
-    'button:not([disabled])',
-    'input:not([disabled]):not([type="hidden"])',
-    'select:not([disabled])',
-    'textarea:not([disabled])',
-    '[tabindex]:not([tabindex="-1"])',
-  ].join(', ');
-
-  // Collect elements to test.
-  // Each item stores a stable_sel: either "#id" (if unique ID exists) or the
-  // nth-of-type selector, so re-queries in subsequent evaluate() calls target
-  // the SAME element even if sibling DOM mutations have occurred.
-  const elements = await page.evaluate((sel, max) => {
-    const seen = new Set();
-    const items = [];
-    const idCounts = {};
-    // Count IDs to detect duplicates (which would make "#id" non-unique)
-    for (const el of document.querySelectorAll('[id]')) {
-      idCounts[el.id] = (idCounts[el.id] || 0) + 1;
-    }
-    for (const el of document.querySelectorAll(sel)) {
-      if (seen.has(el)) continue;
-      seen.add(el);
-      // Build a stable selector: prefer unique id, fallback to global DOM index
-      let stableSel = null;
-      if (el.id && idCounts[el.id] === 1) {
-        stableSel = `#${CSS.escape(el.id)}`;
-      }
-      items.push({
-        idx:       items.length,
-        stableSel,
-        tag:       el.tagName.toUpperCase(),
-        tagName:   el.tagName.toLowerCase(),
-        target:    stableSel ? [stableSel] : [el.tagName.toLowerCase()],
-        id:        el.id || null,
-        html:      el.outerHTML.slice(0, 150),
-      });
-      if (items.length >= max) break;
-    }
-    return items;
-  }, SELECTOR, MAX_ELEMENTS);
+  // Technique #3: Use pre-discovered elements from context
+  const elements = sharedContext.focusableElements || [];
 
   const violations = [];
   const passes = [];
@@ -179,16 +136,13 @@ async function run(page, context = {}) {
     // ── L-2: collapsed per-element round-trip (mirrors L-1 in focus-visible) ──
     // One `page.evaluate` runs the full unfocused-capture → focus → settle →
     // focused-capture → blur cycle browser-side. CDP cost: 1 RT instead of 3.
-    // SETTLE_MS waits stay inside the page context so CSS transitions still
-    // get to resolve. Also captures body background in the same pass for the
-    // transparent-element fallback (B5).
     const sample = await page.evaluate(
-      ({ sel, idx, stableSel, settleMs }) => {
+      ({ idx, stableSel, settleMs }) => {
         const findEl = () =>
           stableSel
             ? (document.querySelector(stableSel) ||
-               Array.from(document.querySelectorAll(sel))[idx])
-            : Array.from(document.querySelectorAll(sel))[idx];
+               Array.from(document.querySelectorAll('*'))[idx])
+            : Array.from(document.querySelectorAll('*'))[idx];
 
         const captureBox = (node) => {
           const cs = window.getComputedStyle(node);
@@ -233,7 +187,7 @@ async function run(page, context = {}) {
           }, settleMs);
         });
       },
-      { sel: SELECTOR, idx: el.idx, stableSel: el.stableSel, settleMs: SETTLE_MS },
+      { idx: el.idx, stableSel: el.stableSel, settleMs: 80 },
     );
 
     if (!sample) continue;

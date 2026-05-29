@@ -8,18 +8,6 @@ const {
 const SC = '2.4.7';
 const RULE_ID = 'custom-focus-visible';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-visible';
-const MAX_ELEMENTS = 2000;
-// Settle delay: allow CSS transitions and React/Vue re-renders to apply before capturing styles
-const SETTLE_MS = 80;
-
-const SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled]):not([type="hidden"])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-].join(', ');
 
 function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
@@ -27,33 +15,8 @@ function _t(context, en, ja, params = {}) {
 
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
-  // Collect element metadata once — include stable selectors (B11: DOM index shifts when
-  // focus triggers DOM mutations; stable selectors survive re-queries after mutations).
-  const elements = await page.evaluate((sel, max) => {
-    const seen = new Set();
-    const items = [];
-    const idCounts = {};
-    for (const el of document.querySelectorAll('[id]')) {
-      idCounts[el.id] = (idCounts[el.id] || 0) + 1;
-    }
-    for (const el of document.querySelectorAll(sel)) {
-      if (seen.has(el)) continue;
-      seen.add(el);
-      let stableSel = null;
-      if (el.id && idCounts[el.id] === 1) stableSel = `#${CSS.escape(el.id)}`;
-      items.push({ 
-        idx: items.length, 
-        stableSel, 
-        tagName: el.tagName.toLowerCase(), 
-        tag: el.tagName.toUpperCase(),
-        target: stableSel ? [stableSel] : [el.tagName.toLowerCase()],
-        id: el.id || null, 
-        html: el.outerHTML.slice(0, 200) 
-      });
-      if (items.length >= max) break;
-    }
-    return items;
-  }, SELECTOR, MAX_ELEMENTS);
+  // Technique #3: Use pre-discovered elements from context
+  const elements = sharedContext.focusableElements || [];
 
   // Static CSS scan: detect global :focus { outline: none } resets without :focus-visible restoration
   const cssFindings = await page.evaluate(() => {
@@ -119,12 +82,12 @@ async function run(page, context = {}) {
     // Stable-selector + idx fallback is preserved verbatim (B11: DOM index
     // shifts when focus triggers mutations).
     const sample = await page.evaluate(
-      ({ sel, idx, stableSel, settleMs }) => {
+      ({ idx, stableSel, settleMs }) => {
         const findEl = () =>
           stableSel
             ? (document.querySelector(stableSel) ||
-               Array.from(document.querySelectorAll(sel))[idx])
-            : Array.from(document.querySelectorAll(sel))[idx];
+               Array.from(document.querySelectorAll('*'))[idx])
+            : Array.from(document.querySelectorAll('*'))[idx];
 
         const capture = (node) => {
           const cs = window.getComputedStyle(node);
@@ -174,7 +137,7 @@ async function run(page, context = {}) {
           }, settleMs);
         });
       },
-      { sel: SELECTOR, idx: el.idx, stableSel: el.stableSel, settleMs: SETTLE_MS },
+      { idx: el.idx, stableSel: el.stableSel, settleMs: 80 },
     );
 
     if (!sample) continue;

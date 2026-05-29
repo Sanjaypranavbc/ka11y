@@ -8,18 +8,6 @@ const {
 const SC = '3.2.1';
 const RULE_ID = 'custom-on-focus';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
-const MAX_ELEMENTS = 2000;
-const SETTLE_MS = 100;
-
-// Includes form controls (input, select, textarea) — they can carry onfocus handlers
-const SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled]):not([type="hidden"])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-].join(', ');
 
 // Compare only pathname + search (not hash) to avoid false positives on skip-links
 // and hash-based anchor navigation (B7), while still catching real navigations (B10).
@@ -34,11 +22,10 @@ function _t(context, en, ja, params = {}) {
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const violations = [];
-  let navigationDetected = false;
   const initialUrl = page.url();
-
-  const onNavigated = () => { navigationDetected = true; };
-  page.on('framenavigated', onNavigated);
+  
+  // Technique #3: Use pre-discovered elements from context
+  const focusable = sharedContext.focusableElements || [];
 
   try {
     // Inject SPA navigation detection: wrap history.pushState/replaceState (and
@@ -59,58 +46,40 @@ async function run(page, context = {}) {
       window[stateKey] = state;
     });
 
-    const focusable = await page.evaluate((sel, max) => {
-      // Deduplicate: [tabindex] may overlap with a, button, etc.
-      const seen = new Set();
-      const results = [];
-      for (const el of document.querySelectorAll(sel)) {
-        if (seen.has(el)) continue;
-        seen.add(el);
-        results.push({
-          tagName: el.tagName.toLowerCase(),
-          id: el.id || null,
-          html: el.outerHTML.slice(0, 150),
-          target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
-          tag: el.tagName.toUpperCase(),
-        });
-        if (results.length >= max) break;
-      }
-      return results;
-    }, SELECTOR, MAX_ELEMENTS);
-
-    for (let i = 0; i < (focusable || []).length; i++) {
-      navigationDetected = false;
+    for (let i = 0; i < focusable.length; i++) {
+      const el = focusable[i];
       const urlBefore = page.url();
 
-      await page.evaluate((sel, idx) => {
-        // Re-query each time — prior focus interactions may have altered DOM
-        const uniqueEls = [];
-        const seen = new Set();
-        for (const el of document.querySelectorAll(sel)) {
-          if (!seen.has(el)) { seen.add(el); uniqueEls.push(el); }
-        }
-        const el = uniqueEls[idx];
-        if (el) el.focus({ preventScroll: true });
-      }, SELECTOR, i);
+      // ── L-1: collapsed per-element round-trip ──
+      // Focus element and wait for settlement browser-side.
+      // Returns the SPA navigation count to detect context changes without extra RTs.
+      const navStatus = await page.evaluate(({ idx, stableSel, settleMs }) => {
+        const findEl = () =>
+          stableSel
+            ? (document.querySelector(stableSel) ||
+               Array.from(document.querySelectorAll('*'))[idx])
+            : Array.from(document.querySelectorAll('*'))[idx];
 
-      await new Promise(r => setTimeout(r, SETTLE_MS));
+        const e = findEl();
+        if (e) e.focus({ preventScroll: true });
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            const s = window.__navChanges;
+            const spaNavChanged = !!(s && s.count > 0);
+            if (s) s.count = 0; // Reset for next element
+            resolve({ spaNavChanged });
+          }, settleMs);
+        });
+      }, { idx: el.idx, stableSel: el.stableSel, settleMs: 100 });
 
       const currentUrl = page.url();
-      const spaNavChanged = await page.evaluate(() => {
-        const s = window.__navChanges;
-        return !!(s && s.count > 0);
-      }).catch(() => false);
-
       // Only flag pathname/search changes — hash-only changes (skip-links, anchor navigation)
       // are not a WCAG 3.2.1 context change.
-      if (navigationDetected || spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
-        violations.push(focusable[i]);
+      if (navStatus.spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
+        violations.push(el);
         break; // page may have navigated; unsafe to continue testing other elements
       }
-      // Reset SPA counter for next element
-      await page.evaluate(() => {
-        if (window.__navChanges) window.__navChanges.count = 0;
-      }).catch(() => {});
     }
   } finally {
     page.off('framenavigated', onNavigated);

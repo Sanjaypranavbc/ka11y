@@ -209,10 +209,11 @@ function _buildExecutionFailure(checkDef, reason) {
   };
 }
 
-function _buildContext(context = {}) {
+function _buildContext(context = {}, page = null) {
   return {
     config: context && context.config ? context.config : loadSharedConfig(),
     lang: sanitizeLang(context && context.lang ? context.lang : 'en'),
+    page,
   };
 }
 
@@ -248,7 +249,7 @@ function _selectChecks(checkDefs, criteriaId) {
 }
 
 async function _runChecks(checkDefs, page, context = {}) {
-  const sharedContext = _buildContext(context);
+  const sharedContext = _buildContext(context, page);
   const results = await Promise.allSettled(checkDefs.map(d => d.check.run(page, sharedContext)));
   return results
     .map((r, i) => {
@@ -270,7 +271,12 @@ async function runStaticChecks(page, criteriaIdOrContext = null, context = {}) {
 async function runInteractiveChecks(page, criteriaIdOrContext = null, context = {}) {
   const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
   // Interactive checks must run sequentially (they mutate focus/keyboard/page state)
-  const sharedContext = _buildContext(ctx);
+  const sharedContext = _buildContext(ctx, page);
+
+  // Technique #3: Discover focusable set once and share across all 5 interactive checks
+  const { discoverPageElements, FOCUSABLE_SELECTOR } = require('./sharedAssets');
+  sharedContext.focusableElements = await discoverPageElements(page, FOCUSABLE_SELECTOR);
+
   const selected = _selectChecks(INTERACTIVE_CHECKS, criteriaId);
   const results = [];
   for (let i = 0; i < selected.length; i++) {
