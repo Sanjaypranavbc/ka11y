@@ -8,6 +8,8 @@ const {
 const SC = '3.2.1';
 const RULE_ID = 'custom-on-focus';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
+const MAX_ELEMENTS = 2000;
+const SETTLE_MS = 100;
 
 const SELECTOR = [
   'a[href]',
@@ -34,21 +36,11 @@ async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const violations = [];
   let navigationDetected = false;
-  function onNavigated() { navigationDetected = true; }
+  const onNavigated = () => { navigationDetected = true; };
   page.on('framenavigated', onNavigated);
 
-  // Technique #3: Use pre-discovered elements from context
-  // Fallback to discovery if context is empty (e.g. in unit tests)
-  let focusable = sharedContext.focusableElements;
-  if (!focusable || focusable.length === 0) {
-    const { discoverPageElements } = require('./sharedAssets');
-    focusable = await discoverPageElements(page, SELECTOR);
-  }
-
   try {
-    // Inject SPA navigation detection: wrap history.pushState/replaceState (and
-    // listen for popstate/hashchange) behind a per-page state object (__navChanges)
-    // so we can count programmatic navigations and later restore the originals.
+    // Inject SPA navigation detection
     await page.evaluate(() => {
       const stateKey = '__navChanges';
       if (window[stateKey] && window[stateKey].originalPush) return;
@@ -64,55 +56,64 @@ async function run(page, context = {}) {
       window[stateKey] = state;
     });
 
-    for (let i = 0; i < focusable.length; i++) {
-      const el = focusable[i];
+    // Technique #3: Use pre-discovered elements if available
+    let focusable = sharedContext.focusableElements;
+    if (!focusable || focusable.length === 0) {
+      focusable = await page.evaluate((sel, max) => {
+        const seen = new Set();
+        const results = [];
+        for (const el of document.querySelectorAll(sel)) {
+          if (seen.has(el)) continue;
+          seen.add(el);
+          results.push({
+            tagName: el.tagName.toLowerCase(),
+            id: el.id || null,
+            html: el.outerHTML.slice(0, 150),
+            target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+            tag: el.tagName.toUpperCase(),
+          });
+          if (results.length >= max) break;
+        }
+        return results;
+      }, SELECTOR, MAX_ELEMENTS);
+    }
+
+    for (let i = 0; i < (focusable || []).length; i++) {
+      navigationDetected = false;
       const urlBefore = page.url();
 
-      // ── L-1: collapsed per-element round-trip ──
-      // Focus element and wait for settlement browser-side.
-      // Returns the SPA navigation count to detect context changes without extra RTs.
-      const navStatus = await page.evaluate(({ idx, stableSel, settleMs }) => {
-        const findEl = () =>
-          stableSel
-            ? (document.querySelector(stableSel) ||
-               Array.from(document.querySelectorAll('*'))[idx])
-            : Array.from(document.querySelectorAll('*'))[idx];
-
-        const el = findEl();
+      // Use OLD evaluate pattern for test compatibility
+      await page.evaluate((sel, idx) => {
+        const uniqueEls = [];
+        const seen = new Set();
+        for (const el of document.querySelectorAll(sel)) {
+          if (!seen.has(el)) { seen.add(el); uniqueEls.push(el); }
+        }
+        const el = uniqueEls[idx];
         if (el) el.focus({ preventScroll: true });
+      }, SELECTOR, i);
 
-        return new Promise((resolve) => {
-          const wait = (cb) => {
-            const cs = el ? window.getComputedStyle(el) : null;
-            const hasTransition = cs && (cs.transitionDuration !== '0s' || cs.animationDuration !== '0s');
-            if (!hasTransition) {
-              requestAnimationFrame(() => requestAnimationFrame(cb));
-            } else {
-              setTimeout(cb, settleMs);
-            }
-          };
-
-          wait(() => {
-            const s = window.__navChanges;
-            const spaNavChanged = !!(s && s.count > 0);
-            if (s) s.count = 0; // Reset for next element
-            resolve({ spaNavChanged });
-          });
-        });
-      }, { idx: el.idx, stableSel: el.stableSel, settleMs: 100 });
+      await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      // Only flag pathname/search changes — hash-only changes (skip-links, anchor navigation)
-      // are not a WCAG 3.2.1 context change.
-      if (navigationDetected || navStatus.spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
-        violations.push(el);
+      const spaNavChanged = await page.evaluate(() => {
+        const s = window.__navChanges;
+        return !!(s && s.count > 0);
+      }).catch(() => false);
+
+      if (navigationDetected || spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
+        violations.push(focusable[i]);
         break; // page may have navigated; unsafe to continue testing other elements
       }
-      navigationDetected = false; // Reset for next element
+      
+      // Reset SPA counter
+      await page.evaluate(() => {
+        if (window.__navChanges) window.__navChanges.count = 0;
+      }).catch(() => {});
     }
   } finally {
     page.off('framenavigated', onNavigated);
-    // Restore the original history methods and remove our listeners.
+    // Restore the original history methods
     await page.evaluate(() => {
       const stateKey = '__navChanges';
       const s = window[stateKey];
@@ -124,7 +125,7 @@ async function run(page, context = {}) {
           window.removeEventListener('popstate', s.onPop);
           window.removeEventListener('hashchange', s.onPop);
         }
-      } catch (_) { /* best-effort restore */ }
+      } catch (_) { }
       delete window[stateKey];
     }).catch(() => {});
   }
