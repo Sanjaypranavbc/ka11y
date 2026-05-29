@@ -141,6 +141,7 @@
         "internals/crawler-metadata",
         "internals/data-models",
         "internals/sse-events",
+        "internals/stage-timing",
         "internals/output-format",
         "internals/live-ten-site-analysis",
         "internals/config",
