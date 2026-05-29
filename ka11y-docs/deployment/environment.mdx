@@ -10,6 +10,9 @@ description: "All environment variables for each ka11y service"
 | `NODE_ENV` | `development` | No | Set to `production` to disable dev logging |
 | `PORT` | `3000` | No | Port the Express server listens on |
 | `AXE_TIMEOUT_MS` | `60000` | No | Per-page axe-core scan timeout (milliseconds) |
+| `CUSTOM_CHECKS_TIMEOUT_MS` | `30000` | No | Per-page budget (ms) for the Node custom checks (focus-visible, on-focus, keyboard-trap, etc.), split 60/40 between static and interactive phases. Was `90000`; dropped 2026-05-29 after profiling showed the interactive phase was the dominant per-page cost. Raise this on sites that need exhaustive interactive coverage; lower it on shallow scans where speed matters more than the tail of focus-checks. See [Stage timing](/internals/stage-timing) for which phase hit the cap. |
+| `FLAT_CRAWL_BUDGET_MS` | `255000` | No | Overall multi-page crawl budget (ms) for `/api/v1/analyse-url-flat`. Must stay below the Python `_call_node_flat` HTTP timeout (300 s). Ignored in snapshot-fed mode (when Python sends `discoveredUrls`) — Node then audits exactly the snapshot's pages without time-based clipping. |
+| `FLAT_PER_PAGE_MS` | `120000` | No | Per-page hard cap (ms) inside the flat crawl loop, clamped to the remaining overall budget. |
 | `BODY_LIMIT` | `10mb` | No | Express request body size limit |
 | `PUPPETEER_EXECUTABLE_PATH` | `/usr/bin/chromium` | No | Path to the Chromium binary (auto-set in Dockerfile) |
 | `PUPPETEER_SKIP_CHROMIUM_DOWNLOAD` | `true` | No | Prevents Puppeteer from downloading its own Chromium (auto-set in Dockerfile) |
@@ -21,6 +24,11 @@ NODE_ENV=production
 PORT=3000
 AXE_TIMEOUT_MS=90000
 BODY_LIMIT=10mb
+
+# Tune custom-check coverage vs. throughput.
+# 30s default keeps multi-page crawls bounded; raise on sites that need
+# exhaustive interactive focus-check coverage.
+CUSTOM_CHECKS_TIMEOUT_MS=30000
 ```
 
 ---
