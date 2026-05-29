@@ -68,11 +68,11 @@ async function run(page, context = {}) {
       }
     }
     return issues;
-  });
+  }) || [];
 
   const violations = [];
 
-  for (const el of elements) {
+  for (const el of (elements || [])) {
     // Technique #5: Cache look-up by (outerHTML + static computed styles)
     const cacheKey = `${RULE_ID}:${el.html}:${el.staticStyles}`;
     if (RESULT_CACHE.has(cacheKey)) {

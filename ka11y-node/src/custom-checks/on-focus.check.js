@@ -78,12 +78,12 @@ async function run(page, context = {}) {
                Array.from(document.querySelectorAll('*'))[idx])
             : Array.from(document.querySelectorAll('*'))[idx];
 
-        const e = findEl();
-        if (e) e.focus({ preventScroll: true });
+        const el = findEl();
+        if (el) el.focus({ preventScroll: true });
 
         return new Promise((resolve) => {
           const wait = (cb) => {
-            const cs = e ? window.getComputedStyle(e) : null;
+            const cs = el ? window.getComputedStyle(el) : null;
             const hasTransition = cs && (cs.transitionDuration !== '0s' || cs.animationDuration !== '0s');
             if (!hasTransition) {
               requestAnimationFrame(() => requestAnimationFrame(cb));

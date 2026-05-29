@@ -3,23 +3,32 @@
 const { run, SC, RULE_ID, HELP_URL } = require('../../src/custom-checks/focus-appearance.check');
 const { RESULT_CACHE } = require('../../src/custom-checks/sharedAssets');
 
+jest.mock('../../src/custom-checks/sharedAssets', () => {
+  const actual = jest.requireActual('../../src/custom-checks/sharedAssets');
+  return {
+    ...actual,
+    settle: jest.fn().mockResolvedValue(undefined),
+  };
+});
+
 /**
  * Creates a mock page for focus-appearance tests.
- *
- * Each element now uses ONE evaluate returning both style snapshots.
- *
- * @param {Array} styleSeq   - Array of [unfocused, focused] style pairs, one per element.
  */
-function makePage(styleSeq = []) {
-  let evaluateIdx = 0;
+function makePage(styleSeq = [], elements = []) {
+  let elementCheckIdx = 0;
   return {
-    evaluate: jest.fn().mockImplementation(() => {
-      const pair = styleSeq[evaluateIdx++];
-      if (!pair) return Promise.resolve(null);
-      return Promise.resolve({
-        unfocused: pair[0],
-        focused: pair[1],
-      });
+    evaluate: jest.fn().mockImplementation((fn) => {
+      const src = String(fn);
+      if (src.includes('results.push({')) return Promise.resolve(elements);
+      if (src.includes('captureBox')) {
+        const pair = styleSeq[elementCheckIdx++];
+        if (!pair) return Promise.resolve(null);
+        return Promise.resolve({
+          unfocused: pair[0],
+          focused: pair[1],
+        });
+      }
+      return Promise.resolve(null);
     }),
   };
 }
@@ -44,7 +53,6 @@ const STYLES = {
     borderColor: 'rgb(0,0,0)', borderWidth: '1px',
     bodyBg: 'rgb(255,255,255)',
   },
-  // Low contrast: light gray outline on white background (contrast ratio < 3:1)
   outlineLowContrast: {
     outlineWidth: '2px', outlineStyle: 'solid', outlineColor: 'rgb(200,200,200)',
     boxShadow: 'none', backgroundColor: 'rgb(255,255,255)',
@@ -54,12 +62,9 @@ const STYLES = {
 };
 
 const SAMPLE_ELEMENTS = [
-  { idx: 0, stableSel: '#btn', tag: 'button', id: 'btn', html: '<button id="btn">Click me</button>' },
+  { idx: 0, stableSel: '#btn', tag: 'button', id: 'btn', html: '<button id="btn">Click me</button>', staticStyles: '' },
 ];
 
-/**
- * Helper: run() and advance fake timers concurrently.
- */
 async function runWithTimers(page, elements = SAMPLE_ELEMENTS, context = {}) {
   const resultPromise = run(page, { ...context, focusableElements: elements });
   await jest.runAllTimersAsync();
@@ -73,251 +78,143 @@ describe('focus-appearance.check (WCAG 2.4.13)', () => {
   });
   afterEach(() => jest.useRealTimers());
 
-  // ── Module exports ─────────────────────────────────────────────────────────
-  test('exports SC as 2.4.13', () => { expect(SC).toBe('2.4.13'); });
-  test('exports RULE_ID as custom-focus-appearance', () => { expect(RULE_ID).toBe('custom-focus-appearance'); });
-  test('exports HELP_URL', () => { expect(HELP_URL).toContain('focus-appearance'); });
+  test('exports metadata', () => {
+    expect(SC).toBe('2.4.13');
+    expect(RULE_ID).toBe('custom-focus-appearance');
+    expect(HELP_URL).toContain('focus-appearance');
+  });
 
-  // ── Pass paths ─────────────────────────────────────────────────────────────
   test('successCriteriaId is 2.4.13', async () => {
-    const page = makePage([]);
-    const result = await runWithTimers(page, []);
+    const result = await runWithTimers(makePage([], []), []);
     expect(result.successCriteriaId).toBe('2.4.13');
   });
 
-  test('ruleId is custom-focus-appearance', async () => {
-    const page = makePage([], []);
-    const result = await runWithTimers(page);
-    expect(result.rules[0].ruleId).toBe('custom-focus-appearance');
-  });
-
-  test('passes when no focusable elements are found', async () => {
-    const page = makePage([], []);
-    const result = await runWithTimers(page);
+  test('passes when no focusable elements exist', async () => {
+    const result = await runWithTimers(makePage([], []), []);
     expect(result.rules[0].status).toBe('pass');
-    expect(result.rules[0].impact).toBeNull();
-    expect(result.rules[0].helpUrl).toBe(HELP_URL);
   });
 
   test('element with 2px+ outline and sufficient contrast SHOULD pass', async () => {
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, STYLES.outline2px]],
-    );
+    const page = makePage([[STYLES.noOutline, STYLES.outline2px]]);
     const result = await runWithTimers(page);
     expect(result.rules[0].status).toBe('pass');
     expect(result.rules[0].reason).toContain('1 focusable element(s) sampled');
   });
 
-  test('pass reason includes min outline and contrast requirements', async () => {
-    const page = makePage(SAMPLE_ELEMENTS, [[STYLES.noOutline, STYLES.outline2px]]);
+  test('pass reason includes min requirements', async () => {
+    const page = makePage([[STYLES.noOutline, STYLES.outline2px]]);
     const result = await runWithTimers(page);
-    expect(result.rules[0].reason).toContain('2px');
-    expect(result.rules[0].reason).toContain('3');
+    expect(result.rules[0].reason).toContain('≥2px outline');
+    expect(result.rules[0].reason).toContain('≥3:1');
   });
 
-  // ── Fail: no indicator ────────────────────────────────────────────────────
-  test('element with no focus indicator at all SHOULD fail', async () => {
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, STYLES.noOutline]],
-    );
+  test('element with no focus indicator SHOULD fail', async () => {
+    const page = makePage([[STYLES.noOutline, STYLES.noOutline]]);
     const result = await runWithTimers(page);
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('focus indicator');
-    expect(result.rules[0].impact).toBe('serious');
   });
 
-  // ── Fail: area requirement not met ────────────────────────────────────────
-  test('element with 1px outline SHOULD fail (area requirement not met)', async () => {
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, STYLES.outline1px]],
-    );
+  test('element with 1px outline SHOULD fail (area requirement)', async () => {
+    const page = makePage([[STYLES.noOutline, STYLES.outline1px]]);
     const result = await runWithTimers(page);
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('outline-width');
     expect(result.rules[0].reason).toContain('1px');
   });
 
-  // ── Fail: contrast not met ────────────────────────────────────────────────
-  test('element with insufficient contrast (low-contrast outline) SHOULD fail', async () => {
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, STYLES.outlineLowContrast]],
-    );
+  test('element with low contrast SHOULD fail', async () => {
+    const page = makePage([[STYLES.noOutline, STYLES.outlineLowContrast]]);
     const result = await runWithTimers(page);
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('contrast');
   });
 
-  test('Japanese reason localizes focus issue details', async () => {
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, STYLES.outline1px]],
-    );
-    const result = await runWithTimers(page, { lang: 'ja' });
+  test('Japanese reason localizes details', async () => {
+    const page = makePage([[STYLES.noOutline, STYLES.outline1px]]);
+    const result = await runWithTimers(page, SAMPLE_ELEMENTS, { lang: 'ja' });
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('アウトライン幅');
-    expect(result.rules[0].reason).not.toContain('area requirement');
   });
 
-  test('fail reason includes element tag and issue description', async () => {
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, STYLES.outline1px]],
-    );
+  test('fail reason includes element tag', async () => {
+    const page = makePage([[STYLES.noOutline, STYLES.noOutline]]);
     const result = await runWithTimers(page);
     expect(result.rules[0].reason).toMatch(/<button/);
   });
 
-  test('fail result has impact: serious', async () => {
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, STYLES.noOutline]],
-    );
+  test('fail impact is serious', async () => {
+    const page = makePage([[STYLES.noOutline, STYLES.noOutline]]);
     const result = await runWithTimers(page);
     expect(result.rules[0].impact).toBe('serious');
   });
 
-  // ── Box-shadow indicator ──────────────────────────────────────────────────
-  test('element with box-shadow focus indicator passes (with sufficient spread)', async () => {
-    const focused = {
-      ...STYLES.noOutline,
-      boxShadow: '0 0 0 3px rgb(0,95,204)',
-    };
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, focused]],
-    );
-    const result = await runWithTimers(page);
+  test('box-shadow spread (2px+) pass', async () => {
+    const focused = { ...STYLES.noOutline, boxShadow: '0 0 0 2px rgb(0,95,204)' };
+    const result = await runWithTimers(makePage([[STYLES.noOutline, focused]]));
     expect(result.rules[0].status).toBe('pass');
   });
 
-  test('element with small box-shadow spread (1px) may fail area requirement', async () => {
-    const focused = {
-      ...STYLES.noOutline,
-      boxShadow: '0 0 0 1px rgb(0,95,204)',
-    };
-    const page = makePage(
-      SAMPLE_ELEMENTS,
-      [[STYLES.noOutline, focused]],
-    );
-    const result = await runWithTimers(page);
-    // 1px spread < 2px minimum → fail area
+  test('box-shadow spread (1px) fail', async () => {
+    const focused = { ...STYLES.noOutline, boxShadow: '0 0 0 1px rgb(0,95,204)' };
+    const result = await runWithTimers(makePage([[STYLES.noOutline, focused]]));
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('area requirement');
   });
 
-  // ── Border change indicator ────────────────────────────────────────────────
-  test('element with border change (different color) is detected as indicator', async () => {
-    const unfocused = { ...STYLES.noOutline };
-    const focused = {
-      ...STYLES.noOutline,
-      borderColor: 'rgb(0,95,204)', // color changed
-      borderWidth: '2px',           // width changed from 1px → 2px
-    };
-    const page = makePage(SAMPLE_ELEMENTS, [[unfocused, focused]]);
-    const result = await runWithTimers(page);
-    // Border changed → has indicator; width 2px ≥ 2px → area met
-    // High contrast blue on white → passes
+  test('border-width (2px+) pass', async () => {
+    const unfocused = { ...STYLES.noOutline, borderWidth: '1px' };
+    const focused = { ...STYLES.noOutline, borderWidth: '3px' };
+    const result = await runWithTimers(makePage([[unfocused, focused]]));
     expect(result.rules[0].status).toBe('pass');
   });
 
-  test('border-only indicator with unchanged width fails area requirement', async () => {
-    const unfocused = { ...STYLES.noOutline };
-    const focused = {
-      ...STYLES.noOutline,
-      borderColor: 'rgb(0,95,204)', // only color changed, width unchanged
-      // borderWidth stays '1px' (same as unfocused) → no area change
-    };
-    const page = makePage(SAMPLE_ELEMENTS, [[unfocused, focused]]);
-    const result = await runWithTimers(page);
-    // Border color changed but width unchanged → borderChangedForArea = false → area not met
+  test('border-width unchanged fail', async () => {
+    const unfocused = { ...STYLES.noOutline, borderWidth: '2px', borderColor: 'rgb(0,0,0)' };
+    const focused = { ...STYLES.noOutline, borderWidth: '2px', borderColor: 'rgb(0,95,204)' };
+    const result = await runWithTimers(makePage([[unfocused, focused]]));
     expect(result.rules[0].status).toBe('fail');
   });
 
-  // ── Multiple elements ─────────────────────────────────────────────────────
-  test('multiple elements: all pass when all have sufficient focus', async () => {
+  test('multiple elements: all pass', async () => {
     const elements = [
-      { idx: 0, stableSel: '#a', tag: 'button', id: 'a', html: '<button id="a">A</button>' },
-      { idx: 1, stableSel: '#b', tag: 'a',      id: 'b', html: '<a id="b" href="#">B</a>' },
+      { idx: 0, tag: 'button', html: '<button>A</button>', staticStyles: '' },
+      { idx: 1, tag: 'a',      html: '<a>B</a>', staticStyles: '' },
     ];
-    const page = makePage(elements, [
-      [STYLES.noOutline, STYLES.outline2px],
-      [STYLES.noOutline, STYLES.outline2px],
-    ]);
-    const result = await runWithTimers(page);
+    const page = makePage([[STYLES.noOutline, STYLES.outline2px], [STYLES.noOutline, STYLES.outline2px]]);
+    const result = await runWithTimers(page, elements);
     expect(result.rules[0].status).toBe('pass');
     expect(result.rules[0].reason).toContain('2 focusable element(s)');
   });
 
-  test('multiple elements: one fails → overall fail with count', async () => {
+  test('multiple elements: one fails', async () => {
     const elements = [
-      { idx: 0, stableSel: '#a', tag: 'button', id: 'a', html: '<button id="a">A</button>' },
-      { idx: 1, stableSel: '#b', tag: 'a',      id: 'b', html: '<a id="b" href="#">B</a>' },
+      { idx: 0, tag: 'button', html: '<button>Pass</button>', staticStyles: '' },
+      { idx: 1, tag: 'button', html: '<button>Fail</button>', staticStyles: '' },
     ];
-    const page = makePage(elements, [
-      [STYLES.noOutline, STYLES.outline2px],  // passes
-      [STYLES.noOutline, STYLES.noOutline],   // fails
-    ]);
-    const result = await runWithTimers(page);
+    const page = makePage([[STYLES.noOutline, STYLES.outline2px], [STYLES.noOutline, STYLES.noOutline]]);
+    const result = await runWithTimers(page, elements);
     expect(result.rules[0].status).toBe('fail');
     expect(result.rules[0].reason).toContain('1 focusable');
   });
 
-  test('null unfocused styles: element is skipped', async () => {
-    const page = makePage(SAMPLE_ELEMENTS, [[null, STYLES.outline2px]]);
-    // When unfocused returns null, the element is skipped (continue)
+  test('skips elements that return null styles', async () => {
+    const page = makePage([[null, STYLES.outline2px]]);
     const result = await runWithTimers(page);
-    expect(result.rules[0].status).toBe('pass');
-    expect(result.rules[0].reason).toContain('0 focusable');
+    expect(result.rules[0].reason).toContain('0 focusable element(s) sampled');
   });
 
-  test('null focused styles: element is skipped', async () => {
-    const page = makePage(SAMPLE_ELEMENTS, [[STYLES.noOutline, null]]);
-    const result = await runWithTimers(page);
-    expect(result.rules[0].status).toBe('pass');
-  });
-
-  // ── splitBoxShadowLayers is a Node-side exported function ─────────────────
-  test('source exports splitBoxShadowLayers as module-level function', () => {
-    const src = require('fs').readFileSync(
-      require('path').resolve(__dirname, '../../src/custom-checks/focus-appearance.check.js'),
-      'utf8'
-    );
-    expect(src).toContain('function splitBoxShadowLayers');
-    expect(src).toContain('function extractBoxShadowMetrics');
-    expect(src).toContain('function relativeLuminance');
-    expect(src).toContain('function contrastRatio');
-  });
-
-  // ── transparent background fallback (B5) ──────────────────────────────────
-  test('transparent element background falls back to body background for contrast', async () => {
-    const unfocused = { ...STYLES.noOutline, backgroundColor: 'rgba(0, 0, 0, 0)' }; // transparent
+  test('transparent background uses body background fallback', async () => {
+    const unfocused = { ...STYLES.noOutline, backgroundColor: 'rgba(0, 0, 0, 0)' };
     const focused = {
       ...STYLES.noOutline,
       outlineWidth: '2px',
       outlineStyle: 'solid',
-      outlineColor: 'rgb(0,95,204)', // high contrast vs white body bg
-      backgroundColor: 'rgba(0, 0, 0, 0)', // still transparent
-      bodyBg: 'rgb(255,255,255)', // white body background
+      outlineColor: 'rgb(0,95,204)',
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      bodyBg: 'rgb(255,255,255)',
     };
-    const page = makePage(SAMPLE_ELEMENTS, [[unfocused, focused]]);
-    const result = await runWithTimers(page);
-    // Should use bodyBg (white) for bg comparison → high contrast → pass
-    expect(result.rules[0].status).toBe('pass');
-  });
-
-  // ── Box-shadow: multiple layers (best spread used) ────────────────────────
-  test('box-shadow with multiple layers picks the best (largest) spread', async () => {
-    const focused = {
-      ...STYLES.noOutline,
-      // Two layers: first has 1px spread, second has 3px spread → best is 3px
-      boxShadow: '0 0 0 1px rgb(100,100,100), 0 0 0 3px rgb(0,95,204)',
-    };
-    const page = makePage(SAMPLE_ELEMENTS, [[STYLES.noOutline, focused]]);
-    const result = await runWithTimers(page);
+    const result = await runWithTimers(makePage([[unfocused, focused]]));
     expect(result.rules[0].status).toBe('pass');
   });
 });

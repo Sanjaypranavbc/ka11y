@@ -2,6 +2,14 @@
 
 const { run, SC, RULE_ID, HELP_URL } = require('../../src/custom-checks/on-focus.check');
 
+jest.mock('../../src/custom-checks/sharedAssets', () => {
+  const actual = jest.requireActual('../../src/custom-checks/sharedAssets');
+  return {
+    ...actual,
+    settle: jest.fn().mockResolvedValue(undefined),
+  };
+});
+
 function makePage({ focusable = [], url = 'https://example.com', navigates = false, urlAfterFocus = null } = {}) {
   let navListener = null;
   let evaluateCallCount = 0;

@@ -2,6 +2,14 @@
 
 const { run, SC, RULE_ID, HELP_URL } = require('../../src/custom-checks/on-input.check');
 
+jest.mock('../../src/custom-checks/sharedAssets', () => {
+  const actual = jest.requireActual('../../src/custom-checks/sharedAssets');
+  return {
+    ...actual,
+    settle: jest.fn().mockResolvedValue(undefined),
+  };
+});
+
 function makePage({ inputs = [], url = 'https://example.com', urlAfterFocus = null, spaNav = false } = {}) {
   const page = {
     url: jest.fn().mockReturnValue(urlAfterFocus || url),

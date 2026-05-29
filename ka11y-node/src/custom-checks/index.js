@@ -278,7 +278,12 @@ async function runInteractiveChecks(page, criteriaIdOrContext = null, context = 
 
   // Technique #3: Discover focusable set once and share across all 5 interactive checks
   const { discoverPageElements, FOCUSABLE_SELECTOR } = require('./sharedAssets');
-  sharedContext.focusableElements = await discoverPageElements(page, FOCUSABLE_SELECTOR);
+  try {
+    sharedContext.focusableElements = await discoverPageElements(page, FOCUSABLE_SELECTOR);
+  } catch (err) {
+    console.warn('[custom-checks] focusable element discovery failed:', err && err.message || err);
+    sharedContext.focusableElements = [];
+  }
 
   const results = [];
   for (let i = 0; i < selected.length; i++) {

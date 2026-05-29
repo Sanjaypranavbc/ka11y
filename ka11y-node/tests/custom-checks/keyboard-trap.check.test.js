@@ -2,6 +2,14 @@
 
 const { run, SC, RULE_ID, HELP_URL } = require('../../src/custom-checks/keyboard-trap.check');
 
+jest.mock('../../src/custom-checks/sharedAssets', () => {
+  const actual = jest.requireActual('../../src/custom-checks/sharedAssets');
+  return {
+    ...actual,
+    settle: jest.fn().mockResolvedValue(undefined),
+  };
+});
+
 /**
  * Creates a mock page for keyboard-trap tests.
  *
