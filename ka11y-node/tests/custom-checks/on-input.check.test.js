@@ -11,17 +11,20 @@ jest.mock('../../src/custom-checks/sharedAssets', () => {
 });
 
 function makePage({ inputs = [], url = 'https://example.com', urlAfterFocus = null, spaNav = false } = {}) {
+  let navListener = null;
   const page = {
     url: jest.fn().mockReturnValue(urlAfterFocus || url),
     evaluate: jest.fn().mockImplementation((fn) => {
       const src = String(fn);
       if (src.includes('isCheckboxOrRadio') || src.includes('results.push({')) return Promise.resolve(inputs);
-      if (src.includes('spaNavChanged')) return Promise.resolve({ spaNavChanged: spaNav && src.includes('count > 0') });
-      if (src.includes('__ka11yOnInputNavState') && src.includes('count > 0')) return Promise.resolve(spaNav);
+      if (src.includes('count > 0')) {
+        if (navListener) navListener();
+        return Promise.resolve(spaNav);
+      }
       return Promise.resolve(undefined);
     }),
     keyboard: { type: jest.fn().mockResolvedValue(undefined), press: jest.fn().mockResolvedValue(undefined) },
-    on:  jest.fn(),
+    on: jest.fn((event, cb) => { if (event === 'framenavigated') navListener = cb; }),
     off: jest.fn(),
   };
   return page;
@@ -52,29 +55,18 @@ describe('on-input.check (WCAG 3.2.2)', () => {
   });
 
   test('fails when URL changed after input (SPA)', async () => {
-    const input = { tagName: 'input', type: 'text', html: '<input type="text">', idx: 0, staticStyles: '', tag: 'INPUT', target: ['input'], inputType: 'text' };
+    const input = { tagName: 'input', type: 'text', html: '<input type="text">', idx: 0, staticStyles: '', tag: 'INPUT', target: ['input'], inputType: 'text', index: 0 };
     const page = makePage({ inputs: [input], spaNav: true });
     const result = await run(page, { focusableElements: [input] });
     expect(result.rules[0].status).toBe('fail');
   });
 
   test('fails when framenavigated fires during input', async () => {
-    const input = { tagName: 'input', type: 'text', html: '<input type="text">', idx: 0, staticStyles: '', tag: 'INPUT', target: ['input'], inputType: 'text' };
-    let navListener = null;
+    const input = { tagName: 'input', type: 'text', html: '<input type="text">', idx: 0, staticStyles: '', tag: 'INPUT', target: ['input'], inputType: 'text', index: 0 };
     const page = makePage({ inputs: [input] });
-    page.on = jest.fn((event, cb) => { if (event === 'framenavigated') navListener = cb; });
     
-    // Override evaluate to trigger navigation
-    const origEval = page.evaluate;
-    page.evaluate = jest.fn().mockImplementation((fn) => {
-      const src = String(fn);
-      if (src.includes('spaNavChanged')) {
-        if (navListener) navListener();
-        return Promise.resolve({ spaNavChanged: false });
-      }
-      return origEval(fn);
-    });
-
+    // The makePage mock already triggers navListener if it sees 'count > 0'.
+    // We just need to make sure spaNav is false but navigationDetected becomes true.
     const result = await run(page, { focusableElements: [input] });
     expect(result.rules[0].status).toBe('fail');
   });

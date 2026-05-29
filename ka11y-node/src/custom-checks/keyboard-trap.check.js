@@ -301,23 +301,7 @@ async function run(page, context = {}) {
     }
   }
 
-  if (!trapHtml && modalFindings.length === 0 && arrowTraps.length > 0) {
-    return {
-      successCriteriaId: SC,
-      rules: [{
-        ruleId: RULE_ID,
-        description: 'Keyboard focus must not be trapped in a component',
-        impact: 'serious',
-        status: 'incomplete',
-        reason: _t(sharedContext, 'Possible arrow-key trap in {role} widgets: {count} elements found. Ensure that users can navigate into and out of these components using only the Tab key, even if internal navigation uses arrow keys.', '{role} ウィジェットに矢印キーのトラップがある可能性があります（矢印キー操作）：{count} 個の要素が見つかりました。内部のナビゲーションに矢印キーを使用している場合でも、Tab キーだけでこれらのコンポーネントに入退できることを確認してください。', { role: arrowTraps[0].role, count: arrowTraps.length }),
-        elements: arrowTraps.map(t => ({ html: t.html, tag: t.role.toUpperCase() })),
-        helpUrl: HELP_URL,
-      }],
-    };
-  }
-
   if (!trapHtml && modalFindings.length === 0 && arrowTraps.length === 0) {
-    // Check for scripted suppression heuristics (F58)
     const suppression = await page.evaluate(() => {
       const results = [];
       const all = document.querySelectorAll('*');
@@ -366,6 +350,21 @@ async function run(page, context = {}) {
           { count: modalFindings.length },
         ),
         elements: modalFindings.map(m => ({ html: m.html, tag: 'DIALOG' })),
+        helpUrl: HELP_URL,
+      }],
+    };
+  }
+
+  if (arrowTraps.length > 0) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'Keyboard focus must not be trapped in a component',
+        impact: 'serious',
+        status: 'incomplete',
+        reason: _t(sharedContext, 'Possible arrow-key trap in {role} widgets: {count} elements found. Ensure that users can navigate into and out of these components using only the Tab key, even if internal navigation uses arrow keys.', '[role="{role}"] ウィジェットに矢印キーのトラップがある可能性があります（矢印キー操作）：{count} 個の要素が見つかりました。内部のナビゲーションに矢印キーを使用している場合でも、Tab キーだけでこれらのコンポーネントに入退できることを確認してください。', { role: arrowTraps[0].role, count: arrowTraps.length }),
+        elements: arrowTraps.map(t => ({ html: t.html, tag: t.role.toUpperCase() })),
         helpUrl: HELP_URL,
       }],
     };
