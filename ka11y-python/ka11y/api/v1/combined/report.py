@@ -118,13 +118,17 @@ def _build_report(
 
     # Compliance score: pass-rate = passes / (passes + violations), as a 0–100
     # percentage. needs_review is deliberately excluded (it is neither a pass nor
-    # a confirmed failure). A page/crawl with no pass-or-fail findings scores 100
-    # (nothing failed). Both the overall crawl and each individual page expose it
-    # so the UI can show one headline score plus a per-page column.
-    def _score(passes_n: int, violations_n: int) -> float:
+    # a confirmed failure). A page/crawl with NO pass-or-fail findings (only
+    # needs_review, or nothing) returns ``None`` — "not scored" — rather than a
+    # misleading 100.0. The old 100.0 made pages that were barely audited (e.g.
+    # axe never ran on them, only image needs_review findings landed) advertise
+    # perfect compliance; ``None`` lets the UI render "—" so an un-scored page is
+    # never confused with a passing one. Both the overall crawl and each page
+    # expose it so the UI can show one headline score plus a per-page column.
+    def _score(passes_n: int, violations_n: int) -> Optional[float]:
         denom = passes_n + violations_n
         if denom == 0:
-            return 100.0
+            return None
         return round(100.0 * passes_n / denom, 1)
 
     pages: List[Dict[str, Any]] = []

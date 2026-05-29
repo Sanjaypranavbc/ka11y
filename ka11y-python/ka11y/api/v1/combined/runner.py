@@ -285,8 +285,12 @@ async def _run_job_body(
         # default) which on big sites like kao.com was clipping the crawl to
         # 3 pages and silently dropping axe findings on every page beyond
         # that. We share the snapshot's URL list via a small event/container
-        # pair: Python signals as soon as the snapshot is ready, Node waits
-        # briefly, then audits exactly the same pages — no BFS, no clip.
+        # pair: Python signals as soon as the snapshot is ready (always — even
+        # on failure, via a finally block), and Node waits up to
+        # _SNAPSHOT_URLS_WAIT_SECONDS for it, then audits exactly the same pages
+        # — no BFS, no clip. The wait must outlast a legitimately slow snapshot
+        # (kao.com/jp took 561 s); the old 90 s default caused Node to give up
+        # early and fall back to its budget-capped BFS, under-auditing 43/50.
         snapshot_urls_event: asyncio.Event | None = None
         snapshot_urls_container: dict | None = None
         if payload.max_depth > 0:

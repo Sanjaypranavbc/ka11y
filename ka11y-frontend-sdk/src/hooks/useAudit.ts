@@ -120,7 +120,9 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
         violations: (summary.violations as number) ?? 0,
         needs_review: (summary.needs_review as number) ?? 0,
         passes: (summary.passes as number) ?? 0,
-        score: (summary.score as number) ?? 100,
+        // null = "not scored" (no pass-or-fail findings). Preserve it; do NOT
+        // default to 100 — that made barely-audited pages look compliant.
+        score: (summary.score as number | null) ?? null,
         by_severity: (summary.by_severity as Record<string, number>) ?? {},
       },
       violations: ((p.violations as Record<string, unknown>[]) || []).map(flattenFinding),
@@ -132,12 +134,13 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
   const reportSummary = (report.summary as Record<string, unknown>) || {};
   const passesCount = (report.passes as unknown[])?.length || 0;
   // Prefer the backend's aggregate score; fall back to computing the same
-  // pass-rate locally so older reports still render a score.
-  const overallScore =
-    (reportSummary.score as number) ??
+  // pass-rate locally so older reports still render a score. When there are no
+  // pass-or-fail findings, the score is null ("not scored") — never 100.
+  const overallScore: number | null =
+    (reportSummary.score as number | null) ??
     (passesCount + rawViolations.length > 0
       ? Math.round((1000 * passesCount) / (passesCount + rawViolations.length)) / 10
-      : 100);
+      : null);
 
   return {
     job_id: (pollData.job_id as string) || "",

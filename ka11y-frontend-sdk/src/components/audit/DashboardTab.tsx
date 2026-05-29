@@ -36,10 +36,17 @@ const LEVEL_COLORS: Record<string, string> = {
 };
 
 // Compliance-score colour band: green ≥ 90, amber ≥ 70, red below.
-function scoreColor(score: number): string {
+// null = "not scored" (page had no pass-or-fail findings) → muted.
+function scoreColor(score: number | null): string {
+  if (score == null) return "hsl(215, 16%, 47%)";
   if (score >= 90) return "hsl(151, 68%, 46%)";
   if (score >= 70) return "hsl(45, 100%, 45%)";
   return "hsl(0, 84%, 58%)";
+}
+
+// Render a score as "NN%" or "—" when not scored (null).
+function formatScore(score: number | null): string {
+  return score == null ? "—" : `${score}%`;
 }
 
 export function DashboardTab({ result, timing }: DashboardTabProps) {
@@ -148,11 +155,13 @@ export function DashboardTab({ result, timing }: DashboardTabProps) {
                 : t("dashboard.scoreHint")}
             </div>
           </div>
-          <div className="flex items-baseline gap-1 shrink-0" aria-label={`${t("dashboard.score")}: ${result.score}%`}>
+          <div className="flex items-baseline gap-1 shrink-0" aria-label={`${t("dashboard.score")}: ${formatScore(result.score)}`}>
             <span className="text-4xl font-bold tabular-nums" style={{ color: scoreColor(result.score) }}>
-              {result.score}
+              {result.score == null ? "—" : result.score}
             </span>
-            <span className="text-lg font-semibold" style={{ color: scoreColor(result.score) }}>%</span>
+            {result.score != null && (
+              <span className="text-lg font-semibold" style={{ color: scoreColor(result.score) }}>%</span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -313,7 +322,7 @@ export function DashboardTab({ result, timing }: DashboardTabProps) {
                         </a>
                       </td>
                       <td className="py-1.5 px-2 text-right font-mono font-semibold" style={{ color: scoreColor(p.summary.score) }}>
-                        {p.summary.score}%
+                        {formatScore(p.summary.score)}
                       </td>
                       <td className="py-1.5 px-2 text-right font-mono font-semibold text-foreground">
                         {p.summary.total_findings}

@@ -2,7 +2,8 @@ import { PageBreakdown } from "@/types/audit";
 import { ALL_PAGES, PageOption, formatPageLabel } from "@/components/audit/PageScopeBar";
 
 export interface ScopeSummary {
-  score: number;
+  // null = "not scored" (no pass-or-fail findings) → render as "—".
+  score: number | null;
   violations: number;
   needs_review: number;
   passes: number;

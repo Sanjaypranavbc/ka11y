@@ -147,6 +147,20 @@ _STAGE_TIMEOUT_SECONDS = 1200
 # handles up to ~60 stuck elements before we cut over to OCR on partial images.
 _CRAWL_TIMEOUT_SECONDS = 300
 
+# How long Node (``_call_node_flat``) waits for the Python snapshot to publish
+# its discovered-URL list before giving up. The Python snapshot task ALWAYS
+# sets the coordination event in its ``finally`` (success or failure), so this
+# wait normally resolves the instant the snapshot finishes — its only job is to
+# outlast a legitimately slow snapshot. The old 90 s default was ~6× too short
+# for heavy sites (a kao.com/jp snapshot took 561 s), so the wait expired, Node
+# fell back to its independent BFS, hit the 255 s ``flatCrawlBudgetMs`` cliff,
+# and audited only 7 of 50 pages — silently dropping axe coverage on 43 pages.
+# Bounded by the snapshot stage's own budget; the outer ``_JOB_TIMEOUT_SECONDS``
+# (1800 s) remains the real backstop against a hung Python task.
+_SNAPSHOT_URLS_WAIT_SECONDS = float(
+    os.environ.get("KA11Y_SNAPSHOT_URLS_WAIT_SECONDS", str(_STAGE_TIMEOUT_SECONDS))
+)
+
 # Process-wide queue for browser-heavy crawler stages. ``image_audit`` and
 # ``rendered_layout_audit`` each open their own Playwright contexts + image
 # buffers; with _MAX_CONCURRENT_JOBS=4 an unguarded depth>0 audit can spawn
@@ -265,7 +279,7 @@ async def _call_node_flat(
     discovered_urls: Optional[List[str]] = None,
     snapshot_urls_event: Optional[asyncio.Event] = None,
     snapshot_urls_container: Optional[Dict[str, Any]] = None,
-    snapshot_wait_timeout: float = 90.0,
+    snapshot_wait_timeout: float = _SNAPSHOT_URLS_WAIT_SECONDS,
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings.
 
@@ -283,12 +297,15 @@ async def _call_node_flat(
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
 
     # R-1: prefer snapshot-fed mode. If the caller passed a coordination event,
-    # the Python snapshot task will fill ``snapshot_urls_container["urls"]``
-    # and signal the event when the snapshot finishes (or set it to None if
-    # snapshot was skipped/failed). We wait up to ``snapshot_wait_timeout``
-    # seconds — long enough for kao-sized snapshots, short enough that a
-    # crashed Python task doesn't strand Node forever. On timeout or empty,
-    # we fall back to the legacy independent-BFS behaviour.
+    # the Python snapshot task fills ``snapshot_urls_container["urls"]`` and
+    # signals the event when the snapshot finishes — and it ALWAYS signals, even
+    # on snapshot failure, via a ``finally`` in ``_run_python_stages``. So this
+    # wait normally resolves the moment the snapshot completes; the timeout only
+    # guards against a Python task that never signals at all (hard crash). On
+    # ``max_depth > 0`` the snapshot is the source of truth: falling back to
+    # Node's independent BFS re-introduces the 255 s ``flatCrawlBudgetMs`` cliff
+    # that silently drops axe coverage on every page past the budget, so we log
+    # the degradation at ERROR rather than letting it pass quietly.
     if snapshot_urls_event is not None and snapshot_urls_container is not None and not discovered_urls:
         try:
             await asyncio.wait_for(
@@ -301,10 +318,23 @@ async def _call_node_flat(
             if urls and not (len(urls) == 1 and urls[0] == url):
                 discovered_urls = list(urls)
         except asyncio.TimeoutError:
-            logger.warning(
+            logger.error(
                 f"[combined] axe_core: snapshot URL wait timed out after "
-                f"{snapshot_wait_timeout}s — falling back to independent BFS"
+                f"{snapshot_wait_timeout}s at max_depth={max_depth} — Node will "
+                f"fall back to independent BFS, which is capped by "
+                f"flatCrawlBudgetMs and will likely UNDER-AUDIT deep pages. "
+                f"Raise KA11Y_SNAPSHOT_URLS_WAIT_SECONDS if the snapshot is "
+                f"legitimately slow on this site."
             )
+    if max_depth > 0 and not discovered_urls:
+        # Snapshot produced no usable URL list for a multi-page crawl. Node's
+        # BFS would clip on heavy sites, so make the under-coverage explicit in
+        # the logs (the run still proceeds — partial axe coverage beats none).
+        logger.error(
+            f"[combined] axe_core: no snapshot URLs available at "
+            f"max_depth={max_depth} for {url}; Node falls back to its "
+            f"budget-capped BFS and may under-audit deep pages."
+        )
 
     payload_json: Dict[str, Any] = {
         "url": url,
@@ -1573,7 +1603,7 @@ async def _run_python_stages(
         # R-1: always release the sibling Node task waiting on the snapshot,
         # even if the snapshot load raised. Without this `finally` an
         # exception here would leave Node blocked on `Event.wait()` until the
-        # 90-second fallback timeout, doubling failure latency.
+        # _SNAPSHOT_URLS_WAIT_SECONDS fallback timeout, doubling failure latency.
         if snapshot_urls_container is not None:
             snapshot_urls_container["urls"] = list(discovered_urls)
         if snapshot_urls_event is not None and not snapshot_urls_event.is_set():

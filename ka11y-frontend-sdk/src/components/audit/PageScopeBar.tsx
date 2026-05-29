@@ -20,7 +20,8 @@ export type ChipTone = "violations" | "needsReview" | "passes" | "score" | "defa
 
 export interface PageScopeChip {
   label: string;
-  value: string | number;
+  // null is allowed for the score chip → rendered as "—" (not scored).
+  value: string | number | null;
   tone?: ChipTone;
 }
 
@@ -43,7 +44,9 @@ const TONE_CLASS: Record<ChipTone, string> = {
 };
 
 // Compliance-score colour band — mirrors DashboardTab.
-function scoreColor(score: number): string {
+// null = "not scored" → muted.
+function scoreColor(score: number | null): string {
+  if (score == null) return "hsl(215, 16%, 47%)";
   if (score >= 90) return "hsl(151, 68%, 40%)";
   if (score >= 70) return "hsl(45, 100%, 38%)";
   return "hsl(0, 84%, 52%)";
@@ -103,7 +106,14 @@ export function PageScopeBar({ pages, value, onChange, chips }: PageScopeBarProp
         {chips.map((chip) => {
           const tone = chip.tone ?? "default";
           const isScore = tone === "score";
-          const numeric = typeof chip.value === "number" ? chip.value : Number(chip.value);
+          // Score chip with a null value means "not scored" → render "—".
+          const scoreNotScored = isScore && chip.value == null;
+          const numeric =
+            chip.value == null
+              ? null
+              : typeof chip.value === "number"
+                ? chip.value
+                : Number(chip.value);
           return (
             <div key={chip.label} className="flex items-baseline gap-1.5">
               <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -113,8 +123,8 @@ export function PageScopeBar({ pages, value, onChange, chips }: PageScopeBarProp
                 className={cn("text-base font-bold tabular-nums", !isScore && TONE_CLASS[tone])}
                 style={isScore ? { color: scoreColor(numeric) } : undefined}
               >
-                {chip.value}
-                {isScore ? "%" : ""}
+                {scoreNotScored ? "—" : chip.value}
+                {isScore && !scoreNotScored ? "%" : ""}
               </span>
             </div>
           );
