@@ -8,8 +8,6 @@ const {
 const SC = '3.2.2';
 const RULE_ID = 'custom-on-input';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
-const MAX_INPUTS = 2000;
-const SETTLE_MS = 120;
 
 // Safe test values per input type — use syntactically valid values to avoid
 // triggering browser validation events that could cause false-positive navigations (B9).
@@ -19,17 +17,6 @@ const TYPE_CHAR = {
   url: 'https://x.com',   // valid URL — avoids 'invalid' event on url inputs
   search: 'a', text: 'a', textarea: 'a', default: 'a',
 };
-
-// Selector now includes checkbox and radio — toggling these is a common source of
-// on-input context changes (B8: they were previously excluded from testing).
-// Also includes contenteditable elements which can receive user input.
-const SELECTOR = [
-  'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled])',
-  'textarea:not([disabled])',
-  'select:not([disabled])',
-  '[contenteditable="true"]',
-  '[contenteditable=""]',
-].join(', ');
 
 function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
@@ -44,9 +31,7 @@ async function run(page, context = {}) {
   page.on('framenavigated', onNavigated);
 
   try {
-    // Inject SPA navigation detection: wrap history.pushState/replaceState (and
-    // listen for popstate/hashchange) behind a per-page state object so we can
-    // count programmatic navigations and later restore the originals cleanly.
+    // Inject SPA navigation detection
     await page.evaluate(() => {
       const stateKey = '__ka11yOnInputNavState';
       if (window[stateKey] && window[stateKey].originalPush) return;
@@ -62,76 +47,106 @@ async function run(page, context = {}) {
       window[stateKey] = state;
     });
 
-    const inputs = await page.evaluate((sel, max) => {
-      return Array.from(document.querySelectorAll(sel)).slice(0, max).map((el, i) => ({
-        index: i,
-        tagName: el.tagName.toLowerCase(),
-        type: (el.getAttribute('type') || el.tagName).toLowerCase(),
-        id: el.id || null,
-        isSelect: el.tagName.toLowerCase() === 'select',
-        isCheckboxOrRadio: ['checkbox', 'radio'].includes((el.getAttribute('type') || '').toLowerCase()),
-        html: el.outerHTML.slice(0, 150),
-        target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
-        tag: el.tagName.toUpperCase(),
-      }));
-    }, SELECTOR, MAX_INPUTS);
+    // Technique #3: Use pre-discovered elements, filtered for inputs
+    const inputs = (sharedContext.focusableElements || []).filter(el => {
+      const tag = el.tagName.toLowerCase();
+      const type = el.inputType;
+      const isInput = tag === 'input' && !['submit', 'button', 'reset', 'hidden', 'file'].includes(type);
+      return isInput || tag === 'textarea' || tag === 'select' || el.html.includes('contenteditable');
+    });
 
-    for (const inputInfo of (inputs || [])) {
+    for (const inputInfo of inputs) {
       navigationDetected = false;
       const urlBefore = page.url();
 
-      await page.evaluate((sel, idx) => {
-        const el = document.querySelectorAll(sel)[idx];
-        if (el) el.focus({ preventScroll: true });
-      }, SELECTOR, inputInfo.index);
+      // For selects and checkboxes, we can collapse the interaction.
+      // For text inputs, we still use keyboard.type for realism.
+      if (inputInfo.isSelect || inputInfo.isCheckboxOrRadio) {
+        const navStatus = await page.evaluate(({ idx, stableSel, isSelect, settleMs }) => {
+          const findEl = () =>
+            stableSel
+              ? (document.querySelector(stableSel) ||
+                 Array.from(document.querySelectorAll('*'))[idx])
+              : Array.from(document.querySelectorAll('*'))[idx];
 
-      if (inputInfo.isSelect) {
-        // For selects: change selection value programmatically and fire change event
-        await page.evaluate((sel, idx) => {
-          const el = document.querySelectorAll(sel)[idx];
-          if (!el || el.options.length < 2) return;
-          el.selectedIndex = el.selectedIndex === 0 ? 1 : 0;
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-        }, SELECTOR, inputInfo.index);
-      } else if (inputInfo.isCheckboxOrRadio) {
-        // For checkbox/radio: click to toggle and fire change event (B8)
-        await page.evaluate((sel, idx) => {
-          const el = document.querySelectorAll(sel)[idx];
-          if (el) el.click();
-        }, SELECTOR, inputInfo.index);
+          const el = findEl();
+          if (!el) return { spaNavChanged: false };
+          
+          el.focus({ preventScroll: true });
+          if (isSelect) {
+            if (el.options && el.options.length >= 2) {
+              el.selectedIndex = el.selectedIndex === 0 ? 1 : 0;
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          } else {
+            el.click();
+          }
+
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              const s = window.__ka11yOnInputNavState;
+              const spaNavChanged = !!(s && s.count > 0);
+              if (s) s.count = 0;
+              resolve({ spaNavChanged });
+            }, settleMs);
+          });
+        }, { 
+          idx: inputInfo.idx, 
+          stableSel: inputInfo.stableSel, 
+          isSelect: inputInfo.isSelect, 
+          settleMs: 120 
+        });
+
+        const currentUrl = page.url();
+        if (navigationDetected || navStatus.spaNavChanged || currentUrl !== urlBefore) {
+          violations.push(inputInfo);
+          break;
+        }
+
+        // Clean up select/checkbox
+        if (inputInfo.isCheckboxOrRadio) {
+           await page.evaluate(({ idx, stableSel }) => {
+             const findEl = () =>
+               stableSel
+                 ? (document.querySelector(stableSel) ||
+                    Array.from(document.querySelectorAll('*'))[idx])
+                 : Array.from(document.querySelectorAll('*'))[idx];
+             const el = findEl();
+             if (el) el.click();
+           }, { idx: inputInfo.idx, stableSel: inputInfo.stableSel });
+        }
       } else {
-        const char = TYPE_CHAR[inputInfo.type] || TYPE_CHAR.default;
+        // Text inputs: focus, type, wait, check
+        await page.evaluate(({ idx, stableSel }) => {
+          const findEl = () =>
+            stableSel
+              ? (document.querySelector(stableSel) ||
+                 Array.from(document.querySelectorAll('*'))[idx])
+              : Array.from(document.querySelectorAll('*'))[idx];
+          const el = findEl();
+          if (el) el.focus({ preventScroll: true });
+        }, { idx: inputInfo.idx, stableSel: inputInfo.stableSel });
+
+        const char = TYPE_CHAR[inputInfo.inputType] || TYPE_CHAR.default;
         await page.keyboard.type(char);
-      }
+        await new Promise(r => setTimeout(r, 120));
 
-      await new Promise(r => setTimeout(r, SETTLE_MS));
+        const currentUrl = page.url();
+        const spaNavChanged = await page.evaluate(() => {
+          const s = window.__ka11yOnInputNavState;
+          const changed = !!(s && s.count > 0);
+          if (s) s.count = 0;
+          return changed;
+        }).catch(() => false);
 
-      const currentUrl = page.url();
-      const spaNavChanged = await page.evaluate(() => {
-        const s = window.__ka11yOnInputNavState;
-        return !!(s && s.count > 0);
-      }).catch(() => false);
+        if (navigationDetected || spaNavChanged || currentUrl !== urlBefore) {
+          violations.push(inputInfo);
+          break;
+        }
 
-      if (navigationDetected || spaNavChanged || currentUrl !== urlBefore) {
-        violations.push(inputInfo);
-        break; // page may have navigated; can't continue safely
-      }
-      // Reset SPA counter for next element
-      await page.evaluate(() => {
-        if (window.__ka11yOnInputNavState) window.__ka11yOnInputNavState.count = 0;
-      }).catch(() => {});
-
-      // Clean up: restore original state
-      if (!inputInfo.isSelect && !inputInfo.isCheckboxOrRadio) {
-        // Remove typed character(s) — length varies by type (url/email use multi-char values)
-        const charLen = (TYPE_CHAR[inputInfo.type] || TYPE_CHAR.default).length;
+        // Clean up text input
+        const charLen = char.length;
         for (let b = 0; b < charLen; b++) await page.keyboard.press('Backspace');
-      } else if (inputInfo.isCheckboxOrRadio) {
-        // Toggle back to original state
-        await page.evaluate((sel, idx) => {
-          const el = document.querySelectorAll(sel)[idx];
-          if (el) el.click();
-        }, SELECTOR, inputInfo.index);
       }
     }
   } finally {
