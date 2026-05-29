@@ -1,8 +1,10 @@
 'use strict';
-
 const {
   getSharedRuleContext,
   renderLocalizedText,
+  settle,
+  RESULT_CACHE,
+  FOCUSABLE_SELECTOR: SELECTOR,
 } = require('./sharedAssets');
 
 const SC = '2.4.7';
@@ -16,7 +18,12 @@ function _t(context, en, ja, params = {}) {
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   // Technique #3: Use pre-discovered elements from context
-  const elements = sharedContext.focusableElements || [];
+  // Fallback to discovery if context is empty (e.g. in unit tests)
+  let elements = sharedContext.focusableElements;
+  if (!elements || elements.length === 0) {
+    const { discoverPageElements } = require('./sharedAssets');
+    elements = await discoverPageElements(page, SELECTOR);
+  }
 
   // Static CSS scan: detect global :focus { outline: none } resets without :focus-visible restoration
   const cssFindings = await page.evaluate(() => {
@@ -66,6 +73,23 @@ async function run(page, context = {}) {
   const violations = [];
 
   for (const el of elements) {
+    // Technique #5: Cache look-up by (outerHTML + static computed styles)
+    const cacheKey = `${RULE_ID}:${el.html}:${el.staticStyles}`;
+    if (RESULT_CACHE.has(cacheKey)) {
+      const cached = RESULT_CACHE.get(cacheKey);
+      if (!cached.isVisible) {
+        violations.push({
+          html: el.html,
+          element_id: el.id || null,
+          target: el.target,
+          tag: el.tag,
+          tagName: el.tagName,
+          id: el.id,
+        });
+      }
+      continue;
+    }
+
     // ── L-1: collapsed per-element round-trip ─────────────────────────────────
     // The original implementation made FOUR `page.evaluate()` calls per element
     // — capture-unfocused, focus, capture-focused, blur — each paying the CDP
@@ -120,10 +144,17 @@ async function run(page, context = {}) {
         e1.focus({ preventScroll: true });
 
         return new Promise((resolve) => {
-          setTimeout(() => {
-            // Re-resolve the element after the focus mutation in case the
-            // page's onfocus handler re-rendered subtree (the original
-            // stableSel-fallback path was specifically for this case).
+          const wait = (cb) => {
+            const cs = window.getComputedStyle(e1);
+            const hasTransition = cs.transitionDuration !== '0s' || cs.animationDuration !== '0s';
+            if (!hasTransition) {
+              requestAnimationFrame(() => requestAnimationFrame(cb));
+            } else {
+              setTimeout(cb, settleMs);
+            }
+          };
+
+          wait(() => {
             const e2 = findEl();
             if (!e2) {
               resolve({ unfocused, focused: null });
@@ -131,10 +162,9 @@ async function run(page, context = {}) {
             }
             const focused = capture(e2);
             e2.blur();
-            // Second settle so the NEXT iteration's `unfocused` capture
-            // isn't tainted by the still-propagating focus removal.
-            setTimeout(() => resolve({ unfocused, focused }), settleMs);
-          }, settleMs);
+            // Second settle
+            wait(() => resolve({ unfocused, focused }));
+          });
         });
       },
       { idx: el.idx, stableSel: el.stableSel, settleMs: 80 },
@@ -178,6 +208,9 @@ async function run(page, context = {}) {
     // child transitioning 0→1 while the button itself has no focus style).
     const isVisible = hasVisibleOutline || outlineChanged || boxShadowChanged ||
                       borderChanged || bgChanged || colorChanged || transformChanged || afterChanged;
+
+    // Cache the result for this element shape
+    RESULT_CACHE.set(cacheKey, { isVisible });
 
     if (!isVisible) {
       violations.push({

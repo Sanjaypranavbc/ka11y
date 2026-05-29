@@ -9,6 +9,8 @@ const SC = '3.2.1';
 const RULE_ID = 'custom-on-focus';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
 
+const { FOCUSABLE_SELECTOR: SELECTOR } = require('./sharedAssets');
+
 // Compare only pathname + search (not hash) to avoid false positives on skip-links
 // and hash-based anchor navigation (B7), while still catching real navigations (B10).
 function urlPathAndSearch(url) {
@@ -22,10 +24,17 @@ function _t(context, en, ja, params = {}) {
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const violations = [];
-  const initialUrl = page.url();
-  
+  let navigationDetected = false;
+  const onNavigated = () => { navigationDetected = true; };
+  page.on('framenavigated', onNavigated);
+
   // Technique #3: Use pre-discovered elements from context
-  const focusable = sharedContext.focusableElements || [];
+  // Fallback to discovery if context is empty (e.g. in unit tests)
+  let focusable = sharedContext.focusableElements;
+  if (!focusable || focusable.length === 0) {
+    const { discoverPageElements } = require('./sharedAssets');
+    focusable = await discoverPageElements(page, SELECTOR);
+  }
 
   try {
     // Inject SPA navigation detection: wrap history.pushState/replaceState (and
@@ -64,22 +73,33 @@ async function run(page, context = {}) {
         if (e) e.focus({ preventScroll: true });
 
         return new Promise((resolve) => {
-          setTimeout(() => {
+          const wait = (cb) => {
+            const cs = e ? window.getComputedStyle(e) : null;
+            const hasTransition = cs && (cs.transitionDuration !== '0s' || cs.animationDuration !== '0s');
+            if (!hasTransition) {
+              requestAnimationFrame(() => requestAnimationFrame(cb));
+            } else {
+              setTimeout(cb, settleMs);
+            }
+          };
+
+          wait(() => {
             const s = window.__navChanges;
             const spaNavChanged = !!(s && s.count > 0);
             if (s) s.count = 0; // Reset for next element
             resolve({ spaNavChanged });
-          }, settleMs);
+          });
         });
       }, { idx: el.idx, stableSel: el.stableSel, settleMs: 100 });
 
       const currentUrl = page.url();
       // Only flag pathname/search changes — hash-only changes (skip-links, anchor navigation)
       // are not a WCAG 3.2.1 context change.
-      if (navStatus.spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
+      if (navigationDetected || navStatus.spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
         violations.push(el);
         break; // page may have navigated; unsafe to continue testing other elements
       }
+      navigationDetected = false; // Reset for next element
     }
   } finally {
     page.off('framenavigated', onNavigated);

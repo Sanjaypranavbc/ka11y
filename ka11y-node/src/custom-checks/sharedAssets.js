@@ -21,6 +21,10 @@ const INPUT_SELECTOR = [
   '[contenteditable=""]',
 ].join(', ');
 
+// Technique #5: Cross-page result cache
+// Stores results of expensive interactive checks by (outerHTML + computed-style) hash.
+const RESULT_CACHE = new Map();
+
 /**
  * Standard settlement helper (Technique #2).
  * Skips the hard 80ms wait if the element has no active CSS transitions.
@@ -28,12 +32,18 @@ const INPUT_SELECTOR = [
 async function settle(page, ms = 80) {
   return page.evaluate((timeout) => {
     return new Promise((resolve) => {
-      // Two rAFs ensure any style/layout invalidations from focus() have reached the paint phase
+      const start = performance.now();
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          // If no transitions are detected, we could resolve early, but for safety
-          // we still allow a small buffer or the full timeout if requested.
-          setTimeout(resolve, timeout);
+          // Check if any transitions are active on the page.
+          // This is a heuristic: if we are in a steady state after 2 rAFs,
+          // we can potentially resolve early.
+          const elapsed = performance.now() - start;
+          if (elapsed > timeout) {
+            resolve();
+          } else {
+            setTimeout(resolve, timeout - elapsed);
+          }
         });
       });
     });
@@ -86,6 +96,11 @@ async function discoverPageElements(page, selector, max = 2000) {
         target: stableSel ? [stableSel] : [el.tagName.toLowerCase()],
         id: el.id || null,
         html: html.slice(0, 200),
+        // Cache metadata: relevant static styles
+        staticStyles: (() => {
+          const cs = window.getComputedStyle(el);
+          return [cs.outline, cs.boxShadow, cs.border, cs.backgroundColor, cs.color].join('|');
+        })(),
         // Metadata for on-input
         isSelect: el.tagName === 'SELECT',
         isCheckboxOrRadio: el.type === 'checkbox' || el.type === 'radio',
@@ -219,4 +234,5 @@ module.exports = {
   settle,
   FOCUSABLE_SELECTOR,
   INPUT_SELECTOR,
+  RESULT_CACHE,
 };

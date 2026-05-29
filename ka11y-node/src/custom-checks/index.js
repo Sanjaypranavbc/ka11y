@@ -270,6 +270,9 @@ async function runStaticChecks(page, criteriaIdOrContext = null, context = {}) {
 
 async function runInteractiveChecks(page, criteriaIdOrContext = null, context = {}) {
   const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
+  const selected = _selectChecks(INTERACTIVE_CHECKS, criteriaId);
+  if (selected.length === 0) return [];
+
   // Interactive checks must run sequentially (they mutate focus/keyboard/page state)
   const sharedContext = _buildContext(ctx, page);
 
@@ -277,7 +280,6 @@ async function runInteractiveChecks(page, criteriaIdOrContext = null, context = 
   const { discoverPageElements, FOCUSABLE_SELECTOR } = require('./sharedAssets');
   sharedContext.focusableElements = await discoverPageElements(page, FOCUSABLE_SELECTOR);
 
-  const selected = _selectChecks(INTERACTIVE_CHECKS, criteriaId);
   const results = [];
   for (let i = 0; i < selected.length; i++) {
     const checkDef = selected[i];

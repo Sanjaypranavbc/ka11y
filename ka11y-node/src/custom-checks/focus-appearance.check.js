@@ -3,6 +3,8 @@
 const {
   getSharedRuleContext,
   renderLocalizedText,
+  RESULT_CACHE,
+  FOCUSABLE_SELECTOR: SELECTOR,
 } = require('./sharedAssets');
 
 const SC = '2.4.13';
@@ -127,12 +129,29 @@ function extractBoxShadowMetrics(layer) {
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   // Technique #3: Use pre-discovered elements from context
-  const elements = sharedContext.focusableElements || [];
+  // Fallback to discovery if context is empty (e.g. in unit tests)
+  let elements = sharedContext.focusableElements;
+  if (!elements || elements.length === 0) {
+    const { discoverPageElements } = require('./sharedAssets');
+    elements = await discoverPageElements(page, SELECTOR);
+  }
 
   const violations = [];
   const passes = [];
 
   for (const el of elements) {
+    // Technique #5: Cache look-up by (outerHTML + static computed styles)
+    const cacheKey = `${RULE_ID}:${el.html}:${el.staticStyles}`;
+    if (RESULT_CACHE.has(cacheKey)) {
+      const cached = RESULT_CACHE.get(cacheKey);
+      if (cached.violations) {
+        violations.push({ ...el, issues: cached.violations });
+      } else {
+        passes.push(el);
+      }
+      continue;
+    }
+
     // ── L-2: collapsed per-element round-trip (mirrors L-1 in focus-visible) ──
     // One `page.evaluate` runs the full unfocused-capture → focus → settle →
     // focused-capture → blur cycle browser-side. CDP cost: 1 RT instead of 3.
@@ -164,14 +183,24 @@ async function run(page, context = {}) {
         const unfocused = captureBox(e1);
 
         return new Promise((resolve) => {
-          setTimeout(() => {
+          const wait = (cb) => {
+            const cs = window.getComputedStyle(e1);
+            const hasTransition = cs.transitionDuration !== '0s' || cs.animationDuration !== '0s';
+            if (!hasTransition) {
+              requestAnimationFrame(() => requestAnimationFrame(cb));
+            } else {
+              setTimeout(cb, settleMs);
+            }
+          };
+
+          wait(() => {
             const e2 = findEl();
             if (!e2) {
               resolve({ unfocused, focused: null });
               return;
             }
             e2.focus({ preventScroll: true });
-            setTimeout(() => {
+            wait(() => {
               const e3 = findEl();
               if (!e3) {
                 resolve({ unfocused, focused: null });
@@ -183,8 +212,8 @@ async function run(page, context = {}) {
               };
               e3.blur();
               resolve({ unfocused, focused });
-            }, settleMs);
-          }, settleMs);
+            });
+          });
         });
       },
       { idx: el.idx, stableSel: el.stableSel, settleMs: 80 },
@@ -289,11 +318,17 @@ async function run(page, context = {}) {
           contrast: MIN_CONTRAST,
         });
       }
+
+      // Cache the violation
+      RESULT_CACHE.set(cacheKey, { violations: issues });
+
       violations.push({
         ...el,
         issues,
       });
     } else {
+      // Cache the pass
+      RESULT_CACHE.set(cacheKey, { violations: null });
       passes.push(el);
     }
   }

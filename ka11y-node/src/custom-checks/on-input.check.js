@@ -9,6 +9,8 @@ const SC = '3.2.2';
 const RULE_ID = 'custom-on-input';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
 
+const { INPUT_SELECTOR } = require('./sharedAssets');
+
 // Safe test values per input type — use syntactically valid values to avoid
 // triggering browser validation events that could cause false-positive navigations (B9).
 const TYPE_CHAR = {
@@ -48,7 +50,14 @@ async function run(page, context = {}) {
     });
 
     // Technique #3: Use pre-discovered elements, filtered for inputs
-    const inputs = (sharedContext.focusableElements || []).filter(el => {
+    // Fallback to discovery if context is empty (e.g. in unit tests)
+    let allElements = sharedContext.focusableElements;
+    if (!allElements || allElements.length === 0) {
+      const { discoverPageElements, FOCUSABLE_SELECTOR } = require('./sharedAssets');
+      allElements = await discoverPageElements(page, FOCUSABLE_SELECTOR);
+    }
+
+    const inputs = (allElements || []).filter(el => {
       const tag = el.tagName.toLowerCase();
       const type = el.inputType;
       const isInput = tag === 'input' && !['submit', 'button', 'reset', 'hidden', 'file'].includes(type);
@@ -83,12 +92,22 @@ async function run(page, context = {}) {
           }
 
           return new Promise((resolve) => {
-            setTimeout(() => {
+            const wait = (cb) => {
+              const cs = el ? window.getComputedStyle(el) : null;
+              const hasTransition = cs && (cs.transitionDuration !== '0s' || cs.animationDuration !== '0s');
+              if (!hasTransition) {
+                requestAnimationFrame(() => requestAnimationFrame(cb));
+              } else {
+                setTimeout(cb, settleMs);
+              }
+            };
+
+            wait(() => {
               const s = window.__ka11yOnInputNavState;
               const spaNavChanged = !!(s && s.count > 0);
               if (s) s.count = 0;
               resolve({ spaNavChanged });
-            }, settleMs);
+            });
           });
         }, { 
           idx: inputInfo.idx, 
@@ -102,6 +121,7 @@ async function run(page, context = {}) {
           violations.push(inputInfo);
           break;
         }
+        navigationDetected = false;
 
         // Clean up select/checkbox
         if (inputInfo.isCheckboxOrRadio) {
@@ -143,6 +163,7 @@ async function run(page, context = {}) {
           violations.push(inputInfo);
           break;
         }
+        navigationDetected = false;
 
         // Clean up text input
         const charLen = char.length;

@@ -3,6 +3,7 @@
 const {
   getSharedRuleContext,
   renderLocalizedText,
+  settle,
 } = require('./sharedAssets');
 
 const SC = '2.1.2';
@@ -13,8 +14,6 @@ const MAX_TABS = 200;
 // This detects both single-element stuck traps (A,A,A) and two-element cycling
 // traps (A,B,A,B) — the most common real-world pattern (dialog with 2 focusable elements).
 const CYCLE_WINDOW = 4;
-// Settle delay: allow focus event handlers and page mutations to complete before reading state
-const SETTLE_MS = 60;
 
 function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
@@ -75,7 +74,7 @@ async function run(page, context = {}) {
   for (let i = 0; i < MAX_TABS; i++) {
     await page.keyboard.press('Tab');
     // Wait for focus event handlers and React/Vue re-renders to settle
-    await new Promise(r => setTimeout(r, SETTLE_MS));
+    await settle(page, 60);
 
     const activeInfo = await page.evaluate(() => {
       const el = document.activeElement;
@@ -111,9 +110,9 @@ async function run(page, context = {}) {
       // Verify it's a real trap: try Escape then Tab
       // Settle after Escape to allow modal-close / focus-restore handlers to run
       await page.keyboard.press('Escape');
-      await new Promise(r => setTimeout(r, SETTLE_MS));
+      await settle(page, 60);
       await page.keyboard.press('Tab');
-      await new Promise(r => setTimeout(r, SETTLE_MS));
+      await settle(page, 60);
 
       const afterEscape = await page.evaluate(() => {
         const el = document.activeElement;
@@ -147,7 +146,7 @@ async function run(page, context = {}) {
 
     for (let i = 0; i < MAX_TABS; i++) {
       await shiftTab();
-      await new Promise(r => setTimeout(r, SETTLE_MS));
+      await settle(page, 60);
 
       const activeInfo = await page.evaluate(() => {
         const el = document.activeElement;
@@ -175,9 +174,9 @@ async function run(page, context = {}) {
       if (isConsecutiveTrap) {
         // Verify: try Escape then Shift+Tab
         await page.keyboard.press('Escape');
-        await new Promise(r => setTimeout(r, SETTLE_MS));
+        await settle(page, 60);
         await shiftTab();
-        await new Promise(r => setTimeout(r, SETTLE_MS));
+        await settle(page, 60);
 
         const afterEscape = await page.evaluate(() => {
           const el = document.activeElement;
@@ -207,7 +206,7 @@ async function run(page, context = {}) {
 
   if (!trapHtml) {
     for (const role of ARROW_TRAP_ROLES) {
-      const widgets = await page.evaluate((r) => {
+      const widgetsResult = await page.evaluate((r) => {
         return Array.from(document.querySelectorAll(`[role="${r}"]`)).slice(0, 3).map(el => ({
           id: el.id || null,
           html: el.outerHTML.slice(0, 100),
@@ -216,8 +215,9 @@ async function run(page, context = {}) {
           childCount: el.querySelectorAll('[role]').length,
         }));
       }, role);
+      const widgets = widgetsResult || [];
 
-      for (const widget of (widgets || [])) {
+      for (const widget of widgets) {
         // Skip trivially empty widgets
         if (widget.childCount === 0) continue;
 
@@ -228,7 +228,7 @@ async function run(page, context = {}) {
           const first = root.querySelector('[tabindex], button, a[href], input, select, textarea, [role="option"], [role="treeitem"], [role="menuitem"], [role="tab"], [role="row"], [role="gridcell"]');
           (first || root).focus({ preventScroll: true });
         }, widget.selector, role);
-        await new Promise(res => setTimeout(res, SETTLE_MS));
+        await settle(page, 60);
 
         const focusBeforeArrows = await page.evaluate((sel, r) => {
           const root = sel ? document.querySelector(sel) : document.querySelector(`[role="${r}"]`);
@@ -245,7 +245,7 @@ async function run(page, context = {}) {
 
         // Press ArrowDown then ArrowUp — if either changes active element, arrows work
         await page.keyboard.press('ArrowDown');
-        await new Promise(res => setTimeout(res, SETTLE_MS));
+        await settle(page, 60);
         const afterDown = await page.evaluate(() => {
           const el = document.activeElement;
           const allEls = Array.from(document.querySelectorAll('*'));
@@ -253,7 +253,7 @@ async function run(page, context = {}) {
         });
 
         await page.keyboard.press('ArrowUp');
-        await new Promise(res => setTimeout(res, SETTLE_MS));
+        await settle(page, 60);
         const afterUp = await page.evaluate(() => {
           const el = document.activeElement;
           const allEls = Array.from(document.querySelectorAll('*'));
@@ -264,7 +264,7 @@ async function run(page, context = {}) {
 
         // Also test: does Tab exit the widget container?
         await page.keyboard.press('Tab');
-        await new Promise(res => setTimeout(res, SETTLE_MS));
+        await settle(page, 60);
         const afterTab = await page.evaluate((sel, r) => {
           const root = sel ? document.querySelector(sel) : document.querySelector(`[role="${r}"]`);
           const el = document.activeElement;
@@ -307,7 +307,7 @@ async function run(page, context = {}) {
 
         for (let i = 0; i < 30; i++) {
           await page.keyboard.press('Tab');
-          await new Promise(res => setTimeout(res, SETTLE_MS));
+          await settle(page, 60);
 
           const frameActive = await frame.evaluate(() => {
             const el = document.activeElement;
@@ -386,11 +386,11 @@ async function run(page, context = {}) {
           target.focus({ preventScroll: true });
         }
       }, dlg.selector);
-      await new Promise(r => setTimeout(r, SETTLE_MS));
+      await settle(page, 60);
 
       // Press Escape and see if focus leaves the dialog.
       await page.keyboard.press('Escape');
-      await new Promise(r => setTimeout(r, SETTLE_MS + 40));
+      await settle(page, 100);
 
       const stillInside = await page.evaluate((sel) => {
         const root = sel ? document.querySelector(sel) : null;
@@ -460,10 +460,10 @@ async function run(page, context = {}) {
         );
         (focusable || root).focus({ preventScroll: true });
       }, candidate.selector);
-      await new Promise(r => setTimeout(r, SETTLE_MS));
+      await settle(page, 60);
 
       await page.keyboard.press('Escape');
-      await new Promise(r => setTimeout(r, SETTLE_MS + 20));
+      await settle(page, 80);
 
       const outcome = await page.evaluate((sel) => {
         const root = document.querySelector(sel);
