@@ -88,6 +88,11 @@ services:
       DEEPGRAM_API_KEY:     "${DEEPGRAM_API_KEY}"
       PYTHONUNBUFFERED:     "1"
       PYTHONDONTWRITEBYTECODE: "1"
+      # How long the Node axe task waits for the Python universal snapshot's
+      # discovered-URL list before falling back to its budget-capped BFS. Must
+      # outlast a slow snapshot (kao.com/jp took ~561s) or deep pages get
+      # under-audited. Defaults to the stage timeout (1200s) if unset.
+      KA11Y_SNAPSHOT_URLS_WAIT_SECONDS: "1200"
 
     # Expose to host for local debugging / direct API calls.
     # In production behind a reverse proxy this can be removed.

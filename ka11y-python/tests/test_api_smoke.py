@@ -273,6 +273,32 @@ class TestBuildReport:
         assert s["violations"] == 0
         assert s["needs_review"] == 0
         assert s["passes"] == 0
+        # No pass-or-fail findings → score is None ("not scored"), NOT 100.0.
+        # A 100.0 here would let an empty/un-audited report look compliant.
+        assert s["score"] is None
+
+    def test_needs_review_only_page_is_not_scored(self):
+        """Regression: a page with only needs_review findings (e.g. axe never
+        ran on it, only image needs_review landed) must score None — not 100.0.
+        This is the kao.com depth-crawl symptom where 36 barely-audited pages
+        showed a fake 100% (run a7a5d98c, 2026-05-29)."""
+        findings = [
+            _make_finding(
+                source="python", rule_id="r1", wcag_sc="1.4.3",
+                status="needs_review", severity="medium", reason="review",
+                element_html="<p>", page_url="https://x.com/unaudited",
+            ),
+        ]
+        r = _build_report("https://x.com", findings)
+        # Exactly one page, carrying only the needs_review finding.
+        assert len(r["pages"]) == 1
+        only_page = r["pages"][0]
+        assert only_page["summary"]["needs_review"] == 1
+        assert only_page["summary"]["violations"] == 0
+        assert only_page["summary"]["passes"] == 0
+        assert only_page["summary"]["score"] is None
+        # And the overall crawl, having no pass-or-fail finding, is also unscored.
+        assert r["summary"]["score"] is None
 
     def test_by_wcag_sc_present(self):
         r = _build_report("https://x.com", self._findings())
