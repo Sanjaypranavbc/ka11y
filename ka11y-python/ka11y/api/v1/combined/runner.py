@@ -241,7 +241,13 @@ async def _run_job_body(
         )
 
         # Announce the stage plan to SSE subscribers so the progress bar can render.
-        active_stages: list[str] = ["axe_core"]
+        node_stage = "axe_core"
+        if payload.run_accesslint and not payload.run_axe:
+            node_stage = "accesslint"
+        elif payload.run_accesslint and payload.run_axe:
+            node_stage = "node_audit"
+            
+        active_stages: list[str] = [node_stage]
         if payload.run_ocr or payload.run_image_audit:
             active_stages.append("image_audit")
         # pipeline stage always runs; it handles 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
@@ -271,17 +277,19 @@ async def _run_job_body(
         emit_job_plan(job_id, active_stages)
 
         # Fire axe-core and all Python stages concurrently
-        _stage_start(job_id, "axe_core")
+        _stage_start(job_id, node_stage)
         node_task = asyncio.create_task(
             _call_node_flat(
-                url,
-                node_base_url,
-                payload.wcag_level,
-                resolved_lang,
+                url=url,
+                node_base_url=node_base_url,
+                wcag_level=payload.wcag_level,
+                lang=resolved_lang,
                 max_depth=payload.max_depth,
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
                 success_criteria_id=payload.success_criteria_id,
+                run_axe=payload.run_axe,
+                run_accesslint=payload.run_accesslint,
             )
         )
         python_task = asyncio.create_task(
@@ -294,6 +302,7 @@ async def _run_job_body(
                 run_form_audit=payload.run_form_audit,
                 run_label_in_name_audit=payload.run_label_in_name_audit,
                 run_media_audit=payload.run_media_audit,
+                run_captions_audit=payload.run_captions_audit,
                 run_pause_stop_hide_audit=payload.run_pause_stop_hide_audit,
                 run_target_size_audit=payload.run_target_size_audit,
                 run_resize_text_audit=payload.run_resize_text_audit,
@@ -335,15 +344,15 @@ async def _run_job_body(
 
         # ── Resolve axe-core result ───────────────────────────────────────────
         if isinstance(node_result, Exception):
-            _stage_error_and_warn(job_id, "axe_core", node_result)
+            _stage_error_and_warn(job_id, node_stage, node_result)
             node_findings: List[Dict] = []
         else:
             node_findings = node_result
-            _stage_complete(job_id, "axe_core", len(node_findings))
+            _stage_complete(job_id, node_stage, len(node_findings))
             step_logger.record(
-                step="axe_core_summary",
+                step=f"{node_stage}_summary",
                 status="completed",
-                message="axe-core results recorded",
+                message=f"{node_stage.replace('_', '-')} results recorded",
                 context={"finding_count": len(node_findings)},
             )
 
@@ -437,6 +446,12 @@ async def _run_job_body(
             json.dump(
                 report, fh, indent=2, ensure_ascii=False, default=_json_serializer
             )
+
+        # Slim down the "passes" array for the in-memory 'result' object used by the UI
+        if len(report.get("passes", [])) > 100:
+            logger.info(f"[combined] Slimming in-memory passes array from {len(report['passes'])} to 100 for job {job_id}")
+            report["passes"] = report["passes"][:100]
+            report["summary"]["passes_truncated"] = True
 
         async with _get_job_lock(job_id):
             _jobs[job_id].update(

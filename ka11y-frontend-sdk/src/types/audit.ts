@@ -22,6 +22,8 @@ export interface AuditViolation extends AuditElementInfo {
   reason: string;
   suggested_fix: string | null;
   help_url?: string | null;
+  detected_by?: string[];
+  aiContext?: string | null;
 }
 
 export interface AuditNeedsReview extends AuditElementInfo {
@@ -34,6 +36,8 @@ export interface AuditNeedsReview extends AuditElementInfo {
   reason: string;
   suggested_fix: string | null;
   help_url?: string | null;
+  detected_by?: string[];
+  aiContext?: string | null;
 }
 
 export interface ContrastDetection {
@@ -120,6 +124,8 @@ export interface AuditPass extends AuditElementInfo {
   source: AuditSource;
   reason: string;
   help_url?: string | null;
+  detected_by?: string[];
+  aiContext?: string | null;
 }
 
 export interface StageInfo {

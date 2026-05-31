@@ -1,81 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 'use strict';
 
 const rulesGuide = require('./rulesGuide');
@@ -95,6 +18,81 @@ const {
 // English rules cached at startup as fallback.
 const _enRules = getRules('en');
 
+const ACCESSLINT_WCAG_MAP = {
+  "navigable/document-title": "2.4.2",
+  "labels-and-names/frame-title": "4.1.2",
+  "labels-and-names/frame-title-unique": "4.1.2",
+  "distinguishable/meta-viewport": "1.4.4",
+  "enough-time/meta-refresh": "2.2.1",
+  "enough-time/meta-refresh-no-exception": "2.2.1",
+  "enough-time/blink": "2.2.2",
+  "enough-time/marquee": "2.2.2",
+  "text-alternatives/img-alt": "1.1.1",
+  "text-alternatives/svg-img-alt": "1.1.1",
+  "text-alternatives/input-image-alt": "1.1.1",
+  "text-alternatives/area-alt": "1.1.1",
+  "text-alternatives/object-alt": "1.1.1",
+  "text-alternatives/role-img-alt": "1.1.1",
+  "keyboard-accessible/server-image-map": "2.1.1",
+  "labels-and-names/form-label": "4.1.2",
+  "labels-and-names/input-button-name": "4.1.2",
+  "adaptable/autocomplete-valid": "1.3.5",
+  "keyboard-accessible/nested-interactive": "4.1.2",
+  "keyboard-accessible/scrollable-region": "2.1.1",
+  "keyboard-accessible/focus-visible": "2.4.7",
+  "adaptable/list-children": "1.3.1",
+  "adaptable/listitem-parent": "1.3.1",
+  "adaptable/dl-children": "1.3.1",
+  "adaptable/definition-list": "1.3.1",
+  "distinguishable/letter-spacing": "1.4.12",
+  "distinguishable/line-height": "1.4.12",
+  "distinguishable/word-spacing": "1.4.12",
+  "adaptable/orientation-lock": "1.3.4",
+  "aria/aria-roles": "4.1.2",
+  "aria/aria-valid-attr": "4.1.2",
+  "aria/aria-valid-attr-value": "4.1.2",
+  "aria/aria-required-attr": "4.1.2",
+  "aria/aria-allowed-attr": "4.1.2",
+  "aria/aria-allowed-role": "4.1.2",
+  "adaptable/aria-required-children": "1.3.1",
+  "adaptable/aria-required-parent": "1.3.1",
+  "aria/aria-hidden-body": "4.1.2",
+  "aria/aria-hidden-focus": "4.1.2",
+  "labels-and-names/aria-command-name": "4.1.2",
+  "labels-and-names/aria-input-field-name": "4.1.2",
+  "labels-and-names/aria-toggle-field-name": "4.1.2",
+  "labels-and-names/aria-meter-name": "4.1.2",
+  "labels-and-names/aria-progressbar-name": "4.1.2",
+  "labels-and-names/aria-dialog-name": "4.1.2",
+  "labels-and-names/aria-tooltip-name": "4.1.2",
+  "labels-and-names/aria-treeitem-name": "4.1.2",
+  "aria/aria-prohibited-attr": "4.1.2",
+  "aria/presentation-role-conflict": "4.1.2",
+  "aria/presentational-children-focusable": "4.1.2",
+  "labels-and-names/button-name": "4.1.2",
+  "labels-and-names/summary-name": "4.1.2",
+  "navigable/link-name": "2.4.4",
+  "navigable/skip-link": "2.4.1",
+  "distinguishable/link-in-text-block": "1.4.1",
+  "readable/html-has-lang": "3.1.1",
+  "readable/html-lang-valid": "3.1.1",
+  "readable/valid-lang": "3.1.2",
+  "readable/html-xml-lang-mismatch": "3.1.1",
+  "adaptable/td-headers-attr": "1.3.1",
+  "adaptable/th-has-data-cells": "1.3.1",
+  "adaptable/td-has-header": "1.3.1",
+  "adaptable/scope-attr-valid": "1.3.1",
+  "labels-and-names/duplicate-id-aria": "4.1.2",
+  "time-based-media/video-captions": "1.2.2",
+  "time-based-media/audio-transcript": "1.2.1",
+  "distinguishable/color-contrast": "1.4.3",
+  "input-assistance/accessible-authentication": "3.3.8",
+  "distinguishable/color-contrast-enhanced": "1.4.6",
+  "labels-and-names/label-content-mismatch": "2.5.3",
+  "landmarks/landmark-main": "1.3.1",
+  "landmarks/region": "1.3.1",
+  "keyboard-accessible/focus-order": "2.4.3"
+};
 /**
  * Augment a finding with localized severity/level/status display labels
  * (and copies of the stable machine values, so consumers that only look at
@@ -122,7 +120,7 @@ function cleanReason(summary, fallback) {
  * @param {string|null} criteriaFilter - Optional WCAG SC ID to filter by (e.g. "1.1.1")
  * @returns {Array<object>} Structured rule results sorted by severity
  */
-function mapResults(axeResults, criteriaFilter = null) {
+function mapResults(results, criteriaFilter = null, accessLintResults = null) {
   const resultMap = {};
 
   // violations → status: "fail"
@@ -178,7 +176,74 @@ function mapResults(axeResults, criteriaFilter = null) {
   for (const { _criteriaId, ...rule } of flat) {
     const key = _criteriaId ?? 'best-practice';
     if (!grouped[key]) grouped[key] = [];
+    
+    // Tag Axe-core inherently
+    rule.detected_by = ["axe-core"];
     grouped[key].push(rule);
+  }
+
+  // --- NEW: THE DEDUPLICATION ENGINE ---
+  if (accessLintResults && accessLintResults.violations) {
+    for (const alViolation of accessLintResults.violations) {
+      // Use the injected map, or fallback to best-practice
+      let mappedWcag = null;
+      if (typeof ACCESSLINT_WCAG_MAP !== 'undefined') {
+        mappedWcag = ACCESSLINT_WCAG_MAP[alViolation.ruleId];
+      }
+      const wcagKey = mappedWcag || ((alViolation.wcag && alViolation.wcag[0]) ? alViolation.wcag[0] : 'best-practice');
+      
+      if (grouped[wcagKey]) {
+        let merged = false;
+        for (const axeRule of grouped[wcagKey]) {
+          const matchingNode = axeRule.nodes?.find(n => 
+            n.target && n.target.includes(alViolation.selector)
+          );
+
+          if (matchingNode) {
+            axeRule.detected_by.push("accesslint");
+            axeRule.aiContext = alViolation.aiContext;
+            merged = true;
+            break;
+          }
+        }
+
+        if (!merged) {
+          grouped[wcagKey].push({
+            id: alViolation.ruleId,
+            description: alViolation.message,
+            help: alViolation.message,
+            helpUrl: '',
+            tags: alViolation.tags || [],
+            impact: alViolation.impact,
+            status: 'fail',
+            detected_by: ["accesslint"],
+            aiContext: alViolation.aiContext,
+            nodes: [{
+              html: alViolation.html,
+              target: [alViolation.selector],
+              failureSummary: alViolation.context || alViolation.message
+            }]
+          });
+        }
+      } else {
+        grouped[wcagKey] = [{
+            id: alViolation.ruleId,
+            description: alViolation.message,
+            help: alViolation.message,
+            helpUrl: '',
+            tags: alViolation.tags || [],
+            impact: alViolation.impact,
+            status: 'fail',
+            detected_by: ["accesslint"],
+            aiContext: alViolation.aiContext,
+            nodes: [{
+              html: alViolation.html,
+              target: [alViolation.selector],
+              failureSummary: alViolation.context || alViolation.message
+            }]
+        }];
+      }
+    }
   }
 
   return Object.entries(grouped)
@@ -406,7 +471,7 @@ function _localizedGuideEntry(ruleId, lang = 'en') {
  * @param {string} pageUrl    - URL of the page (for element.page_url)
  * @returns {Array<object>}
  */
-function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter = null) {
+function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter = null, accessLintResults = null) {
   const findings = [];
 
   const IMPACT_TO_SEVERITY = {
@@ -529,6 +594,50 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter 
         element:        buildElement(node),
       });
     }
+  }
+
+  // --- NEW: THE DEDUPLICATION ENGINE (FLAT) ---
+  if (accessLintResults && accessLintResults.violations) {
+    for (const alViolation of accessLintResults.violations) {
+      const mappedWcag = ACCESSLINT_WCAG_MAP[alViolation.ruleId] || null;
+      const wcagKey = mappedWcag || ((alViolation.wcag && alViolation.wcag[0]) ? alViolation.wcag[0] : 'best-practice');
+      const alSelector = alViolation.selector;
+      
+      let merged = false;
+      for (const finding of findings) {
+        if (finding.wcag_sc === wcagKey && finding.element?.selector === alSelector) {
+          finding.detected_by = finding.detected_by || ["axe-core"];
+          if (!finding.detected_by.includes("accesslint")) {
+             finding.detected_by.push("accesslint");
+          }
+          finding.aiContext = alViolation.aiContext;
+          merged = true;
+          break;
+        }
+      }
+
+      if (!merged) {
+        findings.push({
+          source:         'accesslint',
+          rule_id:        alViolation.ruleId,
+          wcag_sc:        wcagKey,
+          criterion_name: _criterionName(wcagKey, alViolation.ruleId, alViolation.message || null, lang),
+          level:          _criterionLevel(wcagKey),
+          severity:       IMPACT_TO_SEVERITY[alViolation.impact] || null,
+          status:         'fail',
+          reason:         alViolation.message,
+          suggested_fix:  alViolation.context || null,
+          help_url:       '',
+          element:        { selector: alSelector, html_snippet: alViolation.html, page_url: pageUrl },
+          detected_by:    ["accesslint"],
+          aiContext:      alViolation.aiContext
+        });
+      }
+    }
+  }
+
+  for (const f of findings) {
+    if (!f.detected_by) f.detected_by = ["axe-core"];
   }
 
   for (const f of findings) _attachLabels(f, lang);

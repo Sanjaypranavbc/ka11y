@@ -2269,6 +2269,7 @@ files = [
     {file = "numpy-2.4.4.tar.gz", hash = "sha256:2d390634c5182175533585cc89f3608a4682ccb173cc9bb940b2881c8d6f8fa0"},
 ]
 
+
 [[package]]
 name = "opencv-python-headless"
 version = "4.13.0.92"

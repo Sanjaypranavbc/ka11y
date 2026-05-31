@@ -169,6 +169,8 @@ async def _call_node_flat(
     internal_links: bool = True,
     max_pages: int = 50,
     success_criteria_id: Optional[str] = None,
+    run_axe: bool = True,
+    run_accesslint: bool = True,
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings.
 
@@ -186,6 +188,8 @@ async def _call_node_flat(
         "maxDepth": max_depth,
         "internalLinks": internal_links,
         "maxPages": max_pages,
+        "run_axe": run_axe,
+        "run_accesslint": run_accesslint,
     }
     if success_criteria_id:
         payload_json["successCriteriaId"] = success_criteria_id
@@ -1334,7 +1338,14 @@ async def _run_python_stages(
         ),
         _timed(
             _stage_media_audit_universal(
-                url, output_dir, run_media_audit, run_captions_audit, job_id, snapshot_task, lang, step_logger
+                url,
+                output_dir,
+                run_media_audit,
+                run_captions_audit,
+                job_id,
+                snapshot_task,
+                lang,
+                step_logger,
             )
         ),
         _timed(

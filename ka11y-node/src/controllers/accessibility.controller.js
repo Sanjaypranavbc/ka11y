@@ -286,6 +286,8 @@ class AccessibilityController {
       maxDepth = 0,
       internalLinks = true,
       maxPages = 50,
+      run_axe = true,
+      run_accesslint = true,
     } = req.body;
 
     if (!url || typeof url !== 'string') {
@@ -317,13 +319,16 @@ class AccessibilityController {
       this._logger.info(
         `analyseUrlFlat start url=${url} level=${wcagLevel} lang=${safeLang} ` +
         `successCriteriaId=${filter ?? 'none'} maxDepth=${safeMaxDepth} ` +
-        `internalLinks=${safeInternalLinks} maxPages=${safeMaxPages}`
+        `internalLinks=${safeInternalLinks} maxPages=${safeMaxPages} ` +
+        `run_axe=${run_axe} run_accesslint=${run_accesslint}`
       );
       const findings = await this._service.analyseUrlFlat(url, wcagLevel, safeLang, {
         maxDepth: safeMaxDepth,
         maxPages: safeMaxPages,
         internalLinks: safeInternalLinks,
         successCriteriaId: filter,
+        run_axe: !!run_axe,
+        run_accesslint: !!run_accesslint,
       });
       this._logger.info(`analyseUrlFlat done findings=${findings.length}`);
       res.json({ url, findings });

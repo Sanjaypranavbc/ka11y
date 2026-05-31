@@ -35,40 +35,40 @@ interface AuditSidebarProps {
 }
 
 const NAV_ITEMS: { key: TranslationKey; value: TabValue; icon: React.ElementType }[] = [
-  { key: "nav.dashboard",       value: "dashboard",           icon: LayoutDashboard },
-  { key: "nav.violations",      value: "violations",          icon: AlertTriangle   },
-  { key: "nav.needsReview",     value: "needs-review",        icon: HelpCircle      },
-  { key: "nav.passes",          value: "passes",              icon: CheckCircle2    },
-  { key: "nav.imageVisualiser", value: "image-visualisation", icon: Images          },
-  { key: "nav.wcagRules",       value: "wcag-rules",          icon: BookOpen        },
-  { key: "nav.ruleEvaluator",     value: "rule-evaluator",        icon: Beaker          },
-  { key: "nav.settings",        value: "settings",            icon: Settings        },
+  { key: "nav.dashboard", value: "dashboard", icon: LayoutDashboard },
+  { key: "nav.violations", value: "violations", icon: AlertTriangle },
+  { key: "nav.needsReview", value: "needs-review", icon: HelpCircle },
+  { key: "nav.passes", value: "passes", icon: CheckCircle2 },
+  { key: "nav.imageVisualiser", value: "image-visualisation", icon: Images },
+  { key: "nav.wcagRules", value: "wcag-rules", icon: BookOpen },
+  { key: "nav.ruleEvaluator", value: "rule-evaluator", icon: Beaker },
+  { key: "nav.settings", value: "settings", icon: Settings },
 ];
 
 const TOGGLE_ITEMS: { key: keyof AuditConfig; labelKey: TranslationKey }[] = [
-  { key: "run_ocr",                          labelKey: "toggle.ocr"             },
-  { key: "run_image_audit",                  labelKey: "toggle.imageAudit"      },
-  { key: "run_form_audit",                   labelKey: "toggle.formAudit"       },
-  { key: "run_label_in_name_audit",          labelKey: "toggle.labelInName"     },
-  { key: "run_media_audit",                  labelKey: "toggle.mediaAudit"      },
-  { key: "run_captions_audit",               labelKey: "toggle.captionsAudit"   },
-  { key: "run_sensory_audit",                labelKey: "toggle.sensoryAudit"    },
-  { key: "run_pause_stop_hide_audit",        labelKey: "toggle.pauseStop"       },
-  { key: "run_target_size_audit",            labelKey: "toggle.targetSize"      },
-  { key: "run_resize_text_audit",            labelKey: "toggle.resizeText"      },
-  { key: "run_reflow_audit",                 labelKey: "toggle.reflow"          },
-  { key: "run_text_spacing_audit",           labelKey: "toggle.textSpacing"     },
-  { key: "run_orientation_audit",            labelKey: "toggle.orientation"     },
-  { key: "run_hover_focus_content_audit",    labelKey: "toggle.hoverFocus"      },
-  { key: "run_focus_not_obscured_min_audit", labelKey: "toggle.focusObscured"   },
+  { key: "run_ocr", labelKey: "toggle.ocr" },
+  { key: "run_image_audit", labelKey: "toggle.imageAudit" },
+  { key: "run_form_audit", labelKey: "toggle.formAudit" },
+  { key: "run_label_in_name_audit", labelKey: "toggle.labelInName" },
+  { key: "run_media_audit", labelKey: "toggle.mediaAudit" },
+  { key: "run_captions_audit", labelKey: "toggle.captionsAudit" },
+  { key: "run_sensory_audit", labelKey: "toggle.sensoryAudit" },
+  { key: "run_pause_stop_hide_audit", labelKey: "toggle.pauseStop" },
+  { key: "run_target_size_audit", labelKey: "toggle.targetSize" },
+  { key: "run_resize_text_audit", labelKey: "toggle.resizeText" },
+  { key: "run_reflow_audit", labelKey: "toggle.reflow" },
+  { key: "run_text_spacing_audit", labelKey: "toggle.textSpacing" },
+  { key: "run_orientation_audit", labelKey: "toggle.orientation" },
+  { key: "run_hover_focus_content_audit", labelKey: "toggle.hoverFocus" },
+  { key: "run_focus_not_obscured_min_audit", labelKey: "toggle.focusObscured" },
   { key: "run_focus_not_obscured_enh_audit", labelKey: "toggle.focusObscuredPlus" },
 ];
 
 const STATUS_KEYS: Record<string, TranslationKey> = {
-  pending:   "status.pending",
-  running:   "status.running",
+  pending: "status.pending",
+  running: "status.running",
   completed: "status.completed",
-  failed:    "status.failed",
+  failed: "status.failed",
 };
 
 export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, currentStage, open, onClose }: AuditSidebarProps) {
@@ -150,7 +150,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
               key={item.value}
               onClick={() => { onTabChange(item.value); onClose(); }}
               aria-current={activeTab === item.value ? "page" : undefined}
-            className={cn(
+              className={cn(
                 "w-full cursor-pointer flex items-center gap-3 px-4 py-2.5 text-xs font-medium transition-colors border-l-2",
                 activeTab === item.value
                   ? "border-l-primary text-primary bg-primary/5"
@@ -323,7 +323,7 @@ export function AuditSidebar({ activeTab, onTabChange, onRunAudit, jobStatus, cu
                 <span className={cn(
                   "capitalize",
                   jobStatus === "completed" && "text-success",
-                  jobStatus === "failed"    && "text-destructive",
+                  jobStatus === "failed" && "text-destructive",
                   (jobStatus === "pending" || jobStatus === "running") && "text-primary",
                 )}>
                   {t(STATUS_KEYS[jobStatus] ?? "status.pending")}

@@ -484,7 +484,7 @@ class MediaAuditor:
                 "wcag_1_2_1_status": "N/A",
                 "wcag_1_2_1_violation": (
                     "Synchronized media (has both audio and video tracks). "
-                    "WCAG 1.2.1 does not apply — see 1.2.2."
+                    "WCAG 1.2.1 does not apply — see 1.2.2 / 1.2.3."
                 ),
                 "wcag_1_2_1_gate_reached": 2,
             })
@@ -573,8 +573,6 @@ class MediaAuditor:
                 "wcag_1_2_2_gate_reached": 6,
             })
             return base
-
-
 
         # ── Gate 3: Is it a labeled media alternative? ────────────────────
         
