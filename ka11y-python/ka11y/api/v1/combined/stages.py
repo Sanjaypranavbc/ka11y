@@ -70,6 +70,10 @@ from .findings import (
     _resize_text_to_findings,
     _ts_to_findings,
     _sensory_to_findings,
+    _consistent_navigation_to_findings,
+    _consistent_id_to_findings,
+    _unusual_words_to_findings,
+    _section_headings_to_findings,
 )
 from .stage_events import (
     _stage_complete,
@@ -1166,6 +1170,103 @@ async def _stage_sensory_audit_universal(
         return []
 
 
+async def _stage_consistent_navigation(
+    url: str,
+    output_dir: Path,
+    run_consistent_navigation_audit: bool,
+    job_id: str,
+    step_logger: ExecutionStepLogger | None = None,
+) -> List[Dict]:
+    _stage_start(job_id, "consistent_navigation")
+    if not run_consistent_navigation_audit:
+        _stage_complete(job_id, "consistent_navigation", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.navigation.consistent_nav import analyze_wcag_323
+        
+        report = await analyze_wcag_323(url)
+        findings = _consistent_navigation_to_findings(report, url)
+        _stage_complete(job_id, "consistent_navigation", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "consistent_navigation", _exc)
+        return []
+
+
+async def _stage_consistent_identification(
+    url: str,
+    output_dir: Path,
+    run_consistent_id_audit: bool,
+    job_id: str,
+    step_logger: ExecutionStepLogger | None = None,
+) -> List[Dict]:
+    _stage_start(job_id, "consistent_identification")
+    if not run_consistent_id_audit:
+        _stage_complete(job_id, "consistent_identification", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.navigation.consistent_id import analyze_wcag_324
+        
+        report = await analyze_wcag_324(url)
+        findings = _consistent_id_to_findings(report, url)
+        _stage_complete(job_id, "consistent_identification", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "consistent_identification", _exc)
+        return []
+
+
+async def _stage_unusual_words(
+    url: str,
+    output_dir: Path,
+    run_unusual_words_audit: bool,
+    job_id: str,
+    lang: str,
+    step_logger: ExecutionStepLogger | None = None,
+) -> List[Dict]:
+    _stage_start(job_id, "unusual_words")
+    if not run_unusual_words_audit:
+        _stage_complete(job_id, "unusual_words", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.language.unusual_words import analyze_wcag_313
+        
+        report = await analyze_wcag_313(url)
+        findings = _unusual_words_to_findings(report, url)
+        _stage_complete(job_id, "unusual_words", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "unusual_words", _exc)
+        return []
+
+
+async def _stage_section_headings(
+    url: str,
+    output_dir: Path,
+    run_section_headings_audit: bool,
+    job_id: str,
+    step_logger: ExecutionStepLogger | None = None,
+) -> List[Dict]:
+    _stage_start(job_id, "section_headings")
+    if not run_section_headings_audit:
+        _stage_complete(job_id, "section_headings", 0)
+        return []
+
+    try:
+        from ka11y.accessibility.rules.rendered.section_headings import analyze_wcag_2410
+        
+        report = await analyze_wcag_2410(url)
+        findings = _section_headings_to_findings(report, url)
+        _stage_complete(job_id, "section_headings", len(findings))
+        return findings
+    except Exception as _exc:
+        _stage_error_and_warn(job_id, "section_headings", _exc)
+        return []
+
+
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
 
@@ -1199,6 +1300,10 @@ async def _run_python_stages(
     internal_links: bool = True,
     max_pages: int = 50,
     success_criteria_id: Optional[str] = None,
+    run_consistent_navigation_audit: bool = False,
+    run_consistent_id_audit: bool = False,
+    run_unusual_words_audit: bool = False,
+    run_section_headings_audit: bool = False,
 ) -> PythonStagesResult:
     """
     Run all Python audit stages concurrently.
@@ -1357,6 +1462,26 @@ async def _run_python_stages(
                 lang,
                 snapshot_task,
                 step_logger,
+            )
+        ),
+        _timed(
+            _stage_consistent_navigation(
+                url, output_dir, run_consistent_navigation_audit, job_id, step_logger
+            )
+        ),
+        _timed(
+            _stage_consistent_identification(
+                url, output_dir, run_consistent_id_audit, job_id, step_logger
+            )
+        ),
+        _timed(
+            _stage_unusual_words(
+                url, output_dir, run_unusual_words_audit, job_id, lang, step_logger
+            )
+        ),
+        _timed(
+            _stage_section_headings(
+                url, output_dir, run_section_headings_audit, job_id, step_logger
             )
         ),
         return_exceptions=True,

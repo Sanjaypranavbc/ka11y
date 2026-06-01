@@ -274,6 +274,14 @@ async def _run_job_body(
             active_stages.append("media_audit")
         if payload.run_sensory_audit:
             active_stages.append("sensory_audit")
+        if payload.run_consistent_navigation_audit:
+            active_stages.append("consistent_navigation")
+        if payload.run_consistent_id_audit:
+            active_stages.append("consistent_identification")
+        if payload.run_unusual_words_audit:
+            active_stages.append("unusual_words")
+        if payload.run_section_headings_audit:
+            active_stages.append("section_headings")
         emit_job_plan(job_id, active_stages)
 
         # Fire axe-core and all Python stages concurrently
@@ -319,6 +327,10 @@ async def _run_job_body(
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
                 success_criteria_id=payload.success_criteria_id,
+                run_consistent_navigation_audit=payload.run_consistent_navigation_audit,
+                run_consistent_id_audit=payload.run_consistent_id_audit,
+                run_unusual_words_audit=payload.run_unusual_words_audit,
+                run_section_headings_audit=payload.run_section_headings_audit,
             )
         )
 

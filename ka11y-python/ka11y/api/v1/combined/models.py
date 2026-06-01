@@ -32,6 +32,10 @@ _SC_STAGE_PREREQUISITES = {
     "3.3.1": ("run_form_audit",),
     "3.3.2": ("run_form_audit",),
     "4.1.2": ("run_image_audit",),
+    "3.2.3": ("run_consistent_navigation_audit",),
+    "3.2.4": ("run_consistent_id_audit",),
+    "3.1.3": ("run_unusual_words_audit",),
+    "2.4.10": ("run_section_headings_audit",),
 }
 
 
@@ -66,6 +70,11 @@ class CombinedRequest(BaseModel):
     run_focus_not_obscured_min_audit: bool = True
     run_focus_not_obscured_enh_audit: bool = True
     run_sensory_audit: bool = True
+    # ── 4 New WCAG checks ────────────────────────────────────────────────────
+    run_consistent_navigation_audit: bool = True
+    run_consistent_id_audit: bool = True
+    run_unusual_words_audit: bool = True
+    run_section_headings_audit: bool = True
     # ── Node engine toggles ──────────────────────────────────────────────────
     run_axe: bool = True
     run_accesslint: bool = True

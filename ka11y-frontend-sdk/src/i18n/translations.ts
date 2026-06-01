@@ -74,6 +74,10 @@ export const translations = {
     "stage.target_size": "Target size",
     "stage.text_spacing": "Text spacing",
     "stage.rendered_layout_audit": "Rendered layout",
+    "stage.consistent_navigation": "Consistent navigation",
+    "stage.consistent_identification": "Consistent identification",
+    "stage.unusual_words": "Unusual words",
+    "stage.section_headings": "Section headings",
 
     // ── Stage labels (progress panel full) ───────────────────────────────────
     "stageFull.axe_core": "axe-core WCAG scan",
@@ -86,6 +90,10 @@ export const translations = {
     "stageFull.target_size": "Target size (2.5.8)",
     "stageFull.text_spacing": "Text spacing (1.4.12)",
     "stageFull.rendered_layout_audit": "Rendered layout checks",
+    "stageFull.consistent_navigation": "Consistent navigation (3.2.3)",
+    "stageFull.consistent_identification": "Consistent identification (3.2.4)",
+    "stageFull.unusual_words": "Unusual words (3.1.3)",
+    "stageFull.section_headings": "Section headings (2.4.10)",
 
     // ── Progress panel ───────────────────────────────────────────────────────
     "progress.title": "Audit Progress",
@@ -279,6 +287,10 @@ export const translations = {
     "stage.target_size": "ターゲットサイズ",
     "stage.text_spacing": "テキスト間隔",
     "stage.rendered_layout_audit": "レンダリングレイアウト",
+    "stage.consistent_navigation": "一貫したナビゲーション",
+    "stage.consistent_identification": "一貫した識別",
+    "stage.unusual_words": "珍しい言葉",
+    "stage.section_headings": "セクションの見出し",
 
     // ── Stage labels (progress panel full) ───────────────────────────────────
     "stageFull.axe_core": "axe-core WCAGスキャン",
@@ -291,6 +303,10 @@ export const translations = {
     "stageFull.target_size": "ターゲットサイズ (2.5.8)",
     "stageFull.text_spacing": "テキスト間隔 (1.4.12)",
     "stageFull.rendered_layout_audit": "レンダリングレイアウトチェック",
+    "stageFull.consistent_navigation": "一貫したナビゲーション (3.2.3)",
+    "stageFull.consistent_identification": "一貫した識別 (3.2.4)",
+    "stageFull.unusual_words": "珍しい言葉 (3.1.3)",
+    "stageFull.section_headings": "セクションの見出し (2.4.10)",
 
     // ── Progress panel ───────────────────────────────────────────────────────
     "progress.title": "監査進捗",

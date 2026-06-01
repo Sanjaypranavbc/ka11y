@@ -142,6 +142,12 @@ export function RuleEvaluatorTab() {
                 <option value="wcag_2_4_11">WCAG 2.4.11 Focus Not Obscured (Min)</option>
                 <option value="wcag_2_4_12">WCAG 2.4.12 Focus Not Obscured (Enh)</option>
               </optgroup>
+              <optgroup label="Navigation & Language">
+                <option value="wcag_3_2_3">WCAG 3.2.3 Consistent Navigation</option>
+                <option value="wcag_3_2_4">WCAG 3.2.4 Consistent Identification</option>
+                <option value="wcag_3_1_3">WCAG 3.1.3 Unusual Words</option>
+                <option value="wcag_2_4_10">WCAG 2.4.10 Section Headings</option>
+              </optgroup>
               <optgroup label="Standard Javascript Engines">
                 <option value="axe_core">All Axe-Core Rules (Live Render)</option>
               </optgroup>

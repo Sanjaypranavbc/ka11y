@@ -1554,6 +1554,166 @@ def _contrast_capture_failed_to_findings(
     return findings
 
 
+def _consistent_navigation_to_findings(report: dict, page_url: str) -> List[Dict]:
+    """Emit WCAG 3.2.3 Consistent Navigation findings."""
+    status_lower = report["status"].lower()
+    if status_lower == "pass":
+        return [_make_finding(
+            source="python",
+            rule_id="python_3_2_3_navigation",
+            wcag_sc="3.2.3",
+            status="pass",
+            severity=None,
+            reason=report["reason"],
+            page_url=page_url
+        )]
+    elif status_lower == "needs_review":
+        return [_make_finding(
+            source="python",
+            rule_id="python_3_2_3_navigation",
+            wcag_sc="3.2.3",
+            status="needs_review",
+            severity="minor",
+            reason=report["reason"],
+            page_url=page_url
+        )]
+    
+    findings = []
+    for comp in report.get("details", {}).get("comparisons", []):
+        if not comp["pass"]:
+            findings.append(_make_finding(
+                source="python",
+                rule_id="python_3_2_3_navigation",
+                wcag_sc="3.2.3",
+                status="fail",
+                severity="moderate",
+                reason=f"Navigation order mismatch between {comp['url1']} and {comp['url2']}. Expected sequence: {comp['seq1']}, Actual sequence: {comp['seq2']}",
+                page_url=page_url
+            ))
+    if not findings:
+        findings.append(_make_finding(
+            source="python",
+            rule_id="python_3_2_3_navigation",
+            wcag_sc="3.2.3",
+            status="fail",
+            severity="moderate",
+            reason=report["reason"],
+            page_url=page_url
+        ))
+    return findings
+
+
+def _consistent_id_to_findings(report: dict, page_url: str) -> List[Dict]:
+    """Emit WCAG 3.2.4 Consistent Identification findings."""
+    status_lower = report["status"].lower()
+    if status_lower == "pass":
+        return [_make_finding(
+            source="python",
+            rule_id="python_3_2_4_consistent_id",
+            wcag_sc="3.2.4",
+            status="pass",
+            severity=None,
+            reason=report["reason"],
+            page_url=page_url
+        )]
+    elif status_lower == "needs_review":
+        return [_make_finding(
+            source="python",
+            rule_id="python_3_2_4_consistent_id",
+            wcag_sc="3.2.4",
+            status="needs_review",
+            severity="minor",
+            reason=report["reason"],
+            page_url=page_url
+        )]
+
+    findings = []
+    for comp_key, labels in report.get("details", {}).items():
+        lbl_str = ", ".join(f"'{lbl}' on {len(urls)} pages" for lbl, urls in labels.items())
+        findings.append(_make_finding(
+            source="python",
+            rule_id="python_3_2_4_consistent_id",
+            wcag_sc="3.2.4",
+            status="fail",
+            severity="moderate",
+            reason=f"Inconsistent identification for repeated component '{comp_key}': {lbl_str}",
+            page_url=page_url
+        ))
+    if not findings:
+        findings.append(_make_finding(
+            source="python",
+            rule_id="python_3_2_4_consistent_id",
+            wcag_sc="3.2.4",
+            status="fail",
+            severity="moderate",
+            reason=report["reason"],
+            page_url=page_url
+        ))
+    return findings
+
+
+def _unusual_words_to_findings(report: dict, page_url: str) -> List[Dict]:
+    """Emit WCAG 3.1.3 Unusual Words findings."""
+    findings = []
+    for f in report.get("details", {}).get("findings", []):
+        findings.append(_make_finding(
+            source="python",
+            rule_id="python_3_1_3_unusual_words",
+            wcag_sc="3.1.3",
+            status="needs_review",
+            severity="minor",
+            reason=f"Potential unexplained {f['category']} '{f['term']}' (found {f['occurrences']} times). Context: \"{f['context']}\"",
+            page_url=page_url
+        ))
+    if not findings:
+        findings.append(_make_finding(
+            source="python",
+            rule_id="python_3_1_3_unusual_words",
+            wcag_sc="3.1.3",
+            status="pass",
+            severity=None,
+            reason=report["reason"],
+            page_url=page_url
+        ))
+    return findings
+
+
+def _section_headings_to_findings(report: dict, page_url: str) -> List[Dict]:
+    """Emit WCAG 2.4.10 Section Headings findings."""
+    findings = []
+    for r in report.get("details", {}).get("findings", []):
+        status_lower = r["verdict"].lower()
+        severity = None
+        if status_lower == "fail":
+            severity = "moderate"
+        elif status_lower == "needs_review":
+            severity = "minor"
+            
+        findings.append(_make_finding(
+            source="python",
+            rule_id="python_2_4_10_section_headings",
+            wcag_sc="2.4.10",
+            status=status_lower,
+            severity=severity,
+            reason=r["reason"],
+            element_html=r["outer_html_snippet"],
+            element_tag=r["tag"],
+            element_selector=r["path_selector"],
+            page_url=r["url"]
+        ))
+    if not findings:
+        findings.append(_make_finding(
+            source="python",
+            rule_id="python_2_4_10_section_headings",
+            wcag_sc="2.4.10",
+            status="pass",
+            severity=None,
+            reason=report["reason"],
+            page_url=page_url
+        ))
+    return findings
+
+
 # ── Converter registries ─────────────────────────────────────────────────────
 
 # Register image-audit rules here so new raw status keys are wired to the
