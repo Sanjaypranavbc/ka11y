@@ -241,3 +241,46 @@ async def test_run_python_stages_skips_snapshot_when_filtered_to_image_rule():
     spacing_stage.assert_not_awaited()
     rendered_stage.assert_not_awaited()
     media_stage.assert_not_awaited()
+
+
+class TestNodeHttpTimeout:
+    """``_node_http_timeout`` must scale the Node flat-call read timeout with
+    the page count so snapshot-fed child crawls don't silently drop all axe
+    findings when the crawl outlasts the old fixed 300 s ceiling.
+    """
+
+    def test_single_page_keeps_300s_floor(self):
+        from ka11y.api.v1.combined.stages import _node_http_timeout
+
+        assert _node_http_timeout(1) == 300.0
+
+    def test_small_crawl_below_floor_still_300s(self):
+        from ka11y.api.v1.combined.stages import _node_http_timeout
+
+        # 3 pages * 75s + 60s base = 285s < 300s floor.
+        assert _node_http_timeout(3) == 300.0
+
+    def test_grows_with_page_count(self):
+        from ka11y.api.v1.combined.stages import _node_http_timeout
+
+        # 13 pages already exceeds the old 300 s ceiling — the exact regime
+        # where the iana repro (138 s / 6 pages) showed ~23 s/page.
+        assert _node_http_timeout(13) > 300.0
+
+    def test_capped_at_job_budget(self):
+        from ka11y.api.v1.combined.stages import (
+            _node_http_timeout,
+            _NODE_HTTP_TIMEOUT_CAP_SECONDS,
+        )
+
+        # 1000 pages would scale to ~75000s; must clamp to the job budget.
+        assert _node_http_timeout(1000) == _NODE_HTTP_TIMEOUT_CAP_SECONDS
+
+    def test_monotonic_non_decreasing(self):
+        from ka11y.api.v1.combined.stages import _node_http_timeout
+
+        prev = 0.0
+        for n in (1, 5, 10, 25, 50, 200, 5000):
+            cur = _node_http_timeout(n)
+            assert cur >= prev
+            prev = cur

@@ -161,6 +161,42 @@ _SNAPSHOT_URLS_WAIT_SECONDS = float(
     os.environ.get("KA11Y_SNAPSHOT_URLS_WAIT_SECONDS", str(_STAGE_TIMEOUT_SECONDS))
 )
 
+# HTTP read-timeout sizing for the call to Node's ``/analyse-url-flat``.
+#
+# In snapshot-fed mode Node audits EVERY discovered URL with no internal
+# time budget (unlike its legacy BFS, which self-caps at flatCrawlBudgetMs).
+# A fixed 300 s client timeout therefore silently discarded *all* axe findings
+# on any child crawl that took longer than 300 s end-to-end: the POST timed out
+# mid-crawl, ``_call_node_flat`` raised, and ``node_findings`` came back empty —
+# so deep pages lost their entire axe coverage even though the snapshot fix was
+# feeding Node the right URLs. We now scale the timeout by the number of pages
+# Node will actually audit (a fixed base for connection + the entry page, plus a
+# per-page budget that matches Node's worst-case page cost: navigate + axe +
+# custom checks), bounded by the outer job budget so a runaway crawl still
+# terminates. The legacy single-page / BFS path keeps the 300 s floor.
+_NODE_HTTP_BASE_TIMEOUT_SECONDS = float(
+    os.environ.get("KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS", "60")
+)
+_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS = float(
+    os.environ.get("KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS", "75")
+)
+# Hard ceiling — keep at/under the runner's KA11Y_JOB_TIMEOUT_SECONDS (1800 s)
+# so the HTTP call fails with a clear axe-specific error before the outer job
+# watchdog cancels the whole audit.
+_NODE_HTTP_TIMEOUT_CAP_SECONDS = float(
+    os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1800")
+)
+
+
+def _node_http_timeout(page_count: int) -> float:
+    """Return the httpx timeout (seconds) for a Node flat call of ``page_count`` pages.
+
+    Floors at 300 s (legacy single-page / BFS behaviour), grows linearly with the
+    page count in snapshot-fed mode, and is capped at the job budget.
+    """
+    scaled = _NODE_HTTP_BASE_TIMEOUT_SECONDS + max(1, page_count) * _NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS
+    return min(_NODE_HTTP_TIMEOUT_CAP_SECONDS, max(300.0, scaled))
+
 # Process-wide queue for browser-heavy crawler stages. ``image_audit`` and
 # ``rendered_layout_audit`` each open their own Playwright contexts + image
 # buffers; with _MAX_CONCURRENT_JOBS=4 an unguarded depth>0 audit can spawn
@@ -354,9 +390,15 @@ async def _call_node_flat(
         # flatCrawlBudgetMs=255s and was the source of the kao.com 3-page
         # truncation that left a2 unaudited by axe).
         payload_json["discoveredUrls"] = discovered_urls
+    # Size the read timeout to the work Node will do. In snapshot-fed mode Node
+    # audits every ``discovered_urls`` entry with no internal budget, so a flat
+    # 300 s ceiling dropped all axe findings on large child crawls (see
+    # _node_http_timeout). Fall back to the page count we asked Node to crawl
+    # when the snapshot produced no explicit list.
+    _page_count = len(discovered_urls) if discovered_urls else (max_pages if max_depth > 0 else 1)
+    http_timeout = _node_http_timeout(_page_count)
     try:
-        # 300s timeout to allow for heavy custom checks on complex pages
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        async with httpx.AsyncClient(timeout=http_timeout) as client:
             resp = await client.post(endpoint, json=payload_json)
             resp.raise_for_status()
             body = resp.json()
@@ -369,7 +411,12 @@ async def _call_node_flat(
     except httpx.ConnectError:
         raise RuntimeError(f"axe_core: Node engine unreachable at {node_base_url}")
     except httpx.TimeoutException:
-        raise RuntimeError(f"axe_core: Node engine timed out ({endpoint})")
+        raise RuntimeError(
+            f"axe_core: Node engine timed out after {http_timeout:.0f}s "
+            f"({_page_count} page(s), {endpoint}) — raise "
+            f"KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS / KA11Y_JOB_TIMEOUT_SECONDS "
+            f"if the crawl legitimately needs longer."
+        )
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 502:
             raise RuntimeError(f"axe_core: Node engine Bad Gateway ({endpoint})")

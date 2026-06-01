@@ -93,6 +93,13 @@ services:
       # outlast a slow snapshot (kao.com/jp took ~561s) or deep pages get
       # under-audited. Defaults to the stage timeout (1200s) if unset.
       KA11Y_SNAPSHOT_URLS_WAIT_SECONDS: "1200"
+      # HTTP read-timeout sizing for the call to Node's /analyse-url-flat. In
+      # snapshot-fed mode Node audits every discovered URL with no internal
+      # budget, so a fixed 300s client timeout silently dropped ALL axe findings
+      # on any child crawl that ran longer. The timeout now scales as
+      # base + per_page * page_count, capped at KA11Y_JOB_TIMEOUT_SECONDS.
+      KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS: "60"
+      KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS: "75"
 
     # Expose to host for local debugging / direct API calls.
     # In production behind a reverse proxy this can be removed.
