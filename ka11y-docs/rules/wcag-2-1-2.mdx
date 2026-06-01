@@ -1,0 +1,60 @@
+---
+title: "2.1.2 No Keyboard Trap"
+description: "WCAG 2.1.2 — keyboard focus is not trapped in any part of the page content"
+---
+
+<Info>
+  **Level A** · **Engine:** `keyboard-trap.check.js` (Node) · **Mode:** Interactive
+</Info>
+
+## What it checks
+
+WCAG 2.1.2 requires that if keyboard focus can be moved to a component of the page using a keyboard interface, then focus can be moved away from that component using only a keyboard interface.
+
+## How it works
+
+The Node engine performs an interactive traversal of the page's focus order to detect traps:
+
+1.  **Tab Traversal**: Simulates up to 200 `Tab` key presses and tracks the `document.activeElement` at each step.
+2.  **Trap Detection**:
+    *   **Single-Element Trap**: Focus stays on the same element for multiple Tab presses.
+    *   **Cyclic Trap**: Focus cycles between a small set of elements (e.g., A → B → A) and never leaves.
+3.  **Escape Simulation**: If a potential trap is detected, the engine simulates an `Escape` key press followed by more Tabs to see if the user can "break out" of the component (common for accessible modals).
+4.  **Widget Analysis**: Performs targeted arrow-key tests within ARIA widgets (`tree`, `grid`, `listbox`, `menu`) to ensure navigation is not trapped within the widget subtree.
+5.  **Iframe Testing**: Specifically tests Tab navigation into and out of same-origin iframes.
+
+## Status Semantics
+
+*   **FAIL**: A definitive trap is confirmed (no escape via Tab or Escape keys).
+*   **INCOMPLETE**: Heuristic signals of a potential trap (e.g., `preventDefault()` on keyboard events) that require manual confirmation.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Modal trap | A modal window that opens and captures focus but has no "Close" button reachable by keyboard. |
+| Widget loop | A complex menu where Tab only cycles through menu items and never moves to the next page element. |
+| Scripted suppression | Custom JavaScript that calls `e.preventDefault()` on all Tab events within a specific container. |
+
+## Suggested fix
+
+Ensure that all interactive components allow the user to move focus away using standard keyboard keys.
+
+```javascript
+// Example: Accessible modal escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && isModalOpen) {
+    closeModal();
+    // Return focus to the trigger element
+    triggerButton.focus();
+  }
+});
+```
+
+## Known limitations
+
+*   **Traversal Limit**: Pages with more than 200 focusable elements may have traps that occur beyond the audit's ceiling.
+*   **Closed Shadow DOM**: Elements inside closed shadow roots are inaccessible to the focus tracker.
+*   **Dynamic Changes**: Traps that only occur after complex user interactions (e.g., submitting a multi-step form) may not be captured in a single-pass audit.
+
+See [Technique coverage for 2.1.2](/rules/coverage-matrix#2-1-2-no-keyboard-trap).

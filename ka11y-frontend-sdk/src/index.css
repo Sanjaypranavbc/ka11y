@@ -3,8 +3,9 @@
 @tailwind utilities;
 
 /*
- * ka11y — Clean White / Electric Blue
- * Pure white base · electric blue primary · IBM Plex Sans + IBM Plex Mono
+ * kao a11y — Dark-first Slate / Electric Blue
+ * Slate-900 base (light mode available) · electric blue primary
+ * IBM Plex Sans + IBM Plex Mono
  */
 
 @layer base {
@@ -79,34 +80,34 @@
   .dark {
     color-scheme: dark;
 
-    /* ── Core palette ────────────────────────────────────────────── */
-    --background:        222 47% 8%;
-    --foreground:        210 40% 96%;
+    /* ── Core palette — slate-900 base (skeleton-inspired) ─────────── */
+    --background:        222 47% 11%;
+    --foreground:        210 40% 98%;
 
-    --card:              222 32% 11%;
-    --card-foreground:   210 40% 96%;
+    --card:              222 33% 14%;
+    --card-foreground:   210 40% 98%;
 
-    --popover:           222 30% 11%;
-    --popover-foreground: 210 40% 96%;
+    --popover:           222 33% 13%;
+    --popover-foreground: 210 40% 98%;
 
     /* Electric blue stays primary in dark mode */
     --primary:           213 94% 62%;
     --primary-foreground: 222 47% 10%;
 
-    --secondary:         217 26% 18%;
-    --secondary-foreground: 210 28% 88%;
+    --secondary:         215 28% 17%;
+    --secondary-foreground: 210 28% 90%;
 
-    --muted:             217 24% 17%;
-    --muted-foreground:  215 18% 68%;
+    --muted:             215 26% 16%;
+    --muted-foreground:  215 20% 68%;
 
-    --accent:            213 34% 22%;
-    --accent-foreground: 210 40% 96%;
+    --accent:            213 34% 24%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive:       0 70% 56%;
+    --destructive:       0 72% 58%;
     --destructive-foreground: 0 0% 100%;
 
-    --border:            217 18% 24%;
-    --input:             217 22% 16%;
+    --border:            215 20% 26%;
+    --input:             215 25% 17%;
     --ring:              213 94% 62%;
 
     /* ── Severity tokens ─────────────────────────────────────────── */
@@ -131,14 +132,14 @@
 
     --report-shadow:     220deg 36% 8% / 0.45;
 
-    /* ── Sidebar ─────────────────────────────────────────────────── */
-    --sidebar-background:         223 36% 10%;
-    --sidebar-foreground:         214 26% 88%;
+    /* ── Sidebar — a touch darker than the canvas for separation ──── */
+    --sidebar-background:         222 47% 9%;
+    --sidebar-foreground:         214 26% 90%;
     --sidebar-primary:            213 94% 62%;
     --sidebar-primary-foreground: 222 47% 10%;
-    --sidebar-accent:             217 28% 18%;
-    --sidebar-accent-foreground:  210 40% 96%;
-    --sidebar-border:             217 18% 22%;
+    --sidebar-accent:             215 28% 18%;
+    --sidebar-accent-foreground:  210 40% 98%;
+    --sidebar-border:             215 20% 22%;
     --sidebar-ring:               213 94% 62%;
   }
 }
@@ -150,6 +151,9 @@
 
   html {
     font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    /* Global base font bump — scales every rem-based size up ~10% so the
+       dense dashboard reads comfortably without retuning each component. */
+    font-size: 110%;
   }
 
   body {

@@ -16,7 +16,9 @@ from ka11y.api.v1.combined.findings import _sensory_to_findings
 from ka11y.api.v1.combined.models import CombinedRequest
 from ka11y.api.v1.combined.stages import _allowed_levels
 
-PAGE_URL = "https://example.com"
+# R-2: canonical form of the root URL keeps the trailing slash (WHATWG URL).
+# Tests should use the canonical form so equality assertions don't churn.
+PAGE_URL = "https://example.com/"
 
 
 def _ocr_result(*, compliance: dict | None = None) -> SimpleNamespace:
@@ -90,6 +92,40 @@ def test_1_4_11_incomplete_reason_becomes_needs_review():
     assert findings[0]["wcag_sc"] == "1.4.11"
     assert findings[0]["status"] == "needs_review"
     assert findings[0]["severity"] == "high"
+
+
+def test_1_4_3_stamps_per_page_url_from_page_by_filename():
+    # D-1 regression: on multi-page crawls, contrast findings must be stamped
+    # with the page the image actually came from, not the root URL — otherwise
+    # every child-page contrast finding collapses onto the root tab in the UI.
+    child_page = "https://example.com/child/page-b"
+    findings = _contrast_to_findings(
+        [_ocr_result()],
+        PAGE_URL,
+        page_by_filename={"sample.png": child_page},
+    )
+    assert len(findings) == 1
+    assert findings[0]["element"]["page_url"] == child_page
+
+
+def test_1_4_3_falls_back_to_page_url_when_filename_not_in_map():
+    findings = _contrast_to_findings(
+        [_ocr_result()],
+        PAGE_URL,
+        page_by_filename={"unrelated.png": "https://example.com/other"},
+    )
+    assert findings[0]["element"]["page_url"] == PAGE_URL
+
+
+def test_1_4_6_stamps_per_page_url_from_page_by_filename():
+    child_page = "https://example.com/child/page-b"
+    findings = _contrast_enhanced_to_findings(
+        [_ocr_result()],
+        PAGE_URL,
+        page_by_filename={"sample.png": child_page},
+    )
+    assert len(findings) == 1
+    assert findings[0]["element"]["page_url"] == child_page
 
 
 def test_1_4_11_true_na_is_still_skipped():

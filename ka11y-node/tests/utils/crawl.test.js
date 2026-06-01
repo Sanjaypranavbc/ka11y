@@ -101,4 +101,53 @@ describe('boundedBfs', () => {
     expect(n).toBe(2);
     expect(visited).toEqual(['https://example.com/', 'https://example.com/a']);
   });
+
+  test('maxTotalMs stops the crawl early and returns partial results', async () => {
+    const visited = [];
+    const n = await boundedBfs({
+      baseUrl: 'https://example.com',
+      maxDepth: 5,
+      maxPages: 100,
+      maxTotalMs: 120, // overall budget
+      // Each page takes ~50ms and fans out, so the budget caps us at ~2-3 pages.
+      visit: async (url) => {
+        visited.push(url);
+        await new Promise((r) => setTimeout(r, 50));
+        return [`${url.replace(/\/$/, '')}/a`, `${url.replace(/\/$/, '')}/b`];
+      },
+    });
+    // Crawl stopped on the time budget, not maxPages — fewer than 100 pages,
+    // and it returned a positive partial count rather than throwing.
+    expect(n).toBeGreaterThan(0);
+    expect(n).toBeLessThan(100);
+    expect(visited.length).toBe(n);
+  });
+
+  test('perPageMs skips a hanging page but keeps crawling (no total stall)', async () => {
+    const visited = [];
+    const n = await boundedBfs({
+      baseUrl: 'https://example.com',
+      maxDepth: 1,
+      maxPages: 10,
+      perPageMs: 60,
+      visit: async (url) => {
+        visited.push(url);
+        if (url === 'https://example.com/') {
+          // Root fans out, then the root's own work hangs longer than perPageMs.
+          // boundedBfs already enqueues links from the resolved value, so to test
+          // the cap we hang AFTER returning links is not possible; instead a
+          // child page hangs and must be skipped without stalling the loop.
+          return ['https://example.com/slow', 'https://example.com/fast'];
+        }
+        if (url === 'https://example.com/slow') {
+          await new Promise((r) => setTimeout(r, 200)); // hangs > perPageMs (60ms)
+        }
+        return [];
+      },
+    });
+    // The hanging child is skipped (its links lost) but the crawl completes and
+    // the fast sibling is still visited — no indefinite stall.
+    expect(visited).toContain('https://example.com/fast');
+    expect(n).toBeGreaterThanOrEqual(2);
+  });
 });

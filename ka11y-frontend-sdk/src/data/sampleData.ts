@@ -13,6 +13,7 @@ export const emptyAuditResult: AuditResult = {
   violations_count: 0,
   needs_review_count: 0,
   passes_count: 0,
+  score: 100,
   violations: [],
   needs_review: [],
   passes: [],

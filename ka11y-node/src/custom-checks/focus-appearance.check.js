@@ -3,6 +3,8 @@
 const {
   getSharedRuleContext,
   renderLocalizedText,
+  RESULT_CACHE,
+  FOCUSABLE_SELECTOR: SELECTOR,
 } = require('./sharedAssets');
 
 const SC = '2.4.13';
@@ -126,110 +128,100 @@ function extractBoxShadowMetrics(layer) {
 
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
-  // Snapshot element styles before/after focus in separate evaluate calls
-  // to allow the browser to settle between focus state changes.
-
-  const SELECTOR = [
-    'a[href]',
-    'button:not([disabled])',
-    'input:not([disabled]):not([type="hidden"])',
-    'select:not([disabled])',
-    'textarea:not([disabled])',
-    '[tabindex]:not([tabindex="-1"])',
-  ].join(', ');
-
-  // Collect elements to test.
-  // Each item stores a stable_sel: either "#id" (if unique ID exists) or the
-  // nth-of-type selector, so re-queries in subsequent evaluate() calls target
-  // the SAME element even if sibling DOM mutations have occurred.
-  const elements = await page.evaluate((sel, max) => {
-    const seen = new Set();
-    const items = [];
-    const idCounts = {};
-    // Count IDs to detect duplicates (which would make "#id" non-unique)
-    for (const el of document.querySelectorAll('[id]')) {
-      idCounts[el.id] = (idCounts[el.id] || 0) + 1;
-    }
-    for (const el of document.querySelectorAll(sel)) {
-      if (seen.has(el)) continue;
-      seen.add(el);
-      // Build a stable selector: prefer unique id, fallback to global DOM index
-      let stableSel = null;
-      if (el.id && idCounts[el.id] === 1) {
-        stableSel = `#${CSS.escape(el.id)}`;
-      }
-      items.push({
-        idx:       items.length,
-        stableSel,
-        tag:       el.tagName.toUpperCase(),
-        tagName:   el.tagName.toLowerCase(),
-        target:    stableSel ? [stableSel] : [el.tagName.toLowerCase()],
-        id:        el.id || null,
-        html:      el.outerHTML.slice(0, 150),
-      });
-      if (items.length >= max) break;
-    }
-    return items;
-  }, SELECTOR, MAX_ELEMENTS);
+  // Technique #3: Use pre-discovered elements from context
+  // Fallback to discovery if context is empty (e.g. in unit tests)
+  let elements = sharedContext.focusableElements;
+  if (!elements || elements.length === 0) {
+    const { discoverPageElements } = require('./sharedAssets');
+    elements = await discoverPageElements(page, SELECTOR);
+  }
 
   const violations = [];
   const passes = [];
 
-  for (const el of elements) {
-    // Capture unfocused styles — resolve element via stable selector first, then DOM index fallback
-    const unfocused = await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (!e) return null;
-      e.blur();
-      const cs = window.getComputedStyle(e);
-      return {
-        outlineWidth:    cs.outlineWidth,
-        outlineStyle:    cs.outlineStyle,
-        outlineColor:    cs.outlineColor,
-        boxShadow:       cs.boxShadow,
-        backgroundColor: cs.backgroundColor,
-        borderColor:     cs.borderColor,
-        borderWidth:     cs.borderWidth,
-      };
-    }, SELECTOR, el.idx, el.stableSel);
+  for (const el of (elements || [])) {
+    // Technique #5: Cache look-up by (outerHTML + static computed styles)
+    const cacheKey = `${RULE_ID}:${el.html}:${el.staticStyles}`;
+    if (RESULT_CACHE.has(cacheKey)) {
+      const cached = RESULT_CACHE.get(cacheKey);
+      if (cached.violations) {
+        violations.push({ ...el, issues: cached.violations });
+      } else {
+        passes.push(el);
+      }
+      continue;
+    }
 
-    if (!unfocused) continue;
+    // ── L-2: collapsed per-element round-trip (mirrors L-1 in focus-visible) ──
+    // One `page.evaluate` runs the full unfocused-capture → focus → settle →
+    // focused-capture → blur cycle browser-side. CDP cost: 1 RT instead of 3.
+    const sample = await page.evaluate(
+      ({ idx, stableSel, settleMs }) => {
+        const findEl = () =>
+          stableSel
+            ? (document.querySelector(stableSel) ||
+               Array.from(document.querySelectorAll('*'))[idx])
+            : Array.from(document.querySelectorAll('*'))[idx];
 
-    // Settle before focusing
-    await new Promise(r => setTimeout(r, SETTLE_MS));
+        const captureBox = (node) => {
+          const cs = window.getComputedStyle(node);
+          return {
+            outlineWidth:    cs.outlineWidth,
+            outlineStyle:    cs.outlineStyle,
+            outlineColor:    cs.outlineColor,
+            boxShadow:       cs.boxShadow,
+            backgroundColor: cs.backgroundColor,
+            borderColor:     cs.borderColor,
+            borderWidth:     cs.borderWidth,
+          };
+        };
 
-    // Capture focused styles; also capture body background for transparent-element fallback (B5)
-    const focused = await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (!e) return null;
-      e.focus({ preventScroll: true });
-      const cs = window.getComputedStyle(e);
-      return {
-        outlineWidth:    cs.outlineWidth,
-        outlineStyle:    cs.outlineStyle,
-        outlineColor:    cs.outlineColor,
-        boxShadow:       cs.boxShadow,
-        backgroundColor: cs.backgroundColor,
-        borderColor:     cs.borderColor,
-        borderWidth:     cs.borderWidth,
-        bodyBg:          window.getComputedStyle(document.body).backgroundColor,
-      };
-    }, SELECTOR, el.idx, el.stableSel);
+        const e1 = findEl();
+        if (!e1) return null;
 
-    // Settle then blur
-    await new Promise(r => setTimeout(r, SETTLE_MS));
-    await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (e) e.blur();
-    }, SELECTOR, el.idx, el.stableSel);
+        e1.blur();
+        const unfocused = captureBox(e1);
 
-    if (!focused) continue;
+        return new Promise((resolve) => {
+          const wait = (cb) => {
+            const cs = window.getComputedStyle(e1);
+            const hasTransition = cs.transitionDuration !== '0s' || cs.animationDuration !== '0s';
+            if (!hasTransition) {
+              requestAnimationFrame(() => requestAnimationFrame(cb));
+            } else {
+              setTimeout(cb, settleMs);
+            }
+          };
+
+          wait(() => {
+            const e2 = findEl();
+            if (!e2) {
+              resolve({ unfocused, focused: null });
+              return;
+            }
+            e2.focus({ preventScroll: true });
+            wait(() => {
+              const e3 = findEl();
+              if (!e3) {
+                resolve({ unfocused, focused: null });
+                return;
+              }
+              const focused = {
+                ...captureBox(e3),
+                bodyBg: window.getComputedStyle(document.body).backgroundColor,
+              };
+              e3.blur();
+              resolve({ unfocused, focused });
+            });
+          });
+        });
+      },
+      { idx: el.idx, stableSel: el.stableSel, settleMs: 80 },
+    );
+
+    if (!sample) continue;
+    const { unfocused, focused } = sample;
+    if (!unfocused || !focused) continue;
 
     // ── Check 1: Does a visible focus indicator appear? ──────────────────────
     const outlineWidthPx = parseFloat(focused.outlineWidth) || 0;
@@ -326,11 +318,17 @@ async function run(page, context = {}) {
           contrast: MIN_CONTRAST,
         });
       }
+
+      // Cache the violation
+      RESULT_CACHE.set(cacheKey, { violations: issues });
+
       violations.push({
         ...el,
         issues,
       });
     } else {
+      // Cache the pass
+      RESULT_CACHE.set(cacheKey, { violations: null });
       passes.push(el);
     }
   }

@@ -64,6 +64,8 @@ export interface ContrastImageDetail {
   filename: string;
   path: string;
   image_url: string;          // injected by backend: /api/v1/combined/{job_id}/image?path=...
+  // Page the image was discovered on (multi-page crawls, max_depth > 0).
+  page_url?: string | null;
   classification: ImageClassification; // derived from storage path by backend
   contrast_violations_count: number;
   detections: ContrastDetection[];
@@ -86,6 +88,8 @@ export interface ImageAuditImageDetail {
   image_url: string;
   src?: string | null;
   url?: string | null;
+  // Page the image was discovered on (multi-page crawls, max_depth > 0).
+  page_url?: string | null;
   alt_text?: string | null;
   title?: string | null;
   classification: ImageClassification;
@@ -159,6 +163,37 @@ export interface StageProgressInfo {
   phase?: string;
 }
 
+// Per-stage timing from GET /combined/{job_id}/timings — the same data the
+// backend appends to logs/run_timings.log. duration_s is null for stages that
+// have not finished (mid-run polls).
+export interface StageTiming {
+  name: string | null;
+  status: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_s: number | null;
+  crawler_duration_s: number | null;
+  findings_count: number | null;
+}
+
+export interface RunTiming {
+  job_id: string;
+  url: string;
+  status: string;
+  lang: string | null;
+  error_stage: string | null;
+  submitted_at: string | null;
+  run_started_at: string | null;
+  completed_at: string | null;
+  // queue_wait = submitted→start, run = start→completed, wall = submitted→done.
+  // Null until the relevant timestamps exist.
+  queue_wait_s: number | null;
+  run_s: number | null;
+  wall_s: number | null;
+  stages: StageTiming[];
+  summary?: Record<string, unknown> | null;
+}
+
 export interface JobFailure {
   error: string;
   stage?: string;
@@ -171,6 +206,10 @@ export interface PageSummary {
   violations: number;
   needs_review: number;
   passes: number;
+  // Pass-rate compliance score 0–100 = passes / (passes + violations).
+  // needs_review is excluded from the ratio. null when the page has no
+  // pass-or-fail findings (not scored — render as "—", never as 100%).
+  score: number | null;
   by_severity: Record<string, number>;
 }
 
@@ -192,6 +231,10 @@ export interface AuditResult {
   violations_count: number;
   needs_review_count: number;
   passes_count: number;
+  // Overall compliance score 0–100 aggregated across all crawled pages
+  // (passes / (passes + violations)). needs_review excluded. null when there
+  // are no pass-or-fail findings at all (not scored — render as "—").
+  score: number | null;
   violations: AuditViolation[];
   needs_review: AuditNeedsReview[];
   passes: AuditPass[];
@@ -232,6 +275,7 @@ export interface AuditConfig {
   run_hover_focus_content_audit: boolean;
   run_focus_not_obscured_min_audit: boolean;
   run_focus_not_obscured_enh_audit: boolean;
+  run_node_audit: boolean;
 }
 
 export type TabValue = "dashboard" | "violations" | "needs-review" | "passes" | "image-visualisation" | "wcag-rules" | "settings" | "rule-evaluator";

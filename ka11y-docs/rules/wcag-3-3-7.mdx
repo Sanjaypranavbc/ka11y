@@ -1,0 +1,78 @@
+---
+title: "3.3.7 Redundant Entry"
+description: "WCAG 3.3.7 — information previously entered by the user in the same process is either auto-populated or available for selection"
+---
+
+<Info>
+  **Level A** · WCAG 2.2 · **Engine:** `redundant-entry.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 3.3.7 requires that information previously entered by the user in the same process that is required to be entered again is either:
+*   Auto-populated, or
+*   Available for the user to select.
+
+Exceptions apply when re-entering is essential (e.g., password confirmation), required for security, or previously entered information is no longer valid.
+
+## How it works
+
+The Node engine analyzes the page's forms for repeated data requests:
+
+1.  **Process Detection**: Identifies likely multi-step processes via keywords in headings and URLs (e.g., `checkout`, `shipping`, `billing`, `registration`).
+2.  **Personal Data Matching**: Searches for fields that request personal data (name, address, email) using the same autocomplete heuristic as [3.3.2 Labels or Instructions](/rules/wcag-3-3-1-3-3-2#autocomplete-heuristic).
+3.  **Redundancy Check**:
+    *   **Same-Page Redundancy**: Flags cases where the same data is requested in multiple fields on the same page (e.g., "Shipping Address" and "Billing Address") without a reuse mechanism.
+    *   **Reuse Mechanism Discovery**: Searches for "Same as [X]" checkboxes or "Copy from [X]" buttons that allow the user to avoid re-typing.
+    *   **Confirmation Field Detection**: Correctly recognizes and exempts "Confirm Email" or "Confirm Password" fields as essential security/accuracy checks.
+
+## Status Semantics
+
+*   **FAIL**: Strong evidence of repeated data requests on the same page without a visible reuse mechanism.
+*   **PASS**: Redundant fields are detected but a clear "Same as" or "Copy" control is provided.
+*   **INCOMPLETE**: Heuristic matches that require manual review to confirm if the fields belong to the same logical process.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Double address entry | A single checkout page that requires the user to type their full address twice (once for shipping, once for billing) with no "Same as shipping" checkbox. |
+| Repeated contact info | A registration form that asks for "User Email" and "Emergency Contact Email" (where the user might be the same person) without a selection option. |
+
+## Suggested fix
+
+Always provide a way for users to reuse previously entered information.
+
+```html
+<!-- FAILED - Manual re-entry required -->
+<h3>Shipping Address</h3>
+<input type="text" name="ship-addr">
+<h3>Billing Address</h3>
+<input type="text" name="bill-addr">
+
+<!-- PASSED - Reuse mechanism provided -->
+<h3>Shipping Address</h3>
+<input type="text" id="ship-addr" name="ship-addr">
+
+<h3>Billing Address</h3>
+<label>
+  <input type="checkbox" id="same-as-ship">
+  Same as Shipping Address
+</label>
+<input type="text" id="bill-addr" name="bill-addr">
+
+<script>
+  document.getElementById('same-as-ship').addEventListener('change', (e) => {
+    if (e.target.checked) {
+      document.getElementById('bill-addr').value = document.getElementById('ship-addr').value;
+    }
+  });
+</script>
+```
+
+## Known limitations
+
+*   **Cross-Page Redundancy**: Since the check is scoped to a single page snapshot, it cannot detect if information requested on Step 2 was already entered on Step 1.
+*   **Essential Exemption**: The auditor cannot always determine if re-entering information is "essential" for a specific business process.
+
+See [Technique coverage for 3.3.7](/rules/coverage-matrix#3-3-7-redundant-entry).

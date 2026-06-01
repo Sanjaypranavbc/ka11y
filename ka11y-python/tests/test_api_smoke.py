@@ -76,6 +76,26 @@ class TestAppStartup:
         assert get.status_code == 200
         assert get.json()["job_id"] == job_id
 
+    def test_combined_timings_unknown_job_returns_404(self, client):
+        resp = client.get("/api/v1/combined/nonexistent-job-id/timings")
+        assert resp.status_code == 404
+
+    def test_combined_timings_known_job_returns_structured_timing(self, client):
+        # Submit a job, then immediately fetch its timing breakdown. The job is
+        # still pending/running so totals may be null, but the structure must be
+        # present and match the job_id — same data that lands in run_timings.log.
+        post = client.post("/api/v1/combined/", json={"url": "https://example.com"})
+        job_id = post.json()["job_id"]
+        resp = client.get(f"/api/v1/combined/{job_id}/timings")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["job_id"] == job_id
+        assert body["url"] == "https://example.com/"
+        # Timing keys exposed for the frontend, mirroring the log block.
+        for key in ("queue_wait_s", "run_s", "wall_s", "stages", "submitted_at"):
+            assert key in body
+        assert isinstance(body["stages"], list)
+
     def test_combined_post_rejects_invalid_success_criteria_id(self, client):
         resp = client.post(
             "/api/v1/combined/",
@@ -253,6 +273,32 @@ class TestBuildReport:
         assert s["violations"] == 0
         assert s["needs_review"] == 0
         assert s["passes"] == 0
+        # No pass-or-fail findings → score is None ("not scored"), NOT 100.0.
+        # A 100.0 here would let an empty/un-audited report look compliant.
+        assert s["score"] is None
+
+    def test_needs_review_only_page_is_not_scored(self):
+        """Regression: a page with only needs_review findings (e.g. axe never
+        ran on it, only image needs_review landed) must score None — not 100.0.
+        This is the kao.com depth-crawl symptom where 36 barely-audited pages
+        showed a fake 100% (run a7a5d98c, 2026-05-29)."""
+        findings = [
+            _make_finding(
+                source="python", rule_id="r1", wcag_sc="1.4.3",
+                status="needs_review", severity="medium", reason="review",
+                element_html="<p>", page_url="https://x.com/unaudited",
+            ),
+        ]
+        r = _build_report("https://x.com", findings)
+        # Exactly one page, carrying only the needs_review finding.
+        assert len(r["pages"]) == 1
+        only_page = r["pages"][0]
+        assert only_page["summary"]["needs_review"] == 1
+        assert only_page["summary"]["violations"] == 0
+        assert only_page["summary"]["passes"] == 0
+        assert only_page["summary"]["score"] is None
+        # And the overall crawl, having no pass-or-fail finding, is also unscored.
+        assert r["summary"]["score"] is None
 
     def test_by_wcag_sc_present(self):
         r = _build_report("https://x.com", self._findings())
@@ -293,8 +339,9 @@ class TestBuildReport:
         by_page = r["summary"]["by_page"]
         assert by_page["https://x.com/a"] == {"violations": 1, "needs_review": 0, "passes": 0}
         assert by_page["https://x.com/b"] == {"violations": 1, "needs_review": 1, "passes": 0}
-        # element-less finding falls back to the root URL
-        assert by_page["https://x.com"] == {"violations": 0, "needs_review": 0, "passes": 1}
+        # element-less finding falls back to the root URL. R-2: root is now
+        # canonicalised so the key carries its trailing slash.
+        assert by_page["https://x.com/"] == {"violations": 0, "needs_review": 0, "passes": 1}
         assert r["summary"]["page_count"] == 3
 
     def test_pages_grouping_and_nested_findings(self):
@@ -312,12 +359,15 @@ class TestBuildReport:
         # /a and /b each have 1 violation; /b also has a needs_review → /b ranks first.
         r = _build_report("https://x.com", self._multi_page_findings())
         ranked = [p["page_url"] for p in r["pages"]]
-        assert ranked.index("https://x.com/b") < ranked.index("https://x.com")
+        # R-2: root URL is canonicalised; element-less findings bucket under
+        # "https://x.com/" not "https://x.com".
+        assert ranked.index("https://x.com/b") < ranked.index("https://x.com/")
 
     def test_single_page_report_has_one_page_entry(self):
         r = _build_report("https://x.com", self._findings())
         assert r["summary"]["page_count"] == 1
-        assert r["pages"][0]["page_url"] == "https://x.com"
+        # R-2: the page entry's URL is the canonicalised form.
+        assert r["pages"][0]["page_url"] == "https://x.com/"
         assert r["pages"][0]["summary"]["total_findings"] == 3
 
 
@@ -347,13 +397,19 @@ class TestConverterHelpers:
         findings = _alt_text_to_findings(records, self.PAGE)
         assert findings == []
 
-    def test_alt_text_fallback_reason_uses_localised_rule_description(self):
+    def test_alt_text_fallback_reason_uses_specific_missing_alt_template(self):
+        # A status-only FAILED record (no explicit reason) resolves the specific
+        # `fail_missing_alt` reason template — preferred over the generic rule
+        # description because it tells the user exactly what to fix. The reason
+        # is still localised from the active (ja) context.
         token = _lang_ctx.set("ja")
         try:
             records = [{"wcag_1_1_1_status": "FAILED", "src": "x.png"}]
             findings = _alt_text_to_findings(records, self.PAGE)
             assert len(findings) == 1
-            assert findings[0]["reason"].startswith("利用者に提示されるすべての非テキストコンテンツ")
+            assert findings[0]["reason_code"] == "fail_missing_alt"
+            # Localised (Japanese) and specific to the missing-alt case.
+            assert findings[0]["reason"].startswith("画像")
         finally:
             _lang_ctx.reset(token)
 

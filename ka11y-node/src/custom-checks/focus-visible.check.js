@@ -1,25 +1,15 @@
 'use strict';
-
 const {
   getSharedRuleContext,
   renderLocalizedText,
+  settle,
+  RESULT_CACHE,
+  FOCUSABLE_SELECTOR: SELECTOR,
 } = require('./sharedAssets');
 
 const SC = '2.4.7';
 const RULE_ID = 'custom-focus-visible';
 const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-visible';
-const MAX_ELEMENTS = 2000;
-// Settle delay: allow CSS transitions and React/Vue re-renders to apply before capturing styles
-const SETTLE_MS = 80;
-
-const SELECTOR = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled]):not([type="hidden"])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-].join(', ');
 
 function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
@@ -27,33 +17,13 @@ function _t(context, en, ja, params = {}) {
 
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
-  // Collect element metadata once — include stable selectors (B11: DOM index shifts when
-  // focus triggers DOM mutations; stable selectors survive re-queries after mutations).
-  const elements = await page.evaluate((sel, max) => {
-    const seen = new Set();
-    const items = [];
-    const idCounts = {};
-    for (const el of document.querySelectorAll('[id]')) {
-      idCounts[el.id] = (idCounts[el.id] || 0) + 1;
-    }
-    for (const el of document.querySelectorAll(sel)) {
-      if (seen.has(el)) continue;
-      seen.add(el);
-      let stableSel = null;
-      if (el.id && idCounts[el.id] === 1) stableSel = `#${CSS.escape(el.id)}`;
-      items.push({ 
-        idx: items.length, 
-        stableSel, 
-        tagName: el.tagName.toLowerCase(), 
-        tag: el.tagName.toUpperCase(),
-        target: stableSel ? [stableSel] : [el.tagName.toLowerCase()],
-        id: el.id || null, 
-        html: el.outerHTML.slice(0, 200) 
-      });
-      if (items.length >= max) break;
-    }
-    return items;
-  }, SELECTOR, MAX_ELEMENTS);
+  // Technique #3: Use pre-discovered elements from context
+  // Fallback to discovery if context is empty (e.g. in unit tests)
+  let elements = sharedContext.focusableElements;
+  if (!elements || elements.length === 0) {
+    const { discoverPageElements } = require('./sharedAssets');
+    elements = await discoverPageElements(page, SELECTOR);
+  }
 
   // Static CSS scan: detect global :focus { outline: none } resets without :focus-visible restoration
   const cssFindings = await page.evaluate(() => {
@@ -98,85 +68,111 @@ async function run(page, context = {}) {
       }
     }
     return issues;
-  });
+  }) || [];
 
   const violations = [];
 
-  for (const el of elements) {
-    // ── Step 1: Capture unfocused styles ─────────────────────────────────────
-    // Use stable selector when available to survive DOM mutations caused by focus (B11).
-    const unfocused = await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (!e) return null;
-      e.blur();
-      const cs = window.getComputedStyle(e);
-      const csAfter = window.getComputedStyle(e, '::after');
-      return {
-        outlineWidth:    cs.outlineWidth,
-        outlineStyle:    cs.outlineStyle,
-        outlineColor:    cs.outlineColor,
-        boxShadow:       cs.boxShadow,
-        borderColor:     cs.borderColor,
-        borderWidth:     cs.borderWidth,
-        backgroundColor: cs.backgroundColor,
-        color:           cs.color,
-        transform:       cs.transform,
-        afterContent:    csAfter.content,
-        afterBoxShadow:  csAfter.boxShadow,
-        afterBorder:     csAfter.border,
-        afterOpacity:    csAfter.opacity,
-      };
-    }, SELECTOR, el.idx, el.stableSel);
+  for (const el of (elements || [])) {
+    // Technique #5: Cache look-up by (outerHTML + static computed styles)
+    const cacheKey = `${RULE_ID}:${el.html}:${el.staticStyles}`;
+    if (RESULT_CACHE.has(cacheKey)) {
+      const cached = RESULT_CACHE.get(cacheKey);
+      if (!cached.isVisible) {
+        violations.push({
+          html: el.html,
+          element_id: el.id || null,
+          target: el.target,
+          tag: el.tag,
+          tagName: el.tagName,
+          id: el.id,
+        });
+      }
+      continue;
+    }
 
-    if (!unfocused) continue;
+    // ── L-1: collapsed per-element round-trip ─────────────────────────────────
+    // The original implementation made FOUR `page.evaluate()` calls per element
+    // — capture-unfocused, focus, capture-focused, blur — each paying the CDP
+    // round-trip cost (~10–50 ms over the wire). With 5 interactive checks ×
+    // hundreds of elements that's the dominant per-page cost on heavy sites
+    // (see ka11y-docs/internals/stage-timing.mdx; this was the kao.com
+    // bottleneck).
+    //
+    // The whole dance now runs browser-side in ONE evaluate. The two
+    // SETTLE_MS waits are kept (CSS transitions / React re-renders still
+    // need them) but they happen inside the page context, so the cost is
+    // 1 CDP RT + 160 ms wait instead of 4 CDP RTs + 160 ms wait.
+    //
+    // Stable-selector + idx fallback is preserved verbatim (B11: DOM index
+    // shifts when focus triggers mutations).
+    const sample = await page.evaluate(
+      ({ idx, stableSel, settleMs }) => {
+        const findEl = () =>
+          stableSel
+            ? (document.querySelector(stableSel) ||
+               Array.from(document.querySelectorAll('*'))[idx])
+            : Array.from(document.querySelectorAll('*'))[idx];
 
-    // ── Step 2: Focus the element and wait for transitions to settle ──────────
-    await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (e) e.focus({ preventScroll: true });
-    }, SELECTOR, el.idx, el.stableSel);
+        const capture = (node) => {
+          const cs = window.getComputedStyle(node);
+          const csAfter = window.getComputedStyle(node, '::after');
+          return {
+            outlineWidth:    cs.outlineWidth,
+            outlineStyle:    cs.outlineStyle,
+            outlineColor:    cs.outlineColor,
+            boxShadow:       cs.boxShadow,
+            borderColor:     cs.borderColor,
+            borderWidth:     cs.borderWidth,
+            backgroundColor: cs.backgroundColor,
+            color:           cs.color,
+            transform:       cs.transform,
+            afterContent:    csAfter.content,
+            afterBoxShadow:  csAfter.boxShadow,
+            afterBorder:     csAfter.border,
+            afterOpacity:    csAfter.opacity,
+          };
+        };
 
-    await new Promise(r => setTimeout(r, SETTLE_MS));
+        const e1 = findEl();
+        if (!e1) return null;
 
-    // ── Step 3: Capture focused styles ────────────────────────────────────────
-    const focused = await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (!e) return null;
-      const cs = window.getComputedStyle(e);
-      const csAfter = window.getComputedStyle(e, '::after');
-      return {
-        outlineWidth:    cs.outlineWidth,
-        outlineStyle:    cs.outlineStyle,
-        outlineColor:    cs.outlineColor,
-        boxShadow:       cs.boxShadow,
-        borderColor:     cs.borderColor,
-        borderWidth:     cs.borderWidth,
-        backgroundColor: cs.backgroundColor,
-        color:           cs.color,
-        transform:       cs.transform,
-        afterContent:    csAfter.content,
-        afterBoxShadow:  csAfter.boxShadow,
-        afterBorder:     csAfter.border,
-        afterOpacity:    csAfter.opacity,
-      };
-    }, SELECTOR, el.idx, el.stableSel);
+        // Unfocused snapshot (post-blur) — preserves original semantics.
+        e1.blur();
+        const unfocused = capture(e1);
 
-    // Blur and wait before next element
-    await page.evaluate((sel, idx, stableSel) => {
-      const e = stableSel
-        ? (document.querySelector(stableSel) || Array.from(document.querySelectorAll(sel))[idx])
-        : Array.from(document.querySelectorAll(sel))[idx];
-      if (e) e.blur();
-    }, SELECTOR, el.idx, el.stableSel);
-    await new Promise(r => setTimeout(r, SETTLE_MS));
+        // Focus and wait for transitions to settle.
+        e1.focus({ preventScroll: true });
 
-    if (!focused) continue;
+        return new Promise((resolve) => {
+          const wait = (cb) => {
+            const cs = window.getComputedStyle(e1);
+            const hasTransition = cs.transitionDuration !== '0s' || cs.animationDuration !== '0s';
+            if (!hasTransition) {
+              requestAnimationFrame(() => requestAnimationFrame(cb));
+            } else {
+              setTimeout(cb, settleMs);
+            }
+          };
+
+          wait(() => {
+            const e2 = findEl();
+            if (!e2) {
+              resolve({ unfocused, focused: null });
+              return;
+            }
+            const focused = capture(e2);
+            e2.blur();
+            // Second settle
+            wait(() => resolve({ unfocused, focused }));
+          });
+        });
+      },
+      { idx: el.idx, stableSel: el.stableSel, settleMs: 80 },
+    );
+
+    if (!sample) continue;
+    const { unfocused, focused } = sample;
+    if (!unfocused || !focused) continue;
 
     // ── Step 4: Determine if a visual change occurred ─────────────────────────
     // Verify the focused outline is not transparent before counting it visible.
@@ -212,6 +208,9 @@ async function run(page, context = {}) {
     // child transitioning 0→1 while the button itself has no focus style).
     const isVisible = hasVisibleOutline || outlineChanged || boxShadowChanged ||
                       borderChanged || bgChanged || colorChanged || transformChanged || afterChanged;
+
+    // Cache the result for this element shape
+    RESULT_CACHE.set(cacheKey, { isVisible });
 
     if (!isVisible) {
       violations.push({

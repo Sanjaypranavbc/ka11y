@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { AuditPass } from "@/types/audit";
+import { AuditPass, PageBreakdown } from "@/types/audit";
+import { PageScopeBar, ALL_PAGES } from "./PageScopeBar";
+import { buildPageOptions, scopedFindings, scopedSummary, ScopeSummary } from "@/lib/page-scope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,10 +22,12 @@ import { useLanguage } from "@/i18n/LanguageContext";
 
 interface PassesTabProps {
   passes: AuditPass[];
+  pages?: PageBreakdown[];
+  overall: ScopeSummary;
   pageSize?: number;
 }
 
-export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
+export function PassesTab({ passes, pages, overall, pageSize = 50 }: PassesTabProps) {
   const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
@@ -31,29 +35,38 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
   const [scFilter, setScFilter] = useState<string[]>([]);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  const [scope, setScope] = useState<string>(ALL_PAGES);
+
+  // Page-scoped findings: aggregated for ALL_PAGES, else just the selected page.
+  const pageOptions = useMemo(() => buildPageOptions(pages), [pages]);
+  const summary = scopedSummary(scope, overall, pages);
+  const scoped = useMemo(
+    () => scopedFindings(scope, passes, pages, "passes"),
+    [scope, passes, pages]
+  );
 
   useEffect(() => {
     setVisibleCounts({});
-  }, [pageSize, search, sourceFilter, levelFilter, scFilter]);
+  }, [pageSize, search, sourceFilter, levelFilter, scFilter, scope]);
 
   const allSources = useMemo(
-    () => [...new Set(passes.map((p) => p.source).filter(Boolean))].sort(),
-    [passes]
+    () => [...new Set(scoped.map((p) => p.source).filter(Boolean))].sort(),
+    [scoped]
   );
   const allLevels = useMemo(() => {
     const preferred = ["A", "AA", "AAA"];
-    const present = [...new Set(passes.map((p) => p.level).filter(Boolean))] as string[];
+    const present = [...new Set(scoped.map((p) => p.level).filter(Boolean))] as string[];
     const ordered = preferred.filter((l) => present.includes(l));
     const extras = present.filter((l) => !preferred.includes(l)).sort();
     return [...ordered, ...extras];
-  }, [passes]);
+  }, [scoped]);
   const allScs = useMemo(
-    () => [...new Set(passes.map((p) => p.wcag_sc).filter(Boolean))].sort(),
-    [passes]
+    () => [...new Set(scoped.map((p) => p.wcag_sc).filter(Boolean))].sort(),
+    [scoped]
   );
 
   const filtered = useMemo(() => {
-    return passes.filter((p) => {
+    return scoped.filter((p) => {
       if (sourceFilter.length && !sourceFilter.includes(p.source)) return false;
       if (levelFilter.length && (!p.level || !levelFilter.includes(p.level))) return false;
       if (scFilter.length && (!p.wcag_sc || !scFilter.includes(p.wcag_sc))) return false;
@@ -73,7 +86,7 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
           (p.element_id || "").toLowerCase().includes(q)
         );
     });
-  }, [passes, search, sourceFilter, levelFilter, scFilter]);
+  }, [scoped, search, sourceFilter, levelFilter, scFilter]);
 
   const grouped = useMemo(
     () =>
@@ -108,12 +121,24 @@ export function PassesTab({ passes, pageSize = 50 }: PassesTabProps) {
     setVisibleCounts((prev) => ({ ...prev, [source]: (prev[source] ?? pageSize) + pageSize }));
   };
 
-  const showingText = filtered.length !== passes.length
-    ? t("passes.showingFiltered", { n: filtered.length, all: passes.length })
+  const showingText = filtered.length !== scoped.length
+    ? t("passes.showingFiltered", { n: filtered.length, all: scoped.length })
     : t("passes.showing", { n: filtered.length });
 
   return (
     <div className="p-3 sm:p-5 space-y-4 grid-bg min-h-full animate-fade-up delay-0">
+      <PageScopeBar
+        pages={pageOptions}
+        value={scope}
+        onChange={setScope}
+        chips={[
+          { label: t("pageScope.score"), value: summary.score, tone: "score" },
+          { label: t("pageScope.violations"), value: summary.violations, tone: "violations" },
+          { label: t("pageScope.needsReview"), value: summary.needs_review, tone: "needsReview" },
+          { label: t("pageScope.passes"), value: summary.passes, tone: "passes" },
+        ]}
+      />
+
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
           placeholder={t("passes.searchPlaceholder")}

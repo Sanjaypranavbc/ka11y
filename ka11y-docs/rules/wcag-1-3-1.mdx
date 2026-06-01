@@ -4,30 +4,28 @@ description: "WCAG 1.3.1 — Ensuring information, structure, and relationships 
 ---
 
 <Info>
-  **Level A** · Auditor: `FormAccessibilityAuditor` / `InfoRelationshipsAuditor` · File: `ka11y/accessibility/rules/forms/form_auditor.py`
+  **Level A** · **Primary Engine:** Unified Pipeline (`Policy131`) · **Secondary Engine:** `FormAccessibilityAuditor` · **External Engine:** axe-core
 </Info>
 
 ## What it checks
 
-WCAG 1.3.1 requires that information, structure, and relationships conveyed through presentation can be programmatically determined or are available in text. This ensures that users of assistive technologies (like screen readers) receive the same structural information as sighted users.
+WCAG 1.3.1 requires that information, structure, and relationships conveyed through presentation can be programmatically determined or are available in text. ka11y's **Unified Accessibility Pipeline** provides context-aware auditing for structural relationships that standard linters often miss.
 
-ka11y's Python engine focuses on several key areas that go beyond basic linting:
+## How it works (Unified Pipeline)
 
-1.  **Form Structure**: Validates that `<label>` elements are correctly associated with their inputs (via `for` attributes or wrapping).
-2.  **Fieldsets and Legends**: Checks for the presence of `<fieldset>` and `<legend>` to group related controls (like radio button groups or complex address forms).
-3.  **ARIA Landmark Relationships**: Validates that ARIA roles (like `navigation`, `main`, `search`) and properties (like `aria-labelledby`, `aria-describedby`) are used correctly to establish relationships.
-4.  **Data Tables**: (Partial) Validates that table headers (`<th>`) are correctly used and associated with data cells.
+The Unified Pipeline evaluates structural relationships by analyzing the entire page state:
 
-## How it works
+1.  **Section Analysis**: `SectionAnalyzer` determines the macro-context of elements (e.g., `HEADER`, `FOOTER`, `DATA_TABLE`, `FORM_REGION`).
+2.  **Semantic Mapping**: `SemanticRelationshipEngine` resolves ARIA pointers (`aria-describedby`, `aria-labelledby`) and native HTML groupings like `<fieldset>` and `<label>`.
+3.  **Policy Evaluation**: `Policy131` uses this context to decide if structural information is properly exposed.
 
-The universal crawler extracts a rich `SemanticContext` for every element, which includes:
-- `section_type`: Computed macro-context (e.g., `FORM_REGION`, `DATA_TABLE`).
-- `ancestor_tags` / `ancestor_roles`: Full hierarchy traversal.
-- `described_by_text`: Pre-resolved text from `aria-describedby` IDs.
+### False Positive Protection
 
-The `FormAccessibilityAuditor` then uses this data to verify that every input has a discernible relationship to its label and any relevant group instructions.
+*   **Context-Aware Orphans**: The pipeline avoids failing "orphaned" inputs (inputs without an explicit label) if they reside within a specifically identified macro-context like a `search` region or a `DATA_TABLE` where the relationship is implicitly clear but not strictly labeled.
+*   **Recursive Fieldset Resolution**: The engine recursively traverses parent containers to find the correct `<fieldset>` and `<legend>`, ensuring that complex nested forms are audited accurately without double-counting violations.
+*   **Aria-Controls/Owns Mapping**: Unlike static auditors that only check for attribute presence, the pipeline validates that the referenced IDs actually exist and establish a meaningful semantic bond.
 
-## Multi-language Support
+## Key Audit Areas
 
 Relationships are often established via text labels. ka11y's Japanese support includes word-boundary-safe checks for common relationship indicators (e.g., "必須", "注記") and handles CJK-specific form patterns.
 

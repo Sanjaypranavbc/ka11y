@@ -1,0 +1,60 @@
+---
+title: "2.5.2 Pointer Cancellation"
+description: "WCAG 2.5.2 — pointer-down actions can be cancelled or aborted"
+---
+
+<Info>
+  **Level A** · **Engine:** `pointer-cancellation.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 2.5.2 requires that for any functionality that can be operated using a single pointer, at least one of the following is true:
+
+1.  **No Down-Event**: The down-event of the pointer is not used to execute any part of the function.
+2.  **Abort or Undo**: Completion of the function is on the up-event, and a mechanism is available to abort the function before completion or to undo the function after completion.
+3.  **Up-Reversal**: The up-event reverses any outcome of the preceding down-event.
+4.  **Essential**: Completing the function on the down-event is essential.
+
+## How it works
+
+The Node engine scans the DOM for elements with inline pointer event handlers:
+
+1.  **Down-Event Discovery**: Identifies elements with `onmousedown`, `onpointerdown`, `onpointermove`, or `ontouchstart` attributes.
+2.  **Pattern Analysis**: It analyzes the handler text to distinguish between trivial handlers (like setting a class) and meaningful actions (like navigation or form submission).
+3.  **Cancellation Check**: For meaningful down-event actions, it verifies the existence of a corresponding up-event handler (`onmouseup`, `onpointerup`, `onclick`, `ontouchend`) that provides an opportunity to abort the action.
+
+## Status Semantics
+
+*   **PASS**: The action is triggered by a click or up-event, or a clear cancellation path is provided.
+*   **INCOMPLETE**: A meaningful action is detected on a down-event without a detectable up-event cancellation mechanism. Requires manual confirmation.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Down-event navigation | A link that navigates to a new page as soon as the mouse button is pressed down. |
+| Unguarded toggle | A checkbox that toggles state on `touchstart` instead of `click`, making it hard to abort a mistaken tap. |
+
+## Suggested fix
+
+Use the `click` event (which fires on the up-event) for all primary actions.
+
+```javascript
+// FAILED - Action triggers immediately on press
+button.addEventListener('mousedown', (e) => {
+  executeAction();
+});
+
+// PASSED - Action triggers on release (standard behavior)
+button.addEventListener('click', (e) => {
+  executeAction();
+});
+```
+
+## Known limitations
+
+*   **Synthetic Handlers**: Event listeners added via `addEventListener` in modern frameworks (React, Vue) are not visible to this static scan; Layer 2 monkey-patching is required for full coverage.
+*   **Essential Exemption**: The auditor cannot automatically determine if a down-event action is "essential" (e.g., a piano keyboard app).
+
+See [Technique coverage for 2.5.2](/rules/coverage-matrix#2-5-2-pointer-cancellation).

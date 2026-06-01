@@ -40,6 +40,11 @@ logger = setup_logger(name="KAC", tag="crawler")
 
 _SCREENSHOT_TIMEOUT_MS = 5_000
 
+# Upper bound on inline <svg> elements rasterised per page. Icon-heavy sites can
+# have hundreds of inline SVGs; cap the work so a pathological page can't stall
+# the image crawl.
+_MAX_SVGS_PER_PAGE = 300
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pydantic models
@@ -126,7 +131,11 @@ class AsyncImageCrawler:
         max_depth: int,
         max_pages: int | None = None,
         internal_links: bool = True,
+        job_id: str | None = None,
     ):
+        # job_id is optional so existing callers (tests, scripts) don't break.
+        # When set, per-page timing rows are emitted to logs/timings/<job_id>.jsonl.
+        self.job_id = job_id
         self.base_url = base_url
         self.max_depth = max_depth
         # Page budget is request-driven (default 50). The hard ceiling that keeps a
@@ -409,10 +418,20 @@ class AsyncImageCrawler:
         )
 
         if discovered_urls:
-            # Seed the queue with pre-discovered URLs at depth 0
+            # D-3 fix: snapshot-fed mode. The universal snapshot already did BFS
+            # (bounded by max_depth + max_pages), so re-enqueuing children here
+            # would double the effective depth and exhaust max_pages before
+            # every snapshot URL is visited. We treat discovered_urls as the
+            # final, exact list of pages to crawl and turn off further BFS.
             queue: deque[Tuple[str, int]] = deque([(u, 0) for u in discovered_urls])
+            snapshot_fed = True
+            logger.info(
+                f"[image-crawler] snapshot-fed mode: {len(discovered_urls)} URL(s); "
+                f"BFS disabled, max_pages={self.max_pages}"
+            )
         else:
             queue: deque[Tuple[str, int]] = deque([(self.base_url, 0)])
+            snapshot_fed = False
 
         self.visited_urls.clear()
 
@@ -433,15 +452,25 @@ class AsyncImageCrawler:
                     url, depth = queue.popleft()
                     normalized_url = policy.normalize_url(url)
 
-                    if normalized_url in self.visited_urls:
+                    if not normalized_url or normalized_url in self.visited_urls:
                         continue
-                    self.visited_urls.add(normalized_url)
-
-                    if len(self.visited_urls) > policy.max_pages:
+                    # Budget check runs BEFORE visited.add so visited_urls
+                    # tracks only URLs we actually attempted (was previously
+                    # ``max_pages + 1`` after the final break). In snapshot-fed
+                    # mode the snapshot is the source of truth; the budget
+                    # ceiling is max(policy.max_pages, len(discovered_urls)) so
+                    # a low default cannot silently clip discovered pages.
+                    effective_max = (
+                        max(policy.max_pages, len(discovered_urls))
+                        if snapshot_fed
+                        else policy.max_pages
+                    )
+                    if len(self.visited_urls) >= effective_max:
                         logger.warning(
-                            f"[image-crawler] Budget reached ({policy.max_pages} pages)"
+                            f"[image-crawler] Budget reached ({effective_max} pages)"
                         )
                         break
+                    self.visited_urls.add(normalized_url)
 
                     console.print(
                         Panel(
@@ -453,14 +482,29 @@ class AsyncImageCrawler:
                     )
 
                     try:
+                        # Per-page timing row for the image crawl (no-op when
+                        # KA11Y_STAGE_TIMING_DISABLE=1 or job_id is None).
+                        from ka11y.utils import stage_timing as _st
+
+                        _t0 = time.perf_counter()
                         new_links = await self._crawl_one_page(
                             context=context,
                             url=normalized_url,
                             depth=depth,
                             download_session=download_session,
                         )
+                        if self.job_id:
+                            _st.record(
+                                self.job_id,
+                                stage="image_audit",
+                                sub_stage="image_crawl_page",
+                                page_url=normalized_url,
+                                depth=depth,
+                                duration_ms=(time.perf_counter() - _t0) * 1000.0,
+                                item_count=len(new_links),
+                            )
 
-                        if depth < self.max_depth:
+                        if not snapshot_fed and depth < self.max_depth:
                             for link in new_links:
                                 if policy.is_allowed(link, self.base_url):
                                     queue.append((link, depth + 1))
@@ -468,6 +512,38 @@ class AsyncImageCrawler:
                     except Exception as e:
                         logger.error(f"Error crawling {normalized_url}: {e}")
 
+            # D-4: emit a single budget-summary row so reviewers can see when a
+            # crawl was clipped by max_pages without grep'ing the warning log.
+            if self.job_id:
+                try:
+                    from ka11y.utils import stage_timing as _st
+
+                    discovered_count = (
+                        len(discovered_urls) if discovered_urls else None
+                    )
+                    visited_count = len(self.visited_urls)
+                    clipped = (
+                        max(0, (discovered_count or 0) - visited_count)
+                        if discovered_count is not None
+                        else None
+                    )
+                    _st.record(
+                        self.job_id,
+                        stage="image_audit",
+                        sub_stage="image_crawl_budget",
+                        duration_ms=0.0,
+                        status="warning" if (clipped and clipped > 0) else "ok",
+                        item_count=visited_count,
+                        extra={
+                            "discovered": discovered_count,
+                            "audited": visited_count,
+                            "clipped": clipped,
+                            "max_pages": self.max_pages,
+                            "snapshot_fed": snapshot_fed,
+                        },
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
             # Context close handled by leased_context's __aexit__.
             if not self.visited_urls:
                 raise ImageCrawlerNavigationError(
@@ -856,52 +932,77 @@ class AsyncImageCrawler:
 
             console.print(f"  [green]✓ Captured {captured_btns} buttons[/green]")
 
-            # ── PASS 3 (SVGs) and others... simplified for brevity here but keeping core logic
+            # ── PASS 3 — inline <svg> elements ──────────────────────────────
+            # Inline SVGs are rasterised to PNG (not saved as raw .svg markup):
+            # downstream rules read screenshot_path with cv2.imread / OCR, which
+            # cannot decode SVG text. We also capture NON-icon SVGs (logos,
+            # illustrations, charts) — they still need a WCAG 1.1.1 accessible-name
+            # check — and pull aria-label / <title> / role / aria-hidden so the
+            # auditor can distinguish informative vs. correctly-hidden decorative.
             svg_els = await page.locator("svg").all()
             captured_svgs = 0
+            seen_svgs: set[str] = set()
             for svg in svg_els:
                 try:
+                    if captured_svgs >= _MAX_SVGS_PER_PAGE:
+                        break
                     if not await self._is_visible(svg):
                         continue
-                    svg_html = await svg.evaluate("el => el.outerHTML.slice(0,300)")
-                    svg_hash = hashlib.md5(svg_html.encode()).hexdigest()[:12]
+
+                    meta = await svg.evaluate("""el => {
+                        const t = el.querySelector('title');
+                        return {
+                            ariaLabel:  el.getAttribute('aria-label') || '',
+                            ariaHidden: el.getAttribute('aria-hidden') || '',
+                            role:       el.getAttribute('role') || '',
+                            title:      t ? (t.textContent || '').trim() : '',
+                            outer:      el.outerHTML.slice(0, 300),
+                        };
+                    }""")
+                    svg_hash = hashlib.md5(meta["outer"].encode()).hexdigest()[:12]
+                    if svg_hash in seen_svgs:
+                        continue
+                    seen_svgs.add(svg_hash)
 
                     is_icon_svg = await self.classifier.is_icon(svg, "", "")
-                    if not is_icon_svg:
-                        continue
+                    if is_icon_svg:
+                        cr = _CR({
+                            "classification": "functional",
+                            "sub_type": "icons",
+                            "is_functional": True,
+                            "is_icon": True,
+                        })
+                    else:
+                        cr = _CR({"classification": "informative", "sub_type": "images"})
 
-                    sub_dir = "functional/icons"
-                    save_dir = f"{self.output_dir}/{sub_dir}"
+                    sub_path = self._subpath(cr)
+                    save_dir = f"{self.output_dir}/{sub_path}"
                     os.makedirs(save_dir, exist_ok=True)
-                    svg_file = f"svg_{svg_hash}.svg"
+                    svg_file = f"svg_{svg_hash}.png"
                     svg_path = f"{save_dir}/{svg_file}"
 
-                    svg_content = await svg.evaluate("el => el.outerHTML")
-                    with open(svg_path, "w", encoding="utf-8") as f:
-                        f.write(svg_content)
+                    # Rasterise the rendered SVG so cv2/OCR-based rules can read it.
+                    saved = await self._safe_screenshot(svg, path=svg_path)
+                    if not saved:
+                        continue
 
                     captured_svgs += 1
                     self.images_data.append(
-                        ImageData(
+                        self._make_image_data(
                             url=url,
                             src=url,
-                            alt_text="",
-                            title="",
-                            classification="functional",
-                            sub_type="icons",
-                            is_functional=True,
-                            is_decorative=False,
-                            is_complex=False,
-                            is_text_image=False,
-                            is_logo=False,
-                            is_icon=True,
-                            is_button=False,
+                            alt=(meta["ariaLabel"] or meta["title"]),
+                            title=meta["title"],
+                            cr=cr,
                             screenshot_path=svg_path,
                             filename=svg_file,
+                            element_id=f"svg_{svg_hash}",
+                            aria_hidden=(meta["ariaHidden"].strip() or None),
+                            role=(meta["role"].strip() or None),
                         )
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"  SVG capture error: {e}")
 
             console.print(f"  [green]✓ Captured {captured_svgs} SVGs[/green]")
 

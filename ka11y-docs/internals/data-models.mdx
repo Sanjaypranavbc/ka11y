@@ -205,18 +205,22 @@ interface CombinedReport {
   warnings:     string[];
   warning_details?: WarningSample[];
   summary: {
-    total_findings:  number;
+    total_findings:  number;   // summed across all crawled pages
     violations:      number;
     needs_review:    number;
     passes:          number;
+    score:           number;   // pass-rate 0–100 = 100 * passes / (passes + violations); needs_review excluded
     by_severity:     { critical: number; high: number; medium: number; low: number };
     by_level:        Record<"A" | "AA" | "AAA", { violations: number; needs_review: number; passes: number }>;
     by_wcag_sc:      Record<string, { violations: number; needs_review: number; passes: number }>;
     by_source:       Record<"axe" | "python", { violations: number; needs_review: number; passes: number }>;
+    by_page:         Record<string, { violations: number; needs_review: number; passes: number }>;
+    page_count:      number;   // distinct crawled pages (1 for single-page audits)
   };
-  violations:      Finding[];
+  violations:      Finding[];  // aggregated across all crawled pages
   needs_review:    Finding[];
   passes:          Finding[];
+  pages:           PageBreakdown[];  // per-page grouping (max_depth > 0), worst-first; see Output Format
   image_audit_report: ImageAuditReport | null;
   contrast_report: ContrastReport | null;
 }
@@ -244,6 +248,7 @@ interface ContrastImageDetail {
   filename:                  string;
   path:                      string;   // Absolute server-side filesystem path
   image_url:                 string;   // Injected by backend: /api/v1/combined/{job_id}/image?path=...
+  page_url:                  string | null;  // Source page (multi-page crawls); null on older reports
   contrast_violations_count: number;
   detections:                ContrastDetection[];
 }
@@ -284,6 +289,7 @@ interface ImageAuditImageDetail {
   filename:                  string;
   path:                      string;
   image_url:                 string;
+  page_url?:                 string | null;  // Source page (= url); drives the per-page image visualiser
   classification:            string;
   sub_type?:                 string | null;
   overall_status:            string;

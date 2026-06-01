@@ -2,6 +2,117 @@
 
 const { getSharedConfigValue, loadSharedConfig } = require('../utils/sharedConfigLoader');
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+  '[contenteditable="true"]',
+  '[contenteditable=""]',
+].join(', ');
+
+const INPUT_SELECTOR = [
+  'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled])',
+  'textarea:not([disabled])',
+  'select:not([disabled])',
+  '[contenteditable="true"]',
+  '[contenteditable=""]',
+].join(', ');
+
+// Technique #5: Cross-page result cache
+// Stores results of expensive interactive checks by (outerHTML + computed-style) hash.
+const RESULT_CACHE = new Map();
+
+/**
+ * Standard settlement helper (Technique #2).
+ * Skips the hard 80ms wait if the element has no active CSS transitions.
+ */
+async function settle(page, ms = 80) {
+  return page.evaluate((timeout) => {
+    return new Promise((resolve) => {
+      const start = performance.now();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Check if any transitions are active on the page.
+          // This is a heuristic: if we are in a steady state after 2 rAFs,
+          // we can potentially resolve early.
+          const elapsed = performance.now() - start;
+          if (elapsed > timeout) {
+            resolve();
+          } else {
+            setTimeout(resolve, timeout - elapsed);
+          }
+        });
+      });
+    });
+  }, ms);
+}
+
+/**
+ * Discover focusable elements once per page (Technique #3 + #4).
+ * Includes stratified sampling by outerHTML hash to avoid redundant testing
+ * of identical elements (e.g. 80 nav links).
+ */
+async function discoverPageElements(page, selector, max = 2000) {
+  return page.evaluate((sel, limit) => {
+    const results = [];
+    const seen = new Set();
+    const idCounts = {};
+    const hashBuckets = {};
+
+    // 1. Count IDs for stable selector generation
+    for (const el of document.querySelectorAll('[id]')) {
+      idCounts[el.id] = (idCounts[el.id] || 0) + 1;
+    }
+
+    const all = document.querySelectorAll(sel);
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      if (seen.has(el)) continue;
+      seen.add(el);
+
+      // 2. Stratified sampling (Technique #4): limit testing of identical elements
+      // We use a simple hash of outerHTML to identify clones
+      const html = el.outerHTML;
+      const hash = html.length + html.slice(0, 100); // Simple fast "hash"
+      hashBuckets[hash] = (hashBuckets[hash] || 0) + 1;
+      
+      // If we've seen this exact element shape more than 3 times, skip it
+      // unless we are under a very small limit.
+      if (hashBuckets[hash] > 3 && all.length > 50) continue;
+
+      let stableSel = null;
+      if (el.id && idCounts[el.id] === 1) {
+        stableSel = `#${CSS.escape(el.id)}`;
+      }
+
+      results.push({
+        idx: i, // DOM order index
+        stableSel,
+        tag: el.tagName.toUpperCase(),
+        tagName: el.tagName.toLowerCase(),
+        target: stableSel ? [stableSel] : [el.tagName.toLowerCase()],
+        id: el.id || null,
+        html: html.slice(0, 200),
+        // Cache metadata: relevant static styles
+        staticStyles: (() => {
+          const cs = window.getComputedStyle(el);
+          return [cs.outline, cs.boxShadow, cs.border, cs.backgroundColor, cs.color].join('|');
+        })(),
+        // Metadata for on-input
+        isSelect: el.tagName === 'SELECT',
+        isCheckboxOrRadio: el.type === 'checkbox' || el.type === 'radio',
+        inputType: (el.getAttribute('type') || el.tagName).toLowerCase(),
+      });
+
+      if (results.length >= limit) break;
+    }
+    return results;
+  }, selector, max);
+}
+
 function sanitizeLang(lang = 'en') {
   const safe = String(lang || 'en').replace(/[^a-zA-Z-]/g, '').slice(0, 10);
   return safe || 'en';
@@ -111,6 +222,7 @@ function renderReasonTemplate(checkKey, reasonCode, params = {}, context = {}, f
 
 module.exports = {
   buildKeywordPattern,
+  discoverPageElements,
   getCheckConfig,
   getKeywordList,
   getNumberConfig,
@@ -119,4 +231,8 @@ module.exports = {
   renderLocalizedText,
   renderReasonTemplate,
   sanitizeLang,
+  settle,
+  FOCUSABLE_SELECTOR,
+  INPUT_SELECTOR,
+  RESULT_CACHE,
 };

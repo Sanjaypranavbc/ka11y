@@ -16,11 +16,47 @@ from typing import Any, Optional
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils.step_logger import append_step_log
+from ka11y.utils import stage_timing
 
 from .constants import STAGE_WEIGHTS
 from .store import _broadcast, _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
+
+
+def _emit_stage_timing(
+    *,
+    job_id: str,
+    stage: str,
+    started_at: Optional[str],
+    completed_at: str,
+    status: str,
+    item_count: Optional[int] = None,
+    error: Optional[str] = None,
+) -> None:
+    """Bridge the stage lifecycle into the low-level JSONL timing log.
+
+    Every stage_complete / stage_error already records started_at + completed_at
+    on the in-memory job state. We piggy-back on those timestamps so each stage
+    gets a row in ``logs/timings/<run_id>.jsonl`` with zero extra wiring per
+    stage. Per-page rows still need to be emitted manually inside the stages.
+    """
+    if not started_at:
+        return
+    try:
+        t0 = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        t1 = datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
+        duration_ms = (t1 - t0).total_seconds() * 1000.0
+    except (ValueError, TypeError):
+        return
+    stage_timing.record(
+        job_id,
+        stage=stage,
+        duration_ms=duration_ms,
+        status=status,
+        item_count=item_count,
+        error=error,
+    )
 
 # Throttle stage_progress events to at most one per (job_id, stage, phase)
 # every _PROGRESS_MIN_INTERVAL_S seconds to prevent SSE flooding on fast
@@ -143,13 +179,23 @@ def emit_stage_progress(
 def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
     now = datetime.now(timezone.utc).isoformat()
     matched = False
+    started_at: Optional[str] = None
     for s in _jobs[job_id].get("stages", []):
         if s["name"] == name and s["status"] == "running":
+            started_at = s.get("started_at")
             s.update(
                 status="completed", completed_at=now, findings_count=findings_count
             )
             matched = True
             break
+    _emit_stage_timing(
+        job_id=job_id,
+        stage=name,
+        started_at=started_at,
+        completed_at=now,
+        status="ok",
+        item_count=findings_count,
+    )
     if not matched:
         logger.warning(
             f"[combined] _stage_complete: stage '{name}' not found in running state "
@@ -185,11 +231,21 @@ def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
 def _stage_error(job_id: str, name: str, error: str) -> None:
     now = datetime.now(timezone.utc).isoformat()
     matched = False
+    started_at: Optional[str] = None
     for s in _jobs[job_id].get("stages", []):
         if s["name"] == name and s["status"] == "running":
+            started_at = s.get("started_at")
             s.update(status="error", completed_at=now, error=error)
             matched = True
             break
+    _emit_stage_timing(
+        job_id=job_id,
+        stage=name,
+        started_at=started_at,
+        completed_at=now,
+        status="error",
+        error=error,
+    )
     if not matched:
         logger.warning(
             f"[combined] _stage_error: stage '{name}' not found in running state "
@@ -230,3 +286,18 @@ def _stage_warn(job_id: str, message: str) -> None:
     """
     logger.warning(f"[combined] {message}")
     _jobs[job_id].setdefault("warnings", []).append(message)
+
+
+def _record_crawler_time(job_id: str, stage_name: str, duration_s: float) -> None:
+    """Record the duration of the crawler pass for a given stage.
+
+    Visible in the timing breakdown on the frontend and the run_timings.log.
+    """
+    job = _jobs.get(job_id)
+    if not job:
+        return
+    for s in job.get("stages", []):
+        # We target the 'running' stage of this name (usually current).
+        if s.get("name") == stage_name and s.get("status") == "running":
+            s["crawler_duration_s"] = round(duration_s, 2)
+            break

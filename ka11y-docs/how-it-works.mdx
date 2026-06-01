@@ -5,14 +5,14 @@ description: "A plain-language guide to ka11y's two-engine audit model, WCAG rul
 
 ## What happens when you submit a URL
 
-You provide a URL. ka11y launches two specialised engines simultaneously — one that analyses the **rendered visual page** and one that analyses the **underlying code structure**. Both engines crawl the same URL in parallel, then their findings are merged into a single unified report.
+You provide a URL. ka11y launches two specialised engines — one that analyses the **rendered visual page** and one that analyses the **underlying code structure**. Both engines crawl the same URL in parallel (unless the Node engine is disabled via the `run_node_audit` flag), then their findings are merged into a single unified report.
 
 ```mermaid
 graph LR
     U(["You submit a URL"]) --> K["ka11y Platform"]
 
     K --> PE["Python Engine\nVisual + Rendered Analysis"]
-    K --> NE["Node Engine\nDOM + Code Analysis"]
+    K --> NE["Node Engine\nDOM + Code Analysis\n(Optional)"]
 
     PE --> T(["Target Website"])
     NE --> T
@@ -23,7 +23,7 @@ graph LR
     M --> R(["Combined Accessibility Report\nViolations · Needs Review · Passes"])
 ```
 
-The two engines complement each other — neither alone gives the full picture. Together they cover **37 WCAG 2.1 / 2.2 success criteria** across conformance levels A, AA, and AAA.
+The two engines complement each other — neither alone gives the full picture. Together they cover **37 WCAG 2.1 / 2.2 success criteria** across conformance levels A, AA, and AAA. If you only need visual/multimodal analysis, the Node engine can be toggled off to reduce audit duration.
 
 ---
 
@@ -155,10 +155,20 @@ Every finding, regardless of source, looks the same:
 
 **Summary statistics** at the top of every report:
 
+- A single **compliance score** (0–100) — the pass rate `passes / (passes + violations)`, with needs-review excluded
 - Total findings broken down by status (violations / needs review / passes)
 - Breakdown by severity (critical → low)
 - Breakdown by WCAG conformance level (A / AA / AAA)
 - Breakdown by WCAG success criterion
+
+**Per-page reporting (multi-page crawls).** When you raise **Max Depth above 0**,
+ka11y crawls multiple same-domain pages and attributes every finding to the page
+it was found on. The report stays aggregated at the top (the headline counts and
+score cover the whole crawl), and a `pages` array carries the same findings grouped
+per page — each with its own score and severity breakdown, sorted worst-first. In
+the dashboard this surfaces as a **page selector + per-page summary bar** on the
+Violations, Needs Review, Passes, and Image Visualiser views; the selector is hidden
+for single-page audits. See [Output Format → Per-page breakdown](/internals/output-format#per-page-breakdown-pages).
 
 ---
 

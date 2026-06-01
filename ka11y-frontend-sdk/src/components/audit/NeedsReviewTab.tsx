@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
-import { AuditNeedsReview } from "@/types/audit";
+import { AuditNeedsReview, PageBreakdown } from "@/types/audit";
+import { PageScopeBar, ALL_PAGES } from "./PageScopeBar";
+import { buildPageOptions, scopedFindings, scopedSummary, ScopeSummary } from "@/lib/page-scope";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +20,8 @@ import { useLanguage } from "@/i18n/LanguageContext";
 
 interface NeedsReviewTabProps {
   items: AuditNeedsReview[];
+  pages?: PageBreakdown[];
+  overall: ScopeSummary;
   pageSize?: number;
 }
 
@@ -37,7 +41,7 @@ const sourceColors: Record<string, string> = {
   unknown: "bg-muted text-muted-foreground border-border",
 };
 
-export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
+export function NeedsReviewTab({ items, pages, overall, pageSize = 50 }: NeedsReviewTabProps) {
   const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [severityFilter, setSeverityFilter] = useState<string[]>([]);
@@ -45,25 +49,34 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
   const [scFilter, setScFilter] = useState<string[]>([]);
   const [modalData, setModalData] = useState<AuditNeedsReview | null>(null);
   const [visibleCount, setVisibleCount] = useState(pageSize);
+  const [scope, setScope] = useState<string>(ALL_PAGES);
+
+  // Page-scoped findings: aggregated for ALL_PAGES, else just the selected page.
+  const pageOptions = useMemo(() => buildPageOptions(pages), [pages]);
+  const summary = scopedSummary(scope, overall, pages);
+  const scoped = useMemo(
+    () => scopedFindings(scope, items, pages, "needs_review"),
+    [scope, items, pages]
+  );
 
   const allSeverities = useMemo(() => {
     const preferred = ["critical", "high", "medium", "low"];
-    const present = [...new Set(items.map((v) => v.severity).filter(Boolean))] as string[];
+    const present = [...new Set(scoped.map((v) => v.severity).filter(Boolean))] as string[];
     const ordered = preferred.filter((s) => present.includes(s));
     const extras = present.filter((s) => !preferred.includes(s)).sort();
     return [...ordered, ...extras];
-  }, [items]);
+  }, [scoped]);
   const allSources = useMemo(
-    () => [...new Set(items.map((v) => v.source).filter(Boolean))].sort(),
-    [items]
+    () => [...new Set(scoped.map((v) => v.source).filter(Boolean))].sort(),
+    [scoped]
   );
   const allScs = useMemo(
-    () => [...new Set(items.map((v) => v.wcag_sc).filter(Boolean))].sort() as string[],
-    [items]
+    () => [...new Set(scoped.map((v) => v.wcag_sc).filter(Boolean))].sort() as string[],
+    [scoped]
   );
 
   const filtered = useMemo(() => {
-    return items.filter((v) => {
+    return scoped.filter((v) => {
       if (severityFilter.length && !severityFilter.includes(v.severity)) return false;
       if (sourceFilter.length && !sourceFilter.includes(v.source)) return false;
       if (scFilter.length && !scFilter.includes(v.wcag_sc)) return false;
@@ -80,7 +93,7 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           (v.element_tag || "").toLowerCase().includes(q)
         );
     });
-  }, [items, search, severityFilter, sourceFilter, scFilter]);
+  }, [scoped, search, severityFilter, sourceFilter, scFilter]);
 
   const toggleFilter = (arr: string[], val: string, setter: (v: string[]) => void) => {
     setter(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
@@ -96,12 +109,12 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
 
   useEffect(() => {
     setVisibleCount(pageSize);
-  }, [pageSize, search, severityFilter, sourceFilter, scFilter]);
+  }, [pageSize, search, severityFilter, sourceFilter, scFilter, scope]);
 
   const hasFilters = search || severityFilter.length || sourceFilter.length || scFilter.length;
 
-  const showingText = filtered.length !== items.length
-    ? t("needsReview.showingFiltered", { visible: Math.min(visibleCount, filtered.length), total: filtered.length, all: items.length })
+  const showingText = filtered.length !== scoped.length
+    ? t("needsReview.showingFiltered", { visible: Math.min(visibleCount, filtered.length), total: filtered.length, all: scoped.length })
     : t("needsReview.showing", { visible: Math.min(visibleCount, filtered.length), total: filtered.length });
 
   return (
@@ -112,6 +125,18 @@ export function NeedsReviewTab({ items, pageSize = 50 }: NeedsReviewTabProps) {
           {t("needsReview.manualNote")}
         </p>
       </div>
+
+      <PageScopeBar
+        pages={pageOptions}
+        value={scope}
+        onChange={setScope}
+        chips={[
+          { label: t("pageScope.score"), value: summary.score, tone: "score" },
+          { label: t("pageScope.violations"), value: summary.violations, tone: "violations" },
+          { label: t("pageScope.needsReview"), value: summary.needs_review, tone: "needsReview" },
+          { label: t("pageScope.passes"), value: summary.passes, tone: "passes" },
+        ]}
+      />
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input

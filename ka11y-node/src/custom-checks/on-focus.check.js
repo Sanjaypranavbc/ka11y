@@ -11,7 +11,6 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-focus';
 const MAX_ELEMENTS = 2000;
 const SETTLE_MS = 100;
 
-// Includes form controls (input, select, textarea) — they can carry onfocus handlers
 const SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -19,6 +18,8 @@ const SELECTOR = [
   'select:not([disabled])',
   'textarea:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
+  '[contenteditable="true"]',
+  '[contenteditable=""]',
 ].join(', ');
 
 // Compare only pathname + search (not hash) to avoid false positives on skip-links
@@ -35,15 +36,11 @@ async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const violations = [];
   let navigationDetected = false;
-  const initialUrl = page.url();
-
   const onNavigated = () => { navigationDetected = true; };
   page.on('framenavigated', onNavigated);
 
   try {
-    // Inject SPA navigation detection: wrap history.pushState/replaceState (and
-    // listen for popstate/hashchange) behind a per-page state object (__navChanges)
-    // so we can count programmatic navigations and later restore the originals.
+    // Inject SPA navigation detection
     await page.evaluate(() => {
       const stateKey = '__navChanges';
       if (window[stateKey] && window[stateKey].originalPush) return;
@@ -59,31 +56,34 @@ async function run(page, context = {}) {
       window[stateKey] = state;
     });
 
-    const focusable = await page.evaluate((sel, max) => {
-      // Deduplicate: [tabindex] may overlap with a, button, etc.
-      const seen = new Set();
-      const results = [];
-      for (const el of document.querySelectorAll(sel)) {
-        if (seen.has(el)) continue;
-        seen.add(el);
-        results.push({
-          tagName: el.tagName.toLowerCase(),
-          id: el.id || null,
-          html: el.outerHTML.slice(0, 150),
-          target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
-          tag: el.tagName.toUpperCase(),
-        });
-        if (results.length >= max) break;
-      }
-      return results;
-    }, SELECTOR, MAX_ELEMENTS);
+    // Technique #3: Use pre-discovered elements if available
+    let focusable = sharedContext.focusableElements;
+    if (!focusable || focusable.length === 0) {
+      focusable = await page.evaluate((sel, max) => {
+        const seen = new Set();
+        const results = [];
+        for (const el of document.querySelectorAll(sel)) {
+          if (seen.has(el)) continue;
+          seen.add(el);
+          results.push({
+            tagName: el.tagName.toLowerCase(),
+            id: el.id || null,
+            html: el.outerHTML.slice(0, 150),
+            target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+            tag: el.tagName.toUpperCase(),
+          });
+          if (results.length >= max) break;
+        }
+        return results;
+      }, SELECTOR, MAX_ELEMENTS);
+    }
 
     for (let i = 0; i < (focusable || []).length; i++) {
       navigationDetected = false;
       const urlBefore = page.url();
 
+      // Use OLD evaluate pattern for test compatibility
       await page.evaluate((sel, idx) => {
-        // Re-query each time — prior focus interactions may have altered DOM
         const uniqueEls = [];
         const seen = new Set();
         for (const el of document.querySelectorAll(sel)) {
@@ -101,20 +101,19 @@ async function run(page, context = {}) {
         return !!(s && s.count > 0);
       }).catch(() => false);
 
-      // Only flag pathname/search changes — hash-only changes (skip-links, anchor navigation)
-      // are not a WCAG 3.2.1 context change.
       if (navigationDetected || spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
         violations.push(focusable[i]);
         break; // page may have navigated; unsafe to continue testing other elements
       }
-      // Reset SPA counter for next element
+      
+      // Reset SPA counter
       await page.evaluate(() => {
         if (window.__navChanges) window.__navChanges.count = 0;
       }).catch(() => {});
     }
   } finally {
     page.off('framenavigated', onNavigated);
-    // Restore the original history methods and remove our listeners.
+    // Restore the original history methods
     await page.evaluate(() => {
       const stateKey = '__navChanges';
       const s = window[stateKey];
@@ -126,7 +125,7 @@ async function run(page, context = {}) {
           window.removeEventListener('popstate', s.onPop);
           window.removeEventListener('hashchange', s.onPop);
         }
-      } catch (_) { /* best-effort restore */ }
+      } catch (_) { }
       delete window[stateKey];
     }).catch(() => {});
   }

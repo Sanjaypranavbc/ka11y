@@ -24,6 +24,30 @@ const config = {
 
   axe: {
     timeoutMs: parseInt(process.env.AXE_TIMEOUT_MS) || 30_000,
+    // Per-page custom-checks budget (ms). Split 60/40 inside runAll between
+    // static and interactive phases so partial results survive a timeout (the
+    // previous single-budget Promise.race forfeited every check on a slow page).
+    //
+    // Default dropped from 90s → 30s on 2026-05-29. Profiling kao.com showed
+    // per-page wall time was ≥95s (3s axe.run + ~90s custom-checks), so the
+    // 255s overall budget always clipped multi-page crawls at 3 pages. The
+    // split-budget cooperative timeout already preserves whichever phase
+    // finishes first, so a 30s cap surfaces violations the heavy passes
+    // would have found anyway while letting the snapshot-fed crawl actually
+    // visit every discovered page. Tune up via the env var if a specific
+    // site needs the longer per-page interactive coverage.
+    //
+    // See ka11y-docs/internals/stage-timing.mdx for how to read which phase
+    // hit the cap in the per-(page, stage) summary log.
+    customChecksTimeoutMs: parseInt(process.env.CUSTOM_CHECKS_TIMEOUT_MS) || 30_000,
+    // Overall multi-page (flat) crawl budget (ms). MUST stay below the Python
+    // combined runner's _call_node_flat HTTP timeout (300s) so a deep crawl
+    // returns partial findings instead of the caller timing out and discarding
+    // everything.
+    flatCrawlBudgetMs: parseInt(process.env.FLAT_CRAWL_BUDGET_MS) || 255_000,
+    // Per-page hard cap (ms) for the flat crawl; clamped to the remaining
+    // overall budget so the loop stays responsive when a single page hangs.
+    flatPerPageMs: parseInt(process.env.FLAT_PER_PAGE_MS) || 120_000,
     defaultTags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'],
     runOnly: {
       type: 'tag',

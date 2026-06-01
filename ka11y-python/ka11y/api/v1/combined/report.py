@@ -9,11 +9,18 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from ka11y.crawler.policy import CrawlPolicy
 from ka11y.i18n.loader import (
     get_level_labels,
     get_severity_labels,
     get_status_labels,
 )
+from ka11y.utils.url_canonical import canonicalize_url as _canonicalize_url
+
+# Single shared policy used purely for URL canonicalization in the report.
+# Mirrors the BFS defaults so the page table groups variants of the same page
+# (http vs https, trailing-slash, tracker params) into one row.
+_REPORT_URL_POLICY = CrawlPolicy()
 
 
 def _build_report(
@@ -65,11 +72,25 @@ def _build_report(
     # by_wcag_sc) and a `pages` array that groups the findings per page with its own
     # summary, so clients can render a per-page view without re-scanning the flat
     # lists. The page entries reference the same finding objects as the flat lists.
+    # R-2: canonicalise the root URL once up front so the element-less
+    # fallback path produces the same key as element-stamped findings (which
+    # were canonicalised in _make_finding). Without this, `https://x.com` and
+    # `https://x.com/` end up as separate page rows in the by_page table.
+    canonical_root = _canonicalize_url(url) if url else url
+
     def _page_of(f: Dict) -> str:
         element = f.get("element")
-        if isinstance(element, dict) and element.get("page_url"):
-            return element["page_url"]
-        return url
+        raw = (
+            element["page_url"]
+            if isinstance(element, dict) and element.get("page_url")
+            else canonical_root
+        )
+        # Apply both layers of normalisation: the CrawlPolicy step keeps the
+        # report grouping bug-compatible with older runs (strips tracker
+        # params etc.), and the canonicalise step keeps Python + Node + the
+        # snapshot all in agreement.
+        normalized = _REPORT_URL_POLICY.normalize_url(raw)
+        return _canonicalize_url(normalized) if normalized else (normalized or raw)
 
     by_page: Dict[str, Dict[str, int]] = {}
     page_buckets: Dict[str, Dict[str, List[Dict]]] = {}
@@ -95,6 +116,21 @@ def _build_report(
         by_page[page_url][bucket_key] += 1
         page_buckets[page_url][bucket_key].append(f)
 
+    # Compliance score: pass-rate = passes / (passes + violations), as a 0–100
+    # percentage. needs_review is deliberately excluded (it is neither a pass nor
+    # a confirmed failure). A page/crawl with NO pass-or-fail findings (only
+    # needs_review, or nothing) returns ``None`` — "not scored" — rather than a
+    # misleading 100.0. The old 100.0 made pages that were barely audited (e.g.
+    # axe never ran on them, only image needs_review findings landed) advertise
+    # perfect compliance; ``None`` lets the UI render "—" so an un-scored page is
+    # never confused with a passing one. Both the overall crawl and each page
+    # expose it so the UI can show one headline score plus a per-page column.
+    def _score(passes_n: int, violations_n: int) -> Optional[float]:
+        denom = passes_n + violations_n
+        if denom == 0:
+            return None
+        return round(100.0 * passes_n / denom, 1)
+
     pages: List[Dict[str, Any]] = []
     for page_url in page_order:
         buckets = page_buckets[page_url]
@@ -115,6 +151,9 @@ def _build_report(
                     "violations": len(buckets["violations"]),
                     "needs_review": len(buckets["needs_review"]),
                     "passes": len(buckets["passes"]),
+                    "score": _score(
+                        len(buckets["passes"]), len(buckets["violations"])
+                    ),
                     "by_severity": page_sev,
                 },
                 "violations": buckets["violations"],
@@ -146,6 +185,7 @@ def _build_report(
             "violations": len(violations),
             "needs_review": len(needs_review),
             "passes": len(passes),
+            "score": _score(len(passes), len(violations)),
             "by_severity": sev_count,
             "by_level": level_count,
             "by_wcag_sc": sc_count,

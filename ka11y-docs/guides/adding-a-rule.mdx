@@ -11,7 +11,8 @@ The short version:
 - Put language-specific Node behavior keywords and reason templates in `config/universal.yml`
 - Put DOM-only checks in `ka11y-node/src/custom-checks/`
 - Put crawler + auditor stages in `ka11y-python/ka11y/`
-- If the rule should appear as an optional stage, update both Python request models and frontend audit config
+- If the rule should appear as an optional stage, update `CombinedRequest` in `ka11y-python/ka11y/api/v1/combined/models.py` and the frontend audit config.
+- The Node.js engine can now be toggled via the `run_node_audit` flag in the API.
 
 ## 1. Pick the correct path first
 
@@ -243,106 +244,34 @@ npm test -- --runInBand tests/utils/axeResultMapper.custom-flat.test.js
 
 Use this path when the rule needs crawlers, auditors, OCR, rendered layout, or richer post-processing.
 
-### Step 1: Decide whether you actually need a new crawler
+### Step 1: Decide between Unified Pipeline or Static Auditor
+
+ka11y now prefers the **Unified Accessibility Pipeline** for any rule that requires DOM context, semantic relationships, or interaction simulation (like focus rings).
+
+| If your rule needs... | Use this path | Why |
+| --- | --- | --- |
+| Deep DOM context, ARIA resolution, or interactive deltas (e.g. 2.4.7, 2.5.8) | **Unified Pipeline Policy** | Centralized extraction prevents false positives and ensures data consistency |
+| Specialized multi-page crawling, non-DOM assets (e.g. Media), or unique viewport scenarios | **Static/Rendered Auditor** | Best for rules that don't fit the standard element-by-element pipeline |
+
+### Step 2 (Option A): Adding a Pipeline Policy
+
+1.  **Create the Policy**: Add a new policy class in `ka11y-python/ka11y/accessibility/pipeline/decisions/policies/policy_X_X_X.py` inheriting from `BasePolicy`.
+2.  **Define the Logic**: Implement the `evaluate()` method using the rich `ElementContext` (which includes `semantics`, `visual`, and `interaction` sub-contexts).
+3.  **Register the Policy**: Wire the new policy into `ka11y-python/ka11y/accessibility/pipeline/pipeline_stage.py`.
+4.  **Formatting**: Ensure any unique verdict codes are handled in `ka11y-python/ka11y/accessibility/pipeline/formatters/evidence_formatter.py`.
+
+### Step 2 (Option B): Adding a Static/Rendered Auditor
 
 Before you create a new crawler, check whether the data already exists in:
+*   `ka11y-python/ka11y/crawler/universal_page.py`
+*   `ka11y-python/ka11y/crawler/rendered_layout_crawler.py`
 
-- `ka11y-python/ka11y/crawler/universal_page.py`
-- `ka11y-python/ka11y/crawler/snapshot_normalizer.py`
-- `ka11y-python/ka11y/crawler/rendered_layout_crawler.py`
-- `ka11y-python/ka11y/crawler/crawler.py` for image/OCR work
+1.  **Add/Update Auditor**: Auditors live under `ka11y-python/ka11y/accessibility/rules/`.
+2.  **Convert to Findings**: Edit `ka11y-python/ka11y/api/v1/combined/findings.py` to add a converter function.
+3.  **Wire the Stage**: Edit `ka11y-python/ka11y/api/v1/combined/stages.py` to call your auditor.
+4.  **Register Stage**: Update `active_stages` in `ka11y-python/ka11y/api/v1/combined/runner.py` and `STAGE_WEIGHTS` in `ka11y-python/ka11y/api/v1/combined/constants.py` to ensure the stage is included in the job plan and progress reporting.
 
-Best practice:
-
-- If a static DOM field can be added to the universal snapshot, do that.
-- Only create a brand-new crawler when the rule truly needs a separate extraction flow.
-
-### Step 2: Add or update the auditor
-
-Auditors live under:
-
-- `ka11y-python/ka11y/accessibility/rules/`
-
-Examples:
-
-- `forms/form_auditor.py`
-- `input_modalities/label_in_name_auditor.py`
-- `media/media_auditor.py`
-
-Keep auditors pure when possible:
-
-- crawler extracts data
-- auditor decides pass/fail/needs review
-
-If you need to leave an intentional stub for a future branch inside a Python
-rule module, do not leave a raw `# TODO: not implemented` comment at the top of
-the file. Use the reusable decorator in:
-
-- `ka11y-python/ka11y/utils/not_implemented.py`
-
-Example:
-
-```python
-from ka11y.utils import not_implemented
-
-
-@not_implemented(reason="vision-model verification is reserved for a future release")
-def _future_multimodal_check(*, media_url: str, transcript_text: str) -> None:
-    pass
-```
-
-Why this is better:
-
-- the failure mode is explicit and consistent
-- the exception message includes the fully-qualified function name
-- the same pattern works for sync and async functions
-- future contributors can search for `@not_implemented` instead of chasing ad hoc comments
-
-### Step 3: Convert auditor output into combined findings
-
-Edit:
-
-- `ka11y-python/ka11y/api/v1/combined/findings.py`
-
-Add:
-
-- a converter function like `_my_rule_to_findings(...)`
-- `_make_finding(...)` calls for each output record
-
-Student note:
-
-- Shared WCAG names and suggested fixes already come from `i18n/`.
-- You do not normally edit a separate constants table for new metadata anymore.
-
-### Step 4: Wire the stage into the combined pipeline
-
-Edit:
-
-- `ka11y-python/ka11y/api/v1/combined/stages.py`
-
-You will usually:
-
-- add a new `_stage_<name>(...)`
-- call the crawler
-- call the auditor
-- convert records to findings
-- return findings from `_run_python_stages(...)`
-
-If the stage should be optional, also add a boolean request flag in:
-
-- `ka11y-python/ka11y/api/v1/combined/models.py`
-
-### Step 5: If the rule needs a frontend toggle, update the frontend too
-
-If users should be able to turn the rule on/off from the dashboard, update:
-
-- `ka11y-frontend-sdk/src/types/audit.ts`
-- `ka11y-frontend-sdk/src/components/audit/AuditSidebar.tsx`
-- `ka11y-frontend-sdk/src/hooks/useAudit.ts`
-
-That keeps the request body, sidebar toggle, and TypeScript types in sync with Python.
-
-### Step 6: Write tests
+### Step 3: Write tests
 
 Common Python test locations:
 
@@ -468,5 +397,7 @@ Before you call the rule finished, check this list:
 - failing Node checks return structured `elements`
 - Python findings include real element data when available
 - tests cover English and Japanese behavior
-- optional stage toggles are wired end-to-end
+- optional stage toggles are wired end-to-end (update `CombinedRequest` and `runner.py`)
 - the report looks correct in the frontend, not just in raw JSON
+- `STAGE_WEIGHTS` in `constants.py` is updated for accurate progress reporting
+- the stage is added to `active_stages` in `runner.py` based on the request flags

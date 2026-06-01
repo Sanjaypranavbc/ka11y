@@ -1,0 +1,63 @@
+---
+title: "1.2.2 Captions (Prerecorded)"
+description: "WCAG 1.2.2 — providing captions for all prerecorded audio content in synchronized media"
+---
+
+<Info>
+  **Level A** · **Engine:** `captions-prerecorded.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 1.2.2 requires that captions are provided for all prerecorded audio content in synchronized media (video with audio), except when the media is a media alternative for text and is clearly labeled as such.
+
+## How it works
+
+The Node engine scans the DOM for `<video>` elements and evaluates the presence of captions:
+
+1.  **Exemption Check**: Muted videos (no audio track) and content identified as "live" (via `data-live`, HLS URLs, or "stream" in the source) are skipped as they fall under other criteria.
+2.  **Native Tracks**: Checks for `<track>` elements with `kind="captions"` or `kind="subtitles"` that have both `src` and `srclang` attributes.
+3.  **ARIA Alternatives**: Validates if `aria-describedby` points to a text block that serves as a text alternative.
+4.  **Nearby Evidence**: Scans the surrounding DOM for `<details>` blocks or links containing "caption" or "transcript" keywords.
+5.  **Cross-Origin Detection**: Identifies cross-origin video players (like YouTube or Vimeo iframes).
+
+## Status Semantics
+
+*   **PASS**: A valid `<track>` element or clear text alternative is found.
+*   **FAIL**: No captions or alternatives are detected for a non-muted prerecorded video.
+*   **INCOMPLETE**: Emitted for cross-origin iframes (YouTube/Vimeo) where the auditor cannot inspect the internal DOM to confirm captioning.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Missing track | A `<video>` element with audio but no `<track kind="captions">`. |
+| Cross-origin uncertainty | A YouTube embed that may have captions, but they cannot be verified automatically. |
+| No alternative | A promotional video with music and speech but no visible text version. |
+
+## Suggested fix
+
+Add a valid WebVTT caption track to your video elements.
+
+```html
+<!-- Correct implementation -->
+<video controls>
+  <source src="presentation.mp4" type="video/mp4">
+  <track 
+    kind="captions" 
+    src="captions_en.vtt" 
+    srclang="en" 
+    label="English" 
+    default
+  >
+</video>
+```
+
+For third-party embeds, ensure that the player's captioning feature is enabled by default or provide a link to a full transcript nearby.
+
+## Known limitations
+
+*   **Cross-Origin Restriction**: Same-origin policy prevents the auditor from inspecting the DOM inside YouTube or Vimeo iframes.
+*   **Dynamic Injection**: Captions injected via JavaScript after the initial page load may be missed by the static scan.
+
+See [Technique coverage for 1.2.2](/rules/coverage-matrix#1-2-2-captions-prerecorded).

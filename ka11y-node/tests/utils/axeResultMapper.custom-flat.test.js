@@ -286,7 +286,7 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
       tag: 'IMG',
       target: ['#hero'],
       selector: '#hero',
-      page_url: 'https://example.com',
+      page_url: 'https://example.com/',
     });
     expect(findings[1].element).toEqual({
       html: '<img alt="Logo" src="/logo.png">',
@@ -294,7 +294,7 @@ describe('mapResultsFlat - N14: unknown SC code in axe violations', () => {
       tag: 'IMG',
       target: ['header img.logo'],
       selector: 'header img.logo',
-      page_url: 'https://example.com',
+      page_url: 'https://example.com/',
     });
   });
 
@@ -362,7 +362,7 @@ describe('mapCustomResultsFlat element mapping', () => {
       selector: '#save',
       source: null,
       media_query: null,
-      page_url: 'https://example.com',
+      page_url: 'https://example.com/',
     });
     expect(findings[1].element).toEqual({
       html: '<a class="cta">Continue</a>',
@@ -372,7 +372,7 @@ describe('mapCustomResultsFlat element mapping', () => {
       selector: '.cta',
       source: null,
       media_query: null,
-      page_url: 'https://example.com',
+      page_url: 'https://example.com/',
     });
   });
 
@@ -398,7 +398,7 @@ describe('mapCustomResultsFlat element mapping', () => {
       selector: null,
       source: null,
       media_query: null,
-      page_url: 'https://example.com',
+      page_url: 'https://example.com/',
     });
   });
 
@@ -424,7 +424,7 @@ describe('mapCustomResultsFlat element mapping', () => {
       selector: null,
       source: null,
       media_query: null,
-      page_url: 'https://example.com',
+      page_url: 'https://example.com/',
     });
   });
 
@@ -454,7 +454,7 @@ describe('mapCustomResultsFlat element mapping', () => {
       target: ['meta[name="viewport"]'],
       source: 'https://example.com/app.css',
       media_query: '(orientation: portrait)',
-      page_url: 'https://example.com',
+      page_url: 'https://example.com/',
     });
   });
 });

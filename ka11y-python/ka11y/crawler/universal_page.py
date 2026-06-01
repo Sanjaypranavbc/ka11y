@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import os
 from pydantic import BaseModel, Field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -15,7 +17,30 @@ from ka11y.crawler.policy import CrawlPolicy
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.utils.step_logger import ExecutionStepLogger
 
+# Pipeline extractors run per-page during the universal crawl so the unified
+# pipeline (1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 2.4.7, 2.4.13, 2.5.3, 2.5.8 …)
+# covers every BFS-discovered page without re-navigation. Imports are local to
+# the helper that uses them to keep this module importable in test contexts
+# that stub the pipeline.
+from ka11y.accessibility.pipeline.extractors.element_context_extractor import (
+    ElementContextExtractor,
+)
+from ka11y.accessibility.pipeline.extractors.semantic_relationship_engine import (
+    SemanticRelationshipEngine,
+)
+from ka11y.accessibility.pipeline.runners.interaction_state_runner import (
+    InteractionStateRunner,
+)
+
 logger = setup_logger(name="KAC", tag="universal_page")
+
+# Number of pages the universal snapshot crawls in parallel. Each worker leases
+# its own ``new_page()`` off the shared BrowserContext; 4 is the aggressive
+# setting requested for EC2 and is overridable per-deploy. The hard
+# ``max_pages`` budget still bounds total work regardless of concurrency.
+_UNIVERSAL_PARALLEL_PAGES = max(
+    1, int(os.environ.get("KA11Y_UNIVERSAL_PARALLEL_PAGES", "4"))
+)
 
 _GOTO_TIMEOUT_MS = 30_000
 _NETWORKIDLE_TIMEOUT_MS = 15_000
@@ -53,12 +78,21 @@ class PageSnapshot(BaseModel):
     # so downstream image-audit hooks can flag informational backgrounds that
     # lack a text alternative (Sprint 3 / step 15).
     background_images: List[Dict[str, Any]] = Field(default_factory=list)
+    # Pipeline element contexts, captured per page during the same visit that
+    # populates the universal extractors. Each entry is
+    # ``{"page_url": str, "contexts": List[ElementContext]}`` where contexts is
+    # the Pydantic model from accessibility.pipeline.models. The DecisionEngine
+    # consumes this side-channel offline so the unified pipeline does not need
+    # to re-navigate every discovered page.
+    pipeline_pages: List[Dict[str, Any]] = Field(default_factory=list)
     warnings: List[Dict[str, Any]] = Field(default_factory=list)
     element_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     page_summaries: List[Dict[str, Any]] = Field(default_factory=list)
     pages_crawled: int = 0
     partial: bool = False
     har_path: Optional[str] = None
+
+    model_config = {"arbitrary_types_allowed": True}
 
 
 _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
@@ -1408,40 +1442,86 @@ class UniversalPageLoader:
             context_kwargs["record_har_path"] = str(har_file)
             context_kwargs["record_har_url_filter"] = "**/*"
 
+        # Parallel BFS: up to _UNIVERSAL_PARALLEL_PAGES pages crawl
+        # concurrently against the SAME BrowserContext (one Chromium, many
+        # Pages). BFS ordering is preserved because the queue is consumed in
+        # FIFO order and discovered links are appended as workers finish.
+        # ``visited`` is updated *before* a task launches so no two workers
+        # ever crawl the same URL, and ``snapshot.pages_crawled`` (incremented
+        # inside ``_crawl_one_url``) gates further launches once the budget
+        # is hit. Per-page extraction code only mutates ``snapshot`` between
+        # awaits, so the single-threaded asyncio interleaving keeps appends
+        # to the shared lists safe.
         async with leased_context(**context_kwargs) as context:
-            while queue:
-                current_url, current_depth = queue.popleft()
-                normalized_url = policy.normalize_url(current_url)
+            inflight: Dict[asyncio.Task, int] = {}
 
-                if normalized_url in visited:
-                    continue
-                visited.add(normalized_url)
+            def _can_launch() -> bool:
+                # In-flight tasks already count against the budget, since each
+                # increments ``pages_crawled`` only AFTER its work succeeds.
+                # Bound launches by the budget MINUS what's still running so
+                # we don't briefly over-shoot ``max_pages``.
+                return (
+                    snapshot.pages_crawled + len(inflight)
+                ) < policy.max_pages
 
-                if not policy.is_allowed(normalized_url, url):
-                    logger.info(
-                        f"[universal] skipping off-origin/disallowed URL: {normalized_url}"
+            budget_hit = False
+            while queue or inflight:
+                while (
+                    queue
+                    and len(inflight) < _UNIVERSAL_PARALLEL_PAGES
+                    and not budget_hit
+                ):
+                    if not _can_launch():
+                        logger.warning(
+                            f"[universal] crawl budget reached "
+                            f"({policy.max_pages} pages); not launching more"
+                        )
+                        budget_hit = True
+                        break
+
+                    current_url, current_depth = queue.popleft()
+                    normalized_url = policy.normalize_url(current_url)
+
+                    if not normalized_url or normalized_url in visited:
+                        continue
+                    visited.add(normalized_url)
+
+                    if not policy.is_allowed(normalized_url, url):
+                        logger.info(
+                            f"[universal] skipping off-origin/disallowed URL: "
+                            f"{normalized_url}"
+                        )
+                        continue
+
+                    task = asyncio.create_task(
+                        cls._crawl_one_url(
+                            context=context,
+                            root_url=url,
+                            url=normalized_url,
+                            depth=current_depth,
+                            policy=policy,
+                            output=snapshot,
+                            step_logger=step_logger,
+                        )
                     )
-                    continue
+                    inflight[task] = current_depth
 
-                if snapshot.pages_crawled >= policy.max_pages:
-                    logger.warning(
-                        f"[universal] crawl budget exceeded ({policy.max_pages} pages)"
-                    )
+                if not inflight:
                     break
 
-                new_links = await cls._crawl_one_url(
-                    context=context,
-                    root_url=url,
-                    url=normalized_url,
-                    depth=current_depth,
-                    policy=policy,
-                    output=snapshot,
-                    step_logger=step_logger,
+                done, _pending = await asyncio.wait(
+                    inflight.keys(), return_when=asyncio.FIRST_COMPLETED
                 )
-
-                if current_depth < policy.max_depth:
-                    for link in new_links:
-                        queue.append((link, current_depth + 1))
+                for task in done:
+                    depth = inflight.pop(task)
+                    try:
+                        new_links = await task
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(f"[universal] page task raised: {exc}")
+                        new_links = []
+                    if depth < policy.max_depth and not budget_hit:
+                        for link in new_links:
+                            queue.append((link, depth + 1))
 
         if record_har and har_file.exists():
             har_path = str(har_file)
@@ -1499,8 +1579,20 @@ class UniversalPageLoader:
             # Chunked extraction to combat virtualized DOMs (Infinite scroll)
             await cls._extract_page_chunked(page, page_url=url, output=output)
 
-            # Links extraction can just use the final state
-            links = await cls._extract_links(page, root_url=url)
+            # Pipeline element contexts for this page. Runs on the same loaded
+            # page as the universal extractor — every page reached by the BFS
+            # gets pipeline coverage, not just the root. Failures degrade to a
+            # warning and never abort the snapshot.
+            await cls._extract_pipeline_contexts(
+                page=page, page_url=url, output=output, step_logger=step_logger
+            )
+
+            # Links extraction can just use the final state. We hand the
+            # active CrawlPolicy in so its normalize_url drives href dedup;
+            # the previous code called ``cls._normalize_url`` which never
+            # existed and silently returned an empty list, so the universal
+            # BFS only ever visited the entry URL even at max_depth>0.
+            links = await cls._extract_links(page, root_url=url, policy=policy)
 
             # Limit links per page
             if len(links) > policy.max_links_per_page:
@@ -1688,6 +1780,68 @@ class UniversalPageLoader:
         await page.evaluate("window.scrollTo(0, 0)")
 
     @classmethod
+    async def _extract_pipeline_contexts(
+        cls,
+        *,
+        page: Page,
+        page_url: str,
+        output: PageSnapshot,
+        step_logger: ExecutionStepLogger | None,
+    ) -> None:
+        """Run the unified-pipeline extractors against the currently-loaded
+        page and append the resulting contexts to ``output.pipeline_pages``.
+
+        This is what closes the multi-page coverage gap: every BFS-visited
+        page contributes its own contexts so DecisionEngine can produce
+        verdicts per page, not just for the root URL. The work runs in three
+        steps that must touch the live page:
+
+        1. ElementContextExtractor.extract_contexts — gathers element data.
+        2. SemanticRelationshipEngine.enrich_semantics — resolves aria-*
+           references against the document; mutates contexts in place.
+        3. InteractionStateRunner.batch_evaluate_focus — simulates focus
+           and records focus-ring state; mutates contexts in place.
+
+        Failures degrade to a warning + an empty entry so DecisionEngine
+        can still report "no findings here" rather than the page being
+        silently dropped from the pipeline output.
+        """
+        contexts: list = []
+        try:
+            contexts = await ElementContextExtractor.extract_contexts(page)
+            if contexts:
+                await SemanticRelationshipEngine.enrich_semantics(page, contexts)
+                await InteractionStateRunner.batch_evaluate_focus(page, contexts)
+        except Exception as exc:  # noqa: BLE001 — pipeline must not abort the crawl
+            output.partial = True
+            output.warnings.append(
+                {
+                    "code": "pipeline_extract_failed",
+                    "page_url": page_url,
+                    "message": str(exc),
+                }
+            )
+            logger.warning(
+                f"[universal] pipeline extraction failed for {page_url}: {exc}"
+            )
+            contexts = []
+
+        output.pipeline_pages.append(
+            {"page_url": page_url, "contexts": contexts}
+        )
+
+        if step_logger:
+            step_logger.record(
+                step="universal_pipeline",
+                status="completed",
+                message="Pipeline contexts captured",
+                context={
+                    "url": page_url,
+                    "contexts": len(contexts),
+                },
+            )
+
+    @classmethod
     async def _extract_page(
         cls,
         page: Page,
@@ -1831,7 +1985,9 @@ class UniversalPageLoader:
             }
 
     @classmethod
-    async def _extract_links(cls, page: Page, root_url: str) -> List[str]:
+    async def _extract_links(
+        cls, page: Page, root_url: str, policy: CrawlPolicy
+    ) -> List[str]:
         try:
             raw_links: List[str] = await page.evaluate(_LINK_EXTRACT_JS)
         except Exception:
@@ -1840,8 +1996,10 @@ class UniversalPageLoader:
         resolved: List[str] = []
         for href in raw_links:
             try:
-                url = cls._normalize_url(urljoin(page.url or root_url, href))
+                url = policy.normalize_url(urljoin(page.url or root_url, href))
             except Exception:
+                continue
+            if not url:
                 continue
             if not cls._is_same_origin(root_url, url):
                 continue

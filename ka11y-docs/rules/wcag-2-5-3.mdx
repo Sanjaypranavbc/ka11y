@@ -4,12 +4,26 @@ description: "WCAG 2.5.3 — accessible name must contain the visible label text
 ---
 
 <Info>
-  **Level A** · WCAG 2.1+ · Auditor: `LabelInNameAuditor` · File: `ka11y/accessibility/rules/input_modalities/label_in_name_auditor.py`
+  **Level A** · **Primary Engine:** Unified Pipeline (`Policy253`) · **Secondary Engine:** `LabelInNameAuditor` (Python Static)
 </Info>
 
 ## What it checks
 
-For interactive elements that have visible text, the **accessible name** (what a screen reader or speech-input tool reads) must **contain** that visible text.
+For interactive elements that have visible text, the **accessible name** (what a screen reader or speech-input tool reads) must **contain** that visible label text.
+
+## How it works (Unified Pipeline)
+
+The Unified Pipeline evaluates this rule by comparing the actual rendered text against the computed accessible name:
+
+1.  **Visible Label Extraction**: `ElementContextExtractor` captures the raw text nodes visually associated with an element (the "Visible Label").
+2.  **Accessible Name Computation**: The engine computes the accessible name by resolving `aria-label`, `aria-labelledby`, `alt` attributes, and other sources in order of priority.
+3.  **Policy Evaluation**: `Policy253` performs a normalized comparison between the two strings.
+
+### False Positive Protection
+
+*   **NFC Normalization**: Both strings are Unicode NFC-normalized to ensure that accented characters (e.g., "é") match correctly regardless of their byte representation.
+*   **Contiguous Substring Logic**: The engine validates that the visible label is a contiguous substring of the accessible name. This correctly allows for legally compliant variations where the accessible name adds context (e.g., Visible: "Submit", ARIA: "Submit Form").
+*   **Token-Based Matching**: Uses rigorous substring and token matching to prevent false positives caused by minor punctuation or whitespace differences.
 
 ## Why this matters
 

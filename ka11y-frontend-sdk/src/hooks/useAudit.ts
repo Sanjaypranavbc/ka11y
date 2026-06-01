@@ -6,6 +6,7 @@ import {
   ImageAuditReport,
   JobFailure,
   JobPlan,
+  RunTiming,
   StageInfo,
   StageProgressInfo,
 } from "@/types/audit";
@@ -119,6 +120,9 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
         violations: (summary.violations as number) ?? 0,
         needs_review: (summary.needs_review as number) ?? 0,
         passes: (summary.passes as number) ?? 0,
+        // null = "not scored" (no pass-or-fail findings). Preserve it; do NOT
+        // default to 100 — that made barely-audited pages look compliant.
+        score: (summary.score as number | null) ?? null,
         by_severity: (summary.by_severity as Record<string, number>) ?? {},
       },
       violations: ((p.violations as Record<string, unknown>[]) || []).map(flattenFinding),
@@ -126,6 +130,17 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
       passes: ((p.passes as Record<string, unknown>[]) || []).map(flattenFinding),
     };
   }) as AuditResult["pages"];
+
+  const reportSummary = (report.summary as Record<string, unknown>) || {};
+  const passesCount = (report.passes as unknown[])?.length || 0;
+  // Prefer the backend's aggregate score; fall back to computing the same
+  // pass-rate locally so older reports still render a score. When there are no
+  // pass-or-fail findings, the score is null ("not scored") — never 100.
+  const overallScore: number | null =
+    (reportSummary.score as number | null) ??
+    (passesCount + rawViolations.length > 0
+      ? Math.round((1000 * passesCount) / (passesCount + rawViolations.length)) / 10
+      : null);
 
   return {
     job_id: (pollData.job_id as string) || "",
@@ -138,7 +153,8 @@ function mapPollResult(pollData: Record<string, unknown>, config: AuditConfig): 
       ((report.passes as unknown[])?.length || 0),
     violations_count: rawViolations.length,
     needs_review_count: rawNeedsReview.length,
-    passes_count: (report.passes as unknown[])?.length || 0,
+    passes_count: passesCount,
+    score: overallScore,
     violations: rawViolations.map(flattenFinding) as AuditResult["violations"],
     needs_review: rawNeedsReview.map(flattenFinding) as AuditResult["needs_review"],
     passes: (((report.passes as Record<string, unknown>[]) || []).map(flattenFinding) as AuditResult["passes"]) || [],
@@ -162,6 +178,7 @@ export function useAudit() {
   const [stageProgress, setStageProgress] = useState<StageProgressInfo | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [activeRun, setActiveRun] = useState<{ url: string; lang: string; submitted_at: string } | null>(null);
+  const [timing, setTiming] = useState<RunTiming | null>(null);
 
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sseRef = useRef<EventSource | null>(null);
@@ -180,6 +197,22 @@ export function useAudit() {
     if (sseRef.current) {
       sseRef.current.close();
       sseRef.current = null;
+    }
+  }, []);
+
+  // ── Stage timings ───────────────────────────────────────────────────────
+  // Fetch the per-stage timing breakdown (same data as logs/run_timings.log).
+  // Called once a job reaches a terminal state; ignores stale jobs.
+  const fetchTiming = useCallback(async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/v1/combined/${jobId}/timings`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as RunTiming;
+      if (activeJobRef.current === jobId) setTiming(data);
+    } catch {
+      /* timing is best-effort — never block the report on it */
     }
   }, []);
 
@@ -208,12 +241,14 @@ export function useAudit() {
             setJobStatus("completed");
             setCurrentStage("");
             setActiveRun(null);
+            fetchTiming(jobId);
           } else if (pollData.status === "failed") {
             stopPolling();
             setJobStatus("failed");
             setError(pollData.error || "Audit failed");
             setCurrentStage("");
             setActiveRun(null);
+            fetchTiming(jobId);
           }
         } catch (e) {
           stopPolling();
@@ -223,7 +258,7 @@ export function useAudit() {
         }
       }, 3000);
     },
-    [stopPolling],
+    [stopPolling, fetchTiming],
   );
 
   // ── SSE connection ────────────────────────────────────────────────────────
@@ -337,6 +372,9 @@ export function useAudit() {
           .catch(() => {
             setJobStatus("completed");
             setActiveRun(null);
+          })
+          .finally(() => {
+            fetchTiming(data.job_id as string);
           });
       });
 
@@ -357,6 +395,7 @@ export function useAudit() {
         setCurrentStage("");
         setStageProgress(null);
         setActiveRun(null);
+        fetchTiming(jobId);
       });
 
       es.onerror = () => {
@@ -370,7 +409,7 @@ export function useAudit() {
         }
       };
     },
-    [closeSSE, stopPolling, startPollingFallback],
+    [closeSSE, stopPolling, startPollingFallback, fetchTiming],
   );
 
   // ── Run audit ─────────────────────────────────────────────────────────────
@@ -384,6 +423,7 @@ export function useAudit() {
       setPlan(null);
       setStageProgress(null);
       setWarnings([]);
+      setTiming(null);
       stopPolling();
       closeSSE();
       configRef.current = config;
@@ -420,6 +460,7 @@ export function useAudit() {
             run_media_audit: config.run_media_audit,
             run_captions_audit: config.run_captions_audit,
             run_sensory_audit: config.run_sensory_audit,
+            run_node_audit: config.run_node_audit,
           }),
         });
 
@@ -476,6 +517,7 @@ export function useAudit() {
     stageProgress,
     warnings,
     activeRun,
+    timing,
   };
 }
 

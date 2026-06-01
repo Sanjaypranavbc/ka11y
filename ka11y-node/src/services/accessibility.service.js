@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const dns = require('dns').promises;
 const { mapResults, mapResultsFlat, mapCustomResultsFlat, axeRuleIdsForCriteria } = require('../utils/axeResultMapper');
+const { StageTimings, NULL_TIMINGS } = require('../utils/stageTimings');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 const { boundedBfs } = require('../utils/crawl');
 
@@ -536,8 +537,19 @@ class AccessibilityService {
       maxPages = 50,
       internalLinks = true,
       successCriteriaId = null,
-      run_axe = true,
-      run_accesslint = true,
+      // Optional per-request timing collector. When set, every per-page step
+      // (navigate, axe, custom checks, mapping) appends a row. The route
+      // handler builds the collector from `jobId` in the request body so the
+      // Python caller can mirror these rows into its own JSONL.
+      timings = NULL_TIMINGS,
+      // R-1: snapshot-fed mode. When the Python caller has already built a
+      // universal snapshot it forwards the discovered page URLs here. We then
+      // visit exactly that set with no further BFS and no time-budget cliff —
+      // the snapshot is the source of truth, the same way the Python image
+      // crawler treats it (see crawler.py snapshot_fed mode). Empty array =
+      // fall back to the legacy boundedBfs path so existing callers are
+      // unchanged.
+      discoveredUrls = [],
     } = options;
     const { timeoutMs } = this._config.axe;
     let browser = null;
@@ -561,26 +573,89 @@ class AccessibilityService {
       const allFindings = [];
       const seen = new Set(); // cross-page dedup of identical findings
 
-      const pagesCrawled = await boundedBfs({
-        baseUrl: url,
-        maxDepth,
-        maxPages,
-        internalLinksOnly: internalLinks,
-        log: (msg) => this._logger.info(`[flat][crawl] ${msg}`),
-        visit: async (pageUrl /*, depth */) => {
-          const { findings, links } = await this._auditPageFlat(
-            browser, pageUrl, level, lang, successCriteriaId, run_axe, run_accesslint
-          );
-          for (const f of findings) {
-            // Dedup across pages by (pageUrl, ruleId, selector, status).
-            const key = `${f.pageUrl || pageUrl}|${f.ruleId || f.rule_id || ''}|${f.selector || f.target || ''}|${f.status}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            allFindings.push(f);
+      // Per-page audit closure shared by both the snapshot-fed and BFS paths.
+      const auditOne = async (pageUrl, depth) => {
+        const { findings, links } = await this._auditPageFlat(
+          browser, pageUrl, level, lang, successCriteriaId, { timings, depth }
+        );
+        for (const f of findings) {
+          // Dedup across pages by (pageUrl, ruleId, selector, status).
+          const key = `${f.pageUrl || pageUrl}|${f.ruleId || f.rule_id || ''}|${f.selector || f.target || ''}|${f.status}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          allFindings.push(f);
+        }
+        return links;
+      };
+
+      let pagesCrawled = 0;
+      if (Array.isArray(discoveredUrls) && discoveredUrls.length > 0) {
+        // R-1: snapshot-fed mode. Visit exactly the URLs Python's snapshot
+        // discovered — no BFS, no time budget, mirrors Python's image_crawler
+        // snapshot_fed behaviour. Each page is still capped by perPageMs via
+        // the per-page custom-checks budget inside _auditPageFlat.
+        this._logger.info(
+          `[flat][crawl] snapshot-fed: ${discoveredUrls.length} URL(s) ` +
+          `from caller; skipping BFS`
+        );
+        for (const pageUrl of discoveredUrls) {
+          try {
+            await auditOne(pageUrl, 0);
+            pagesCrawled++;
+          } catch (err) {
+            this._logger.warn(
+              `[flat][crawl] snapshot-fed page failed: ${pageUrl} — ${err.message}`
+            );
           }
-          return links;
-        },
-      });
+        }
+        // Surface a budget-style row to the timing log so the Python summary
+        // can show snapshot-fed-mode coverage alongside image_crawl_budget.
+        timings.record({
+          stage: 'axe_core',
+          sub_stage: 'axe_crawl_budget',
+          duration_ms: 0,
+          item_count: pagesCrawled,
+          status: 'ok',
+          extra: {
+            discovered: discoveredUrls.length,
+            audited: pagesCrawled,
+            clipped: Math.max(0, discoveredUrls.length - pagesCrawled),
+            snapshot_fed: true,
+          },
+        });
+      } else {
+        // Legacy independent BFS path. Used when the caller didn't supply
+        // discoveredUrls (e.g. single-page audits or direct Node calls).
+        pagesCrawled = await boundedBfs({
+          baseUrl: url,
+          maxDepth,
+          maxPages,
+          internalLinksOnly: internalLinks,
+          // Keep the whole crawl under the Python caller's HTTP timeout so a deep
+          // crawl returns partial findings instead of the caller timing out and
+          // discarding everything; per-page cap keeps the loop responsive.
+          maxTotalMs: this._config.axe.flatCrawlBudgetMs,
+          perPageMs: this._config.axe.flatPerPageMs,
+          log: (msg) => this._logger.info(`[flat][crawl] ${msg}`),
+          visit: auditOne,
+        });
+        // D-5: surface BFS clip status in the timing log so the Python summary
+        // can show why Node only audited N of M pages without grepping logs.
+        timings.record({
+          stage: 'axe_core',
+          sub_stage: 'axe_crawl_budget',
+          duration_ms: 0,
+          item_count: pagesCrawled,
+          status: 'ok',
+          extra: {
+            audited: pagesCrawled,
+            max_pages: maxPages,
+            max_depth: maxDepth,
+            time_budget_ms: this._config.axe.flatCrawlBudgetMs,
+            snapshot_fed: false,
+          },
+        });
+      }
       const ORDER = { fail: 0, needs_review: 1, pass: 2 };
       allFindings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
       this._logger.info(
@@ -611,9 +686,13 @@ class AccessibilityService {
    * @param {string|null} successCriteriaId  Optional SC filter.
    * @returns {Promise<{findings: object[], links: string[]}>}
    */
-  async _auditPageFlat(browser, url, level = 'AA', lang = 'en', successCriteriaId = null, run_axe = true, run_accesslint = true) {
+  async _auditPageFlat(browser, url, level = 'AA', lang = 'en', successCriteriaId = null, opts = {}) {
     const { timeoutMs } = this._config.axe;
     const runOnly = { type: 'tag', values: _tagsForLevel(level) };
+    // Per-page timing collector. NULL_TIMINGS when the caller didn't supply
+    // one — every `record` / `time` call becomes a no-op then.
+    const timings = opts.timings || NULL_TIMINGS;
+    const depth = (opts.depth == null) ? null : opts.depth;
 
     const page = await browser.newPage();
     try {
@@ -632,105 +711,61 @@ class AccessibilityService {
       _installSsrfInterceptor(page);
 
       this._logger.info(`[flat] Navigating to ${url}...`);
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
+      await timings.time(
+        { stage: 'axe_core', sub_stage: 'page_navigate', page_url: url, depth },
+        () => page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs }),
+      );
 
-      // Conditionally inject engines based on toggles
-      if (run_axe) {
-        await this._injectAxe(page, '[flat]');
-        await this._configureAxeLocale(page, lang, '[flat]');
-      }
+      await timings.time(
+        { stage: 'axe_core', sub_stage: 'inject_axe', page_url: url, depth },
+        async () => {
+          await this._injectAxe(page, '[flat]');
+          await this._configureAxeLocale(page, lang, '[flat]');
+        },
+      );
 
-      if (run_accesslint) {
-        const alDir = require('path').dirname(require.resolve('@accesslint/core'));
-        const alIifePath = require('path').join(alDir, 'index.iife.js');
-        await page.addScriptTag({ path: alIifePath });
+      const axeResults = await timings.time(
+        { stage: 'axe_core', sub_stage: 'axe_run', page_url: url, depth },
+        () => this._runAxeWithTimeout(page, runOnly, timeoutMs, '[flat]'),
+      );
+      this._logger.info(
+        `[flat] axe.run() ${url} — violations: ${axeResults.violations.length}, ` +
+        `passes: ${axeResults.passes.length}, ` +
+        `incomplete: ${(axeResults.incomplete || []).length}`
+      );
 
-        // Ensure AccessLint is ready in the browser context
-        await page.waitForFunction(
-          () => Boolean(globalThis.AccessLint && typeof globalThis.AccessLint.runAudit === 'function'),
-          { timeout: 5000 }
-        ).catch(e => this._logger.warn(`[flat] AccessLint ready check failed/timed out: ${e.message}`));
-      }
-
-      let axeResults = null;
-      if (run_axe) {
-        axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs, '[flat]');
-        this._logger.info(
-          `[flat] axe.run() ${url} — violations: ${axeResults.violations.length}, ` +
-          `passes: ${axeResults.passes.length}, ` +
-          `incomplete: ${(axeResults.incomplete || []).length}`
-        );
-      }
-
-      let accessLintResults = null;
-      if (run_accesslint) {
-        accessLintResults = await page.evaluate(async () => {
-          // Helper to get a clean CSS path for an element
-          const getCssPath = (el) => {
-            if (!el || el.nodeType !== 1) return null;
-            const path = [];
-            let current = el;
-            while (current && current.nodeType === 1) {
-              let selector = current.nodeName.toLowerCase();
-              if (current.id) {
-                selector += `#${CSS.escape(current.id)}`;
-                path.unshift(selector);
-                break; // ID is unique enough
-              } else {
-                let sib = current;
-                let nth = 1;
-                while (sib.previousElementSibling) {
-                  sib = sib.previousElementSibling;
-                  if (sib.nodeName.toLowerCase() === selector) nth++;
-                }
-                if (nth !== 1) selector += `:nth-of-type(${nth})`;
-              }
-              path.unshift(selector);
-              current = current.parentNode;
-            }
-            return path.join(' > ');
-          };
-
-          if (window.AccessLint) {
-            const alResRaw = window.AccessLint.runAudit(document);
-            // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
-            return {
-              ...alResRaw,
-              violations: (alResRaw.violations || []).map(v => {
-                const { element, source, ...safeProps } = v;
-                return {
-                  ...safeProps,
-                  selector: v.selector || getCssPath(element),
-                  html: v.html || (element ? element.outerHTML : null)
-                };
-              })
-            };
-          }
-          return null;
-        });
-        this._logger.info(`[flat] AccessLint complete for ${url} — violations: ${(accessLintResults?.violations || []).length}`);
-      }
-
+      // Per-page custom-checks budget. Kept modest so one page can't dominate a
+      // multi-page crawl's overall time budget (see boundedBfs maxTotalMs).
+      // The budget is now handed to runAll which splits it between the static
+      // and interactive phases — previously a single Promise.race over runAll
+      // forfeited *all* completed work when the timer fired, so on heavy deep
+      // pages we lost focus-visible / focus-appearance / on-focus / on-input
+      // / keyboard-trap findings entirely. Splitting preserves partial work.
+      const customChecksTimeoutMs = this._config.axe.customChecksTimeoutMs;
       let customResults = [];
-      const customChecksTimeoutMs = 180000; // 3 minutes budget for custom checks
-      let timeoutId;
       try {
-        const timeoutPromise = new Promise((_, reject) => {
-          timeoutId = setTimeout(() => reject(new Error('Custom checks timed out')), customChecksTimeoutMs);
-        });
-        customResults = await Promise.race([runAll(page, { lang }), timeoutPromise]);
+        customResults = await timings.time(
+          { stage: 'axe_core', sub_stage: 'custom_checks', page_url: url, depth },
+          () => runAll(page, { lang, timeoutMs: customChecksTimeoutMs }),
+        );
       } catch (err) {
-        this._logger.warn(`[flat] Custom checks failed or timed out for ${url}: ${err.message}`);
-      } finally {
-        clearTimeout(timeoutId);
+        this._logger.warn(`[flat] Custom checks failed for ${url}: ${err.message}`);
       }
 
+      const mappingStart = process.hrtime.bigint();
       const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);
       const allowedLevels = _allowedLevels(level);
       let customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
 
-      const safeAxeResults = axeResults || { violations: [], passes: [], incomplete: [] };
-      let findings = [...mapResultsFlat(safeAxeResults, url, lang, null, accessLintResults), ...customFindings];
+      let findings = [...mapResultsFlat(axeResults, url, lang), ...customFindings];
+      timings.record({
+        stage: 'axe_core',
+        sub_stage: 'result_mapping',
+        page_url: url,
+        depth,
+        duration_ms: Number(process.hrtime.bigint() - mappingStart) / 1e6,
+        item_count: findings.length,
+      });
 
       // Optional SC filter (now honoured in flat mode too).
       if (successCriteriaId) {

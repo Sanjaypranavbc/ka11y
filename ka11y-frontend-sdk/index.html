@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ka11y — Accessibility Diagnostic</title>
+    <title>kao a11y — Accessibility Diagnostic</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
@@ -23,8 +23,9 @@
         try {
           const stored = localStorage.getItem("ka11y_theme");
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          // Dark-first: default to dark when the user has no stored preference.
           const shouldUseDark =
-            stored === "dark" || (stored === "system" && prefersDark) || (!stored && prefersDark);
+            stored === "dark" || (stored === "system" && prefersDark) || !stored;
           if (shouldUseDark) document.documentElement.classList.add("dark");
           document.documentElement.style.colorScheme = shouldUseDark ? "dark" : "light";
         } catch {

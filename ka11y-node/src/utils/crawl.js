@@ -64,6 +64,24 @@ function hostOf(raw) {
  * @param {number}   [opts.maxLinksPerPage=200] Cap on links enqueued per page.
  * @returns {Promise<number>} number of pages actually visited
  */
+/**
+ * Resolve `promise` but reject with a timeout error after `ms` (when finite).
+ * Used to keep the BFS loop responsive when a single page hangs.
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms          Timeout in ms; <= 0 or non-finite disables it.
+ * @param {string} label
+ * @returns {Promise<T>}
+ */
+function withTimeout(promise, ms, label) {
+  if (!Number.isFinite(ms) || ms <= 0) return promise;
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} (${Math.round(ms)}ms)`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function boundedBfs({
   baseUrl,
   maxDepth = 0,
@@ -72,11 +90,21 @@ async function boundedBfs({
   visit,
   log = () => {},
   maxLinksPerPage = 200,
+  // Overall wall-clock budget for the whole crawl. When exceeded the crawl
+  // stops and returns the pages done so far — this MUST stay below the Python
+  // caller's HTTP timeout so a deep crawl returns partial findings instead of
+  // the caller timing out and discarding everything. 0 disables it.
+  maxTotalMs = 0,
+  // Hard cap for a single page's visit() so one hanging page can't consume the
+  // whole budget. Clamped to the remaining overall budget. 0 disables it.
+  perPageMs = 0,
 }) {
   const baseHost = hostOf(baseUrl);
   const queue = [[baseUrl, 0]];
   const visited = new Set();
   let pagesDone = 0;
+
+  const deadline = maxTotalMs > 0 ? Date.now() + maxTotalMs : Infinity;
 
   // Link-following is ALWAYS confined to the exact base hostname: we never follow
   // off-host links, so a deep crawl stays on the audited domain and cannot be used
@@ -99,9 +127,19 @@ async function boundedBfs({
       break;
     }
 
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      log(`time budget reached (${maxTotalMs}ms) after ${pagesDone} page(s); ` +
+          `stopping crawl with partial results`);
+      break;
+    }
+
+    // Bound this page to the per-page cap, but never beyond the overall budget,
+    // so the last page can't push total time past the deadline.
+    const pageCap = Math.min(perPageMs > 0 ? perPageMs : Infinity, remaining);
     let links = [];
     try {
-      links = (await visit(url, depth)) || [];
+      links = (await withTimeout(visit(url, depth), pageCap, `page audit exceeded`)) || [];
     } catch (e) {
       log(`error visiting ${url}: ${e.message}`);
       links = [];

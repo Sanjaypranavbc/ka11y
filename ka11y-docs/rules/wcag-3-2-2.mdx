@@ -1,0 +1,61 @@
+---
+title: "3.2.2 On Input"
+description: "WCAG 3.2.2 — changing the setting of any user interface component does not automatically cause a change of context"
+---
+
+<Info>
+  **Level A** · **Engine:** `on-input.check.js` (Node) · **Mode:** Interactive
+</Info>
+
+## What it checks
+
+WCAG 3.2.2 requires that changing the setting of any user interface component (e.g., entering text, checking a checkbox, selecting a menu item) does not automatically cause a change of context unless the user has been advised of the behavior before using the component.
+
+## How it works
+
+The Node engine performs an interactive audit by simulating input changes and monitoring page state:
+
+1.  **Input Identification**: Detects `input`, `textarea`, `select`, and `contenteditable` elements.
+2.  **Interaction Simulation**:
+    *   **Text/Number/Email**: Types a single type-safe character and waits 120ms.
+    *   **Select**: Programmatically changes the selected option.
+    *   **Checkbox/Radio**: Simulates a click to toggle the state.
+3.  **Context Monitoring**: Uses the same URL tracking as the [3.2.1 On Focus](/rules/wcag-3-2-1) check to detect navigation or SPA route changes.
+4.  **State Restoration**: Attempts to restore the element to its original state after each interaction to avoid interfering with subsequent checks.
+
+## Status Semantics
+
+*   **FAIL**: Changing an input value triggers an automatic navigation or major context change.
+*   **PASS**: The page context remains stable after input simulation.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Auto-submit select | A dropdown menu that navigates to a new page as soon as an option is selected. |
+| Automatic redirection | A text field that redirects the user after entering a certain number of characters. |
+
+## Suggested fix
+
+Use explicit submission buttons for all actions that change the user's context.
+
+```javascript
+// FAILED - Navigation on change
+const select = document.querySelector('select');
+select.addEventListener('change', () => {
+  window.location.href = `/search?q=${select.value}`;
+});
+
+// PASSED - Explicit button required
+const form = document.querySelector('form');
+form.addEventListener('submit', (e) => {
+  // Navigation happens only on submit
+});
+```
+
+## Known limitations
+
+*   **Completion Submission**: Some forms submit automatically only when a field is *completed* (e.g., typing a full ZIP code); these may be missed by the single-character simulation.
+*   **Advice Detection**: The auditor cannot determine if the user was "advised of the behavior" (e.g., via a preceding instruction paragraph).
+
+See [Technique coverage for 3.2.2](/rules/coverage-matrix#3-2-2-on-input).

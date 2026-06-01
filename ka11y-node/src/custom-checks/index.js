@@ -209,10 +209,11 @@ function _buildExecutionFailure(checkDef, reason) {
   };
 }
 
-function _buildContext(context = {}) {
+function _buildContext(context = {}, page = null) {
   return {
     config: context && context.config ? context.config : loadSharedConfig(),
     lang: sanitizeLang(context && context.lang ? context.lang : 'en'),
+    page,
   };
 }
 
@@ -248,7 +249,7 @@ function _selectChecks(checkDefs, criteriaId) {
 }
 
 async function _runChecks(checkDefs, page, context = {}) {
-  const sharedContext = _buildContext(context);
+  const sharedContext = _buildContext(context, page);
   const results = await Promise.allSettled(checkDefs.map(d => d.check.run(page, sharedContext)));
   return results
     .map((r, i) => {
@@ -269,9 +270,21 @@ async function runStaticChecks(page, criteriaIdOrContext = null, context = {}) {
 
 async function runInteractiveChecks(page, criteriaIdOrContext = null, context = {}) {
   const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
-  // Interactive checks must run sequentially (they mutate focus/keyboard/page state)
-  const sharedContext = _buildContext(ctx);
   const selected = _selectChecks(INTERACTIVE_CHECKS, criteriaId);
+  if (selected.length === 0) return [];
+
+  // Interactive checks must run sequentially (they mutate focus/keyboard/page state)
+  const sharedContext = _buildContext(ctx, page);
+
+  // Technique #3: Discover focusable set once and share across all 5 interactive checks
+  const { discoverPageElements, FOCUSABLE_SELECTOR } = require('./sharedAssets');
+  try {
+    sharedContext.focusableElements = await discoverPageElements(page, FOCUSABLE_SELECTOR);
+  } catch (err) {
+    console.warn('[custom-checks] focusable element discovery failed:', err && err.message || err);
+    sharedContext.focusableElements = [];
+  }
+
   const results = [];
   for (let i = 0; i < selected.length; i++) {
     const checkDef = selected[i];
@@ -290,8 +303,67 @@ async function runAll(page, criteriaIdOrContext = null, context = {}) {
   const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
   // Deterministic order: static first, then interactive.
   // Running both in parallel on the same page can cause state interference.
-  const staticR = await runStaticChecks(page, criteriaId, ctx);
-  const interactiveR = await runInteractiveChecks(page, criteriaId, ctx);
+
+  // Cooperative timeout: when ctx.timeoutMs is set, each phase races against
+  // its own slice of the budget so a slow page that exceeded the previous
+  // single overall Promise.race could lose ALL completed work. With the split
+  // budget, a timed-out interactive phase still preserves static findings
+  // (and vice-versa). 60/40 favours static because it's the larger phase.
+  const timeoutMs = ctx && typeof ctx.timeoutMs === 'number' && ctx.timeoutMs > 0
+    ? ctx.timeoutMs
+    : null;
+
+  if (!timeoutMs) {
+    const staticR = await runStaticChecks(page, criteriaId, ctx);
+    const interactiveR = await runInteractiveChecks(page, criteriaId, ctx);
+    return [...staticR, ...interactiveR];
+  }
+
+  const staticBudget = Math.max(15_000, Math.floor(timeoutMs * 0.6));
+  const interactiveBudget = Math.max(15_000, timeoutMs - staticBudget);
+
+  function _withTimeout(promise, ms, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms,
+      );
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  let staticR = [];
+  const staticStart = Date.now();
+  try {
+    staticR = await _withTimeout(
+      runStaticChecks(page, criteriaId, ctx), staticBudget, 'static custom checks'
+    );
+  } catch (err) {
+    // Note: the WARN level makes this visible in the timing summary as the
+    // reason a page only returned partial custom-check findings. The
+    // split-budget design (60/40) ensures the other phase still ran.
+    console.warn(
+      `[custom-checks] static phase hit ${staticBudget}ms cap after ` +
+      `${Date.now() - staticStart}ms — partial results returned. ` +
+      `Increase CUSTOM_CHECKS_TIMEOUT_MS if this site needs full coverage.`
+    );
+  }
+
+  let interactiveR = [];
+  const interactiveStart = Date.now();
+  try {
+    interactiveR = await _withTimeout(
+      runInteractiveChecks(page, criteriaId, ctx), interactiveBudget, 'interactive custom checks'
+    );
+  } catch (err) {
+    console.warn(
+      `[custom-checks] interactive phase hit ${interactiveBudget}ms cap after ` +
+      `${Date.now() - interactiveStart}ms — partial results returned. ` +
+      `Increase CUSTOM_CHECKS_TIMEOUT_MS if this site needs full coverage.`
+    );
+  }
+
   return [...staticR, ...interactiveR];
 }
 

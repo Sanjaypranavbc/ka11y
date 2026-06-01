@@ -1,5 +1,6 @@
-import { AuditResult } from "@/types/audit";
+import { AuditResult, RunTiming } from "@/types/audit";
 import { ContrastReportSection } from "./ContrastReportSection";
+import { StageTimingsCard } from "./StageTimingsCard";
 import { MetricCard } from "./MetricCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -12,6 +13,7 @@ import { useLanguage } from "@/i18n/LanguageContext";
 
 interface DashboardTabProps {
   result: AuditResult;
+  timing?: RunTiming | null;
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
@@ -33,7 +35,21 @@ const LEVEL_COLORS: Record<string, string> = {
   AAA: "hsl(277, 70%, 62%)",
 };
 
-export function DashboardTab({ result }: DashboardTabProps) {
+// Compliance-score colour band: green ≥ 90, amber ≥ 70, red below.
+// null = "not scored" (page had no pass-or-fail findings) → muted.
+function scoreColor(score: number | null): string {
+  if (score == null) return "hsl(215, 16%, 47%)";
+  if (score >= 90) return "hsl(151, 68%, 46%)";
+  if (score >= 70) return "hsl(45, 100%, 45%)";
+  return "hsl(0, 84%, 58%)";
+}
+
+// Render a score as "NN%" or "—" when not scored (null).
+function formatScore(score: number | null): string {
+  return score == null ? "—" : `${score}%`;
+}
+
+export function DashboardTab({ result, timing }: DashboardTabProps) {
   const isMobile = useIsMobile();
   const { t } = useLanguage();
 
@@ -122,8 +138,34 @@ export function DashboardTab({ result }: DashboardTabProps) {
   };
   const sourceNamesForLabel = sourceData.map((row) => row.name).join(", ");
 
+  const pageCount = result.pages?.length ?? 0;
+
   return (
     <div className="space-y-5 p-3 sm:p-5 grid-bg min-h-full">
+      {/* Overall compliance score */}
+      <Card className="animate-fade-up">
+        <CardContent className="flex items-center justify-between gap-4 py-4">
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+              {t("dashboard.score")}
+            </div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {pageCount > 1
+                ? t("dashboard.scoreAcrossPages", { n: pageCount })
+                : t("dashboard.scoreHint")}
+            </div>
+          </div>
+          <div className="flex items-baseline gap-1 shrink-0" aria-label={`${t("dashboard.score")}: ${formatScore(result.score)}`}>
+            <span className="text-4xl font-bold tabular-nums" style={{ color: scoreColor(result.score) }}>
+              {result.score == null ? "—" : result.score}
+            </span>
+            {result.score != null && (
+              <span className="text-lg font-semibold" style={{ color: scoreColor(result.score) }}>%</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Metric cards — staggered reveal */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -259,6 +301,8 @@ export function DashboardTab({ result }: DashboardTabProps) {
                 <thead>
                   <tr className="text-left text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
                     <th className="py-1.5 pr-3 font-semibold">{t("dashboard.pageColumn")}</th>
+                    <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.scoreColumn")}</th>
+                    <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.findingsColumn")}</th>
                     <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.violations")}</th>
                     <th className="py-1.5 px-2 text-right font-semibold">{t("dashboard.needsReview")}</th>
                     <th className="py-1.5 pl-2 text-right font-semibold">{t("dashboard.passes")}</th>
@@ -277,6 +321,12 @@ export function DashboardTab({ result }: DashboardTabProps) {
                           {p.page_url}
                         </a>
                       </td>
+                      <td className="py-1.5 px-2 text-right font-mono font-semibold" style={{ color: scoreColor(p.summary.score) }}>
+                        {formatScore(p.summary.score)}
+                      </td>
+                      <td className="py-1.5 px-2 text-right font-mono font-semibold text-foreground">
+                        {p.summary.total_findings}
+                      </td>
                       <td className="py-1.5 px-2 text-right font-mono" style={{ color: SOURCE_COLORS.violations }}>
                         {p.summary.violations}
                       </td>
@@ -294,6 +344,9 @@ export function DashboardTab({ result }: DashboardTabProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Stage timings — same data as logs/run_timings.log */}
+      <StageTimingsCard timing={timing ?? null} />
 
       {/* Contrast report — rendered only when OCR produced contrast data */}
       {result.contrast_report && result.contrast_report.images.length > 0 && (

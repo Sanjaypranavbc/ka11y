@@ -8,7 +8,10 @@
     "dev": "nodemon server.js",
     "selftest": "node selftest.js",
     "evidence": "node scripts/evidence-loop.js",
-    "test": "jest --coverage"
+    "test": "jest --coverage",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "accesslint": "eslint . --plugin jsx-a11y"
   },
   "keywords": [
     "accessibility",
@@ -30,8 +33,16 @@
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
+    "@accesslint/core": "^0.12.1",
+    "@accesslint/jest": "^0.1.2",
+    "eslint": "^8.57.0",
+    "eslint-plugin-jsx-a11y": "^6.8.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-security": "^2.1.1",
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.4.1",
     "jest-junit": "^16.0.0",
+    "jsdom": "^29.1.1",
     "nodemon": "^3.1.0",
     "supertest": "^7.2.2"
   },

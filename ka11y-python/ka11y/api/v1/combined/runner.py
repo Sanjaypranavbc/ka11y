@@ -28,6 +28,8 @@ from ka11y.utils.step_logger import ExecutionStepLogger
 
 from .findings import _lang_ctx
 from ka11y.utils.lang_detector import detect_page_language
+from ka11y.utils.run_timing import log_run_timing
+from ka11y.utils.stage_timing import emit_summary as emit_stage_timing_summary
 from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import (
@@ -50,7 +52,7 @@ logger = setup_logger(name="KAC", tag="combined")
 # Outer audit budget — bounds the top-level asyncio.gather of axe+python so
 # a stuck inner branch cannot pin a worker forever. Each inner stage already
 # has a tighter _STAGE_TIMEOUT_SECONDS budget in stages.py.
-_JOB_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1200"))
+_JOB_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1800"))
 
 # Hard cap on concurrent _run_job() background tasks. Without this, every
 # accepted POST spawns a Chromium + axe-core run; at the rate-limiter's
@@ -197,6 +199,9 @@ async def _run_job_body(
 ) -> None:
     """Original body of :func:`_run_job`, gated by the concurrency semaphore."""
     _jobs[job_id]["status"] = "running"
+    # Wall-clock start of real work (before lang detection + stages). Used by
+    # the run-timing logger to separate queue wait from execution time.
+    _jobs[job_id]["run_started_at"] = datetime.now(timezone.utc).isoformat()
     url = str(payload.url)
 
     # Resolve the effective language once, up front. When the user selects
@@ -241,13 +246,9 @@ async def _run_job_body(
         )
 
         # Announce the stage plan to SSE subscribers so the progress bar can render.
-        node_stage = "axe_core"
-        if payload.run_accesslint and not payload.run_axe:
-            node_stage = "accesslint"
-        elif payload.run_accesslint and payload.run_axe:
-            node_stage = "node_audit"
-            
-        active_stages: list[str] = [node_stage]
+        active_stages: list[str] = []
+        if payload.run_node_audit:
+            active_stages.append("axe_core")
         if payload.run_ocr or payload.run_image_audit:
             active_stages.append("image_audit")
         # pipeline stage always runs; it handles 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
@@ -284,22 +285,45 @@ async def _run_job_body(
             active_stages.append("section_headings")
         emit_job_plan(job_id, active_stages)
 
-        # Fire axe-core and all Python stages concurrently
-        _stage_start(job_id, node_stage)
-        node_task = asyncio.create_task(
-            _call_node_flat(
-                url=url,
-                node_base_url=node_base_url,
-                wcag_level=payload.wcag_level,
-                lang=resolved_lang,
-                max_depth=payload.max_depth,
-                internal_links=payload.internal_links,
-                max_pages=payload.max_pages,
-                success_criteria_id=payload.success_criteria_id,
-                run_axe=payload.run_axe,
-                run_accesslint=payload.run_accesslint,
+        # Fire axe-core and all Python stages concurrently.
+        #
+        # R-1: When ``max_depth > 0`` the Python stage builds a universal
+        # snapshot that enumerates all pages to audit. Node's independent
+        # ``boundedBfs`` has a hard ``flatCrawlBudgetMs`` cap (255 s by
+        # default) which on big sites like kao.com was clipping the crawl to
+        # 3 pages and silently dropping axe findings on every page beyond
+        # that. We share the snapshot's URL list via a small event/container
+        # pair: Python signals as soon as the snapshot is ready (always — even
+        # on failure, via a finally block), and Node waits up to
+        # _SNAPSHOT_URLS_WAIT_SECONDS for it, then audits exactly the same pages
+        # — no BFS, no clip. The wait must outlast a legitimately slow snapshot
+        # (kao.com/jp took 561 s); the old 90 s default caused Node to give up
+        # early and fall back to its budget-capped BFS, under-auditing 43/50.
+        snapshot_urls_event: asyncio.Event | None = None
+        snapshot_urls_container: dict | None = None
+        if payload.max_depth > 0:
+            snapshot_urls_event = asyncio.Event()
+            snapshot_urls_container = {"urls": None}
+
+        node_task = None
+        if payload.run_node_audit:
+            _stage_start(job_id, "axe_core")
+            node_task = asyncio.create_task(
+                _call_node_flat(
+                    url,
+                    node_base_url,
+                    payload.wcag_level,
+                    resolved_lang,
+                    max_depth=payload.max_depth,
+                    internal_links=payload.internal_links,
+                    max_pages=payload.max_pages,
+                    success_criteria_id=payload.success_criteria_id,
+                    job_id=job_id,
+                    snapshot_urls_event=snapshot_urls_event,
+                    snapshot_urls_container=snapshot_urls_container,
+                )
             )
-        )
+
         python_task = asyncio.create_task(
             _run_python_stages(
                 url=url,
@@ -331,6 +355,8 @@ async def _run_job_body(
                 run_consistent_id_audit=payload.run_consistent_id_audit,
                 run_unusual_words_audit=payload.run_unusual_words_audit,
                 run_section_headings_audit=payload.run_section_headings_audit,
+                snapshot_urls_event=snapshot_urls_event,
+                snapshot_urls_container=snapshot_urls_container,
             )
         )
 
@@ -340,14 +366,22 @@ async def _run_job_body(
         # (_timed in stages.py) bound individual auditors; this is the outer
         # safety net.
         try:
-            node_result, python_result = await asyncio.wait_for(
-                asyncio.gather(node_task, python_task, return_exceptions=True),
+            tasks = [python_task]
+            if node_task:
+                tasks.append(node_task)
+
+            gathered = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
                 timeout=_JOB_TIMEOUT_SECONDS,
             )
+            python_result = gathered[0]
+            node_result = gathered[1] if node_task else []
+
         except asyncio.TimeoutError:
-            for t in (node_task, python_task):
-                if not t.done():
-                    t.cancel()
+            if node_task and not node_task.done():
+                node_task.cancel()
+            if not python_task.done():
+                python_task.cancel()
             # Surface as a structured failure; the outer except path will
             # scrub it before broadcasting.
             raise TimeoutError(
@@ -355,18 +389,19 @@ async def _run_job_body(
             )
 
         # ── Resolve axe-core result ───────────────────────────────────────────
-        if isinstance(node_result, Exception):
-            _stage_error_and_warn(job_id, node_stage, node_result)
-            node_findings: List[Dict] = []
-        else:
-            node_findings = node_result
-            _stage_complete(job_id, node_stage, len(node_findings))
-            step_logger.record(
-                step=f"{node_stage}_summary",
-                status="completed",
-                message=f"{node_stage.replace('_', '-')} results recorded",
-                context={"finding_count": len(node_findings)},
-            )
+        node_findings: List[Dict] = []
+        if payload.run_node_audit:
+            if isinstance(node_result, Exception):
+                _stage_error_and_warn(job_id, "axe_core", node_result)
+            else:
+                node_findings = node_result
+                _stage_complete(job_id, "axe_core", len(node_findings))
+                step_logger.record(
+                    step="axe_core_summary",
+                    status="completed",
+                    message="axe-core results recorded",
+                    context={"finding_count": len(node_findings)},
+                )
 
         # ── Resolve Python result ─────────────────────────────────────────────
         python_findings: List[Dict] = []
@@ -476,6 +511,24 @@ async def _run_job_body(
                 }
             )
 
+        # Append a per-run timing block to logs/run_timings.log (durations are
+        # derived from the timestamps already recorded; no extra measurement).
+        job_rec = _jobs.get(job_id, {})
+        log_run_timing(
+            job_id=job_id,
+            url=url,
+            status="completed",
+            stages=job_rec.get("stages", []),
+            submitted_at=job_rec.get("submitted_at"),
+            run_started_at=job_rec.get("run_started_at"),
+            completed_at=job_rec.get("completed_at"),
+            lang=resolved_lang,
+            summary=report.get("summary"),
+        )
+        # Render the low-level per-(page, stage, rule) summary alongside the JSONL.
+        # Never raises — safe on missing rows.
+        emit_stage_timing_summary(job_id)
+
         logger.info(
             f"[combined] job {job_id} completed — "
             f"{report['summary']['violations']} violations, "
@@ -534,6 +587,22 @@ async def _run_job_body(
                     "current_stage": None,
                 }
             )
+
+        # Record timing for the failed run too, so the log shows where time went
+        # before the failure (and which stage failed).
+        job_rec = _jobs.get(job_id, {})
+        log_run_timing(
+            job_id=job_id,
+            url=url,
+            status="failed",
+            stages=job_rec.get("stages", []),
+            submitted_at=job_rec.get("submitted_at"),
+            run_started_at=job_rec.get("run_started_at"),
+            completed_at=job_rec.get("completed_at"),
+            lang=_jobs.get(job_id, {}).get("lang"),
+            error_stage=current_stage,
+        )
+        emit_stage_timing_summary(job_id)
         step_logger.finalize(
             status="error",
             message="Combined audit job failed",

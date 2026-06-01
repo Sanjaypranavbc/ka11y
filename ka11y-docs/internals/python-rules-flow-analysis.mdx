@@ -21,8 +21,16 @@ To eliminate false positives caused by evaluating elements in a vacuum, the Pyth
     *   **SectionAnalyzer:** Determines the macro-context (e.g., `HEADER`, `FORM_REGION`, `DATA_TABLE`).
     *   **SemanticRelationshipEngine:** Resolves ARIA pointers (`aria-describedby`, `aria-labelledby`) and native HTML group mechanics (`<fieldset>`, `<label>`).
 3.  **Interaction Simulation:** The `InteractionStateRunner` natively simulates interactions (like `.focus()`) and captures the delta in rendered CSS properties (like `box-shadow` or `background-color`) to prove visible state changes.
-4.  **Decision Engine:** Evaluates the rich `ElementContext` against registered `WCAGPolicy` classes (e.g., `Policy111`, `Policy258`).
-5.  **Evidence Formatter:** Maps the internal pipeline `RuleVerdict` back to the legacy JSON schema expected by the frontend.
+4.  **Decision Engine**: Evaluates the rich `ElementContext` against registered `WCAGPolicy` classes:
+    *   **Policy111**: 1.1.1 Non-text Content (with functional redundancy check)
+    *   **Policy131**: 1.3.1 Info and Relationships (context-aware orphaned input check)
+    *   **Policy143 / 146**: 1.4.3 / 1.4.6 Contrast (Minimum/Enhanced) with dynamic font-size thresholds
+    *   **Policy145**: 1.4.5 Images of Text (OCR-backed)
+    *   **Policy1411**: 1.4.11 Non-text Contrast (rendered boundary check)
+    *   **Policy247 / 2413**: 2.4.7 / 2.4.13 Focus Visible and Appearance (visual delta simulation)
+    *   **Policy253**: 2.5.3 Label in Name (NFC-normalized substring match)
+    *   **Policy258**: 2.5.8 Target Size (effective clickable area calculation)
+5.  **Evidence Formatter**: Maps the internal pipeline `RuleVerdict` back to the legacy JSON schema expected by the frontend.
 
 ```mermaid
 flowchart TD

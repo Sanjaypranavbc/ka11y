@@ -1,0 +1,66 @@
+---
+title: "1.2.3 Audio Description or Media Alternative"
+description: "WCAG 1.2.3 — providing audio descriptions or a text alternative for prerecorded synchronized media"
+---
+
+<Info>
+  **Level A** · **Engine:** `audio-description.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 1.2.3 requires that an alternative for time-based media (such as a transcript) or audio description is provided for prerecorded synchronized media. This ensures that users who cannot see the video can still access the information being presented visually.
+
+## How it works
+
+The Node engine evaluates synchronized media (videos with audio) for the following signals:
+
+1.  **Exemption Check**: Muted videos are exempt as they do not have an audio track to describe.
+2.  **Native Description Tracks**: Checks for `<track>` elements with `kind="descriptions"` that have both `src` and `srclang`.
+3.  **Secondary Audio Channels**: Identifies secondary `<audio>` or `<source>` elements labeled as "description" or "audio-desc" via `title` or `data-kind` attributes.
+4.  **Nearby Text Alternatives**: Scans for `<a>` links or `<details>` blocks containing "audio description", "full-text alternative", "音声解説", or "代替テキスト" keywords.
+
+## Status Semantics
+
+*   **PASS**: A valid description track, secondary audio, or clear text alternative is detected.
+*   **FAIL**: No audio descriptions or text alternatives are found for a synchronized video.
+*   **INCOMPLETE**: Emitted when the engine detects a video but cannot definitively confirm the absence of a description (e.g., if it's baked into the main audio track).
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| No audio description | A video showing a tutorial with visual steps but no spoken narration for those steps. |
+| Missing transcript | A talking-head video with important visual slides but no text version available. |
+
+## Suggested fix
+
+Provide an audio description track or a full-text alternative that describes all visual information.
+
+```html
+<!-- Video with native audio description track -->
+<video controls>
+  <source src="tutorial.mp4" type="video/mp4">
+  <track 
+    kind="descriptions" 
+    src="descriptions_en.vtt" 
+    srclang="en" 
+    label="English Audio Description"
+  >
+</video>
+
+<!-- Or provide a link to a descriptive transcript -->
+<video src="presentation.mp4" controls></video>
+<p>
+  <a href="/alternatives/presentation-transcript.html">
+    View descriptive transcript for presentation
+  </a>
+</p>
+```
+
+## Known limitations
+
+*   **Content Equivalence**: The auditor verifies the *presence* of the alternative but cannot judge if the description is sufficiently detailed or accurate.
+*   **Third-Party Players**: Descriptions provided via external player plugins (not using standard HTML5 `<track>`) may not be detected.
+
+See [Technique coverage for 1.2.3](/rules/coverage-matrix#1-2-3-audio-description-or-media-alternative-prerecorded).

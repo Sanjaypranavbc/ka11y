@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -47,8 +49,13 @@ from ka11y.utils.crawler_settings import (
     get_max_warning_samples,
     select_ocr_candidate_paths,
 )
-from ka11y.accessibility.pipeline.pipeline_stage import _run_pipeline_stage
+from ka11y.accessibility.pipeline.pipeline_stage import (
+    _run_pipeline_stage as _real_run_pipeline_stage,
+)
+
+
 from ka11y.utils.step_logger import ExecutionStepLogger
+from ka11y.utils.crawler_timing import time_crawler
 
 from .findings import (
     IMAGE_AUDIT_RECORD_CONVERTERS,
@@ -76,6 +83,7 @@ from .findings import (
     _section_headings_to_findings,
 )
 from .stage_events import (
+    _record_crawler_time,
     _stage_complete,
     _stage_error_and_warn,
     _stage_start,
@@ -83,15 +91,113 @@ from .stage_events import (
 )
 from .store import _jobs
 from ka11y.crawler.universal_page import UniversalPageLoader
+from ka11y.utils import stage_timing
+
+
+async def _run_pipeline_stage(
+    url: str,
+    job_id: str,
+    run_image_audit: bool,
+    run_label_in_name_audit: bool,
+    run_target_size_audit: bool = True,
+    run_focus_audit: bool = True,
+    run_contrast_audit: bool = True,
+    lang: str = "en",
+    snapshot: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
+    """Wrapper to record stage lifecycle and crawler time for the pipeline."""
+    _stage_start(job_id, "pipeline")
+    start_crawl: Optional[float] = None
+    if snapshot:
+        # Snapshot path: pipeline reuses the universal crawler's pass, so we
+        # report that same duration here rather than re-timing CPU work.
+        crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+        if crawl_dur:
+            _record_crawler_time(job_id, "pipeline", crawl_dur)
+    else:
+        # Single-URL fallback: ``_real_run_pipeline_stage`` opens its own page
+        # via ``_extract_contexts_for_url``. Time the call so the timing log
+        # shows the real browser work instead of an empty cell.
+        start_crawl = time.perf_counter()
+
+    try:
+        findings = await _real_run_pipeline_stage(
+            url=url,
+            job_id=job_id,
+            run_image_audit=run_image_audit,
+            run_label_in_name_audit=run_label_in_name_audit,
+            run_target_size_audit=run_target_size_audit,
+            run_focus_audit=run_focus_audit,
+            run_contrast_audit=run_contrast_audit,
+            lang=lang,
+            snapshot=snapshot,
+        )
+        if start_crawl is not None:
+            _record_crawler_time(job_id, "pipeline", time.perf_counter() - start_crawl)
+        _stage_complete(job_id, "pipeline", len(findings))
+        return findings
+    except Exception as e:
+        if start_crawl is not None:
+            _record_crawler_time(job_id, "pipeline", time.perf_counter() - start_crawl)
+        _stage_error_and_warn(job_id, "pipeline", e)
+        return []
 
 # Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
-_STAGE_TIMEOUT_SECONDS = 600
+_STAGE_TIMEOUT_SECONDS = 1200
 # Maximum seconds for the crawler pass only.  OCR always runs on whatever
 # images were saved before this deadline, so a slow/stuck target never
 # prevents contrast analysis from completing.
 # Button/icon screenshots are now capped at 5 s each (crawler.py), so 300 s
 # handles up to ~60 stuck elements before we cut over to OCR on partial images.
 _CRAWL_TIMEOUT_SECONDS = 300
+
+# How long Node (``_call_node_flat``) waits for the Python snapshot to publish
+# its discovered-URL list before giving up. The Python snapshot task ALWAYS
+# sets the coordination event in its ``finally`` (success or failure), so this
+# wait normally resolves the instant the snapshot finishes — its only job is to
+# outlast a legitimately slow snapshot. The old 90 s default was ~6× too short
+# for heavy sites (a kao.com/jp snapshot took 561 s), so the wait expired, Node
+# fell back to its independent BFS, hit the 255 s ``flatCrawlBudgetMs`` cliff,
+# and audited only 7 of 50 pages — silently dropping axe coverage on 43 pages.
+# Bounded by the snapshot stage's own budget; the outer ``_JOB_TIMEOUT_SECONDS``
+# (1800 s) remains the real backstop against a hung Python task.
+_SNAPSHOT_URLS_WAIT_SECONDS = float(
+    os.environ.get("KA11Y_SNAPSHOT_URLS_WAIT_SECONDS", str(_STAGE_TIMEOUT_SECONDS))
+)
+
+# Process-wide queue for browser-heavy crawler stages. ``image_audit`` and
+# ``rendered_layout_audit`` each open their own Playwright contexts + image
+# buffers; with _MAX_CONCURRENT_JOBS=4 an unguarded depth>0 audit can spawn
+# 8 simultaneous BFS crawls and OOM-kill the container. The semaphore is
+# global (not per-job) so the surplus parks until a slot frees, regardless
+# of which job they belong to. Queue wait does NOT count against the stage
+# timeout — ``_heavy`` arms ``asyncio.wait_for`` only after acquiring the
+# slot, so a parked stage isn't killed for waiting its turn.
+_HEAVY_STAGE_CONCURRENCY = int(os.environ.get("KA11Y_HEAVY_STAGE_CONCURRENCY", "2"))
+_heavy_stage_sem: asyncio.Semaphore | None = None
+_heavy_stage_sem_loop: Any = None
+
+
+def _get_heavy_stage_sem() -> asyncio.Semaphore:
+    """Lazy per-event-loop semaphore so module import never touches the loop."""
+    global _heavy_stage_sem, _heavy_stage_sem_loop
+    current = asyncio.get_event_loop()
+    if _heavy_stage_sem is None or _heavy_stage_sem_loop is not current:
+        _heavy_stage_sem = asyncio.Semaphore(_HEAVY_STAGE_CONCURRENCY)
+        _heavy_stage_sem_loop = current
+    return _heavy_stage_sem
+
+
+async def _heavy(coro, *, timeout: float = _STAGE_TIMEOUT_SECONDS):
+    """Run ``coro`` while holding the global heavy-stage slot.
+
+    Replaces ``_timed`` for browser-heavy stages: the per-stage deadline is
+    armed *after* the semaphore is acquired so a stage queued behind another
+    heavy stage isn't penalised for the wait.
+    """
+    async with _get_heavy_stage_sem():
+        return await asyncio.wait_for(coro, timeout=timeout)
+
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -173,8 +279,11 @@ async def _call_node_flat(
     internal_links: bool = True,
     max_pages: int = 50,
     success_criteria_id: Optional[str] = None,
-    run_axe: bool = True,
-    run_accesslint: bool = True,
+    job_id: Optional[str] = None,
+    discovered_urls: Optional[List[str]] = None,
+    snapshot_urls_event: Optional[asyncio.Event] = None,
+    snapshot_urls_container: Optional[Dict[str, Any]] = None,
+    snapshot_wait_timeout: float = _SNAPSHOT_URLS_WAIT_SECONDS,
 ) -> List[Dict]:
     """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings.
 
@@ -183,8 +292,54 @@ async def _call_node_flat(
     the root URL, so max_depth had no effect on the axe-core side).
     ``success_criteria_id`` lets Node run only the axe rules + custom checks for a
     single WCAG SC, so a per-rule audit doesn't pay for the full rule set.
+
+    ``job_id`` (when supplied) is forwarded to Node which collects per-page
+    timing rows and returns them in the response. Each row is then mirrored
+    into the same ``logs/timings/<job_id>.jsonl`` file the Python stages write
+    to, so the per-(page, stage) summary covers both engines.
     """
     endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
+
+    # R-1: prefer snapshot-fed mode. If the caller passed a coordination event,
+    # the Python snapshot task fills ``snapshot_urls_container["urls"]`` and
+    # signals the event when the snapshot finishes — and it ALWAYS signals, even
+    # on snapshot failure, via a ``finally`` in ``_run_python_stages``. So this
+    # wait normally resolves the moment the snapshot completes; the timeout only
+    # guards against a Python task that never signals at all (hard crash). On
+    # ``max_depth > 0`` the snapshot is the source of truth: falling back to
+    # Node's independent BFS re-introduces the 255 s ``flatCrawlBudgetMs`` cliff
+    # that silently drops axe coverage on every page past the budget, so we log
+    # the degradation at ERROR rather than letting it pass quietly.
+    if snapshot_urls_event is not None and snapshot_urls_container is not None and not discovered_urls:
+        try:
+            await asyncio.wait_for(
+                snapshot_urls_event.wait(), timeout=snapshot_wait_timeout
+            )
+            urls = snapshot_urls_container.get("urls") or []
+            # Drop the entry URL when it's the only thing the snapshot found
+            # — that's the "no snapshot needed" sentinel and Node already
+            # audits it through its own single-page path.
+            if urls and not (len(urls) == 1 and urls[0] == url):
+                discovered_urls = list(urls)
+        except asyncio.TimeoutError:
+            logger.error(
+                f"[combined] axe_core: snapshot URL wait timed out after "
+                f"{snapshot_wait_timeout}s at max_depth={max_depth} — Node will "
+                f"fall back to independent BFS, which is capped by "
+                f"flatCrawlBudgetMs and will likely UNDER-AUDIT deep pages. "
+                f"Raise KA11Y_SNAPSHOT_URLS_WAIT_SECONDS if the snapshot is "
+                f"legitimately slow on this site."
+            )
+    if max_depth > 0 and not discovered_urls:
+        # Snapshot produced no usable URL list for a multi-page crawl. Node's
+        # BFS would clip on heavy sites, so make the under-coverage explicit in
+        # the logs (the run still proceeds — partial axe coverage beats none).
+        logger.error(
+            f"[combined] axe_core: no snapshot URLs available at "
+            f"max_depth={max_depth} for {url}; Node falls back to its "
+            f"budget-capped BFS and may under-audit deep pages."
+        )
+
     payload_json: Dict[str, Any] = {
         "url": url,
         "level": wcag_level,
@@ -192,17 +347,29 @@ async def _call_node_flat(
         "maxDepth": max_depth,
         "internalLinks": internal_links,
         "maxPages": max_pages,
-        "run_axe": run_axe,
-        "run_accesslint": run_accesslint,
     }
     if success_criteria_id:
         payload_json["successCriteriaId"] = success_criteria_id
+    if job_id:
+        payload_json["jobId"] = job_id
+    if discovered_urls:
+        # R-1: when Python's snapshot has already enumerated the pages, send
+        # the full list so Node skips its own BFS (which was capped by
+        # flatCrawlBudgetMs=255s and was the source of the kao.com 3-page
+        # truncation that left a2 unaudited by axe).
+        payload_json["discoveredUrls"] = discovered_urls
     try:
         # 300s timeout to allow for heavy custom checks on complex pages
         async with httpx.AsyncClient(timeout=300.0) as client:
             resp = await client.post(endpoint, json=payload_json)
             resp.raise_for_status()
-            return resp.json().get("findings", [])
+            body = resp.json()
+            # Mirror Node-side per-page timing rows into our shared JSONL so
+            # the run summary attributes time to both engines. Failure here
+            # never breaks the audit — the findings already returned cleanly.
+            if job_id:
+                _mirror_node_timings(job_id, body.get("timings") or [])
+            return body.get("findings", [])
     except httpx.ConnectError:
         raise RuntimeError(f"axe_core: Node engine unreachable at {node_base_url}")
     except httpx.TimeoutException:
@@ -213,6 +380,32 @@ async def _call_node_flat(
         raise RuntimeError(f"axe_core: Node engine returned {e.response.status_code}")
     except Exception as e:
         raise RuntimeError(f"axe_core: unexpected error calling Node: {e}")
+
+
+def _mirror_node_timings(job_id: str, rows: List[Dict[str, Any]]) -> None:
+    """Append Node-engine timing rows to the shared JSONL via stage_timing.
+
+    Row shape from Node mirrors the Python schema (`stage`, `sub_stage`,
+    `page_url`, `depth`, `rule`, `duration_ms`, `item_count`, `status`,
+    `error`, `extra`). Anything malformed is skipped silently.
+    """
+    for row in rows:
+        try:
+            stage_timing.record(
+                job_id,
+                stage=str(row.get("stage") or "axe_core"),
+                duration_ms=float(row.get("duration_ms") or 0.0),
+                status=str(row.get("status") or "ok"),
+                page_url=row.get("page_url"),
+                depth=row.get("depth"),
+                sub_stage=row.get("sub_stage"),
+                rule=row.get("rule"),
+                item_count=row.get("item_count"),
+                error=row.get("error"),
+                extra={**(row.get("extra") or {}), "source": "node"},
+            )
+        except Exception:  # noqa: BLE001 — never let mirroring break a run
+            continue
 
 
 # ── Individual stage coroutines ───────────────────────────────────────────────
@@ -255,10 +448,17 @@ async def _stage_image_audit(
             max_depth=max_depth,
             max_pages=max_pages,
             internal_links=internal_links,
+            job_id=job_id,
         )
 
         async def _crawl_and_save() -> None:
-            await image_crawler.crawl_page(discovered_urls=discovered_urls)
+            start_crawl = time.perf_counter()
+            async with time_crawler(
+                output_dir, "image", url,
+                pages_getter=lambda: len(image_crawler.images_data),
+            ):
+                await image_crawler.crawl_page(discovered_urls=discovered_urls)
+            _record_crawler_time(job_id, "image_audit", time.perf_counter() - start_crawl)
             await asyncio.to_thread(image_crawler.save_results)
 
         try:
@@ -320,7 +520,13 @@ async def _stage_image_audit(
                 total=len(ocr_paths),
                 phase="ocr",
             )
-            await asyncio.to_thread(detector.scan_directory)
+            async with stage_timing.time_stage_async(
+                job_id,
+                "image_audit",
+                sub_stage="ocr_scan",
+                extra={"image_count": len(ocr_paths)},
+            ):
+                await asyncio.to_thread(detector.scan_directory)
             emit_stage_progress(
                 job_id,
                 "image_audit",
@@ -331,12 +537,38 @@ async def _stage_image_audit(
 
             saver = TextClassification(source_directory=image_crawler.output_dir)
             saver.results = detector.results
-            await asyncio.to_thread(saver.save_reports)
+            async with stage_timing.time_stage_async(
+                job_id,
+                "image_audit",
+                sub_stage="ocr_save_reports",
+            ):
+                await asyncio.to_thread(saver.save_reports)
 
             ocr_results = detector.results
-            contrast_report = _build_contrast_report(ocr_results)
-            for _, converter in OCR_RESULT_CONVERTERS:
-                findings.extend(converter(ocr_results, url))
+            # filename → source page URL, so the contrast report can be grouped
+            # per page in the image visualiser on multi-page crawls.
+            page_by_filename: Dict[str, str] = {}
+            for _img in image_crawler.images_data:
+                _fn = getattr(_img, "filename", None)
+                _pg = getattr(_img, "url", None)
+                if _fn and _pg:
+                    page_by_filename[_fn] = _pg
+            contrast_report = _build_contrast_report(ocr_results, page_by_filename)
+            # D-1 fix: thread page_by_filename through so contrast findings (1.4.3,
+            # 1.4.6) are stamped with the page the image actually came from, not
+            # the root URL. Without this, every contrast finding on a multi-page
+            # crawl collapses to the root URL and child pages silently lose them.
+            for rule_sc, converter in OCR_RESULT_CONVERTERS:
+                with stage_timing.time_stage(
+                    job_id,
+                    "image_audit",
+                    sub_stage="ocr_converter",
+                    rule=rule_sc,
+                    extra={"input_count": len(ocr_results)},
+                ):
+                    findings.extend(
+                        converter(ocr_results, url, page_by_filename=page_by_filename)
+                    )
             # 1.4.3/1.4.6 needs_review for images that failed screenshot capture
             findings.extend(
                 _contrast_capture_failed_to_findings(image_crawler.images_data, url)
@@ -365,8 +597,21 @@ async def _stage_image_audit(
                 phase="alt_audit",
             )
             image_audit_report = _build_image_audit_report(records)
-            for _, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
-                findings.extend(converter(records, url))
+            for status_key, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
+                # Strip the wcag_X_Y_Z_status prefix → "X.Y.Z" for the rule field.
+                _rule = (
+                    status_key.replace("wcag_", "")
+                    .replace("_status", "")
+                    .replace("_", ".")
+                )
+                with stage_timing.time_stage(
+                    job_id,
+                    "image_audit",
+                    sub_stage="image_audit_converter",
+                    rule=_rule,
+                    extra={"input_count": len(records)},
+                ):
+                    findings.extend(converter(records, url))
         else:
             records = []
 
@@ -429,7 +674,12 @@ async def _stage_form_audit(
         form_crawler = AsyncFormCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        form_inputs = await form_crawler.crawl()
+        start_crawl = time.perf_counter()
+        async with time_crawler(
+            output_dir, "form", url, pages_getter=lambda: len(form_inputs or [])
+        ):
+            form_inputs = await form_crawler.crawl()
+        _record_crawler_time(job_id, "form_audit", time.perf_counter() - start_crawl)
         await asyncio.to_thread(form_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -489,7 +739,12 @@ async def _stage_sensory_audit(
             output_dir=str(output_dir),
             max_depth=max_depth,
         )
-        elements = await sensory_crawler.crawl()
+        start_crawl = time.perf_counter()
+        async with time_crawler(
+            output_dir, "sensory", url, pages_getter=lambda: len(elements or [])
+        ):
+            elements = await sensory_crawler.crawl()
+        _record_crawler_time(job_id, "sensory_audit", time.perf_counter() - start_crawl)
         await asyncio.to_thread(sensory_crawler.save_raw_json)
 
         # ── Audit ──────────────────────────────────────────────────────────
@@ -534,7 +789,13 @@ async def _stage_label_in_name(
         interactive_crawler = InteractiveElementCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        interactive_elements = await interactive_crawler.crawl()
+        start_crawl = time.perf_counter()
+        async with time_crawler(
+            output_dir, "interactive", url,
+            pages_getter=lambda: len(interactive_elements or []),
+        ):
+            interactive_elements = await interactive_crawler.crawl()
+        _record_crawler_time(job_id, "label_in_name", time.perf_counter() - start_crawl)
         await asyncio.to_thread(interactive_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -574,7 +835,13 @@ async def _stage_pause_stop_hide(
         moving_crawler = MovingContentCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        moving_items = await moving_crawler.crawl()
+        start_crawl = time.perf_counter()
+        async with time_crawler(
+            output_dir, "pause_stop_hide", url,
+            pages_getter=lambda: len(moving_items or []),
+        ):
+            moving_items = await moving_crawler.crawl()
+        _record_crawler_time(job_id, "pause_stop_hide", time.perf_counter() - start_crawl)
         await asyncio.to_thread(moving_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -614,7 +881,12 @@ async def _stage_target_size(
         ts_crawler = TargetSizeCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        ts_items = await ts_crawler.crawl()
+        start_crawl = time.perf_counter()
+        async with time_crawler(
+            output_dir, "target_size", url, pages_getter=lambda: len(ts_items or [])
+        ):
+            ts_items = await ts_crawler.crawl()
+        _record_crawler_time(job_id, "target_size", time.perf_counter() - start_crawl)
         await asyncio.to_thread(ts_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -654,7 +926,12 @@ async def _stage_text_spacing(
         ts_crawler = AsyncTextSpacingCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        items = await ts_crawler.crawl()
+        start_crawl = time.perf_counter()
+        async with time_crawler(
+            output_dir, "text_spacing", url, pages_getter=lambda: len(items or [])
+        ):
+            items = await ts_crawler.crawl()
+        _record_crawler_time(job_id, "text_spacing", time.perf_counter() - start_crawl)
         await asyncio.to_thread(ts_crawler.save_json)
 
         findings: List[Dict] = []
@@ -710,7 +987,13 @@ async def _stage_rendered_layout_audit(
         )
 
         crawler = RenderedLayoutCrawler(base_url=url, output_dir=str(output_dir))
-        raw = await crawler.crawl(discovered_urls=discovered_urls)
+        start_crawl = time.perf_counter()
+        async with time_crawler(
+            output_dir, "rendered_layout", url,
+            pages_getter=lambda: len(discovered_urls or []),
+        ):
+            raw = await crawler.crawl(discovered_urls=discovered_urls)
+        _record_crawler_time(job_id, "rendered_layout_audit", time.perf_counter() - start_crawl)
         await asyncio.to_thread(crawler.save_raw_json)
 
         records = await asyncio.to_thread(
@@ -796,7 +1079,12 @@ async def _stage_media_audit(
         media_crawler = AsyncMediaCrawler(
             base_url=url, output_dir=str(output_dir), max_depth=max_depth
         )
-        media_items = await media_crawler.crawl()
+        start_crawl = time.perf_counter()
+        async with time_crawler(
+            output_dir, "media", url, pages_getter=lambda: len(media_items or [])
+        ):
+            media_items = await media_crawler.crawl()
+        _record_crawler_time(job_id, "media_audit", time.perf_counter() - start_crawl)
         await asyncio.to_thread(media_crawler.save_raw_json)
 
         findings: List[Dict] = []
@@ -840,14 +1128,21 @@ async def _load_universal_snapshot(
     # UniversalPageLoader is imported at module level so tests can patch
     # `stages.UniversalPageLoader`; the call site below resolves it from the
     # module namespace.
-    raw_snapshot = await UniversalPageLoader.load(
-        url=url,
-        output_dir=output_dir,
-        max_depth=max_depth,
-        record_har=False,
-        step_logger=step_logger,
-        policy=policy,
-    )
+    start_crawl = time.perf_counter()
+    async with time_crawler(
+        output_dir, "universal_snapshot", url,
+        pages_getter=lambda: len(getattr(raw_snapshot, "page_summaries", []) or []),
+    ):
+        raw_snapshot = await UniversalPageLoader.load(
+            url=url,
+            output_dir=output_dir,
+            max_depth=max_depth,
+            record_har=False,
+            step_logger=step_logger,
+            policy=policy,
+        )
+    crawl_dur = time.perf_counter() - start_crawl
+    _jobs[job_id]["universal_crawler_duration_s"] = round(crawl_dur, 2)
     await asyncio.to_thread(UniversalPageLoader.save_snapshot, raw_snapshot, output_dir)
     normalized = await asyncio.to_thread(
         SnapshotNormalizer.normalize,
@@ -902,6 +1197,10 @@ async def _stage_form_audit_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "form_audit")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "form_audit", crawl_dur)
+
     if not run_form_audit:
         _stage_complete(job_id, "form_audit", 0)
         return []
@@ -942,6 +1241,10 @@ async def _stage_label_in_name_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "label_in_name")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "label_in_name", crawl_dur)
+
     if not run_label_in_name_audit:
         _stage_complete(job_id, "label_in_name", 0)
         return []
@@ -980,6 +1283,10 @@ async def _stage_pause_stop_hide_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "pause_stop_hide")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "pause_stop_hide", crawl_dur)
+
     if not run_pause_stop_hide_audit:
         _stage_complete(job_id, "pause_stop_hide", 0)
         return []
@@ -1023,6 +1330,10 @@ async def _stage_target_size_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "target_size")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "target_size", crawl_dur)
+
     if not run_target_size_audit:
         _stage_complete(job_id, "target_size", 0)
         return []
@@ -1061,6 +1372,10 @@ async def _stage_text_spacing_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "text_spacing")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "text_spacing", crawl_dur)
+
     if not run_text_spacing_audit:
         _stage_complete(job_id, "text_spacing", 0)
         return []
@@ -1101,6 +1416,10 @@ async def _stage_media_audit_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "media_audit")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "media_audit", crawl_dur)
+
     if not run_media_audit and not run_captions_audit:
         _stage_complete(job_id, "media_audit", 0)
         return []
@@ -1141,6 +1460,10 @@ async def _stage_sensory_audit_universal(
     step_logger: ExecutionStepLogger | None = None,
 ) -> List[Dict]:
     _stage_start(job_id, "sensory_audit")
+    crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
+    if crawl_dur:
+        _record_crawler_time(job_id, "sensory_audit", crawl_dur)
+
     if not run_sensory_audit:
         _stage_complete(job_id, "sensory_audit", 0)
         return []
@@ -1304,12 +1627,20 @@ async def _run_python_stages(
     run_consistent_id_audit: bool = False,
     run_unusual_words_audit: bool = False,
     run_section_headings_audit: bool = False,
+    snapshot_urls_event: Optional[asyncio.Event] = None,
+    snapshot_urls_container: Optional[Dict[str, Any]] = None,
 ) -> PythonStagesResult:
     """
     Run all Python audit stages concurrently.
 
     Returns a :class:`PythonStagesResult` with named ``findings``,
     ``contrast_report``, and ``image_audit_report`` fields.
+
+    ``snapshot_urls_event`` / ``snapshot_urls_container`` (R-1) let a sibling
+    Node task wait for the universal snapshot's discovered URL list before
+    starting its own crawl. We always signal the event before returning so a
+    crash here cannot strand Node — see the ``finally`` block at the bottom
+    of this function.
     """
 
     def _timed(coro):
@@ -1344,22 +1675,44 @@ async def _run_python_stages(
         )
     )
 
-    # 1. Run universal snapshot first
+    # 1. Run universal snapshot first.
+    #
+    # The snapshot now ALSO carries per-page pipeline contexts, so building it
+    # at ``max_depth > 0`` is the only way the unified pipeline (1.1.1, 1.4.3,
+    # 1.4.5, 1.4.6, 1.4.11, 2.4.7, 2.4.13, 2.5.3, 2.5.8) covers more than the
+    # entry URL. Without that, deep pages were silently losing every pipeline
+    # finding even though the BFS visited them. The image-only ``max_depth=0``
+    # path remains snapshot-free (the pipeline falls back to its single-URL
+    # navigation, which preserves the previous behaviour for that case).
     snapshot = None
     discovered_urls = [url]
-    if static_rules_enabled or (rendered_layout_enabled and max_depth > 0):
-        snapshot = await _load_universal_snapshot(
-            url=url,
-            output_dir=output_dir,
-            max_depth=max_depth,
-            job_id=job_id,
-            step_logger=step_logger,
-            internal_links=internal_links,
-            max_pages=max_pages,
-        )
-        discovered_urls = [s["page_url"] for s in snapshot.page_summaries]
-        if not discovered_urls:
-            discovered_urls = [url]
+    try:
+        if (
+            static_rules_enabled
+            or (rendered_layout_enabled and max_depth > 0)
+            or max_depth > 0
+        ):
+            snapshot = await _load_universal_snapshot(
+                url=url,
+                output_dir=output_dir,
+                max_depth=max_depth,
+                job_id=job_id,
+                step_logger=step_logger,
+                internal_links=internal_links,
+                max_pages=max_pages,
+            )
+            discovered_urls = [s["page_url"] for s in snapshot.page_summaries]
+            if not discovered_urls:
+                discovered_urls = [url]
+    finally:
+        # R-1: always release the sibling Node task waiting on the snapshot,
+        # even if the snapshot load raised. Without this `finally` an
+        # exception here would leave Node blocked on `Event.wait()` until the
+        # _SNAPSHOT_URLS_WAIT_SECONDS fallback timeout, doubling failure latency.
+        if snapshot_urls_container is not None:
+            snapshot_urls_container["urls"] = list(discovered_urls)
+        if snapshot_urls_event is not None and not snapshot_urls_event.is_set():
+            snapshot_urls_event.set()
 
     snapshot_task = asyncio.Future()
     if snapshot:
@@ -1368,7 +1721,7 @@ async def _run_python_stages(
         snapshot_task.set_result(None)
 
     results = await asyncio.gather(
-        _timed(
+        _heavy(
             _stage_image_audit(
                 url,
                 output_dir,
@@ -1388,7 +1741,9 @@ async def _run_python_stages(
                 url, output_dir, run_form_audit, job_id, snapshot_task, step_logger
             )
         ),
-        # MUTED: _stage_label_in_name_universal is replaced by Pipeline 2.5.3
+        # MUTED: _stage_label_in_name_universal is replaced by Pipeline 2.5.3.
+        # Snapshot is passed so the pipeline evaluates every BFS-discovered page,
+        # not just the entry URL; with no snapshot it falls back to single-URL mode.
         _timed(
             _run_pipeline_stage(
                 url,
@@ -1397,6 +1752,7 @@ async def _run_python_stages(
                 run_label_in_name_audit=run_label_in_name_audit,
                 run_target_size_audit=run_target_size_audit,
                 lang=lang,
+                snapshot=snapshot,
             )
         ),
         _timed(
@@ -1425,7 +1781,7 @@ async def _run_python_stages(
                 step_logger,
             )
         ),
-        _timed(
+        _heavy(
             _stage_rendered_layout_audit(
                 url,
                 output_dir,

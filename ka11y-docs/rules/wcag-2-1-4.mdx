@@ -1,0 +1,63 @@
+---
+title: "2.1.4 Character Key Shortcuts"
+description: "WCAG 2.1.4 — character key shortcuts can be remapped, turned off, or require modifiers"
+---
+
+<Info>
+  **Level A** · **Engine:** `character-key-shortcuts.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 2.1.4 requires that if a keyboard shortcut is implemented in content using only letter (including upper- and lower-case letters), punctuation, number, or symbol characters, then at least one of the following is true:
+
+1.  **Turn off**: A mechanism is available to turn the shortcut off.
+2.  **Remap**: A mechanism is available to remap the shortcut to include one or more non-printable keyboard characters (e.g., Ctrl, Alt).
+3.  **Active only on focus**: The keyboard shortcut for a user interface component is only active when that component has focus.
+
+## How it works
+
+The Node engine scans the DOM and script content for potential single-character shortcut definitions:
+
+1.  **Accesskey Audit**: Scans for the `accesskey` attribute on any element. If the value is a single character (letter or symbol), it is flagged.
+2.  **Inline Handler Scan**: Searches for `onkeydown`, `onkeypress`, and `onkeyup` attributes. It parses the handler text to see if it listens for specific keys without checking for modifier keys (`ctrlKey`, `altKey`, `metaKey`, `shiftKey`).
+3.  **Script Pattern Matching**: Scans inline `<script>` tags for common keyboard listener patterns (e.g., `addEventListener('keydown', ...)`) and checks if they are guarded by modifier requirements.
+
+## Status Semantics
+
+*   **FAIL**: Clear evidence of a single-character shortcut that cannot be disabled or remapped.
+*   **INCOMPLETE**: Heuristic matches in script content that require manual review to confirm if they represent a global shortcut.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Unguarded hotkey | A site where pressing `S` automatically focuses the search bar, with no way to disable this behavior. |
+| Single-char accesskey | `<button accesskey="p">Print</button>` |
+
+## Suggested fix
+
+Require a modifier key for all global shortcuts, or provide a settings menu to disable/remap them.
+
+```javascript
+// FAILED - Single character 's' triggers search
+document.addEventListener('keydown', (e) => {
+  if (e.key === 's') {
+    focusSearch();
+  }
+});
+
+// PASSED - Modifier key required
+document.addEventListener('keydown', (e) => {
+  if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+    focusSearch();
+  }
+});
+```
+
+## Known limitations
+
+*   **Bundled JavaScript**: Shortcuts defined within large, external bundled script files (common in modern frameworks) may evade the static snippet scanner.
+*   **Mechanism Detection**: The auditor cannot automatically detect if a "Turn off" or "Remap" setting exists elsewhere on the site (e.g., in a user profile page).
+
+See [Technique coverage for 2.1.4](/rules/coverage-matrix#2-1-4-character-key-shortcuts).

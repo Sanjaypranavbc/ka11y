@@ -1,0 +1,61 @@
+---
+title: "3.1.6 Pronunciation"
+description: "WCAG 3.1.6 — pronunciation of words is available when meaning depends on it"
+---
+
+<Info>
+  **Level AAA** · **Engine:** `pronunciation.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 3.1.6 requires that a mechanism is available for identifying the specific pronunciation of words where meaning of the words, in context, is ambiguous without knowing the pronunciation.
+
+This is especially critical for **CJK (Chinese, Japanese, Korean)** languages where the same character (Kanji/Hanzi) can have multiple pronunciations with vastly different meanings.
+
+## How it works
+
+The Node engine performs a language-aware scan of the page:
+
+1.  **CJK Language Detection**: Detects CJK languages via the `lang` attribute or a 5% CJK character density heuristic.
+2.  **Ruby Element Counting**: Counts the number of `<ruby>` elements on the page.
+3.  **Kanji Identification**: Walks the DOM text nodes to identify Kanji characters outside of `<ruby>` tags.
+4.  **Coverage Calculation**: Computes the ratio of annotated Kanji to total Kanji.
+5.  **Glossary Detection**: Searches for links to glossaries or pronunciation guides.
+
+## Status Semantics
+
+*   **PASS**: High CJK character density with significant `<ruby>` coverage (≥ 30%).
+*   **FAIL**: A CJK-heavy page with zero `<ruby>` annotations.
+*   **INCOMPLETE**: Low ruby annotation coverage that may require manual confirmation of whether the remaining Kanji are ambiguous.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| No Furigana | A Japanese page using complex or rare Kanji with no `<ruby>` annotations for pronunciation. |
+| Mixed context | A page that declares `lang="ja"` but contains many unannotated technical terms that could be mispronounced by a screen reader. |
+
+## Suggested fix
+
+Use the HTML5 `<ruby>` element to provide pronunciation guidance (Furigana) for ambiguous characters.
+
+```html
+<!-- FAILED -->
+<p>今日は良い天気ですね。</p>
+
+<!-- PASSED -->
+<p>
+  <ruby>今日<rt>きょう</ruby>は良い天気ですね。
+</p>
+```
+
+For English content, consider linking to a glossary or providing the pronunciation in parentheses if a word's meaning depends on its sound (e.g., "desert" as in a wasteland vs. "desert" as in to abandon).
+
+## Known limitations
+
+*   **Phonetic Furigana**: Annotations provided via plain text parentheses `( )` instead of the `<ruby>` tag are harder to detect programmatically and may be missed.
+*   **SVG Text**: Kanji characters rendered inside `<svg>` elements are currently not included in the DOM text walk.
+*   **Dynamic Injection**: Ruby annotations injected via JavaScript after the initial page load may not be captured.
+
+See [Technique coverage for 3.1.6](/rules/coverage-matrix#3-1-6-pronunciation).

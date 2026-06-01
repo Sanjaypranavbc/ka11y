@@ -1,0 +1,59 @@
+---
+title: "3.2.6 Consistent Help"
+description: "WCAG 3.2.6 — help mechanisms are located in the same relative order on every page"
+---
+
+<Info>
+  **Level A** · WCAG 2.2 · **Engine:** `consistent-help.check.js` (Node) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 3.2.6 requires that if a Web page contains any of the following help mechanisms, and those mechanisms are repeated on multiple Web pages within a set of Web pages, they occur in the same relative order to other page content:
+*   Human contact information
+*   A self-service option
+*   A fully automated contact mechanism
+
+## How it works
+
+The Node engine scans the page for common help and support signals:
+
+1.  **Help Link Discovery**: Searches for links (`a`, `button`) with multi-language keywords like "help", "support", "faq", "contact", "ヘルプ", "助け".
+2.  **Contact Mechanism Detection**: Identifies phone and email links (`tel:`, `mailto:`) and chat widgets (e.g., Intercom, Drift, Crisp).
+3.  **Location Classification**: Tracks the location of detected mechanisms (header, footer, nav, or body).
+4.  **Relative Order Tracking**: Records the relative position of multiple help mechanisms found on the same page.
+
+## Status Semantics
+
+*   **PASS**: At least one help mechanism is found and its location is consistent with common patterns.
+*   **INCOMPLETE**: No help mechanism is found, or its location requires manual verification. Since consistency is a multi-page property, a single page result is advisory.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Inconsistent location | A "Help" link that appears in the top-right header on the home page but moves to the footer on a sub-page. |
+| Missing help | A complex dashboard with no visible link to support or FAQs. |
+
+## Suggested fix
+
+Ensure that help mechanisms are available in a predictable, global location like the **Site Header** or **Global Footer**.
+
+```html
+<!-- Recommended: Global Footer Support -->
+<footer>
+  <nav aria-label="Support">
+    <ul>
+      <li><a href="/help">Help Center</a></li>
+      <li><a href="/contact">Contact Us</a></li>
+    </ul>
+  </nav>
+</footer>
+```
+
+## Known limitations
+
+*   **Single-Page Scope**: The auditor cannot confirm "consistency" across a whole site in a single-page audit.
+*   **Contextual Help**: Help mechanisms that only appear in specific contexts (e.g., a "Need help?" button only on a checkout form) are harder to audit for global consistency.
+
+See [Technique coverage for 3.2.6](/rules/coverage-matrix#3-2-6-consistent-help).

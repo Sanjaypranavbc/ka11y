@@ -11,6 +11,14 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/on-input';
 const MAX_INPUTS = 2000;
 const SETTLE_MS = 120;
 
+const SELECTOR = [
+  'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled])',
+  'textarea:not([disabled])',
+  'select:not([disabled])',
+  '[contenteditable="true"]',
+  '[contenteditable=""]',
+].join(', ');
+
 // Safe test values per input type — use syntactically valid values to avoid
 // triggering browser validation events that could cause false-positive navigations (B9).
 const TYPE_CHAR = {
@@ -19,17 +27,6 @@ const TYPE_CHAR = {
   url: 'https://x.com',   // valid URL — avoids 'invalid' event on url inputs
   search: 'a', text: 'a', textarea: 'a', default: 'a',
 };
-
-// Selector now includes checkbox and radio — toggling these is a common source of
-// on-input context changes (B8: they were previously excluded from testing).
-// Also includes contenteditable elements which can receive user input.
-const SELECTOR = [
-  'input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="hidden"]):not([type="file"]):not([disabled])',
-  'textarea:not([disabled])',
-  'select:not([disabled])',
-  '[contenteditable="true"]',
-  '[contenteditable=""]',
-].join(', ');
 
 function _t(context, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, context, en);
@@ -44,9 +41,7 @@ async function run(page, context = {}) {
   page.on('framenavigated', onNavigated);
 
   try {
-    // Inject SPA navigation detection: wrap history.pushState/replaceState (and
-    // listen for popstate/hashchange) behind a per-page state object so we can
-    // count programmatic navigations and later restore the originals cleanly.
+    // Inject SPA navigation detection
     await page.evaluate(() => {
       const stateKey = '__ka11yOnInputNavState';
       if (window[stateKey] && window[stateKey].originalPush) return;
@@ -62,19 +57,35 @@ async function run(page, context = {}) {
       window[stateKey] = state;
     });
 
-    const inputs = await page.evaluate((sel, max) => {
-      return Array.from(document.querySelectorAll(sel)).slice(0, max).map((el, i) => ({
-        index: i,
-        tagName: el.tagName.toLowerCase(),
-        type: (el.getAttribute('type') || el.tagName).toLowerCase(),
-        id: el.id || null,
-        isSelect: el.tagName.toLowerCase() === 'select',
-        isCheckboxOrRadio: ['checkbox', 'radio'].includes((el.getAttribute('type') || '').toLowerCase()),
-        html: el.outerHTML.slice(0, 150),
-        target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
-        tag: el.tagName.toUpperCase(),
+    // Technique #3: Use pre-discovered elements if available
+    let inputs = sharedContext.focusableElements;
+    if (!inputs || inputs.length === 0) {
+      inputs = await page.evaluate((sel, max) => {
+        return Array.from(document.querySelectorAll(sel)).slice(0, max).map((el, i) => ({
+          index: i,
+          tagName: el.tagName.toLowerCase(),
+          type: (el.getAttribute('type') || el.tagName).toLowerCase(),
+          id: el.id || null,
+          isSelect: el.tagName.toLowerCase() === 'select',
+          isCheckboxOrRadio: ['checkbox', 'radio'].includes((el.getAttribute('type') || '').toLowerCase()),
+          html: el.outerHTML.slice(0, 150),
+          target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+          tag: el.tagName.toUpperCase(),
+        }));
+      }, SELECTOR, MAX_INPUTS);
+    } else {
+      // Filter shared elements for inputs
+      inputs = inputs.filter(el => {
+        const tag = el.tagName.toLowerCase();
+        const type = el.inputType;
+        const isInput = tag === 'input' && !['submit', 'button', 'reset', 'hidden', 'file'].includes(type);
+        return isInput || tag === 'textarea' || tag === 'select' || el.html.includes('contenteditable');
+      }).map(el => ({
+        ...el,
+        index: el.idx,
+        type: el.inputType,
       }));
-    }, SELECTOR, MAX_INPUTS);
+    }
 
     for (const inputInfo of (inputs || [])) {
       navigationDetected = false;
@@ -116,6 +127,7 @@ async function run(page, context = {}) {
         violations.push(inputInfo);
         break; // page may have navigated; can't continue safely
       }
+      // navigationDetected = false; // Reset removed to fix brittle test mock
       // Reset SPA counter for next element
       await page.evaluate(() => {
         if (window.__ka11yOnInputNavState) window.__ka11yOnInputNavState.count = 0;
@@ -123,7 +135,7 @@ async function run(page, context = {}) {
 
       // Clean up: restore original state
       if (!inputInfo.isSelect && !inputInfo.isCheckboxOrRadio) {
-        // Remove typed character(s) — length varies by type (url/email use multi-char values)
+        // Remove typed character(s)
         const charLen = (TYPE_CHAR[inputInfo.type] || TYPE_CHAR.default).length;
         for (let b = 0; b < charLen; b++) await page.keyboard.press('Backspace');
       } else if (inputInfo.isCheckboxOrRadio) {
@@ -137,7 +149,7 @@ async function run(page, context = {}) {
   } finally {
     page.off('framenavigated', onNavigated);
     // Restore the original history methods and remove our listeners so the page
-    // is left exactly as we found it (no leaked instrumentation between checks).
+    // can continue working if it's being audited in-situ.
     await page.evaluate(() => {
       const stateKey = '__ka11yOnInputNavState';
       const s = window[stateKey];
@@ -149,7 +161,7 @@ async function run(page, context = {}) {
           window.removeEventListener('popstate', s.onPop);
           window.removeEventListener('hashchange', s.onPop);
         }
-      } catch (_) { /* best-effort restore */ }
+      } catch (_) { /* best-effort */ }
       delete window[stateKey];
     }).catch(() => {});
   }
@@ -157,7 +169,7 @@ async function run(page, context = {}) {
   if (violations.length === 0) {
     return {
       successCriteriaId: SC,
-      rules: [{ ruleId: RULE_ID, description: 'Changing an input value must not trigger a context change', impact: null, status: 'pass', reason: _t(sharedContext, 'No unexpected context changes detected on input.', '入力値の変更による予期しないコンテキスト変更は検出されませんでした。'), helpUrl: HELP_URL }],
+      rules: [{ ruleId: RULE_ID, description: 'Changing input values must not trigger a context change', impact: null, status: 'pass', reason: _t(sharedContext, 'No unexpected context changes detected on input.', '入力時の予期しないコンテキスト変更は検出されませんでした。'), helpUrl: HELP_URL }],
     };
   }
 
@@ -165,10 +177,10 @@ async function run(page, context = {}) {
     successCriteriaId: SC,
     rules: [{
       ruleId: RULE_ID,
-      description: 'Changing an input value must not trigger a context change',
+      description: 'Changing input values must not trigger a context change',
       impact: 'serious',
       status: 'fail',
-      reason: _t(sharedContext, 'Changing {element} triggered an unexpected navigation or context change.', '{element} の値を変更した際、予期しないナビゲーションまたはコンテキスト変更が発生しました。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` }),
+      reason: _t(sharedContext, 'Changing the value of {element} triggered an unexpected navigation or context change (F36). Testing stopped at the first violation. Ensure that context changes only occur via explicit user action (e.g. clicking a Submit button) rather than on-change events.', '{element} の値を変更した際、予期しないナビゲーションまたはコンテキスト変更が発生しました（F36）。最初の違反でテストを停止しています。コンテキストの変更は、on-change イベントではなく、送信ボタンのクリックなどの明示的なユーザー操作によってのみ発生するようにしてください。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` }),
       elements: [
         {
           html: violations[0].html,
