@@ -461,6 +461,12 @@ export function useAudit() {
             run_captions_audit: config.run_captions_audit,
             run_sensory_audit: config.run_sensory_audit,
             run_node_audit: config.run_node_audit,
+            run_axe: config.run_axe,
+            run_accesslint: config.run_accesslint,
+            run_consistent_navigation_audit: config.run_consistent_navigation_audit,
+            run_consistent_id_audit: config.run_consistent_id_audit,
+            run_unusual_words_audit: config.run_unusual_words_audit,
+            run_section_headings_audit: config.run_section_headings_audit,
           }),
         });
 

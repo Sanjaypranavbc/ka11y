@@ -59,6 +59,16 @@ export const translations = {
     "toggle.focusObscured": "Focus Obscured",
     "toggle.focusObscuredPlus": "Focus Obscured+",
     "toggle.runNodeAudit":    "axe-core (Node)",
+    "toggle.runAxe":          "axe-core Engine",
+    "toggle.runAccesslint":   "AccessLint Engine",
+    "toggle.consistentNav":   "Consistent Navigation",
+    "toggle.consistentId":    "Consistent Identification",
+    "toggle.unusualWords":    "Unusual Words",
+    "toggle.sectionHeadings": "Section Headings",
+
+    // ── Engine selection group ────────────────────────────────────────────────
+    "engines.title":           "Audit Engines",
+    "engines.hint":            "Select which analysis engines to run. Both engines provide complementary coverage.",
 
     // ── Advanced checks group ─────────────────────────────────────────────────
     "checks.advanced":        "Advanced checks",
@@ -308,6 +318,16 @@ export const translations = {
     "toggle.focusObscured": "フォーカス隠蔽",
     "toggle.focusObscuredPlus": "フォーカス隠蔽+",
     "toggle.runNodeAudit":    "axe-core (Node)監査",
+    "toggle.runAxe":          "axe-coreエンジン",
+    "toggle.runAccesslint":   "AccessLintエンジン",
+    "toggle.consistentNav":   "一貫したナビゲーション",
+    "toggle.consistentId":    "一貫した識別",
+    "toggle.unusualWords":    "珍しい言葉",
+    "toggle.sectionHeadings": "セクションの見出し",
+
+    // ── Engine selection group ────────────────────────────────────────────────
+    "engines.title":           "監査エンジン",
+    "engines.hint":            "実行する分析エンジンを選択してください。両エンジンは補完的なカバレッジを提供します。",
 
     // ── Advanced checks group ─────────────────────────────────────────────────
     "checks.advanced":        "詳細チェック",
