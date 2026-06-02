@@ -45,6 +45,7 @@ from .stages import (
     _run_python_stages,
 )
 from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
+from ka11y.store import repo
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -201,7 +202,12 @@ async def _run_job_body(
     _jobs[job_id]["status"] = "running"
     # Wall-clock start of real work (before lang detection + stages). Used by
     # the run-timing logger to separate queue wait from execution time.
-    _jobs[job_id]["run_started_at"] = datetime.now(timezone.utc).isoformat()
+    run_started_at = datetime.now(timezone.utc).isoformat()
+    _jobs[job_id]["run_started_at"] = run_started_at
+    # Durable store: mark this run as running with its queue-wait, so a polling
+    # client or the /history endpoint reflects live state even across restarts.
+    await repo.mark_running(job_id, run_started_at, _jobs[job_id].get("submitted_at"))
+    repo.insert_event(job_id, "running", {})
     url = str(payload.url)
 
     # Resolve the effective language once, up front. When the user selects

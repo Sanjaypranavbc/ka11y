@@ -29,9 +29,11 @@ from typing import AsyncGenerator
 
 from ka11y.utils.run_timing import compute_run_timing
 
+from .dispatcher import enqueue
 from .models import CombinedRequest, JobStatusResponse
-from .runner import _run_job
 from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
+from ka11y.store import repo
+from ka11y.store.assets import get_asset
 
 # Private/reserved IP ranges that must never be fetched (SSRF guard for redirects).
 # These CIDR networks cover: loopback, RFC-1918 private, link-local, unique-local
@@ -219,7 +221,7 @@ async def submit_combined_audit(payload: CombinedRequest):
 
     _jobs[job_id] = {
         "job_id": job_id,
-        "status": "pending",
+        "status": "queued",
         "url": url,
         "submitted_at": now,
         "lang": payload.lang,
@@ -233,34 +235,24 @@ async def submit_combined_audit(payload: CombinedRequest):
         "warnings": [],
     }
 
-    asyncio.create_task(_run_job(job_id, payload))
+    # Durable queue (P4): persist a 'queued' run and let the dispatcher execute
+    # it. Falls back to in-process launch if the store/dispatcher is unavailable.
+    await enqueue(job_id, payload)
     from ka11y.config.logger import setup_logger
     logger = setup_logger(name="KAC", tag="combined")
     logger.info(f"[combined] job {job_id} submitted for {url}")
     return _jobs[job_id]
 
 
-@router.get("/{job_id}", response_model=JobStatusResponse)
-async def get_combined_audit(job_id: str):
-    """Poll the status or retrieve the result of a combined audit job."""
-    if job_id not in _jobs:
-        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-    # Snapshot under the per-job lock so a concurrent runner._run_job() update
-    # cannot publish a half-applied state to a polling client. Shallow copy is
-    # sufficient because we only read top-level fields below.
-    async with _get_job_lock(job_id):
-        snapshot = _jobs.get(job_id)
-        if not snapshot:
-            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-        job = dict(snapshot)
-        # `stages` is a list mutated by sync stage_events; snapshot it too.
-        if "stages" in job:
-            job["stages"] = list(job["stages"])
+def _inject_image_urls(job: dict, job_id: str) -> None:
+    """Rewrite on-disk image paths to job-scoped serving URLs for the frontend.
 
-    # Inject image_url into image-backed reports so the frontend can load them.
-    result = job.get("result") or {}
+    Shared by the hot-cache and durable (DB) read paths so both return the same
+    shape regardless of whether the run is still in memory.
+    """
     from urllib.parse import quote
 
+    result = job.get("result") or {}
     for report_key in ("contrast_report", "image_audit_report"):
         report = result.get(report_key) or {}
         for img in report.get("images", []):
@@ -270,8 +262,7 @@ async def get_combined_audit(job_id: str):
                 )
 
     for array_key in ("violations", "needs_review", "passes"):
-        arr = result.get(array_key) or []
-        for finding in arr:
+        for finding in result.get(array_key) or []:
             element = finding.get("element")
             if element and isinstance(element, dict):
                 src = element.get("image_src")
@@ -284,6 +275,97 @@ async def get_combined_audit(job_id: str):
                         f"/api/v1/combined/{job_id}/image?path={quote(src, safe='')}"
                     )
 
+
+@router.get("/history")
+async def list_combined_history(
+    limit: int = 50, offset: int = 0, url: str | None = None, status: str | None = None
+):
+    """Paginated history of past audit runs (durable; survives restart/TTL).
+
+    Reads straight from the ``runs`` table so the list is available even after
+    a run has been evicted from the in-memory hot cache.
+    """
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    try:
+        runs = await repo.list_runs(limit=limit, offset=offset, url=url, status=status)
+    except Exception:
+        raise HTTPException(status_code=503, detail="History store unavailable.")
+    return {"runs": runs, "limit": limit, "offset": offset, "count": len(runs)}
+
+
+async def _job_from_db(job_id: str) -> dict | None:
+    """Reconstruct a JobStatusResponse-shaped dict from the durable store for a
+    run no longer in the in-memory hot cache (restart / TTL eviction)."""
+    run = await repo.get_run(job_id)
+    if not run:
+        return None
+    result = None
+    if run.get("status") == "completed":
+        result = await repo.get_report(job_id)
+    job = {
+        "job_id": job_id,
+        "status": run.get("status", "unknown"),
+        "url": run.get("url", ""),
+        "submitted_at": run.get("submitted_at") or "",
+        "lang": run.get("lang_resolved") or run.get("lang_requested") or "auto",
+        "completed_at": run.get("completed_at"),
+        "report_path": run.get("output_dir"),
+        "result": result,
+        "error": None if run.get("status") != "failed" else "Audit failed due to an internal error.",
+        "error_id": run.get("error_id"),
+        "error_stage": run.get("error_stage"),
+        "current_stage": None,
+        "stages": [],
+        "warnings": (result or {}).get("warnings", []) if result else [],
+    }
+    return job
+
+
+@router.post("/{job_id}/cancel")
+async def cancel_combined_audit(job_id: str):
+    """Cooperatively cancel a queued/running audit. The worker checks the DB
+    status between stages and aborts if it sees ``cancelled``."""
+    run = await repo.get_run(job_id)
+    in_hot = job_id in _jobs
+    if not run and not in_hot:
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+    current = (run or {}).get("status") or _jobs.get(job_id, {}).get("status")
+    if current in ("completed", "failed", "cancelled"):
+        return {"job_id": job_id, "status": current, "cancelled": False}
+    await repo.update_run(
+        job_id, status="cancelled", completed_at=datetime.now(timezone.utc).isoformat()
+    )
+    if in_hot:
+        _jobs[job_id]["status"] = "cancelled"
+    repo.insert_event(job_id, "cancelled", {})
+    return {"job_id": job_id, "status": "cancelled", "cancelled": True}
+
+
+@router.get("/{job_id}", response_model=JobStatusResponse)
+async def get_combined_audit(job_id: str):
+    """Poll the status or retrieve the result of a combined audit job."""
+    if job_id not in _jobs:
+        # Durable fallback: the run may have been evicted from the hot cache or
+        # the process may have restarted — reconstruct it from SQLite.
+        db_job = await _job_from_db(job_id)
+        if db_job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        _inject_image_urls(db_job, job_id)
+        return db_job
+    # Snapshot under the per-job lock so a concurrent runner._run_job() update
+    # cannot publish a half-applied state to a polling client. Shallow copy is
+    # sufficient because we only read top-level fields below.
+    async with _get_job_lock(job_id):
+        snapshot = _jobs.get(job_id)
+        if not snapshot:
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        job = dict(snapshot)
+        # `stages` is a list mutated by sync stage_events; snapshot it too.
+        if "stages" in job:
+            job["stages"] = list(job["stages"])
+
+    _inject_image_urls(job, job_id)
     return job
 
 
