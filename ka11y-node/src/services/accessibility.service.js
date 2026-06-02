@@ -7,6 +7,7 @@ const { mapResults, mapResultsFlat, mapCustomResultsFlat, axeRuleIdsForCriteria 
 const { StageTimings, NULL_TIMINGS } = require('../utils/stageTimings');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 const { boundedBfs } = require('../utils/crawl');
+const { canonicalizeUrl } = require('../utils/canonicalUrl');
 
 // Bug 3 fix: expanded from narrow RFC-1918/loopback/link-local set to include all
 // non-public ranges matched by the Python-side guard (0.0.0.0/8, shared-address
@@ -680,6 +681,23 @@ class AccessibilityService {
         () => page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs }),
       );
 
+      // Stamp findings with the URL the page actually resolved to, not the URL
+      // we were asked to visit. A snapshot-fed child can be discovered as
+      // ``/worldwide`` yet 301 to ``/worldwide.html`` (or vice-versa); when the
+      // same page is audited directly the user passes the resolved form. Using
+      // the requested URL split that one page's findings across two page_url
+      // buckets, so a child page lost the half of its findings that came from
+      // the other engine. ``page.url()`` collapses both to one identity. Fall
+      // back to the requested URL if the browser reports nothing usable.
+      let resolvedUrl = url;
+      try {
+        if (typeof page.url === 'function') {
+          resolvedUrl = canonicalizeUrl(page.url()) || url;
+        }
+      } catch (e) {
+        this._logger.debug(`[flat] page.url() read failed for ${url}: ${e.message}`);
+      }
+
       await timings.time(
         { stage: 'axe_core', sub_stage: 'inject_axe', page_url: url, depth },
         async () => {
@@ -717,11 +735,11 @@ class AccessibilityService {
       }
 
       const mappingStart = process.hrtime.bigint();
-      const allCustomFindings = mapCustomResultsFlat(customResults, url, lang);
+      const allCustomFindings = mapCustomResultsFlat(customResults, resolvedUrl, lang);
       const allowedLevels = _allowedLevels(level);
       let customFindings = allCustomFindings.filter(f => !f.level || allowedLevels.has(f.level));
 
-      let findings = [...mapResultsFlat(axeResults, url, lang), ...customFindings];
+      let findings = [...mapResultsFlat(axeResults, resolvedUrl, lang), ...customFindings];
       timings.record({
         stage: 'axe_core',
         sub_stage: 'result_mapping',
@@ -740,7 +758,7 @@ class AccessibilityService {
 
       // Ensure every finding records the page it came from (multi-page reports).
       for (const f of findings) {
-        if (!f.pageUrl) f.pageUrl = url;
+        if (!f.pageUrl) f.pageUrl = resolvedUrl;
       }
 
       // Collect same-page hrefs for the crawler to consider.

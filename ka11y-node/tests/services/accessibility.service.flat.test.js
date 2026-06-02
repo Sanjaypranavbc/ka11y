@@ -15,7 +15,7 @@ jest.mock('../../src/custom-checks/index', () => ({
 const { runAll } = require('../../src/custom-checks/index');
 const AccessibilityService = require('../../src/services/accessibility.service');
 
-function makePage(axeResults) {
+function makePage(axeResults, resolvedUrl = 'https://example.com/') {
   return {
     setDefaultTimeout: jest.fn(),
     setDefaultNavigationTimeout: jest.fn(),
@@ -26,6 +26,8 @@ function makePage(axeResults) {
     addScriptTag: jest.fn().mockResolvedValue(undefined),
     waitForFunction: jest.fn().mockResolvedValue(undefined),
     evaluate: jest.fn().mockResolvedValue(axeResults),
+    // page.url() reports where navigation actually landed (after redirects).
+    url: jest.fn().mockReturnValue(resolvedUrl),
   };
 }
 
@@ -134,6 +136,38 @@ describe('AccessibilityService.analyseUrlFlat', () => {
     expect(page.addScriptTag).toHaveBeenCalledTimes(2);
     expect(page.waitForFunction).toHaveBeenCalledTimes(2);
     expect(findings).toEqual([]);
+  });
+
+  test('stamps findings with the resolved page.url() after a redirect, not the requested URL', async () => {
+    // Requested /child, but the server 301s to /child.html — page.url() reports
+    // the resolved form. Findings must be stamped with the resolved URL so they
+    // share a page_url bucket with a direct audit of /child.html (otherwise a
+    // child page loses the findings that came from the other engine).
+    const page = makePage(
+      { violations: [], passes: [], incomplete: [] },
+      'https://example.com/child.html',
+    );
+    const service = makeService(page);
+
+    runAll.mockResolvedValue([
+      {
+        successCriteriaId: '3.3.8',
+        rules: [{
+          ruleId: 'custom-accessible-auth',
+          impact: 'serious',
+          status: 'fail',
+          reason: 'x',
+          helpUrl: 'https://example.com/sc-338',
+        }],
+      },
+    ]);
+
+    const findings = await service.analyseUrlFlat('https://example.com/child', 'AA');
+
+    expect(findings).toHaveLength(1);
+    const stamped = findings[0].pageUrl || findings[0].page_url;
+    expect(stamped).toBe('https://example.com/child.html');
+    expect(stamped).not.toBe('https://example.com/child');
   });
 
   test('configures axe-core locale when lang=ja', async () => {

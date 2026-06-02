@@ -11,6 +11,8 @@ from urllib.parse import urljoin, urlparse
 
 from playwright.async_api import BrowserContext, Page
 
+from ka11y.utils.url_canonical import canonicalize_url
+
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
 from ka11y.crawler.policy import CrawlPolicy
@@ -331,15 +333,29 @@ class UniversalPageLoader:
 
             await cls._prepare_page(page, url, step_logger=step_logger)
 
+            # Stamp every finding with the URL the page actually resolved to,
+            # not the URL we queued. A child discovered as ``/worldwide`` may
+            # 301 to ``/worldwide.html`` (or vice-versa); when that same page is
+            # audited directly the caller passes the resolved form. Stamping the
+            # requested URL split one child page's findings across two page_url
+            # buckets — and because Node now stamps ``page.url()`` too, both
+            # engines must agree on the resolved identity or the buckets diverge
+            # again. ``canonicalize_url`` keeps the key consistent with the
+            # finding-stamp sites; fall back to the queued URL if the browser
+            # reports nothing usable (e.g. ``about:blank`` after a hard nav fail).
+            # NB: Playwright-Python exposes ``page.url`` as a property (the JS
+            # binding uses ``page.url()`` — do not add parens here).
+            resolved_url = canonicalize_url(page.url or "") or url
+
             # Chunked extraction to combat virtualized DOMs (Infinite scroll)
-            await cls._extract_page_chunked(page, page_url=url, output=output)
+            await cls._extract_page_chunked(page, page_url=resolved_url, output=output)
 
             # Pipeline element contexts for this page. Runs on the same loaded
             # page as the universal extractor — every page reached by the BFS
             # gets pipeline coverage, not just the root. Failures degrade to a
             # warning and never abort the snapshot.
             await cls._extract_pipeline_contexts(
-                page=page, page_url=url, output=output, step_logger=step_logger
+                page=page, page_url=resolved_url, output=output, step_logger=step_logger
             )
 
             # Links extraction can just use the final state. We hand the
@@ -357,7 +373,7 @@ class UniversalPageLoader:
                 links = links[: policy.max_links_per_page]
 
             def _count_for_url(collection: list) -> int:
-                return len([r for r in collection if r.get("page_url") == url])
+                return len([r for r in collection if r.get("page_url") == resolved_url])
 
             page_forms = _count_for_url(output.forms)
             page_interactive = _count_for_url(output.interactive)
@@ -369,7 +385,7 @@ class UniversalPageLoader:
 
             output.page_summaries.append(
                 {
-                    "page_url": url,
+                    "page_url": resolved_url,
                     "depth": depth,
                     "forms": page_forms,
                     "interactive": page_interactive,
@@ -383,7 +399,7 @@ class UniversalPageLoader:
             )
             output.pages_crawled += 1
             page_warning_count = len(
-                [w for w in output.warnings if w.get("page_url") == url]
+                [w for w in output.warnings if w.get("page_url") == resolved_url]
             )
 
             if step_logger:

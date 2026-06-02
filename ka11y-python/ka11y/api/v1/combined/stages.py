@@ -1643,7 +1643,17 @@ async def _run_python_stages(
                 internal_links=internal_links,
                 max_pages=max_pages,
             )
-            discovered_urls = [s["page_url"] for s in snapshot.page_summaries]
+            # page_url is now the resolved URL (see universal_page._crawl_one_url),
+            # so two queued links that 301 to the same page collapse to one
+            # page_summary key. Dedupe (order-preserving) before feeding Node so
+            # it doesn't re-audit an identical resolved page.
+            seen_pages: set[str] = set()
+            discovered_urls = []
+            for s in snapshot.page_summaries:
+                pu = s["page_url"]
+                if pu not in seen_pages:
+                    seen_pages.add(pu)
+                    discovered_urls.append(pu)
             if not discovered_urls:
                 discovered_urls = [url]
     finally:
