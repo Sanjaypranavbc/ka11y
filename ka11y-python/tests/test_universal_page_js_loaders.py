@@ -1,13 +1,13 @@
 """
-Sprint 2 / step 10 smoke test. The three JS extractors used by
-``universal_page.py`` live in ``ka11y/crawler/js/`` as ``.js`` files
-loaded from disk at module import time. If any file is removed,
-renamed, or has its top-level export shape changed, this test catches
-it before a live browser invocation does.
+Smoke test for the JS extractors used by ``universal_page.py``.
+
+These extractors are now defined as inline Python string constants
+(``_COMBINED_EXTRACT_JS``, ``_LINK_EXTRACT_JS``, ``_LAZY_LOAD_TRIGGER_JS``,
+``_BACKGROUND_IMAGES_JS``) rather than loaded from separate ``.js`` files. If
+any constant is removed, renamed, or emptied, this test catches it before a
+live browser invocation does.
 """
 from __future__ import annotations
-
-from pathlib import Path
 
 import pytest
 
@@ -24,27 +24,22 @@ _EXPECTED_TOP_KEYS = (
     "sensory",
 )
 
-
-def test_js_dir_exists():
-    assert universal_page._JS_DIR.is_dir(), (
-        f"expected JS extractor dir at {universal_page._JS_DIR}"
-    )
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        "universal_extract.js",
-        "link_extract.js",
-        "lazy_load_trigger.js",
-        "background_images.js",
-    ],
+# The inline JS extractor constants the crawler evaluates in-page.
+_JS_CONSTANTS = (
+    "_COMBINED_EXTRACT_JS",
+    "_LINK_EXTRACT_JS",
+    "_LAZY_LOAD_TRIGGER_JS",
+    "_BACKGROUND_IMAGES_JS",
 )
-def test_each_js_file_loads(name: str):
-    path: Path = universal_page._JS_DIR / name
-    assert path.is_file(), f"missing JS extractor: {path}"
-    body = path.read_text(encoding="utf-8")
-    assert body.strip(), f"{name} is empty"
+
+
+@pytest.mark.parametrize("const_name", _JS_CONSTANTS)
+def test_each_js_constant_present_and_nonempty(const_name: str):
+    assert hasattr(universal_page, const_name), (
+        f"universal_page no longer defines inline extractor {const_name}"
+    )
+    body = getattr(universal_page, const_name)
+    assert isinstance(body, str) and body.strip(), f"{const_name} is empty"
 
 
 def test_page_snapshot_has_background_images_field():

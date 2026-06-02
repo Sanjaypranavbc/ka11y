@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 from urllib.parse import urljoin, urlparse, urlunparse
-from bs4 import BeautifulSoup
+from ka11y.utils.html_soup import make_soup
 from ka11y.crawler.navigation import navigate_with_resilience
 from ka11y.crawler.browser_pool import leased_context
 from ka11y.config.logger import setup_logger
@@ -64,7 +64,7 @@ def get_accessible_name(link):
     return None
 
 def extract_navigation(html):
-    soup = BeautifulSoup(html, "lxml")
+    soup = make_soup(html)
     nav_elements = []
 
     # Standard nav landmarks
@@ -133,7 +133,7 @@ def extract_navigation(html):
     return navigation_data
 
 def discover_links(html, base_url):
-    soup = BeautifulSoup(html, "lxml")
+    soup = make_soup(html)
     domain = urlparse(base_url).netloc
     urls = []
     normalized_base = normalize_url(base_url)

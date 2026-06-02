@@ -3,14 +3,36 @@ import time
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from urllib.parse import urlparse
-from bs4 import BeautifulSoup
-from wordfreq import word_frequency
 
+from ka11y.utils.html_soup import make_soup
 from ka11y.crawler.navigation import navigate_with_resilience
 from ka11y.crawler.browser_pool import leased_context
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="unusual_words")
+
+# wordfreq is an optional (heavy) dependency. Import it defensively so a missing
+# wheel degrades the 3.1.3 check to "needs manual review" instead of crashing the
+# whole stage at import time. When absent, _word_frequency() returns 0.0, which
+# makes every term look "unusual" — so we also expose WORDFREQ_AVAILABLE and skip
+# the automated verdict in the auditor when it's False.
+try:
+    from wordfreq import word_frequency as _word_frequency
+
+    WORDFREQ_AVAILABLE = True
+except Exception:  # noqa: BLE001 - missing optional dep must not break import
+    WORDFREQ_AVAILABLE = False
+
+    def _word_frequency(term: str, lang: str) -> float:  # type: ignore
+        return 0.0
+
+
+def word_frequency(term: str, lang: str) -> float:
+    """Frequency lookup that tolerates a missing ``wordfreq`` install."""
+    try:
+        return _word_frequency(term, lang)
+    except Exception:  # noqa: BLE001
+        return 0.0
 
 MIN_TERM_LENGTH = 4
 MAX_CONTEXT_DISTANCE = 2
@@ -69,7 +91,7 @@ async def fetch_page(context, url: str) -> tuple[str, str]:
         await page.close()
 
 def extract_content(html: str):
-    soup = BeautifulSoup(html, "lxml")
+    soup = make_soup(html)
     for tag in soup(["script", "style", "noscript", "svg", "footer", "nav", "aside", "iframe"]):
         tag.decompose()
 

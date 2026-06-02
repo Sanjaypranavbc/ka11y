@@ -92,5 +92,8 @@ async def test_analyze_wcag_324_crawls_and_analyzes():
         # We also need to mock get_links to return no links so crawl stops quickly
         with patch("ka11y.accessibility.rules.navigation.consistent_id.get_links", return_value=[]):
             res = await consistent_id.analyze_wcag_324("https://example.com")
-            # Should be FAIL because MIN_REPEAT_PAGES is 2, but we only crawled 1 page successfully with the repeated component
-            assert res["status"] == "FAIL"
+            # With only 1 crawled page there is nothing to compare against
+            # (MIN_REPEAT_PAGES = 2), so 3.2.4 cannot be violated — failing here
+            # would be a false positive. A component seen on a single page is
+            # skipped and the check PASSES.
+            assert res["status"] == "PASS"

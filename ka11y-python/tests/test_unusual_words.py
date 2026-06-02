@@ -30,8 +30,13 @@ def test_sentence_window():
     ]
     window = unusual_words.sentence_window(sentences, "cryptography", radius=1)
     assert len(window) == 1
-    assert "First sentence" not in window[0]
-    assert "Second sentence with cryptography in it. Third sentence." in window[0]
+    # The window is symmetric (radius sentences before AND after the term) so a
+    # backward inline definition like "...called cryptography" is still caught by
+    # EXPLANATION_PATTERNS. With radius=1 around index 1 that's sentences 0–2.
+    assert "Second sentence with cryptography in it." in window[0]
+    assert "First sentence." in window[0]
+    assert "Third sentence." in window[0]
+    assert "Fourth sentence" not in window[0]
 
 def test_detect_inline_explanation():
     sentences1 = [

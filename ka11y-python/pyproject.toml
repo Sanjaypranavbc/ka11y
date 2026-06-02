@@ -38,8 +38,11 @@ deepgram-sdk = "^7.1.0"
 sudachipy = { version = ">=0.6.8,<1.0.0", optional = true }
 sudachidict-core = { version = ">=20240409,<99999999", optional = true }
 beautifulsoup4 = "^4.14.3"
+lxml = "^5.2.0"
 yake = "^0.4.8"
-wordfreq = "^2.5.1"
+# wordfreq must be 3.x: 2.5.x imports the removed `pkg_resources` and is broken
+# on Python 3.13 (the runtime here). 3.x dropped that dependency.
+wordfreq = ">=3.0.0,<4.0.0"
 keybert = "^0.8.4"
 sentence-transformers = "^2.7.0"
 
