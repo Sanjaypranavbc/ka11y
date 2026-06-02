@@ -20,11 +20,27 @@ concurrently (``asyncio.gather``) and several may finish at once.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Callable, Optional
+
+# P3: the run_id under which crawler rows should also be mirrored into the
+# durable ``stage_timings`` table. Set once per job (runner._run_job_body) and
+# inherited by every stage task via the copied context — same mechanism as the
+# language context. ``None`` (e.g. unit tests) → file-only, no DB mirror.
+_run_id_ctx: ContextVar[Optional[str]] = ContextVar("ka11y_crawler_run_id", default=None)
+
+
+def set_run_id(run_id: Optional[str]) -> None:
+    _run_id_ctx.set(run_id)
+
+
+def _files_enabled() -> bool:
+    return os.environ.get("KA11Y_TELEMETRY_FILES", "1") != "0"
 
 # Column widths (content only; borders/padding added in _format_row).
 _W_CRAWLER = 20
@@ -61,6 +77,8 @@ class CrawlerTimingLogger:
 
     def __init__(self, output_dir, filename: str = _DEFAULT_FILENAME) -> None:
         self.path = Path(output_dir) / filename
+        if not _files_enabled():
+            return
         with _lock_for(str(self.path)):
             self.path.parent.mkdir(parents=True, exist_ok=True)
             # Write the header exactly once (first crawler to finish creates it).
@@ -78,6 +96,29 @@ class CrawlerTimingLogger:
         scope = (scope or "").replace("\n", " ")
         if len(scope) > _W_SCOPE:
             scope = scope[: _W_SCOPE - 1] + "…"  # ellipsis
+        # P3: mirror the crawler row into the durable stage_timings table
+        # (queryable; survives TTL). Fire-and-forget; never raises.
+        run_id = _run_id_ctx.get()
+        if run_id:
+            try:
+                from ka11y.store import repo
+
+                repo.insert_timing(
+                    {
+                        "run_id": run_id,
+                        "stage": crawler,
+                        "sub_stage": "crawl",
+                        "page_url": scope or None,
+                        "duration_ms": duration_s * 1000.0,
+                        "item_count": pages,
+                        "status": status,
+                    }
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        if not _files_enabled():
+            return
         pages_s = "" if pages is None else str(pages)
         row = (
             f"| {crawler:<{_W_CRAWLER}.{_W_CRAWLER}} | {scope:<{_W_SCOPE}.{_W_SCOPE}} | "

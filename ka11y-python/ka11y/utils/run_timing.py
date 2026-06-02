@@ -221,12 +221,23 @@ def log_run_timing(
         run_dur = data["run_s"]
         queue_wait = data["queue_wait_s"]
 
-        block = _format_run_timing_block(data)
-        path = _log_path()
-        with _write_lock:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(block)
+        # P3: mirror the computed aggregate into the durable run_events table so
+        # the per-run timing summary is queryable (and survives TTL/restart),
+        # not only tailable from run_timings.log. Fire-and-forget; never raises.
+        try:
+            from ka11y.store import repo
+
+            repo.insert_event(job_id, "run_timing", data)
+        except Exception:  # noqa: BLE001
+            pass
+
+        if os.environ.get("KA11Y_TELEMETRY_FILES", "1") != "0":
+            block = _format_run_timing_block(data)
+            path = _log_path()
+            with _write_lock:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("a", encoding="utf-8") as fh:
+                    fh.write(block)
 
         # Also emit a one-line summary to the app log for quick grepping.
         logger.info(

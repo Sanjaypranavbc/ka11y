@@ -423,7 +423,12 @@ async def get_combined_audit_timings(job_id: str):
 @router.get("/{job_id}/image")
 async def get_job_image(job_id: str, path: str):
     """
-    Serve an image file belonging to a completed audit job.
+    DEPRECATED legacy image serving (``?path=``). Superseded by the
+    content-addressed ``GET /api/v1/assets/{id}`` route: as of P2 the runner
+    registers every report-referenced image in the ``assets`` table and points
+    ``image_url`` / ``element.image_src`` at ``/api/v1/assets/{id}``. This
+    endpoint remains only as a fallback for images that were never
+    content-addressed (e.g. a run produced before the asset store existed).
 
     The ``path`` query parameter must exactly match one of the image paths
     recorded in ``result.contrast_report.images`` for the given job.

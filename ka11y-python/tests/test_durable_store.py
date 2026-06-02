@@ -252,6 +252,87 @@ def test_axe_mapper_shapes_findings():
     assert any(f["status"] == "pass" and f["wcag_sc"] == "2.4.2" for f in findings)
 
 
+@pytest.mark.asyncio
+async def test_register_report_assets_rewrites_urls(isolated_db, tmp_path):
+    """P2: report images + finding image_src local paths become /assets/{id}."""
+    from ka11y.store.assets import register_report_assets
+
+    await repo.create_run(
+        run_id="run-p2", url="https://e.com", status="running",
+        lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
+        max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
+    )
+    crop = tmp_path / "crop.png"
+    crop.write_bytes(b"\x89PNG_crop")
+    region = tmp_path / "region.png"
+    region.write_bytes(b"\x89PNG_region")
+
+    report = {
+        "contrast_report": {"images": [{"path": str(region), "filename": "region.png"}]},
+        "violations": [
+            {"wcag_sc": "1.1.1", "status": "fail",
+             "element": {"selector": "img", "image_src": str(crop)}}
+        ],
+        "needs_review": [], "passes": [],
+    }
+    n = await register_report_assets("run-p2", report)
+    assert n == 2
+    assert report["contrast_report"]["images"][0]["image_url"].startswith("/api/v1/assets/")
+    assert report["violations"][0]["element"]["image_src"].startswith("/api/v1/assets/")
+    rows = await repo.list_run_assets("run-p2")
+    assert len(rows) == 2
+    assert {r["kind"] for r in rows} == {"contrast_region", "finding_image"}
+
+
+@pytest.mark.asyncio
+async def test_crawler_timing_mirrors_to_db(isolated_db, tmp_path, monkeypatch):
+    """P3: crawler rows mirror into stage_timings when a run_id is in context."""
+    from ka11y.utils import crawler_timing
+
+    monkeypatch.setenv("KA11Y_TELEMETRY_FILES", "0")
+    crawler_timing.set_run_id("run-ct")
+    crawler_timing.CrawlerTimingLogger(tmp_path).record(
+        "image", scope="https://e.com", duration_s=1.5, status="ok", pages=4
+    )
+    await asyncio.sleep(0.1)  # let the fire-and-forget writer drain
+    rows = await dbm.get_db().query(
+        "SELECT stage, sub_stage, duration_ms, item_count FROM stage_timings WHERE run_id=?",
+        ("run-ct",),
+    )
+    crawler_timing.set_run_id(None)
+    assert any(r["stage"] == "image" and r["sub_stage"] == "crawl" for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_run_timing_mirrors_to_run_events(isolated_db):
+    """P3: the aggregate run-timing block lands in run_events as well."""
+    from ka11y.utils.run_timing import log_run_timing
+
+    log_run_timing(
+        job_id="run-rt2", url="https://e.com", status="completed", stages=[],
+        submitted_at="2026-06-02T00:00:00+00:00",
+        run_started_at="2026-06-02T00:00:01+00:00",
+        completed_at="2026-06-02T00:00:05+00:00", lang="en",
+        summary={"violations": 0},
+    )
+    await asyncio.sleep(0.1)
+    events = await repo.get_events("run-rt2")
+    assert any(e["event"] == "run_timing" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_merge_findings_via_run_cpu(isolated_db):
+    """P5: _merge_findings runs through run_cpu (thread fallback by default)."""
+    from ka11y.api.v1.combined.runner import _merge_findings
+    from ka11y.store.cpu_pool import run_cpu
+
+    node = [{"wcag_sc": "1.1.1", "status": "fail", "element": {"selector": "a"}}]
+    py = [{"wcag_sc": "1.4.3", "status": "fail", "element": {"selector": "b"}}]
+    merged = await run_cpu(_merge_findings, node, py)
+    scs = {f["wcag_sc"] for f in merged}
+    assert scs == {"1.1.1", "1.4.3"}
+
+
 def test_new_routes_registered(isolated_db):
     """The new endpoints are wired into the app and reachable."""
     from fastapi.testclient import TestClient

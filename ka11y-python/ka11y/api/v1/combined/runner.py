@@ -232,6 +232,13 @@ async def _run_job_body(
         resolved_lang = payload.lang
 
     _lang_ctx.set(resolved_lang)  # Inherited by all child tasks via context copy
+    # P3: tag crawler-timing rows with this run so they mirror into stage_timings.
+    try:
+        from ka11y.utils import crawler_timing
+
+        crawler_timing.set_run_id(job_id)
+    except Exception:  # noqa: BLE001
+        pass
 
     config = load_config()
     node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
@@ -476,7 +483,13 @@ async def _run_job_body(
             if f.get("level") in allowed or f.get("level") is None
         ]
 
-        all_findings = _merge_findings(node_findings, python_findings)
+        # P5: merge is pure CPU (sha1 + string normalisation over every finding)
+        # and grows with site size. Route it through the shared process pool for
+        # true multi-core parallelism when KA11Y_CPU_WORKERS>0; otherwise run_cpu
+        # transparently falls back to a thread (identical behaviour, off-loop).
+        from ka11y.store.cpu_pool import run_cpu
+
+        all_findings = await run_cpu(_merge_findings, node_findings, python_findings)
 
         # A single-SC audit can come either from the per-rule router (filter_rule)
         # or directly on the request (payload.success_criteria_id); honour whichever
