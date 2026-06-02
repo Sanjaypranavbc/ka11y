@@ -225,6 +225,14 @@ async def submit_combined_audit(payload: CombinedRequest):
     **Graceful degradation**: if Node/axe-core is unavailable the job still
     completes using Python-only findings; a `warnings` list notes the failure.
     """
+    return await _admit_run(payload)
+
+
+async def _admit_run(payload: CombinedRequest, *, rerun_of: str | None = None) -> dict:
+    """Create the hot-cache entry and enqueue a run through the durable queue.
+
+    Shared by fresh submissions and re-audits so both go through the exact same
+    SSRF guard, queue, and dispatcher path."""
     job_id = str(uuid.uuid4())
     url = str(payload.url)
     now = datetime.now(timezone.utc).isoformat()
@@ -251,10 +259,43 @@ async def submit_combined_audit(payload: CombinedRequest):
     # Durable queue (P4): persist a 'queued' run and let the dispatcher execute
     # it. Falls back to in-process launch if the store/dispatcher is unavailable.
     await enqueue(job_id, payload)
+    if rerun_of:
+        repo.insert_event(job_id, "rerun_of", {"parent_run_id": rerun_of})
     from ka11y.config.logger import setup_logger
     logger = setup_logger(name="KAC", tag="combined")
-    logger.info(f"[combined] job {job_id} submitted for {url}")
+    logger.info(
+        f"[combined] job {job_id} {'re-' if rerun_of else ''}submitted for {url}"
+        + (f" (rerun of {rerun_of})" if rerun_of else "")
+    )
     return _jobs[job_id]
+
+
+@router.post("/{job_id}/rerun", status_code=202)
+async def rerun_combined_audit(job_id: str):
+    """Re-audit a past run with its exact stored parameters.
+
+    Returns a NEW ``job_id`` (the original run is preserved for comparison). Use
+    this to refresh a result after an engine improvement — e.g. the per-page OCR
+    budget change that recovers image findings on deep-crawl child pages — without
+    re-entering the URL and toggles. The new run flows through the normal durable
+    queue + dispatcher.
+    """
+    run = await repo.get_run(job_id)
+    if not run:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id!r} not found in the durable store; cannot re-run.",
+        )
+    try:
+        params = json.loads(run.get("params_json") or "{}")
+        payload = CombinedRequest(**params)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Stored audit parameters could not be reconstructed for re-run.",
+        )
+    new_job = await _admit_run(payload, rerun_of=job_id)
+    return {**new_job, "rerun_of": job_id}
 
 
 def _inject_image_urls(job: dict, job_id: str) -> None:
