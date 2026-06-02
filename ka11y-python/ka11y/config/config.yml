@@ -46,7 +46,13 @@ crawler:
   performance:
     max_focus_steps: 100
     max_hover_candidates: 12
+    # Single-page (max_depth=0) OCR budget — unchanged legacy behaviour.
     max_ocr_images_per_run: 60
+    # Multi-page crawls: total OCR budget = per_page * num_pages, capped by the
+    # ceiling, distributed fairly across pages so a child page isn't starved of
+    # image findings by its siblings.
+    max_ocr_images_per_page: 60
+    max_ocr_images_ceiling: 600
 
 
 crawl_browser:

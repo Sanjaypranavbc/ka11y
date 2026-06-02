@@ -106,6 +106,30 @@ def get_max_ocr_images_per_run() -> int | None:
     )
 
 
+def get_max_ocr_images_per_page() -> int:
+    """Per-page OCR budget for multi-page crawls. The total run budget scales as
+    ``per_page * num_pages`` (capped by :func:`get_max_ocr_images_ceiling`), so a
+    page audited as a child gets the same image coverage it would as the root —
+    instead of competing with every sibling for one shared ``max_ocr_images_per_run``
+    budget. Falls back to the legacy per-run value (or 60)."""
+    per_page = get_int_config(
+        "crawler", "performance", "max_ocr_images_per_page", default=None, minimum=1
+    )
+    if per_page:
+        return per_page
+    legacy = get_max_ocr_images_per_run()
+    return legacy if legacy else 60
+
+
+def get_max_ocr_images_ceiling() -> int:
+    """Hard cap on total OCR images per run regardless of page count — bounds the
+    cost of a deep crawl. Default 600."""
+    ceiling = get_int_config(
+        "crawler", "performance", "max_ocr_images_ceiling", default=None, minimum=1
+    )
+    return ceiling if ceiling else 600
+
+
 def build_text_spacing_cjk_selector_css() -> str:
     selectors = []
     descendant_selectors = []
@@ -134,8 +158,17 @@ def select_ocr_candidate_paths(
     images: Iterable[Any],
     *,
     limit: int,
+    fair_per_page: bool = False,
 ) -> tuple[list[str], list[str]]:
+    """Rank screenshots and return ``(selected, skipped)`` within *limit*.
+
+    ``fair_per_page`` (multi-page crawls): after global priority ranking, the
+    budget is distributed round-robin across source pages so one page's images
+    can't monopolise it and starve a sibling — the cross-page coverage gap that
+    made a child page yield fewer findings than the same page audited alone.
+    """
     ranked: list[tuple[tuple[int, int, str], str]] = []
+    page_by_path: dict[str, str] = {}
     seen: set[str] = set()
     seen_asset_keys: set[str] = set()
 
@@ -147,6 +180,7 @@ def select_ocr_candidate_paths(
         if resolved in seen:
             continue
         seen.add(resolved)
+        page_by_path[resolved] = str(getattr(item, "url", "") or "")
 
         classification = str(getattr(item, "classification", "") or "").strip().lower()
         sub_type = str(getattr(item, "sub_type", "") or "").strip().lower()
@@ -194,4 +228,33 @@ def select_ocr_candidate_paths(
 
     if limit is None or len(ordered) <= limit:  # None = no limit
         return ordered, []
-    return ordered[:limit], ordered[limit:]
+
+    if not fair_per_page:
+        return ordered[:limit], ordered[limit:]
+
+    # Fair per-page round-robin. Bucket the globally-ranked paths by source page
+    # (buckets keyed by first appearance ⇒ ordered by page priority), then take
+    # one image per page per round until the budget is spent. Each page keeps its
+    # own priority order internally, so every page contributes its top images.
+    from collections import OrderedDict, deque
+
+    buckets: "OrderedDict[str, deque[str]]" = OrderedDict()
+    for path in ordered:
+        buckets.setdefault(page_by_path.get(path, ""), deque()).append(path)
+
+    selected: list[str] = []
+    queues = list(buckets.values())
+    while len(selected) < limit and any(queues):
+        progressed = False
+        for q in queues:
+            if q:
+                selected.append(q.popleft())
+                progressed = True
+                if len(selected) >= limit:
+                    break
+        if not progressed:
+            break
+
+    selected_set = set(selected)
+    skipped = [p for p in ordered if p not in selected_set]
+    return selected, skipped

@@ -45,6 +45,8 @@ class PythonStagesResult(BaseModel):
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils.crawler_settings import (
+    get_max_ocr_images_ceiling,
+    get_max_ocr_images_per_page,
     get_max_ocr_images_per_run,
     get_max_warning_samples,
     select_ocr_candidate_paths,
@@ -532,10 +534,29 @@ async def _stage_image_audit(
         )
 
         if run_ocr:
-            max_ocr_images = get_max_ocr_images_per_run()
+            # OCR budget scales with the number of crawled pages so a child page
+            # gets the same image coverage it would as the root. Previously the
+            # budget was a single per-run cap (default 60) ranked GLOBALLY across
+            # every page, so on a multi-page crawl a page's images competed with
+            # all siblings and everything past rank 60 was silently dropped — the
+            # same page therefore yielded far fewer image findings (1.1.1, 1.4.3,
+            # 1.4.5, 1.4.6) as a child than audited alone. Now: per_page * pages,
+            # capped by a ceiling, distributed fairly across pages.
+            distinct_pages = len(
+                {getattr(i, "url", "") for i in image_crawler.images_data if getattr(i, "url", "")}
+            ) or 1
+            if distinct_pages > 1:
+                max_ocr_images = min(
+                    get_max_ocr_images_per_page() * distinct_pages,
+                    get_max_ocr_images_ceiling(),
+                )
+            else:
+                # Single page: preserve the exact legacy budget/behaviour.
+                max_ocr_images = get_max_ocr_images_per_run()
             ocr_paths, skipped_ocr_paths = select_ocr_candidate_paths(
                 image_crawler.images_data,
                 limit=max_ocr_images,
+                fair_per_page=distinct_pages > 1,
             )
             if skipped_ocr_paths:
                 message = (
