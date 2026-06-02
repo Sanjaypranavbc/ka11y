@@ -102,6 +102,7 @@ stages, and wall-time by crawl depth — all from SQL.
 | `GET /combined/{id}/timings` | Rebuilt from `stage_timings` for evicted runs. |
 | `GET /combined/{id}/stream` | SSE; replays the terminal state from the store for finished runs. |
 | `POST /combined/{id}/cancel` | Cooperative cancel. |
+| `POST /combined/{id}/rerun` | Re-audit a past run with its exact stored parameters — returns a **new** `job_id` (original preserved). Use to refresh a result after an engine change without re-entering the URL/toggles. |
 | `GET /api/v1/assets/{id}` | Content-addressed asset serving. |
 | `GET /api/v1/admin/metrics` | Telemetry rollups for ops. |
 
