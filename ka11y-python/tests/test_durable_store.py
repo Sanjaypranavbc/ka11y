@@ -166,3 +166,103 @@ async def test_dispatcher_executes_queued_run(isolated_db, monkeypatch):
 
     assert "run-disp" in ran
     assert (await repo.get_run("run-disp"))["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_get_after_eviction_reads_from_db(isolated_db):
+    """A run absent from the hot _jobs cache must still resolve from SQLite."""
+    from ka11y.api.v1.combined.routes import get_combined_audit
+    from ka11y.api.v1.combined.store import _jobs
+
+    await _seed_completed("run-evicted")
+    _jobs.pop("run-evicted", None)  # simulate TTL eviction / restart
+    job = await get_combined_audit("run-evicted")
+    assert job["status"] == "completed"
+    assert job["result"]["summary"]["violations"] == 1
+    # Image src rewritten to a job-scoped serving URL by the shared injector.
+    el = job["result"]["violations"][0]["element"]
+    assert el["selector"] == "img"
+
+
+@pytest.mark.asyncio
+async def test_history_endpoint(isolated_db):
+    from ka11y.api.v1.combined.routes import list_combined_history
+
+    await _seed_completed("run-h1")
+    out = await list_combined_history(limit=10, offset=0, url=None, status="completed")
+    assert out["count"] == 1
+    assert out["runs"][0]["run_id"] == "run-h1"
+
+
+@pytest.mark.asyncio
+async def test_cancel_endpoint(isolated_db):
+    from ka11y.api.v1.combined.routes import cancel_combined_audit
+    from ka11y.api.v1.combined.store import _jobs
+
+    await repo.create_run(
+        run_id="run-c", url="https://e.com", status="queued",
+        lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
+        max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
+    )
+    _jobs.pop("run-c", None)
+    res = await cancel_combined_audit("run-c")
+    assert res["cancelled"] is True
+    assert (await repo.get_run("run-c"))["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_admin_metrics(isolated_db):
+    from ka11y.api.v1.assets import admin_metrics
+
+    await _seed_completed("run-m")
+    m = await admin_metrics()
+    assert m["status_counts"].get("completed", 0) >= 1
+    assert m["totals"]["total_runs"] >= 1
+
+
+def test_axe_mapper_shapes_findings():
+    """P6: raw axe.run output maps to the flat finding shape merge/report expect."""
+    from ka11y.crawler.axe_runner import map_axe_results
+
+    raw = {
+        "violations": [
+            {
+                "id": "image-alt",
+                "impact": "critical",
+                "help": "Images must have alternate text",
+                "helpUrl": "https://dequeuniversity.com/rules/axe/image-alt",
+                "tags": ["wcag2a", "wcag111"],
+                "nodes": [{"html": "<img src='x'>", "target": ["#logo"]}],
+            }
+        ],
+        "incomplete": [],
+        "passes": [
+            {"id": "document-title", "tags": ["wcag2a", "wcag242"], "help": "ok", "nodes": []}
+        ],
+    }
+    findings = map_axe_results(raw, "https://example.com")
+    fail = next(f for f in findings if f["status"] == "fail")
+    assert fail["wcag_sc"] == "1.1.1"
+    assert fail["level"] == "A"
+    assert fail["source"] == "axe"
+    assert fail["severity"] == "critical"
+    assert fail["element"]["tag"] == "IMG"
+    assert fail["element"]["selector"] == "#logo"
+    assert fail["element"]["page_url"] == "https://example.com"
+    assert any(f["status"] == "pass" and f["wcag_sc"] == "2.4.2" for f in findings)
+
+
+def test_new_routes_registered(isolated_db):
+    """The new endpoints are wired into the app and reachable."""
+    from fastapi.testclient import TestClient
+
+    from ka11y.main import app
+
+    with TestClient(app) as client:
+        h = client.get("/api/v1/combined/history")
+        assert h.status_code == 200 and "runs" in h.json()
+        m = client.get("/api/v1/admin/metrics")
+        assert m.status_code == 200 and "status_counts" in m.json()
+        # Unknown asset → 404 (route exists, not a 404-because-no-route).
+        a = client.get("/api/v1/assets/999999")
+        assert a.status_code == 404
