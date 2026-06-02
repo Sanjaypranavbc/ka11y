@@ -647,7 +647,16 @@ async def _run_job_body(
             else "unknown"
         )
         err_type = type(exc).__name__
-        current_stage = _jobs[job_id].get("current_stage") or "post_processing"
+        running_stages = [
+            s["name"]
+            for s in _jobs[job_id].get("stages", [])
+            if s.get("status") == "running"
+        ]
+        current_stage = (
+            ", ".join(running_stages)
+            if running_stages
+            else (_jobs[job_id].get("current_stage") or "post_processing")
+        )
         # Internal-only diagnostic detail (file paths, exception type, traceback)
         # is logged but never surfaced to API clients. Clients receive an opaque
         # error_id which support staff can correlate against these logs.

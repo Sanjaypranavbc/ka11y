@@ -93,6 +93,9 @@ services:
       # outlast a slow snapshot (kao.com/jp took ~561s) or deep pages get
       # under-audited. Defaults to the stage timeout (1200s) if unset.
       KA11Y_SNAPSHOT_URLS_WAIT_SECONDS: "1200"
+      # Overall job timeout in seconds. Defends against deadlocks / hung crawls.
+      # For large/heavy multi-page crawls (such as kao.com), increase this budget.
+      KA11Y_JOB_TIMEOUT_SECONDS: "1800"
       # HTTP read-timeout sizing for the call to Node's /analyse-url-flat. In
       # snapshot-fed mode Node audits every discovered URL with no internal
       # budget, so a fixed 300s client timeout silently dropped ALL axe findings
