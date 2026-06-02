@@ -131,8 +131,8 @@ services:
     volumes:
       - ./output/crawled_images:/app/crawled_images
       - ./output/logs:/app/logs
-      - ka11y_db:/data/db
-      - ka11y_assets:/data/assets
+      - ./output/db:/data/db
+      - ./output/assets:/data/assets
       - huggingface_cache:/root/.cache/huggingface
 
     healthcheck:
@@ -223,7 +223,3 @@ networks:
 
 volumes:
   huggingface_cache:
-  # Durable SQLite store (run state, reports, findings, telemetry). Back this up.
-  ka11y_db:
-  # Content-addressed audit assets (bytes on disk; metadata in ka11y_db).
-  ka11y_assets:
