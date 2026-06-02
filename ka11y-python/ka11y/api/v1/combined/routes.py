@@ -29,11 +29,24 @@ from typing import AsyncGenerator
 
 from ka11y.utils.run_timing import compute_run_timing
 
+from pydantic import BaseModel, Field
+
 from .dispatcher import enqueue
 from .models import CombinedRequest, JobStatusResponse
+from .report import apply_reviews
 from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
 from ka11y.store.assets import get_asset
+
+
+class FindingReviewRequest(BaseModel):
+    """A reviewer's adjudication of a 'Manual Review Required' (needs_review) item.
+
+    ``status='needs_review'`` re-opens the item (clears a prior decision)."""
+
+    status: str = Field(pattern=r"^(pass|violation|needs_review)$")
+    note: str | None = Field(default=None, max_length=2000)
+    reviewer: str | None = Field(default=None, max_length=200)
 
 # Private/reserved IP ranges that must never be fetched (SSRF guard for redirects).
 # These CIDR networks cover: loopback, RFC-1918 private, link-local, unique-local
@@ -276,6 +289,24 @@ def _inject_image_urls(job: dict, job_id: str) -> None:
                     )
 
 
+async def _apply_reviews_to_job(job: dict, job_id: str) -> None:
+    """Overlay any stored manual-review decisions onto the job's report so the
+    effective score (violations / needs_review / passes counts) reflects them."""
+    result = job.get("result")
+    if not result or not result.get("needs_review"):
+        return
+    try:
+        reviews = await repo.get_reviews(job_id)
+    except Exception:  # noqa: BLE001
+        return
+    apply_reviews(result, reviews)
+
+
+async def _finalize_job_view(job: dict, job_id: str) -> None:
+    _inject_image_urls(job, job_id)
+    await _apply_reviews_to_job(job, job_id)
+
+
 @router.get("/history")
 async def list_combined_history(
     limit: int = 50, offset: int = 0, url: str | None = None, status: str | None = None
@@ -351,7 +382,7 @@ async def get_combined_audit(job_id: str):
         db_job = await _job_from_db(job_id)
         if db_job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-        _inject_image_urls(db_job, job_id)
+        await _finalize_job_view(db_job, job_id)
         return db_job
     # Snapshot under the per-job lock so a concurrent runner._run_job() update
     # cannot publish a half-applied state to a polling client. Shallow copy is
@@ -365,8 +396,65 @@ async def get_combined_audit(job_id: str):
         if "stages" in job:
             job["stages"] = list(job["stages"])
 
-    _inject_image_urls(job, job_id)
+    await _finalize_job_view(job, job_id)
     return job
+
+
+@router.get("/{job_id}/reviews")
+async def get_finding_reviews(job_id: str):
+    """List the manual-review decisions recorded for a run's needs_review items."""
+    run = await repo.get_run(job_id)
+    if not run and job_id not in _jobs:
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+    reviews = await repo.get_reviews(job_id)
+    return {"job_id": job_id, "reviews": reviews, "count": len(reviews)}
+
+
+@router.post("/{job_id}/findings/{finding_id}/review")
+async def review_finding(job_id: str, finding_id: str, body: FindingReviewRequest):
+    """Record/clear a reviewer's adjudication of a 'Manual Review Required' item.
+
+    The next GET /combined/{job_id} returns the report with the effective score
+    (violations / needs_review / passes) updated to reflect this decision.
+    """
+    run = await repo.get_run(job_id)
+    in_hot = job_id in _jobs
+    if not run and not in_hot:
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+
+    # Locate the finding in the report to capture its SC/page for the audit row
+    # and to reject ids that don't correspond to a needs_review item.
+    result = (_jobs.get(job_id, {}).get("result")) or (await repo.get_report(job_id)) or {}
+    target = next(
+        (f for f in result.get("needs_review", []) if f.get("finding_id") == finding_id),
+        None,
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Finding {finding_id!r} is not a reviewable (needs_review) item of this run.",
+        )
+
+    await repo.set_finding_review(
+        run_id=job_id,
+        finding_id=finding_id,
+        status=body.status,
+        note=body.note,
+        reviewer=body.reviewer,
+        wcag_sc=target.get("wcag_sc"),
+        page_url=(target.get("element") or {}).get("page_url"),
+    )
+    repo.insert_event(
+        job_id,
+        "finding_reviewed",
+        {"finding_id": finding_id, "status": body.status, "wcag_sc": target.get("wcag_sc")},
+    )
+    return {
+        "job_id": job_id,
+        "finding_id": finding_id,
+        "status": body.status,
+        "wcag_sc": target.get("wcag_sc"),
+    }
 
 
 @router.get("/{job_id}/timings")

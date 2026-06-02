@@ -333,6 +333,87 @@ async def test_merge_findings_via_run_cpu(isolated_db):
     assert scs == {"1.1.1", "1.4.3"}
 
 
+def _sample_findings():
+    return [
+        {"source": "axe", "rule_id": "image-alt", "wcag_sc": "1.1.1", "level": "A",
+         "status": "fail", "element": {"selector": "img.logo", "page_url": "https://e.com"}},
+        {"source": "python", "rule_id": "py_143", "wcag_sc": "1.4.3", "level": "AA",
+         "status": "needs_review", "element": {"selector": "p.hero", "page_url": "https://e.com"}},
+        {"source": "axe", "rule_id": "document-title", "wcag_sc": "2.4.2", "level": "A",
+         "status": "pass", "element": {"selector": "title", "page_url": "https://e.com"}},
+    ]
+
+
+def test_build_report_stamps_finding_ids_and_manual_review():
+    from ka11y.api.v1.combined.report import _build_report
+
+    rep = _build_report("https://e.com", _sample_findings())
+    assert rep["summary"]["manual_review_required"] == 1
+    nr = rep["needs_review"][0]
+    assert nr["manual_review"] is True
+    assert len(nr["finding_id"]) == 16
+    # pass/(pass+violation) = 1/2
+    assert rep["summary"]["score"] == 50.0
+
+
+def test_apply_reviews_recomputes_score():
+    from ka11y.api.v1.combined.report import _build_report, apply_reviews
+
+    rep = _build_report("https://e.com", _sample_findings())
+    fid = rep["needs_review"][0]["finding_id"]
+
+    apply_reviews(rep, {fid: {"status": "violation"}})
+    s = rep["summary"]
+    assert s["violations"] == 2 and s["passes"] == 1 and s["needs_review"] == 0
+    assert s["score"] == 33.3
+    assert s["automated"] == {"violations": 1, "needs_review": 1, "passes": 1, "score": 50.0}
+
+    # Idempotent + re-review to pass flips it the other way.
+    apply_reviews(rep, {fid: {"status": "pass"}})
+    s = rep["summary"]
+    assert s["violations"] == 1 and s["passes"] == 2 and s["score"] == 66.7
+
+    # Clearing the review restores automated numbers.
+    apply_reviews(rep, {})
+    assert rep["summary"]["score"] == 50.0 and rep["summary"]["needs_review"] == 1
+
+
+@pytest.mark.asyncio
+async def test_review_endpoint_updates_effective_score(isolated_db):
+    from ka11y.api.v1.combined.report import _build_report
+    from ka11y.api.v1.combined.routes import (
+        FindingReviewRequest,
+        get_combined_audit,
+        review_finding,
+    )
+    from ka11y.api.v1.combined.store import _jobs
+
+    rep = _build_report("https://e.com", _sample_findings())
+    await repo.create_run(
+        run_id="run-rev", url="https://e.com", status="completed",
+        lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
+        max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
+    )
+    await repo.save_report("run-rev", rep)
+    _jobs.pop("run-rev", None)
+
+    fid = rep["needs_review"][0]["finding_id"]
+    out = await review_finding("run-rev", fid, FindingReviewRequest(status="violation", note="confirmed"))
+    assert out["status"] == "violation" and out["wcag_sc"] == "1.4.3"
+
+    job = await get_combined_audit("run-rev")
+    s = job["result"]["summary"]
+    assert s["violations"] == 2 and s["needs_review"] == 0 and s["score"] == 33.3
+    assert s["reviews"]["as_violation"] == 1
+    # The reviewed finding carries its decision for the UI.
+    assert job["result"]["needs_review"][0]["review_status"] == "violation"
+
+    # Reviewing a non-existent / non-needs_review finding id → 404.
+    import fastapi
+    with pytest.raises(fastapi.HTTPException):
+        await review_finding("run-rev", "deadbeefdeadbeef", FindingReviewRequest(status="pass"))
+
+
 def test_new_routes_registered(isolated_db):
     """The new endpoints are wired into the app and reachable."""
     from fastapi.testclient import TestClient

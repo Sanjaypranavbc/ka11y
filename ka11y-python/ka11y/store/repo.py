@@ -435,6 +435,49 @@ async def retention_sweep(retention_days: int) -> List[str]:
     return ids
 
 
+# ── manual-review decisions ──────────────────────────────────────────────────
+
+
+async def set_finding_review(
+    *,
+    run_id: str,
+    finding_id: str,
+    status: str,
+    note: Optional[str] = None,
+    reviewer: Optional[str] = None,
+    wcag_sc: Optional[str] = None,
+    page_url: Optional[str] = None,
+) -> None:
+    """Upsert a reviewer's decision (pass|violation) for one needs_review item.
+
+    ``status='needs_review'`` clears the decision (re-opens the item)."""
+    if status == "needs_review":
+        await get_db().execute(
+            "DELETE FROM finding_reviews WHERE run_id=? AND finding_id=?",
+            (run_id, finding_id),
+        )
+        return
+    await get_db().execute(
+        "INSERT INTO finding_reviews "
+        "(run_id, finding_id, status, note, reviewer, wcag_sc, page_url, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(run_id, finding_id) DO UPDATE SET "
+        "  status=excluded.status, note=excluded.note, reviewer=excluded.reviewer, "
+        "  updated_at=excluded.updated_at",
+        (run_id, finding_id, status, note, reviewer, wcag_sc, page_url, _now()),
+    )
+
+
+async def get_reviews(run_id: str) -> Dict[str, Dict[str, Any]]:
+    """Return ``{finding_id: {status, note, reviewer, updated_at}}`` for a run."""
+    rows = await get_db().query(
+        "SELECT finding_id, status, note, reviewer, updated_at "
+        "FROM finding_reviews WHERE run_id=?",
+        (run_id,),
+    )
+    return {r["finding_id"]: r for r in rows}
+
+
 async def list_run_assets(run_id: str) -> List[Dict[str, Any]]:
     return await get_db().query(
         "SELECT id, page_url, kind, rel_path, sha256, mime, width, height, bytes "

@@ -49,10 +49,14 @@ rules catalogue.
 ```typescript
 interface Summary {
   total_findings:  number;      // violations + needs_review + passes — summed across ALL crawled pages
-  violations:      number;
-  needs_review:    number;
-  passes:          number;
-  score:           number;      // Compliance pass-rate 0–100 = 100 * passes / (passes + violations); needs_review excluded, 100 when nothing failed
+  violations:      number;       // EFFECTIVE (after any manual-review decisions)
+  needs_review:    number;       // EFFECTIVE — still pending review
+  passes:          number;       // EFFECTIVE
+  manual_review_required: number;// Needs Review items awaiting human adjudication
+  score:           number | null;// Pass-rate 0–100 = 100 * passes / (passes + violations); null when nothing pass/fail
+  // Present once any finding has been reviewed (see Scoring & Manual Review):
+  automated?: { violations: number; needs_review: number; passes: number; score: number | null };
+  reviews?:   { reviewed: number; pending: number; as_pass: number; as_violation: number };
   by_severity: {
     critical: number;
     high:     number;
@@ -126,6 +130,11 @@ Every entry in `violations`, `needs_review`, and `passes` is a `Finding` object:
 
 ```typescript
 interface Finding {
+  finding_id:     string;           // Stable id (sha1[:16]) — attach a manual review to this
+  manual_review:  boolean;          // true for needs_review ("Manual Review Required") items
+  review_status?: "pass" | "violation";  // Set once a reviewer adjudicates the item
+  review_note?:   string | null;
+  reviewed?:      boolean;
   source:         "axe" | "python" | "custom";
   rule_id:        string;           // e.g. "python_1_1_1_alt", axe rule id, or custom rule id
   wcag_sc:        string;           // e.g. "1.1.1"

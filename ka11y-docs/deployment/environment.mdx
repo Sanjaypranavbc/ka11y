@@ -46,6 +46,22 @@ CUSTOM_CHECKS_TIMEOUT_MS=30000
 | `KA11Y_STAGE_TIMING_DIR` | `ka11y-python/logs/timings/` | No | Override the directory where per-(page, stage, rule) timing files (`<run_id>.jsonl` + `<run_id>.summary.log`) are written. See [Stage timing](/internals/stage-timing). |
 | `KA11Y_STAGE_TIMING_DISABLE` | — | No | Set to `1` / `true` to skip all stage-timing writes. Existing `crawler_timings.log` and `run_timings.log` are unaffected. |
 
+#### Durable store, queue & telemetry
+
+See [Persistence, Queue & Telemetry](/internals/persistence-and-queue).
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `KA11Y_DB_PATH` | `ka11y-python/logs/ka11y.db` | No | SQLite (WAL) database file: run state, reports, findings, assets metadata, telemetry. Mount on a durable volume in production (e.g. `/data/db/ka11y.db`). Back up `ka11y.db` + `-wal` + `-shm` together. |
+| `KA11Y_ASSET_DIR` | `ka11y-python/logs/assets` | No | Root for content-addressed asset bytes (screenshots, OCR crops). Served via `GET /api/v1/assets/{id}`. |
+| `KA11Y_RUN_RETENTION_DAYS` | `30` | No | Retention sweep deletes runs (and their findings/reports/assets) older than this. |
+| `KA11Y_RETENTION_SWEEP_SECONDS` | `3600` | No | Interval between retention sweeps. |
+| `KA11Y_MAX_ATTEMPTS` | `2` | No | Crash-requeue cap. A run requeued on boot more than this many times is failed with `error_stage=crash_recovery`. |
+| `KA11Y_TELEMETRY_FILES` | `1` | No | Set to `0` to keep telemetry in SQLite only and stop writing the JSONL/`.log` timing files (recommended in production). |
+| `KA11Y_CPU_WORKERS` | `0` | No | `>0` enables a `ProcessPoolExecutor` for pure-CPU work (report compression, finding merge) — true multi-core parallelism. `0` keeps the thread path; model-based OCR always stays on threads. |
+| `KA11Y_UNIFIED_CRAWL` | `0` | No | `1` runs axe-core inside the Playwright page (one page load) instead of a second Puppeteer crawl in Node. Default off until validated against the Node engine. Requires `axe.min.js` (vendored, or `KA11Y_AXE_MIN_JS`). |
+| `KA11Y_AXE_MIN_JS` | — | No | Override path to `axe.min.js` for the unified crawl. |
+
 ### Example `.env` (Python)
 
 ```bash

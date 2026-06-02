@@ -136,6 +136,8 @@
       "group": "Internals",
       "pages": [
         "internals/combined-package",
+        "internals/persistence-and-queue",
+        "internals/scoring-and-manual-review",
         "internals/python-rules-flow-analysis",
         "internals/node-rules-flow-analysis",
         "internals/crawler-metadata",

@@ -6,6 +6,7 @@ _build_report() — merges all flat findings into the final combined report shap
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -23,6 +24,125 @@ from ka11y.utils.url_canonical import canonicalize_url as _canonicalize_url
 _REPORT_URL_POLICY = CrawlPolicy()
 
 
+def _finding_signature(f: Dict) -> str:
+    """Element-identity signature for a finding, independent of its status.
+
+    Used to build a stable ``finding_id`` so a client can attach a manual-review
+    decision to a specific item and have it survive restart / re-read."""
+    el = f.get("element") or {}
+    parts = [
+        str(f.get("wcag_sc") or ""),
+        str(f.get("rule_id") or ""),
+        str(el.get("page_url") or ""),
+        str(el.get("frame_path") or ""),
+        str(el.get("selector") or el.get("target") or ""),
+        str(el.get("element_ref_id") or ""),
+        str(el.get("element_id") or ""),
+        str(el.get("tag") or ""),
+        str(el.get("image_src") or ""),
+        (" ".join(str(el.get("html") or "").split())[:200]),
+    ]
+    return "|".join(parts)
+
+
+def _stamp_finding_ids(findings: List[Dict]) -> None:
+    """Stamp each finding with a deterministic ``finding_id`` (+ disambiguate
+    exact duplicates) and a ``manual_review`` flag for needs_review items."""
+    seen: Dict[str, int] = {}
+    for f in findings:
+        sig = _finding_signature(f)
+        n = seen.get(sig, 0)
+        seen[sig] = n + 1
+        raw = sig if n == 0 else f"{sig}#{n}"
+        f["finding_id"] = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+        # needs_review items are the ones a human must adjudicate. Surface that
+        # explicitly so the UI can label them "Manual Review Required".
+        f["manual_review"] = f.get("status") == "needs_review"
+
+
+def apply_reviews(report: Dict[str, Any], reviews: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """Overlay manual-review decisions onto a built report and recompute the
+    *effective* score so it reflects human adjudication.
+
+    ``reviews`` maps ``finding_id`` → ``{"status": "pass"|"violation", "note": ...}``.
+    A reviewed needs_review item counts toward passes/violations for the headline
+    counts and the pass-rate; the original automated counts are preserved under
+    ``summary.automated``. Mutates and returns *report*. Safe with empty reviews
+    (then effective == automated, so nothing visibly changes)."""
+    summary = report.get("summary") or {}
+    # Idempotent: source the automated baseline from a prior overlay if present,
+    # so applying reviews twice to the same (hot-cache) report object doesn't
+    # compound the counts.
+    automated = summary.get("automated") or {
+        "violations": summary.get("violations", 0),
+        "needs_review": summary.get("needs_review", 0),
+        "passes": summary.get("passes", 0),
+        "score": summary.get("score"),
+    }
+
+    reviewed = as_pass = as_violation = 0
+    # Stamp every needs_review finding (flat list + per-page copies share refs).
+    for f in report.get("needs_review", []) or []:
+        rev = reviews.get(f.get("finding_id")) if reviews else None
+        if rev and rev.get("status") in ("pass", "violation"):
+            f["review_status"] = rev["status"]
+            f["review_note"] = rev.get("note")
+            f["reviewed"] = True
+            reviewed += 1
+            if rev["status"] == "pass":
+                as_pass += 1
+            else:
+                as_violation += 1
+        else:
+            f.pop("review_status", None)
+            f.pop("reviewed", None)
+
+    eff_violations = automated["violations"] + as_violation
+    eff_passes = automated["passes"] + as_pass
+    eff_needs_review = automated["needs_review"] - reviewed
+    denom = eff_passes + eff_violations
+    eff_score = round(100.0 * eff_passes / denom, 1) if denom else None
+
+    summary["automated"] = automated
+    summary["violations"] = eff_violations
+    summary["needs_review"] = eff_needs_review
+    summary["passes"] = eff_passes
+    summary["score"] = eff_score
+    summary["manual_review_required"] = eff_needs_review
+    summary["reviews"] = {
+        "reviewed": reviewed,
+        "pending": eff_needs_review,
+        "as_pass": as_pass,
+        "as_violation": as_violation,
+    }
+    report["summary"] = summary
+
+    # Per-page effective recompute. pages[].needs_review holds the SAME finding
+    # objects just stamped above, so each page's score reflects its own reviews.
+    for page in report.get("pages", []) or []:
+        ps = page.get("summary") or {}
+        if "automated" not in ps:
+            ps["automated"] = {
+                "violations": ps.get("violations", 0),
+                "needs_review": ps.get("needs_review", 0),
+                "passes": ps.get("passes", 0),
+                "score": ps.get("score"),
+            }
+        p_pass = sum(1 for f in page.get("needs_review", []) if f.get("review_status") == "pass")
+        p_viol = sum(1 for f in page.get("needs_review", []) if f.get("review_status") == "violation")
+        ev = ps["automated"]["violations"] + p_viol
+        ep = ps["automated"]["passes"] + p_pass
+        enr = ps["automated"]["needs_review"] - p_pass - p_viol
+        d = ep + ev
+        ps["violations"] = ev
+        ps["passes"] = ep
+        ps["needs_review"] = enr
+        ps["manual_review_required"] = enr
+        ps["score"] = round(100.0 * ep / d, 1) if d else None
+        page["summary"] = ps
+    return report
+
+
 def _build_report(
     url: str,
     all_findings: List[Dict],
@@ -36,6 +156,10 @@ def _build_report(
     The image-related report keys surface both OCR contrast analysis and the
     broader image-audit result set alongside the flat findings.
     """
+    # Stamp stable ids + manual_review flags before bucketing so every copy of a
+    # finding (flat lists + per-page arrays) carries the same id.
+    _stamp_finding_ids(all_findings)
+
     violations = [f for f in all_findings if f["status"] == "fail"]
     needs_review = [f for f in all_findings if f["status"] == "needs_review"]
     passes = [f for f in all_findings if f["status"] == "pass"]
@@ -185,6 +309,10 @@ def _build_report(
             "violations": len(violations),
             "needs_review": len(needs_review),
             "passes": len(passes),
+            # needs_review items are surfaced to the UI as "Manual Review
+            # Required"; this mirrors the count until a reviewer adjudicates them
+            # (apply_reviews then decrements it as items move to pass/violation).
+            "manual_review_required": len(needs_review),
             "score": _score(len(passes), len(violations)),
             "by_severity": sev_count,
             "by_level": level_count,
