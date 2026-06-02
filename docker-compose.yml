@@ -101,6 +101,28 @@ services:
       KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS: "60"
       KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS: "75"
 
+      # ── Durable store (SQLite WAL) + assets + telemetry ──────────────────
+      # Source of truth for run state, reports, findings, assets metadata and
+      # per-(page,stage,rule) telemetry. Lives on the ka11y_db named volume so
+      # it survives restarts/redeploys. Back up ka11y.db + -wal + -shm together
+      # (or use `VACUUM INTO`).
+      KA11Y_DB_PATH:        "/data/db/ka11y.db"
+      # Content-addressed asset bytes (screenshots, OCR crops, contrast regions).
+      KA11Y_ASSET_DIR:      "/data/assets"
+      # Delete runs (+ their findings/reports/assets) older than this many days.
+      KA11Y_RUN_RETENTION_DAYS: "30"
+      # Keep telemetry in SQLite only in prod (0) — avoids unbounded JSONL files.
+      KA11Y_TELEMETRY_FILES: "0"
+      # Durable queue: bounded concurrent jobs; crash-requeue attempt cap.
+      KA11Y_MAX_CONCURRENT_JOBS: "3"
+      KA11Y_MAX_ATTEMPTS:   "2"
+      # True multi-core CPU parallelism for report compression / pure-CPU
+      # auditors. Unset/0 = thread fallback (model-based OCR stays on threads).
+      KA11Y_CPU_WORKERS:    "0"
+      # P6 unified crawl: run axe-core inside Playwright (one page load) instead
+      # of a second Puppeteer crawl in Node. Default OFF; flip to "1" to trial.
+      KA11Y_UNIFIED_CRAWL:  "0"
+
     # Expose to host for local debugging / direct API calls.
     # In production behind a reverse proxy this can be removed.
     ports:
@@ -109,6 +131,8 @@ services:
     volumes:
       - ./output/crawled_images:/app/crawled_images
       - ./output/logs:/app/logs
+      - ka11y_db:/data/db
+      - ka11y_assets:/data/assets
       - huggingface_cache:/root/.cache/huggingface
 
     healthcheck:
@@ -199,3 +223,7 @@ networks:
 
 volumes:
   huggingface_cache:
+  # Durable SQLite store (run state, reports, findings, telemetry). Back this up.
+  ka11y_db:
+  # Content-addressed audit assets (bytes on disk; metadata in ka11y_db).
+  ka11y_assets:
