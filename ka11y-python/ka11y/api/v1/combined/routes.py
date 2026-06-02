@@ -382,11 +382,28 @@ async def get_combined_audit_timings(job_id: str):
     """
     async with _get_job_lock(job_id):
         snapshot = _jobs.get(job_id)
-        if not snapshot:
+        if snapshot:
+            job = dict(snapshot)
+            if "stages" in job:
+                job["stages"] = [dict(s) for s in job["stages"]]
+        else:
+            job = None
+
+    if job is None:
+        # Durable fallback: rebuild the per-(page,stage,rule) breakdown from the
+        # stage_timings table for runs no longer in the hot cache.
+        run = await repo.get_run(job_id)
+        if not run:
             raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-        job = dict(snapshot)
-        if "stages" in job:
-            job["stages"] = [dict(s) for s in job["stages"]]
+        rows = await repo.get_timings(job_id)
+        return {
+            "job_id": job_id,
+            "url": run.get("url"),
+            "status": run.get("status"),
+            "queue_wait_ms": run.get("queue_wait_ms"),
+            "wall_ms": run.get("wall_ms"),
+            "steps": rows,
+        }
 
     result = job.get("result") or {}
     return compute_run_timing(

@@ -65,7 +65,9 @@ class TestAppStartup:
         assert resp.status_code == 202
         body = resp.json()
         assert "job_id" in body
-        assert body["status"] in ("pending", "running")
+        # Durable-queue (P4): a freshly submitted job is persisted as 'queued'
+        # until the dispatcher admits it; 'pending'/'running' also acceptable.
+        assert body["status"] in ("pending", "queued", "running")
         assert body["url"] == "https://example.com/"
 
     def test_combined_get_known_job_returns_200(self, client):

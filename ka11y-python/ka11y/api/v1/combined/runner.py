@@ -208,6 +208,17 @@ async def _run_job_body(
     # client or the /history endpoint reflects live state even across restarts.
     await repo.mark_running(job_id, run_started_at, _jobs[job_id].get("submitted_at"))
     repo.insert_event(job_id, "running", {})
+
+    # Cooperative cancellation (P4): a client may have cancelled while the job
+    # waited in the queue. Bail out before launching browsers/axe.
+    try:
+        if await repo.is_cancelled(job_id):
+            _jobs[job_id]["status"] = "cancelled"
+            logger.info("[combined] job %s cancelled before start", job_id)
+            return
+    except Exception:  # noqa: BLE001
+        pass
+
     url = str(payload.url)
 
     # Resolve the effective language once, up front. When the user selects
@@ -506,16 +517,33 @@ async def _run_job_body(
             report["passes"] = report["passes"][:100]
             report["summary"]["passes_truncated"] = True
 
+        completed_at = datetime.now(timezone.utc).isoformat()
         async with _get_job_lock(job_id):
             _jobs[job_id].update(
                 {
                     "status": "completed",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": completed_at,
                     "report_path": str(report_path),
                     "result": report,
                     "current_stage": None,
                 }
             )
+
+        # Durable persistence (P0/P1): full report (zlib), flattened findings,
+        # per-page rows, and run summary. All wrapped — never fails the audit.
+        await repo.save_report(job_id, report)
+        await repo.save_findings(job_id, report)
+        await repo.save_pages(
+            job_id, (report.get("pages") or []) if isinstance(report.get("pages"), list) else []
+        )
+        await repo.mark_completed(
+            job_id,
+            completed_at=completed_at,
+            run_started_at=_jobs[job_id].get("run_started_at"),
+            summary=report.get("summary"),
+            output_dir=str(output_dir),
+        )
+        repo.insert_event(job_id, "job_complete", {"summary": report.get("summary")})
 
         # Append a per-run timing block to logs/run_timings.log (durations are
         # derived from the timestamps already recorded; no extra measurement).
@@ -582,17 +610,26 @@ async def _run_job_body(
             f"[combined] job {job_id} (error_id={error_id}) failed during stage "
             f"'{current_stage}' ({err_type}: {exc}) at {where}\n{tb}"
         )
+        failed_at = datetime.now(timezone.utc).isoformat()
         async with _get_job_lock(job_id):
             _jobs[job_id].update(
                 {
                     "status": "failed",
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "completed_at": failed_at,
                     "error": "Audit failed due to an internal error.",
                     "error_id": error_id,
                     "error_stage": current_stage,
                     "current_stage": None,
                 }
             )
+        await repo.mark_failed(
+            job_id,
+            completed_at=failed_at,
+            run_started_at=_jobs[job_id].get("run_started_at"),
+            error_id=error_id,
+            error_stage=current_stage,
+        )
+        repo.insert_event(job_id, "job_failed", {"error_id": error_id, "stage": current_stage})
 
         # Record timing for the failed run too, so the log shows where time went
         # before the failure (and which stage failed).
