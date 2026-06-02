@@ -133,19 +133,34 @@ async def get_asset(asset_id: int) -> Optional[Dict[str, Any]]:
     return row
 
 
+def _is_local_path(src: Optional[str]) -> bool:
+    """True only for an on-disk file path (not a URL, data URI, or served route)."""
+    if not src or not isinstance(src, str):
+        return False
+    if src.startswith(("http://", "https://", "data:", "/api/v1/")):
+        return False
+    try:
+        return Path(src).is_file()
+    except OSError:
+        return False
+
+
 async def register_report_assets(run_id: str, report: Dict[str, Any]) -> int:
-    """Register every on-disk image the report references into the ``assets``
-    table and stamp each with an ``asset_id`` + ``asset_url``. Idempotent and
-    best-effort: a failure on one image never aborts the others or the audit.
+    """Content-address every on-disk image the report references and rewrite the
+    frontend-facing URL fields to the ``/api/v1/assets/{id}`` route.
 
-    This is the low-touch P2 integration point — producers keep writing to their
-    existing paths; the report is the single place we know which files survived
-    into the final result, so we content-address them here.
+    This is the P2 integration point. Producers keep writing to their working
+    dirs; the report is the one place that knows which files survived into the
+    final result, so we register them here and repoint:
+      * contrast/image-report ``images[].image_url`` → asset URL (was ?path=)
+      * finding ``element.image_src`` local paths → asset URL (was ?path=)
 
-    Returns the number of assets registered.
+    Idempotent + best-effort: a failure on one image never aborts the rest or
+    the audit. Returns the number of assets registered.
     """
     n = 0
     try:
+        # Report image blocks (contrast / OCR visualiser).
         for report_key, kind in (
             ("contrast_report", "contrast_region"),
             ("image_audit_report", "ocr_crop"),
@@ -156,14 +171,32 @@ async def register_report_assets(run_id: str, report: Dict[str, Any]) -> int:
                 if not path or not Path(path).is_file():
                     continue
                 ref = await put_asset(
-                    run_id=run_id,
-                    kind=kind,
-                    data=path,
-                    page_url=img.get("page_url"),
+                    run_id=run_id, kind=kind, data=path, page_url=img.get("page_url")
                 )
                 if ref:
                     img["asset_id"] = ref.asset_id
                     img["asset_url"] = ref.url
+                    img["image_url"] = ref.url  # served via /assets, not ?path=
+                    n += 1
+
+        # Finding-level images (element.image_src pointing at a local crop).
+        for array_key in ("violations", "needs_review", "passes"):
+            for finding in report.get(array_key, []) or []:
+                element = finding.get("element")
+                if not isinstance(element, dict):
+                    continue
+                src = element.get("image_src")
+                if not _is_local_path(src):
+                    continue
+                ref = await put_asset(
+                    run_id=run_id,
+                    kind="finding_image",
+                    data=src,
+                    page_url=element.get("page_url"),
+                )
+                if ref:
+                    element["image_src"] = ref.url
+                    element["asset_id"] = ref.asset_id
                     n += 1
     except Exception:  # noqa: BLE001
         logger.warning("[store] register_report_assets(%s) failed", run_id, exc_info=True)

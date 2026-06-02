@@ -501,11 +501,23 @@ async def _run_job_body(
         report["warnings"] = _jobs[job_id].get("warnings", [])
         report["warning_details"] = _jobs[job_id].get("warning_details", [])
 
-        # Inject image_url into image-backed reports for frontend rendering.
+        # P2: content-address every image the report references and repoint the
+        # frontend-facing fields (image_url / element.image_src) at the durable
+        # /api/v1/assets/{id} route. Must run BEFORE the ?path= fallback below so
+        # registered images are served from the asset store, not the legacy path.
+        try:
+            from ka11y.store.assets import register_report_assets
+
+            await register_report_assets(job_id, report)
+        except Exception:  # noqa: BLE001
+            logger.debug("asset registration failed for %s", job_id, exc_info=True)
+
+        # Legacy fallback: any image NOT content-addressed above (no DB asset)
+        # still gets a working URL via the deprecated ?path= endpoint.
         for report_key in ("contrast_report", "image_audit_report"):
             if report.get(report_key):
                 for img in report[report_key].get("images", []):
-                    if img.get("path"):
+                    if img.get("path") and not img.get("image_url"):
                         img["image_url"] = (
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(img['path'], safe='')}"
@@ -549,15 +561,6 @@ async def _run_job_body(
                     "current_stage": None,
                 }
             )
-
-        # P2: content-address the images the report references (DB metadata +
-        # files on disk). Stamps asset_id/asset_url onto each image dict.
-        try:
-            from ka11y.store.assets import register_report_assets
-
-            await register_report_assets(job_id, report)
-        except Exception:  # noqa: BLE001
-            logger.debug("asset registration failed for %s", job_id, exc_info=True)
 
         # Durable persistence (P0/P1): full report (zlib), flattened findings,
         # per-page rows, and run summary. All wrapped — never fails the audit.
