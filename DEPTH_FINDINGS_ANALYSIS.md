@@ -70,7 +70,7 @@ The OCR budget now **scales with the number of crawled pages** and is
 `crawler_settings.py`:
 - `get_max_ocr_images_per_page()` — per-page budget (default 60, falls back to the
   legacy per-run value).
-- `get_max_ocr_images_ceiling()` — hard cap on total OCR per run (default 600) to
+- `get_max_ocr_images_ceiling()` — hard cap on total OCR per run (default 3000) to
   bound the cost of a deep crawl.
 - `select_ocr_candidate_paths(..., fair_per_page=True)` — after global priority
   ranking, buckets images by source page and takes **one image per page per
@@ -89,17 +89,19 @@ else:
     max_ocr_images = get_max_ocr_images_per_run()          # single-page: unchanged
 ```
 
-**Effect by crawl size** (defaults per_page=60, ceiling=600):
+**Effect by crawl size** (defaults per_page=60, ceiling=3000):
 
 | Pages | Old total budget | New total budget | Per-page share |
 |-------|------------------|------------------|----------------|
 | 1 (root) | 60 | 60 (unchanged) | 60 |
-| 5 | 60 (shared) | 300 | ~60 |
-| 50 | 60 (shared) | 600 (ceiling) | ~12 |
+| 5 | 60 (shared) | 300 | ~60 (full) |
+| 25 | 60 (shared) | 1500 | ~60 (full) |
+| 50 | 60 (shared) | 3000 | ~60 (full) |
+| 100 | 60 (shared) | 3000 (ceiling) | ~30 |
 
-A child page now gets the same image coverage it would as the root for small/medium
-crawls, and a fair, non-starved share on very deep crawls. Single-page behaviour is
-byte-for-byte unchanged. All knobs live in `config.yml → crawler.performance`.
+A child page now gets the **same image coverage it would as the root up to ~50 pages**,
+and a fair, non-starved share beyond that. Single-page behaviour is byte-for-byte
+unchanged. All knobs live in `config.yml → crawler.performance`.
 
 ### Related depth fixes shipped alongside
 - `max_links_per_page` now scales as `max(50, max_pages)` (was a flat 50, which

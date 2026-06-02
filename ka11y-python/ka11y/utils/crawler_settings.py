@@ -123,11 +123,12 @@ def get_max_ocr_images_per_page() -> int:
 
 def get_max_ocr_images_ceiling() -> int:
     """Hard cap on total OCR images per run regardless of page count — bounds the
-    cost of a deep crawl. Default 600."""
+    cost of a deep crawl. Default 3000 (full 60/page coverage up to ~50 pages
+    before the cap engages)."""
     ceiling = get_int_config(
         "crawler", "performance", "max_ocr_images_ceiling", default=None, minimum=1
     )
-    return ceiling if ceiling else 600
+    return ceiling if ceiling else 3000
 
 
 def build_text_spacing_cjk_selector_css() -> str:

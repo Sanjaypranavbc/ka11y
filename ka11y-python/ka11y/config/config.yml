@@ -52,7 +52,7 @@ crawler:
     # ceiling, distributed fairly across pages so a child page isn't starved of
     # image findings by its siblings.
     max_ocr_images_per_page: 60
-    max_ocr_images_ceiling: 600
+    max_ocr_images_ceiling: 3000
 
 
 crawl_browser:
