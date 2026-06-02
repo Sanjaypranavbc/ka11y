@@ -79,11 +79,38 @@ logger.info("Configuration loaded successfully")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("ka11y API starting up")
+
+    # Durable store: open SQLite (WAL) and start the single writer thread before
+    # anything that might persist. Degrades to memory-only if it can't start.
+    try:
+        from ka11y.store import init_db
+
+        init_db()
+    except Exception:  # noqa: BLE001
+        logger.exception("SQLite store failed to initialise; running memory-only")
+
     eviction_task = asyncio.create_task(_evict_old_jobs())
+
+    # Crash recovery + durable queue dispatcher (P4). On boot any run left
+    # 'running' is requeued; the dispatcher drains 'queued' rows FIFO, bounded
+    # by KA11Y_MAX_CONCURRENT_JOBS. Retention sweep (P1) prunes old runs+assets.
+    dispatcher_task = None
+    retention_task = None
+    try:
+        from ka11y.api.v1.combined.dispatcher import run_dispatcher
+        from ka11y.store.retention import run_retention_loop
+
+        dispatcher_task = asyncio.create_task(run_dispatcher())
+        retention_task = asyncio.create_task(run_retention_loop())
+    except Exception:  # noqa: BLE001
+        logger.exception("dispatcher/retention failed to start")
+
     try:
         yield
     finally:
-        eviction_task.cancel()
+        for _t in (eviction_task, dispatcher_task, retention_task):
+            if _t is not None:
+                _t.cancel()
         # Sprint-2 (#9): tear down the shared Chromium pool on shutdown so
         # the host doesn't leak browser processes between reloads.
         try:
@@ -92,6 +119,12 @@ async def lifespan(app: FastAPI):
             await shutdown_pool()
         except Exception:  # noqa: BLE001
             logger.exception("browser pool shutdown failed during lifespan teardown")
+        try:
+            from ka11y.store import shutdown_db
+
+            shutdown_db()
+        except Exception:  # noqa: BLE001
+            logger.exception("SQLite store shutdown failed")
         logger.info("ka11y API shutting down")
 
 
