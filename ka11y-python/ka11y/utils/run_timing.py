@@ -231,9 +231,9 @@ def log_run_timing(
         except Exception:  # noqa: BLE001
             pass
 
+        path = _log_path()
         if os.environ.get("KA11Y_TELEMETRY_FILES", "1") != "0":
             block = _format_run_timing_block(data)
-            path = _log_path()
             with _write_lock:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with path.open("a", encoding="utf-8") as fh:
