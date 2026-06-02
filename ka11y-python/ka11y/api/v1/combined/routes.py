@@ -517,7 +517,34 @@ async def stream_combined_audit(job_id: str):
     """
     job = _jobs.get(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        # Durable fallback: the run may have completed before this client
+        # connected (or the process restarted). Emit its terminal state from the
+        # store and close, rather than 404-ing a finished run.
+        run = await repo.get_run(job_id)
+        if not run:
+            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+
+        async def _terminal() -> AsyncGenerator[str, None]:
+            status = run.get("status")
+            if status == "completed":
+                rep = await repo.get_report(job_id) or {}
+                yield (
+                    f"event: job_complete\n"
+                    f"data: {json.dumps({'job_id': job_id, 'summary': rep.get('summary', {})})}\n\n"
+                )
+            elif status == "failed":
+                yield (
+                    f"event: job_failed\n"
+                    f"data: {json.dumps({'job_id': job_id, 'error': 'Audit failed due to an internal error.'})}\n\n"
+                )
+            else:
+                yield f"event: job_state\ndata: {json.dumps({'status': status})}\n\n"
+
+        return StreamingResponse(
+            _terminal(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     q: asyncio.Queue = asyncio.Queue()
     async with _get_subscribers_lock():

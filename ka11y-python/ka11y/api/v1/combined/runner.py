@@ -325,21 +325,42 @@ async def _run_job_body(
         node_task = None
         if payload.run_node_audit:
             _stage_start(job_id, "axe_core")
-            node_task = asyncio.create_task(
-                _call_node_flat(
-                    url,
-                    node_base_url,
-                    payload.wcag_level,
-                    resolved_lang,
-                    max_depth=payload.max_depth,
-                    internal_links=payload.internal_links,
-                    max_pages=payload.max_pages,
-                    success_criteria_id=payload.success_criteria_id,
-                    job_id=job_id,
-                    snapshot_urls_event=snapshot_urls_event,
-                    snapshot_urls_container=snapshot_urls_container,
+            # P6: unified crawl runs axe-core inside the Python Playwright pass
+            # (one page load) instead of a second Puppeteer crawl in Node. Same
+            # snapshot-URL handshake, same flat findings shape. Default OFF.
+            from ka11y.crawler.axe_runner import is_unified_enabled, run_axe_unified
+
+            if is_unified_enabled():
+                node_task = asyncio.create_task(
+                    run_axe_unified(
+                        url,
+                        payload.wcag_level,
+                        resolved_lang,
+                        max_depth=payload.max_depth,
+                        internal_links=payload.internal_links,
+                        max_pages=payload.max_pages,
+                        success_criteria_id=payload.success_criteria_id,
+                        job_id=job_id,
+                        snapshot_urls_event=snapshot_urls_event,
+                        snapshot_urls_container=snapshot_urls_container,
+                    )
                 )
-            )
+            else:
+                node_task = asyncio.create_task(
+                    _call_node_flat(
+                        url,
+                        node_base_url,
+                        payload.wcag_level,
+                        resolved_lang,
+                        max_depth=payload.max_depth,
+                        internal_links=payload.internal_links,
+                        max_pages=payload.max_pages,
+                        success_criteria_id=payload.success_criteria_id,
+                        job_id=job_id,
+                        snapshot_urls_event=snapshot_urls_event,
+                        snapshot_urls_container=snapshot_urls_container,
+                    )
+                )
 
         python_task = asyncio.create_task(
             _run_python_stages(
@@ -528,6 +549,15 @@ async def _run_job_body(
                     "current_stage": None,
                 }
             )
+
+        # P2: content-address the images the report references (DB metadata +
+        # files on disk). Stamps asset_id/asset_url onto each image dict.
+        try:
+            from ka11y.store.assets import register_report_assets
+
+            await register_report_assets(job_id, report)
+        except Exception:  # noqa: BLE001
+            logger.debug("asset registration failed for %s", job_id, exc_info=True)
 
         # Durable persistence (P0/P1): full report (zlib), flattened findings,
         # per-page rows, and run summary. All wrapped — never fails the audit.

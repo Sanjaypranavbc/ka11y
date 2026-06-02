@@ -1,7 +1,7 @@
 import os
 import httpx
 from fastapi import APIRouter
-from ka11y.api.v1 import combined, pipeline, crawl, rule_evaluator
+from ka11y.api.v1 import combined, pipeline, crawl, rule_evaluator, assets
 from ka11y.api.v1.rules import router as rules_router
 
 router = APIRouter(prefix="/api/v1")
@@ -9,6 +9,7 @@ router.include_router(crawl.router)
 # router.include_router(forms.router)
 router.include_router(pipeline.router)
 router.include_router(combined.router)
+router.include_router(assets.router)
 router.include_router(rules_router)
 router.include_router(rule_evaluator.router, prefix="/test")
 

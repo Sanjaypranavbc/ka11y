@@ -120,6 +120,12 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             logger.exception("browser pool shutdown failed during lifespan teardown")
         try:
+            from ka11y.store.cpu_pool import shutdown_pool as shutdown_cpu_pool
+
+            shutdown_cpu_pool()
+        except Exception:  # noqa: BLE001
+            logger.exception("CPU pool shutdown failed")
+        try:
             from ka11y.store import shutdown_db
 
             shutdown_db()

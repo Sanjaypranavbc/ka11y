@@ -49,10 +49,16 @@ _pool: Optional[ProcessPoolExecutor] = None
 
 
 def get_pool() -> Optional[ProcessPoolExecutor]:
-    """Lazily create the shared process pool. Returns ``None`` if disabled
-    (``KA11Y_CPU_WORKERS=0``) or if pool creation fails."""
+    """Lazily create the shared process pool.
+
+    Opt-in: the pool is only created when ``KA11Y_CPU_WORKERS`` is set to a
+    value > 0. Unset (or ``0``) keeps the default thread path — identical to
+    today's behaviour, and avoids forking under pytest. Ops enables true
+    multi-core parallelism on the box by exporting e.g. ``KA11Y_CPU_WORKERS=6``.
+    """
     global _pool
-    if os.getenv("KA11Y_CPU_WORKERS") == "0":
+    raw = os.getenv("KA11Y_CPU_WORKERS")
+    if not raw or raw == "0":
         return None
     if _pool is None:
         try:

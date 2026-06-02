@@ -158,15 +158,24 @@ def _pid() -> int:
 # ── report + findings ────────────────────────────────────────────────────────
 
 
+def _compress_report(report: Dict[str, Any]) -> tuple:
+    """Pure CPU: serialize + zlib a report. Top-level + picklable so it can run
+    in the shared ProcessPoolExecutor (P5) for large multi-page reports without
+    blocking the event loop."""
+    raw = json.dumps(report, default=str, ensure_ascii=False).encode("utf-8")
+    return zlib.compress(raw, level=6), len(raw)
+
+
 async def save_report(run_id: str, report: Dict[str, Any]) -> None:
     try:
-        raw = json.dumps(report, default=str, ensure_ascii=False).encode("utf-8")
-        comp = zlib.compress(raw, level=6)
+        from ka11y.store.cpu_pool import run_cpu
+
+        comp, raw_len = await run_cpu(_compress_report, report)
         await get_db().execute(
             "INSERT OR REPLACE INTO run_reports "
             "(run_id, report_zlib, bytes_raw, bytes_stored, created_at) "
             "VALUES (?,?,?,?,?)",
-            (run_id, comp, len(raw), len(comp), _now()),
+            (run_id, comp, raw_len, len(comp), _now()),
         )
     except Exception:  # noqa: BLE001
         logger.warning("[store] save_report(%s) failed", run_id, exc_info=True)

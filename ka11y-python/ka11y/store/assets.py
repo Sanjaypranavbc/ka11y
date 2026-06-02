@@ -133,6 +133,43 @@ async def get_asset(asset_id: int) -> Optional[Dict[str, Any]]:
     return row
 
 
+async def register_report_assets(run_id: str, report: Dict[str, Any]) -> int:
+    """Register every on-disk image the report references into the ``assets``
+    table and stamp each with an ``asset_id`` + ``asset_url``. Idempotent and
+    best-effort: a failure on one image never aborts the others or the audit.
+
+    This is the low-touch P2 integration point — producers keep writing to their
+    existing paths; the report is the single place we know which files survived
+    into the final result, so we content-address them here.
+
+    Returns the number of assets registered.
+    """
+    n = 0
+    try:
+        for report_key, kind in (
+            ("contrast_report", "contrast_region"),
+            ("image_audit_report", "ocr_crop"),
+        ):
+            block = report.get(report_key) or {}
+            for img in block.get("images", []) or []:
+                path = img.get("path")
+                if not path or not Path(path).is_file():
+                    continue
+                ref = await put_asset(
+                    run_id=run_id,
+                    kind=kind,
+                    data=path,
+                    page_url=img.get("page_url"),
+                )
+                if ref:
+                    img["asset_id"] = ref.asset_id
+                    img["asset_url"] = ref.url
+                    n += 1
+    except Exception:  # noqa: BLE001
+        logger.warning("[store] register_report_assets(%s) failed", run_id, exc_info=True)
+    return n
+
+
 def prune_run_assets(run_id: str) -> None:
     """Delete the on-disk asset directory for a run (rows are removed by the
     ON DELETE CASCADE in the retention sweep). Best-effort; never raises."""

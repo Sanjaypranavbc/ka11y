@@ -111,8 +111,26 @@ def _safe_run_id(run_id: str) -> str:
     return "".join(c for c in (run_id or "unknown") if c.isalnum() or c in "-_.") or "unknown"
 
 
+def _files_enabled() -> bool:
+    """JSONL/summary files are opt-out (P3). Set KA11Y_TELEMETRY_FILES=0 in prod
+    to keep telemetry in SQLite only and avoid unbounded log-file growth."""
+    return os.environ.get("KA11Y_TELEMETRY_FILES", "1") != "0"
+
+
 def _write_row(run_id: str, row: Dict[str, Any]) -> None:
     if _is_disabled():
+        return
+    # P3: mirror every fine-grained step into the durable stage_timings table
+    # (fire-and-forget; never blocks or raises). This is the queryable sink that
+    # /admin/metrics and /{run_id}/timings read from.
+    try:
+        from ka11y.store import repo
+
+        repo.insert_timing(row)
+    except Exception:  # noqa: BLE001
+        pass
+
+    if not _files_enabled():
         return
     try:
         path = _jsonl_path(run_id)
