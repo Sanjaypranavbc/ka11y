@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { TranslationKey } from "@/i18n/translations";
 
-// The 16 optional audit-module toggles. Collapsed under "Advanced checks".
+// The 20 optional audit-module toggles. Collapsed under "Advanced checks".
 const TOGGLE_ITEMS: { key: keyof AuditConfig; labelKey: TranslationKey }[] = [
   { key: "run_ocr",                          labelKey: "toggle.ocr"             },
   { key: "run_image_audit",                  labelKey: "toggle.imageAudit"      },
@@ -40,6 +40,10 @@ const TOGGLE_ITEMS: { key: keyof AuditConfig; labelKey: TranslationKey }[] = [
   { key: "run_focus_not_obscured_min_audit", labelKey: "toggle.focusObscured"   },
   { key: "run_focus_not_obscured_enh_audit", labelKey: "toggle.focusObscuredPlus" },
   { key: "run_node_audit",                   labelKey: "toggle.runNodeAudit"    },
+  { key: "run_consistent_navigation_audit",  labelKey: "toggle.consistentNav"   },
+  { key: "run_consistent_id_audit",          labelKey: "toggle.consistentId"    },
+  { key: "run_unusual_words_audit",          labelKey: "toggle.unusualWords"    },
+  { key: "run_section_headings_audit",       labelKey: "toggle.sectionHeadings" },
 ];
 
 const STATUS_KEYS: Record<string, TranslationKey> = {
@@ -190,7 +194,89 @@ export function AuditForm({
         </div>
       </div>
 
-      {/* Advanced checks — all 16 module toggles, collapsed by default */}
+      {/* Engine Selection — axe-core and AccessLint toggles */}
+      <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2.5">
+        <div className="flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-primary animate-pulse shrink-0" aria-hidden="true" />
+          <span className="text-xs font-semibold text-foreground">{t("engines.title" as TranslationKey)}</span>
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-snug">
+          {t("engines.hint" as TranslationKey)}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {/* axe-core Engine Card */}
+          <button
+            type="button"
+            onClick={() => update({ run_axe: !config.run_axe })}
+            className={cn(
+              "relative flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left transition-all cursor-pointer",
+              config.run_axe
+                ? "border-blue-500/50 bg-blue-500/10 shadow-sm shadow-blue-500/10"
+                : "border-border bg-card opacity-60 hover:opacity-80"
+            )}
+          >
+            <div className="flex items-center gap-1.5 w-full">
+              <div className={cn(
+                "h-1.5 w-1.5 rounded-full shrink-0",
+                config.run_axe ? "bg-blue-500" : "bg-muted-foreground/30"
+              )} />
+              <span className={cn(
+                "text-xs font-bold uppercase tracking-wider",
+                config.run_axe ? "text-blue-500" : "text-muted-foreground"
+              )}>
+                axe-core
+              </span>
+              <Switch
+                id="toggle-run_axe"
+                checked={config.run_axe}
+                onCheckedChange={(v) => update({ run_axe: v })}
+                className="ml-auto scale-75 data-[state=checked]:bg-blue-500 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground leading-tight">
+              DOM rules · ARIA · color contrast
+            </span>
+          </button>
+
+          {/* AccessLint Engine Card */}
+          <button
+            type="button"
+            onClick={() => update({ run_accesslint: !config.run_accesslint })}
+            className={cn(
+              "relative flex flex-col items-start gap-1 rounded-lg border px-3 py-2.5 text-left transition-all cursor-pointer",
+              config.run_accesslint
+                ? "border-purple-500/50 bg-purple-500/10 shadow-sm shadow-purple-500/10"
+                : "border-border bg-card opacity-60 hover:opacity-80"
+            )}
+          >
+            <div className="flex items-center gap-1.5 w-full">
+              <div className={cn(
+                "h-1.5 w-1.5 rounded-full shrink-0",
+                config.run_accesslint ? "bg-purple-500" : "bg-muted-foreground/30"
+              )} />
+              <span className={cn(
+                "text-xs font-bold uppercase tracking-wider",
+                config.run_accesslint ? "text-purple-500" : "text-muted-foreground"
+              )}>
+                AccessLint
+              </span>
+              <Switch
+                id="toggle-run_accesslint"
+                checked={config.run_accesslint}
+                onCheckedChange={(v) => update({ run_accesslint: v })}
+                className="ml-auto scale-75 data-[state=checked]:bg-purple-500 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground leading-tight">
+              Semantic HTML · best practices
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Advanced checks — all 20 module toggles, collapsed by default */}
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="rounded-lg border border-border bg-muted/20">
         <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2.5 text-left">
           <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />

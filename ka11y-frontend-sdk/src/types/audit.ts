@@ -22,6 +22,8 @@ export interface AuditViolation extends AuditElementInfo {
   reason: string;
   suggested_fix: string | null;
   help_url?: string | null;
+  detected_by?: string[];
+  aiContext?: string | null;
 }
 
 export interface AuditNeedsReview extends AuditElementInfo {
@@ -34,6 +36,8 @@ export interface AuditNeedsReview extends AuditElementInfo {
   reason: string;
   suggested_fix: string | null;
   help_url?: string | null;
+  detected_by?: string[];
+  aiContext?: string | null;
 }
 
 export interface ContrastDetection {
@@ -124,6 +128,8 @@ export interface AuditPass extends AuditElementInfo {
   source: AuditSource;
   reason: string;
   help_url?: string | null;
+  detected_by?: string[];
+  aiContext?: string | null;
 }
 
 export interface StageInfo {
@@ -270,6 +276,14 @@ export interface AuditConfig {
   run_focus_not_obscured_min_audit: boolean;
   run_focus_not_obscured_enh_audit: boolean;
   run_node_audit: boolean;
+  // ── Node engine selection ──────────────────────────────────────────────────
+  run_axe: boolean;
+  run_accesslint: boolean;
+  // ── New WCAG rule checks ──────────────────────────────────────────────────
+  run_consistent_navigation_audit: boolean;
+  run_consistent_id_audit: boolean;
+  run_unusual_words_audit: boolean;
+  run_section_headings_audit: boolean;
 }
 
 export type TabValue = "dashboard" | "violations" | "needs-review" | "passes" | "image-visualisation" | "wcag-rules" | "settings" | "rule-evaluator";

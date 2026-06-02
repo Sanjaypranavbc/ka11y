@@ -189,12 +189,12 @@ class AccessibilityService {
    * @param {object} config       - Application config ({ browser, axe })
    */
   constructor(puppeteer, axeCorePath, logger, config) {
-    this._puppeteer    = puppeteer;
-    this._axeCorePath  = axeCorePath;
-    this._logger       = logger;
-    this._config       = config;
-    this._activeCount  = 0;
-    this._waitQueue    = [];
+    this._puppeteer = puppeteer;
+    this._axeCorePath = axeCorePath;
+    this._logger = logger;
+    this._config = config;
+    this._activeCount = 0;
+    this._waitQueue = [];
   }
 
   _acquireSlot() {
@@ -231,6 +231,12 @@ class AccessibilityService {
         ]);
       await injectWithTimeout(async () => {
         await page.addScriptTag({ path: this._axeCorePath });
+
+        // Workaround for Node.js "exports" restrictions in @accesslint/core package.json
+        const alDir = require('path').dirname(require.resolve('@accesslint/core'));
+        const alIifePath = require('path').join(alDir, 'index.iife.js');
+        await page.addScriptTag({ path: alIifePath });
+
         await waitForAxe();
       });
     };
@@ -313,10 +319,10 @@ class AccessibilityService {
         // Signal cancellation to the browser context (best effort).
         try {
           await page.evaluate(() => {
-            try { window.__ka11yAxeAbort = true; } catch (_) {}
+            try { window.__ka11yAxeAbort = true; } catch (_) { }
             // eslint-disable-next-line no-undef
             if (typeof axe !== 'undefined' && typeof axe._abortAll === 'function') {
-              try { axe._abortAll(); } catch (_) {}
+              try { axe._abortAll(); } catch (_) { }
             }
           });
         } catch (e) {
@@ -336,8 +342,8 @@ class AccessibilityService {
       axeRunPromise.catch((e) => {
         const msg = (e && e.message) || '';
         if (msg.includes('Target closed') ||
-            msg.includes('Execution context was destroyed') ||
-            msg.includes('Session closed')) {
+          msg.includes('Execution context was destroyed') ||
+          msg.includes('Session closed')) {
           this._logger.debug(`${prefix}Late axe.run rejection after browser closed: ${msg}`);
         } else {
           this._logger.debug(`${prefix}Late axe.run rejection: ${msg}`);
@@ -361,10 +367,10 @@ class AccessibilityService {
     try {
       this._logger.info('Launching Puppeteer browser...');
       browser = await this._puppeteer.launch({
-        headless:       this._config.browser.headless,
+        headless: this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
         ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
-        args:           this._config.browser.args,
+        args: this._config.browser.args,
       });
 
       const page = await browser.newPage();
@@ -389,6 +395,22 @@ class AccessibilityService {
       const axeRunOnly = _runOnlyForCriteria(criteriaId, runOnly);
       const axeResults = await this._runAxeWithTimeout(page, axeRunOnly, timeoutMs);
 
+      this._logger.info('Running AccessLint sequentially...');
+      const accessLintResults = await page.evaluate(() => {
+        // Immediately run AccessLint natively
+        if (!window.AccessLint) return null;
+        const alResRaw = window.AccessLint.runAudit(document);
+        
+        // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
+        return {
+          ...alResRaw,
+          violations: (alResRaw.violations || []).map(v => {
+            const { element, source, ...safeProps } = v;
+            return safeProps;
+          })
+        };
+      });
+
       this._logger.info(
         `axe.run() complete — violations: ${axeResults.violations.length}, ` +
         `passes: ${axeResults.passes.length}, ` +
@@ -401,7 +423,7 @@ class AccessibilityService {
       const customResults = await runStaticChecks(page, criteriaId != null ? criteriaId : { lang });
       this._logger.info(`Custom checks complete — ${customResults.length} SC(s) returned.`);
 
-      return mergeWithAxe(mapResults(axeResults, criteriaId), customResults);
+      return mergeWithAxe(mapResults(axeResults, criteriaId, accessLintResults), customResults);
     } catch (err) {
       this._logger.error('Error during accessibility analysis:', err.message);
       throw err;
@@ -430,10 +452,10 @@ class AccessibilityService {
     try {
       this._logger.info(`Launching Puppeteer browser for URL: ${url}`);
       browser = await this._puppeteer.launch({
-        headless:       this._config.browser.headless,
+        headless: this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
         ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
-        args:           this._config.browser.args,
+        args: this._config.browser.args,
       });
 
       const page = await browser.newPage();
@@ -464,6 +486,22 @@ class AccessibilityService {
       const axeRunOnly = _runOnlyForCriteria(criteriaId, runOnly);
       const axeResults = await this._runAxeWithTimeout(page, axeRunOnly, timeoutMs);
 
+      this._logger.info('Running AccessLint sequentially...');
+      const accessLintResults = await page.evaluate(() => {
+        // Immediately run AccessLint natively
+        if (!window.AccessLint) return null;
+        const alResRaw = window.AccessLint.runAudit(document);
+        
+        // Sanitize out live HTML elements because Puppeteer cannot serialize them to JSON
+        return {
+          ...alResRaw,
+          violations: (alResRaw.violations || []).map(v => {
+            const { element, source, ...safeProps } = v;
+            return safeProps;
+          })
+        };
+      });
+
       this._logger.info(
         `axe.run() complete — violations: ${axeResults.violations.length}, ` +
         `passes: ${axeResults.passes.length}, ` +
@@ -474,7 +512,7 @@ class AccessibilityService {
       const customResults = await runAll(page, criteriaId != null ? criteriaId : { lang });
       this._logger.info(`Custom checks complete — ${customResults.length} SC(s) returned.`);
 
-      return mergeWithAxe(mapResults(axeResults, criteriaId), customResults);
+      return mergeWithAxe(mapResults(axeResults, criteriaId, accessLintResults), customResults);
     } catch (err) {
       this._logger.error(`Error during URL accessibility analysis: ${err.message}`);
       throw err;
@@ -514,7 +552,6 @@ class AccessibilityService {
       // unchanged.
       discoveredUrls = [],
     } = options;
-
     const { timeoutMs } = this._config.axe;
     let browser = null;
 
@@ -526,10 +563,10 @@ class AccessibilityService {
         `maxDepth=${maxDepth} internalLinks=${internalLinks} maxPages=${maxPages}`
       );
       browser = await this._puppeteer.launch({
-        headless:       this._config.browser.headless,
+        headless: this._config.browser.headless,
         executablePath: this._config.browser.executablePath,
         ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
-        args:           this._config.browser.args,
+        args: this._config.browser.args,
       });
 
       // Single browser is reused across all crawled pages (one Chromium, many
@@ -620,7 +657,6 @@ class AccessibilityService {
           },
         });
       }
-
       const ORDER = { fail: 0, needs_review: 1, pass: 2 };
       allFindings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
       this._logger.info(

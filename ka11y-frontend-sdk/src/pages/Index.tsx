@@ -45,6 +45,12 @@ const DEFAULT_CONFIG: AuditConfig = {
   run_focus_not_obscured_min_audit: true,
   run_focus_not_obscured_enh_audit: true,
   run_node_audit: true,
+  run_axe: true,
+  run_accesslint: true,
+  run_consistent_navigation_audit: true,
+  run_consistent_id_audit: true,
+  run_unusual_words_audit: true,
+  run_section_headings_audit: true,
 };
 
 const Index = () => {

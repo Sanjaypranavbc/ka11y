@@ -129,3 +129,38 @@ This document provides a deep technical breakdown of every accessibility rule im
 *   **Logic**:
     1.  **Role Verification**: Ensures functional images have `role="button"` or are contained within interactive tags.
     2.  **Name Resolution**: Follows the WCAG Name Computation algorithm: checks `aria-labelledby` > `aria-label` > `alt` > `title`. Fails if all are missing or generic (e.g., "button1").
+
+---
+
+### **Rule ID**: WCAG 3.2.3 — Consistent Navigation (Level AA)
+*   **Goal**: Repeated navigational mechanisms across multiple pages occur in the same relative order.
+*   **Solution Approach**: **Relative Sequence Alignment Mapping**. Simulates human-like browsing by crawling identical-domain menus and computing relative-order sequence checks.
+*   **Logic**:
+    1.  **Landmark Harvesting**: Extracts standard `<nav>`, `role="navigation"`, `<header>`, and common class-based (`navbar`, `main-menu`) menus.
+    2.  **Accessible Name Extraction**: Compares the links by standard name computation to build structured navigational lists.
+    3.  **Relative Alignment Matching**: Compares repeated menus (having 3+ common items) and verifies if they match in exact relative sequence order. Fails on mismatches.
+
+### **Rule ID**: WCAG 3.2.4 — Consistent Identification (Level AA)
+*   **Goal**: Components that perform the same function across multiple pages are identified consistently.
+*   **Solution Approach**: **Region-Based Functional Component Analysis**. Groups repeated components (Search, Login, Logout, Contact, etc.) by layout region and compares labels.
+*   **Logic**:
+    1.  **Region Mapping**: Groups elements within `header`, `footer`, `navigation`, or `main` landmarks.
+    2.  **Function Matching**: Detects intended actions (e.g. login, register, cart, search) via specialized regex and clean label normalizers.
+    3.  **Consistency Audit**: Asserts that all repeated elements mapped to the same function in identical regions share exactly consistent accessible labels.
+
+### **Rule ID**: WCAG 3.1.3 — Unusual Words (Level AAA)
+*   **Goal**: Provide a mechanism for explaining unusual words, jargon, idioms, and abbreviations.
+*   **Solution Approach**: **NLP-Driven Terminology Extraction & Explanation Checking**. Employs lightweight, lazy-loaded keyphrase singletons (spaCy, YAKE, and KeyBERT) to analyze vocabulary rarity and explanation mapping.
+*   **Logic**:
+    1.  **Unusual Candidates Discovery**: Uses YAKE and KeyBERT to extract prominent phrases, filtered against a fast text frequency database (`wordfreq`) to identify statistical rarity.
+    2.  **Explanation Scanner**: Cross-references rare candidates against known grammatical definition patterns (e.g., `X is a...`, `X refers to...`) within the sentence context.
+    3.  **Programmatic Verification**: Inspects native definition elements (`<dfn>`, `<abbr>`) and `aria-describedby` linkages to verify appropriate accessibility wiring.
+
+### **Rule ID**: WCAG 2.4.10 — Section Headings (Level AAA)
+*   **Goal**: Section headings are used to organize content.
+*   **Solution Approach**: **Visual & Semantic Layout Region Audit**. Evaluates structural blocks within the browser viewport to verify heading presence, size, and significance.
+*   **Logic**:
+    1.  **Structural Region Sweep**: Gathers landmark regions (`section`, `article`, `main`, `[role="region"]`).
+    2.  **Semantic Heading Verification**: Searches for h1–h6 tags or `aria-labelledby` pointing to appropriate heading elements within each section.
+    3.  **Visual Styling Analysis**: Flags non-semantic styled heading tags (e.g., bold paragraphs with 16px+ size) that mimic sections without being screen-reader discoverable.
+
