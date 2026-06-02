@@ -378,6 +378,25 @@ def test_apply_reviews_recomputes_score():
     assert rep["summary"]["score"] == 50.0 and rep["summary"]["needs_review"] == 1
 
 
+def test_apply_reviews_idempotent_and_arrays_match_counts():
+    from ka11y.api.v1.combined.report import _build_report, apply_reviews
+
+    rep = _build_report("https://e.com", _sample_findings())
+    fid = rep["needs_review"][0]["finding_id"]
+    decision = {fid: {"status": "violation"}}
+
+    apply_reviews(rep, decision)
+    first = dict(rep["summary"])
+    # Applying the same decision again must not compound counts or move arrays.
+    apply_reviews(rep, decision)
+    assert rep["summary"]["violations"] == first["violations"] == 2
+    assert rep["summary"]["needs_review"] == first["needs_review"] == 0
+    # Arrays and summary counts agree after repartition.
+    assert len(rep["violations"]) == rep["summary"]["violations"]
+    assert len(rep["needs_review"]) == rep["summary"]["needs_review"]
+    assert len(rep["passes"]) == rep["summary"]["passes"]
+
+
 @pytest.mark.asyncio
 async def test_review_endpoint_updates_effective_score(isolated_db):
     from ka11y.api.v1.combined.report import _build_report
@@ -402,11 +421,15 @@ async def test_review_endpoint_updates_effective_score(isolated_db):
     assert out["status"] == "violation" and out["wcag_sc"] == "1.4.3"
 
     job = await get_combined_audit("run-rev")
-    s = job["result"]["summary"]
+    result = job["result"]
+    s = result["summary"]
     assert s["violations"] == 2 and s["needs_review"] == 0 and s["score"] == 33.3
     assert s["reviews"]["as_violation"] == 1
-    # The reviewed finding carries its decision for the UI.
-    assert job["result"]["needs_review"][0]["review_status"] == "violation"
+    # Arrays and counts stay in lockstep: the reviewed needs_review item is now
+    # bucketed under violations (with its decision) and needs_review is empty.
+    assert len(result["violations"]) == 2 and len(result["needs_review"]) == 0
+    moved = [f for f in result["violations"] if f.get("review_status") == "violation"]
+    assert len(moved) == 1 and moved[0]["status"] == "needs_review"
 
     # Reviewing a non-existent / non-needs_review finding id → 404.
     import fastapi

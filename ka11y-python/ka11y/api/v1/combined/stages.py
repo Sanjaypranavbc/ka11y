@@ -1166,9 +1166,14 @@ async def _load_universal_snapshot(
     # Build the crawl policy explicitly so the request's internal_links /
     # max_pages controls reach the universal BFS: same_origin == internal-only
     # (exact hostname), max_pages is the hard RAM/time budget.
+    #
+    # max_links_per_page must scale with max_pages: it was defaulting to 50, so a
+    # crawl with max_pages>50 could never actually reach that many pages — each
+    # page only enqueued its first 50 links, starving deep BFS of child URLs.
     policy = CrawlPolicy(
         max_depth=max_depth,
         max_pages=max_pages,
+        max_links_per_page=max(50, max_pages),
         same_origin=internal_links,
     )
 

@@ -80,26 +80,55 @@ def apply_reviews(report: Dict[str, Any], reviews: Dict[str, Dict[str, Any]]) ->
         "score": summary.get("score"),
     }
 
-    reviewed = as_pass = as_violation = 0
-    # Stamp every needs_review finding (flat list + per-page copies share refs).
-    for f in report.get("needs_review", []) or []:
-        rev = reviews.get(f.get("finding_id")) if reviews else None
-        if rev and rev.get("status") in ("pass", "violation"):
-            f["review_status"] = rev["status"]
-            f["review_note"] = rev.get("note")
-            f["reviewed"] = True
-            reviewed += 1
-            if rev["status"] == "pass":
-                as_pass += 1
-            else:
-                as_violation += 1
-        else:
-            f.pop("review_status", None)
-            f.pop("reviewed", None)
+    def _repartition(violations, needs_review, passes):
+        """Stamp review decisions and re-bucket findings idempotently.
 
-    eff_violations = automated["violations"] + as_violation
-    eff_passes = automated["passes"] + as_pass
-    eff_needs_review = automated["needs_review"] - reviewed
+        Membership is derived purely from each finding's immutable automated
+        ``status`` plus the current ``review_status`` overlay, so calling this
+        repeatedly (the hot report object is shared across GETs) always yields
+        the same partition — a reviewed needs_review item lands in
+        violations/passes AND is counted there, keeping arrays and counts in
+        lockstep. Returns ``(new_violations, new_needs_review, new_passes,
+        as_violation, as_pass)``."""
+        all_f = list(violations) + list(needs_review) + list(passes)
+        n_viol, n_nr, n_pass = [], [], []
+        a_viol = a_pass = 0
+        for f in all_f:
+            status = f.get("status")
+            if status == "needs_review":
+                rev = reviews.get(f.get("finding_id")) if reviews else None
+                if rev and rev.get("status") in ("pass", "violation"):
+                    f["review_status"] = rev["status"]
+                    f["review_note"] = rev.get("note")
+                    f["reviewed"] = True
+                else:
+                    f.pop("review_status", None)
+                    f.pop("review_note", None)
+                    f.pop("reviewed", None)
+            rs = f.get("review_status")
+            if status == "fail" or rs == "violation":
+                n_viol.append(f)
+                if status == "needs_review":
+                    a_viol += 1
+            elif status == "pass" or rs == "pass":
+                n_pass.append(f)
+                if status == "needs_review":
+                    a_pass += 1
+            else:
+                n_nr.append(f)
+        return n_viol, n_nr, n_pass, a_viol, a_pass
+
+    n_viol, n_nr, n_pass, as_violation, as_pass = _repartition(
+        report.get("violations", []), report.get("needs_review", []), report.get("passes", [])
+    )
+    report["violations"] = n_viol
+    report["needs_review"] = n_nr
+    report["passes"] = n_pass
+    reviewed = as_violation + as_pass
+
+    eff_violations = len(n_viol)
+    eff_passes = len(n_pass)
+    eff_needs_review = len(n_nr)
     denom = eff_passes + eff_violations
     eff_score = round(100.0 * eff_passes / denom, 1) if denom else None
 
@@ -117,9 +146,12 @@ def apply_reviews(report: Dict[str, Any], reviews: Dict[str, Dict[str, Any]]) ->
     }
     report["summary"] = summary
 
-    # Per-page effective recompute. pages[].needs_review holds the SAME finding
-    # objects just stamped above, so each page's score reflects its own reviews.
+    # Per-page: same idempotent repartition over each page's own arrays.
     for page in report.get("pages", []) or []:
+        pv, pnr, pp, _, _ = _repartition(
+            page.get("violations", []), page.get("needs_review", []), page.get("passes", [])
+        )
+        page["violations"], page["needs_review"], page["passes"] = pv, pnr, pp
         ps = page.get("summary") or {}
         if "automated" not in ps:
             ps["automated"] = {
@@ -128,17 +160,12 @@ def apply_reviews(report: Dict[str, Any], reviews: Dict[str, Dict[str, Any]]) ->
                 "passes": ps.get("passes", 0),
                 "score": ps.get("score"),
             }
-        p_pass = sum(1 for f in page.get("needs_review", []) if f.get("review_status") == "pass")
-        p_viol = sum(1 for f in page.get("needs_review", []) if f.get("review_status") == "violation")
-        ev = ps["automated"]["violations"] + p_viol
-        ep = ps["automated"]["passes"] + p_pass
-        enr = ps["automated"]["needs_review"] - p_pass - p_viol
-        d = ep + ev
-        ps["violations"] = ev
-        ps["passes"] = ep
-        ps["needs_review"] = enr
-        ps["manual_review_required"] = enr
-        ps["score"] = round(100.0 * ep / d, 1) if d else None
+        d = len(pv) + len(pp)
+        ps["violations"] = len(pv)
+        ps["passes"] = len(pp)
+        ps["needs_review"] = len(pnr)
+        ps["manual_review_required"] = len(pnr)
+        ps["score"] = round(100.0 * len(pp) / d, 1) if d else None
         page["summary"] = ps
     return report
 

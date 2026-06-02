@@ -1401,6 +1401,8 @@ class UniversalPageLoader:
         output_dir: Path,
         *,
         max_depth: int = 0,
+        max_pages: int = 50,
+        internal_links: bool = True,
         record_har: bool = False,
         step_logger: ExecutionStepLogger | None = None,
         policy: CrawlPolicy | None = None,
@@ -1408,13 +1410,21 @@ class UniversalPageLoader:
         """
         Main entry point for universal crawling. Uses a single browser session
         and a bounded queue (Optimized v2).
+
+        ``max_pages`` / ``internal_links`` are honoured when no explicit
+        ``policy`` is supplied — previously they were ignored here and the page
+        budget was hardcoded to 50, so a direct ``load()`` call (any path that
+        didn't build its own policy) silently capped the crawl regardless of the
+        request. ``_load_universal_snapshot`` still passes an explicit policy, so
+        this only affects callers that rely on the defaults.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         if policy is None:
             policy = CrawlPolicy(
                 max_depth=max_depth,
-                max_pages=50,  # Default page budget (matches request default)
-                max_links_per_page=50,
+                max_pages=max_pages,
+                max_links_per_page=max(50, max_pages),
+                same_origin=internal_links,
             )
 
         snapshot = PageSnapshot(page_url=url)
