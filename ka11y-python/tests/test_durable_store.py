@@ -437,6 +437,44 @@ async def test_review_endpoint_updates_effective_score(isolated_db):
         await review_finding("run-rev", "deadbeefdeadbeef", FindingReviewRequest(status="pass"))
 
 
+@pytest.mark.asyncio
+async def test_rerun_creates_new_run_from_stored_params(isolated_db, monkeypatch):
+    """Re-audit reconstructs the original parameters and enqueues a NEW run,
+    preserving the original — closes the 'must re-submit manually' gap."""
+    from ka11y.api.v1.combined import routes
+
+    enqueued: list = []
+
+    async def fake_enqueue(job_id, payload, filter_rule=None):
+        enqueued.append((job_id, payload))
+
+    async def fake_ssrf(url):
+        return None
+
+    monkeypatch.setattr(routes, "enqueue", fake_enqueue)
+    monkeypatch.setattr(routes, "assert_public_url", fake_ssrf)
+
+    await repo.create_run(
+        run_id="run-orig", url="https://example.com", status="completed",
+        lang_requested="auto", wcag_level="AA",
+        params={"url": "https://example.com", "max_depth": 2, "max_pages": 25, "wcag_level": "AA"},
+        max_depth=2, max_pages=25, submitted_at="2026-06-02T00:00:00+00:00",
+    )
+
+    out = await routes.rerun_combined_audit("run-orig")
+    assert out["rerun_of"] == "run-orig"
+    assert out["job_id"] != "run-orig" and out["status"] == "queued"
+    # The reconstructed payload preserved the original depth/pages/level.
+    assert len(enqueued) == 1
+    _, payload = enqueued[0]
+    assert payload.max_depth == 2 and payload.max_pages == 25 and payload.wcag_level == "AA"
+
+    # Unknown run → 404.
+    import fastapi
+    with pytest.raises(fastapi.HTTPException):
+        await routes.rerun_combined_audit("nope")
+
+
 def test_new_routes_registered(isolated_db):
     """The new endpoints are wired into the app and reachable."""
     from fastapi.testclient import TestClient
