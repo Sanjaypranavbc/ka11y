@@ -230,7 +230,7 @@ const Index = () => {
                     aria-hidden="true"
                   />
                   <h1 className="text-4xl sm:text-5xl font-extrabold tracking-[-0.04em] text-foreground leading-none">
-                    kao <span className="text-primary">a11y</span>
+                    <span className="text-primary">A11y</span>
                   </h1>
                   <p className="text-sm text-muted-foreground max-w-xs mx-auto">
                     {t("state.welcomeHint")}
