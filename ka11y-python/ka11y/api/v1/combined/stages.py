@@ -151,7 +151,20 @@ _STAGE_TIMEOUT_SECONDS = 1200
 # prevents contrast analysis from completing.
 # Button/icon screenshots are now capped at 5 s each (crawler.py), so 300 s
 # handles up to ~60 stuck elements before we cut over to OCR on partial images.
+# This is the FLOOR (single-page / small-crawl) budget; for multi-page crawls
+# the effective budget scales with the page count (see below) so a page visited
+# late in the BFS still gets reached and screenshotted instead of being silently
+# dropped — the bug where the same page yielded fewer image/contrast findings as
+# a crawled child than as a directly-audited root.
 _CRAWL_TIMEOUT_SECONDS = 300
+# Per-discovered-page crawl budget. The effective crawl deadline is
+# ``max(_CRAWL_TIMEOUT_SECONDS, per_page * pages)`` capped by
+# ``_CRAWL_TIMEOUT_CEILING`` so deep crawls reach every page while still leaving
+# the rest of the stage budget (``_STAGE_TIMEOUT_SECONDS``) for OCR/contrast.
+_CRAWL_PER_PAGE_SECONDS = float(os.environ.get("KA11Y_IMAGE_CRAWL_PER_PAGE_SECONDS", "20"))
+# Hard ceiling on the (scaled) crawl deadline. Kept well under the 1200 s stage
+# budget so OCR/contrast always has time to run on the images that were captured.
+_CRAWL_TIMEOUT_CEILING = float(os.environ.get("KA11Y_IMAGE_CRAWL_TIMEOUT_CEILING", "600"))
 
 # How long Node (``_call_node_flat``) waits for the Python snapshot to publish
 # its discovered-URL list before giving up. The Python snapshot task ALWAYS
@@ -460,6 +473,38 @@ def _mirror_node_timings(job_id: str, rows: List[Dict[str, Any]]) -> None:
 # ── Individual stage coroutines ───────────────────────────────────────────────
 
 
+def _ocr_lang_for_page(page_lang: Optional[str], run_lang: str) -> str:
+    """Pick the OCR language for one page's screenshots.
+
+    The OCR backends only meaningfully distinguish Japanese (``ja`` → PaddleOCR
+    ``japan`` / EasyOCR ``["en","ja"]``) from the Latin family. We therefore only
+    ever split a run into a ``ja`` group and a non-``ja`` group, which keeps the
+    grouping safe (never passes an unsupported code to a backend) while fixing
+    the real cross-language bug:
+
+    * Japanese page (root or child) → ``ja``.
+    * Non-Japanese page under a Japanese run → the page is Latin, so OCR it as
+      ``en`` instead of mis-reading it with the Japanese model.
+    * Non-Japanese page under a non-Japanese run → keep the run language
+      (unchanged from previous behaviour).
+    * Unknown page language → fall back to the run language (unchanged).
+    """
+
+    def _base(value: Optional[str]) -> str:
+        return (value or "").split("-")[0].split("_")[0].strip().lower()
+
+    page_base = _base(page_lang)
+    run_base = _base(run_lang)
+    if page_base in ("ja", "jp"):
+        return "ja"
+    if page_base:
+        # Known non-Japanese (Latin) page: if the run language is Japanese the
+        # page would otherwise be mis-OCR'd, so force English; else keep the run
+        # language so a configured Latin language (fr/de/…) is preserved.
+        return "en" if run_base in ("ja", "jp") else run_lang
+    return run_lang
+
+
 async def _stage_image_audit(
     url: str,
     output_dir: Path,
@@ -510,13 +555,48 @@ async def _stage_image_audit(
             _record_crawler_time(job_id, "image_audit", time.perf_counter() - start_crawl)
             await asyncio.to_thread(image_crawler.save_results)
 
+        # Scale the crawl deadline with the number of pages to visit so a deep
+        # crawl reaches every discovered page (each gets ~_CRAWL_PER_PAGE_SECONDS)
+        # instead of all pages sharing one fixed 300 s budget — which let pages
+        # visited late get no screenshots and silently contribute zero findings.
+        # A single page / small crawl keeps the original 300 s floor; the ceiling
+        # keeps the crawl from eating the OCR portion of the stage budget.
+        _crawl_page_count = len(discovered_urls) if discovered_urls else 1
+        effective_crawl_timeout = max(
+            _CRAWL_TIMEOUT_SECONDS,
+            min(_CRAWL_PER_PAGE_SECONDS * _crawl_page_count, _CRAWL_TIMEOUT_CEILING),
+        )
+
         try:
-            await asyncio.wait_for(_crawl_and_save(), timeout=_CRAWL_TIMEOUT_SECONDS)
+            await asyncio.wait_for(_crawl_and_save(), timeout=effective_crawl_timeout)
         except asyncio.TimeoutError:
-            logger.warning(
-                f"[combined] image_audit: crawler exceeded {_CRAWL_TIMEOUT_SECONDS}s "
-                f"— proceeding with partial image set from {image_crawler.output_dir}"
+            # The crawl was clipped by the wall-clock cap, so pages visited late
+            # in the BFS (often the very child page the user cares about) may have
+            # NO screenshots and therefore silently contribute zero image/contrast
+            # findings. Surface this on the report instead of hiding it in the log
+            # so a low child finding-count is explainable, not mysterious.
+            covered_pages = sorted(
+                {getattr(i, "url", "") for i in image_crawler.images_data if getattr(i, "url", "")}
             )
+            requested = len(discovered_urls) if discovered_urls else None
+            clipped = (
+                max(0, requested - len(covered_pages)) if requested is not None else None
+            )
+            logger.warning(
+                f"[combined] image_audit: crawler exceeded {effective_crawl_timeout:.0f}s "
+                f"— proceeding with partial image set ({len(covered_pages)} page(s) "
+                f"covered{f', {clipped} clipped' if clipped else ''}) "
+                f"from {image_crawler.output_dir}"
+            )
+            try:
+                _jobs[job_id].setdefault("warnings", []).append(
+                    f"image_audit: image crawl timed out after "
+                    f"{effective_crawl_timeout:.0f}s; {len(covered_pages)} page(s) covered"
+                    + (f", {clipped} page(s) not screenshotted" if clipped else "")
+                    + " — some pages may show fewer image/contrast findings"
+                )
+            except Exception:  # noqa: BLE001 — a warning must never fail the audit
+                pass
 
         ocr_results: list = []
         contrast_report: Optional[Dict[str, Any]] = None
@@ -535,13 +615,15 @@ async def _stage_image_audit(
 
         if run_ocr:
             # OCR budget scales with the number of crawled pages so a child page
-            # gets the same image coverage it would as the root. Previously the
-            # budget was a single per-run cap (default 60) ranked GLOBALLY across
-            # every page, so on a multi-page crawl a page's images competed with
-            # all siblings and everything past rank 60 was silently dropped — the
-            # same page therefore yielded far fewer image findings (1.1.1, 1.4.3,
-            # 1.4.5, 1.4.6) as a child than audited alone. Now: per_page * pages,
-            # capped by a ceiling, distributed fairly across pages.
+            # gets the same per-page image coverage it would as the root. The
+            # budget is per_page * pages (capped by a global memory ceiling) and
+            # distributed fairly round-robin across pages, so a page's images
+            # never compete with every sibling for one shared cap — the cross-page
+            # starvation that made the same page yield fewer image findings
+            # (1.1.1, 1.4.3, 1.4.5, 1.4.6) as a child than audited alone. With the
+            # default per_page (60) and max_pages (50) every page gets its full
+            # ~60 either way; only crawls past the ceiling degrade, and they do so
+            # evenly across pages rather than starving the ones visited last.
             distinct_pages = len(
                 {getattr(i, "url", "") for i in image_crawler.images_data if getattr(i, "url", "")}
             ) or 1
@@ -576,43 +658,73 @@ async def _stage_image_audit(
                         },
                     )
 
-            detector = OCRPreprocessing(
-                source_directory=image_crawler.output_dir,
-                lang=lang,
-                include_paths=ocr_paths,
-            )
+            # Per-page OCR language. The default OCR backend (PaddleOCR) is
+            # mono-lingual: forcing the root URL's language on every page made an
+            # English child of a Japanese root (e.g. /jp → /global/en/...) get
+            # OCR'd with the Japanese model, detecting almost no text and so
+            # losing nearly all its 1.1.1/1.4.3/1.4.6 image+contrast findings.
+            # Group the selected screenshots by the language of the page they
+            # came from and OCR each group with the right model. When every page
+            # resolves to the same language this is a single group — identical to
+            # the previous single-detector behaviour.
+            path_to_page: Dict[str, str] = {}
+            for _img in image_crawler.images_data:
+                _sp = getattr(_img, "screenshot_path", None)
+                _pg = getattr(_img, "url", None)
+                if _sp and _pg:
+                    try:
+                        path_to_page[str(Path(_sp).resolve())] = _pg
+                    except Exception:
+                        path_to_page[str(_sp)] = _pg
+            page_lang_map = getattr(image_crawler, "page_langs", {}) or {}
+
+            ocr_groups: Dict[str, List[str]] = {}
+            for _p in ocr_paths:
+                try:
+                    _rp = str(Path(_p).resolve())
+                except Exception:
+                    _rp = str(_p)
+                _page_url = path_to_page.get(_rp)
+                _glang = _ocr_lang_for_page(page_lang_map.get(_page_url), lang)
+                ocr_groups.setdefault(_glang, []).append(_p)
+
+            ocr_results = []
+            total_ocr = len(ocr_paths)
+            done_ocr = 0
             emit_stage_progress(
-                job_id,
-                "image_audit",
-                current=0,
-                total=len(ocr_paths),
-                phase="ocr",
+                job_id, "image_audit", current=0, total=total_ocr, phase="ocr"
             )
-            async with stage_timing.time_stage_async(
-                job_id,
-                "image_audit",
-                sub_stage="ocr_scan",
-                extra={"image_count": len(ocr_paths)},
-            ):
-                await asyncio.to_thread(detector.scan_directory)
-            emit_stage_progress(
-                job_id,
-                "image_audit",
-                current=len(ocr_paths),
-                total=len(ocr_paths),
-                phase="ocr",
-            )
+            for _glang, _gpaths in ocr_groups.items():
+                detector = OCRPreprocessing(
+                    source_directory=image_crawler.output_dir,
+                    lang=_glang,
+                    include_paths=_gpaths,
+                )
+                async with stage_timing.time_stage_async(
+                    job_id,
+                    "image_audit",
+                    sub_stage="ocr_scan",
+                    extra={"image_count": len(_gpaths), "ocr_lang": _glang},
+                ):
+                    await asyncio.to_thread(detector.scan_directory)
+                ocr_results.extend(detector.results)
+                done_ocr += len(_gpaths)
+                emit_stage_progress(
+                    job_id,
+                    "image_audit",
+                    current=done_ocr,
+                    total=total_ocr,
+                    phase="ocr",
+                )
 
             saver = TextClassification(source_directory=image_crawler.output_dir)
-            saver.results = detector.results
+            saver.results = ocr_results
             async with stage_timing.time_stage_async(
                 job_id,
                 "image_audit",
                 sub_stage="ocr_save_reports",
             ):
                 await asyncio.to_thread(saver.save_reports)
-
-            ocr_results = detector.results
             # filename → source page URL, so the contrast report can be grouped
             # per page in the image visualiser on multi-page crawls.
             page_by_filename: Dict[str, str] = {}

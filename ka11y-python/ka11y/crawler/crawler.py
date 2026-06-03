@@ -10,7 +10,7 @@ from ka11y.crawler.navigation import navigate_with_resilience
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.crawler.policy import CrawlPolicy
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 from pydantic import BaseModel, Field
 from datetime import datetime
 import time
@@ -154,6 +154,13 @@ class AsyncImageCrawler:
         self.images_data: List[ImageData] = []
         self.images_metadata: List[ImageMetadata] = []
         self.visited_urls: Set[str] = set()
+        # Per-page <html lang> captured during the crawl, keyed by the same
+        # normalized page URL stamped onto each ImageData.url. The default OCR
+        # backend (PaddleOCR) is mono-lingual, so a Japanese run-language would
+        # mis-OCR English child pages (and vice-versa). The image-audit stage
+        # reads this to OCR each page's screenshots with the page's own language
+        # instead of forcing the root URL's language on every discovered page.
+        self.page_langs: Dict[str, str] = {}
 
         base_out = CONFIG["input"]["output_dir"]
         domain = urlparse(base_url).netloc.replace("www.", "").replace(".", "_")
@@ -565,6 +572,19 @@ class AsyncImageCrawler:
         depth: int,
         download_session: aiohttp.ClientSession,
     ) -> List[str]:
+        # Clean session per page. The crawl reuses one BrowserContext for every
+        # page, so cookies/region/consent state set on an earlier page (e.g. the
+        # root /jp picking a Japan locale + dismissing consent) would leak into
+        # this page and change what it renders — making a crawled child diverge
+        # from the same URL audited directly as a fresh visitor. Clearing cookies
+        # before navigation restores first-visit parity. The crawl is sequential
+        # (one page at a time), so this never races a concurrent page; for the
+        # first/only page the context is already empty, so it is a no-op.
+        try:
+            await context.clear_cookies()
+        except Exception:  # noqa: BLE001 — never let session reset abort the crawl
+            logger.debug(f"[image_crawler] clear_cookies failed before {url}")
+
         page = await context.new_page()
         page.set_default_timeout(60_000)
         links: List[str] = []
@@ -586,6 +606,20 @@ class AsyncImageCrawler:
                 )
 
             await page.wait_for_timeout(1_000)
+
+            # Capture this page's declared language so the image-audit stage can
+            # OCR its screenshots with the right model. Keyed by ``url`` (the
+            # normalized page URL), which is exactly what ImageData.url is
+            # stamped with below, so the stage can map screenshot → page → lang.
+            try:
+                page_lang = await page.evaluate(
+                    "() => document.documentElement.getAttribute('lang') || ''"
+                )
+                if isinstance(page_lang, str) and page_lang.strip():
+                    self.page_langs[url] = page_lang.strip()
+            except Exception:
+                logger.debug(f"[image_crawler] lang capture failed for {url}")
+
             await self._trigger_lazy_loading(page)
             await self._reveal_hidden_images(page)
             await page.wait_for_timeout(500)
@@ -1012,6 +1046,17 @@ class AsyncImageCrawler:
             )
 
         finally:
+            # Clear this origin's web storage before closing so the NEXT
+            # (same-origin) page navigates without region/language state this
+            # page may have written — cookie-clearing alone doesn't touch
+            # localStorage/sessionStorage. Best-effort: the page may already be
+            # in a bad state, and a storage reset must never fail the crawl.
+            try:
+                await page.evaluate(
+                    "() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }"
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug(f"[image_crawler] storage clear failed for {url}")
             await page.close()
 
         return links
