@@ -67,7 +67,7 @@ export function AuditSidebar({ activeTab, onTabChange, onNewAudit, open, onClose
             />
             <div className="min-w-0">
               <h1 className="text-xl font-extrabold tracking-[-0.04em] text-foreground leading-none">
-                kao <span className="text-primary">a11y</span>
+                <span className="text-primary">Ally</span>
               </h1>
               <p className="text-[9px] font-mono tracking-[0.2em] uppercase text-muted-foreground mt-1 select-none">
                 {t("sidebar.tagline")}
