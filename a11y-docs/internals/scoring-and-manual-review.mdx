@@ -1,0 +1,124 @@
+---
+title: "Scoring & Manual Review"
+description: "What the Violations / Needs Review / Passes score means, why Needs Review is high, and how the manual-review workflow folds human decisions back into the score"
+---
+
+## What "score" means
+
+The score is the three counts shown in the audit UI:
+
+- **Violations** — confirmed accessibility failures.
+- **Needs Review** — *"Manual Review Required"*: the tool found something relevant
+  but a deterministic machine verdict isn't defensible.
+- **Passes** — confirmed conformant checks.
+
+A headline **pass-rate** is derived as `passes / (passes + violations)`, expressed
+0–100 (`null` when nothing pass/fail was decided). `Needs Review` is excluded from
+the automated pass-rate because it is neither a confirmed pass nor a confirmed
+failure — until a human reviews it.
+
+## Why Needs Review is often the largest bucket
+
+This is **by design**, not a weakness. Only about **30–40%** of WCAG success
+criteria are *fully* machine-testable. Honest tools have three options for the
+rest; a11y takes the third:
+
+1. Silently **pass** them (axe-only "0 violations!" tools) → ships barriers, legal risk.
+2. Hard-**fail** them → false-positive noise, teams lose trust.
+3. Surface them as scoped, evidence-backed **Manual Review Required** → actionable.
+
+### The two sources of Needs Review
+
+| Source | Where | Typical driver |
+|--------|-------|----------------|
+| axe-core `incomplete` → `needs_review` | `axeResultMapper.js` / Python `axe_runner.map_axe_results` | **`color-contrast`** can't resolve a background image/gradient/overlay → emitted **per element**, so text-over-image pages produce many items |
+| Python heuristic checks that defer | `combined/findings.py` | contrast-over-image (OCR), images-of-text, media caption/description *quality*, moving-content duration, reflow/spacing clipping risk, custom-widget ARIA completeness |
+
+A full per-SC table — *which criterion, what signal we compute, why it defers, and
+what the reviewer confirms* — is in
+[`NEEDS_REVIEW_ANALYSIS.md`](https://github.com/Sanjaypranavbc/a11y/blob/main/NEEDS_REVIEW_ANALYSIS.md)
+(repo root). Examples: **1.1.1** (is the alt text meaningful?), **1.4.3/1.4.6**
+(in-image text contrast), **2.2.2** (does motion auto-stop within 5s?), **1.4.12**
+(does text clip when spacing increases?), **1.2.x** (do captions/descriptions
+actually match?), **4.1.2** (are name/role/state complete for AT?).
+
+<Note>
+Every Needs Review item is tied to a **specific element** with a selector, HTML
+snippet, and — for image/contrast checks — a **screenshot or OCR crop**. Review is
+minutes per item, not a from-scratch manual audit.
+</Note>
+
+## The manual-review workflow
+
+Each `needs_review` finding is labelled **Manual Review Required** and carries a
+stable `finding_id` plus `manual_review: true`. A reviewer adjudicates it to **Pass**
+or **Violation**, and the score **auto-updates**: the item moves out of *Needs
+Review* into *Pass*/*Violation* and the pass-rate (and per-page scores) recompute.
+
+```
+Automated:   Violations 12 | Needs Review 40 | Passes 88 | Score 88.0%
+            └─ reviewer marks 25 needs_review (5 violation, 20 pass) ─┐
+Effective:   Violations 17 | Needs Review 15 | Passes 108| Score 86.4%
+```
+
+So the initial Needs Review count is a **backlog that burns down** as the team works.
+
+### API
+
+<ParamField path="POST /api/v1/combined/{run_id}/findings/{finding_id}/review" type="endpoint">
+Record (or clear) a reviewer's decision.
+
+```json
+{ "status": "violation", "note": "text is unreadable on hero image", "reviewer": "jane" }
+```
+
+`status` is `pass`, `violation`, or `needs_review` (the last re-opens the item).
+Decisions are stored durably in the `finding_reviews` table.
+</ParamField>
+
+<ParamField path="GET /api/v1/combined/{run_id}" type="endpoint">
+Returns the report with the **effective** summary (decisions applied) and each
+reviewed finding stamped with `review_status`. The original automated numbers are
+preserved under `summary.automated`; `summary.reviews` reports
+`{ reviewed, pending, as_pass, as_violation }`.
+</ParamField>
+
+<ParamField path="GET /api/v1/combined/{run_id}/reviews" type="endpoint">
+List all manual-review decisions recorded for the run.
+</ParamField>
+
+### Report fields
+
+```typescript
+interface Finding {
+  finding_id:     string;     // stable id to attach a review to
+  manual_review:  boolean;    // true for Needs Review items
+  status:         "fail" | "needs_review" | "pass";
+  review_status?: "pass" | "violation";   // set once reviewed
+  review_note?:   string | null;
+  reviewed?:      boolean;
+  // ...wcag_sc, level, severity, element, reason, suggested_fix
+}
+
+interface Summary {
+  violations:             number;  // effective (post-review)
+  needs_review:           number;  // effective (pending review)
+  passes:                 number;  // effective
+  manual_review_required: number;  // pending Needs Review items
+  score:                  number | null;
+  automated: { violations; needs_review; passes; score };   // pre-review baseline
+  reviews:   { reviewed; pending; as_pass; as_violation };
+}
+```
+
+## Why clients need this
+
+- **Coverage**: a11y evaluates ~3–4× the success criteria of an axe-only scan —
+  all of axe's A/AA *plus* AAA contrast, media (1.2.x), enhanced 1.4.x, pointer
+  (2.5.x), and cognitive (3.x) via the Node custom checks.
+- **Honesty + evidence**: the hard, non-deterministic ~60% of WCAG is surfaced as a
+  pre-investigated, element-scoped worklist instead of being silently passed.
+- **It shrinks**: the manual-review workflow folds decisions into the score, so the
+  number you see on day one is a starting backlog, not a verdict.
+- **Automated where it can be**: clear violations and clear passes are decided for
+  you; Needs Review is only the irreducible judgement set.

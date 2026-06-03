@@ -1,0 +1,390 @@
+---
+title: "Crawlers Reference"
+description: "Practical guide for extending a11y crawlers without creating unnecessary new crawl paths"
+---
+
+This guide explains which crawler file to edit when you add a new Python rule or extend an existing one.
+
+The most important idea:
+
+- Most new rules should **not** start by creating a brand-new crawler.
+- First check whether the universal snapshot, rendered layout crawler, or image crawler already gives you the data you need.
+
+## 1. The crawler decision tree
+
+Use this table first.
+
+| If you need... | Edit this first | Why |
+| --- | --- | --- |
+| More static DOM data from the page | `a11y-python/a11y/crawler/universal_page.py` | This is the main static extraction path |
+| Cleaner static records for auditors | `a11y-python/a11y/crawler/snapshot_normalizer.py` | Normalize once, reuse in many rules |
+| Hover/focus/reflow/orientation/rendered geometry data | `a11y-python/a11y/crawler/rendered_layout_crawler.py` | Rendered-layout rules already depend on it |
+| OCR, screenshots, image metadata, contrast inputs | `a11y-python/a11y/crawler/crawler.py` | This is the image/OCR crawler path |
+| A truly different extraction workflow | create a new crawler under `a11y-python/a11y/crawler/` | Only do this if the existing three paths cannot support the rule |
+
+## 2. Current crawler architecture
+
+All ten a11y crawlers share a single Chromium process via the
+`BrowserPool` (`a11y-python/a11y/crawler/browser_pool.py`). When you
+add or extend a crawler, **do not** open your own `async_playwright()`
+block — lease a context from the pool instead. See section 5 for the
+pattern.
+
+Think of the Python side as three main extraction families:
+
+### Universal static path
+
+Main files:
+
+- `a11y-python/a11y/crawler/universal_page.py`
+- `a11y-python/a11y/crawler/snapshot_normalizer.py`
+- `a11y-python/a11y/crawler/cookie_handler.py`
+
+Use this for:
+
+- forms
+- media
+- target size inputs
+- sensory characteristics
+- text spacing source data
+- general static DOM inspection
+
+**Page Preparation & Cookie Handling:**
+The `universal_page.py` crawler is responsible for navigating to the target URL and preparing the DOM for deterministic extraction. This includes:
+- Waiting for Single Page Application (SPA) hydration.
+- Automatically handling cookie consent banners via `handle_cookies()` (prioritizes rejecting cookies to minimize personalization/layout noise, falls back to accepting or visually removing blocking overlays).
+- Verifying DOM stability (`_DOM_STABILITY_JS`) to ensure no layout shifts occur during extraction.
+
+Best practice:
+
+- If a new static rule needs one extra field, add that field here once.
+- Then let multiple auditors reuse it.
+
+### Rendered layout path
+
+Main file:
+
+- `a11y-python/a11y/crawler/rendered_layout_crawler.py`
+
+Use this for:
+
+- focus-not-obscured
+- hover/focus content
+- resize text
+- reflow
+- orientation
+- rendered text spacing
+
+Best practice:
+
+- Only use this path if the rule depends on actual layout after rendering.
+- If plain DOM data is enough, stay on the universal snapshot path.
+
+### Image/OCR path
+
+Main file:
+
+- `a11y-python/a11y/crawler/crawler.py`
+
+Use this for:
+
+- OCR
+- image classification
+- contrast extraction
+- screenshot-backed image rules
+
+Best practice:
+
+- Keep image crawling and OCR concerns here.
+- Do not duplicate image traversal logic in a random new crawler.
+
+## 3. The default workflow for a new Python rule
+
+For most rules, follow this order.
+
+### Step 1: Decide which crawler family owns the data
+
+Ask:
+
+- Is this just DOM data from the page source?
+- Does it need rendered size, focus state, or viewport interaction?
+- Does it need screenshots, OCR, or downloaded images?
+
+Pick one crawler family, not all three.
+
+### Step 2: Extend extraction only where needed
+
+Examples:
+
+- Add a new static field in `universal_page.py`
+- Normalize it in `snapshot_normalizer.py`
+- Add one new rendered measurement in `rendered_layout_crawler.py`
+- Add one new image metadata field in `crawler.py`
+
+Student rule:
+
+- If you can add one field to an existing record, do that.
+- Do not create a separate crawler just to extract one more attribute.
+
+### Step 3: Keep WCAG judgment out of the crawler
+
+Crawler job:
+
+- navigate
+- extract
+- normalize
+- save raw/debug artifacts
+
+Auditor job:
+
+- decide pass/fail/needs review
+- write reasons
+- return auditor records
+
+Combined converter job:
+
+- turn auditor records into frontend-friendly findings
+
+This separation keeps the code easier to test.
+
+### Step 4: Wire the stage into the combined pipeline
+
+Most crawler changes eventually connect back through:
+
+- `a11y-python/a11y/api/v1/combined/stages.py`
+- `a11y-python/a11y/api/v1/combined/findings.py`
+
+If the stage is optional, also edit:
+
+- `a11y-python/a11y/api/v1/combined/models.py`
+- `a11y-frontend-sdk/src/types/audit.ts`
+- `a11y-frontend-sdk/src/components/audit/AuditSidebar.tsx`
+- `a11y-frontend-sdk/src/hooks/useAudit.ts`
+
+## 4. Exact file-by-file guidance
+
+### When you should edit `universal_page.py`
+
+Edit `a11y-python/a11y/crawler/universal_page.py` when:
+
+- the rule needs more static element attributes
+- the rule needs more page-level metadata
+- the rule should reuse the same discovered page inventory as other static rules
+
+Usually also review:
+
+- `a11y-python/a11y/crawler/snapshot_normalizer.py`
+- the rule-specific auditor that consumes the normalized snapshot
+
+Examples of good additions:
+
+- extra label/source metadata
+- frame or selector provenance
+- clearer element role/type normalization
+
+### When you should edit `snapshot_normalizer.py`
+
+Edit `a11y-python/a11y/crawler/snapshot_normalizer.py` when:
+
+- the raw snapshot already has the data
+- auditors need a cleaner, more stable structure
+- you want one normalization fix to benefit many rules
+
+Good use cases:
+
+- consistent selectors
+- normalized tags and role names
+- page/frame provenance
+- deduped element representations
+
+### When you should edit `rendered_layout_crawler.py`
+
+Edit `a11y-python/a11y/crawler/rendered_layout_crawler.py` when:
+
+- the rule depends on rendered geometry
+- the rule needs hover/focus state capture
+- the rule depends on viewport changes or visual obstruction
+
+Good use cases:
+
+- bounding boxes
+- overlap/obscuration checks
+- hover-triggered content
+- zoom/reflow measurements
+
+### When you should edit `crawler.py`
+
+Edit `a11y-python/a11y/crawler/crawler.py` when:
+
+- the rule depends on screenshots or downloaded assets
+- OCR or contrast analysis must see extra image metadata
+- image prioritization or budgeting should change
+
+Good use cases:
+
+- better image candidate selection
+- extra screenshot metadata
+- OCR budget rules
+- image classification signals
+
+## 5. When a brand-new crawler is justified
+
+Create a new crawler only if all of these are true:
+
+1. The rule cannot be answered from the universal snapshot.
+2. The rendered crawler is the wrong abstraction.
+3. The image crawler is also unrelated.
+4. Reusing an existing crawler would make the code more confusing, not less.
+
+If that happens:
+
+- create a new file in `a11y-python/a11y/crawler/`
+- copy the closest existing crawler style instead of inventing a new architecture
+- wire it from `a11y-python/a11y/api/v1/combined/stages.py`
+- convert its output in `a11y-python/a11y/api/v1/combined/findings.py`
+- add focused tests before growing the feature further
+
+Important honesty note:
+
+- The crawler classes in this repo are not all identical.
+- `UniversalPageLoader`, `RenderedLayoutCrawler`, and `AsyncImageCrawler` do not share one perfect common interface yet.
+- Because of that, copy the closest existing pattern for your problem instead of forcing a fake abstraction.
+
+## 6. Data you should preserve for good finding quality
+
+Whether you extend an existing crawler or add a new one, keep element provenance whenever possible.
+
+Useful fields include:
+
+- `html_snippet`
+- `selector`
+- `element_id`
+- `tag`
+- `page_url`
+- `frame_path`
+- `element_ref_id`
+
+Why this matters:
+
+- Python findings merge better with Node findings when selectors and page/frame scope are preserved.
+- Frontend element views are much more useful when they show a real HTML snippet instead of a vague summary.
+
+## 7. Language and crawler behavior
+
+The crawler layer itself is mostly language-neutral, but language still matters in some places.
+
+### Where `lang` is already used
+
+- `a11y-python/a11y/api/v1/combined/models.py`
+- `a11y-python/a11y/api/v1/combined/stages.py`
+- OCR path in `crawler.py` through the image audit stage
+
+### What this means in practice
+
+- OCR can behave differently for English and Japanese content
+- shared WCAG names and suggested fixes can change language
+- Node custom checks also receive the same `lang` value from the combined pipeline
+
+### Where to put language-specific crawler settings
+
+If the setting is shared behavior, prefer:
+
+- `config/universal.yml`
+
+Examples:
+
+- language lists such as CJK language prefixes
+- OCR budgets or crawler limits
+- shared thresholds used by multiple services
+
+Avoid:
+
+- scattering English/Japanese keyword logic across several crawler files
+
+## 8. Tests you should update
+
+When crawler behavior changes, look at:
+
+- `a11y-python/tests/test_runner.py`
+- `a11y-python/tests/test_combined_findings.py`
+- `a11y-python/tests/test_image_audit_stage.py`
+- `a11y-python/tests/test_rendered_converters.py`
+- `a11y-python/tests/test_rendered_evaluators.py`
+- `a11y-python/tests/test_crawler_settings.py`
+
+If your change is universal-snapshot-heavy, also consider adding a focused regression test near the closest existing rule test.
+
+## 9. Common crawler mistakes
+
+- Creating a new crawler for data that could have been one more field in the universal snapshot
+- Re-crawling pages separately for each rule
+- Mixing WCAG pass/fail logic into extraction code
+- Dropping selector or page provenance that later makes findings impossible to merge
+- Adding language-specific heuristics in many files instead of central config
+- **Calling `async_playwright()` directly instead of leasing from `BrowserPool`** — every Chromium launch must go through the pool so the host stays bounded under concurrent audits
+
+## 10. Browser pool — required pattern
+
+Every crawler shares one Chromium via `a11y-python/a11y/crawler/browser_pool.py`. Each crawler's `crawl()` method must lease either a single context or the warm browser:
+
+### Single-context pattern (most crawlers)
+
+```python
+from a11y.crawler.browser_pool import leased_context
+
+async def crawl(self):
+    async with leased_context(
+        viewport={"width": 1440, "height": 900},
+        user_agent="…",
+    ) as context:
+        await self._crawl_page(context, self.base_url, depth=0)
+    return self.results
+```
+
+The context is closed on exit; the underlying Chromium stays warm for the next lease.
+
+### Many-contexts-per-browser pattern (rendered-layout fan-out)
+
+When a crawler needs to open several contexts in parallel off one browser (e.g. seven viewport scenarios), use `leased_browser` instead:
+
+```python
+from a11y.crawler.browser_pool import leased_browser
+
+async def crawl(self):
+    async with leased_browser() as browser:
+        # _run_all_scenarios spawns its own contexts via browser.new_context()
+        return await self._run_all_scenarios(browser)
+```
+
+### Concurrency caps
+
+- `A11Y_MAX_BROWSERS` (env, default `2`) — concurrent context leases. The pool's `asyncio.Semaphore` parks excess callers in FIFO order.
+- The pool is per-event-loop and rebuilt automatically when the loop changes (important for pytest's function-scoped loops).
+- `shutdown_pool()` is wired into the FastAPI lifespan so reloads do not leak Chromium processes.
+
+### Tests
+
+`tests/test_browser_pool.py` covers lease behaviour, browser reuse, semaphore serialisation, and verifies `forms_crawler` is wired through the pool. Add a similar check when adding a new crawler.
+
+## 11. Top-level concurrency caps
+
+The combined runner enforces two outer budgets in addition to per-stage timeouts:
+
+- `A11Y_MAX_CONCURRENT_JOBS` (env, default `4`) — bounds simultaneous `_run_job()` background tasks. Excess jobs sit in status `queued` until a slot frees. See `a11y-python/a11y/api/v1/combined/runner.py:_get_job_semaphore`.
+- `A11Y_JOB_TIMEOUT_SECONDS` (env, default `1200`) — outer cap on the top-level axe + Python `asyncio.gather`. On timeout both branches are cancelled and the scrubbed-error path emits an opaque `error_id`.
+
+Inner stage timeouts (`_STAGE_TIMEOUT_SECONDS=600` in `stages.py`) and rendered-layout's `_SCENARIOS_TIMEOUT_SECONDS=300` bound individual stages.
+
+## 10. A good student workflow
+
+If you are not sure where to start, use this sequence:
+
+1. Find the closest existing rule.
+2. Trace which crawler family feeds that rule.
+3. Extend extraction in the smallest possible place.
+4. Add or update the auditor.
+5. Wire the converter and combined stage.
+6. Add tests.
+7. Run a small local check before touching more files.
+
+That path is slower at the beginning, but it prevents duplicate crawler architecture and broken pipeline wiring later.

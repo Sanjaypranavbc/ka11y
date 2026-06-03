@@ -1,0 +1,128 @@
+---
+title: "2.2.2 Pause, Stop, Hide"
+description: "WCAG 2.2.2 — auto-playing content detection beyond axe-core"
+---
+
+<Info>
+  **Level A** · Auditor: `PauseStopHideAuditor` · File: `a11y/accessibility/rules/timing/pause_stop_hide_auditor.py`
+</Info>
+
+## What it checks
+
+Any content that moves, blinks, scrolls, or auto-updates for more than 5 seconds must have a mechanism to pause, stop, or hide it.
+
+## What axe-core misses
+
+axe-core only flags `<blink>` and `<marquee>` — both deprecated HTML elements rarely used in modern sites. a11y detects:
+
+| Content type | Detection method |
+|-------------|-----------------|
+| `video_autoplay` | `<video autoplay>` element |
+| `animated_gif` | `<img src="*.gif">` |
+| `css_animation` | Running WAAPI / CSS animations via `document.getAnimations()` — infinite loop (`iterationCount === Infinity`) |
+| `carousel_autoplay` | Bootstrap, Swiper, Slick, Owl Carousel, Flickity, Glide.js, Splide — detected via class names and `data-*` attributes |
+| `marquee` | `<marquee>` (legacy) |
+| `blink` | `<blink>` (legacy) |
+
+## Applicability gates
+
+All three must be true for a **violation** to be raised:
+
+1. **Starts automatically** — autoplay, CSS animation on page load, carousel auto-advances
+2. **Duration > 5 s or infinite** — very short one-shot transitions are excluded
+3. **No mechanism** — no `controls` attribute, no adjacent button containing pause/stop/play text, no ARIA control
+
+## The `axe_would_catch` field
+
+Each finding carries `axe_would_catch: bool`. Use this to filter for novel detections:
+
+```json
+{
+  "axe_would_catch": false,
+  "status": "fail",
+  "reason": "Autoplay carousel has no pause mechanism (Swiper detected via .swiper-container)",
+  "element": { "html": "<div class=\"swiper-container\" data-autoplay=\"3000\">…" }
+}
+```
+
+When `axe_would_catch` is `false`, the finding is something axe-core would have missed entirely.
+
+## Content type labels
+
+| `content_type` value | Human-readable label |
+|---------------------|---------------------|
+| `video_autoplay` | Video with autoplay |
+| `animated_gif` | Animated GIF (loops indefinitely) |
+| `css_animation` | CSS / WAAPI animation |
+| `carousel_autoplay` | Carousel / slider with autoplay |
+| `marquee_element` | `<marquee>` element (deprecated) |
+| `blink_element` | `<blink>` element (deprecated) |
+
+## Output
+
+**CSV file:** `audit_pause_stop_hide_report.csv`
+
+Columns: `page_url`, `element_index`, `content_type`, `content_type_label`, `tag`, `element_id`, `src`, `animation_name`, `animation_duration_seconds`, `animation_iteration_count`, `loops`, `duration_seconds`, `starts_automatically`, `has_video_controls`, `has_pause_button`, `has_mechanism`, `wcag_2_2_2_status`, `wcag_2_2_2_violation`, `overall_status`, `axe_would_catch`, `html_snippet`
+
+A summary row (`── SUMMARY ──`) is appended at the end of the CSV.
+
+### `summarize()` return keys
+
+| Key | Description |
+|-----|-------------|
+| `total_items` | All moving-content items found |
+| `passed` | Items that passed |
+| `failed` | Items that failed |
+| `pass_rate_pct` | `passed / total × 100`, rounded to 1 dp |
+| `wcag_2_2_2_failed` | Same as `failed` |
+| `axe_would_miss` | Items where `axe_would_catch` is `False` |
+| `failed_by_type` | `dict[content_type, count]` for failing items |
+| `passed_by_type` | `dict[content_type, count]` for passing items |
+
+## Common violations
+
+| Type | Example |
+|------|---------|
+| Autoplay video | `<video autoplay loop src="hero.mp4">` without `controls` |
+| Animated GIF | `<img src="loading-animation.gif">` in a persistent hero section |
+| CSS animation | `animation: slide 2s linear infinite` with no pause button |
+| Carousel | Bootstrap `.carousel[data-ride="carousel"]` with no pause-on-hover |
+
+## Suggested fix
+
+```html
+<!-- Video — add controls -->
+<video autoplay loop src="hero.mp4" controls>
+  <track kind="captions" src="captions.vtt">
+</video>
+
+<!-- Carousel — add pause button -->
+<div class="carousel" data-ride="carousel">
+  <button type="button" data-bs-target=".carousel" data-bs-slide="pause"
+          aria-label="Pause slideshow">
+    Pause
+  </button>
+  <!-- slides -->
+</div>
+
+<!-- CSS animation — provide control -->
+<button id="pause-anim" aria-pressed="false">Pause animation</button>
+<div class="animated-banner" aria-live="off">…</div>
+<script>
+  document.getElementById('pause-anim').addEventListener('click', e => {
+    const banner = document.querySelector('.animated-banner');
+    const paused = e.target.getAttribute('aria-pressed') === 'true';
+    banner.style.animationPlayState = paused ? 'running' : 'paused';
+    e.target.setAttribute('aria-pressed', String(!paused));
+  });
+</script>
+```
+
+## Known limitations
+
+- **Pause-button state verification is missing** — the check detects *existence* of a button with pause-like text within 2 DOM-ancestor levels but never clicks it; "fake" pause buttons pass.
+- **Custom carousels** using raw `setInterval` / `requestAnimationFrame` without standard library classes or data-attributes are invisible (Bootstrap/Swiper/Slick/Owl/Flickity/Glide/Splide are recognised).
+- **Pause-button DOM depth** — fixed at 2 ancestor levels; deeper component hierarchies miss buttons.
+- **F50 (script that cannot be paused)** is not detected beyond known library patterns.
+
+See [Technique coverage for 2.2.2](/rules/coverage-matrix#2-2-2-pause-stop-hide).

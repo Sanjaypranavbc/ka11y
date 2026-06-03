@@ -1,6 +1,6 @@
 # =============================================================================
-# ka11y — Docker Compose (project root)
-# Services: ka11y-node · ka11y-python · ka11y-frontend · ka11y-docs
+# a11y — Docker Compose (project root)
+# Services: a11y-node · a11y-python · a11y-frontend · a11y-docs
 #
 # Port map
 #   host:8080  →  frontend (nginx)  →  internal:80
@@ -22,10 +22,10 @@ services:
   # ── Node axe-core engine ───────────────────────────────────────────────────
   node:
     build:
-      context: ./ka11y-node
+      context: ./a11y-node
       dockerfile: Dockerfile
-    image: ka11y-node:latest
-    container_name: ka11y-node
+    image: a11y-node:latest
+    container_name: a11y-node
     restart: unless-stopped
     shm_size: '256m'
 
@@ -33,7 +33,7 @@ services:
       - seccomp:unconfined
 
     networks:
-      - ka11y-net
+      - a11y-net
 
     environment:
       NODE_ENV:       production
@@ -63,13 +63,13 @@ services:
   # ── Python FastAPI auditors ────────────────────────────────────────────────
   python:
     build:
-      context: ./ka11y-python
+      context: ./a11y-python
       dockerfile: Dockerfile
       args:
         # Set to "0" to skip sudachipy/sudachidict + ja_core_news_lg (~500MB).
         INSTALL_JAPANESE: "1"
-    image: ka11y-python:latest
-    container_name: ka11y-python
+    image: a11y-python:latest
+    container_name: a11y-python
     restart: unless-stopped
     shm_size: '256m'
 
@@ -81,7 +81,7 @@ services:
         condition: service_healthy
 
     networks:
-      - ka11y-net
+      - a11y-net
 
     environment:
       NODE_BASE_URL:        "http://node:3000"
@@ -92,39 +92,39 @@ services:
       # discovered-URL list before falling back to its budget-capped BFS. Must
       # outlast a slow snapshot (kao.com/jp took ~561s) or deep pages get
       # under-audited. Defaults to the stage timeout (1200s) if unset.
-      KA11Y_SNAPSHOT_URLS_WAIT_SECONDS: "1200"
+      A11Y_SNAPSHOT_URLS_WAIT_SECONDS: "1200"
       # Overall job timeout in seconds. Defends against deadlocks / hung crawls.
       # For large/heavy multi-page crawls (such as kao.com), increase this budget.
-      KA11Y_JOB_TIMEOUT_SECONDS: "1800"
+      A11Y_JOB_TIMEOUT_SECONDS: "1800"
       # HTTP read-timeout sizing for the call to Node's /analyse-url-flat. In
       # snapshot-fed mode Node audits every discovered URL with no internal
       # budget, so a fixed 300s client timeout silently dropped ALL axe findings
       # on any child crawl that ran longer. The timeout now scales as
-      # base + per_page * page_count, capped at KA11Y_JOB_TIMEOUT_SECONDS.
-      KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS: "60"
-      KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS: "75"
+      # base + per_page * page_count, capped at A11Y_JOB_TIMEOUT_SECONDS.
+      A11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS: "60"
+      A11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS: "75"
 
       # ── Durable store (SQLite WAL) + assets + telemetry ──────────────────
       # Source of truth for run state, reports, findings, assets metadata and
-      # per-(page,stage,rule) telemetry. Lives on the ka11y_db named volume so
-      # it survives restarts/redeploys. Back up ka11y.db + -wal + -shm together
+      # per-(page,stage,rule) telemetry. Lives on the a11y_db named volume so
+      # it survives restarts/redeploys. Back up a11y.db + -wal + -shm together
       # (or use `VACUUM INTO`).
-      KA11Y_DB_PATH:        "/data/db/ka11y.db"
+      A11Y_DB_PATH:        "/data/db/a11y.db"
       # Content-addressed asset bytes (screenshots, OCR crops, contrast regions).
-      KA11Y_ASSET_DIR:      "/data/assets"
+      A11Y_ASSET_DIR:      "/data/assets"
       # Delete runs (+ their findings/reports/assets) older than this many days.
-      KA11Y_RUN_RETENTION_DAYS: "30"
+      A11Y_RUN_RETENTION_DAYS: "30"
       # Keep telemetry in SQLite only in prod (0) — avoids unbounded JSONL files.
-      KA11Y_TELEMETRY_FILES: "0"
+      A11Y_TELEMETRY_FILES: "0"
       # Durable queue: bounded concurrent jobs; crash-requeue attempt cap.
-      KA11Y_MAX_CONCURRENT_JOBS: "3"
-      KA11Y_MAX_ATTEMPTS:   "2"
+      A11Y_MAX_CONCURRENT_JOBS: "3"
+      A11Y_MAX_ATTEMPTS:   "2"
       # True multi-core CPU parallelism for report compression / pure-CPU
       # auditors. Unset/0 = thread fallback (model-based OCR stays on threads).
-      KA11Y_CPU_WORKERS:    "0"
+      A11Y_CPU_WORKERS:    "0"
       # P6 unified crawl: run axe-core inside Playwright (one page load) instead
       # of a second Puppeteer crawl in Node. Default OFF; flip to "1" to trial.
-      KA11Y_UNIFIED_CRAWL:  "0"
+      A11Y_UNIFIED_CRAWL:  "0"
 
     # Expose to host for local debugging / direct API calls.
     # In production behind a reverse proxy this can be removed.
@@ -155,12 +155,12 @@ services:
   # ── React + nginx frontend ─────────────────────────────────────────────────
   frontend:
     build:
-      context: ./ka11y-frontend-sdk
+      context: ./a11y-frontend-sdk
       dockerfile: Dockerfile
       args:
         VITE_API_URL: "https://a11y-api.bluecaffeine.in" # http:localhost:8000/
-    image: ka11y-frontend:latest
-    container_name: ka11y-frontend
+    image: a11y-frontend:latest
+    container_name: a11y-frontend
     restart: unless-stopped
 
     depends_on:
@@ -168,7 +168,7 @@ services:
         condition: service_healthy
 
     networks:
-      - ka11y-net
+      - a11y-net
 
     ports:
       - "8080:80"
@@ -190,20 +190,20 @@ services:
   # ── Mintlify documentation site ────────────────────────────────────────────
   docs:
     build:
-      context: ./ka11y-docs
+      context: ./a11y-docs
       dockerfile: Dockerfile
-    image: ka11y-docs:latest
-    container_name: ka11y-docs
+    image: a11y-docs:latest
+    container_name: a11y-docs
     restart: unless-stopped
 
     networks:
-      - ka11y-net
+      - a11y-net
 
     ports:
       - "3001:3000"
 
     volumes:
-      - ./ka11y-docs:/docs
+      - ./a11y-docs:/docs
 
     healthcheck:
       test:         ["CMD", "curl", "-f", "http://localhost:3000/"]
@@ -221,7 +221,7 @@ services:
 
 # ── Networks ───────────────────────────────────────────────────────────────────
 networks:
-  ka11y-net:
+  a11y-net:
     driver: bridge
 
 volumes:

@@ -1,0 +1,219 @@
+---
+title: "Quickstart"
+description: "Get a11y running locally in under 5 minutes"
+---
+
+## Prerequisites
+
+| Tool | Minimum version |
+|------|----------------|
+| Docker | 24+ |
+| Docker Compose | v2 |
+| 8 GB RAM | recommended for EasyOCR models |
+
+---
+
+## 1 — Clone and start
+
+```bash
+git clone https://github.com/Sanjaypranavbc/a11y.git
+cd a11y
+docker compose up --build
+```
+
+This builds and starts four services:
+
+| Container | Port | Purpose |
+|-----------|------|---------|
+| `a11y-node` | 3000 | axe-core / Puppeteer engine |
+| `a11y-python` | 8000 | FastAPI + Python auditors |
+| `a11y-frontend` | 8080 | React dashboard (nginx) |
+| `a11y-docs` | 3001 | Mintlify documentation site |
+
+<Warning>
+  First build downloads EasyOCR language models (~300 MB) and Playwright Chromium (~150 MB). Subsequent builds use the Docker layer cache and are fast.
+</Warning>
+
+---
+
+## 2 — Run an audit via the dashboard
+
+Open **http://localhost:8080**, enter a URL in the audit form on the start screen, and click **Run Audit**. Optional check modules (OCR, image audit, media, rendered-layout, etc.) live under the collapsible **Advanced checks** group; set **Max Depth > 0** to crawl and score multiple same-domain pages. After a run, re-run or tweak settings from the **New audit** button (top bar / sidebar), which opens the form in a slide-over drawer.
+
+The dashboard streams live stage progress as each auditor completes. When the job finishes, violations, needs-review items, and passes are shown across the tabs. Multi-page crawls add a **page selector + per-page summary bar** to those views, alongside the aggregated totals.
+
+Dashboard rule/result language defaults to **EN** (including Japanese websites). To get Japanese-localized results, use the **EN / JA** switcher in the top-right header, select **JA**, then start the audit. The next submitted job uses `lang: "ja"`.
+
+Important details:
+
+- Switching **EN / JA** changes the **next audit submission language** and the UI chrome language. It does **not** retroactively relocalize an already-completed report.
+- Node findings localize `criterion_name`, `reason`, and `suggested_fix` for Japanese.
+- Python findings localize `criterion_name` and `suggested_fix` through shared i18n. Python `reason` strings are localized when the underlying auditor emits localized text; some older Python auditors still emit English reasons.
+- The current combined API response does not echo `lang` yet, so clients should treat the submitted request language as the source of truth for the job they just started.
+
+---
+
+## 3 — Open the documentation site
+
+Open **http://localhost:3001** to browse the Mintlify docs locally. The docs container runs from the same repository and is included in `docker compose up`.
+
+---
+
+## 4 — Run an audit via the API
+
+```bash
+# Submit an audit
+JOB=$(curl -s -X POST http://localhost:8000/api/v1/combined/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "wcag_level": "AAA",
+    "max_depth": 0,
+    "run_ocr": true,
+    "run_image_audit": true,
+    "run_form_audit": true,
+    "run_label_in_name_audit": true,
+    "run_pause_stop_hide_audit": true,
+    "run_target_size_audit": true
+  }' | jq -r '.job_id')
+
+echo "Job ID: $JOB"
+
+# Stream real-time progress (Ctrl+C to stop)
+curl -N http://localhost:8000/api/v1/combined/$JOB/stream
+
+# Or poll for the final result
+curl http://localhost:8000/api/v1/combined/$JOB | jq '.result.summary'
+```
+
+### Japanese results
+
+To get Japanese localized rule names and suggested fixes in results, set `"lang": "ja"` when submitting the job. If you omit `lang`, results stay in English by default:
+
+```bash
+JOB=$(curl -s -X POST http://localhost:8000/api/v1/combined/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com",
+    "wcag_level": "AAA",
+    "lang": "ja",
+    "max_depth": 0
+  }' | jq -r '.job_id')
+```
+
+This localizes:
+
+- Node / axe-core mapped output
+- Node custom-rule `reason` and `suggested_fix` strings
+- Python `criterion_name` and `suggested_fix` values
+
+Python `reason` localization still depends on the individual auditor implementation.
+
+### Japanese-site coverage report (English output)
+
+To generate a separate Japanese-sites coverage campaign while keeping report text readable in English:
+
+```bash
+python scripts/wcag_audit_runner.py --lang en --site-set global --include-japanese
+```
+
+Outputs:
+
+- Global campaign XLSX reports under `./wcag_reports/global_en/`
+- Japanese campaign XLSX reports under `./wcag_reports/jp_ja/`
+- Separate Japanese coverage markdown summary in English: `./COVERAGE_JA.md`
+
+<Warning>
+Japanese heuristic checks are language-augmented (JP keywords + JP OCR) but still heuristic. Treat `WARN` and checker discrepancies as manual-review priority.
+</Warning>
+
+Expected poll response once complete:
+
+```json
+{
+  "violations": 12,
+  "needs_review": 4,
+  "passes": 87,
+  "by_severity": { "critical": 2, "high": 5, "medium": 4, "low": 1 },
+  "by_source": {
+    "axe":    { "violations": 8, "needs_review": 4, "passes": 75 },
+    "python": { "violations": 4, "needs_review": 0, "passes": 12 }
+  }
+}
+```
+
+---
+
+## 6 — Automated Testing with Jest
+
+a11y components can be integrated into your own test suites using `@accesslint/jest`. This allows you to run accessibility audits as part of your CI/CD pipeline.
+
+### Installation
+
+```bash
+npm install --save-dev @accesslint/jest
+```
+
+### Usage
+
+In your Jest test files, extend `expect` and use the `toBeAccessible` matcher:
+
+```javascript
+const { toBeAccessible } = require('@accesslint/jest');
+expect.extend({ toBeAccessible });
+
+describe('My Component', () => {
+  it('should have no accessibility violations', async () => {
+    const html = '<button>Submit</button>';
+    await expect(html).toBeAccessible();
+  });
+
+  it('should fail if there are violations', async () => {
+    const html = '<img src="logo.png">'; // Missing alt text
+    await expect(html).toBeAccessible();
+  });
+});
+```
+
+This matcher internally uses axe-core (the same engine powering a11y-node) to validate your HTML strings or DOM elements.
+
+
+---
+
+## Development mode (hot reload)
+
+For local development without Docker:
+
+```bash
+cd a11y-python
+
+# Install dependencies
+poetry install
+
+# Install Playwright browsers
+poetry run playwright install chromium
+
+# Run with hot reload
+poetry run uvicorn a11y.main:app --reload --port 8000
+```
+
+Set `NODE_BASE_URL` to point to a running a11y-node instance:
+
+```bash
+NODE_BASE_URL=http://localhost:3000 poetry run uvicorn a11y.main:app --reload
+```
+
+---
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NODE_BASE_URL` | `http://localhost:3000` | Base URL used by **a11y-python** to reach **a11y-node** |
+| `PYTHONUNBUFFERED` | `1` | Ensure live log output in Docker |
+
+See [Environment Reference](/deployment/environment) for all options.
+
+<Note>
+  The browser/frontend does **not** call `node:3000` directly. Frontend requests stay on `/api/*`, nginx or Vite proxies them to Python, and Python calls Node using `NODE_BASE_URL`.
+</Note>

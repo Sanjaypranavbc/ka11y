@@ -5,9 +5,9 @@
 output
 .claude
 *.xlsx
-ka11y-docs/node_modules/
-ka11y-docs/package-lock.json
-ka11y-docs/package.json
+a11y-docs/node_modules/
+a11y-docs/package-lock.json
+a11y-docs/package.json
 *.html
 wcag_reports
 .ai/
@@ -15,13 +15,13 @@ crawled_images
 mcp
 Scripts
 scripts
-ka11y-python/scripts/
-ka11y-python/scripts/live_stage_audit.py
-ka11y-python/scripts/live_stage_plan.example.yml
+a11y-python/scripts/
+a11y-python/scripts/live_stage_audit.py
+a11y-python/scripts/live_stage_plan.example.yml
 
 
-/ka11y-python/ka11y/devtools/
-/ka11y-python/tests/test_dual_cli_chat.py
+/a11y-python/a11y/devtools/
+/a11y-python/tests/test_dual_cli_chat.py
 
 # Protect Environment Variables
 .env
@@ -30,4 +30,4 @@ ka11y-python/scripts/live_stage_plan.example.yml
 combined_report_*.json
 reports/
 test_output/
-ka11y-node/axe_rules.json
+a11y-node/axe_rules.json

@@ -1,9 +1,9 @@
-# ka11y — Audit Limitations Report (Actual vs Audited)
+# a11y — Audit Limitations Report (Actual vs Audited)
 
-**Generated:** 2026-04-26 · **Engines:** ka11y-python (FastAPI + Playwright + OCR + spaCy/SudachiPy) and ka11y-node (axe-core 4.x + 31 custom Playwright/static checks).
+**Generated:** 2026-04-26 · **Engines:** a11y-python (FastAPI + Playwright + OCR + spaCy/SudachiPy) and a11y-node (axe-core 4.x + 31 custom Playwright/static checks).
 **Method:** ran the combined audit endpoint with `wcag_level: AAA`, `max_depth: 0`, all stages enabled, against two real-world public sites (one EN, one JA). Each finding category in the report was then cross-checked against a fresh static-HTML snapshot of the page (image counts, lang attr, landmarks, forms, headings, etc.) to surface what the audit caught, missed, or over-flagged.
 
-The aim is **not** a WCAG conformance verdict on the target sites — it is a candid map of where ka11y's automated detection ends and human review must begin, per rule and per crawler.
+The aim is **not** a WCAG conformance verdict on the target sites — it is a candid map of where a11y's automated detection ends and human review must begin, per rule and per crawler.
 
 ---
 
@@ -70,7 +70,7 @@ The static HTML for each target was downloaded with `curl` and parsed with regex
 
 ## 3. Crawler limitations (Python)
 
-Each crawler is a Playwright page-bound extractor that runs once at page load. Limitations were derived from the source modules (`ka11y-python/ka11y/crawler/`) plus what we observed in the audit output for the two test pages.
+Each crawler is a Playwright page-bound extractor that runs once at page load. Limitations were derived from the source modules (`a11y-python/a11y/crawler/`) plus what we observed in the audit output for the two test pages.
 
 | Crawler | Scope | Extracts | Hard limits observed |
 |---------|-------|----------|----------------------|
@@ -467,7 +467,7 @@ Static-HTML facts captured at `/tmp/static_facts2.json`. Full reports at `/tmp/e
 #### 1.1.1 — Non-text Content — 26 violations
 - **Coverage:** axe image-alt (97 total) + python_1_1_1_alt (224 total) + svg-img-alt (1 total)
 - **Audited:** 2 axe violations + 24 python violations = 26 total; 10 python NR; 95 axe pass + 190 python pass + 1 svg pass = 286 passes
-- **Limitation:** 115 images audited by image_audit (90 pass / 25 fail). The 24 python violations are OCR-driven: alt text too short vs detected image content. Example: logo images with meaningful alt yet flagged for "insufficient alt". Kyoto had similar pattern (23 violations). WCAG 1.1.1 over-flags when OCR detects rich image content but alt is literal/compact — a news-thumbnail pattern issue, not an error in ka11y.
+- **Limitation:** 115 images audited by image_audit (90 pass / 25 fail). The 24 python violations are OCR-driven: alt text too short vs detected image content. Example: logo images with meaningful alt yet flagged for "insufficient alt". Kyoto had similar pattern (23 violations). WCAG 1.1.1 over-flags when OCR detects rich image content but alt is literal/compact — a news-thumbnail pattern issue, not an error in a11y.
 
 #### 2.5.8 [axe/python split] — 42 total (13 + 29)
 *(See above: all legitimate small-target failures.)*
@@ -518,7 +518,7 @@ Static-HTML facts captured at `/tmp/static_facts2.json`. Full reports at `/tmp/e
 | **rendered_layout_crawler** | No hover menus, reflow at 320×800 is correct | 0 findings for 1.4.4, 1.4.10, 1.4.13, 2.4.11, 2.4.12 | Rules run (axe `meta-viewport-large` pass=1) but Python rendered suite produces 0 records — no heuristic triggers. Page reflows correctly so no failures, but absence of "silent pass" output means users cannot see which rules were checked. Differs from Kyoto where Smashing also emitted 0, but here layout rules stay silent even for a responsive site. |
 
 **Crawler-level systemic gaps:**
-- **Iframe content is never crawled.** Chunichi has 2 iframes (likely ads/embeds). ka11y cannot reach into them (CORS + same-origin API limitation). Media content inside iframes is invisible.
+- **Iframe content is never crawled.** Chunichi has 2 iframes (likely ads/embeds). a11y cannot reach into them (CORS + same-origin API limitation). Media content inside iframes is invisible.
 - **Post-load JS carousel not intercepted.** Thumbnail images on the news carousel load after `requestIdleCallback` — image-audit only sees the first slide. Secondary slides' alt text and OCR are never captured.
 - **Form rules emit silence when forms=0.** Unlike media rules (synthetic pass), form-audit produces 0 output when `form_crawler` finds 0 instances. This is acceptable but inconsistent with media.
 
@@ -530,7 +530,7 @@ Static-HTML facts captured at `/tmp/static_facts2.json`. Full reports at `/tmp/e
 
 2. **OCR color-extraction failures over-flagged as violations.** Image text with unknown/missing foreground and background colors (`Ratio 1.00:1 fg ? bg ?`) are marked `fail` for 1.4.3/1.4.6 instead of `needs_review`. On Chunichi: 10 python_1_4_3 violations + 28 python_1_4_6 violations = 38 total are OCR color misses, not real contrast failures. The contrast_report_summary shows only 2 violations out of 10 regions analyzed — a mismatch suggesting OCR step is marking inability-to-measure as failure. Differs from Kyoto (48 similar failures with explicit `1.00:1` ratio).
 
-3. **Image alt text incorrectly flagged as insufficient by OCR.** 115 images crawled; 24 with OCR-detected text. When OCR text length >> alt attribute length, python_1_1_1_alt marks it a violation. Example: logo with meaningful alt `"中日新聞プラス会員への会員登録"` (19 chars) but OCR detects extra badges/UI → fail. This is news-site artifact (logo as link icon is treated as "functional" and over-scanned by OCR). Not a ka11y bug; a domain-specific over-flag.
+3. **Image alt text incorrectly flagged as insufficient by OCR.** 115 images crawled; 24 with OCR-detected text. When OCR text length >> alt attribute length, python_1_1_1_alt marks it a violation. Example: logo with meaningful alt `"中日新聞プラス会員への会員登録"` (19 chars) but OCR detects extra badges/UI → fail. This is news-site artifact (logo as link icon is treated as "functional" and over-scanned by OCR). Not a a11y bug; a domain-specific over-flag.
 
 4. **Frame-title-unique produces NR, not fail, for inaccessible iframes.** Both iframes on Chunichi emit 12 NR records from axe `frame-tested` and `frame-title-unique` — frames are "found but untestable (CORS)". Report shows `best-practice` NR=12, not violations. This is correct behavior (cannot audit = needs_review), but users may assume frames passed accessibility. Frame content is blind spot by design.
 
@@ -620,4 +620,4 @@ curl -s -X POST http://localhost:8000/api/v1/combined/ \
 # job_id: fe407bfb-60e5-4154-945e-3d6dc90de9b1
 ```
 
-Both jobs ran on docker-compose (ka11y-node + ka11y-python, both `Up 14 hours (healthy)` at submission time). Compact extracts at `/tmp/en2_compact.json` (122 KB) and `/tmp/ja2_compact.json` (82 KB) carry the per-(rule,source,checker,status) groups, severity-per-rule, and one example per (rule, status, source) — sufficient for a third-pass review without re-running the audit.
+Both jobs ran on docker-compose (a11y-node + a11y-python, both `Up 14 hours (healthy)` at submission time). Compact extracts at `/tmp/en2_compact.json` (122 KB) and `/tmp/ja2_compact.json` (82 KB) carry the per-(rule,source,checker,status) groups, severity-per-rule, and one example per (rule, status, source) — sufficient for a third-pass review without re-running the audit.

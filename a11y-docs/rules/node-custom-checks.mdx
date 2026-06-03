@@ -1,0 +1,76 @@
+---
+title: "Node Custom Checks"
+description: "The 24 a11y-node custom WCAG checks that run inside the axe_core stage"
+---
+
+`a11y-node` ships **32** custom checks in addition to raw axe-core. They run inside the same `axe_core` stage, so they are returned together with axe-core findings rather than as a separate API stage.
+
+These checks exist for three reasons:
+
+- to cover WCAG criteria that axe-core does not attempt
+- to add stronger heuristics on top of axe-core for criteria a11y wants to surface earlier
+- to exercise live page behavior such as focus, keyboard flow, and input-triggered context changes
+
+## Status semantics
+
+The Node custom checks are intentionally conservative:
+
+- `fail` is used for high-confidence evidence only
+- `pass` is used when the criterion is clearly not applicable or there is strong positive evidence
+- `incomplete` is used when a single-page heuristic cannot prove a WCAG failure
+
+Current examples of conservative behavior:
+
+- `1.2.1` does not treat `<track>` alone as a transcript for audio-only content
+- `3.1.6` pronunciation heuristics do not auto-fail a CJK page just because ruby is absent
+- `3.2.6` consistent-help stays `incomplete` on a single page because cross-page consistency is a site-level property
+- `2.4.8` only passes on visible location indicators; sitemap or JSON-LD alone stay `incomplete`
+- `4.1.3` no longer fails a page just because forms exist without live regions
+
+## Static checks
+
+| WCAG SC | Rule ID | Focus | Typical behavior |
+|---------|---------|-------|------------------|
+| `1.1.1` | `custom-background-image-content` | CSS background-image keywords (hero, banner) lacking names | `incomplete` or `fail` |
+| `1.2.1` | `custom-audio-transcript` | Audio-only transcript evidence near `<audio>` elements | `incomplete` |
+| `1.2.2` | `custom-captions-prerecorded` | Presence of `<track kind="captions">` on video | `fail` or `incomplete` |
+| `1.2.3` | `custom-audio-description` | Presence of description tracks or secondary audio | `fail` or `incomplete` |
+| `1.2.4` | `custom-captions-live` | Live-stream surface detection and opted-in captions | `pass` or `incomplete` |
+| `1.3.2` | `custom-meaningful-sequence` | CSS reordering via flex, grid, float, and `order` | Usually `incomplete` |
+| `1.3.4` | `custom-orientation` | JS lock calls, manifest/meta restrictions, CSS orientation hiding | Mix of `fail` and `incomplete` |
+| `1.4.1` | `custom-use-of-color` | Inline links and form indicators distinguishable by color alone | `fail` on strong cases |
+| `1.4.2` | `custom-audio-control` | Mechanism to pause unmuted autoplay audio | `fail` or `pass` |
+| `1.4.5` | `custom-images-of-text` | Heuristic text-in-image detection from DOM and CSS | Heuristic preflight |
+| `2.1.4` | `custom-character-key-shortcuts` | Single-character shortcuts in inline handlers and scripts | Usually `incomplete` |
+| `2.4.5` | `custom-multiple-ways` | Search, sitemap, nav, breadcrumb, and TOC presence | Often `incomplete` |
+| `2.4.8` | `custom-location` | Breadcrumbs, `aria-current`, active nav, current-step cues | `pass` or `incomplete` |
+| `2.4.9` | `custom-link-purpose` | Generic link text such as “click here” or “more” | `fail` on clear cases |
+| `2.5.1` | `custom-pointer-gestures` | Gesture-based widgets lacking single-pointer alternatives | `fail` or `incomplete` |
+| `2.5.2` | `custom-pointer-cancellation` | Action handlers on down events without up/cancel path | Usually `incomplete` |
+| `2.5.4` | `custom-motion-actuation` | Sensor API usage patterns and disable mechanisms | `incomplete` |
+| `2.5.7` | `custom-dragging-movements` | DnD UI without detectable single-pointer alternative | Usually `incomplete` |
+| `3.1.2` | `custom-language-of-parts` | BCP47 validation and unannotated CJK passage detection | `fail` or `incomplete` |
+| `3.1.6` | `custom-pronunciation` | Ruby/furigana heuristics for CJK content | `incomplete` |
+| `3.2.6` | `custom-consistent-help` | Help/contact/support mechanisms on the page | `incomplete` |
+| `3.3.3` | `custom-error-suggestion` | Error messages including correction guidance | `fail` on terse messages |
+| `3.3.4` | `custom-error-prevention` | Review/confirm safeguards for legal/financial/destructive forms | `fail` on clear misses |
+| `3.3.7` | `custom-redundant-entry` | Repeated personal-data fields in a process | `fail` or `incomplete` |
+| `3.3.8` | `custom-accessible-auth` | CAPTCHA alternatives, paste blocking, cognitive tests | `fail` or `pass` |
+| `4.1.1` | `custom-html-parsing` | Duplicate IDs, broken ARIA references, orphaned labels | `fail` |
+| `4.1.3` | `custom-status-messages` | Live-region heuristics for dynamic updates and notifications | `fail` or `incomplete` |
+
+## Interactive checks
+
+| WCAG SC | Rule ID | Focus | Typical behavior |
+|---------|---------|-------|------------------|
+| `2.1.2` | `custom-keyboard-trap` | Tab traversal and Escape breakout patterns | `fail` on strong misses |
+| `2.4.7` | `custom-focus-visible` | Visible focus style after real focus movement | `fail` on misses |
+| `2.4.13` | `custom-focus-appearance` | Focus-indicator area and contrast | `fail` on misses |
+| `3.2.1` | `custom-on-focus` | Context changes triggered purely by focusing an element | `fail` |
+| `3.2.2` | `custom-on-input` | Context changes triggered by changing an input value | `fail` |
+
+## Where to look next
+
+- [Rules Overview](/rules/overview) for the primary engine matrix
+- [Combined Audit](/api-reference/combined) for API behavior and stage names
+- [Adding a Rule](/guides/adding-a-rule) if you want to extend the catalogue

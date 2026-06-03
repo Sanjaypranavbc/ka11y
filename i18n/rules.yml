@@ -1,5 +1,5 @@
 # ============================================================
-# ka11y — Universal WCAG Rules Catalogue
+# a11y — Universal WCAG Rules Catalogue
 # ============================================================
 # SINGLE SOURCE OF TRUTH — edit only this file, then run:
 #   scripts/sync-i18n.sh
@@ -60,7 +60,7 @@ statuses:
 # Per-finding reason templates (translatable)
 # ============================================================
 # Keyed by WCAG SC ID, then by an opaque code string used by the
-# emitting auditor.  Both ka11y-python and ka11y-node look up reason
+# emitting auditor.  Both a11y-python and a11y-node look up reason
 # strings from the same map; locale files override individual codes
 # without having to redeclare the rule body.
 #

@@ -2,7 +2,7 @@
 
 > Generated: 2026-04-09  
 > Updated: 2026-04-09 (all gaps resolved)  
-> Scope: ka11y-node (24 custom checks + axe-core) and ka11y-python (18 WCAG rules)  
+> Scope: a11y-node (24 custom checks + axe-core) and a11y-python (18 WCAG rules)  
 > Target: Japanese websites (lang="ja", CJK character content, Japanese UI patterns)
 
 This report documents how well each rule handles Japanese-language websites — where keyword matching, text analysis, or language-specific patterns are needed.
@@ -73,21 +73,21 @@ This report documents how well each rule handles Japanese-language websites — 
 All 8 gaps from the original report have been resolved:
 
 ### Fix 1: Link Purpose — Japanese Generic Link Patterns ✅
-**File:** `ka11y-node/src/custom-checks/link-purpose.check.js`  
+**File:** `a11y-node/src/custom-checks/link-purpose.check.js`  
 **Change:** Added `もっと読む`, `さらに`, `リンク` to `GENERIC_LINK_RE`.  
 **Full JP pattern set:** こちら, こちらへ, 詳細, 詳しくはこちら, 詳細はこちら, もっと見る, 続きを読む, もっと読む, 続きはこちら, 詳しく見る, もっと詳しく, 開く, 見る, 確認する, ここをクリック, クリック, タップ, 詳細を見る, さらに, リンク
 
 ---
 
 ### Fix 2: Error Suggestion — Japanese Suggestion Patterns ✅
-**File:** `ka11y-node/src/custom-checks/error-suggestion.check.js`  
+**File:** `a11y-node/src/custom-checks/error-suggestion.check.js`  
 **Change:** Added to `SUGGESTION_RE`: `お願いします`, `しなければなりません`, `べきです`, `試してください`, `やり直してください`, `提供してください`, `修正してください`, `が必要です`, `ください$`.  
 **Terse JP patterns** (無効, エラー, 必須, 失敗, 不正, 入力エラー) already present in `TERSE_RE`.
 
 ---
 
 ### Fix 3: Text Spacing — CJK Typography ✅
-**File:** `ka11y-python/ka11y/crawler/rendered_layout_crawler.py`  
+**File:** `a11y-python/a11y/crawler/rendered_layout_crawler.py`  
 **Change:** `_TEXT_SPACING_CSS` now includes CJK-aware overrides:
 - Elements under `:lang(ja)`, `:lang(zh)`, `:lang(ko)` (and `[lang=...]` attribute variants) have `letter-spacing: normal !important` and `word-spacing: normal !important`
 - `line-height: 1.5` is still applied (valid for CJK vertical rhythm)
@@ -97,13 +97,13 @@ All 8 gaps from the original report have been resolved:
 
 ### Fix 4: Audio/Video Transcript — Japanese Keywords ✅
 **Files:**
-- `ka11y-node/src/custom-checks/audio-transcript.check.js` — added `音声解説`, `音声ガイド`, `代替テキスト` to both transcript link and details detection regexes
-- `ka11y-python/ka11y/accessibility/rules/media/media_auditor.py` — added 11 Japanese keywords to `_TRANSCRIPT_LINK_KEYWORDS`: 書き起こし, 文字起こし, トランスクリプト, 字幕, キャプション, テキスト版, 音声テキスト, 音声解説, 音声ガイド, 説明文, 代替テキスト
+- `a11y-node/src/custom-checks/audio-transcript.check.js` — added `音声解説`, `音声ガイド`, `代替テキスト` to both transcript link and details detection regexes
+- `a11y-python/a11y/accessibility/rules/media/media_auditor.py` — added 11 Japanese keywords to `_TRANSCRIPT_LINK_KEYWORDS`: 書き起こし, 文字起こし, トランスクリプト, 字幕, キャプション, テキスト版, 音声テキスト, 音声解説, 音声ガイド, 説明文, 代替テキスト
 
 ---
 
 ### Fix 5: Consistent Help — JP Chat/Support Patterns ✅
-**File:** `ka11y-node/src/custom-checks/consistent-help.check.js`  
+**File:** `a11y-node/src/custom-checks/consistent-help.check.js`  
 **Changes:**
 - Added `助け`, `フリーダイヤル`, `0120` to `HELP_PATTERNS` regex
 - Added JP-specific chat widget selectors to `chatbotSelectors`: `#line-chat-widget`, `[class*="line-chat"]`, `[id*="smarthr-help"]`, `[class*="smarthr-help"]`, `[id*="tayori"]`, `[class*="tayori"]`
@@ -111,14 +111,14 @@ All 8 gaps from the original report have been resolved:
 ---
 
 ### Fix 6: Location — Japanese Breadcrumb Class Patterns ✅
-**File:** `ka11y-node/src/custom-checks/location.check.js`  
+**File:** `a11y-node/src/custom-checks/location.check.js`  
 **Change:** Added `pan-kuzu` and `panku-zu` romanized class/id patterns alongside `パンくず`.  
 **Full breadcrumb detection:** aria-label breadcrumb, aria-label パンくず, class/id breadcrumb, class/id パンくず, class/id pan-kuzu, class/id panku-zu, BreadcrumbList itemtype, JSON-LD BreadcrumbList, aria-current="page" in nav
 
 ---
 
 ### Fix 7: Pointer Cancellation — JP Action Patterns ✅
-**File:** `ka11y-node/src/custom-checks/pointer-cancellation.check.js`  
+**File:** `a11y-node/src/custom-checks/pointer-cancellation.check.js`  
 **Change:** Added Japanese action words to `ACTION_PATTERN`: `送信`, `購入`, `削除`, `確認`, `登録`, `申込`, `注文`, `クリック`.  
 These cover form submission and destructive action patterns common in JP inline event handlers.
 
@@ -164,7 +164,7 @@ These are not regressions — they are architecturally constrained and documente
 
 ## i18n Infrastructure
 
-### ka11y-node i18n
+### a11y-node i18n
 - **`i18n/rules.yml`** — Canonical English WCAG rule catalog (name, description, suggested_fix, level, severity)
 - **`i18n/locales/ja.yml`** — Full Japanese translations for all rule names, descriptions, and suggested fixes
 - **`i18n/locales/de.yml`** — German locale
@@ -173,7 +173,7 @@ These are not regressions — they are architecturally constrained and documente
 **Japanese locale coverage in rules.yml:**
 All 23+ WCAG rules have Japanese translations in `locales/ja.yml`. The locale file is complete — no missing entries.
 
-### ka11y-python i18n
+### a11y-python i18n
 - **`i18n/rules.yml`** — Identical canonical English catalog (shared structure)
 - **`i18n/locales/ja.yml`** — Japanese translations (same structure as node)
 - **`sensory_auditor.py`** — Embedded Japanese sensory word taxonomy
@@ -183,7 +183,7 @@ All 23+ WCAG rules have Japanese translations in `locales/ja.yml`. The locale fi
 
 ## Test Coverage for Japanese
 
-### ka11y-node
+### a11y-node
 No dedicated Japanese-language HTML fixture files exist in `tests/`. All existing test fixtures use English content. Japanese coverage is tested only through inline regex patterns in unit tests.
 
 **Missing test coverage:**
@@ -193,7 +193,7 @@ No dedicated Japanese-language HTML fixture files exist in `tests/`. All existin
 - Japanese auth form with ログイン
 - Japanese link text with こちら/詳細/さらに
 
-### ka11y-python
+### a11y-python
 No Japanese-language fixture pages in `tests/`. The sensory rule Japanese taxonomy is tested via unit tests on isolated text strings, not full-page crawls.
 
 **Missing test coverage:**
@@ -211,6 +211,6 @@ All previously listed High and Medium priority code fixes have been applied. Rem
 | Priority | Gap | Effort | Service |
 |----------|-----|--------|---------|
 | Medium | Add Japanese HTML test fixtures | High (new fixtures) | Both |
-| Medium | Test text spacing on lang="ja" page | Medium | ka11y-python |
-| Low | Tune 1.1.1 alt text heuristics for JP content | High (NLP) | ka11y-python |
-| Low | Expand 3.3.2 JP label instruction patterns | Low (add keywords) | ka11y-python |
+| Medium | Test text spacing on lang="ja" page | Medium | a11y-python |
+| Low | Tune 1.1.1 alt text heuristics for JP content | High (NLP) | a11y-python |
+| Low | Expand 3.3.2 JP label instruction patterns | Low (add keywords) | a11y-python |

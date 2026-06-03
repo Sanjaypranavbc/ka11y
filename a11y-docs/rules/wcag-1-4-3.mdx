@@ -1,0 +1,154 @@
+---
+title: "1.4.3 Contrast (Minimum)"
+description: "WCAG 1.4.3 — text-in-image contrast check via OCR and per-region luminance analysis"
+---
+
+<Info>
+  **Level AA** · **Primary Engine:** Unified Pipeline (`Policy143` + `ContrastEngine`) · **Secondary Engine:** OCR contrast pipeline (multimodal)
+</Info>
+
+## What it checks
+
+WCAG 1.4.3 requires that text has sufficient contrast against its background. a11y audits both standard DOM text and **text embedded inside images** using a combination of the Unified Accessibility Pipeline and an OCR-backed multimodal analysis.
+
+## How it works (Unified Pipeline)
+
+The Unified Pipeline evaluates DOM-based text contrast with higher accuracy than heuristic-only checkers:
+
+1.  **Computed Style Extraction**: `ElementContextExtractor` captures the exact `font-size`, `font-weight`, and `color` of every text node.
+2.  **Background Color Resolution**: The `ContrastEngine` performs an upward DOM traversal to find the true, solid painted background color, correctly handling transparent `rgba(..., 0)` wrappers that often cause false failures in other tools.
+3.  **Dynamic Thresholds**: The engine dynamically adjusts the required ratio (4.5:1 vs 3.0:1) based on the element's rendered font size and weight.
+
+### False Positive Protection
+
+*   **Opacity Blending**: The engine calculates the effective color by blending foreground and background opacities, preventing false positives on semi-transparent elements.
+*   **Classification Exemptions**: Images and graphics classified as `logo` or `decorative` are automatically exempt, complying with WCAG 2.1 exceptions.
+*   **Disabled State Detection**: Elements marked as `:disabled` or carrying `aria-disabled="true"` are gracefully handled.
+
+## Multimodal OCR Pipeline (for Images of Text)
+
+For text rendered inside images, a11y uses a separate pipeline:
+1.  **Detection**: PaddleOCR/EasyOCR identifies text regions within images.
+2.  **Sampling**: Each region's foreground and background colors are sampled directly from the pixels.
+3.  **Analysis**: The WCAG contrast ratio is computed for these sampled values.
+
+When OCR is enabled and images are found, the audit result includes a top-level `contrast_report` key:
+
+```typescript
+interface ContrastReport {
+  summary: {
+    total_regions_analysed:  number;
+    total_violations:        number;
+    images_with_violations:  number;
+    pass_rate_pct:           number;   // 0–100
+  };
+  table: ContrastDetection[];          // flat list of all detections
+  images: ContrastImageDetail[];       // per-image aggregations
+}
+
+interface ContrastImageDetail {
+  filename:                  string;
+  path:                      string;   // absolute server-side filesystem path
+  image_url:                 string;   // ready-to-use URL: GET /api/v1/combined/{job_id}/image?path=...
+  contrast_violations_count: number;
+  classification:            string;
+  detections:                ContrastDetection[];
+}
+
+interface ContrastDetection {
+  text:                string;
+  confidence:          number;
+  bbox:                number[][];
+  foreground?:         object | null;
+  background_palette:  object[];
+  contrast_checks:     object[];
+  wcag_violations:     string[];
+  ratio:               number | null;  // computed ratio, e.g. 3.2
+  AA_passes:           boolean | null;
+  AAA_passes:          boolean | null;
+}
+```
+
+`contrast_report` is OCR-only. If you disable OCR but keep image auditing enabled, the job still returns `image_audit_report` for image inventory and `1.1.1`/`1.4.5` style checks that do not require OCR output.
+
+## `_contrast_to_findings` logic
+
+The internal `_contrast_to_findings` function in `a11y/api/v1/combined/findings.py` converts the contrast table into the standard `Finding` schema:
+
+```python
+for result in ocr_results:
+    for det in result.detections:
+        dom = (det.color_info or {}).get("dominant_contrast") or {}
+        compliance = dom.get("compliance") or {}
+        aa_normal = compliance.get("AA_passes")   # True | False | None
+        ratio = compliance.get("contrast_ratio")
+
+        if aa_normal is False:
+            status = "fail"
+            severity = "high"
+        elif aa_normal is True:
+            status = "pass"
+            severity = None
+        else:
+            status = "needs_review"
+
+        finding = {
+            "source":         "python",
+            "rule_id":        "python_1_4_3_contrast",
+            "wcag_sc":        "1.4.3",
+            "criterion_name": "Contrast (Minimum)",
+            "level":          "AA",
+            "severity":       severity,
+            "status":         status,
+            "reason":         f"Observed ratio: {ratio}",
+            "suggested_fix":  "Increase contrast to at least 4.5:1 for normal text or 3:1 for large text." if status == "fail" else None,
+            "help_url":       None,
+            "element":        { "tag": "img", "page_url": page_url },
+        }
+```
+
+Localization note:
+
+- `criterion_name` and `suggested_fix` localize through shared i18n for both Node and Python report consumers
+- the current Python `1.4.3` `reason` strings are still emitted by the contrast converter in English
+
+## Common violations
+
+| Situation | Example |
+|-----------|---------|
+| Light grey text on white background | `#aaaaaa` on `#ffffff` → ratio ≈ 2.3 : 1 (fails 4.5 : 1) |
+| Yellow text on white background | `#ffff00` on `#ffffff` → ratio ≈ 1.1 : 1 |
+| Dark text on dark image | `#222222` text on `#1a1a1a` photo → ratio ≈ 1.2 : 1 |
+
+## Suggested fix
+
+```html
+<!-- Overlay text on images — use a semi-transparent backdrop -->
+<div style="position: relative;">
+  <img src="hero.jpg" alt="Hero image">
+  <div style="
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.65);   /* ensures 4.5:1+ for white text */
+    color: #ffffff;
+    padding: 0.75rem;
+  ">
+    Heading text here
+  </div>
+</div>
+```
+
+Use a contrast-checker tool (e.g. WebAIM Contrast Checker) to validate final colour combinations.
+
+## Viewing affected images
+
+The frontend **Image Visualiser** tab renders every image that was analysed, grouped into **Failed** and **Passed** sections. Each failed image shows all violating text regions. Images are served from the backend via the dedicated image endpoint — see [Combined API — Serve a job image](/api-reference/combined#serve-a-job-image).
+
+## Known limitations
+
+- **Otsu segmentation fails on strong gradients / glassmorphism** — rule returns `N/A` instead of flagging. Manual verification needed on modern design systems.
+- **Anti-aliasing halo pixels** skew the luminance percentile computation; the 10th/90th percentile heuristic mitigates but does not eliminate drift.
+- **Retina / high-DPI screenshots** introduce interpolation artefacts that shift ratios by ~0.1.
+- **Disabled-state exemption** — WCAG exempts `:disabled` controls; current implementation still flags them.
+- **`::before` / `::after` pseudo-content** is rendered and OCR'd, but its CSSOM colour values are not inspected directly.
+
+See [Technique coverage for 1.4.3 / 1.4.6](/rules/coverage-matrix#1-4-3-1-4-6-contrast-minimum-enhanced).

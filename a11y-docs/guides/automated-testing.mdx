@@ -1,0 +1,75 @@
+---
+title: "Automated Testing"
+description: "How to use AccessLint and Jest to automate accessibility audits in your CI/CD pipeline"
+---
+
+a11y is designed to be integrated into your development workflow. This guide explains how to use `@accesslint/jest` and standard linting tools to catch accessibility issues as you write code.
+
+---
+
+## AccessLint for Jest
+
+The `@accesslint/jest` package provides a custom matcher for Jest that allows you to assert accessibility on HTML strings or DOM elements. It uses the same **axe-core** engine that powers the a11y-node service.
+
+### Installation
+
+```bash
+npm install --save-dev @accesslint/jest
+```
+
+### Configuration
+
+In your Jest setup file (e.g., `jest.setup.js`), extend `expect`:
+
+```javascript
+const { toBeAccessible } = require('@accesslint/jest');
+expect.extend({ toBeAccessible });
+```
+
+### Usage
+
+You can now use `toBeAccessible()` in your tests. This is particularly useful for component-level testing (React, Vue, etc.) or for validating raw HTML snippets.
+
+```javascript
+describe('MyComponent', () => {
+  it('should be accessible', async () => {
+    const html = '<button>Click Me</button>';
+    await expect(html).toBeAccessible();
+  });
+
+  it('should fail on missing labels', async () => {
+    const html = '<input type="text">'; // Fails: no label
+    await expect(html).toBeAccessible();
+  });
+});
+```
+
+---
+
+## Static Analysis (ESLint)
+
+For catch common accessibility mistakes without running your code, we recommend using the `eslint-plugin-jsx-a11y` plugin. This is already integrated into the **a11y-node** service.
+
+### Scripts
+
+If you are contributing to a11y-node, you can run:
+
+```bash
+# Run all lint checks
+npm run lint
+
+# Run accessibility-only linting
+npm run accesslint
+```
+
+---
+
+## Why use automated testing?
+
+1.  **Shift Left**: Identify issues during development, long before they reach the QA or production stages.
+2.  **Regression Guard**: Ensure that new features don't break existing accessibility implementations.
+3.  **Consistency**: Enforce a baseline level of accessibility across your entire codebase.
+
+<Note>
+  While automated tools like AccessLint are powerful, they can only catch roughly **30-50%** of accessibility issues. We recommend using them in conjunction with a11y's [Combined Audits](/api-reference/combined) and manual verification.
+</Note>

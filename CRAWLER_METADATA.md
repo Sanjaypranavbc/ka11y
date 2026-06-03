@@ -2,7 +2,7 @@
 
 > Generated: 2026-04-09  
 > Updated: 2026-04-13  
-> Scope: `ka11y-node` (24 custom WCAG checks + axe-core) and `ka11y-python` (18 WCAG rules across the universal static pipeline, image crawler, and rendered-layout crawler)
+> Scope: `a11y-node` (24 custom WCAG checks + axe-core) and `a11y-python` (18 WCAG rules across the universal static pipeline, image crawler, and rendered-layout crawler)
 
 This document exhaustively maps every piece of data extracted from a crawled page to the rules that consume it. It is the canonical reference for what each crawler must provide and what each rule consumes.
 
@@ -10,19 +10,19 @@ This document exhaustively maps every piece of data extracted from a crawled pag
 
 ## Table of Contents
 
-- [ka11y-node — Crawler Architecture](#ka11y-node--crawler-architecture)
-- [ka11y-node — Rule-by-Rule Data Requirements](#ka11y-node--rule-by-rule-data-requirements)
-- [ka11y-python — Crawler Architecture](#ka11y-python--crawler-architecture)
+- [a11y-node — Crawler Architecture](#a11y-node--crawler-architecture)
+- [a11y-node — Rule-by-Rule Data Requirements](#a11y-node--rule-by-rule-data-requirements)
+- [a11y-python — Crawler Architecture](#a11y-python--crawler-architecture)
 - [How universal crawler data is audited](#how-universal-crawler-data-is-audited)
-- [ka11y-python — Crawler Data Models](#ka11y-python--crawler-data-models)
-- [ka11y-python — Rule-by-Rule Data Requirements](#ka11y-python--rule-by-rule-data-requirements)
+- [a11y-python — Crawler Data Models](#a11y-python--crawler-data-models)
+- [a11y-python — Rule-by-Rule Data Requirements](#a11y-python--rule-by-rule-data-requirements)
 - [Cross-Service Field Mapping](#cross-service-field-mapping)
 
 ---
 
-## ka11y-node — Crawler Architecture
+## a11y-node — Crawler Architecture
 
-ka11y-node does **not** produce a persistent snapshot object. Instead, Puppeteer's `page` object serves as the live data source. Each rule calls `page.evaluate()` with its own JavaScript extractor, pulls exactly the fields it needs, and returns structured JSON. Interactive rules additionally use `page.keyboard`, `page.mouse`, `page.on()`, and `page.frames()`.
+a11y-node does **not** produce a persistent snapshot object. Instead, Puppeteer's `page` object serves as the live data source. Each rule calls `page.evaluate()` with its own JavaScript extractor, pulls exactly the fields it needs, and returns structured JSON. Interactive rules additionally use `page.keyboard`, `page.mouse`, `page.on()`, and `page.frames()`.
 
 ```
 HTTP POST /api/v1/analyse-url
@@ -51,7 +51,7 @@ AccessibilityService
 
 ---
 
-## ka11y-node — Rule-by-Rule Data Requirements
+## a11y-node — Rule-by-Rule Data Requirements
 
 ### 1.2.1 — custom-audio-transcript
 
@@ -437,14 +437,14 @@ AccessibilityService
 
 ---
 
-## ka11y-python — Crawler Architecture
+## a11y-python — Crawler Architecture
 
-ka11y-python now has two execution modes:
+a11y-python now has two execution modes:
 
 - direct crawler classes still exist and preserve the original model contracts for debugging or compatibility
 - the combined production endpoint now reuses **one universal static crawl** for seven DOM rule families, then normalizes that snapshot back into the existing Pydantic models
 
-Direct answer: yes, the combined `ka11y-python` crawler is now universal for the static DOM rule families.
+Direct answer: yes, the combined `a11y-python` crawler is now universal for the static DOM rule families.
 
 That does **not** mean every stage uses one crawler. Two specialized crawlers remain outside the universal static path:
 
@@ -482,7 +482,7 @@ runner._run_job()
         └── PageSnapshot (portrait/landscape/zoom variants)
 ```
 
-The universal static path is where ka11y-python now gets:
+The universal static path is where a11y-python now gets:
 
 - same-origin iframe traversal
 - open shadow-root traversal
@@ -512,7 +512,7 @@ This is the current production order:
 5. `_run_python_stages()` creates one shared `snapshot_task` and passes it to every static auditor stage.
 6. Each stage waits on the same normalized snapshot, calls the existing auditor unchanged, and receives structured audit rows back.
 7. Stage-specific adapters convert those audit rows into unified combined findings.
-8. The combined runner merges universal-static findings with image/OCR findings, rendered-layout findings, and `ka11y-node` findings into `combined_report.json`.
+8. The combined runner merges universal-static findings with image/OCR findings, rendered-layout findings, and `a11y-node` findings into `combined_report.json`.
 9. Rich step logs capture crawler counts, auditor counts, finding counts, OCR-budget decisions, and warning summaries in `step_logs/combined_execution_steps.jsonl`.
 
 ### Universal snapshot to auditor map
@@ -551,11 +551,11 @@ This is the current production order:
 
 ---
 
-## ka11y-python — Crawler Data Models
+## a11y-python — Crawler Data Models
 
 ### AsyncImageCrawler → `ImageMetadata`
 
-**File:** `ka11y/crawler/crawler.py` + `ka11y/crawler/models.py`
+**File:** `a11y/crawler/crawler.py` + `a11y/crawler/models.py`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -607,7 +607,7 @@ This is the current production order:
 
 ### AsyncFormCrawler → `FormInputData`
 
-**File:** `ka11y/crawler/forms_crawler.py`
+**File:** `a11y/crawler/forms_crawler.py`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -640,7 +640,7 @@ This is the current production order:
 
 ### InteractiveElementCrawler → `InteractiveElementData`
 
-**File:** `ka11y/crawler/interactive_crawler.py`
+**File:** `a11y/crawler/interactive_crawler.py`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -663,7 +663,7 @@ This is the current production order:
 
 ### TargetSizeCrawler → `TargetSizeData`
 
-**File:** `ka11y/crawler/target_size_crawler.py`
+**File:** `a11y/crawler/target_size_crawler.py`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -688,7 +688,7 @@ This is the current production order:
 
 ### MediaCrawler → `MediaElementData`
 
-**File:** `ka11y/crawler/media_crawler.py`
+**File:** `a11y/crawler/media_crawler.py`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -714,7 +714,7 @@ This is the current production order:
 
 ### MovingContentCrawler → `MovingContentData`
 
-**File:** `ka11y/crawler/moving_content_crawler.py`
+**File:** `a11y/crawler/moving_content_crawler.py`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -740,7 +740,7 @@ This is the current production order:
 
 ### SensoryCrawler → `SensoryElementData`
 
-**File:** `ka11y/crawler/sensory_crawler.py`
+**File:** `a11y/crawler/sensory_crawler.py`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -764,7 +764,7 @@ This is the current production order:
 
 ### TextSpacingCrawler → `TextSpacingData`
 
-**File:** `ka11y/crawler/text_spacing_crawler.py`
+**File:** `a11y/crawler/text_spacing_crawler.py`
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -786,7 +786,7 @@ This is the current production order:
 
 ### RenderedLayoutCrawler → `PageSnapshot` + `ElementSnapshot`
 
-**File:** `ka11y/crawler/rendered_layout_crawler.py`
+**File:** `a11y/crawler/rendered_layout_crawler.py`
 
 **PageSnapshot fields:**
 
@@ -816,7 +816,7 @@ This is the current production order:
 
 ---
 
-## ka11y-python — Rule-by-Rule Data Requirements
+## a11y-python — Rule-by-Rule Data Requirements
 
 ### 1.1.1 — Non-text Content (AltTextAccessibilityAuditor)
 
@@ -1059,7 +1059,7 @@ This is the current production order:
 
 Fields that exist in both services under different names:
 
-| Concept | ka11y-node (page.evaluate) | ka11y-python (crawler field) |
+| Concept | a11y-node (page.evaluate) | a11y-python (crawler field) |
 |---------|---------------------------|------------------------------|
 | Alt text | `el.getAttribute('alt')` | `ImageMetadata.alt` |
 | ARIA label | `el.getAttribute('aria-label')` | `*.aria_label` |
@@ -1074,4 +1074,4 @@ Fields that exist in both services under different names:
 | Required | `el.hasAttribute('required')` | `FormInputData.required` |
 | Aria-required | `el.getAttribute('aria-required')` | `FormInputData.aria_required` |
 
-**Resolution approach:** ka11y-node resolves references (aria-labelledby, aria-describedby) at query time inside `page.evaluate()`. ka11y-python resolves them during the crawler phase and stores the resolved text, so auditors receive pre-resolved values.
+**Resolution approach:** a11y-node resolves references (aria-labelledby, aria-describedby) at query time inside `page.evaluate()`. a11y-python resolves them during the crawler phase and stores the resolved text, so auditors receive pre-resolved values.

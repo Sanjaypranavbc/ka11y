@@ -1,6 +1,6 @@
-# ka11y — AI-Powered WCAG Accessibility Auditing
+# a11y — AI-Powered WCAG Accessibility Auditing
 
-**ka11y** is a next-generation accessibility auditing platform that transcends traditional DOM-based scanning. By combining industry-standard DOM analysis with advanced Computer Vision (CV) and Natural Language Processing (NLP), ka11y detects complex accessibility violations that automated tools typically miss—such as descriptive alt-text accuracy, animated content controls, and interactive target sizes.
+**a11y** is a next-generation accessibility auditing platform that transcends traditional DOM-based scanning. By combining industry-standard DOM analysis with advanced Computer Vision (CV) and Natural Language Processing (NLP), a11y detects complex accessibility violations that automated tools typically miss—such as descriptive alt-text accuracy, animated content controls, and interactive target sizes.
 
 ---
 
@@ -80,7 +80,7 @@ graph TD
 ## 📖 Solution Components
 
 ### 1. Unified Accessibility Pipeline
-Instead of evaluating elements in isolation, `ka11y` uses a **Centralized Context Pipeline**. It extracts the full page state (DOM, CSS, ARIA, Bounding Boxes) once and feeds this "Rich Context" into multiple WCAG policies. This drastically reduces false positives in complex checks like **2.5.8 Target Size**.
+Instead of evaluating elements in isolation, `a11y` uses a **Centralized Context Pipeline**. It extracts the full page state (DOM, CSS, ARIA, Bounding Boxes) once and feeds this "Rich Context" into multiple WCAG policies. This drastically reduces false positives in complex checks like **2.5.8 Target Size**.
 
 ### 2. Python AI Auditors
 Specialized auditors handle criteria that require "human-like" understanding:
@@ -95,8 +95,8 @@ The system maintains an internal event bus. As each stage (axe-core, image-crawl
 
 ## 📂 Project Structure
 
-- `ka11y-python/`: The core FastAPI application, AI auditors, and Playwright crawlers.
-- `ka11y-node/`: Node.js microservice wrapping `axe-core` for standard DOM audits.
-- `ka11y-frontend-sdk/`: A React-based UI components and hooks for integrating ka11y results.
-- `ka11y-docs/`: Comprehensive technical documentation and WCAG mapping guides.
+- `a11y-python/`: The core FastAPI application, AI auditors, and Playwright crawlers.
+- `a11y-node/`: Node.js microservice wrapping `axe-core` for standard DOM audits.
+- `a11y-frontend-sdk/`: A React-based UI components and hooks for integrating a11y results.
+- `a11y-docs/`: Comprehensive technical documentation and WCAG mapping guides.
 - `i18n/`: Multi-language support for audit findings (currently English, Japanese, German).

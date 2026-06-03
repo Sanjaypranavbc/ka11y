@@ -34,8 +34,8 @@ axe-core returns three buckets: `violations`, `passes`, **`incomplete`**. The
 `incomplete` bucket is axe saying *"a rule applied but I could not reach a verdict."*
 We map it **one finding per node**:
 
-- Node engine: `ka11y-node/src/utils/axeResultMapper.js:480` (`status: 'needs_review'`).
-- Unified engine (P6): `ka11y-python/ka11y/crawler/axe_runner.py` → `map_axe_results` (`incomplete → needs_review`).
+- Node engine: `a11y-node/src/utils/axeResultMapper.js:480` (`status: 'needs_review'`).
+- Unified engine (P6): `a11y-python/a11y/crawler/axe_runner.py` → `map_axe_results` (`incomplete → needs_review`).
 
 **The dominant rule is `color-contrast`.** axe marks contrast *incomplete* (not fail)
 whenever it cannot resolve the effective background: a background **image**, CSS
@@ -49,7 +49,7 @@ widgets, `scrollable-region-focusable`, `link-in-text-block`.
 Our deeper Python auditors (which cover SC axe doesn't touch at all) emit
 `needs_review` when the signal is present but a deterministic verdict isn't
 defensible. Each has an i18n reason string (`i18n/rules.yml`) and a `reason_code`.
-From `ka11y/api/v1/combined/findings.py`:
+From `a11y/api/v1/combined/findings.py`:
 
 | WCAG SC | Check (file ref) | Why it can't auto-decide | What the human confirms |
 |--------|------------------|--------------------------|--------------------------|
@@ -82,7 +82,7 @@ tool faces the other ~60%. There are only three things a tool can do with them:
    the client ships inaccessible pages and finds out in a **demand letter**.
 2. **Hard-fail them** → huge false-positive noise, teams stop trusting the tool.
 3. **Surface them as scoped, evidence-backed "Manual Review Required"** → honest,
-   actionable. **This is what ka11y does.**
+   actionable. **This is what a11y does.**
 
 So a high `Needs Review` count is the platform doing the **valuable, hard** part —
 covering the SC competitors quietly skip (AAA contrast, media quality, cognitive,
@@ -90,7 +90,7 @@ reflow, motion) and handing the reviewer a precise, pre-investigated list instea
 of "go read WCAG and check the whole site yourself."
 
 **Client value, concretely:**
-- **Coverage**: ka11y evaluates ~3–4× the SC of an axe-only scan (all of axe's A/AA
+- **Coverage**: a11y evaluates ~3–4× the SC of an axe-only scan (all of axe's A/AA
   *plus* AAA, media 1.2.x, 1.4.x enhanced, 2.5.x, cognitive 3.x via the Node custom checks).
 - **Evidence per item**: each `needs_review` is tied to a specific element with a
   selector, HTML snippet, and (for image/contrast) a **screenshot/OCR crop** — review
@@ -107,7 +107,7 @@ of "go read WCAG and check the whole site yourself."
 
 "Score" = the three counts shown in the demo: **Violations**, **Needs Review**, **Passes**.
 
-- `ka11y/api/v1/combined/report.py:_build_report` computes the automated baseline.
+- `a11y/api/v1/combined/report.py:_build_report` computes the automated baseline.
   Pass-rate = `passes / (passes + violations)` (0–100; `null` when nothing
   pass/fail was decided). `summary.manual_review_required` = the `needs_review` count.
 - Every finding gets a stable `finding_id` (`report._finding_signature`) and

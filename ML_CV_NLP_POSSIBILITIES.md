@@ -2,12 +2,12 @@
 
 > Baseline source: `COVERAGE.md` dated 2026-03-26
 > Repo reconciliation date: 2026-04-10
-> Stack assumption: Python (FastAPI + Playwright + existing `ka11y-python` pipeline) plus current Node custom checks
+> Stack assumption: Python (FastAPI + Playwright + existing `a11y-python` pipeline) plus current Node custom checks
 
 ## Scope Notes
 
 - This file is now a reviewed planning document, not a raw brainstorm.
-- `COVERAGE.md` is slightly stale relative to the current repo. `1.3.3` is already implemented in `ka11y-python`, and `3.3.7`, `3.3.8`, `1.4.5`, and `2.5.8` already provide reusable foundations.
+- `COVERAGE.md` is slightly stale relative to the current repo. `1.3.3` is already implemented in `a11y-python`, and `3.3.7`, `3.3.8`, `1.4.5`, and `2.5.8` already provide reusable foundations.
 - The main correction throughout this document is: do not auto-`fail` criteria that depend on semantic completeness, editorial quality, essentiality, or off-page alternatives unless the evidence is strong enough to prove non-conformance.
 
 ## Confidence Scale
@@ -28,7 +28,7 @@
 
 ## Japanese Language Analysis
 
-- Repo baseline: Japanese support is already materially present in [JAPANESE_COVERAGE_REPORT.md](/home/pranav/Documents/ka11y/JAPANESE_COVERAGE_REPORT.md) and [COVERAGE_JA.md](/home/pranav/Documents/ka11y/COVERAGE_JA.md).
+- Repo baseline: Japanese support is already materially present in [JAPANESE_COVERAGE_REPORT.md](/home/pranav/Documents/a11y/JAPANESE_COVERAGE_REPORT.md) and [COVERAGE_JA.md](/home/pranav/Documents/a11y/COVERAGE_JA.md).
 - Reusable Japanese foundations already in repo:
   - `sensory_auditor.py` already has Japanese/CJK taxonomy and language detection.
   - OCR already supports `ja + en` / PaddleOCR `japan`.

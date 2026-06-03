@@ -1,0 +1,160 @@
+---
+title: "Introduction"
+description: "a11y — AI-powered WCAG accessibility auditing for the web"
+---
+
+<img
+  className="block dark:hidden"
+  src="/logo/light.svg"
+  alt="a11y hero"
+/>
+
+## What is a11y?
+
+**a11y** is an automated WCAG 2.1/2.2 accessibility auditing platform that combines:
+
+| Engine | What it checks |
+|--------|---------------|
+| **axe-core + Node custom checks** (Node.js) | DOM structure, ARIA semantics, focus/input interactions, keyboard behavior, parsing, use-of-color, authentication, status-message heuristics, and 32 shipped custom checks |
+| **Python auditors** | OCR-backed image/text checks, forms, label-in-name, moving content, target size, and rendered-layout WCAG checks |
+
+Beyond the core audit platform, a11y provides **developer-first tooling** to ensure accessibility is baked into the development lifecycle:
+*   **AccessLint Integration**: Use `@accesslint/jest` to run accessibility assertions directly in your unit and integration tests.
+*   **Static Analysis**: ESLint plugins (`jsx-a11y`) for catch issues before they reach production.
+
+---
+
+## Coverage Highlights
+
+<Note>
+  This section is a snapshot, not the full catalogue. For the full matrix see [Rules Overview](/rules/overview). For the complete Node-side custom rule set see [Node Custom Checks](/rules/node-custom-checks).
+</Note>
+
+<CardGroup cols={3}>
+  <Card title="1.1.1 Non-text Content" icon="image" href="/rules/wcag-1-1-1">
+    OCR + ML classification determines whether alt text accurately describes the image. Goes far beyond a simple "alt attribute present" check.
+  </Card>
+  <Card title="1.4.3 Contrast (Minimum)" icon="circle" href="/rules/wcag-1-4-3">
+    OCR-backed contrast analysis covers text inside images, not just DOM text that axe-core can already see.
+  </Card>
+  <Card title="1.4.4 Resize Text" icon="font" href="/rules/wcag-1-4-4">
+    Simulates 200% text scaling and checks for clipping, overlap, and unreadable layouts after real rendering.
+  </Card>
+  <Card title="1.4.10 Reflow" icon="mobile" href="/rules/wcag-1-4-10">
+    Re-renders the page at 320 px width and checks horizontal scrolling and broken responsive layouts.
+  </Card>
+  <Card title="1.4.12 Text Spacing" icon="font" href="/rules/wcag-1-4-12">
+    Injects the WCAG spacing overrides and diffs the resulting layout to find clipped text and broken components.
+  </Card>
+  <Card title="1.4.13 Content on Hover or Focus" icon="mouse-pointer" href="/rules/wcag-1-4-13">
+    Tests dismissibility, hoverability, and persistence for tooltips, popovers, and hover-triggered UI.
+  </Card>
+  <Card title="2.4.11 / 2.4.12 Focus Not Obscured" icon="eye" href="/rules/wcag-2-4-11-12">
+    Traverses real focus order and checks whether fixed or sticky overlays hide focused controls.
+  </Card>
+  <Card title="2.2.2 Pause, Stop, Hide" icon="pause" href="/rules/wcag-2-2-2">
+    Detects animated GIFs, CSS animations, autoplay video, and JavaScript carousels — categories axe-core misses entirely.
+  </Card>
+  <Card title="2.5.3 Label in Name" icon="tag" href="/rules/wcag-2-5-3">
+    Verifies that every accessible name contains its visible label text, enabling speech-input users to activate controls by voice.
+  </Card>
+  <Card title="2.5.8 Target Size" icon="expand" href="/rules/wcag-2-5-8">
+    Measures rendered dimensions via JavaScript + Playwright to flag targets below 24 × 24 CSS px, applying the three WCAG 2.2 exceptions.
+  </Card>
+  <Card title="3.3.1 Error Identification" icon="triangle-exclamation" href="/rules/wcag-3-3-1-3-3-2">
+    Checks that required fields link to error messages via `aria-describedby` pointing to elements with `role="alert"` or `aria-live`.
+  </Card>
+  <Card title="3.3.2 Labels or Instructions" icon="input-text" href="/rules/wcag-3-3-1-3-3-2">
+    Verifies visible labels, rejects placeholder-only patterns, and checks `autocomplete` on personal-data fields.
+  </Card>
+</CardGroup>
+
+### Additional Node Custom Checks
+
+a11y also ships **32** Node-side custom checks inside the `axe_core` stage. They cover criteria that plain axe-core does not cover well or does not cover at all:
+
+| Group | Criteria |
+|-------|----------|
+| **Perceivable** | `1.2.1`, `1.3.2`, `1.4.1`, `1.4.5` |
+| **Operable** | `2.1.2`, `2.1.4`, `2.4.5`, `2.4.7`, `2.4.8`, `2.4.9`, `2.4.13`, `2.5.2`, `2.5.7` |
+| **Understandable** | `3.1.6`, `3.2.1`, `3.2.2`, `3.2.6`, `3.3.3`, `3.3.4`, `3.3.7`, `3.3.8` |
+| **Robust** | `4.1.1`, `4.1.3` |
+
+Several of these checks are intentionally conservative and return `incomplete` when a single-page heuristic cannot prove a user-facing failure. See [Node Custom Checks](/rules/node-custom-checks) for the rule-by-rule behavior.
+
+---
+
+## Key Features
+
+<AccordionGroup>
+  <Accordion title="Graceful degradation">
+    If axe-core (Node) fails — e.g. Docker sandbox crash, timeout — the job still completes with Python-only results. A `warnings[]` array in the response notes what was unavailable.
+  </Accordion>
+  <Accordion title="Real-time SSE streaming">
+    Connect to `GET /api/v1/combined/{job_id}/stream` immediately after submitting an audit to receive live stage events: `stage_start`, `stage_complete`, `stage_error`, `job_complete`, `job_failed`. Heartbeat keepalives fire every 25 s.
+  </Accordion>
+  <Accordion title="Pluggable rule architecture">
+    Python rule families are built as crawler/auditor pairs, while `a11y-node` custom checks live as self-contained modules under `src/custom-checks/`. Adding a new rule still requires explicit registration in the `combined/` package (`findings.py`, `constants.py`, `stages.py`, and request models). See [Adding a Rule](/guides/adding-a-rule).
+  </Accordion>
+  <Accordion title="CSV + JSON output">
+    Every auditor writes a per-stage CSV report alongside the consolidated `combined_report.json`. Artefacts are stored in a timestamped directory under `crawled_images/`.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Project Layout
+
+```
+a11y-python/
+├── a11y/
+│   ├── main.py                    # FastAPI app + lifespan
+│   ├── api/
+│   │   ├── router.py              # Top-level /api/v1 router
+│   │   └── v1/
+│   │       ├── combined/          # ★ Primary endpoint package (async job + SSE)
+│   │       │   ├── routes.py      # FastAPI routes
+│   │       │   ├── runner.py      # Background job orchestration
+│   │       │   ├── stages.py      # Python audit stages
+│   │       │   └── findings.py    # Flat finding converters
+│   │       ├── pipeline.py        # Sequential 11-step pipeline endpoint
+│   │       ├── crawl.py           # Image + form crawl-only endpoint
+│   │       ├── forms.py           # Forms-only endpoint
+│   │       └── dependencies.py    # FastAPI Depends() providers
+│   ├── crawler/
+│   │   ├── crawler.py             # AsyncImageCrawler
+│   │   ├── forms_crawler.py       # AsyncFormCrawler
+│   │   ├── interactive_crawler.py # InteractiveElementCrawler
+│   │   ├── moving_content_crawler.py # MovingContentCrawler
+│   │   ├── target_size_crawler.py # TargetSizeCrawler
+│   │   └── models.py              # Shared Pydantic models
+│   ├── accessibility/rules/
+│   │   ├── non_text/alttext.py    # AltTextAccessibilityAuditor  (1.1.1 / 4.1.2 / 1.4.5 / 1.4.11)
+│   │   ├── forms/form_auditor.py  # FormAccessibilityAuditor     (3.3.1 / 3.3.2)
+│   │   └── input_modalities/
+│   │       ├── label_in_name_auditor.py  # LabelInNameAuditor   (2.5.3)
+│   │       └── target_size_auditor.py    # TargetSizeAuditor    (2.5.8)
+│   │   └── timing/
+│   │       └── pause_stop_hide_auditor.py # PauseStopHideAuditor (2.2.2)
+│   ├── classifier/classfier.py    # Image classification cascade
+│   ├── text_detector/             # EasyOCR wrapper
+│   ├── config/                    # Logger + config loader
+│   └── utils/                    # config_loader.py
+└── pyproject.toml
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run the stack in 3 commands with Docker Compose.
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand the job lifecycle, SSE bus, and stage pipeline.
+  </Card>
+  <Card title="Add a Rule" icon="plus" href="/guides/adding-a-rule">
+    Step-by-step guide to adding a new WCAG success criterion.
+  </Card>
+</CardGroup>

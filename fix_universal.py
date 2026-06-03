@@ -1,11 +1,11 @@
 from pathlib import Path
 import re
 
-f = Path("ka11y-python/ka11y/crawler/universal_page.py")
+f = Path("a11y-python/a11y/crawler/universal_page.py")
 content = f.read_text()
 
 def inject(var_name, js_file):
-    js_content = Path(f"ka11y-python/ka11y/crawler/js/{js_file}").read_text()
+    js_content = Path(f"a11y-python/a11y/crawler/js/{js_file}").read_text()
     search_str = f'{var_name} = _load_js("{js_file}")'
     replacement_str = f'{var_name} = r"""{js_content}"""'
     return content.replace(search_str, replacement_str)

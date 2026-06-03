@@ -1,0 +1,338 @@
+---
+title: "Japanese Language Support"
+description: "What is covered, what is not, and how to improve Japanese-language accessibility auditing in a11y."
+---
+
+<Info>
+  This page documents the current state of Japanese (and broader CJK) language support across a11y-python and a11y-node, explains why coverage is partial, and lists concrete fixes in priority order.
+</Info>
+
+## Summary
+
+a11y supports Japanese audits end-to-end: the `lang` parameter flows through both engines, every text-bearing finding field is universally localised via `i18n/rules.yml` + the `i18n/locales/<lang>.yml` overlay, and some NLP-backed rules use a Japanese spaCy model. However, **NLP-dependent rules produce a higher false-positive/false-negative rate on Japanese pages** than on English pages due to tokenization limitations, vocabulary gaps, and `lang` attribute drift.
+
+DOM-structural, rendered-layout, and contrast rules are unaffected — they operate on computed style and bounding boxes and produce equivalent quality for all languages.
+
+## Localized output
+
+Setting `?lang=ja` (or `lang: "ja"` in the audit body) makes every text-bearing field in the report come from the YAML for that language:
+
+| Field | Source |
+|-------|--------|
+| `criterion_name` | `rules.<sc>.name` |
+| `description` (rules catalogue) | `rules.<sc>.description` |
+| `suggested_fix` | `rules.<sc>.suggested_fix` |
+| `reason` | `reason_templates.<sc>.<reason_code>` (with the `_generic` block as fallback) |
+| `severity_label` | `severities.<severity>` |
+| `level_label` | `levels.<level>` |
+| `status_label` | `statuses.<status>` |
+| Top-level `labels` | full `severities` / `levels` / `statuses` maps |
+
+The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) never change across languages and are safe to filter / group on. axe-core's `failureSummary` is localized natively by `axe.configure({ locale })`; Python converters emit a `reason_code` plus optional `reason_params`, and `_make_finding` resolves the localized text through `i18n.loader.render_reason()`.
+
+---
+
+## What is fully covered
+
+| Rule | Engine | JA quality | Notes |
+|---|---|---|---|
+| 1.1.1 Non-text Content (ARIA, missing alt) | Python pipeline | Strong | No NLP involved |
+| 1.3.1 Info and Relationships | axe-core + Python | Strong | Structural |
+| 1.3.4 Orientation | Rendered evaluator + Node | Strong | CSS/JS analysis |
+| 1.4.1–1.4.13 Contrast, Resize, Reflow, Spacing | Python rendered | Strong | Pixel-level |
+| 2.1.2 No Keyboard Trap | Node interactive | Strong | Tab simulation |
+| 2.4.7 Focus Visible | Python + Node | Strong | CSSOM diff |
+| 2.4.11/12 Focus Not Obscured | Python rendered | Strong | Geometry |
+| 2.5.8 Target Size | Python | Strong | getBoundingClientRect |
+| 3.1.6 Pronunciation | Node | Strong | `<ruby>` + CJK density |
+| 3.3.1/3.3.2 Error / Labels | Python | Strong | ARIA structural |
+| 4.1.1 Parsing | Node | Strong | DOM structural |
+| 4.1.2 Name, Role, Value | axe-core + Python | Strong | Computed accessible name |
+| i18n finding text | Both | Strong | Locale overlay |
+
+---
+
+## What is partially covered
+
+### 1.3.3 Sensory Characteristics
+
+**File:** `a11y-python/a11y/accessibility/rules/non_text/sensory_auditor.py`
+
+The auditor uses spaCy's `ja_core_news_sm` (12 MB) to tokenize and analyse instructional text. Three structural problems limit accuracy:
+
+#### Problem 1 — Token boundary errors on web text
+
+`ja_core_news_sm` is trained on newswire. Japanese web copy uses casual register, katakana loan words, and ASCII-mixed text (e.g. `"右のボタンをクリックしてください"`). The model mis-tokenizes these — for example splitting `クリックして` into `クリック` + `して` but misclassifying `して` as a content word rather than a conjunctive particle.
+
+`_remaining_label_words` removes tokens by set-membership lookup in `SENSORY_WORDS`. If tokenization is wrong, the lookup fails and sensory-only instructions are not flagged (false pass).
+
+#### Problem 2 — `SENSORY_WORDS` is English-only
+
+The sensory vocabulary has no Japanese entries. A sentence like `"赤いボタンを押してください"` ("Please press the red button") contains only a colour reference (`赤い`) and a direction-of-action, which is a textbook SC 1.3.3 failure — but because `"赤い"` is not in `SENSORY_WORDS`, it survives the filter as a content word and produces a false pass.
+
+Missing Japanese sensory terms:
+
+| Japanese | Romaji | English |
+|---|---|---|
+| 右 | migi | right |
+| 左 | hidari | left |
+| 上 | ue | top / above |
+| 下 | shita | bottom / below |
+| 赤い / 赤 | akai / aka | red |
+| 青い / 青 | aoi / ao | blue |
+| 黄色 | kiiro | yellow |
+| 緑 | midori | green |
+| 丸い / 丸 | marui / maru | round / circle |
+| 四角 | shikaku | square |
+| 点滅 | tenmetsu | flashing |
+| 音声 | onsei | audio / sound |
+| 形 | katachi | shape |
+| 色 | iro | color |
+| 位置 | ichi | position / location |
+| 大きい | ookii | large |
+| 小さい | chiisai | small |
+
+#### Problem 3 — CJK character-class stripping vs. morpheme filtering
+
+The JA fallback in `_remaining_label_words` strips characters via a Unicode range regex instead of filtering by POS tag. This removes content words and structural particles alike, producing inconsistent results. A sentence that mixes kanji (sensory) with hiragana particles loses its sensory kanji but retains the (now meaningless) particle text as a residual "content" token.
+
+---
+
+### 2.4.9 Link Purpose — `link-purpose.check.js`
+
+JA generic link-text patterns are seeded with a fixed list. Patterns not covered:
+
+- `"ここをクリック"` (click here)
+- `"詳しくはこちら"` (more details here)
+- `"続きはこちら"` (continue here)
+- `"もっと詳しく"` (learn more)
+- `"→"` / `"▶"` (bare arrows used as link labels)
+- `"ご覧ください"` (please see)
+- `"お読みください"` (please read)
+
+---
+
+### 1.1.1 Non-text Content — OCR path
+
+PaddleOCR and EasyOCR are used for alt-text validation against image content. Japanese-specific gaps:
+
+| Issue | Impact |
+|---|---|
+| Vertical text (縦組み / tategumi) | OCR reads columns left-to-right; characters are merged or swapped |
+| Half-width katakana (`ｶﾀｶﾅ`) | ✅ Now normalized via NFKC before keyword matching (see Priority 5 below); OCR recognition of half-width glyphs as distinct characters remains an engine limitation |
+| Fonts below 12 pt | Misread rate increases substantially; small kanji strokes are dropped |
+| Mixed kanji + kana + ASCII | Model confidence drops below threshold; region is skipped |
+
+---
+
+### Node custom checks — general keyword gaps
+
+All Node checks that use heuristic keyword matching have a JA seed list, but it is not exhaustive. The following checks have confirmed gaps:
+
+| Check | Gap |
+|---|---|
+| `consistent-help.check.js` | Missing: `"サポートページ"`, `"ヘルプセンター"`, `"オンラインサポート"` |
+| `error-suggestion.check.js` | Missing: `"正しく入力してください"`, `"形式が正しくありません"` |
+| `error-prevention.check.js` | Missing: `"ご確認ください"`, `"取り消しはできません"`, `"削除されます"` |
+| `multiple-ways.check.js` | Missing: `"サイトマップ"`, `"全ページ一覧"` as alternate nav patterns |
+
+---
+
+## `lang` attribute drift
+
+**This is the single highest-impact bug for Japanese audits.**
+
+Language routing in both engines is driven by `<html lang="...">`. When a page declares `lang="en"` but contains Japanese body content (extremely common on corporate microsites and bilingual pages), the English spaCy pipeline is loaded and JA text is processed character-by-character as unknown tokens.
+
+`sensory_auditor.py` current logic (simplified):
+
+```python
+lang = page_snapshot.lang or "en"
+if lang.startswith("ja"):
+    nlp = get_spacy_model("ja_core_news_sm")
+else:
+    nlp = get_spacy_model("en_core_web_sm")
+```
+
+This single `startswith("ja")` check misses:
+- `lang="en"` pages with JA text blocks that have inner `lang="ja"` spans
+- `lang="ja-JP"` variants (correctly handled — `startswith` passes)
+- Pages with no `lang` attribute at all (default to English)
+
+---
+
+## Recommended fixes — priority order
+
+### Priority 1 — `lang` drift fix (fasttext-langid)
+
+Replace the single-page language check with per-element language detection:
+
+```python
+import fasttext
+_lid_model = fasttext.load_model("lid.176.ftz")  # 917 KB model
+
+def detect_lang(text: str) -> str:
+    if len(text) < 10:
+        return "en"  # too short to classify
+    labels, _ = _lid_model.predict(text.replace("\n", " "), k=1)
+    return labels[0].replace("__label__", "")
+```
+
+Call `detect_lang(element.inner_text)` for each instructional sentence before dispatching to the spaCy pipeline. Cache per unique text to avoid repeated inference.
+
+---
+
+### Priority 2 — Upgrade `ja_core_news_sm` → `ja_core_news_lg` ✅ Implemented (2026-04-24)
+
+`_get_nlp()` in `sensory_auditor.py` now tries `ja_core_news_lg` first and silently falls back to `ja_core_news_sm` if the large model is not installed:
+
+```python
+for model_name in ("ja_core_news_lg", "ja_core_news_sm"):
+    try:
+        nlp = spacy.load(model_name, disable=["ner"])
+        break
+    except OSError:
+        continue
+```
+
+Install the large model to activate the upgrade:
+
+```bash
+python -m spacy download ja_core_news_lg
+```
+
+The large model includes contextual word vectors and achieves 94%+ POS accuracy on web-register text. Load is lazy on first JA request; ~400 MB, cached in process memory.
+
+---
+
+### Priority 3 — SudachiPy morpheme-level stop-word filtering ✅ Implemented (2026-04-24)
+
+`_has_meaningful_label_text_ja()` in `sensory_auditor.py` now uses SudachiPy tokenization with graceful fallback to the regex-strip approach when SudachiPy is not installed:
+
+```python
+try:
+    import sudachipy
+    tokenizer_obj = sudachipy.Dictionary().create()
+    morphemes = tokenizer_obj.tokenize(text)
+    for m in morphemes:
+        pos0 = m.part_of_speech()[0]
+        if pos0 not in ("名詞", "動詞", "形容詞", "形容動詞"):
+            continue
+        surface = m.surface()
+        # skip sensory / generic UI / stop / instruction tokens
+        ...
+        if _CJK_CHAR_RE.search(surface) or re.search(r"[a-zA-Z]{3,}", surface):
+            return True  # meaningful label found
+    return False
+except Exception:
+    pass  # fall through to regex strip
+```
+
+Install SudachiPy to activate:
+
+```bash
+# Using the optional extras group:
+poetry install -E japanese
+# Or directly:
+pip install sudachipy sudachidict-core
+```
+
+---
+
+### Priority 4 — Expand `SENSORY_WORDS` with Japanese
+
+In `sensory_auditor.py`, add to the `SENSORY_WORDS` set:
+
+```python
+SENSORY_WORDS_JA = {
+    "右", "左", "上", "下",
+    "赤い", "赤", "青い", "青", "黄色", "緑", "白い", "黒い",
+    "丸い", "丸", "四角", "三角",
+    "点滅", "音声", "形", "色", "位置",
+    "大きい", "小さい", "太い", "細い",
+    "明るい", "暗い", "光る",
+}
+
+SENSORY_WORDS = SENSORY_WORDS_EN | SENSORY_WORDS_JA
+```
+
+---
+
+### Priority 5 — Half-width katakana normalization ✅ Implemented (2026-04-24)
+
+NFKC normalization is now applied as the first step in all text-processing paths in both engines:
+
+**Python** (`sensory_auditor.py`) — `_normalize_text()` calls `unicodedata.normalize("NFKC", text)` and is invoked at the top of `_iter_text_sources()` before any spaCy or keyword processing:
+
+```python
+import unicodedata
+
+def _normalize_text(text: str) -> str:
+    return unicodedata.normalize("NFKC", text)
+```
+
+**Node** (`sharedAssets.js`) — `normalizeText()` calls `text.normalize('NFKC')` and is applied inside `_normalizeStringList()`, so every keyword entry in every check's config list is normalized at pattern-build time:
+
+```javascript
+function normalizeText(text) {
+  return typeof text === 'string' ? text.normalize('NFKC') : text;
+}
+```
+
+This converts `ｶﾀｶﾅ` → `カタカナ`, `Ａ` → `A`, and `１` → `1`, ensuring half-width variants match keyword patterns and OCR patterns consistently across both engines.
+
+---
+
+### Priority 6 — Extend Node JA keyword lists
+
+In each check file, add the missing JA patterns documented above. Example for `link-purpose.check.js`:
+
+```javascript
+const JA_GENERIC_PATTERNS = [
+  "こちら", "詳細", "もっと見る", "続きを読む",       // existing
+  "ここをクリック", "詳しくはこちら", "続きはこちら",  // add
+  "もっと詳しく", "ご覧ください", "お読みください",   // add
+];
+```
+
+---
+
+### Priority 7 — OCR: vertical text fallback
+
+When PaddleOCR confidence for a text region is below 0.6, add a Tesseract vertical-text fallback:
+
+```python
+import subprocess
+
+def ocr_with_vertical_fallback(image_path: str, lang: str) -> str:
+    result = paddle_ocr(image_path, lang=lang)
+    if result.confidence < 0.6 and lang == "ja":
+        # Try vertical PSM
+        out = subprocess.run(
+            ["tesseract", image_path, "stdout", "-l", "jpn_vert", "--psm", "5"],
+            capture_output=True, text=True
+        )
+        if out.returncode == 0:
+            return out.stdout
+    return result.text
+```
+
+---
+
+## Testing JA coverage
+
+A minimal test fixture for `sensory_auditor.py` JA coverage:
+
+```python
+@pytest.mark.parametrize("text,should_fail", [
+    ("右のボタンを押してください", True),   # colour/direction only
+    ("送信ボタンを押してください", False),  # non-sensory label
+    ("赤いリンクをクリックしてください", True),  # colour only
+    ("次へボタンをクリックしてください", False),  # directional but has "next"
+])
+def test_sensory_ja(text, should_fail):
+    result = check_sensory_instruction(text, lang="ja")
+    assert result.is_failure == should_fail
+```
+
+For Node, add JA entries to the existing `link-purpose` test fixtures in `a11y-node/src/custom-checks/__tests__/`.

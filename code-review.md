@@ -1,9 +1,9 @@
-# ka11y — System-Wide Code Review (Re-Review)
+# a11y — System-Wide Code Review (Re-Review)
 
 **Original review:** 2026-05-06 (branch `fix-patches`)
 **Re-review:** 2026-05-25 (branch `pranav-v2`) — B-1…B-12 fix verification
 **Latest pass:** 2026-05-26 (branch `pranav-v2`) — feature code that landed after the B-fix pass: multi-page per-page reporting, auto-language detection, page-wise image reports.
-**Scope:** Full system — `ka11y-python` (FastAPI + Playwright + auditors), `ka11y-node` (axe-core + custom checks), API/orchestration glue.
+**Scope:** Full system — `a11y-python` (FastAPI + Playwright + auditors), `a11y-node` (axe-core + custom checks), API/orchestration glue.
 **Method:** Every finding from the 2026-05-06 review was re-verified against current code, file-by-file, line-by-line. The 2026-05-26 pass reads the new feature modules (`report.py`, `runner.py`, `lang_detector.py`, `findings.py`, `stages.py`) against the current source and runs the browser-free test suite. Status tags below (`FIXED` / `IMPROVED` / `OPEN` / new `N-*`) are grounded in the present source, not the prior report.
 
 ---
@@ -43,7 +43,7 @@ Severity legend: **P0** = ship-blocker / CI-red / correctness, **P1** = correctn
 | **B-6** | ~~P1~~ **FIXED (mitigated)** | **SSRF resolver given a bounded TTL.** Replaced the unbounded `lru_cache` with a 30 s TTL cache so the guard can no longer be permanently poisoned by a host that resolves public once then rebinds. 43 SSRF tests pass. | `_ssrf_guard.py:_resolve_hostname` (`_DNS_CACHE_TTL_SECONDS=30`) | ✅ Done. *Residual (documented):* Chromium's own connect-time resolution is still independent — full TOCTOU closure needs a pinned-IP fetch proxy. TTL shrinks the window from ∞ to ≤30 s. |
 | **B-7** | ~~P2~~ **FIXED** | **Hard `seen_refs` ceiling added.** Chunked scroll extraction now breaks once `len(seen_refs) >= _MAX_SEEN_REFS (5000)` and marks the snapshot partial. | `universal_page.py:_MAX_SEEN_REFS`, scroll-loop guard | ✅ Done. |
 | **B-8** | ~~P2~~ **FIXED** | **`import re` hoisted.** Module-level `_NON_ALNUM_RE` + `_normalise()`; no per-call import. | `policy_1_4_5.py` | ✅ Done. |
-| **B-9** | ~~P2~~ **FIXED** | **File renamed `classfier.py → classifier.py`** via `git mv`; sole importer updated; no stray refs remain. | `ka11y/classifier/classifier.py`, `crawler.py:33` | ✅ Done. |
+| **B-9** | ~~P2~~ **FIXED** | **File renamed `classfier.py → classifier.py`** via `git mv`; sole importer updated; no stray refs remain. | `a11y/classifier/classifier.py`, `crawler.py:33` | ✅ Done. |
 | **B-10** | ~~P2~~ **FIXED** | **1.4.6 uses the AAA constants.** Imports `CONTRAST_NORMAL_AAA`/`CONTRAST_LARGE_AAA` instead of hardcoding `7.0`/`4.5`. | `policy_1_4_6.py` | ✅ Done. |
 | **B-11** | ~~P2~~ **FIXED** | **Generic-settings-link signal dropped.** A settings/preferences link with no motion/accessibility keywords nearby now contributes no evidence and no confidence bump. 2.5.4 suites pass. | `disable-control-validator.js` (removed `else` branch) | ✅ Done. |
 | **B-12** | ~~P2~~ **FIXED** | **Disk TTL tied to job eviction.** `_evict_old_jobs` now deletes each expired job's `output_dir` (off-loop via `to_thread`), guarded to only remove `*_combined` directories. | `store.py:_safe_remove_job_dir` + eviction loop | ✅ Done. *Residual:* the global standalone-pipeline `crawled_images/` is not job-scoped and is left to ops cleanup. |
@@ -58,7 +58,7 @@ These are **new** issues found in code that landed *after* the B-fix pass (multi
 
 | # | Sev | Bug | Location | Evidence / Fix |
 |---|-----|-----|----------|----------------|
-| **N-1** | ~~P1 (security)~~ **FIXED** | **Auto-language detection bypassed the SSRF guard — on the default path.** `runner._run_job_body()` calls `detect_page_language(url)` whenever `payload.lang == "auto"`, and **`lang` defaults to `"auto"`** (`models.py:69`), so this fired on essentially every audit. The old `detect_page_language()` did a raw `httpx.AsyncClient(..., follow_redirects=True).stream("GET", url)` with **no SSRF validation**, before any browser (and its context-level guard) started — an unguarded server-side request to an attacker URL (`HttpUrl` doesn't block `169.254.169.254`/`localhost`/RFC-1918; `follow_redirects=True` let a public host 30x inward). **Resolved (2026-05-26):** rewrote `lang_detector.py` to (a) validate **every hop** (initial URL + each redirect) with the shared `_host_is_blocked` classifier from `_ssrf_guard.py`, run off-loop via `asyncio.to_thread`; (b) set `follow_redirects=False` and follow manually (max 5 hops), validating each `Location` before connecting; (c) return the safe default + skip the fetch entirely for blocked hosts. New regression suite `tests/test_lang_detector_ssrf.py` (7 cases incl. metadata IP, localhost, RFC-1918, IPv6 loopback, decimal-encoded `2130706433`) asserts **`.stream()` is never called** for a blocked host. *Residual:* same OS-resolver TOCTOU as B-6 — documented, needs pinned-IP fetch to fully close. | `ka11y/utils/lang_detector.py` (`_safe_fetch_head`, `_host_is_blocked` import); `tests/test_lang_detector_ssrf.py` | ✅ Done. |
+| **N-1** | ~~P1 (security)~~ **FIXED** | **Auto-language detection bypassed the SSRF guard — on the default path.** `runner._run_job_body()` calls `detect_page_language(url)` whenever `payload.lang == "auto"`, and **`lang` defaults to `"auto"`** (`models.py:69`), so this fired on essentially every audit. The old `detect_page_language()` did a raw `httpx.AsyncClient(..., follow_redirects=True).stream("GET", url)` with **no SSRF validation**, before any browser (and its context-level guard) started — an unguarded server-side request to an attacker URL (`HttpUrl` doesn't block `169.254.169.254`/`localhost`/RFC-1918; `follow_redirects=True` let a public host 30x inward). **Resolved (2026-05-26):** rewrote `lang_detector.py` to (a) validate **every hop** (initial URL + each redirect) with the shared `_host_is_blocked` classifier from `_ssrf_guard.py`, run off-loop via `asyncio.to_thread`; (b) set `follow_redirects=False` and follow manually (max 5 hops), validating each `Location` before connecting; (c) return the safe default + skip the fetch entirely for blocked hosts. New regression suite `tests/test_lang_detector_ssrf.py` (7 cases incl. metadata IP, localhost, RFC-1918, IPv6 loopback, decimal-encoded `2130706433`) asserts **`.stream()` is never called** for a blocked host. *Residual:* same OS-resolver TOCTOU as B-6 — documented, needs pinned-IP fetch to fully close. | `a11y/utils/lang_detector.py` (`_safe_fetch_head`, `_host_is_blocked` import); `tests/test_lang_detector_ssrf.py` | ✅ Done. |
 | **N-2** | ~~P0 (CI-red)~~ **FIXED** | **Browser-free suite was red.** `test_alt_text_fallback_reason_uses_localised_rule_description` expected the JA reason to start with the generic **rule description**, but `_alt_text_to_findings` now passes `reason=None` + `reason_code="fail_missing_alt"`, so the renderer resolves the **specific** template (`画像に説明（alt 属性）が…`). The specific reason is the **better** behaviour → stale test, not a logic bug. **Resolved (2026-05-26):** renamed to `test_alt_text_fallback_reason_uses_specific_missing_alt_template` and now asserts `reason_code == "fail_missing_alt"` (stable machine value) plus a localised JA reason — robust against future wording tweaks. | `tests/test_api_smoke.py:350-364`; `findings.py:492-510` | ✅ Done. |
 | **N-3** | ~~P2 (perf)~~ **FIXED (mitigated)** | **Auto-lang added a second pre-flight fetch on the default path** (a full extra round-trip, ≤16 KB, ≤10 s, before the crawl loads the same page). **Resolved (2026-05-26):** added a bounded per-host TTL cache (`_LANG_CACHE`, 600 s) so repeated audits of the same host — and the common case of multiple pages on one domain — skip the fetch; blocked hosts are cached too. *Residual:* the first audit of a host still does one lightweight pre-flight fetch; fully eliminating it would require reading `<html lang>` from the universal snapshot (deferred — the cache removes the repeat cost). | `lang_detector.py` (`_LANG_CACHE`, `_cache_get/_cache_put`) | ✅ Done. |
 
@@ -86,7 +86,7 @@ Condensed verification of the 2026-05-06 findings. `FIXED` = verified resolved i
 | ID | Finding | Status |
 |----|---------|--------|
 | P-01 | Monolithic JS / megabyte JSON | IMPROVED → **B-3** |
-| P-02 | Browser-per-crawler | **FIXED** (pool; `KA11Y_MAX_BROWSERS`) |
+| P-02 | Browser-per-crawler | **FIXED** (pool; `A11Y_MAX_BROWSERS`) |
 | P-03 | gather without timeout | **FIXED** (`asyncio.wait_for`) |
 | P-04 | Page leak on exception | **FIXED** (ctx always closed in `finally`) |
 | P-05 | Unbounded `seen_refs` | PARTIAL → **B-7** |
@@ -213,7 +213,7 @@ So **old reports are lost by design** once the TTL fires; there is no run histor
 
 - **Single-file, zero-ops, mountable.** One `*.db` file on a Docker volume = trivially persistent and backup-able (`cp`/`sqlite3 .backup`). No extra service in `docker-compose`.
 - **Queryable history** the JSON-on-disk approach can't give: "last 50 runs", "score trend for host X", "all runs with violations of SC 1.4.3", "slowest stage last week".
-- **Concurrency is fine at our scale.** Writes are bounded by `KA11Y_MAX_CONCURRENT_JOBS` (4) and are short; **WAL mode** handles concurrent readers + one writer comfortably. If we ever outgrow it, the repository interface (§8.6) lets us swap the backend without touching call sites.
+- **Concurrency is fine at our scale.** Writes are bounded by `A11Y_MAX_CONCURRENT_JOBS` (4) and are short; **WAL mode** handles concurrent readers + one writer comfortably. If we ever outgrow it, the repository interface (§8.6) lets us swap the backend without touching call sites.
 
 ### 8.3 Schema (DDL)
 
@@ -284,7 +284,7 @@ CREATE INDEX IF NOT EXISTS idx_stage_job ON run_stage_timings(job_id);
 
 ### 8.4 Where the writes hook in (minimal, additive)
 
-New module `ka11y/api/v1/combined/db.py` (a thin repository; see §8.6). Call sites:
+New module `a11y/api/v1/combined/db.py` (a thin repository; see §8.6). Call sites:
 
 | Event | Source today | New write |
 |-------|--------------|-----------|
@@ -313,26 +313,26 @@ All writes wrapped in `try/except` that **logs and continues** — persistence m
 
 The DB file **must** live on a mounted volume, not in the container's ephemeral layer.
 
-- **Path:** `KA11Y_DB_PATH` env, default `/data/ka11y.db` (new) — keep it separate from `crawled_images/` so report blobs survive even when B-12 sweeps the image dirs.
-- **`docker-compose.yml`:** add a named volume and mount it on the `ka11y-python` service:
+- **Path:** `A11Y_DB_PATH` env, default `/data/a11y.db` (new) — keep it separate from `crawled_images/` so report blobs survive even when B-12 sweeps the image dirs.
+- **`docker-compose.yml`:** add a named volume and mount it on the `a11y-python` service:
   ```yaml
   services:
-    ka11y-python:
+    a11y-python:
       environment:
-        - KA11Y_DB_PATH=/data/ka11y.db
+        - A11Y_DB_PATH=/data/a11y.db
       volumes:
-        - ka11y_db:/data            # durable, survives `down`/redeploy
+        - a11y_db:/data            # durable, survives `down`/redeploy
   volumes:
-    ka11y_db:
+    a11y_db:
   ```
-  (WAL creates `ka11y.db-wal` / `ka11y.db-shm` siblings — they live in `/data` too, so the volume covers them.)
-- **Bootstrap:** run the DDL (`CREATE TABLE IF NOT EXISTS …`) at app startup (FastAPI lifespan), idempotent. Mkdir the parent of `KA11Y_DB_PATH` first.
-- **Backups:** `sqlite3 $KA11Y_DB_PATH ".backup '/data/backups/ka11y-$(date +%F).db'"` on a cron; the file is portable.
+  (WAL creates `a11y.db-wal` / `a11y.db-shm` siblings — they live in `/data` too, so the volume covers them.)
+- **Bootstrap:** run the DDL (`CREATE TABLE IF NOT EXISTS …`) at app startup (FastAPI lifespan), idempotent. Mkdir the parent of `A11Y_DB_PATH` first.
+- **Backups:** `sqlite3 $A11Y_DB_PATH ".backup '/data/backups/a11y-$(date +%F).db'"` on a cron; the file is portable.
 
 ### 8.8 Retention & size
 
 - **Metadata (`runs`, `run_stage_timings`) is kept indefinitely** — it's tiny (hundreds of bytes/run).
-- **Report blobs (`run_reports`) are the only heavy rows.** Add `KA11Y_DB_REPORT_RETENTION_DAYS` (default e.g. 180): a periodic task `DELETE FROM run_reports WHERE created_at < …` keeps the queryable history (counts, score, timings) forever while bounding blob storage. `runs` rows stay so trends remain complete even after a blob is pruned.
+- **Report blobs (`run_reports`) are the only heavy rows.** Add `A11Y_DB_REPORT_RETENTION_DAYS` (default e.g. 180): a periodic task `DELETE FROM run_reports WHERE created_at < …` keeps the queryable history (counts, score, timings) forever while bounding blob storage. `runs` rows stay so trends remain complete even after a blob is pruned.
 - zlib compression typically shrinks the report JSON 8–15×; budget ~tens of KB/run compressed.
 - Decouple from B-12: B-12 deletes the working `output_dir`; the SQLite copy is independent and is what the history endpoints read.
 
@@ -341,7 +341,7 @@ The DB file **must** live on a mounted volume, not in the container's ephemeral 
 1. **Schema + repo + bootstrap** (`db.py`, lifespan DDL, `:memory:` unit tests). No behaviour change.
 2. **Write hooks** in `routes`/`runner`/`stage_events`, all `try/except`-guarded. Verify a run produces one `runs` row + one `run_reports` blob + N `run_stage_timings`.
 3. **Read endpoints** + `GET /combined/{job_id}` SQLite fallback.
-4. **docker-compose volume + `KA11Y_DB_PATH`** + a startup log line confirming the resolved DB path.
+4. **docker-compose volume + `A11Y_DB_PATH`** + a startup log line confirming the resolved DB path.
 5. **Retention task** + docs (`internals/output-format.mdx` "where the output lives" table gains a SQLite row; `deployment/` gets a "persistent run history" note).
 
 ### 8.10 Testing

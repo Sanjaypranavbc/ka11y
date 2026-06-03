@@ -1,6 +1,6 @@
-# ka11y Crawler — Lawsuit Sites Audit Report
+# a11y Crawler — Lawsuit Sites Audit Report
 
-> Date: 2026-04-06 | Auditor: ka11y-python (universal crawler + individual stages)
+> Date: 2026-04-06 | Auditor: a11y-python (universal crawler + individual stages)
 > Sites: Domino's Pizza · Barnes & Noble · Sweetgreen
 > Context: All three sites have faced real accessibility lawsuits
 
@@ -287,7 +287,7 @@ Detection vectors used against the crawler:
 | Add realistic TLS fingerprint | Use `playwright-extra` + `puppeteer-extra-plugin-stealth` port | Bypasses Akamai |
 | Set realistic viewport + language headers | `Accept-Language: en-US`, `viewport: 1280x720` | Matches real browser profile |
 
-**File to create**: `ka11y/crawler/stealth_context.py` — a `create_stealth_context(browser)` factory that wraps the standard Playwright context with all bypass measures.
+**File to create**: `a11y/crawler/stealth_context.py` — a `create_stealth_context(browser)` factory that wraps the standard Playwright context with all bypass measures.
 
 ```python
 # Usage in all crawlers (replaces direct browser.new_context())
@@ -387,7 +387,7 @@ snapshot = await UniversalPageLoader.load(
 
 **What to build**: After form extraction, attempt to submit each form with intentionally invalid/empty data and re-extract error elements.
 
-**New module**: `ka11y/crawler/form_submission_crawler.py`
+**New module**: `a11y/crawler/form_submission_crawler.py`
 
 ```
 For each form found in snapshot.forms:
@@ -417,7 +417,7 @@ This is the only way to test WCAG 3.3.1 (Error Identification) properly — stat
 - `<details>` — open and check content
 - Cookie consent modals — accept and check focus returns to trigger
 
-**File to create**: `ka11y/crawler/interaction_crawler.py`
+**File to create**: `a11y/crawler/interaction_crawler.py`
 
 **WCAG rules enabled by this**:
 - 1.4.13 (hover/focus content) — can verify content is persistent + dismissible

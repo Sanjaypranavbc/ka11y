@@ -1,12 +1,12 @@
-# ka11y Crawler: End-to-End Study Manual
+# a11y Crawler: End-to-End Study Manual
 
-This document provides a complete technical walkthrough of the `ka11y` crawler architecture on the `crawler` branch. This is intended for end-to-end study of how the system discovers, analyzes, and extracts web elements for WCAG auditing.
+This document provides a complete technical walkthrough of the `a11y` crawler architecture on the `crawler` branch. This is intended for end-to-end study of how the system discovers, analyzes, and extracts web elements for WCAG auditing.
 
 ---
 
 ## 1. The Design Philosophy: "Single-Shot" Discovery
 Traditional crawlers load a page multiple times for different checks (e.g., once for images, once for forms). 
-**ka11y** uses a "Universal" strategy:
+**a11y** uses a "Universal" strategy:
 1. **Load Once**: Open the page in a single highly-instrumented session.
 2. **Extract All**: Run a comprehensive JavaScript "Brain" that pulls every required signal in one pass.
 3. **Snapshot**: Save a `PageSnapshot` object that contains everything needed by the auditors (Forms, Media, Layout, etc.).
@@ -14,7 +14,7 @@ Traditional crawlers load a page multiple times for different checks (e.g., once
 ---
 
 ## 2. The Orchestration Layer (Python)
-The entry point is `UniversalPageLoader.load()` in `ka11y/crawler/universal_page.py`.
+The entry point is `UniversalPageLoader.load()` in `a11y/crawler/universal_page.py`.
 
 ### The Preparation Pipeline
 Before extraction begins, the crawler ensures the page is "Audit Ready" using these steps:

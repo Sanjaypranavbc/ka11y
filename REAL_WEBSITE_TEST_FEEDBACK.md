@@ -3,8 +3,8 @@
 Date: 2026-04-14
 
 Tester module:
-- `ka11y-python/scripts/live_stage_audit.py`
-- Plan: `ka11y-python/scripts/live_stage_plan.realtime_image_smoke.yml`
+- `a11y-python/scripts/live_stage_audit.py`
+- Plan: `a11y-python/scripts/live_stage_plan.realtime_image_smoke.yml`
 
 Scope:
 - Live combined smoke runs against `https://www.gov.uk/` (`en`) and `https://www.kao.com/jp/` (`ja`)
@@ -13,7 +13,7 @@ Scope:
 - OCR intentionally disabled to validate the frontend image path when `contrast_report` is empty
 
 Artifacts:
-- Plan summary: `/tmp/ka11y_realtime_image_smoke_20260414/live_stage_summary.json`
+- Plan summary: `/tmp/a11y_realtime_image_smoke_20260414/live_stage_summary.json`
 - GOV.UK combined report: `crawled_images/gov_uk_0414_1027_162a551e_combined/combined_report.json`
 - GOV.UK step log: `crawled_images/gov_uk_0414_1027_162a551e_combined/step_logs/combined_execution_steps.jsonl`
 - Kao JP combined report: `crawled_images/kao_com_0414_1028_bb41980c_combined/combined_report.json`
@@ -50,16 +50,16 @@ Live evidence:
 
 Code changes behind the fix:
 - Python report surfacing:
-  - `ka11y-python/ka11y/api/v1/combined/findings.py`
-  - `ka11y-python/ka11y/api/v1/combined/stages.py`
-  - `ka11y-python/ka11y/api/v1/combined/runner.py`
-  - `ka11y-python/ka11y/api/v1/combined/report.py`
-  - `ka11y-python/ka11y/api/v1/combined/routes.py`
+  - `a11y-python/a11y/api/v1/combined/findings.py`
+  - `a11y-python/a11y/api/v1/combined/stages.py`
+  - `a11y-python/a11y/api/v1/combined/runner.py`
+  - `a11y-python/a11y/api/v1/combined/report.py`
+  - `a11y-python/a11y/api/v1/combined/routes.py`
 - Frontend consumption:
-  - `ka11y-frontend-sdk/src/types/audit.ts`
-  - `ka11y-frontend-sdk/src/hooks/useAudit.ts`
-  - `ka11y-frontend-sdk/src/pages/Index.tsx`
-  - `ka11y-frontend-sdk/src/components/audit/ImageVisualisationTab.tsx`
+  - `a11y-frontend-sdk/src/types/audit.ts`
+  - `a11y-frontend-sdk/src/hooks/useAudit.ts`
+  - `a11y-frontend-sdk/src/pages/Index.tsx`
+  - `a11y-frontend-sdk/src/components/audit/ImageVisualisationTab.tsx`
 
 Result:
 - “No image audit happened” no longer reproduces on these live sites
@@ -75,18 +75,18 @@ Reproduction on live JP output before restarting the Node API:
 - `custom-keyboard-trap` emitted `arrow-key trap in [role="tablist"]`
 
 Code changes:
-- `ka11y-node/src/custom-checks/focus-appearance.check.js`
-- `ka11y-node/src/custom-checks/meaningful-sequence.check.js`
-- `ka11y-node/src/custom-checks/keyboard-trap.check.js`
+- `a11y-node/src/custom-checks/focus-appearance.check.js`
+- `a11y-node/src/custom-checks/meaningful-sequence.check.js`
+- `a11y-node/src/custom-checks/keyboard-trap.check.js`
 
 Regression coverage added:
-- `ka11y-node/tests/custom-checks/focus-appearance.check.test.js`
-- `ka11y-node/tests/custom-checks/meaningful-sequence.check.test.js`
-- `ka11y-node/tests/custom-checks/keyboard-trap.check.test.js`
+- `a11y-node/tests/custom-checks/focus-appearance.check.test.js`
+- `a11y-node/tests/custom-checks/meaningful-sequence.check.test.js`
+- `a11y-node/tests/custom-checks/keyboard-trap.check.test.js`
 
 Verification:
 - Targeted Jest suites passed
-- After restarting `ka11y-node`, a fresh live `POST /api/v1/analyse-url-flat` for `https://www.kao.com/jp/` with `lang=ja` returned `mixedLanguageHits = []`
+- After restarting `a11y-node`, a fresh live `POST /api/v1/analyse-url-flat` for `https://www.kao.com/jp/` with `lang=ja` returned `mixedLanguageHits = []`
 
 ### 3. Node live-site latency remains high
 
@@ -109,13 +109,13 @@ This run did not attempt a performance rewrite. The latency is documented here a
 
 ## Verification Performed
 
-- `pytest -q ka11y-python/tests/test_image_audit_stage.py ka11y-python/tests/test_crawler_settings.py`
+- `pytest -q a11y-python/tests/test_image_audit_stage.py a11y-python/tests/test_crawler_settings.py`
   - `5 passed`
 - `python -m py_compile ...` on the touched Python modules
   - passed
 - `npx jest --runInBand tests/custom-checks/focus-appearance.check.test.js tests/custom-checks/meaningful-sequence.check.test.js tests/custom-checks/keyboard-trap.check.test.js`
   - `22 passed`
-- `npm run build` in `ka11y-frontend-sdk`
+- `npm run build` in `a11y-frontend-sdk`
   - passed
 - Live smoke plan completed successfully for both sites
 - Direct live JP Node recheck after restart

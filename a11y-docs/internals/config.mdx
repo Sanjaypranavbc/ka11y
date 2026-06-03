@@ -1,0 +1,161 @@
+---
+title: "Configuration"
+description: "Shared YAML config, i18n assets, and runtime overrides for a11y"
+---
+
+## Current Config Layers
+
+The runtime now has six practical configuration layers:
+
+| Layer | Source | What it controls |
+|------|--------|------------------|
+| Shared runtime config | `config/universal.yml` | cross-service browser defaults, language families, and shared custom-check assets |
+| Shared WCAG i18n | `i18n/rules.yml` + `i18n/locales/*.yml` | localized WCAG names, descriptions, and suggested fixes for Node and Python |
+| Local fallback config | `a11y-python/a11y/config/config.yml` | standalone defaults if the repo-root shared config is missing |
+| Environment | shell / Docker env vars | service wiring and explicit overrides such as `NODE_BASE_URL`, `A11Y_I18N_DIR`, `PUPPETEER_IGNORE_HTTPS_ERRORS` |
+| API request payload | `POST /api/v1/combined/` body | per-job behavior such as `lang`, `max_depth`, and `run_*` stage toggles |
+| Live test plan YAML | `a11y-python/scripts/live_stage_plan.*.yml` | test harness inputs for real-site validation, not runtime defaults |
+
+### What is implemented today
+
+- Node and Python both default to the repo-root `config/universal.yml`
+- Node and Python both default to the repo-root `i18n/`
+- shared `browser.ignore_https_errors` controls Playwright/Puppeteer TLS handling
+- migrated Node custom checks load EN/JA keywords and selected reason templates from the shared config
+- per-request `lang` still controls output localization and per-job behavior
+- Node now localizes custom-rule `reason` detail fragments as well as top-level `suggested_fix`
+- Python combined finding builders localize `criterion_name` and `suggested_fix` from shared i18n
+
+### What is not implemented yet
+
+- runtime-resolved `site-profiles/*.yml`
+- a universal `reason_code` / `reason_params` contract for every custom rule
+- full migration of every language-specific heuristic out of older Python/Node rule code
+
+## Shared Config File
+
+Both services now prefer the repo-root `config/universal.yml` at startup. Python falls back to `a11y-python/a11y/config/config.yml` only when the shared file is absent.
+
+```yaml
+# config/universal.yml
+
+browser:
+  ignore_https_errors: true
+
+language:
+  supported: ["en", "ja"]
+
+checks:
+  pronunciation:
+    cjk_ratio_threshold: 0.05
+    ruby_min_coverage_pct: 30
+    cjk_lang_prefixes: ["ja", "zh", "zh-CN", "zh-TW", "zh-HK", "ko"]
+
+  audio_transcript:
+    transcript_keywords:
+      en: ["transcript", "caption", "text version"]
+      ja: ["文字起こし", "トランスクリプト", "字幕"]
+
+  multiple_ways:
+    search_keywords:
+      en: ["search", "site map", "table of contents"]
+      ja: ["検索", "サイトマップ", "目次"]
+
+crawler:
+  language:
+    cjk_langs: ["ja", "zh", "zh-CN", "zh-TW", "zh-HK", "ko"]
+```
+
+### Loading the config
+
+```python
+from a11y.utils.config_loader import load_config
+
+config = load_config()                           # Prefers repo-root config/universal.yml
+config = load_config("path/to/config.yml")       # Custom path
+```
+
+Node reads the same file through `a11y-node/src/utils/sharedConfigLoader.js`.
+
+### Shared i18n
+
+`i18n/rules.yml` stays the source of truth for WCAG metadata, and `i18n/locales/<lang>.yml` overlays localized `name`, `description`, and `suggested_fix`.
+
+That shared i18n is now used by:
+
+- Python combined finding builders
+- Node flat result mapping
+- Node WCAG metadata helpers
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NODE_BASE_URL` | `http://localhost:3000` | Base URL of the a11y-node service |
+| `A11Y_I18N_DIR` | repo-root `i18n/` | Override shared WCAG metadata path |
+| `PUPPETEER_IGNORE_HTTPS_ERRORS` | shared config default | Explicit Node override for TLS handling |
+| `PYTHONUNBUFFERED` | — | Set to `1` in Docker for real-time log output |
+
+## Config Reference by Section
+
+### `browser`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `ignore_https_errors` | bool | `true` | Shared default for Node Puppeteer and Python Playwright contexts. Intended for controlled crawling environments and graceful handling of bad TLS on target sites. |
+
+### `checks`
+
+This section now holds shared rule thresholds, keyword lists, and selected localized reason templates.
+
+Current live examples:
+
+| Key | Description |
+|-----|-------------|
+| `checks.pronunciation.cjk_ratio_threshold` | CJK density threshold before ruby/furigana checks apply |
+| `checks.pronunciation.ruby_min_coverage_pct` | Minimum ruby coverage percentage before a page passes |
+| `checks.*.*_keywords` | Shared EN/JA term lists used by migrated Node custom checks |
+| `checks.*.reason_templates` | Localized reason strings for the migrated Node custom checks |
+
+### `crawler`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `crawler.language.cjk_langs` | list[str] | `["ja", "zh", "zh-CN", "zh-TW", "zh-HK", "ko"]` | Shared CJK language family used by rendered and static language-aware behavior |
+| `crawler.reporting.max_warning_samples` | int | `3` | Cap for warning samples surfaced into combined results |
+| `crawler.performance.max_focus_steps` | int | `100` | Limit for rendered focus traversal |
+| `crawler.performance.max_hover_candidates` | int | `12` | Limit for rendered hover probes |
+| `crawler.performance.max_ocr_images_per_run` | int | `60` | OCR budget cap on heavy pages |
+
+## Combined API Request Config
+
+For the combined endpoint, the request body remains the real per-audit override layer.
+
+Important fields:
+
+| Field | Effect |
+|------|--------|
+| `url` | target page |
+| `max_depth` | same-origin crawl depth |
+| `wcag_level` | post-merge WCAG filtering |
+| `lang` | localized output language plus custom-rule reason localization where supported |
+| `run_*` booleans | stage enable/disable switches |
+
+## Language and Japanese Behavior Today
+
+Japanese behavior is no longer purely hardcoded:
+
+- `lang: "ja"` localizes shared WCAG metadata in Node and Python
+- `config/universal.yml` now supplies EN/JA keyword lists and thresholds for migrated Node checks
+- Node `reason` strings are localized for axe findings and migrated custom rules
+- Python `suggested_fix` values are localized through shared i18n, but Python `reason` strings still depend on the emitting auditor
+- some Python-side auditors still keep language-specific logic or English reason text in source code
+
+So the system is now partly request-configured and partly shared-config-driven, with the remaining Python code-driven heuristics still being migrated.
+
+## Adding a New Shared Config Key
+
+1. Add the key to `config/universal.yml`.
+2. Read it from Python via `load_config()` or `a11y.utils.crawler_settings`.
+3. Read it from Node via `sharedConfigLoader` or the custom-check shared-assets helper.
+4. Add a test in both services if the key changes cross-service behavior.

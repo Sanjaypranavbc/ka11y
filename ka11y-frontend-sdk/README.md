@@ -1,1 +1,0 @@
-# Welcome ka11y-frontend

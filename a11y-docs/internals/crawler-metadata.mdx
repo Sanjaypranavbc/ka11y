@@ -1,0 +1,1061 @@
+---
+title: "Crawler Metadata Reference"
+description: "Exhaustive mapping of every crawler field to the rules that consume it, for both a11y-node and a11y-python."
+---
+
+> Generated: 2026-04-09  
+> Updated: 2026-04-13  
+> Scope: `a11y-node` (24 custom WCAG checks + axe-core) and `a11y-python` (18 WCAG rules across the universal static pipeline, image crawler, and rendered-layout crawler)
+
+This is the canonical reference for what each crawler extracts from a page and which rule consumes which fields. Use this when adding a new rule, modifying a crawler, or debugging missing data.
+
+---
+
+## a11y-node — Crawler Architecture
+
+a11y-node does **not** produce a persistent snapshot object. Instead, Puppeteer's `page` object is the live data source. Each rule calls `page.evaluate()` with its own JavaScript extractor, pulls exactly the fields it needs, and returns structured JSON. Interactive rules additionally use `page.keyboard`, `page.mouse`, `page.on()`, and `page.frames()`.
+
+```
+HTTP POST /api/v1/analyse-url
+        │
+        ▼
+AccessibilityService
+  ├── Puppeteer page.goto(url)
+  ├── axe-core injection → axe.run()
+  ├── runStaticChecks(page)       — 18 checks, page.evaluate() per check
+  └── runInteractiveChecks(page)  — 6 checks, keyboard/focus/nav
+```
+
+**Shared page properties available to every check:**
+
+| Property | Access Method | Description |
+|----------|--------------|-------------|
+| Full DOM | `document.querySelectorAll(selector)` | Any CSS selector |
+| Computed styles | `window.getComputedStyle(el)` | All CSS computed values |
+| Attributes | `el.getAttribute(name)` | Any HTML attribute |
+| Text content | `el.textContent` / `el.innerText` | Visible + hidden text |
+| Bounding rect | `el.getBoundingClientRect()` | Size and position |
+| Page URL | `page.url()` / `window.location` | Current URL |
+| Stylesheets | `document.styleSheets` | CSS rules (same-origin) |
+| Active element | `document.activeElement` | Currently focused element |
+| Frames | `page.frames()` | All iframes (same-origin) |
+
+---
+
+## a11y-node — Rule-by-Rule Data Requirements
+
+<AccordionGroup>
+
+<Accordion title="1.2.1 — Audio Transcript (custom-audio-transcript)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `<audio>` elements | `querySelectorAll('audio')` | Counts audio elements needing text alternatives |
+| `<track>` children | child elements of `<audio>` | Checks for `kind="captions\|descriptions\|subtitles"` |
+| Nearby transcript links | ancestor containers (figure, article, section, role=region/main) | Links with transcript/書き起こし keywords |
+| `<figcaption>` | parent `<figure>` | Inline transcript caption |
+| `<details>` blocks | parent/sibling `<details>` | Collapsible transcript content |
+| `aria-describedby` | attribute on `<audio>` | Reference to external transcript element |
+| Element HTML snippet | `el.outerHTML.slice(0, 300)` | Violation reporting |
+
+**Violations detected:** `<audio>` with no `<track>`, no nearby transcript link, no `<figcaption>`, no `aria-describedby`.
+
+</Accordion>
+
+<Accordion title="1.3.2 — Meaningful Sequence (custom-meaningful-sequence)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Flex/grid containers | `display: flex\|inline-flex\|grid\|inline-grid` | Identifies layout containers to inspect |
+| `flexDirection` | `getComputedStyle(el).flexDirection` | Detects reverse (`row-reverse`, `column-reverse`) on LTR pages |
+| Document direction | `[dir="rtl"]`, `document.documentElement.lang` | Skip RTL pages from flex-reverse violation |
+| Child `order` property | `getComputedStyle(child).order` | Detects CSS `order` reordering children |
+| `gridColumnStart`, `gridRowStart` | computed style on grid children | Detects explicit grid placement reordering |
+| `float` property | computed style | Detects mixed float/non-float siblings |
+| Visibility | `display`, `visibility`, `opacity` | Skips hidden elements |
+
+**Violations detected:** flex-reverse on LTR, CSS order reordering, grid explicit placement, mixed floats.
+
+</Accordion>
+
+<Accordion title="1.3.4 — Orientation (custom-orientation)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Web App Manifest | `link[rel="manifest"]` → `fetch(href)` → JSON | `manifest.orientation` field |
+| Inline script content | `script:not([src])` text | `screen.orientation.lock()` calls |
+| CSS transform on layout elements | `getComputedStyle(el).transform` | Matrix parsing for 90°/270° rotation |
+| `rotate` property | `getComputedStyle(el).rotate` | Direct rotate values |
+| CSS @media orientation rules | `document.styleSheets` → `CSSMediaRule` | `@media (orientation:...)` with hiding rules |
+| `<meta name="viewport">` content | `document.querySelector('meta[name="viewport"]')` | `orientation=` and `maximum-scale=1` |
+| `writing-mode` on body | `getComputedStyle(document.body).writingMode` | `vertical-rl`, `vertical-lr` |
+
+**Violations detected:** Script lock, CSS rotation, manifest lock, meta viewport lock, @media hiding, writing-mode vertical.
+
+</Accordion>
+
+<Accordion title="1.4.1 — Use of Color (custom-use-of-color)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Inline text links | `p a[href]`, `li a[href]`, `td a[href]`, `blockquote a[href]`, `article > p a[href]`, `dd a[href]`, `svg a[href]` | Text block links to check |
+| `textDecorationLine` | `getComputedStyle(link)` | Must be `underline` OR other differentiator |
+| `borderBottomWidth`, `borderBottomStyle` | `getComputedStyle(link)` | Alternative to underline |
+| `outlineWidth`, `outlineStyle` | `getComputedStyle(link)` | Alternative differentiator |
+| `color` (link vs ancestor) | `getComputedStyle` on both | RGB luminance comparison |
+| `backgroundColor` | both link and ancestor | Background color difference |
+| `fontWeight`, `fontStyle` | both link and ancestor | Font-based differentiation |
+
+**Violations detected:** Link distinguished from surrounding text by color only (no underline, border, background, or font weight).
+
+</Accordion>
+
+<Accordion title="1.4.5 — Images of Text (custom-images-of-text)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `img[src]` elements | `querySelectorAll('img[src]')` | Non-decorative images to inspect |
+| `alt` attribute | `img.getAttribute('alt')` | Word count, sentence structure analysis |
+| `src` URL | `img.src` | Path keyword scoring (text, banner, heading, etc.) |
+| `className`, `id` | `img.className`, `img.id` | Pattern scoring for text-image markers |
+| `role` attribute | `img.getAttribute('role')` | Skip presentation/none images |
+| Logo detection | alt/src/class/id keyword matching | Exempt logos from violation |
+| CSS background images | `backgroundImage` computed | Background image with text overlay |
+| `<svg>` with `<text>` children | `querySelectorAll('svg')` | SVG images containing text |
+
+**Violations detected:** Likely text-image (scored), CSS background with text overlay, SVG-as-image with text content.
+
+</Accordion>
+
+<Accordion title="2.1.2 — Keyboard Trap (custom-keyboard-trap) [Interactive]">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Focusable elements | `a[href]`, `button:not([disabled])`, `input`, `select`, `textarea`, `[tabindex]:not([tabindex="-1"])` | Elements to Tab through |
+| `document.activeElement` | After each `page.keyboard.press('Tab')` | Tracks focus position |
+| Element `id`, `name` | `activeElement.id`, `activeElement.name` | Stable deduplication key |
+| ARIA widget roles | `[role="tree\|grid\|listbox\|menu\|tablist\|radiogroup"]` | Arrow key navigation testing |
+| Same-origin iframes | `page.frames()` | Tab trap detection in iframes |
+
+**Violations detected:** Tab cycling on single element, A→B→A loop, arrow key trap in ARIA widget, iframe tab trap.
+
+</Accordion>
+
+<Accordion title="2.1.4 — Character Key Shortcuts (custom-character-key-shortcuts)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `[accesskey]` elements | `querySelectorAll('[accesskey]')` | Single-char accesskey values |
+| Inline key handlers | `[onkeydown]`, `[onkeypress]`, `[onkeyup]` | Attribute text content |
+| Handler modifier guards | Regex: `ctrlKey`, `altKey`, `metaKey` in handler text | Checks for modifier requirement |
+| `<script>` tags | `querySelectorAll('script:not([src])')` | `addEventListener('key*')` pattern matching |
+
+**Violations detected:** Unguarded single-char accesskeys, inline handlers without modifiers, addEventListener without modifiers.
+
+</Accordion>
+
+<Accordion title="2.4.5 — Multiple Ways (custom-multiple-ways)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Search inputs | `input[type="search"]`, `[role="search"]` | Navigation mechanism |
+| Navigation links (multi-language) | Text/aria-label regex: `search\|検索\|recherche\|buscar\|suche\|cerca\|zoeken\|sök\|搜索\|搜尋\|검색` | Multi-language search detection |
+| Sitemap links | `a[href*="sitemap"]` | Navigation mechanism |
+| `<nav>` / `[role="navigation"]` count | DOM query | Multiple nav regions |
+| Breadcrumb indicators | `[aria-label*="breadcrumb"]`, `[class*="breadcrumb"]`, `[itemtype*="BreadcrumbList"]` | Navigation mechanism |
+| Table of contents | `[aria-label*="table of contents"]`, `[class*="toc"]` | Navigation mechanism |
+
+**Violations detected:** Fewer than 2 distinct navigation mechanisms.
+
+</Accordion>
+
+<Accordion title="2.4.7 — Focus Visible (custom-focus-visible) [Interactive]">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Focusable elements | `a[href]`, `button`, `input`, `select`, `textarea`, `[tabindex]:not([tabindex="-1"])` | Elements to focus-test |
+| Pre-focus CSS: outline, boxShadow, border, backgroundColor, color, transform | `getComputedStyle` before `.focus()` | Baseline |
+| Post-focus same CSS properties | `getComputedStyle` after `.focus({ preventScroll: true })` | Change detection |
+
+**Violations detected:** Focusable element with no detectable CSS change on focus.
+
+</Accordion>
+
+<Accordion title="2.4.8 — Location (custom-location)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Breadcrumb elements | `[aria-label*="breadcrumb"]`, `[class*="breadcrumb"]`, `[itemtype*="BreadcrumbList"]` | Location indicator |
+| `aria-current="page"` in nav | `nav [aria-current="page"]` | Active page indicator |
+| Active nav items | `.active` or `[aria-selected="true"]` in nav | Location indicator |
+| Sitemap links | `a[href*="sitemap"]`, `[aria-label*="site map"]` | Location indicator |
+| JSON-LD | `script[type="application/ld+json"]` containing `"BreadcrumbList"` | Schema.org breadcrumb |
+
+**Violations detected:** No location indicator of any kind present.
+
+</Accordion>
+
+<Accordion title="2.4.9 — Link Purpose (custom-link-purpose)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| All `a[href]` elements | `querySelectorAll('a[href]')` | Links to evaluate |
+| `aria-label`, `aria-labelledby` (resolved), `img[alt]` inside link | element attributes + `getElementById` | Accessible name (priority 1–3) |
+| Visible text via TreeWalker | `TreeWalker(TEXT_NODE)` excluding `display:none` | Accessible name priority 4 |
+| `title` attribute | `el.getAttribute('title')` | Accessible name priority 5 |
+| Generic link pattern | Regex: click here, read more, more, learn more, details, here | Generic text detection |
+
+**Violations detected:** Links with non-descriptive accessible name.
+
+</Accordion>
+
+<Accordion title="2.4.13 — Focus Appearance (custom-focus-appearance) [Interactive]">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| All CSS focus properties (same as focus-visible) | `getComputedStyle` before/after | Change detection |
+| Outline width value | `getComputedStyle(el).outlineWidth` | Must be ≥ 2px |
+| Box-shadow spread radius | First layer of `boxShadow` | Parsed as focus indicator thickness |
+| `body` `backgroundColor` | Fallback for transparent elements | Contrast calculation |
+| Contrast ratio | Luminance formula `(L1 + 0.05) / (L2 + 0.05)` | Must be ≥ 3:1 |
+
+**Violations detected:** Outline < 2px, focus indicator contrast ratio < 3:1.
+
+</Accordion>
+
+<Accordion title="2.5.2 — Pointer Cancellation (custom-pointer-cancellation)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Pointer-down handlers | `[onmousedown]`, `[onpointerdown]`, `[onpointermove]`, `[ontouchstart]` | Elements with down-action potential |
+| Handler text content | attribute value | Action-triggering pattern detection |
+| Cancellation paths | `[onmouseup]`, `[onpointerup]`, `[onclick]`, `[ontouchend]` | Abort opportunity presence |
+
+**Violations detected:** Action-triggering down-handler without any up/click/touchend cancellation path.
+
+</Accordion>
+
+<Accordion title="2.5.7 — Dragging Movements (custom-dragging-movements)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `[draggable="true"]` elements | `querySelectorAll('[draggable="true"]')` | Native drag elements |
+| DnD library markers | `[data-rbd-draggable-id]`, `[data-dnd-kit-draggable]`, `.sortable-item`, `.ui-draggable` | Library drag detection |
+| Single-pointer alternatives | `button`, `[role="button"]`, `a[href]`, `input[type="button"]` in parent | Pointer alternative presence |
+
+**Violations detected:** Draggable element without nearby single-pointer alternative.
+
+</Accordion>
+
+<Accordion title="3.2.1 — On Focus (custom-on-focus) [Interactive]">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Focusable elements | Same selectors as focus-visible | Elements to trigger focus on |
+| Page URL before focus | `page.url()` → `pathname + search` | Navigation baseline |
+| `framenavigated` event | `page.on('framenavigated')` | Hard navigation detection |
+| `history.pushState` / `replaceState` intercept | `page.evaluate()` override | SPA soft navigation detection |
+
+**Violations detected:** URL changes or context changes triggered by `.focus()`.
+
+</Accordion>
+
+<Accordion title="3.2.2 — On Input (custom-on-input) [Interactive]">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Input elements | `input`, `textarea`, `select`, `[contenteditable="true"]` | Inputs to interact with |
+| `type` attribute | `el.getAttribute('type')` | Determines test input value |
+| URL tracking | Same as custom-on-focus | Navigation detection |
+
+**Violations detected:** Input change triggers unexpected navigation.
+
+</Accordion>
+
+<Accordion title="3.2.6 — Consistent Help (custom-consistent-help)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Help links | `a`, `button`, `[role="link"]`, `[role="button"]` text/aria-label/href matching help, support, faq, contact, ヘルプ, 助け | Help mechanism detection |
+| Chat widgets | `[id*="chat"]`, `#intercom-container`, `#drift-widget`, `.crisp-client` | Chat as help mechanism |
+| Phone/email links | `a[href^="tel:"]`, `a[href^="mailto:"]` | Contact mechanism |
+
+**Violations detected:** No help/contact/support mechanism found on page.
+
+</Accordion>
+
+<Accordion title="3.3.3 — Error Suggestion (custom-error-suggestion)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Error elements | `[role="alert"]`, `[aria-live="assertive"]`, `[aria-invalid="true"]` + siblings | Alert-based errors |
+| `[aria-errormessage]` references | `getAttribute` → `getElementById` | Linked error elements |
+| Form-scoped error classes | `.error-message`, `.field-error`, `.help-block.error` | Class-based errors |
+| Error message text | `el.textContent.trim()` | Suggestion pattern analysis |
+| Suggestion patterns | Regex: must, should, please, example, try, enter, provide | Guidance presence |
+
+**Violations detected:** Terse error messages without actionable correction guidance.
+
+</Accordion>
+
+<Accordion title="3.3.4 — Error Prevention (custom-error-prevention)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Submit button/heading text | `button[type="submit"]`, `input[type="submit"]`, `h1-h6`, `legend` | Risk keyword detection |
+| Financial keywords | payment, checkout, credit card, 支払い, 購入 | Financial risk |
+| Legal keywords | terms, privacy, contract, 利用規約 | Legal risk |
+| Destructive keywords | delete, cancel, deactivate, 削除, キャンセル | Destructive risk |
+| Review safeguard text | review, confirm, 確認, 見直し | Safeguard detection |
+| Confirmation checkbox | `input[type="checkbox"][required]` | Safeguard detection |
+| Multi-step indicators | `[class*="step"]`, `[class*="wizard"]`, `[class*="progress"]` | Multi-step safeguard |
+
+**Violations detected:** High-risk forms without review/confirm safeguard.
+
+</Accordion>
+
+<Accordion title="3.3.7 — Redundant Entry (custom-redundant-entry)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Multiple forms | `querySelectorAll('form')` | Multi-form process detection |
+| `type`, `autocomplete` attributes | each field | Personal data token matching |
+| Input labels | `label[for]`, `aria-label`, nearby text | Field type inference |
+| Confirm/re-entry patterns | field name/label containing confirm, repeat, re-enter, 確認 | Redundant entry detection |
+
+**Violations detected:** Same personal data requested in multiple fields without autocomplete or confirmation context.
+
+</Accordion>
+
+<Accordion title="3.3.8 — Accessible Authentication (custom-accessible-auth)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `input[type="password"]` | `querySelectorAll` | Auth form detection |
+| Form text | login, sign in, サインイン, ログイン | Auth form classification |
+| CAPTCHA elements | `img[src*="captcha"]`, `[class*="g-recaptcha"]`, `.cf-turnstile`, `[class*="h-captcha"]` | CAPTCHA detection |
+| Audio CAPTCHA alternative | `[class*="captcha-audio"]`, `button[aria-label*="audio"]` | Accessible alternative |
+| Paste-blocking | `onpaste`, `oncopy` attributes + synthetic paste | Clipboard restriction |
+| Cognitive test patterns | form text matching math/puzzle/riddle keywords | Cognitive test detection |
+
+**Violations detected:** CAPTCHA without audio alternative, paste-blocked password, cognitive function test.
+
+</Accordion>
+
+<Accordion title="4.1.1 — HTML Parsing (custom-html-parsing)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| All `[id]` elements | `querySelectorAll('[id]')` | Duplicate ID detection |
+| ARIA references | `[aria-labelledby]`, `[aria-describedby]`, `[aria-controls]`, `[aria-owns]` | ARIA ref validity |
+| `document.getElementById(id)` | JS lookup | Verifies referenced IDs exist |
+| `label[for]` elements | `querySelectorAll('label[for]')` | Orphaned label detection |
+
+**Violations detected:** Duplicate IDs, broken ARIA references, orphaned `label[for]`.
+
+</Accordion>
+
+<Accordion title="4.1.3 — Status Messages (custom-status-messages)">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Live regions | `[aria-live]`, `[role="status"]`, `[role="alert"]`, `[role="log"]`, `[role="timer"]`, `[role="marquee"]` | Live region inventory |
+| `<form>` elements | `querySelectorAll('form')` | Dynamic content trigger |
+| Search result areas | `[role="region"][aria-label*="result"]`, `[id*="検索結果"]`, `[class*="検索結果"]` | Search result containers |
+| Badge/counter elements | `[class*="badge"]` with numeric text | Count indicators |
+| Cart indicators | `[aria-label*="cart"]`, `[class*="cart-count"]` | E-commerce status |
+| Notification areas | `[class*="notification"]`, `[class*="toast"]`, `[class*="snackbar"]` | Notification containers |
+| `[aria-invalid="true"]` + ancestors | `querySelectorAll` + `el.closest(...)` | Inline validation in live region |
+
+**Violations detected:** Forms/dynamic content without live regions, missing aria-atomic, inline validation outside live region.
+
+</Accordion>
+
+</AccordionGroup>
+
+<Accordion title="1.2.2 — Captions Prerecorded (custom-captions-prerecorded) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `<video>` elements | `querySelectorAll('video')` | Target for caption check |
+| `<track>` children | child elements | Checks for `kind="captions|subtitles"` with `src` + `srclang` |
+| `aria-describedby` | attribute | Linkage to text alternative |
+| Cross-origin iframes | `page.frames()` | Identifies YouTube/Vimeo for INCOMPLETE status |
+
+**Violations detected:** Prerecorded video with no detectable captions or alternatives.
+
+</Accordion>
+
+<Accordion title="1.2.3 — Audio Description (custom-audio-description) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `<video>` elements | `querySelectorAll('video')` | Target for description check |
+| `<track>` children | child elements | Checks for `kind="descriptions"` |
+| Secondary audio | `querySelectorAll('audio')` | Matches description keywords in `title` or `data-kind` |
+| Nearby links | ancestor containers | Transcript/description keywords in link text |
+
+**Violations detected:** Prerecorded synchronized media with no description or text alternative.
+
+</Accordion>
+
+<Accordion title="1.2.4 — Captions Live (custom-captions-live) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Live streams | `video src` matching `.m3u8` / `.mpd` | Identifies live surfaces |
+| `cc_load_policy` | `iframe[src]` query param | YouTube caption opt-in |
+| CART regions | `[aria-live]` with caption keywords | Real-time translation detection |
+| Live badges | text matching "live" / "直播" / "生放送" | Heuristic live identification |
+
+**Violations detected:** Live synchronized media with no captioning signal.
+
+</Accordion>
+
+<Accordion title="1.4.2 — Audio Control (custom-audio-control) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| Autoplay media | `[autoplay]`, `[data-autoplay]` | Target for control check |
+| `muted` state | `media.muted` | Exemption for silent media |
+| `duration` | `media.duration` | Exemption for media ≤ 3s |
+| Native controls | `media.hasAttribute('controls')` | Direct compliance signal |
+| External buttons | sibling/ancestor buttons | Pause/stop/mute keyword matching |
+
+**Violations detected:** Unmuted autoplay media (> 3s) with no user-accessible controls.
+
+</Accordion>
+
+<Accordion title="3.1.2 — Language of Parts (custom-language-of-parts) ★ New">
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `lang` attributes | `querySelectorAll('[lang]')` | Target for validation |
+| CJK characters | Unicode range regex | Detects unannotated passages |
+| `html lang` | `document.documentElement.lang` | Baseline for passage comparison |
+
+**Violations detected:** Empty `lang=""`, invalid BCP47 codes, or unannotated CJK text on non-CJK pages.
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## a11y-python — Unified Pipeline (April 2026)
+
+To permanently resolve false positives, `a11y-python` shifted from isolated single-purpose crawlers to a **Unified Context Pipeline** for core DOM rules (1.1.1, 1.3.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 2.4.7, 2.4.13, 2.5.3, 2.5.8).
+
+Instead of fragmented crawlers, `ElementContextExtractor` generates a single, deeply-nested `ElementContext` for every node on the page.
+
+### ElementContextExtractor → `ElementContext`
+
+The `ElementContext` acts as the single source of truth for the Decision Engine. It is composed of three primary sub-contexts:
+
+#### 1. `SemanticContext`
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag_name`, `role` | `str` | Native identity and ARIA role |
+| `section_type` | `SectionType` | Macro-context computed by `SectionAnalyzer` (e.g., `HEADER`, `FORM_REGION`, `DATA_TABLE`) |
+| `ancestor_tags`, `ancestor_roles` | `List[str]` | Ordered list of all ancestors (DOM tree hierarchy) |
+| `parent_tags`, `parent_roles` | `List[str]` | Immediate wrappers (used for quick grouping checks) |
+| `is_in_labeled_control` | `bool` | True if the element is inside a `<button>`, `<a>`, or `[role="button"]` that provides its own label |
+| `is_video_context` | `bool` | True if inside a video player (exempts thumbnails from 1.4.5) |
+| `described_by_text` | `Optional[str]` | Resolved text from all IDs listed in `aria-describedby` |
+
+#### 2. `VisualContext`
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_visible` | `bool` | Pre-filtered by computed style `display`, `visibility`, `opacity`, and `clip` |
+| `bounding_box` | `BoundingBox` | Actual rendered box on screen |
+| `computed_styles` | `Dict[str, str]` | Extracts `color`, `background-color`, `font-size`, `font-weight`, `opacity` |
+| `resolved_background_color` | `str` | Traverses the DOM tree upward to compute the true, solid painted background color, resolving `rgba(0,0,0,0)` issues |
+| `has_bg_image` | `bool` | True if the element utilizes a CSS background image |
+| `cv_classification` | `Optional[str]` | Image classification (e.g., `logo`, `decorative`, `icon`, `complex`) |
+| `ocr_text` | `Optional[str]` | Text detected within the image boundaries |
+| `visible_label_text` | `Optional[str]` | The raw text nodes visually associated with the element |
+
+#### 3. `InteractionContext`
+| Field | Type | Description |
+|-------|------|-------------|
+| `is_focusable`, `tab_index` | `bool`, `int` | Keyboard reachability |
+| `effective_clickable_bbox` | `BoundingBox` | Merges tiny native inputs with their wrapping `<label>` padding for accurate Target Size measurement |
+| `adjacent_spacing_px` | `float` | Exact pixel distance to the nearest interactive element, computed via spatial bounds check |
+| `has_focus_ring` | `bool` | Computed dynamically by `InteractionStateRunner` by extracting CSS deltas across main element and `::before`/`::after` pseudo-elements |
+| `focus_ring_thickness_px`, `focus_ring_contrast` | `float` | Computed deltas of `box-shadow`, `border`, or `background-color` |
+
+---
+
+## a11y-python — Legacy Crawler Architecture
+
+a11y-python uses a **Universal Discovery** architecture for the combined audit pipeline:
+
+- `UniversalPageLoader` is the **Single Source of Truth** for page discovery and navigation.
+- It performs one shared universal static crawl for seven rule families.
+- `AsyncImageCrawler` and `RenderedLayoutCrawler` consume the **same discovered page inventory** from the universal loader.
+
+```
+POST /api/v1/combined
+        │
+        ▼
+runner._run_job()
+  ├── UniversalPageLoader (Discovery & Static Extraction)
+  │     ├── List[DiscoveredURLs] ──┐
+  │     └── PageSnapshot           │
+  │           ├── forms            │
+  │           ├── interactive      │
+  │           ├── ...              │
+  ├── SnapshotNormalizer           │
+  │     └── Pydantic models        │
+  ├── AsyncImageCrawler <──────────┘
+  │     └── ImageMetadata (Screenshots/OCR)
+  └── RenderedLayoutCrawler <──────┘
+        └── PageSnapshots (Portrait/Landscape/Reflow)
+```
+
+The universal static path is where a11y-python now gets:
+
+- same-origin iframe traversal
+- open shadow-root traversal
+- structured extraction warnings for cross-origin frames and partial failures
+- sidecar provenance through `element_ref_id`, `selector`, and `frame_path`
+- final-report `warning_details` with sampled frame metadata
+
+Recent hardening on top of the universal path:
+
+- `_merge_findings()` now prefers page-aware selector/target/ref evidence before HTML fallback
+- OCR is budgeted on heavy pages through `crawler.performance.max_ocr_images_per_run`
+- rendered hover and focus probes are bounded by `max_hover_candidates` and `max_focus_steps`
+- CJK text-spacing overrides are built from `crawler.language.cjk_langs`
+- config loading is cached and returned as defensive copies
+
+Legacy crawler classes remain useful for direct debugging and compatibility, but the combined endpoint no longer needs seven separate static page loads.
+
+### How universal crawler data is audited
+
+The audit flow is intentionally **raw snapshot first, existing Pydantic models second, existing auditors third**.
+
+This is the current production order:
+
+1. `UniversalPageLoader.load()` does one Playwright session and extracts a `PageSnapshot`.
+2. The raw snapshot is persisted as `universal_snapshot_raw.json`.
+3. `SnapshotNormalizer.normalize()` converts each raw bucket into the existing Pydantic models.
+4. The normalized snapshot is persisted as `universal_snapshot_normalized.json`.
+5. `_run_python_stages()` creates one shared `snapshot_task` and passes it to every static auditor stage.
+6. Each stage waits on the same normalized snapshot, calls the existing auditor unchanged, and receives structured audit rows back.
+7. Stage-specific adapters convert those audit rows into unified combined findings.
+8. The combined runner merges universal-static findings with image/OCR findings, rendered-layout findings, and `a11y-node` findings into `combined_report.json`.
+9. Rich step logs capture crawler counts, auditor counts, finding counts, OCR-budget events, and warnings in `step_logs/combined_execution_steps.jsonl`.
+
+### Universal snapshot to auditor map
+
+| Raw snapshot bucket | Normalized model | Stage function | Auditor | Finding adapter | Main SCs |
+|--------------------|------------------|----------------|---------|-----------------|----------|
+| `forms` | `FormInputData` | `_stage_form_audit_universal()` | `FormAccessibilityAuditor` | `_form_to_findings()` | `3.3.1`, `3.3.2` |
+| `interactive` | `InteractiveElementData` | `_stage_label_in_name_universal()` | `LabelInNameAuditor` | `_lin_to_findings()` | `2.5.3` |
+| `moving_content` | `MovingContentData` | `_stage_pause_stop_hide_universal()` | `PauseStopHideAuditor` | `_psh_to_findings()` | `2.2.2` |
+| `target_sizes` | `TargetSizeData` | `_stage_target_size_universal()` | `TargetSizeAuditor` | `_ts_to_findings()` | `2.5.8` |
+| `text_spacing` | `TextSpacingData` | `_stage_text_spacing_universal()` | `TextSpacingAuditor` | `_crawler_text_spacing_to_findings()` | `1.4.12` |
+| `media` | `MediaElementData` | `_stage_media_audit_universal()` | `MediaAuditor` | `_media_to_findings()` | `1.2.1` |
+| `sensory` | `SensoryElementData` | `_stage_sensory_audit_universal()` | `SensoryCharacteristicsAuditor` | `_sensory_to_findings()` | `1.3.3` |
+
+### PageSnapshot structure
+
+The raw snapshot emitted by `UniversalPageLoader` contains:
+
+- `page_url`: The starting URL.
+- `forms`, `interactive`, `target_sizes`, `moving_content`, `media`, `text_spacing`, `sensory`: Element-specific data buckets.
+- `warnings`: Extraction logs (cross-origin frames, timeouts, detaching).
+- `element_refs`: Global ID-to-element mapping for deduplication.
+- `page_summaries`: Rollup of counts per URL (useful for dashboard progress bars).
+- `pages_crawled`: Total count.
+
+The universal crawler does **not** send raw dicts straight into the auditors.
+
+`SnapshotNormalizer` is the compatibility boundary that:
+
+- injects `page_url` into every normalized record
+- validates payloads against the existing Pydantic models
+- preserves `selector`, `element_ref_id`, and `frame_path` provenance for final findings
+- records `normalization_error` warnings instead of crashing the whole run if one record is malformed
+
+That means the auditors continue to operate on the same data contracts they already expected before the universal crawler existed.
+
+### What the auditors receive in practice
+
+The shared pattern looks like this:
+
+```text
+UniversalPageLoader
+  -> PageSnapshot.forms / interactive / target_sizes / moving_content / media / text_spacing / sensory
+  -> SnapshotNormalizer
+  -> List[ExistingPydanticModel]
+  -> ExistingAuditor.generate_audit_report(...)
+  -> stage-specific *_to_findings(...)
+  -> merged combined findings
+```
+
+The important detail is that the auditors are **not DOM-aware anymore at execution time** for these seven rule families. DOM traversal already happened in the universal crawl, and the auditors only reason over normalized records.
+
+### Files written by the universal audit path
+
+| File | Purpose |
+|------|---------|
+| `universal_snapshot_raw.json` | Exact extracted static snapshot before model validation |
+| `universal_snapshot_normalized.json` | Post-normalization records in existing Pydantic-compatible shapes |
+| `universal_snapshot_warnings.json` | Cross-origin frame skips, detached-frame failures, normalization warnings, and other extraction limitations |
+| `step_logs/combined_execution_steps.jsonl` | Rich-backed event log with crawler counts, auditor counts, finding counts, OCR-budget events, and warnings |
+| `step_logs/combined_execution_steps_summary.json` | Rollup summary of the run |
+| `combined_report.json` | Final merged output from universal static stages, image/OCR, rendered-layout, and node/axe checks, including `warning_details` |
+
+**Universal fields present in normalized static records:**
+
+| Field | Description |
+|-------|-------------|
+| `page_url` | URL of the crawled page |
+| `element_index` | Sequential index of the element on the page |
+| `html_snippet` | Truncated `outerHTML` (≤ 600 chars) |
+| `selector` | Composed selector for evidence and deduplication |
+| `element_ref_id` | Stable key into `PageSnapshot.element_refs` |
+| `frame_path` | Same-origin iframe provenance (`main`, `main.1`, etc.) |
+
+### Recent Hardening Additions
+
+| Area | Current behavior |
+|------|------------------|
+| Universal warnings | `stages.py` samples warning metadata into `warning_details` so blocked frames are visible in the final report |
+| Merge dedup | `runner._merge_findings()` now prefers `element_ref_id`, selector/target evidence, and page URL before HTML fallback |
+| OCR budget | `image_audit` uses `max_ocr_images_per_run` and `select_ocr_candidate_paths()`; Rich logs record selected vs skipped images |
+| Rendered limits | `RenderedLayoutCrawler` reads `max_focus_steps` and `max_hover_candidates` from config |
+| CJK text spacing | `build_text_spacing_cjk_selector_css()` generates the override CSS from `crawler.language.cjk_langs` |
+
+### Live Validation Snapshot
+
+The production universal path was re-validated against a curated 10-site public matrix on `2026-04-13`.
+
+| Live site | Verified behavior |
+|----------|-------------------|
+| `w3schools_iframe` | `3493` normalized records came from non-main frames; cross-origin iframes surfaced as structured warnings |
+| `shoelace_button` | `171` shadow selectors confirmed open shadow-root traversal in normalized static records |
+| `shoelace_spinner` | `6` moving-content records were tagged as `loading_indicator`; `2.2.2` stayed at zero violations |
+| `w3schools_bootstrap_carousel` | Autoplay carousel still surfaced as a genuine `2.2.2` violation after heuristic tightening |
+| `mdn_japanese` | `lang=ja` passed the expectation-driven live checks through the same combined pipeline |
+| `w3schools_bootstrap_forms` | Real public form content produced `6` normalized form records and passed the live expectation gate |
+| `drupal_rendered_probe` | Rendered hover/focus probing completed without the earlier stale-box hover failure mode |
+| `bbc_ocr_budget_probe` | OCR budget logging confirmed selected vs skipped images on a heavy page |
+
+---
+
+## a11y-python — Crawler Data Models
+
+### AsyncImageCrawler → `ImageMetadata`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `src` | `str` | Resolved absolute image URL |
+| `alt` | `str \| None` | `alt` attribute (`None` = missing, `""` = empty) |
+| `title_attr` | `str` | `title` attribute |
+| `aria_label` | `str` | `aria-label` attribute |
+| `aria_labelledby` | `str` | Resolved text from `aria-labelledby` |
+| `aria_describedby` | `str` | Resolved description text |
+| `aria_hidden` | `bool` | `aria-hidden="true"` |
+| `role` | `str` | `role` attribute |
+| `natural_width`, `natural_height` | `int` | Intrinsic image dimensions |
+| `rendered_width`, `rendered_height` | `float` | `getBoundingClientRect()` dimensions |
+| `in_link`, `link_href`, `link_text` | `bool`, `str`, `str` | Parent `<a>` context |
+| `in_button`, `button_text` | `bool`, `str` | Parent `<button>` context |
+| `in_figure`, `figcaption_text` | `bool`, `str` | `<figure>` context |
+| `nearest_heading` | `str` | Closest ancestor `h1`–`h6` text |
+| `surrounding_text` | `str` | 50 chars of surrounding text |
+| `srcset`, `sizes`, `loading`, `decoding` | `str` | Responsive image attributes |
+| `css_display`, `css_visibility`, `css_opacity`, `css_object_fit`, `css_position`, `css_overflow` | `str` | Computed CSS properties |
+| `classification` | `str` | ClassifyAssets result (decorative, informative, functional, complex) |
+| `sub_type` | `str` | Functional subtype (logos, icons, buttons) |
+| `is_functional`, `is_decorative`, `is_complex`, `is_text_image`, `is_logo`, `is_icon`, `is_button` | `bool` | Classification flags |
+
+---
+
+### AsyncFormCrawler → `FormInputData`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag`, `type` | `str` | Element tag and input type |
+| `element_id`, `element_name` | `str` | `id` and `name` attributes |
+| `placeholder` | `str` | `placeholder` attribute |
+| `aria_label`, `aria_labelledby` | `str` | ARIA labelling (labelledby pre-resolved) |
+| `has_explicit_label`, `has_wrapping_label` | `bool` | Label association types |
+| `label_text`, `wrapping_label_text` | `str` | Label text content |
+| `has_any_label` | `bool` | Has any accessible label |
+| `required`, `aria_required` | `bool` | Required field markers |
+| `aria_invalid` | `str` | `aria-invalid` value |
+| `autocomplete` | `str` | `autocomplete` attribute value |
+| `aria_describedby` | `str` | `aria-describedby` attribute |
+| `error_element_id`, `error_element_role`, `error_element_text` | `str` | Resolved error element data |
+| `error_has_role_alert`, `error_has_aria_live` | `bool`, `str` | Error live region flags |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
+
+---
+
+### InteractiveElementCrawler → `InteractiveElementData`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag`, `role` | `str` | Element tag and ARIA role |
+| `visible_label` | `str` | Visible text rendered on screen |
+| `aria_label`, `aria_labelledby` | `str` | ARIA labelling (labelledby pre-resolved) |
+| `title_attr`, `value_attr`, `alt_attr` | `str` | Native name sources |
+| `accessible_name` | `str` | Computed AccName 1.1 result |
+| `element_id`, `element_name`, `input_type` | `str` | Identity fields |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
+
+---
+
+### TargetSizeCrawler → `TargetSizeData`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rendered_width_px`, `rendered_height_px` | `float` | `getBoundingClientRect()` dimensions |
+| `padding_top_px`, `padding_right_px`, `padding_bottom_px`, `padding_left_px` | `float` | Computed CSS padding |
+| `is_inline_exception` | `bool` | Inline `<a>` in text (exception 1) |
+| `is_ua_controlled_exception` | `bool` | Native checkbox/radio (exception 4) |
+| `is_offset_exception` | `bool` | Sufficient spacing (exception 5) |
+| `required_offset_x_px`, `required_offset_y_px` | `float` | Required X/Y offset for exception 5 |
+| `nearest_target_gap_x_px`, `nearest_target_gap_y_px` | `float` | Gap to nearest neighbor |
+| `passes_size` | `bool` | Pre-computed pass flag |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
+
+---
+
+### MediaCrawler → `MediaElementData`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag`, `element_id`, `src` | `str` | Identity |
+| `has_autoplay`, `has_controls`, `has_loop`, `is_muted` | `bool` | Playback attributes |
+| `tracks` | `List[TrackData]` | `<track>` children (kind, src, srclang, label) |
+| `aria_hidden`, `role`, `aria_label`, `aria_describedby_text` | `str` | ARIA attributes |
+| `nearby_links`, `nearby_text`, `nearby_details` | `list`, `str`, `list` | External transcript detection |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
+
+---
+
+### MovingContentCrawler → `MovingContentData`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content_type` | `str` | video_autoplay, animated_gif, css_animation, carousel_autoplay, marquee_element, blink_element |
+| `animation_name`, `animation_duration_seconds`, `animation_iteration_count` | `str`, `float`, `str` | CSS animation details |
+| `loops`, `duration_seconds`, `starts_automatically` | `bool`, `float`, `bool` | Timing properties |
+| `duration_known` | `bool` | Whether duration was actually determined or only inferred |
+| `applicability_exception` | `str` | Essential exception marker, currently including `loading_indicator` |
+| `has_video_controls`, `has_pause_button`, `has_mechanism` | `bool` | Control mechanism flags |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
+
+---
+
+### SensoryCrawler → `SensoryElementData`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag`, `element_id`, `element_class` | `str` | Element identity |
+| `text`, `aria_label`, `aria_labelledby`, `placeholder`, `value` | `str` | All text sources |
+| `role`, `parent_tag`, `nearest_heading` | `str` | Structural context |
+| `title`, `lang` | `str` | Tooltip text and language code |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
+
+---
+
+### TextSpacingCrawler → `TextSpacingData`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag`, `element_id`, `class_name` | `str` | Element identity |
+| `text_length`, `text_preview` | `int`, `str` | Text content size |
+| `height`, `min_height`, `overflow` | `str` | CSS dimension values |
+| `has_fixed_height`, `has_overflow_hidden`, `is_clipped` | `bool` | Clipping risk flags |
+| `selector`, `element_ref_id`, `frame_path` | `str` | Provenance fields carried by the universal static snapshot |
+
+---
+
+### RenderedLayoutCrawler → `PageSnapshot` + `ElementSnapshot`
+
+**PageSnapshot:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `page_url` | `str` | URL crawled |
+| `viewport_width`, `viewport_height` | `int` | Active viewport dimensions |
+| `document_scroll_width`, `document_scroll_height` | `int` | Total page dimensions |
+| `has_horizontal_scroll`, `has_vertical_scroll` | `bool` | Scroll flags |
+| `elements` | `List[ElementSnapshot]` | All visible elements |
+
+**ElementSnapshot:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tag`, `element_id`, `text` | `str` | Element identity and content |
+| `rect.x`, `rect.y`, `rect.width`, `rect.height` | `float` | Bounding box |
+| `rect.top`, `rect.right`, `rect.bottom`, `rect.left` | `float` | Bounding box edges |
+| `visible`, `text_clipped`, `focusable` | `bool` | State flags |
+
+---
+
+## a11y-python — Rule-to-Crawler Mapping
+
+<AccordionGroup>
+
+<Accordion title="1.1.1 — Non-text Content (Unified Pipeline / Policy111)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `accessible_name` (resolved) | Primary compliance check (is it empty?) |
+| `visual.cv_classification` | Determines expected alt pattern (e.g. `logo` vs `decorative`) |
+| `semantics.is_in_labeled_control` | Detects functionally redundant images that can safely pass without specific alt text |
+| `visual.ocr_text` | Validates informative name relevance (word-boundary regex) |
+
+</Accordion>
+
+<Accordion title="1.3.1 — Info and Relationships (Unified Pipeline / Policy131)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `semantics.section_type` | Macro-context (e.g., skips fieldset warnings inside search `FORM_REGION`) |
+| `semantics.described_by_text` | Resolves complex accessible relationships for orphaned inputs |
+| `semantics.is_in_data_table` | Evaluates native structural relationship compliance |
+
+</Accordion>
+
+<Accordion title="1.4.3 & 1.4.6 — Contrast (Unified Pipeline / Policy143 / Policy146)">
+
+**Extractor:** `ElementContextExtractor` & `ContrastEngine`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `visual.computed_styles` | `color`, `background-color`, `font-size`, `font-weight` |
+| `visual.cv_classification` | Automatically exempts `logo` and `decorative` assets |
+| `semantics.is_disabled` | Automatically exempts inactive UI components |
+| `accessible_name` | Evaluated against thresholds dynamically via the `ContrastEngine` |
+
+</Accordion>
+
+<Accordion title="1.4.5 — Images of Text (Unified Pipeline / Policy145)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `visual.cv_classification` | Automatically exempts `logo`, `decorative`, `complex`, `chart` |
+| `semantics.is_video_context` | Exempts video thumbnails/posters (essential presentation) |
+| `visual.ocr_text` | Flags significant text blocks inside non-exempt images for manual review |
+
+</Accordion>
+
+<Accordion title="2.4.7 & 2.4.13 — Focus Visible & Appearance (Unified Pipeline / Policy247)">
+
+**Extractor:** `ElementContextExtractor` & `InteractionStateRunner`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `interaction.is_focusable` | Pre-filters non-interactive nodes |
+| `interaction.has_focus_ring` | Simulated dynamically by extracting the delta of `box-shadow`, `border`, or `background-color` post-focus |
+| `interaction.focus_ring_thickness_px` | Evaluated against `2.4.13` minimums |
+
+</Accordion>
+
+<Accordion title="2.5.3 — Label in Name (Unified Pipeline / Policy253)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `visual.visible_label_text` | Extracts the raw text visually associated with the element |
+| `accessible_name` | Computes the priority name (`aria-label`, `aria-labelledby`, etc.) |
+| `DecisionEngine Logic` | Compares the two normalized strings using contiguous substring logic, supporting legally compliant variations. |
+
+</Accordion>
+
+<Accordion title="2.5.8 — Target Size Minimum (Unified Pipeline / Policy258)">
+
+**Extractor:** `ElementContextExtractor`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `interaction.effective_clickable_bbox` | Merges the target node with its clickable parent wrapper (e.g. `<label>` around an `<input>`) |
+| `interaction.adjacent_spacing_px` | Evaluated for WCAG exception 5 |
+| `semantics.parent_tags` | Evaluates inline link exceptions |
+| `semantics.controlled_by` | Evaluates User-Agent exceptions |
+
+</Accordion>
+
+<Accordion title="1.2.1 — Audio-only and Video-only (MediaAuditor)">
+
+**Crawler:** normalized universal static snapshot → `MediaElementData`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `tag`, `src`, `is_muted`, `has_loop`, `has_autoplay` | Media classification and gate checks |
+| `tracks` (kind, srclang) | Transcript/description track detection |
+| `aria_label`, `aria_describedby_text` | Accessible name as transcript proxy |
+| `nearby_links`, `nearby_text`, `nearby_details` | External transcript detection |
+
+</Accordion>
+
+<Accordion title="1.3.3 — Sensory Characteristics (SensoryCharacteristicsAuditor)">
+
+**Crawler:** normalized universal static snapshot → `SensoryElementData`
+
+| Data Extracted | Source | How Used |
+|---------------|--------|----------|
+| `text`, `aria_label`, `aria_labelledby`, `placeholder`, `value` | element text sources | Instruction text extraction |
+| `role`, `parent_tag`, `nearest_heading` | structure | Context determination |
+| `title`, `lang` | attributes | Tooltip text and language code |
+| `selector`, `element_ref_id`, `frame_path` | universal provenance | Provenance and evidence |
+
+**Japanese sensory word taxonomies:**
+
+| Category | Japanese Keywords |
+|----------|-----------------|
+| Color | 赤, 青, 緑, 黄色, 白, 黒, ピンク, 紫 |
+| Shape | 丸, 四角, 円形, 三角, 長方形 |
+| Size | 大きい, 小さい, 大きな, 小さな |
+| Position | 左, 右, 上, 下, 中央, 前, 後 |
+| Orientation | 横向き, 縦向き, 水平, 垂直 |
+| Sound | 音, 鳴る, 聞こえる |
+| Brightness | 明るい, 暗い, 輝く |
+| Texture | 滑らか, 粗い, ざらざら |
+
+</Accordion>
+
+<Accordion title="1.4.4 — Resize Text (TextResizeEvaluator)">
+
+**Crawler:** `RenderedLayoutCrawler` (baseline + 200% text size)
+
+| Fields Used | Purpose |
+|------------|---------|
+| `elements[].text_clipped` | Clipping detection post-resize |
+| `elements[].visible` | Visibility change detection |
+| `has_horizontal_scroll` | Horizontal scroll introduced at 200% |
+
+</Accordion>
+
+
+<Accordion title="1.4.10 — Reflow (ReflowEvaluator)">
+
+**Crawler:** `RenderedLayoutCrawler` at 320px viewport
+
+| Fields Used | Purpose |
+|------------|---------|
+| `document_scroll_width`, `viewport_width` | Horizontal overflow at 320px |
+| `elements[].tag`, `elements[].html_snippet` | Exemption detection (table, svg, canvas, iframe, pre, code) |
+
+</Accordion>
+
+<Accordion title="1.4.12 — Text Spacing (TextSpacingAuditor)">
+
+**Crawler:** normalized universal static snapshot → `TextSpacingData` + `RenderedLayoutCrawler`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `has_fixed_height`, `has_overflow_hidden` | Static clipping risk |
+| `is_clipped` | Pre-spacing scroll overflow |
+| Rendered `text_clipped` after CSS override | Actual clipping with WCAG 1.4.12 spacing |
+
+</Accordion>
+
+<Accordion title="1.3.4 — Orientation (OrientationEvaluator)">
+
+**Crawler:** `RenderedLayoutCrawler` (portrait + landscape snapshots)
+
+| Fields Used | Purpose |
+|------------|---------|
+| Portrait vs landscape element counts | Content availability comparison |
+| `elements[].focusable` counts | Interactive element availability |
+| Rotate overlay text detection | "Please rotate" message |
+| CSS transform and body overflow heuristics | Lock detection |
+
+</Accordion>
+
+<Accordion title="2.2.2 — Pause, Stop, Hide (PauseStopHideAuditor)">
+
+**Crawler:** normalized universal static snapshot → `MovingContentData`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `content_type` | Kind of moving content |
+| `starts_automatically` | Gate 1: must auto-start |
+| `duration_seconds`, `animation_iteration_count`, `loops` | Gate 2: must be long/infinite |
+| `duration_known`, `applicability_exception` | Duration ambiguity handling and essential exceptions such as loading indicators |
+| `has_video_controls`, `has_pause_button`, `has_mechanism` | Gate 3: mechanism must be absent |
+
+</Accordion>
+
+<Accordion title="2.4.11 / 2.4.12 — Focus Not Obscured">
+
+**Crawler:** `RenderedLayoutCrawler` with focus simulation
+
+| Fields Used | Purpose |
+|------------|---------|
+| Overlay elements (fixed/sticky) | Sticky header/footer identification |
+| `overlay[].rect`, `overlay[].z_index` | Bounding box and stacking |
+| Focused element visible area | Post-focus visibility |
+| Obscuration percentage | Minimum: ≥1px visible; Enhanced: ≥50% visible |
+
+</Accordion>
+
+<Accordion title="2.4.13 — Content on Hover or Focus">
+
+**Crawler:** `RenderedLayoutCrawler` with hover simulation
+
+| Fields Used | Purpose |
+|------------|---------|
+| Hover/focus trigger candidates | `aria-expanded`, `data-tooltip`, `title`, `aria-haspopup` |
+| Content visibility before/after hover | Reveal detection |
+| Escape key response | Dismissible check |
+
+</Accordion>
+
+
+
+<Accordion title="3.3.1 / 3.3.2 — Error Identification + Labels (FormAccessibilityAuditor)">
+
+**Crawler:** normalized universal static snapshot → `FormInputData`
+
+| Fields Used | Purpose |
+|------------|---------|
+| `required`, `aria_required` | Required field detection |
+| `aria_describedby`, `error_element_id`, `error_has_role_alert`, `error_has_aria_live` | Error live region linkage |
+| `label_text`, `has_any_label`, `placeholder` | Accessible label presence |
+| `type`, `name`, `autocomplete` | Personal data autocomplete requirement |
+| `selector`, `element_ref_id`, `frame_path` | Provenance and same-origin iframe evidence |
+
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## Cross-Service Field Mapping
+
+Fields that exist in both services under different names:
+
+| Concept | a11y-node (live page.evaluate) | a11y-python (crawler field) |
+|---------|--------------------------------|------------------------------|
+| Alt text | `el.getAttribute('alt')` | `ImageMetadata.alt` |
+| ARIA label | `el.getAttribute('aria-label')` | `*.aria_label` |
+| ARIA labelledby (resolved) | `el.getAttribute('aria-labelledby')` + `getElementById` at query time | `*.aria_labelledby` pre-resolved at crawl time |
+| Role | `el.getAttribute('role')` | `*.role` |
+| HTML snippet | `el.outerHTML.slice(0, N)` | `*.html_snippet` |
+| Computed style | `getComputedStyle(el).property` | `*.css_*` fields or `RenderedLayoutCrawler` |
+| Bounding rect | `el.getBoundingClientRect()` | `ElementSnapshot.rect.*` |
+| Page URL | `page.url()` | `PageSnapshot.page_url` |
+| Text content | `el.textContent.trim()` | `*.text` or `*.text_preview` |
+| Required | `el.hasAttribute('required')` | `FormInputData.required` |
+| Aria-required | `el.getAttribute('aria-required')` | `FormInputData.aria_required` |
+
+<Info>
+**Resolution strategy difference:** a11y-node resolves ARIA references (aria-labelledby, aria-describedby) at query time inside `page.evaluate()`. a11y-python resolves them during the crawl phase and stores the resolved text, so auditors receive pre-resolved values and never need to do DOM lookups.
+</Info>

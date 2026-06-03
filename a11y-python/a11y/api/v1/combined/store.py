@@ -1,0 +1,181 @@
+"""
+a11y/api/v1/combined/store.py
+================================
+In-memory job store and SSE subscriber bus.
+
+_jobs            — dict of all live/recent audit jobs keyed by job_id
+_subscribers     — per-job list of asyncio.Queue for SSE fan-out
+_broadcast()     — push an event to every subscriber of a job
+_close_subscribers() — drain and remove all subscriber queues for a job
+_evict_old_jobs() — background TTL cleanup task (called from lifespan)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import shutil
+import time
+from pathlib import Path
+from typing import Any, Dict, List
+
+from a11y.config.logger import setup_logger
+
+logger = setup_logger(name="AC", tag="combined")
+
+# ── In-memory stores ──────────────────────────────────────────────────────────
+
+_jobs: Dict[str, Dict[str, Any]] = {}
+
+# SSE subscriber bus: job_id → list of per-client asyncio.Queue
+_subscribers: Dict[str, List[asyncio.Queue]] = {}
+
+class _LazyAsyncLock:
+    """Loop-aware proxy around asyncio.Lock for safe module-level reuse."""
+
+    def __init__(self) -> None:
+        self._lock: asyncio.Lock | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def _ensure_lock(self) -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        if self._lock is None or self._loop is not loop:
+            self._lock = asyncio.Lock()
+            self._loop = loop
+        return self._lock
+
+    async def acquire(self) -> bool:
+        return await self._ensure_lock().acquire()
+
+    def release(self) -> None:
+        lock = self._ensure_lock()
+        if lock.locked():
+            lock.release()
+
+    def locked(self) -> bool:
+        return self._ensure_lock().locked()
+
+    async def __aenter__(self) -> "_LazyAsyncLock":
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        self.release()
+
+
+_subscribers_lock = _LazyAsyncLock()
+
+
+def _get_subscribers_lock() -> asyncio.Lock:
+    """Return the current loop's underlying subscribers lock."""
+    return _subscribers_lock._ensure_lock()
+
+
+# Per-job locks. Multi-field _jobs[job_id].update({...}) calls and list-mutate
+# operations like stages.append() are not atomic in CPython (each kwarg is a
+# separate dict[k]=v). Without a lock, a polling reader can observe a
+# partially-applied update or iterate a stages list that's being appended to.
+# Same lazy-init-bound-to-running-loop pattern as _subscribers_lock above.
+_job_locks: Dict[str, asyncio.Lock] = {}
+_job_locks_loop: Any = None
+
+
+def _get_job_lock(job_id: str) -> asyncio.Lock:
+    """Return a per-job asyncio.Lock, creating it lazily and rebinding the
+    whole registry if the running event loop has changed (test runs, hot
+    reload). Holding this lock makes a multi-field update atomic from the
+    perspective of any other reader that also holds it."""
+    global _job_locks, _job_locks_loop
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+
+    if running_loop is not None and _job_locks_loop is not running_loop:
+        _job_locks = {}
+        _job_locks_loop = running_loop
+
+    lock = _job_locks.get(job_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _job_locks[job_id] = lock
+    return lock
+
+
+def _drop_job_lock(job_id: str) -> None:
+    """Release the lock entry for a job that's been removed from _jobs."""
+    _job_locks.pop(job_id, None)
+
+
+# TTL for completed/failed jobs (1 hour)
+_JOB_TTL_SECONDS: int = 3600
+
+
+# ── SSE subscriber bus ────────────────────────────────────────────────────────
+
+
+async def _broadcast(job_id: str, event_type: str, data: Dict[str, Any]) -> None:
+    """Push an SSE event dict to every subscriber queue for this job.
+
+    Acquires the subscribers lock before iterating so that a concurrent
+    add-subscriber coroutine cannot slip between the snapshot and the
+    put_nowait loop, which would cause a subscriber to miss the event.
+    """
+    msg = {"event": event_type, "data": data}
+    async with _get_subscribers_lock():
+        for q in list(_subscribers.get(job_id, [])):
+            q.put_nowait(msg)
+
+
+async def _close_subscribers(job_id: str) -> None:
+    """Send sentinel None to all queues so their generators exit, then clean up.
+
+    Also lock-protected so it is consistent with _broadcast.
+    """
+    async with _get_subscribers_lock():
+        for q in list(_subscribers.get(job_id, [])):
+            q.put_nowait(None)
+        _subscribers.pop(job_id, None)
+
+
+# ── TTL eviction ──────────────────────────────────────────────────────────────
+
+
+def _safe_remove_job_dir(output_dir: str | None) -> None:
+    """Delete a job's on-disk artefact directory when its TTL expires.
+
+    Guards against deleting anything other than a per-job combined directory:
+    the path must exist, be a directory, and follow the runner's
+    ``..._combined`` naming convention (see runner.py). This keeps memory-TTL
+    and disk-TTL in lockstep so ``output/`` does not grow unbounded (B-12).
+    """
+    if not output_dir:
+        return
+    try:
+        path = Path(output_dir)
+        if path.is_dir() and path.name.endswith("_combined"):
+            shutil.rmtree(path, ignore_errors=True)
+    except Exception:  # noqa: BLE001 — cleanup must never crash eviction
+        logger.debug("disk cleanup failed for %s", output_dir, exc_info=True)
+
+
+async def _evict_old_jobs() -> None:
+    """Background task: remove completed/failed jobs older than _JOB_TTL_SECONDS."""
+    while True:
+        await asyncio.sleep(300)  # run every 5 minutes
+        cutoff = time.time() - _JOB_TTL_SECONDS
+        expired = [
+            jid
+            for jid, job in list(_jobs.items())
+            if job.get("status") in ("completed", "failed")
+            and job.get("_created_at", 0) < cutoff
+        ]
+        for jid in expired:
+            # Capture the artefact dir before dropping the job, then prune disk
+            # off the event loop so a large rmtree can't stall broadcasts.
+            output_dir = (_jobs.get(jid) or {}).get("output_dir")
+            _jobs.pop(jid, None)
+            _subscribers.pop(jid, None)
+            _drop_job_lock(jid)
+            await asyncio.to_thread(_safe_remove_job_dir, output_dir)
+        if expired:
+            logger.info(f"[combined] TTL eviction: removed {len(expired)} old jobs")
