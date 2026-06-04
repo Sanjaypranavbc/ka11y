@@ -1,7 +1,7 @@
 # Plug-and-Play Config Architecture Plan
 
 > Generated: 2026-04-09  
-> Scope: a11y-node + a11y-python  
+> Scope: ka11y-node + ka11y-python  
 > Goal: Make websites, languages, rules, and crawlers swappable via config — no code changes required
 
 This is an architecture plan only. No code is changed. The goal is to define a configuration schema and system design that allows:
@@ -41,7 +41,7 @@ This is an architecture plan only. No code is changed. The goal is to define a c
 ### Config File Hierarchy
 
 ```
-a11y/
+ka11y/
 └── config/
     ├── rules.config.yml          # Master rule registry
     ├── crawlers.config.yml       # Master crawler registry
@@ -93,7 +93,7 @@ rules:
   "1.3.3":
     id: "custom-sensory-characteristics"
     file: null                                         # Node: not custom
-    python_file: "a11y/accessibility/rules/non_text/sensory_auditor.py"
+    python_file: "ka11y/accessibility/rules/non_text/sensory_auditor.py"
     enabled: true
     mode: static
     crawlers_required: ["SensoryCrawler"]
@@ -313,7 +313,7 @@ crawlers:
 
   # Python crawlers
   - id: "AsyncImageCrawler"
-    file: "a11y/crawler/crawler.py"
+    file: "ka11y/crawler/crawler.py"
     class: "AsyncImageCrawler"
     output_model: "ImageMetadata"
     output_key: "images"
@@ -322,7 +322,7 @@ crawlers:
     tags: ["images", "visual"]
 
   - id: "AsyncFormCrawler"
-    file: "a11y/crawler/forms_crawler.py"
+    file: "ka11y/crawler/forms_crawler.py"
     class: "AsyncFormCrawler"
     output_model: "FormInputData"
     output_key: "forms"
@@ -333,7 +333,7 @@ crawlers:
     tags: ["forms", "interactive"]
 
   - id: "SensoryCrawler"
-    file: "a11y/crawler/sensory_crawler.py"
+    file: "ka11y/crawler/sensory_crawler.py"
     class: "SensoryCrawler"
     output_model: "SensoryElementData"
     output_key: "sensory"
@@ -343,7 +343,7 @@ crawlers:
     tags: ["text", "sensory"]
 
   - id: "MediaCrawler"
-    file: "a11y/crawler/media_crawler.py"
+    file: "ka11y/crawler/media_crawler.py"
     class: "MediaCrawler"
     output_model: "MediaElementData"
     output_key: "media"
@@ -354,7 +354,7 @@ crawlers:
     tags: ["media", "audio", "video"]
 
   - id: "MovingContentCrawler"
-    file: "a11y/crawler/moving_content_crawler.py"
+    file: "ka11y/crawler/moving_content_crawler.py"
     class: "MovingContentCrawler"
     output_model: "MovingContentData"
     output_key: "moving_content"
@@ -363,7 +363,7 @@ crawlers:
     tags: ["animation", "video"]
 
   - id: "InteractiveElementCrawler"
-    file: "a11y/crawler/interactive_crawler.py"
+    file: "ka11y/crawler/interactive_crawler.py"
     class: "InteractiveElementCrawler"
     output_model: "InteractiveElementData"
     output_key: "interactive"
@@ -372,7 +372,7 @@ crawlers:
     tags: ["interactive", "labels"]
 
   - id: "TargetSizeCrawler"
-    file: "a11y/crawler/target_size_crawler.py"
+    file: "ka11y/crawler/target_size_crawler.py"
     class: "TargetSizeCrawler"
     output_model: "TargetSizeData"
     output_key: "target_sizes"
@@ -381,7 +381,7 @@ crawlers:
     tags: ["interactive", "pointer"]
 
   - id: "TextSpacingCrawler"
-    file: "a11y/crawler/text_spacing_crawler.py"
+    file: "ka11y/crawler/text_spacing_crawler.py"
     class: "TextSpacingCrawler"
     output_model: "TextSpacingData"
     output_key: "text_spacing"
@@ -391,7 +391,7 @@ crawlers:
     tags: ["text", "layout"]
 
   - id: "RenderedLayoutCrawler"
-    file: "a11y/crawler/rendered_crawler.py"
+    file: "ka11y/crawler/rendered_crawler.py"
     class: "RenderedLayoutCrawler"
     output_model: "PageSnapshot"
     output_key: "rendered"
@@ -401,7 +401,7 @@ crawlers:
 
   # Example future crawler:
   - id: "ColorThemeCrawler"
-    file: "a11y/crawler/color_theme_crawler.py"
+    file: "ka11y/crawler/color_theme_crawler.py"
     class: "ColorThemeCrawler"
     output_model: "ColorThemeData"
     output_key: "color_themes"
@@ -465,12 +465,12 @@ auth:
 
 ## 5. Config Loader Design
 
-### Python (`a11y/config/loader.py`)
+### Python (`ka11y/config/loader.py`)
 
 ```python
 # Pseudocode — no implementation yet
 
-class A11YConfig:
+class KA11yConfig:
     """Central config resolver. Merges: defaults → language → site → request."""
 
     def __init__(self, site_id=None, lang=None, rule_overrides=None):
@@ -501,7 +501,7 @@ class A11YConfig:
 ```javascript
 // Pseudocode — no implementation yet
 
-class A11YConfig {
+class KA11yConfig {
     constructor({ siteId, lang, ruleOverrides } = {}) {
         this.rules = loadYaml('config/rules.config.yml');
         this.langConfig = loadYaml(`config/languages/${lang || 'en'}.yml`);
@@ -553,7 +553,7 @@ function check(page, config) {
 ```python
 # Auditor constructor receives config
 class LabelInNameAuditor:
-    def __init__(self, config: A11YConfig):
+    def __init__(self, config: KA11yConfig):
         self.config = config
 
     def audit(self, elements):
@@ -626,7 +626,7 @@ This allows clients to request lightweight audits (e.g., "only check images") wi
 Request: { url, lang: "ja", site_id: "yahoo-co-jp" }
         │
         ▼
-A11YConfig.resolve()
+KA11yConfig.resolve()
   ├── Load rules.config.yml       → rule registry
   ├── Load crawlers.config.yml    → crawler registry
   ├── Load languages/ja.yml       → keyword lists + selectors + text_spacing flags
@@ -652,7 +652,7 @@ AuditService / AccessibilityService
 | 2 | `config/crawlers.config.yml` | Master crawler registry |
 | 3 | `config/languages/en.yml` | English keyword/selector defaults |
 | 4 | `config/languages/ja.yml` | Japanese keyword/selector config |
-| 5 | `a11y/config/loader.py` | Python config loader |
+| 5 | `ka11y/config/loader.py` | Python config loader |
 | 6 | `src/config/loader.js` | Node config loader |
 | 7 | Refactor one rule (e.g. link-purpose) | Proof-of-concept migration |
 | 8 | Migrate all rules | Full migration |

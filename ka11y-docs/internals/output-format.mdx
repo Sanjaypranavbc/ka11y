@@ -1,0 +1,551 @@
+---
+title: "Output Format"
+description: "Complete reference for the CombinedReport JSON structure returned by the combined audit"
+---
+
+## Where the output lives
+
+| Location | Contents |
+|----------|----------|
+| `GET /api/v1/combined/{job_id}` → `result` key | Full `CombinedReport` object in JSON |
+| `crawled_images/{hostname}/{job_id}/combined_report.json` | Same report persisted to the server filesystem |
+
+---
+
+## Top-level shape
+
+```typescript
+interface CombinedReport {
+  url:             string;            // Canonical URL that was audited
+  generated_at:    string;            // ISO-8601 UTC timestamp
+  lang:            string;            // Result language ("en" | "ja" | "de" | ...)
+  labels:          {                  // Localized display labels for the active language
+    severities: Record<string, string>;  // e.g. { "critical": "重大", "high": "高", ... }
+    levels:     Record<string, string>;  // e.g. { "A": "レベル A", "AA": "レベル AA", ... }
+    statuses:   Record<string, string>;  // e.g. { "pass": "合格", "fail": "不合格", ... }
+  };
+  warnings:        string[];          // Degradation messages (e.g. "axe-core stage failed")
+  warning_details: WarningSample[];   // Sampled structured crawler warnings
+  summary:         Summary;
+  violations:      Finding[];        // Aggregate across ALL crawled pages
+  needs_review:    Finding[];
+  passes:          Finding[];
+  pages:           PageBreakdown[];  // Per-page grouping — one entry per crawled page, worst-first
+  image_audit_report: ImageAuditReport | null; // Present when run_image_audit=true and images were audited
+  contrast_report: ContrastReport | null;  // Present when OCR is enabled and images are found
+}
+```
+
+`lang` is the language requested via the `?lang=` query parameter (or `lang`
+field in the audit request body). `labels` is a self-contained mirror of
+`i18n/rules.yml` for the active language so the frontend can render the
+machine values (`severity`, `level`, `status`) without re-loading the
+rules catalogue.
+
+---
+
+## Summary
+
+```typescript
+interface Summary {
+  total_findings:  number;      // violations + needs_review + passes — summed across ALL crawled pages
+  violations:      number;       // EFFECTIVE (after any manual-review decisions)
+  needs_review:    number;       // EFFECTIVE — still pending review
+  passes:          number;       // EFFECTIVE
+  manual_review_required: number;// Needs Review items awaiting human adjudication
+  score:           number | null;// Pass-rate 0–100 = 100 * passes / (passes + violations); null when nothing pass/fail
+  // Present once any finding has been reviewed (see Scoring & Manual Review):
+  automated?: { violations: number; needs_review: number; passes: number; score: number | null };
+  reviews?:   { reviewed: number; pending: number; as_pass: number; as_violation: number };
+  by_severity: {
+    critical: number;
+    high:     number;
+    medium:   number;
+    low:      number;
+  };
+  by_level: {
+    A:   { violations: number; needs_review: number; passes: number };
+    AA:  { violations: number; needs_review: number; passes: number };
+    AAA: { violations: number; needs_review: number; passes: number };
+  };
+  by_wcag_sc: {
+    [sc: string]: { violations: number; needs_review: number; passes: number };
+    // e.g. "1.1.1": { violations: 2, needs_review: 1, passes: 14 }
+  };
+  by_source: {
+    axe:    { violations: number; needs_review: number; passes: number };
+    python: { violations: number; needs_review: number; passes: number };
+  };
+  by_page: {
+    [page_url: string]: { violations: number; needs_review: number; passes: number };
+  };
+  page_count: number;           // Number of distinct crawled pages (1 for single-page audits)
+}
+```
+
+`score` is the headline compliance number the dashboard renders; `total_findings`
+already aggregates every crawled page, so use it directly for the depth-aggregated
+total. `by_page` and `page_count` summarise the multi-page crawl; the full per-page
+findings live in [`pages`](#per-page-breakdown-pages).
+
+---
+
+## Per-page breakdown (`pages`)
+
+Multi-page crawls (`max_depth > 0`) attribute every finding to the page it was
+discovered on via `element.page_url`; element-less, document-level findings fall
+back to the audited root URL. The top-level `violations` / `needs_review` /
+`passes` arrays stay **aggregated across all crawled pages**, and the `pages`
+array groups the very same `Finding` objects per page so a client can render a
+per-page view without re-scanning the flat lists. Single-page audits
+(`max_depth = 0`) contain exactly one entry.
+
+```typescript
+interface PageBreakdown {
+  page_url: string;
+  summary: {
+    total_findings: number;
+    violations:     number;
+    needs_review:   number;
+    passes:         number;
+    score:          number;   // Per-page pass-rate (same formula as the top-level score)
+    by_severity: { critical: number; high: number; medium: number; low: number };
+  };
+  violations:   Finding[];    // Same Finding objects referenced by the flat lists
+  needs_review: Finding[];
+  passes:       Finding[];
+}
+```
+
+Pages are sorted **worst-first** (most violations, then most needs_review, then
+URL as tiebreak). The frontend exposes this as a page selector + per-page summary
+bar on the Violations / Needs Review / Passes / Image Visualiser views; the
+selector is hidden for single-page audits.
+
+---
+
+## Finding
+
+Every entry in `violations`, `needs_review`, and `passes` is a `Finding` object:
+
+```typescript
+interface Finding {
+  finding_id:     string;           // Stable id (sha1[:16]) — attach a manual review to this
+  manual_review:  boolean;          // true for needs_review ("Manual Review Required") items
+  review_status?: "pass" | "violation";  // Set once a reviewer adjudicates the item
+  review_note?:   string | null;
+  reviewed?:      boolean;
+  source:         "axe" | "python" | "custom";
+  rule_id:        string;           // e.g. "python_1_1_1_alt", axe rule id, or custom rule id
+  wcag_sc:        string;           // e.g. "1.1.1"
+  criterion_name: string | null;    // Localized name, e.g. "Non-text Content" / "非テキストコンテンツ"
+  level:          "A" | "AA" | "AAA" | null;     // Stable machine value
+  level_label:    string | null;    // Localized label, e.g. "Level AA" / "レベル AA"
+  severity:       "critical" | "high" | "medium" | "low" | null;  // Stable machine value
+  severity_label: string | null;    // Localized label, e.g. "High" / "高" / "Hoch"
+  status:         "fail" | "pass" | "needs_review";  // Stable machine value
+  status_label:   string;           // Localized label, e.g. "Pass" / "合格" / "Bestanden"
+  reason:         string;           // Localized explanation rendered from i18n/rules.yml
+  reason_code:    string | null;    // Stable opaque code that selected the template (e.g. "fail_missing_alt")
+  suggested_fix:  string | null;    // Localized remediation hint — null for passes
+  help_url:       string | null;    // axe or custom help URL when available
+  element: {
+    html:       string;             // First 600 chars of outerHTML
+    element_id: string | null;
+    tag:        string | null;
+    page_url:   string;
+  } | null;                         // null for document-level passes
+}
+```
+
+### Field notes
+
+**`source`**
+`"axe"` — produced by axe-core running in Node/Puppeteer.
+`"python"` — produced by a Python auditor in ka11y-python.
+`"custom"` — produced by a Node custom rule.
+
+**`rule_id`**
+For Python rules the convention is `python_{sc_underscored}_{short_name}`:
+
+| Rule ID | WCAG SC | Auditor |
+|---------|---------|---------|
+| `python_1_1_1_alt` | 1.1.1 | AltTextAccessibilityAuditor |
+| `python_2_2_2_pause_stop_hide` | 2.2.2 | PauseStopHideAuditor |
+| `python_2_5_3_label_in_name` | 2.5.3 | LabelInNameAuditor |
+| `python_2_5_8_target_size` | 2.5.8 | TargetSizeAuditor |
+| `python_3_3_1_error_id` | 3.3.1 | FormAccessibilityAuditor |
+| `python_3_3_2_labels` | 3.3.2 | FormAccessibilityAuditor |
+
+**`severity` and `severity_label`**
+
+`severity` is the stable machine enum (`critical | high | medium | low | null`). Filter UIs and dashboards should compare against this field — its values never change across languages.
+
+`severity_label` is the localized display string for the same value, sourced from `i18n/rules.yml#severities` with optional overrides in `i18n/locales/<lang>.yml`. Render this directly in the UI without translation.
+
+| `severity` | `severity_label` (en) | `severity_label` (ja) | `severity_label` (de) |
+|------------|------------------------|------------------------|------------------------|
+| `critical` | Critical | 重大 | Kritisch |
+| `high`     | High     | 高   | Hoch     |
+| `medium`   | Medium   | 中   | Mittel   |
+| `low`      | Low      | 低   | Niedrig  |
+
+axe-core's `impact` is normalized to severity (`critical`, `serious` → `high`, `moderate` → `medium`, `minor` → `low`). Python severities are configured in `i18n/rules.yml` per SC (e.g. 1.1.1 → critical, 2.5.8 → medium, 3.3.1 → high).
+
+**`level` and `level_label`**
+
+`level` carries the WCAG conformance machine value (`A | AA | AAA`). `level_label` is the localized display (`Level AA` / `レベル AA` / `Stufe AA`).
+
+**`status` and `status_label`**
+
+`status` carries the stable machine value (`fail | pass | needs_review`). `status_label` is the localized display (`Pass` / `合格` / `Bestanden`).
+
+**`reason` and `reason_code`**
+
+`reason` is fully localized — every emitting rule passes a `reason_code` (e.g. `fail_missing_alt`, `capture_failed`, `needs_review_unknown`) plus optional placeholder parameters, and the reporter resolves them through the `reason_templates` map in `i18n/rules.yml` and the per-locale overlays.
+
+`reason_code` is exposed on the finding so frontends can match on the opaque code instead of brittle string comparisons. When a rule has no SC-specific template, the renderer falls back to the shared `_generic` block (`fail_unknown`, `needs_review_unknown`) which interpolates `{wcag_sc}` automatically.
+
+**`status` value semantics**
+
+| Value | Meaning |
+|-------|---------|
+| `"fail"` | Element violates the criterion |
+| `"pass"` | Element satisfies the criterion |
+| `"needs_review"` | Auditor cannot determine automatically — manual check required |
+
+**`reason`**
+Usually sourced from the auditor's raw violation text. When a Python converter has no rule-specific message, ka11y falls back to the localized WCAG `description` for that success criterion from `i18n/rules.yml`. Runtime-generated metric strings such as contrast ratios or target-size measurements are still emitted directly by the auditor.
+
+### Universally localized fields
+
+Setting `?lang=ja` on the audit endpoints yields a report where every text-bearing field comes from the YAML for that locale:
+
+| Field | Source |
+|-------|--------|
+| `criterion_name` | `rules.<sc>.name` |
+| `description` (rules catalogue) | `rules.<sc>.description` |
+| `suggested_fix` | `rules.<sc>.suggested_fix` |
+| `reason` | `reason_templates.<sc>.<reason_code>` (with `_generic` fallback) |
+| `severity_label` | `severities.<severity>` |
+| `level_label` | `levels.<level>` |
+| `status_label` | `statuses.<status>` |
+
+The stable machine values (`severity`, `level`, `status`, `reason_code`, `wcag_sc`) never change across languages and are safe to compare or filter on.
+
+---
+
+## Complete example
+
+```json
+{
+  "url": "https://example.com",
+  "generated_at": "2025-11-04T10:22:31.000Z",
+  "lang": "ja",
+  "labels": {
+    "severities": { "critical": "重大", "high": "高", "medium": "中", "low": "低", "none": "なし" },
+    "levels":     { "A": "レベル A", "AA": "レベル AA", "AAA": "レベル AAA" },
+    "statuses":   { "pass": "合格", "fail": "不合格", "needs_review": "要確認", "inapplicable": "対象外" }
+  },
+  "warnings": [],
+  "warning_details": [],
+  "summary": {
+    "total_findings": 3,
+    "violations": 1,
+    "needs_review": 1,
+    "passes": 1,
+    "score": 50.0,
+    "by_severity": { "critical": 1, "high": 0, "medium": 0, "low": 0 },
+    "by_level": {
+      "A":   { "violations": 1, "needs_review": 1, "passes": 1 },
+      "AA":  { "violations": 0, "needs_review": 0, "passes": 0 },
+      "AAA": { "violations": 0, "needs_review": 0, "passes": 0 }
+    },
+    "by_wcag_sc": {
+      "1.1.1": { "violations": 1, "needs_review": 1, "passes": 1 }
+    },
+    "by_source": {
+      "axe":    { "violations": 0, "needs_review": 0, "passes": 0 },
+      "python": { "violations": 1, "needs_review": 1, "passes": 1 }
+    },
+    "by_page": {
+      "https://example.com": { "violations": 1, "needs_review": 1, "passes": 1 }
+    },
+    "page_count": 1
+  },
+  "violations": [
+    {
+      "source": "python",
+      "rule_id": "python_1_1_1_alt",
+      "wcag_sc": "1.1.1",
+      "criterion_name": "非テキストコンテンツ",
+      "level": "A",
+      "level_label": "レベル A",
+      "severity": "critical",
+      "severity_label": "重大",
+      "status": "fail",
+      "status_label": "不合格",
+      "reason": "画像に十分な alt 属性がありません。",
+      "reason_code": "fail_missing_alt",
+      "suggested_fix": "説明的なalt属性を追加してください: <img alt=\"画像の説明\">。",
+      "help_url": null,
+      "element": {
+        "html": "<img src=\"/hero.jpg\" class=\"banner\">",
+        "element_id": null,
+        "tag": "img",
+        "page_url": "https://example.com"
+      }
+    }
+  ],
+  "needs_review": [
+    {
+      "source": "python",
+      "rule_id": "python_1_1_1_alt",
+      "wcag_sc": "1.1.1",
+      "criterion_name": "非テキストコンテンツ",
+      "level": "A",
+      "level_label": "レベル A",
+      "severity": "critical",
+      "severity_label": "重大",
+      "status": "needs_review",
+      "status_label": "要確認",
+      "reason": "画像のキャプチャに失敗しました — OCR で代替テキストを検証できませんでした。",
+      "reason_code": "capture_failed",
+      "suggested_fix": "説明的なalt属性を追加してください: <img alt=\"画像の説明\">。",
+      "help_url": null,
+      "element": {
+        "html": "<img src=\"/product.png\" alt=\"img\">",
+        "element_id": "product-photo",
+        "tag": "img",
+        "page_url": "https://example.com"
+      }
+    }
+  ],
+  "passes": [
+    {
+      "source": "python",
+      "rule_id": "python_1_1_1_alt",
+      "wcag_sc": "1.1.1",
+      "criterion_name": "非テキストコンテンツ",
+      "level": "A",
+      "level_label": "レベル A",
+      "severity": null,
+      "severity_label": null,
+      "status": "pass",
+      "status_label": "合格",
+      "reason": "画像には十分な代替テキストがあります。",
+      "reason_code": "pass",
+      "suggested_fix": null,
+      "help_url": null,
+      "element": null
+    }
+  ],
+  "pages": [
+    {
+      "page_url": "https://example.com",
+      "summary": {
+        "total_findings": 3,
+        "violations": 1,
+        "needs_review": 1,
+        "passes": 1,
+        "score": 50.0,
+        "by_severity": { "critical": 1, "high": 0, "medium": 0, "low": 0 }
+      },
+      "violations":   [ /* same Finding objects as the flat list */ ],
+      "needs_review": [ /* ... */ ],
+      "passes":       [ /* ... */ ]
+    }
+  ],
+  "image_audit_report": {
+    "summary": {
+      "total_images": 2,
+      "passed": 1,
+      "failed": 1,
+      "with_ocr_text": 0,
+      "with_contrast_violations": 0
+    },
+    "images": [
+      {
+        "filename": "banner.jpg",
+        "path": "/app/crawled_images/example_com/abc123/images/banner.jpg",
+        "image_url": "/api/v1/combined/abc123/image?path=%2Fapp%2Fcrawled_images%2Fexample_com%2Fabc123%2Fimages%2Fbanner.jpg",
+        "page_url": "https://example.com",
+        "classification": "image",
+        "overall_status": "FAILED",
+        "wcag_1_1_1_reason": "Image has no alt attribute."
+      }
+    ]
+  },
+  "contrast_report": {
+    "summary": {
+      "total_regions_analysed": 10,
+      "total_violations": 2,
+      "images_with_violations": 1,
+      "pass_rate_pct": 80.0
+    },
+    "table": [
+      {
+        "text": "SALE",
+        "contrast": 2.3,
+        "wcag_violations": ["aa_normal"],
+        "compliance": { "aa_normal": false, "aa_large": false },
+        "image_path": "/app/crawled_images/example_com/abc123/images/banner.jpg",
+        "bounding_box": [10, 20, 80, 30]
+      }
+    ],
+    "images": [
+      {
+        "filename": "banner.jpg",
+        "path": "/app/crawled_images/example_com/abc123/images/banner.jpg",
+        "image_url": "/api/v1/combined/abc123/image?path=%2Fapp%2Fcrawled_images%2Fexample_com%2Fabc123%2Fimages%2Fbanner.jpg",
+        "page_url": "https://example.com",
+        "contrast_violations_count": 2,
+        "detections": [ /* ... */ ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## ContrastReport
+
+Produced by the OCR + contrast analysis pipeline when `run_ocr: true` and images are found on the page. Attached as `contrast_report` on `CombinedReport` and also available via the [image endpoint](/api-reference/combined#serve-a-job-image).
+
+```typescript
+interface ContrastReport {
+  summary: {
+    total_regions_analysed:  number;   // Total text regions OCR detected across all images
+    total_violations:        number;   // Regions that fail WCAG 1.4.3 AA (4.5:1 normal text)
+    images_with_violations:  number;   // Count of images with ≥ 1 violation
+    pass_rate_pct:           number;   // 100 * passing_regions / total_regions (0–100)
+  };
+  table:  ContrastDetection[];         // Flat list of every detected text region
+  images: ContrastImageDetail[];       // Per-image summary with nested detections
+}
+
+interface ContrastImageDetail {
+  filename:                  string;
+  path:                      string;   // Absolute server-side filesystem path
+  image_url:                 string;   // Pre-built URL: GET /api/v1/combined/{job_id}/image?path=...
+  page_url:                  string | null;  // Page the image was found on (drives the per-page image visualiser); null on older reports
+  contrast_violations_count: number;
+  detections:                ContrastDetection[];
+}
+
+interface ContrastDetection {
+  text:            string;             // OCR-detected text content
+  contrast:        number;             // Computed WCAG contrast ratio (e.g. 3.21)
+  wcag_violations: string[];           // e.g. ["aa_normal"] when contrast < 4.5:1
+  compliance: {
+    aa_normal:  boolean;               // true → passes 4.5:1 threshold (normal text)
+    aa_large:   boolean;               // true → passes 3:1 threshold (large text)
+    aaa_normal?: boolean;
+    aaa_large?:  boolean;
+  };
+  image_path:    string;               // Filesystem path of the parent image
+  bounding_box?: number[];             // [x, y, w, h] in pixels (from EasyOCR)
+}
+```
+
+### `image_url` field
+
+The `image_url` in each `ContrastImageDetail` is injected by the backend **after** the report is built. It is a relative URL pointing to the image-serving endpoint, URL-encoded with `urllib.parse.quote`:
+
+```python
+img["image_url"] = f"/api/v1/combined/{job_id}/image?path={quote(img['path'], safe='')}"
+```
+
+Frontends should consume `image_url` directly — no URL construction is needed on the client side.
+
+---
+
+## ImageAuditReport
+
+Produced by the image auditor when `run_image_audit: true`. Attached to `CombinedReport.image_audit_report` even when OCR is disabled and `contrast_report` is `null`.
+
+```typescript
+interface ImageAuditReport {
+  summary: {
+    total_images:             number;
+    passed:                   number;
+    failed:                   number;
+    with_ocr_text:            number;
+    with_contrast_violations: number;
+    by_classification: Record<string, { passed: number; failed: number; total: number }>;
+  };
+  images: ImageAuditImageDetail[];
+}
+
+interface ImageAuditImageDetail {
+  filename:                  string;
+  path:                      string;
+  image_url:                 string;   // Pre-built URL: GET /api/v1/combined/{job_id}/image?path=...
+  src?:                      string | null;
+  url?:                      string | null;
+  page_url?:                 string | null;  // Page the image was found on (= url); drives the per-page image visualiser
+  alt_text?:                 string | null;
+  title?:                    string | null;
+  classification:            "button" | "icon" | "logo" | "image" | "chart" | "informative" | "decorative" | "other";
+  sub_type?:                 string | null;
+  overall_status:            "PASSED" | "FAILED" | string;
+  has_ocr_text:              boolean;
+  detected_text:             string;
+  contrast_violations_count: number;
+  wcag_1_1_1_status:         string;
+  wcag_4_1_2_status:         string;
+  wcag_1_4_5_status:         string;
+  wcag_1_4_11_status:        string;
+  wcag_1_1_1_reason:         string;
+  wcag_4_1_2_reason:         string;
+  wcag_1_4_5_reason:         string;
+  wcag_1_4_11_reason:        string;
+}
+```
+
+This report is what allows the frontend Image Visualiser to show audited images even when OCR is off and there is no `contrast_report`.
+
+---
+
+## Warnings
+
+The `warnings` array carries human-readable notes about degraded results. These do **not** count as violations.
+
+| Situation | Example warning |
+|-----------|----------------|
+| Node/axe-core stage failed | `"axe_core stage failed — axe-core results not included. Error: Connection refused"` |
+| Python stage failed | `"image_audit stage failed — 1.1.1 results not included. Error: Playwright timeout"` |
+
+When `warnings` is non-empty, treat the report as a **partial result** — rerunning after fixing the infrastructure issue may produce additional findings.
+
+## WarningSample
+
+`warning_details` is a structured, sampled view of crawler limitations that are too noisy for the flat `warnings` string list.
+
+```typescript
+interface WarningSample {
+  code: string;                  // e.g. "cross_origin_frame_skipped"
+  count: number;
+  samples: Record<string, unknown>[];
+}
+```
+
+---
+
+## Filesystem layout
+
+Reports are written under the shared `crawled_output` Docker volume:
+
+```
+crawled_images/
+└── {hostname}/
+    └── {job_id}/
+        ├── combined_report.json      ← Full CombinedReport
+        ├── images/                   ← Downloaded images (image_audit)
+        ├── raw_images.json           ← AsyncImageCrawler output
+        ├── raw_forms.json            ← AsyncFormCrawler output
+        ├── raw_interactive.json      ← InteractiveElementCrawler output
+        ├── raw_moving_content.json   ← MovingContentCrawler output
+        └── raw_target_size.json      ← TargetSizeCrawler output
+```

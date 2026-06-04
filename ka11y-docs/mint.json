@@ -1,0 +1,173 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "ka11y",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/logo/favicon.svg",
+  "colors": {
+    "primary": "#0969da",
+    "light": "#3b82f6",
+    "dark": "#3b82f6",
+    "background": {
+      "light": "#ffffff",
+      "dark": "#0a0a0a"
+    }
+  },
+  "font": {
+    "headings": { "family": "IBM Plex Sans" },
+    "body":     { "family": "IBM Plex Sans" }
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/Sanjaypranavbc/ka11y"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Run Audit",
+    "url": "http://localhost:8080"
+  },
+  "tabs": [
+    { "name": "Docs",          "url": "/"              },
+    { "name": "API Reference", "url": "api-reference"  },
+    { "name": "Rules",         "url": "rules"          },
+    { "name": "Guides",        "url": "guides"         }
+  ],
+  "anchors": [
+    {
+      "name": "WCAG 2.2 Spec",
+      "icon": "book-open",
+      "url": "https://www.w3.org/TR/WCAG22/"
+    },
+    {
+      "name": "axe-core Rules",
+      "icon": "circle-check",
+      "url": "https://dequeuniversity.com/rules/axe/"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Overview",
+      "pages": [
+        "introduction",
+        "quickstart",
+        "how-it-works",
+        "architecture"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/combined",
+        "api-reference/pipeline",
+        "api-reference/crawl",
+        "api-reference/forms"
+      ]
+    },
+    {
+      "group": "WCAG Rules",
+      "pages": [
+        "rules/overview",
+        "rules/node-custom-checks",
+        "rules/coverage-matrix",
+        "rules/wcag-dependency-tree",
+        "rules/wcag-1-1-1",
+        "rules/wcag-1-2-1",
+        "rules/wcag-1-2-2",
+        "rules/wcag-1-2-3",
+        "rules/wcag-1-2-4",
+        "rules/wcag-1-3-1",
+        "rules/wcag-1-3-2",
+        "rules/wcag-1-3-3",
+        "rules/wcag-1-3-4",
+        "rules/wcag-1-4-1",
+        "rules/wcag-1-4-2",
+        "rules/wcag-1-4-3",
+        "rules/wcag-1-4-4",
+        "rules/wcag-1-4-5",
+        "rules/wcag-1-4-6",
+        "rules/wcag-1-4-10",
+        "rules/wcag-1-4-11",
+        "rules/wcag-1-4-12",
+        "rules/wcag-1-4-13",
+        "rules/wcag-2-1-2",
+        "rules/wcag-2-1-4",
+        "rules/wcag-2-2-2",
+        "rules/wcag-2-4-5",
+        "rules/wcag-2-4-7",
+        "rules/wcag-2-4-8",
+        "rules/wcag-2-4-9",
+        "rules/wcag-2-4-11-12",
+        "rules/wcag-2-4-13",
+        "rules/wcag-2-5-1",
+        "rules/wcag-2-5-2",
+        "rules/wcag-2-5-3",
+        "rules/wcag-2-5-4",
+        "rules/wcag-2-5-7",
+        "rules/wcag-2-5-8",
+        "rules/wcag-3-1-2",
+        "rules/wcag-3-1-6",
+        "rules/wcag-3-2-1",
+        "rules/wcag-3-2-2",
+        "rules/wcag-3-2-6",
+        "rules/wcag-3-3-1-3-3-2",
+        "rules/wcag-3-3-3",
+        "rules/wcag-3-3-4",
+        "rules/wcag-3-3-7",
+        "rules/wcag-3-3-8",
+        "rules/wcag-4-1-1",
+        "rules/wcag-4-1-3"
+      ]
+    },
+    {
+      "group": "Developer Guides",
+      "pages": [
+        "guides/adding-a-rule",
+        "guides/automated-testing",
+        "guides/accesslint-performance-and-scaling",
+        "guides/crawlers",
+        "guides/auditors",
+        "guides/sse-integration"
+      ]
+    },
+    {
+      "group": "Internals",
+      "pages": [
+        "internals/combined-package",
+        "internals/persistence-and-queue",
+        "internals/scoring-and-manual-review",
+        "internals/python-rules-flow-analysis",
+        "internals/node-rules-flow-analysis",
+        "internals/crawler-metadata",
+        "internals/data-models",
+        "internals/sse-events",
+        "internals/stage-timing",
+        "internals/output-format",
+        "internals/live-ten-site-analysis",
+        "internals/config",
+        "internals/test-case-documentation",
+        "internals/confidence-report",
+        "internals/japanese-language-support"
+      ]
+    },
+    {
+      "group": "Internals (日本語)",
+      "pages": [
+        "internals/python-rules-flow-analysis-jp",
+        "internals/node-rules-flow-analysis-ja"
+      ]
+    },
+    {
+      "group": "Deployment",
+      "pages": [
+        "deployment/docker",
+        "deployment/environment"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/Sanjaypranavbc/ka11y"
+  }
+}

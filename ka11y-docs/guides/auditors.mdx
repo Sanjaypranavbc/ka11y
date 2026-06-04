@@ -1,0 +1,210 @@
+---
+title: "Auditors Reference"
+description: "How each auditor applies WCAG rules to crawler output"
+---
+
+Auditors receive a `List[Dict]` from a crawler and return a `List[Dict]` with standardised `<rule>_status` and `<rule>_violation` keys. They are pure Python — no browser, no network — and are fully unit-testable.
+
+---
+
+## AltTextAccessibilityAuditor
+
+**File**: `ka11y/accessibility/rules/non_text/alttext.py`
+**WCAG**: 1.1.1 Non-text Content (Level A), 4.1.2 Name, Role, Value (Level A), 1.4.5 Images of Text (Level AA), 1.4.11 Non-text Contrast (Level AA)
+
+### Check logic per image classification
+
+| Classification | Rule applied |
+|----------------|-------------|
+| `decorative/*` | `alt=""` (empty string) required — any other value is a violation |
+| `informative/*` | `1.1.1`: `alt` must be non-empty and semantically accurate. If OCR detected text in the image, one or more meaningful OCR words should be reflected in the alt text. `1.4.5`: fails when embedded text is detected in a non-exempt image. |
+| `functional/logos` | `1.1.1`: `alt` must identify the logo. `4.1.2`: accessible name must include "logo" or "home". `1.4.5`: exempt as a logotype. |
+| `functional/icons` | `1.1.1`: `alt` must describe the action. `4.1.2`: social brand icons must include the brand name + "icon". `1.4.11`: OCR-derived contrast is checked when data is available. |
+| `functional/buttons` | `1.1.1`: `alt` must describe the action. `4.1.2`: accessible name must be meaningful. `1.4.11`: OCR-derived contrast is checked when data is available. |
+| `functional/images` | `1.1.1`: `alt` must be non-empty. `4.1.2`: applies when the image acts as an interactive control. `1.4.5`: fails when embedded text is detected. |
+| `complex/charts` | `1.1.1`: meaningful alt text is still required. `1.4.5`: treated as an essential-presentation exception instead of a violation. |
+
+### OCR integration
+
+When `run_ocr=true`, EasyOCR results are passed alongside image metadata. The alt-text auditor uses OCR output to:
+
+- verify whether visible image text is reflected in `alt` for `1.1.1`
+- detect embedded text for `1.4.5`
+- decide whether image buttons/icons can be checked automatically for `1.4.11`
+
+### Output record keys
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `wcag_1_1_1_status` | `"FAILED"` \| `"PASSED"` | Audit result |
+| `wcag_4_1_2_status` | `"FAILED"` \| `"PASSED"` \| `"N/A"` | Functional-image accessible-name result |
+| `wcag_1_4_5_status` | `"FAILED"` \| `"PASSED"` \| `"N/A"` | Images-of-text result |
+| `wcag_1_4_11_status` | `"FAILED"` \| `"PASSED"` \| `"INCOMPLETE"` \| `"N/A"` | Non-text contrast result |
+| `wcag_1_1_1_reason` | str | Human-readable explanation |
+| `wcag_4_1_2_reason` | str | Human-readable explanation |
+| `wcag_1_4_5_reason` | str | Human-readable explanation |
+| `wcag_1_4_11_reason` | str | Human-readable explanation |
+| `src` | str | Image source URL |
+| `has_ocr_text` | bool | Whether OCR found visible text in the image |
+| `detected_text` | str | OCR text snippet(s) joined for debugging/reporting |
+
+---
+
+## FormAccessibilityAuditor
+
+**File**: `ka11y/accessibility/rules/forms/form_auditor.py`
+**WCAG**: 3.3.1 Error Identification (Level A) + 3.3.2 Labels or Instructions (Level A)
+
+Full details: [Rules / 3.3.1 + 3.3.2](/rules/wcag-3-3-1-3-3-2). Summary follows.
+
+### 3.3.2 — Labels or Instructions
+
+Accessible-name resolution follows **W3C accname-1.2** priority: `aria-labelledby` → `aria-label` → native `<label for>` (for form controls) → `alt` (img/area/`<input type=image>`) → text content → `title`. Empty / broken-ref sources do not count.
+
+A field **fails** if:
+- No source in the priority chain yields a non-empty name
+- Only `placeholder` is used (placeholder is not an accessible label)
+- Personal-data field is missing `autocomplete` **or** has `autocomplete="off"` — applies when the input type is `email`/`tel`/`password` or the `name`/`id`'s trailing segment names a personal token (e.g. `user_email`, `confirm-password`, `given-name`)
+- The label/placeholder contains a required-indicator (`*`, `(required)`, `必須`, …) but the field has neither `required` nor `aria-required="true"`
+
+Excluded from audit: `disabled` inputs and types `hidden`, `submit`, `reset`, `button`, `image`, `file`. Radios and checkboxes accept a `<fieldset> > <legend>` as a group-level label.
+
+### 3.3.1 — Error Identification
+
+Only fires when there is signal that an error is being communicated. `aria-describedby` alone is treated as help text and does **not** trigger a violation.
+
+| Trigger | Required for pass |
+|---|---|
+| `aria-errormessage="ref"` | `ref` exists AND has `role="alert"/"status"/"log"` or `aria-live="polite"/"assertive"` |
+| `aria-invalid="true"` | An `aria-errormessage` or `aria-describedby` linked element exists AND is a live region |
+
+A non-static crawl is available via `AsyncFormCrawler(interactive_validation=True)` — submits each form with `preventDefault()` and network blocking, then re-extracts to capture dynamic errors. See the [rule page](/rules/wcag-3-3-1-3-3-2#interactive-validation-pass-opt-in) for details.
+
+### Output record keys
+
+| Key | Values |
+|-----|--------|
+| `wcag_3_3_1_status` | `"FAILED"` \| `"PASSED"` |
+| `wcag_3_3_1_violations` | str (pipe-separated) |
+| `wcag_3_3_2_status` | `"FAILED"` \| `"PASSED"` |
+| `wcag_3_3_2_violations` | str (pipe-separated) |
+| `aria_errormessage` | str \| None |
+| `errormessage_element_id` | str \| None |
+| `errormessage_is_live` | bool |
+| `error_is_live` | bool |
+| `group_legend_text` | str \| None |
+| `is_disabled` | bool |
+| `html_snippet` | str |
+| `tag` | str |
+| `element_id` | str \| None |
+| `element_name` | str \| None |
+
+---
+
+## LabelInNameAuditor
+
+**File**: `ka11y/accessibility/rules/input_modalities/label_in_name_auditor.py`
+**WCAG**: 2.5.3 Label in Name (Level A)
+
+### Rule
+
+The accessible name of an interactive element must **contain** its visible label text (case-insensitive substring match). This allows speech-input users (e.g. Dragon NaturallySpeaking) to activate the control by speaking what they see.
+
+### Check logic
+
+| Condition | Status | Reason |
+|-----------|--------|--------|
+| `visible_label` is empty | `N/A` | Icon-only; rule does not apply |
+| `accessible_name` is empty | `FAILED` | No accessible name at all |
+| `accessible_name` does not contain `visible_label` (case-insensitive) | `FAILED` | Label mismatch |
+| `accessible_name` contains `visible_label` | `PASSED` | — |
+
+### Output record keys
+
+| Key | Values |
+|-----|--------|
+| `wcag_2_5_3_status` | `"FAILED"` \| `"PASSED"` \| `"N/A"` |
+| `wcag_2_5_3_violation` | str |
+| `html_snippet` | str |
+| `tag` | str |
+| `element_id` | str \| None |
+
+---
+
+## PauseStopHideAuditor
+
+**File**: `ka11y/accessibility/rules/timing/pause_stop_hide_auditor.py`
+**WCAG**: 2.2.2 Pause, Stop, Hide (Level A)
+
+### Applicability gates
+
+All three conditions must be true for a violation to be raised:
+
+1. **Starts automatically** — autoplay, CSS animation runs on page load, carousel auto-advances
+2. **Duration > 5 seconds or loops** — very short one-shot animations are excluded
+3. **No pause/stop/hide mechanism** — no `controls` attribute, no adjacent button with pause/stop text, no aria-label indicating pause control
+
+### Output record keys
+
+| Key | Values |
+|-----|--------|
+| `wcag_2_2_2_status` | `"FAILED"` \| `"PASSED"` |
+| `wcag_2_2_2_violation` | str |
+| `axe_would_catch` | bool — `true` if axe-core would also catch this |
+| `html_snippet` | str |
+| `tag` | str |
+| `element_id` | str \| None |
+
+---
+
+## TargetSizeAuditor
+
+**File**: `ka11y/accessibility/rules/input_modalities/target_size_auditor.py`
+**WCAG**: 2.5.8 Target Size (Minimum) (Level AA)
+
+### Rule
+
+Every interactive element must have a rendered size of at least **24 × 24 CSS pixels**, unless an exception applies.
+
+### Exception handling
+
+| Exception | Condition | Status |
+|-----------|-----------|--------|
+| Inline | `<a>` with `display: inline` in text block | `N/A` |
+| UA-controlled | `<input type="checkbox/radio">` with `appearance: auto` | `N/A` |
+| Offset | Undersized target has sufficient surrounding spacing | `N/A` |
+
+### Output record keys
+
+| Key | Values |
+|-----|--------|
+| `wcag_2_5_8_status` | `"FAILED"` \| `"PASSED"` \| `"N/A"` |
+| `wcag_2_5_8_violation` | str |
+| `rendered_width_px` | float |
+| `rendered_height_px` | float |
+| `is_offset_exception` | bool |
+| `required_offset_x_px` / `required_offset_y_px` | float |
+| `nearest_target_gap_x_px` / `nearest_target_gap_y_px` | float \| None |
+| `html_snippet` | str |
+| `tag` | str |
+| `element_id` | str \| None |
+
+---
+
+## ContrastAnalyser
+
+**File**: `ka11y/accessibility/rules/non_text/contrast_analyser.py`
+**WCAG**: 1.4.3 Contrast (Minimum), 1.4.6 Contrast (Enhanced), 1.4.11 Non-text Contrast
+
+The contrast analyser is a utility used by the OCR pipeline, not a standalone auditor. Given an image and a bounding box from EasyOCR, it:
+
+1. Segments the image into text foreground and background using Otsu thresholding
+2. Computes relative luminance for each region
+3. Calculates the contrast ratio
+4. Returns pass/fail for AA_normal (4.5:1), AA_large (3:1), AAA_normal (7:1), AAA_large (4.5:1)
+
+Results are embedded in OCR detection records and surfaced in:
+
+- `1.4.3` AA text contrast findings
+- `1.4.6` AAA text contrast findings
+- `1.4.11` image-based button/icon checks when OCR contrast data is available

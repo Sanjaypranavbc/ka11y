@@ -2,7 +2,7 @@
 
 ## Scope
 
-This file tracks Japanese-site coverage readiness for the same implemented WCAG rule set in `a11y-node` and `a11y-python`.
+This file tracks Japanese-site coverage readiness for the same implemented WCAG rule set in `ka11y-node` and `ka11y-python`.
 
 - Default result language remains English unless `lang: "ja"` is explicitly requested.
 - Japanese campaigns can now be run separately and exported independently.
@@ -12,8 +12,8 @@ This file tracks Japanese-site coverage readiness for the same implemented WCAG 
 
 Coverage counts are unchanged from global implementation coverage because no new SCs were added:
 
-- `a11y-node`: **47** SCs
-- `a11y-python`: **18** SCs
+- `ka11y-node`: **47** SCs
+- `ka11y-python`: **18** SCs
 - Combined: **53 / 87** SCs (**60.9%**)
 
 ## Japanese Enablement Added

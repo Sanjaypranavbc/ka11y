@@ -1,7 +1,7 @@
 # Rule-wise Code Analysis
 
 - Generated at (UTC): `2026-04-13`
-- Scope: `a11y-node/src/custom-checks`, `a11y-node/src/services`, `a11y-python/a11y/crawler`, `a11y-python/a11y/accessibility/rules`, `a11y-python/a11y/accessibility/rendered/evaluators`, shared `config/universal.yml`
+- Scope: `ka11y-node/src/custom-checks`, `ka11y-node/src/services`, `ka11y-python/ka11y/crawler`, `ka11y-python/ka11y/accessibility/rules`, `ka11y-python/ka11y/accessibility/rendered/evaluators`, shared `config/universal.yml`
 - Method: current-state code review of the live production path, not the older standalone crawler-only model
 - Status baseline: includes the 2026-04-13 shared-config, TLS-handling, localization, and fixture-review changes already merged into the repo
 
@@ -22,7 +22,7 @@ The codebase is materially better than the older report suggested, but it is not
 
 ### Node
 
-- `a11y-node` still owns `axe-core` plus 24 custom checks.
+- `ka11y-node` still owns `axe-core` plus 24 custom checks.
 - Static checks run in parallel; interactive checks run sequentially.
 - Shared config now reaches the service layer and custom checks, so `lang` and selected EN/JA assets can be reused instead of being fully hardcoded.
 - Flat mapping now preserves more structured evidence such as selector, target, snippet, and media query.

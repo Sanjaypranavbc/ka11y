@@ -1,7 +1,7 @@
-# a11y WCAG 2.2 Coverage Report
+# ka11y WCAG 2.2 Coverage Report
 
 **Report date:** 2026-05-07
-**Scope:** Combined coverage across `a11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `a11y-node` (axe-core 4.11.1 + 29 custom checks).
+**Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + 29 custom checks).
 **Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), 2026-04-30 2.5.1 Pointer Gestures three-layer audit module (`src/audits/wcag-2.5.1/`) and 2.5.4 Motion Actuation modularisation (`src/audits/wcag-2.5.4/`), 2026-05-05 2.5.4 hardening (axe rule polarity fix; addEventListener monkey-patch via `motion-listener-detector.js`; expanded UI-alternative + disable-control heuristics), 2026-05-07 2.5.4 UI-alternative scan now hard-requires motion-keyword adjacency (action verb labels alone are no longer enough — closes false-pass on any page with a "Submit"/"Cancel"/"Reset" button) and 1.2.4 live-captions enhancements (YouTube `cc_load_policy`, Vimeo `texttrack`, adjacent CART `[aria-live]`), and 2026-03-26 empirical validation against seven production sites.
 
 ---
@@ -16,7 +16,7 @@
 | Level AA coverage | **23 of 26** (88.5 percent) |
 | Level AAA coverage | **6 of 30** (20.0 percent) |
 | Robust principle coverage | **3 of 3** (100 percent) |
-| Custom Node checks shipped | 28 `*.check.js` files in `a11y-node/src/custom-checks/`; plus `src/src/audits/wcag-2.5.1/` three-layer module |
+| Custom Node checks shipped | 28 `*.check.js` files in `ka11y-node/src/custom-checks/`; plus `src/src/audits/wcag-2.5.1/` three-layer module |
 | Python rendered evaluators | 7 (resize, reflow, text-spacing, hover-focus, orientation, focus-not-obscured min and enhanced) |
 | Python image and CV pipelines | OCR plus classifier-driven image pipeline across 1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 4.1.2 |
 | Real-site validation (2026-03-26) | 7 sites, 38 SCs observed firing |
@@ -681,8 +681,8 @@ _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-de
 
 | Suite | Tests | Status |
 |---|---:|---|
-| `a11y-python` (pytest) | 618 | 601 passing, 17 failing locally (15 due missing `nltk`, 2 assertion failures) |
-| `a11y-node` (jest) | 233 | All passing |
+| `ka11y-python` (pytest) | 618 | 601 passing, 17 failing locally (15 due missing `nltk`, 2 assertion failures) |
+| `ka11y-node` (jest) | 233 | All passing |
 | Custom-check files | 28 | All registered and emitting |
 | Real-world site validation | 7 sites | Verified 2026-03-26 |
 

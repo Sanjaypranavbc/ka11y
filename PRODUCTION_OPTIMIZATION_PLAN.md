@@ -1,8 +1,8 @@
-# a11y — Production Optimization, Persistence & Telemetry Plan
+# ka11y — Production Optimization, Persistence & Telemetry Plan
 
 **Date:** 2026-06-02
 **Author:** engineering (planning)
-**Scope:** `a11y-python` (FastAPI auditors), `a11y-node` (axe-core engine), shared crawl/queue/storage layer.
+**Scope:** `ka11y-python` (FastAPI auditors), `ka11y-node` (axe-core engine), shared crawl/queue/storage layer.
 
 ---
 
@@ -26,7 +26,7 @@ Design constraints implied by these choices:
 
 ### 1.1 Request lifecycle (today)
 1. `POST /api/v1/combined/` (`routes.py:201`) → builds `_jobs[job_id]` **in-memory dict**, fires `asyncio.create_task(_run_job(...))`, returns 202.
-2. `runner._run_job` (`runner.py:165`) acquires `_job_semaphore` (`A11Y_MAX_CONCURRENT_JOBS=4`), then `_run_job_body`:
+2. `runner._run_job` (`runner.py:165`) acquires `_job_semaphore` (`KA11Y_MAX_CONCURRENT_JOBS=4`), then `_run_job_body`:
    - Resolves language, makes `output_dir` on disk.
    - **Fires axe (Node) and Python stages concurrently** via `asyncio.gather`.
    - Node and Python **each crawl the whole site independently**, synchronized by `snapshot_urls_event` / `snapshot_urls_container` so Node audits Python's discovered URL set.
@@ -36,9 +36,9 @@ Design constraints implied by these choices:
 ### 1.2 Concurrency map (today)
 | Layer | Limit | Where |
 |-------|-------|-------|
-| Concurrent audit jobs | `A11Y_MAX_CONCURRENT_JOBS=4` | `runner.py:62` |
-| Heavy stages (image + rendered-layout) | `A11Y_HEAVY_STAGE_CONCURRENCY=2` | `stages.py:212` |
-| Chromium processes (Python pool) | `A11Y_MAX_BROWSERS=2` | `browser_pool.py:60` |
+| Concurrent audit jobs | `KA11Y_MAX_CONCURRENT_JOBS=4` | `runner.py:62` |
+| Heavy stages (image + rendered-layout) | `KA11Y_HEAVY_STAGE_CONCURRENCY=2` | `stages.py:212` |
+| Chromium processes (Python pool) | `KA11Y_MAX_BROWSERS=2` | `browser_pool.py:60` |
 | Parallel pages per crawl (Python) | `_UNIVERSAL_PARALLEL_PAGES` | `universal_page.py:43` |
 | Node puppeteer concurrency | `PUPPETEER_MAX_CONCURRENT=3` | `accessibility.service.js:82` |
 | Node BFS within a request | **serial** (1 page at a time) | `crawl.js:116` `while(queue)` |
@@ -84,7 +84,7 @@ Design constraints implied by these choices:
                                       │
             ┌─────────────────────────┼──────────────────────────────┐
             ▼                         ▼                              ▼
-   SQLite (WAL) a11y.db      Asset volume /data/assets       SSE bus (in-mem)
+   SQLite (WAL) ka11y.db      Asset volume /data/assets       SSE bus (in-mem)
    runs / findings /          <sha256>.png / .har             live progress only
    reports / assets /         (pointed to by assets table)
    stage_timings / events
@@ -100,13 +100,13 @@ Key shifts vs. today:
 
 ## 3. Workstream A — SQLite persistence layer
 
-### 3.1 New module: `a11y/store/db.py`
+### 3.1 New module: `ka11y/store/db.py`
 Single owner of the connection + schema + write serialization.
 
 ```python
 # pseudo-API
 class Database:
-    def __init__(self, path=os.getenv("A11Y_DB_PATH", "/data/a11y.db")): ...
+    def __init__(self, path=os.getenv("KA11Y_DB_PATH", "/data/ka11y.db")): ...
     async def init(self):        # PRAGMA journal_mode=WAL; synchronous=NORMAL;
                                  # busy_timeout=5000; foreign_keys=ON; run migrations
     async def write(self, sql, params): ...   # serialized via single writer task
@@ -115,7 +115,7 @@ class Database:
 ```
 - WAL + `synchronous=NORMAL` is the right durability/throughput tradeoff for a single box.
 - A **single async writer task** drains an `asyncio.Queue[(sql, params, future)]`; all writers `await db.write(...)`. This removes "database is locked" entirely.
-- Schema versioning via a `schema_migrations` table + ordered `.sql` files in `a11y/store/migrations/`.
+- Schema versioning via a `schema_migrations` table + ordered `.sql` files in `ka11y/store/migrations/`.
 
 ### 3.2 Schema (v1)
 
@@ -186,7 +186,7 @@ CREATE TABLE assets (
   run_id      TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
   page_url    TEXT,
   kind        TEXT NOT NULL,                   -- screenshot|ocr_crop|har|dom_snapshot|contrast_region
-  rel_path    TEXT NOT NULL,                   -- relative to A11Y_ASSET_DIR
+  rel_path    TEXT NOT NULL,                   -- relative to KA11Y_ASSET_DIR
   sha256      TEXT NOT NULL,                   -- dedupe + integrity
   mime        TEXT, width INTEGER, height INTEGER,
   bytes       INTEGER,
@@ -225,19 +225,19 @@ CREATE INDEX idx_events_run ON run_events(run_id);
 ```
 
 ### 3.3 Retention
-- Replace TTL eviction (`store.py:161`) with a **DB retention sweep**: delete `runs` older than `A11Y_RUN_RETENTION_DAYS` (default 30); `ON DELETE CASCADE` clears children; a paired pass deletes orphaned asset files whose rows are gone. Optional `VACUUM` weekly.
+- Replace TTL eviction (`store.py:161`) with a **DB retention sweep**: delete `runs` older than `KA11Y_RUN_RETENTION_DAYS` (default 30); `ON DELETE CASCADE` clears children; a paired pass deletes orphaned asset files whose rows are gone. Optional `VACUUM` weekly.
 - Hot in-memory cache (`_jobs`) keeps only running + recently-completed runs for fast polling; everything else reads from DB.
 
 ---
 
 ## 4. Workstream B — Asset store
 
-### 4.1 New module: `a11y/store/assets.py`
+### 4.1 New module: `ka11y/store/assets.py`
 ```python
 def put_asset(run_id, kind, src_bytes_or_path, page_url=None, mime=None) -> AssetRef:
     # 1. compute sha256
     # 2. rel_path = f"{run_id}/{kind}/{sha256[:2]}/{sha256}.{ext}"
-    # 3. write under A11Y_ASSET_DIR (default /data/assets), atomically (tmp+rename)
+    # 3. write under KA11Y_ASSET_DIR (default /data/assets), atomically (tmp+rename)
     # 4. INSERT into assets (dedupe on (run_id, rel_path))
     # 5. return AssetRef(id, rel_path, url="/api/v1/assets/{id}")
 ```
@@ -250,7 +250,7 @@ def put_asset(run_id, kind, src_bytes_or_path, page_url=None, mime=None) -> Asse
 ## 5. Workstream C — Telemetry → DB
 
 - Keep the **call sites** (`stage_timing.start/stop`, `crawler_timing.time_crawler`, `run_timing.log_run_timing`, step logger) but swap their **sinks** to `db.write` into `stage_timings` / `run_events` / `runs`. One adapter per existing logger keeps the rest of the code untouched.
-- File logs become **optional** (`A11Y_TELEMETRY_FILES=0` to disable) — useful for local debugging, off in prod.
+- File logs become **optional** (`KA11Y_TELEMETRY_FILES=0` to disable) — useful for local debugging, off in prod.
 - New analytics endpoints (read-only, served from DB):
   - `GET /api/v1/combined/{run_id}/timings` — rebuilt from `stage_timings` (replaces in-mem version).
   - `GET /api/v1/admin/metrics` — rollups: p50/p95 wall_ms by depth, slowest stages, OCR vs contrast split, failure rate by stage. These are the questions `stage_timing.py`'s docstring poses, now answerable in SQL.
@@ -264,12 +264,12 @@ def put_asset(run_id, kind, src_bytes_or_path, page_url=None, mime=None) -> Asse
 - A single **Dispatcher** asyncio task (started in lifespan):
   1. On boot, `UPDATE runs SET status='queued', attempt=attempt+1 WHERE status='running'` → **crash recovery** (in-flight jobs resume).
   2. Loop: `SELECT ... WHERE status='queued' ORDER BY submitted_at LIMIT (slots_free)`; for each, mark `running`, launch `_run_job_body`.
-  3. Respects `A11Y_MAX_CONCURRENT_JOBS`. Backpressure is natural: queued rows just wait, visibly (`status=queued` is pollable).
-- Add `attempt < A11Y_MAX_ATTEMPTS` (default 2) so a crash-looping URL fails permanently instead of retrying forever.
+  3. Respects `KA11Y_MAX_CONCURRENT_JOBS`. Backpressure is natural: queued rows just wait, visibly (`status=queued` is pollable).
+- Add `attempt < KA11Y_MAX_ATTEMPTS` (default 2) so a crash-looping URL fails permanently instead of retrying forever.
 - Optional `DELETE`/cancel: `POST /combined/{run_id}/cancel` sets `status=cancelled`; worker checks a cancel flag between stages.
 
 ### 6.2 Process pool for CPU work
-- Add `a11y/store/cpu_pool.py`: a module-level `ProcessPoolExecutor(max_workers=A11Y_CPU_WORKERS or cpu_count-1)`.
+- Add `ka11y/store/cpu_pool.py`: a module-level `ProcessPoolExecutor(max_workers=KA11Y_CPU_WORKERS or cpu_count-1)`.
 - Move **pure-Python CPU auditors** (cosine similarity, text parsing, contrast math that isn't already NumPy) from `asyncio.to_thread` → `loop.run_in_executor(cpu_pool, ...)`. Functions must be top-level + picklable; pass plain dicts, not Playwright handles.
 - Keep **I/O + Playwright-bound** work on `to_thread`/async (can't pickle a browser).
 - Net effect: B4 resolved — OCR/contrast/similarity genuinely parallelize across cores instead of serializing on the GIL.
@@ -290,10 +290,10 @@ Then map `axe_raw` → findings with the **existing** Node mapper logic ported t
 
 - Removes B1 (double crawl) and B2 (serial Node BFS) at once.
 - The `snapshot_urls_event` / `snapshot_urls_container` synchronization hack (`runner.py:302`, `stages.py:~1770`) is **deleted** — there's only one crawl, so there's nothing to synchronize.
-- Node service shrinks to a stateless `/map-axe-results` + custom-checks library, or is folded into Python via a tiny axe runner. (Custom JS checks in `a11y-node/src/custom-checks/*` that need a live DOM can also be injected as script tags into the same Playwright page — same pattern.)
+- Node service shrinks to a stateless `/map-axe-results` + custom-checks library, or is folded into Python via a tiny axe runner. (Custom JS checks in `ka11y-node/src/custom-checks/*` that need a live DOM can also be injected as script tags into the same Playwright page — same pattern.)
 
 ### 7.2 Migration safety
-- Gate behind `A11Y_UNIFIED_CRAWL=1`. Run both paths in shadow on a fixture set; diff finding counts per SC (the `evidence-loop.js` / `scripts/test-audits.js` harnesses already exist for this).
+- Gate behind `KA11Y_UNIFIED_CRAWL=1`. Run both paths in shadow on a fixture set; diff finding counts per SC (the `evidence-loop.js` / `scripts/test-audits.js` harnesses already exist for this).
 - The memory notes a history of axe-coverage regressions at depth (runs `a7a5d98c`, D-1/D-3, R-3). Unification **removes the class of bug** (no more "Node raced past the snapshot") because axe runs in the same loop as the crawl. Keep the depth fixtures (`CRAWLER_FIXTURE_PLAN`) as the regression gate.
 
 ### 7.3 If unification must be staged
@@ -316,8 +316,8 @@ New/changed endpoints, all DB-backed:
 
 ## 9. Workstream G — Ops, config, observability
 
-- **Env (new):** `A11Y_DB_PATH`, `A11Y_ASSET_DIR`, `A11Y_RUN_RETENTION_DAYS`, `A11Y_CPU_WORKERS`, `A11Y_MAX_ATTEMPTS`, `A11Y_UNIFIED_CRAWL`, `A11Y_TELEMETRY_FILES`. All documented in `docker-compose.yml` + README.
-- **Volumes (compose):** add `a11y_db:/data` and `a11y_assets:/data/assets`; both must be **named volumes / EBS**, not bind mounts, and backed up. WAL means back up `a11y.db` + `-wal` + `-shm` together, or use `VACUUM INTO` for a consistent snapshot.
+- **Env (new):** `KA11Y_DB_PATH`, `KA11Y_ASSET_DIR`, `KA11Y_RUN_RETENTION_DAYS`, `KA11Y_CPU_WORKERS`, `KA11Y_MAX_ATTEMPTS`, `KA11Y_UNIFIED_CRAWL`, `KA11Y_TELEMETRY_FILES`. All documented in `docker-compose.yml` + README.
+- **Volumes (compose):** add `ka11y_db:/data` and `ka11y_assets:/data/assets`; both must be **named volumes / EBS**, not bind mounts, and backed up. WAL means back up `ka11y.db` + `-wal` + `-shm` together, or use `VACUUM INTO` for a consistent snapshot.
 - **Health:** `/health` reports DB reachable + queue depth + pool saturation.
 - **Single-writer + multiple uvicorn workers caveat:** with SQLite you should run **one** uvicorn worker process for writes (the dispatcher must be a singleton). Scale concurrency via the process pool + async, not multiple API processes. (This is the main thing that would push you to Decision-3 "Postgres-ready" later if you outgrow one box.)
 - **Tuning defaults for a typical 8-core/16GB box:** `MAX_BROWSERS=3`, `MAX_CONCURRENT_JOBS=3`, `HEAVY_STAGE_CONCURRENCY=2`, `CPU_WORKERS=6`. Validate against `LAWSUIT_SITES_AUDIT_REPORT.md` sites.
@@ -328,13 +328,13 @@ New/changed endpoints, all DB-backed:
 
 | Phase | Deliverable | Risk | Unblocks |
 |-------|-------------|------|----------|
-| **P0** | `a11y/store/db.py` + schema + migrations + single-writer. Wire **writes only** (runs/reports/findings) alongside existing in-mem path (dual-write, read still in-mem). | Low | Everything |
+| **P0** | `ka11y/store/db.py` + schema + migrations + single-writer. Wire **writes only** (runs/reports/findings) alongside existing in-mem path (dual-write, read still in-mem). | Low | Everything |
 | **P1** | Switch reads to DB; `_jobs` becomes cache. Add `/history`, DB-backed `{run_id}` + `/timings`. Retire TTL→retention sweep. Resolves §8. | Low | History/durability |
 | **P2** | Asset store (`assets.py`) + `/assets/{id}`; migrate all asset producers; deprecate `?path=`. | Med | DB-as-source-of-truth for assets |
 | **P3** | Telemetry sinks → DB; file logs optional; `/admin/metrics`. | Low | Queryable telemetry |
 | **P4** | Durable queue + dispatcher + crash-requeue + cancel. | Med | Crash-safety |
 | **P5** | Process pool for CPU auditors. | Med | True CPU parallelism (B4) |
-| **P6** | Crawl unification behind `A11Y_UNIFIED_CRAWL`; shadow-diff; flip default; delete Puppeteer BFS + snapshot-sync hack. | **High** | B1+B2 (the big win) |
+| **P6** | Crawl unification behind `KA11Y_UNIFIED_CRAWL`; shadow-diff; flip default; delete Puppeteer BFS + snapshot-sync hack. | **High** | B1+B2 (the big win) |
 
 P0–P3 are independent of P6 and bank durability/telemetry first. P6 is the high-reward, high-risk finale and is feature-flagged.
 
@@ -351,7 +351,7 @@ P0–P3 are independent of P6 and bank durability/telemetry first. P6 is the hig
 ---
 
 ## 12. Open decisions still needed (please confirm before P6)
-1. **Node service fate under unification:** (a) keep a slim stateless Node `/map-axe-results` microservice (least code churn, axe stays in JS), or (b) fully port axe invocation + mapping into Python and retire `a11y-node`. Recommendation: **(a) first**, measure, then decide on (b).
-2. **Custom JS checks** (`a11y-node/src/custom-checks/*`, the 2.5.x audits): inject as script tags into the unified Playwright page, or keep calling Node per-page with rendered HTML? Recommendation: inject — keeps one page load.
-3. **Retention window** default (`A11Y_RUN_RETENTION_DAYS=30`?) and whether completed-run **assets** get a shorter TTL than the run metadata (metadata is cheap; screenshots aren't).
+1. **Node service fate under unification:** (a) keep a slim stateless Node `/map-axe-results` microservice (least code churn, axe stays in JS), or (b) fully port axe invocation + mapping into Python and retire `ka11y-node`. Recommendation: **(a) first**, measure, then decide on (b).
+2. **Custom JS checks** (`ka11y-node/src/custom-checks/*`, the 2.5.x audits): inject as script tags into the unified Playwright page, or keep calling Node per-page with rendered HTML? Recommendation: inject — keeps one page load.
+3. **Retention window** default (`KA11Y_RUN_RETENTION_DAYS=30`?) and whether completed-run **assets** get a shorter TTL than the run metadata (metadata is cheap; screenshots aren't).
 4. **Auth on history/admin endpoints** — `/history` and `/admin/metrics` expose every audited URL. Do they need an API key / auth gate before exposure?

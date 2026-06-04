@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 96" role="img" aria-labelledby="title desc">
-  <title id="title">a11y</title>
-  <desc id="desc">a11y documentation logo</desc>
-  <rect width="320" height="96" rx="20" fill="#f8fbff"/>
-  <rect x="18" y="18" width="60" height="60" rx="16" fill="#0969da"/>
-  <path d="M36 60V36h8v8.3L52.6 36H63L52.7 45.9 64 60H53.3l-9.3-11.8V60Z" fill="#ffffff"/>
-  <text x="96" y="58" font-family="IBM Plex Sans, Arial, sans-serif" font-size="34" font-weight="700" fill="#0f172a">a11y</text>
-</svg>

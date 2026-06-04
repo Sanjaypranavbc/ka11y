@@ -12,7 +12,7 @@ Real-site evidence already collected from the live rerun campaign:
 
 - `wcag_reports/raw/ten_site_deep_en_20260406_rerun/`
 - `wcag_reports/ten_site_deep_en_20260406_rerun/`
-- `a11y-python/logs/AC_2026-04-06.log`
+- `ka11y-python/logs/KAC_2026-04-06.log`
 - `wcag_reports/crawler_recheck_20260406/`
 
 Primary reproduced issues from real sites:
@@ -48,7 +48,7 @@ Conclusion:
 #### `css-tricks.com`
 
 - `wcag_reports/crawler_recheck_20260406/css_tricks_com_recheck/recheck_summary.json` shows `warnings: []`
-- `a11y-python/logs/AC_2026-04-06.log` now records repeated:
+- `ka11y-python/logs/KAC_2026-04-06.log` now records repeated:
   - `networkidle timeout`
   - `readyState timeout`
 - the rerun console also surfaced repeated `Task was destroyed but it is pending!` route-task leaks during the image crawl
@@ -61,7 +61,7 @@ Conclusion:
 #### `ookla.com`
 
 - `wcag_reports/crawler_recheck_20260406/ookla_com_recheck/recheck_summary.json` still shows `warnings: []`
-- `a11y-python/logs/AC_2026-04-06.log` records another partial-image-set warning for `crawled_images/ookla_com_0406_1822`
+- `ka11y-python/logs/KAC_2026-04-06.log` records another partial-image-set warning for `crawled_images/ookla_com_0406_1822`
 - the rerun also showed transient asset download failures during capture
 - a late `TargetClosedError` was reproduced again after the timeout path
 - only `2` images made it into the final OCR/audit phase of this rerun
@@ -75,7 +75,7 @@ Conclusion:
 #### `mozilla.org`
 
 - `wcag_reports/crawler_recheck_20260406/mozilla_org_recheck/recheck_summary.json` still shows `warnings: []`
-- `a11y-python/logs/AC_2026-04-06.log` records another partial-image-set warning for `crawled_images/mozilla_org_0407_1011`
+- `ka11y-python/logs/KAC_2026-04-06.log` records another partial-image-set warning for `crawled_images/mozilla_org_0407_1011`
 - the rerun reproduced another late `TargetClosedError`
 - OCR then failed to reopen multiple crawler-produced `.png` files with `Could not find a backend to open ... .png`
 
@@ -178,7 +178,7 @@ Expected outcome:
 - fewer partial image-set runs
 - lower Python runtime on image-heavy sites
 
-### Fixture 6: document the actual crawler architecture in `a11y-docs`
+### Fixture 6: document the actual crawler architecture in `ka11y-docs`
 
 Problem:
 
@@ -219,7 +219,7 @@ Expected outcome:
 
 ## File-by-file review
 
-### Review: `a11y-python/a11y/crawler/crawler.py`
+### Review: `ka11y-python/ka11y/crawler/crawler.py`
 
 Current state:
 
@@ -239,7 +239,7 @@ Proposed action:
 
 - highest-priority crawler file to fix first
 
-### Review: `a11y-python/a11y/crawler/universal_page.py`
+### Review: `ka11y-python/ka11y/crawler/universal_page.py`
 
 Current state:
 
@@ -257,7 +257,7 @@ Proposed action:
 
 - use this as the central path for crawler load-state consistency
 
-### Review: `a11y-python/a11y/crawler/forms_crawler.py`
+### Review: `ka11y-python/ka11y/crawler/forms_crawler.py`
 
 Current state:
 
@@ -273,7 +273,7 @@ Proposed action:
 
 - move fallback crawling onto shared navigation helper
 
-### Review: `a11y-python/a11y/crawler/interactive_crawler.py`
+### Review: `ka11y-python/ka11y/crawler/interactive_crawler.py`
 
 Current state:
 
@@ -288,7 +288,7 @@ Proposed action:
 
 - align navigation/stabilization with shared helper before further `2.5.3` rule work
 
-### Review: `a11y-python/a11y/crawler/media_crawler.py`
+### Review: `ka11y-python/ka11y/crawler/media_crawler.py`
 
 Current state:
 
@@ -304,7 +304,7 @@ Proposed action:
 
 - simplify onto shared navigation helper
 
-### Review: `a11y-python/a11y/crawler/moving_content_crawler.py`
+### Review: `ka11y-python/ka11y/crawler/moving_content_crawler.py`
 
 Current state:
 
@@ -320,7 +320,7 @@ Proposed action:
 
 - align with shared stabilization, then retest on real animated/carousel pages
 
-### Review: `a11y-python/a11y/crawler/target_size_crawler.py`
+### Review: `ka11y-python/ka11y/crawler/target_size_crawler.py`
 
 Current state:
 
@@ -336,7 +336,7 @@ Proposed action:
 
 - move to shared navigation/stabilization
 
-### Review: `a11y-python/a11y/crawler/text_spacing_crawler.py`
+### Review: `ka11y-python/ka11y/crawler/text_spacing_crawler.py`
 
 Current state:
 
@@ -354,7 +354,7 @@ Proposed action:
 
 - fix immediately after image crawler
 
-### Review: `a11y-python/a11y/crawler/rendered_layout_crawler.py`
+### Review: `ka11y-python/ka11y/crawler/rendered_layout_crawler.py`
 
 Current state:
 
@@ -370,7 +370,7 @@ Proposed action:
 
 - secondary priority
 
-### Review: `a11y-python/a11y/accessibility/rendered/stabilizer.py`
+### Review: `ka11y-python/ka11y/accessibility/rendered/stabilizer.py`
 
 Current state:
 
@@ -386,7 +386,7 @@ Proposed action:
 
 - review warning propagation and interaction with shared navigation/stabilization
 
-### Review: `a11y-python/a11y/text_detector/text_detector.py`
+### Review: `ka11y-python/ka11y/text_detector/text_detector.py`
 
 Current state:
 
@@ -402,7 +402,7 @@ Proposed action:
 
 - add this file to the first fix pass for crawler-output integrity and warning surfacing
 
-### Review: `a11y-python/a11y/api/v1/combined/stages.py`
+### Review: `ka11y-python/ka11y/api/v1/combined/stages.py`
 
 Current state:
 
@@ -419,7 +419,7 @@ Proposed action:
 
 - update warning propagation together with crawler timeout fixes
 
-### Review: `a11y-docs/guides/crawlers.mdx`
+### Review: `ka11y-docs/guides/crawlers.mdx`
 
 Current state:
 
@@ -449,7 +449,7 @@ Proposed action:
 9. `media_crawler.py`
 10. `moving_content_crawler.py`
 11. `target_size_crawler.py`
-12. `a11y-docs/guides/crawlers.mdx`
+12. `ka11y-docs/guides/crawlers.mdx`
 
 ## Explicit non-goals for the first fix pass
 

@@ -1,0 +1,264 @@
+---
+title: "Docker Deployment"
+description: "Deploy the full ka11y stack with Docker Compose"
+---
+
+## Prerequisites
+
+- Docker Engine 24+ and Docker Compose v2
+- At least **4 GB RAM** available to Docker (Playwright + Puppeteer both launch Chromium)
+- Ports `3000`, `3001`, `8000`, and `8080` free on the host
+
+---
+
+## Quick start
+
+```bash
+# Clone the repo
+git clone https://github.com/Sanjaypranavbc/ka11y.git
+cd ka11y
+
+# Build all images in parallel and start
+docker compose up --build
+
+# Or build first, then start
+docker compose build --parallel
+docker compose up
+```
+
+The frontend is available at **http://localhost:8080** and the Mintlify docs at **http://localhost:3001** once the services are healthy.
+
+---
+
+## Services
+
+```
+┌─────────────────────────────────────────┐
+│          ka11y-frontend  :8080          │  React + nginx
+│   (depends on python: service_healthy)  │
+└─────────────────────────────────────────┘
+              │ proxy /api/*
+┌─────────────────────────────────────────┐
+│          ka11y-python  :8000            │  FastAPI + Playwright
+│   (depends on node: service_healthy)    │
+└─────────────────────────────────────────┘
+              │ http://node:3000
+┌─────────────────────────────────────────┐
+│          ka11y-node   :3000             │  Node + Puppeteer + axe-core
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│          ka11y-docs   :3001             │  Mintlify local docs preview
+└─────────────────────────────────────────┘
+```
+
+### ka11y-node
+
+| Property | Value |
+|----------|-------|
+| Image | `ka11y-node:latest` |
+| Base | `node:20-slim` + system Chromium |
+| Port | `3000` |
+| `shm_size` | `256m` (required for Chrome) |
+| Healthcheck | `curl http://localhost:3000/api/v1/health` |
+| Start period | 45 s |
+
+### ka11y-python
+
+| Property | Value |
+|----------|-------|
+| Image | `ka11y-python:latest` |
+| Base | `python:3.13-slim` + Playwright Chromium |
+| Port | `8000` |
+| Depends on | `node` (healthy) |
+| Volume | `./output/crawled_images:/app/crawled_images`, `./output/logs:/app/logs` |
+| Healthcheck | `curl http://localhost:8000/api/v1/health` |
+| System Health | `curl http://localhost:8000/api/v1/system/health` |
+| Start period | 90 s |
+
+### ka11y-frontend
+
+| Property | Value |
+|----------|-------|
+| Image | `ka11y-frontend:latest` |
+| Base | `node:20-alpine` (build) + `nginx:alpine` (runtime) |
+| Port | `8080 → 80` |
+| Depends on | `python` (healthy) |
+| Healthcheck | `wget http://localhost:80/` |
+
+### ka11y-docs
+
+| Property | Value |
+|----------|-------|
+| Image | `ka11y-docs:latest` |
+| Base | `node:24-slim` + `@mintlify/cli` |
+| Port | `3001 → 3000` |
+| Depends on | none |
+| Volume | `./ka11y-docs:/docs` |
+| Healthcheck | `curl http://localhost:3000/` |
+
+---
+
+## Startup sequence
+
+```
+docker compose up
+    │
+    ├─► node starts, Chromium initialises (~30 s)
+    │       healthcheck passes
+    │
+    ├─► python starts, Playwright Chromium + NLTK download (~60 s)
+    │       healthcheck passes
+    │
+    ├─► frontend starts, nginx serves React app (~10 s)
+    │       healthcheck passes
+    │
+    └─► docs starts, Mintlify prepares local preview (~15 s)
+            healthcheck passes
+
+Total: ~90–120 s on first run (plus docs preview startup time)
+```
+
+---
+
+## Common operations
+
+```bash
+# Start in background
+docker compose up -d
+
+# Follow all logs
+docker compose logs -f
+
+# Follow a single service
+docker compose logs -f python
+docker compose logs -f docs
+
+# Stop all services (keep volumes)
+docker compose down
+
+# Stop all services, then clear bind-mounted audit output if needed
+docker compose down
+rm -rf output/crawled_images output/logs
+
+# Rebuild a single image
+docker compose build python
+
+# Restart a single service
+docker compose restart python
+
+# Open a shell in a running container
+docker compose exec python bash
+docker compose exec node sh
+docker compose exec docs bash
+```
+
+---
+
+## Bind mounts
+
+| Name | Mount point | Contents |
+|------|-------------|----------|
+| `./output/crawled_images` | `/app/crawled_images` (python) | Downloaded images, raw JSON crawler output, `combined_report.json` |
+| `./output/logs` | `/app/logs` (python) | Python-side logs and runtime artefacts |
+| `./ka11y-docs` | `/docs` (docs) | Live Mintlify content served by the docs container |
+
+To inspect the output:
+
+```bash
+# List jobs
+docker compose exec python ls /app/crawled_images
+
+# Read a report
+docker compose exec python cat /app/crawled_images/example.com/<job-id>/combined_report.json
+```
+
+---
+
+## Health checks
+
+All four services define Docker health checks. `docker compose up` waits for dependent services to be healthy before starting the next service in the audit path.
+
+```bash
+# Check health status
+docker compose ps
+
+# View health check history
+docker inspect ka11y-node | jq '.[0].State.Health'
+```
+
+---
+
+## Chrome / Chromium configuration
+
+Both Node and Python services run headless Chromium. Key flags used:
+
+```
+--no-sandbox
+--disable-setuid-sandbox
+--disable-dev-shm-usage      # Use /tmp instead of /dev/shm
+--disable-gpu
+--no-zygote
+--disable-crash-reporter
+--disable-breakpad
+--crash-dumps-dir=/tmp       # Avoids crashpad_handler error in Docker
+```
+
+The `shm_size: '256m'` in `docker-compose.yml` is also required — without it Chrome uses the default 64 MB `/dev/shm` and can crash on complex pages.
+
+---
+
+## Resource recommendations
+
+| Environment | RAM | CPU |
+|-------------|-----|-----|
+| Local dev | 4 GB | 2 cores |
+| CI/CD | 8 GB | 4 cores |
+| Production | 8–16 GB | 4–8 cores |
+
+For production, consider running Node and Python on separate hosts and pointing `NODE_BASE_URL` to the Node service's external address.
+
+---
+
+## Troubleshooting
+
+### `chrome_crashpad_handler: --database is required`
+
+Ensure `shm_size: '256m'` is set on the `node` service and `--crash-dumps-dir=/tmp` is in the browser args (`ka11y-node/src/config/app.config.js`).
+
+### Python service fails to start
+
+```bash
+docker compose logs python
+```
+
+Common causes:
+- `node` service not yet healthy — Python waits for the Node healthcheck
+- Playwright Chromium not installed — the Dockerfile runs `playwright install chromium --with-deps` during build; re-run `docker compose build python`
+
+### Port conflicts
+
+```bash
+# Check what is using port 8000
+lsof -i :8000
+
+# Change the host port in docker-compose.yml
+ports:
+  - "8001:8000"   # map to host port 8001 instead
+```
+
+### SSE connection drops through a reverse proxy
+
+Add to your upstream nginx / Caddy / Traefik config:
+
+```nginx
+location ~ ^/api/v1/combined/.+/stream$ {
+    proxy_pass         http://frontend_upstream;
+    proxy_http_version 1.1;
+    proxy_set_header   Connection "";
+    proxy_buffering    off;
+    proxy_cache        off;
+    proxy_read_timeout 3600s;
+    chunked_transfer_encoding on;
+}
+```
