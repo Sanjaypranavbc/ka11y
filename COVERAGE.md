@@ -1,7 +1,8 @@
 # ka11y WCAG 2.2 Coverage Report
 
-**Report date:** 2026-05-07
-**Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + 29 custom checks).
+**Report date:** 2026-06-04
+**Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + AccessLint core + **32 custom checks**).
+**Service naming note:** the backend services are `ka11y-python` and `ka11y-node`; only the frontend SDK is named `a11y-frontend-sdk`. Engine/module names and `KA11Y_*` env vars retain the `ka11y` prefix.
 **Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), 2026-04-30 2.5.1 Pointer Gestures three-layer audit module (`src/audits/wcag-2.5.1/`) and 2.5.4 Motion Actuation modularisation (`src/audits/wcag-2.5.4/`), 2026-05-05 2.5.4 hardening (axe rule polarity fix; addEventListener monkey-patch via `motion-listener-detector.js`; expanded UI-alternative + disable-control heuristics), 2026-05-07 2.5.4 UI-alternative scan now hard-requires motion-keyword adjacency (action verb labels alone are no longer enough — closes false-pass on any page with a "Submit"/"Cancel"/"Reset" button) and 1.2.4 live-captions enhancements (YouTube `cc_load_policy`, Vimeo `texttrack`, adjacent CART `[aria-live]`), and 2026-03-26 empirical validation against seven production sites.
 
 ---
@@ -16,11 +17,11 @@
 | Level AA coverage | **23 of 26** (88.5 percent) |
 | Level AAA coverage | **6 of 30** (20.0 percent) |
 | Robust principle coverage | **3 of 3** (100 percent) |
-| Custom Node checks shipped | 28 `*.check.js` files in `ka11y-node/src/custom-checks/`; plus `src/src/audits/wcag-2.5.1/` three-layer module |
+| Custom Node checks shipped | **32** `*.check.js` files in `ka11y-node/src/custom-checks/` (27 static + 5 interactive); plus deep `src/audits/wcag-2.5.1/` and `src/audits/wcag-2.5.4/` modules |
 | Python rendered evaluators | 7 (resize, reflow, text-spacing, hover-focus, orientation, focus-not-obscured min and enhanced) |
 | Python image and CV pipelines | OCR plus classifier-driven image pipeline across 1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 4.1.2 |
 | Real-site validation (2026-03-26) | 7 sites, 38 SCs observed firing |
-| Test suite status | Python 601 of 618 passing locally, Node 233 of 233 passing |
+| Test suite status | Node: 314 test cases across 40 spec files; Python: 769 `test_*` functions across 43 files (see §12) |
 
 **What changed since the prior 2026-03-26 baseline:**
 
@@ -30,7 +31,7 @@
 4. 2026-04-24 gap pass extended Node heuristics for 1.2.1 F30 filename-only transcript links, 1.4.1 non-link color-only indicators (F13/F81), 2.1.2 scripted key suppression and non-modal popup dismissibility (F58/F60), 2.4.5 related-links/page-index mechanisms (G125/G126), 2.4.8 table-of-contents signal (G127), 3.3.4 undo-window safeguards (G164), and 4.1.3 toast-without-ARIA (F114).
 5. Image-capture failures now propagate end-to-end as `capture_status` with a distinct `incomplete` finding status (was silently treated as N/A before).
 6. 3.3.7 Redundant Entry is confirmed to be wired up via `redundant-entry.check.js` (was undercounted in the prior report).
-7. 2.5.1 Pointer Gestures (2026-04-30) added via a new three-layer audit module (`src/src/audits/wcag-2.5.1/`): CSS selector bank matching (carousels, drag-drop, map embeds, touch widgets, path-based interactions), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, etc.), and a custom axe-core rule for gesture data-attributes. Full EN + JA multilingual selector banks. Escape-hatch validator reduces false positives by detecting sibling/child buttons, aria-controls, keyboard handlers, and tabIndex alternatives. Findings with a detected escape hatch are emitted as warnings rather than violations.
+7. 2.5.1 Pointer Gestures (2026-04-30) added via a new three-layer audit module (`src/audits/wcag-2.5.1/`): CSS selector bank matching (carousels, drag-drop, map embeds, touch widgets, path-based interactions), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, etc.), and a custom axe-core rule for gesture data-attributes. Full EN + JA multilingual selector banks. Escape-hatch validator reduces false positives by detecting sibling/child buttons, aria-controls, keyboard handlers, and tabIndex alternatives. Findings with a detected escape hatch are emitted as warnings rather than violations.
 
 ---
 
@@ -71,12 +72,15 @@
 | Low | Narrow proxy or covers only one slice of the criterion. |
 | Not covered | No current Node or Python emitter outputs this SC. |
 
+Counts below align with the §2 covered totals (A 30, AA 23, AAA 6 = **59**). Confidence
+is an engineering assessment of detection fidelity, not a compliance verdict.
+
 | Level | High | Medium | Low | Covered |
 |---|---:|---:|---:|---:|
-| A | 13 | 12 | 3 | 28 |
-| AA | 11 | 10 | 1 | 22 |
+| A | 13 | 13 | 4 | 30 |
+| AA | 11 | 11 | 1 | 23 |
 | AAA | 2 | 2 | 2 | 6 |
-| **Total** | **26** | **25** | **6** | **57** |
+| **Total** | **26** | **26** | **7** | **59** |
 
 ---
 
@@ -141,7 +145,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 2.4.11 | Focus Not Obscured (Minimum) | AA | No | Yes | Covered | High | Python rendered focus-not-obscured-minimum evaluator | Focused items should not be fully hidden behind overlays. |
 | 2.4.12 | Focus Not Obscured (Enhanced) | AAA | No | Yes | Covered | High | Python rendered focus-not-obscured-enhanced evaluator | Focused items should not be obscured at all. |
 | 2.4.13 | Focus Appearance | AA | Yes | Yes | Covered | Medium | `focus-appearance.check.js` interactive snapshot plus `policy_2_4_13.py` (outline width 2 px or enclosure plus 3:1 contrast) | Focus indicator size and contrast must be strong enough. |
-| 2.5.1 | Pointer Gestures | A | Yes | No | Covered | Medium | New `src/src/audits/wcag-2.5.1/` three-layer module: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, etc.), custom axe-core rule for gesture data-attributes; escape-hatch validator reduces false positives; full EN + JA multilingual selector banks | Complex gestures need a simple pointer alternative. |
+| 2.5.1 | Pointer Gestures | A | Yes | No | Covered | Medium | New `src/audits/wcag-2.5.1/` three-layer module: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, etc.), custom axe-core rule for gesture data-attributes; escape-hatch validator reduces false positives; full EN + JA multilingual selector banks | Complex gestures need a simple pointer alternative. |
 | 2.5.2 | Pointer Cancellation | A | Yes | No | Covered | Low | `pointer-cancellation.check.js`: flags `onpointerdown` / `onmousedown` triggering navigation or submit without `pointercancel` or `preventDefault` | Pointer actions should not trigger unexpectedly on the down event. |
 | 2.5.3 | Label in Name | A | Yes | Yes | Covered | High | `label_in_name_auditor.py`: NFC-normalized casefolded visible label vs computed accessible name | Visible label text should also exist in the accessible name. |
 | 2.5.4 | Motion Actuation | A | Yes | No | Covered | Medium | `src/audits/wcag-2.5.4/`: Five-layer detection — runtime property scan, `addEventListener` monkey-patch (catches React/Vue/Angular sensor listeners), inline + external script keyword scan, library fingerprinting (`shake.js`, `gyroscape`, `hammer.js` motion mode, iOS opt-in API), and a custom axe rule with corrected `evaluate→true=pass` polarity. UI-alternative scan now uses action verbs + motion-keyword adjacency. Disable-control validator no longer flags any "Accessibility" landmark | Motion-based actions need an alternative and an off switch. |
@@ -388,7 +392,7 @@ G53, H30, F84 Covered; G91, H33 Partial. Keyword list is finite; localization En
 | F105 Failure — dragging without single-pointer alternative | Failure | Covered | `draggable="true"` elements without button/keyboard alternative flagged. |
 | F107 Failure — pointer gesture required with no alternative | Failure | Partial | Gesture data-attributes (`data-swipe`, `data-pinch`, `data-タッチ`, etc.) flagged; gesture logic inside bundled JS event listeners is invisible. |
 
-Multi-layer detection: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (window-global + script `src`), and a custom axe-core rule. Escape-hatch validator checks click handlers, keyboard handlers, aria-controls, button siblings, and tabIndex. EN + JA multilingual selector banks. See `src/src/audits/wcag-2.5.1/` for the full implementation.
+Multi-layer detection: CSS selector bank (carousels, drag-drop, map embeds, touch widgets, path-based), gesture library fingerprinting (window-global + script `src`), and a custom axe-core rule. Escape-hatch validator checks click handlers, keyboard handlers, aria-controls, button siblings, and tabIndex. EN + JA multilingual selector banks. See `src/audits/wcag-2.5.1/` for the full implementation.
 
 ### 2.5.2 Pointer Cancellation (Level A)
 
@@ -528,7 +532,7 @@ This is a one-paragraph plain-English summary for each covered SC, suitable for 
 
 **2.4.13 Focus Appearance.** Snapshots each focusable element before and after `focus()`. Requires outline-width 2 px or enclosure plus 3:1 contrast against adjacent color. Empirically failed on 6 of 7 sites in 2026-03-26 scan, the most common failure observed.
 
-**2.5.1 Pointer Gestures.** Three-layer module (`src/src/audits/wcag-2.5.1/`). Layer 1 (dom-pattern): a multilingual CSS selector bank (EN + JA) matches carousel containers, drag-and-drop wrappers, map embeds, touch-gesture widgets, and path-based interaction elements; each matched element is passed to an escape-hatch validator that checks for click handlers, keyboard event handlers, `aria-controls`, sibling/child buttons, and tab-focusable siblings. Layer 2 (library-detected): window-global variable checks and script `src` attribute scanning fingerprint Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, Embla, TouchSwipe, and ZingTouch. Layer 3 (axe-rule): a custom axe-core check runs on the serialised page DOM for elements with gesture data-attributes lacking any single-pointer alternative. Findings with a detected escape hatch are downgraded to warnings; remaining findings are violations.
+**2.5.1 Pointer Gestures.** Three-layer module (`src/audits/wcag-2.5.1/`). Layer 1 (dom-pattern): a multilingual CSS selector bank (EN + JA) matches carousel containers, drag-and-drop wrappers, map embeds, touch-gesture widgets, and path-based interaction elements; each matched element is passed to an escape-hatch validator that checks for click handlers, keyboard event handlers, `aria-controls`, sibling/child buttons, and tab-focusable siblings. Layer 2 (library-detected): window-global variable checks and script `src` attribute scanning fingerprint Hammer.js, Swiper, Interact.js, Slick, Flickity, SortableJS, GSAP Draggable, Embla, TouchSwipe, and ZingTouch. Layer 3 (axe-rule): a custom axe-core check runs on the serialised page DOM for elements with gesture data-attributes lacking any single-pointer alternative. Findings with a detected escape hatch are downgraded to warnings; remaining findings are violations.
 
 **2.5.2 Pointer Cancellation.** Finds elements with `onpointerdown` or `onmousedown` triggering navigation or submit without matching up-event; checks for `pointercancel` or `preventDefault` patterns.
 
@@ -640,11 +644,14 @@ These are the gaps **inside SCs we already cover**. They do not move the SC out 
 
 | Level | Missing count | Missing criteria |
 |---|---:|---|
-| A | 2 | 2.3.1 Three Flashes; 2.5.4 Motion Actuation |
+| A | 1 | 2.3.1 Three Flashes or Below Threshold |
 | AA | 3 | 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
 | AAA | 24 | 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.3.6, 1.4.7, 1.4.8, 1.4.9, 2.1.3, 2.2.3, 2.2.5, 2.2.6, 2.3.2, 2.3.3, 2.4.10, 2.5.5, 2.5.6, 3.1.3, 3.1.4, 3.1.5, 3.2.5, 3.3.5, 3.3.6, 3.3.9 |
+| **Total** | **28** | |
 
-_Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-description.check.js` and is excluded from the covered-count totals._
+_Corrections vs. earlier revisions: **2.5.4 Motion Actuation is COVERED** (`motion-actuation.check.js` + `src/audits/wcag-2.5.4/`) and is no longer listed as a Level A gap — the only remaining Level A gap is 2.3.1. 1.2.5 remains **partial** via `audio-description.check.js` and is counted as a gap for compliance totals._
+
+> **A concrete Node.js implementation plan for every one of these 28 missing criteria is in the new §13 below.**
 
 ## 10. Coverage Growth Opportunities (Roadmap)
 
@@ -679,13 +686,201 @@ _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-de
 
 ## 12. Test-Suite Status
 
-| Suite | Tests | Status |
+| Suite | Count | Notes |
 |---|---:|---|
-| `ka11y-python` (pytest) | 618 | 601 passing, 17 failing locally (15 due missing `nltk`, 2 assertion failures) |
-| `ka11y-node` (jest) | 233 | All passing |
-| Custom-check files | 28 | All registered and emitting |
-| Real-world site validation | 7 sites | Verified 2026-03-26 |
+| `ka11y-node` (jest) | 314 test cases / 40 spec files | Unit specs mock `page.evaluate`; fixture specs use a real Puppeteer page. Run `npm test` for the authoritative pass/fail + coverage (`junit.xml`). |
+| `ka11y-python` (pytest) | 769 `test_*` functions / 43 files | Some tests require optional heavy deps (`nltk`, spaCy models, `faster_whisper`) and skip/fail when absent; run in the `bc` conda env for the full suite. |
+| Custom-check files | 32 | 27 static + 5 interactive; all auto-discovered and emitting via `src/custom-checks/index.js`. |
+| Real-world site validation | 7 sites | Last verified 2026-03-26 (§8); re-run recommended after the next coverage sprint. |
 
 ---
 
-*Prepared for client review on 2026-04-24. Built from `code-review.md` (2026-04-23 sprint review) and the prior `COVERAGE.md` empirical baseline (2026-03-26).*
+## 13. Missing Rules — Node.js Coverage Scope
+
+This section is the actionable plan for closing the **28 remaining gaps**, written from
+the Node service's perspective. Every missing SC gets a **feasibility verdict**, what
+Node can realistically detect, and a concrete implementation outline (file to add,
+what to query in `page.evaluate`, the pass/fail/incomplete logic, and registration).
+The contract and wiring steps are the standard custom-check flow — see
+`ka11y-node/ONBOARDING.md` §5 and §7.
+
+**Verdict legend**
+
+| Verdict | Meaning |
+|---|---|
+| ✅ **Node-feasible** | Implementable now as a Node custom check with usable confidence. |
+| 🟡 **Node-partial** | Node can detect structure/presence; intent or quality needs manual review (emit `incomplete`). |
+| 🔴 **Not Node** | Needs the Python media/CV pipeline, multi-session replay, or is inherently a human judgment. |
+
+### 13.1 Summary — every missing SC and how Node addresses it
+
+| SC | Criterion | Level | Verdict | Node approach (one line) |
+|---|---|---|---|---|
+| 2.3.1 | Three Flashes or Below Threshold | A | 🔴 Not Node | Frame-differential luminance analysis of GIF/`<video>` → **Python CV pipeline**; Node only flags presence of animated media for routing. |
+| 1.2.5 | Audio Description (Prerecorded) | AA | 🟡 Partial | Track/sibling-audio presence already in `audio-description.check.js`; AD *adequacy* needs **Python media** / manual. |
+| 3.2.3 | Consistent Navigation | AA | ✅ Feasible | Cross-page: compare nav-landmark link **order** across the BFS-crawled page set. |
+| 3.2.4 | Consistent Identification | AA | ✅ Feasible | Cross-page: same component (icon/button/link) must keep a consistent accessible name. |
+| 1.2.6 | Sign Language (Prerecorded) | AAA | 🔴 Not Node | Requires video CV / human review. |
+| 1.2.7 | Extended Audio Description | AAA | 🔴 Not Node | Media analysis → Python / manual. |
+| 1.2.8 | Media Alternative (Prerecorded) | AAA | 🟡 Partial | Detect a full-text-alternative link/`<details>` near media; quality manual. |
+| 1.2.9 | Audio-only (Live) | AAA | 🔴 Not Node | Live-stream analysis → Python / manual. |
+| 1.3.6 | Identify Purpose | AAA | 🟡 Partial | Check ARIA landmark/role coverage + `autocomplete` + icon-purpose attributes. |
+| 1.4.7 | Low or No Background Audio | AAA | 🔴 Not Node | Audio-signal analysis → Python media pipeline. |
+| 1.4.8 | Visual Presentation | AAA | 🟡 Partial | CSS heuristics: justified text, line length, block width, user-override of fg/bg. |
+| 1.4.9 | Images of Text (No Exception) | AAA | 🟡 Partial | Strict variant of 1.4.5 with the "essential" exception removed. |
+| 2.1.3 | Keyboard (No Exception) | AAA | 🟡 Partial | Strict variant of 2.1.1/2.1.2 — no best-practice carve-outs; still can't simulate every widget. |
+| 2.2.3 | No Timing | AAA | 🟡 Partial | Pass only when **no** time limit exists (no meta-refresh, no session/JS timers). |
+| 2.2.5 | Re-authenticating | AAA | 🔴 Not Node | Needs stateful session replay → manual. |
+| 2.2.6 | Timeouts | AAA | 🟡 Partial | Detect a timeout/data-loss **warning** mechanism in copy/markup. |
+| 2.3.2 | Three Flashes | AAA | 🔴 Not Node | Shares 2.3.1's CV pipeline. |
+| 2.3.3 | Animation from Interactions | AAA | ✅ Feasible | Detect interaction-triggered transitions/animations + whether `prefers-reduced-motion` is honoured. |
+| 2.4.10 | Section Headings | AAA | ✅ Feasible | Flag content sections/regions lacking a heading; heading-density heuristic. |
+| 2.5.5 | Target Size (AAA) | AAA | ✅ Feasible | Re-run the target-size geometry at the **44×44** threshold. |
+| 2.5.6 | Concurrent Input Mechanisms | AAA | 🟡 Partial | Detect exclusive touch-/pointer-only handlers and `touch-action`/pointer-type gating. |
+| 3.1.3 | Unusual Words | AAA | 🟡 Partial | Detect glossary / `<dfn>` / definition-link affordances; "unusual" classification → NLP (Python). |
+| 3.1.4 | Abbreviations | AAA | ✅ Feasible | Flag abbreviation tokens lacking `<abbr title>` or first-use expansion. |
+| 3.1.5 | Reading Level | AAA | 🔴 Not Node | Readability scoring (multi-lingual) → Python NLP; Node could do EN-only Flesch as a weak proxy. |
+| 3.2.5 | Change on Request | AAA | ✅ Feasible | Flag automatic context changes (meta-refresh redirect, auto-submit, on-load popups, unwarned new windows). |
+| 3.3.5 | Help | AAA | ✅ Feasible | Detect context-sensitive help near complex forms (reuse `consistent-help` machinery). |
+| 3.3.6 | Error Prevention (All) | AAA | ✅ Feasible | Apply 3.3.4's safeguard check to **all** submission forms, not just legal/financial. |
+| 3.3.9 | Accessible Authentication (Enhanced) | AAA | ✅ Feasible | Extend 3.3.8 to also disallow object-recognition / personal-content tests. |
+
+**Net for Node:** of the 28 gaps, **~10 are net-new Node-feasible checks**, **~9 are Node-partial**
+(ship as `incomplete` heuristics), and **~9 are not Node's job** (media/CV/flash → Python, or
+inherently manual). Closing the Node-feasible + partial set would raise emitted coverage from
+**59/87 → ~78/87**; the remainder is bounded by the media/CV pipeline and genuinely manual criteria.
+
+### 13.2 Cluster A — Cross-page consistency (3.2.3, 3.2.4) · ✅ highest ROI
+
+The flat endpoint already performs a **bounded BFS** (`src/utils/crawl.js`) and audits
+multiple pages, so the per-page DOM is available — these two AA gaps are unlocked by
+**aggregating across the crawled set** rather than new page logic.
+
+- **New module:** a *post-pass* in `accessibility.service.js::analyseUrlFlat` (after the
+  per-page loop) that receives `{ pageUrl, navSignature, componentSignatures }` collected
+  per page by a lightweight `page.evaluate`.
+- **3.2.3 Consistent Navigation:** for each page capture the ordered list of links inside
+  `nav`, `[role=navigation]`, header/footer landmarks (text + href). Compare order across
+  pages that share the same nav; a **reordered** repeated nav → `fail`, identical → `pass`,
+  single page → `incomplete` ("needs ≥2 pages").
+- **3.2.4 Consistent Identification:** key repeated components by a stable signature
+  (icon class / svg use href / button purpose) and assert their **accessible name** is
+  consistent across pages; divergent names for the same component → `fail`.
+- **Gating:** both require `maxDepth ≥ 1`/`maxPages ≥ 2`; at single-page scope emit
+  `incomplete` with a clear "multi-page crawl required" reason. This also elevates
+  2.4.5 and 3.2.6 from their current single-page caveat.
+
+### 13.3 Cluster B — Form & auth extensions (3.3.6, 3.3.9, 3.3.5) · ✅ extend existing checks
+
+These reuse machinery already shipped, so they are low-risk extensions, not new engines.
+
+- **3.3.6 Error Prevention (All):** generalise `error-prevention.check.js`. Today it only
+  demands safeguards (confirm/review/undo/multi-step) for forms it classifies as
+  financial/legal/destructive. Add an **AAA mode** that requires the same safeguard for
+  **any** form that submits data; emit under SC `3.3.6` with `incomplete` when no safeguard
+  is found (AAA, so don't over-`fail`).
+- **3.3.9 Accessible Authentication (Enhanced):** extend `accessible-auth.check.js`. The
+  minimum (3.3.8) already flags CAPTCHA/cognitive tests without an alternative; the enhanced
+  variant additionally disallows **object-recognition** and **personal-content** tests
+  (e.g. "select all images with a bus", "what's your pet's name") — add keyword/widget
+  detection and emit under `3.3.9`.
+- **3.3.5 Help:** reuse `consistent-help.check.js`'s help-mechanism locator. For pages
+  containing a complex/multi-step form, require a **context-sensitive help affordance**
+  (help link, tooltip, inline instructions, contact) within the form region; absent → `incomplete`.
+
+### 13.4 Cluster C — Context-change & timing (3.2.5, 2.2.3, 2.2.6) · ✅/🟡
+
+- **3.2.5 Change on Request (AAA) — ✅** new `change-on-request.check.js`: flag automatic
+  context changes the user didn't request — `<meta http-equiv="refresh">` that redirects,
+  forms/`<select>` that auto-submit on change (overlaps 3.2.2 evidence), popups/dialogs
+  shown on `load`, and `target="_blank"` links without a new-window warning. `fail` for
+  auto-redirect/auto-submit; `incomplete` for new-window-without-warning.
+- **2.2.3 No Timing (AAA) — 🟡** new `no-timing.check.js`: `pass` only when the page exposes
+  **no** time limit — no `meta refresh`, no obvious countdown widgets, no session-timeout
+  copy. Any detected timer → `incomplete` (the SC allows essential exceptions Node can't judge).
+- **2.2.6 Timeouts (AAA) — 🟡** detect a **warning** about data-loss timeouts (copy matching
+  "session will expire", "保存されません", countdown + "extend"/"continue"). Presence → `pass`
+  hint; a session timer with no warning → `incomplete`.
+
+### 13.5 Cluster D — Strict variants of shipped checks (1.4.9, 2.1.3, 2.5.5) · ✅/🟡
+
+These are threshold/exception re-runs of existing logic — cheap to add.
+
+- **2.5.5 Target Size (AAA) — ✅** re-run the existing target-size geometry against the
+  **44×44 CSS px** minimum (vs 24×24 for 2.5.8) and emit under `2.5.5`. Share the
+  measurement code; only the threshold and exceptions differ.
+- **1.4.9 Images of Text (No Exception) (AAA) — 🟡** run `images-of-text.check.js` logic with
+  the "logotype/essential" exception **removed**: any text-bearing image → flag under `1.4.9`.
+- **2.1.3 Keyboard (No Exception) (AAA) — 🟡** a stricter pass of the keyboard checks: no
+  best-practice carve-outs, every interactive element must be operable; still bounded by what
+  can be simulated headlessly, so unverifiable widgets → `incomplete`.
+
+### 13.6 Cluster E — Structure, motion & visual presentation (2.4.10, 2.3.3, 1.4.8, 2.5.6, 1.3.6) · ✅/🟡
+
+- **2.4.10 Section Headings (AAA) — ✅** new `section-headings.check.js`: walk `section`,
+  `article`, `[role=region]`, and large visually-distinct content blocks; flag those with no
+  descendant heading (`h1`–`h6`/`[role=heading]`). Heading-density heuristic for long pages.
+- **2.3.3 Animation from Interactions (AAA) — ✅** new `animation-from-interaction.check.js`:
+  detect non-essential CSS `transition`/`animation` triggered by hover/focus/click, and check
+  whether the page **honours** `@media (prefers-reduced-motion: reduce)` (scan CSSOM for the
+  media query). Animations with no reduced-motion guard → `incomplete`.
+- **1.4.8 Visual Presentation (AAA) — 🟡** CSS heuristics: `text-align: justify` on body copy
+  (failure), line length > ~80 characters, fixed pixel text widths, and absence of
+  user-overridable colors. Multiple signals → `incomplete`.
+- **2.5.6 Concurrent Input Mechanisms (AAA) — 🟡** detect handlers wired **exclusively** to
+  touch or pointer events (no click/keyboard equivalent) and `touch-action`/`pointerType`
+  gating that locks out other input modes.
+- **1.3.6 Identify Purpose (AAA) — 🟡** check that regions/controls expose programmatic
+  purpose: ARIA landmark coverage, `autocomplete` on personal-data fields (overlaps 1.3.5),
+  and icon-purpose attributes; sparse coverage → `incomplete`.
+
+### 13.7 Cluster F — Language & text (3.1.4 ✅, 3.1.3 🟡, 3.1.5 🔴)
+
+- **3.1.4 Abbreviations (AAA) — ✅** new `abbreviations.check.js`: find abbreviation-shaped
+  tokens (all-caps runs, `A.B.C.`) in body text that are **not** wrapped in `<abbr title>`
+  and have no first-use expansion `Word (WD)`; emit `incomplete` listing the tokens.
+- **3.1.3 Unusual Words (AAA) — 🟡** Node can verify the **affordance** exists — `<dfn>`,
+  glossary links, `<abbr>`, definition lists — but cannot decide which words are "unusual";
+  that classification belongs to **Python NLP**. Ship the affordance-presence half in Node.
+- **3.1.5 Reading Level (AAA) — 🔴** readability scoring across EN/JA is a Python NLP job
+  (the roadmap already clusters this with sensory/language). A Node EN-only Flesch score
+  would be a weak, monolingual proxy — not recommended as the primary owner.
+
+### 13.8 Cluster G — Media, audio & flash (1.2.5–1.2.9, 1.4.7, 2.3.1, 2.3.2) · 🔴 route to Python/manual
+
+**These are explicitly out of Node's scope.** Node has no video/audio decoding or
+frame-sampling, and injecting that into the Puppeteer path would bloat the service and
+duplicate `ka11y-python`'s media/CV pipeline.
+
+- **2.3.1 / 2.3.2 Three Flashes** — the only remaining **Level A** gap (2.3.1) needs
+  frame-differential luminance analysis of GIFs/`<video>` over a sliding window. This is a
+  Python CV task. **Node's contribution:** detect and report the *presence* of animated GIFs
+  and autoplaying video so the Python stage knows what to sample (a routing signal, not a verdict).
+- **1.2.5 / 1.2.6 / 1.2.7 / 1.2.9, 1.4.7** — audio-description adequacy, sign-language tracks,
+  extended AD, live audio-only alternatives, and background-audio levels all require media
+  decoding/transcription → **Python media pipeline** (Deepgram path) or human review. Node
+  continues to contribute **track/transcript presence** signals only.
+- **1.2.8 Media Alternative — 🟡** the one exception: Node *can* detect a full-text alternative
+  link/`<details>` near media (presence), but equivalence is manual.
+
+### 13.9 Suggested sequencing for the Node sprint
+
+1. **Cluster A (3.2.3, 3.2.4)** — biggest compliance win (two AA criteria) and the
+   infrastructure (BFS) already exists. Start here.
+2. **Cluster B (3.3.6, 3.3.9, 3.3.5)** — pure extensions of shipped checks; low risk.
+3. **Cluster D + E quick wins (2.5.5, 2.4.10, 3.2.5, 2.3.3)** — self-contained new checks.
+4. **Cluster C + F (timing, abbreviations, partials)** — ship as `incomplete` heuristics.
+5. **Hand Cluster G to the Python team** with the routing signals Node already emits.
+
+For each new check, follow the §7 checklist in `ka11y-node/ONBOARDING.md`: export
+`{ run, SC, RULE_ID, HELP_URL, MODE, FALLBACK_DESCRIPTION }`, localize every `reason`
+(EN + JA via `renderLocalizedText`), keep tunables in `config/universal.yml`, add Jest
+specs (incl. a `ja` assertion), and update the SC↔check mapping in this document.
+
+---
+
+*Originally prepared for client review on 2026-04-24 from `code-review.md` and the
+2026-03-26 empirical baseline. **Revised 2026-06-04:** corrected custom-check count
+(28→32) and module paths (`src/audits/…`), fixed the §9 missing-rules inconsistency
+(2.5.4 is covered), refreshed test-suite figures, and added §13 (per-SC Node.js coverage
+scope for all 28 gaps).*
