@@ -1,0 +1,68 @@
+---
+title: "3.2.3 Consistent Navigation"
+description: "WCAG 3.2.3 — Navigational mechanisms that are repeated on multiple Web pages within a set of Web pages occur in the same relative order each time they occur, unless a change is initiated by the user."
+---
+
+<Info>
+  **Level AA** · **Engine:** `consistent_nav.py` (Python) · **Mode:** Pipeline / Static
+</Info>
+
+## What it checks
+
+WCAG 3.2.3 requires that repeated navigation menus, lists, or links appear in the same relative order across different pages of a site. This ensures that users, especially those with cognitive disabilities or screen reader users, can locate navigation links predictably.
+
+## How it works
+
+The Python pipeline performs a cross-page consistent navigation audit by comparing page crawls:
+
+1.  **Page Set Crawl**: Crawls up to 6 pages under the specified domain.
+2.  **Navigation Landmark Extraction**: Scans each page's HTML for `<nav>` tags, elements with `role="navigation"`, `<header>` landmarks, and common navigation classes (e.g., `menu`, `navbar`, `navigation`, `main-menu`).
+3.  **Link Text and Target Ordering**: Extracts and normalizes the ordered list of links (URLs and accessible names) from within these navigation landmarks.
+4.  **Relative Order Check**: Compares the order of identical links across pages. If links change their relative order (e.g., "Home, About, Services" becomes "About, Home, Services"), a violation is flagged.
+
+## Status Semantics
+
+*   **FAIL**: Repeated navigation links change their relative sequence across different crawled pages.
+*   **PASS**: Repeated navigation links maintain a consistent relative order across all crawled pages.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Swapped nav links | The main header menu has "Products" before "Contact" on the homepage, but swaps them to "Contact" before "Products" on the subpages. |
+| Reordered sidebar navigation | A side navigation menu lists sections in a different order depending on which section page the user is currently viewing. |
+
+## Suggested fix
+
+Ensure that global headers, footers, and sidebar navigation menus are generated from a shared template or component that preserves the order of elements consistently across all views.
+
+```html
+<!-- FAILED - Swapped order across pages -->
+<!-- Page 1: Homepage -->
+<nav>
+  <a href="/">Home</a>
+  <a href="/about">About Us</a>
+  <a href="/contact">Contact</a>
+</nav>
+
+<!-- Page 2: About page -->
+<nav>
+  <a href="/">Home</a>
+  <a href="/contact">Contact</a> <!-- Swapped relative order -->
+  <a href="/about">About Us</a>
+</nav>
+
+<!-- PASSED - Consistent relative order -->
+<nav>
+  <a href="/">Home</a>
+  <a href="/about">About Us</a>
+  <a href="/contact">Contact</a>
+</nav>
+```
+
+## Known limitations
+
+*   **Excluded URLs**: Sensitive endpoints such as `/login`, `/auth`, `/checkout`, and `/payment` are automatically excluded from the order checks to prevent false positives during active processes.
+*   **Language-Agnostic String Matching**: Relative link matching uses normalized URLs and labels. It does not perform semantic analysis of link texts across different languages unless a translation map is configured.
+
+See [Technique coverage for 3.2.3](/rules/coverage-matrix#3-2-3-consistent-navigation).

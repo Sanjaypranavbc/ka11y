@@ -1,0 +1,60 @@
+---
+title: "3.1.3 Unusual Words"
+description: "WCAG 3.1.3 — A mechanism is available for identifying specific definitions of words or phrases used in an unusual or restricted way, including idioms and jargon."
+---
+
+<Info>
+  **Level AAA** · **Engine:** `unusual_words.py` (Python) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 3.1.3 requires that words used in a specialized or unusual way, such as technical jargon, slang, idioms, or restricted terms, have a mechanism to provide their definitions. This makes content understandable for users who may not be familiar with specialized terms.
+
+## How it works
+
+The Python pipeline utilizes NLP packages and word frequency lists to analyze vocabulary rarity:
+
+1.  **Word Rarity Scoring**: Uses the `wordfreq` package (if installed) to calculate the statistical frequency of terms in the document.
+2.  **Jargon Extraction**: Runs text content through spaCy (`en_core_web_sm` model) to extract candidate noun chunks, named entities, and technical terminology.
+3.  **Explanation Affordance Verification**: Searches for inline explanations or definitions near rare terms using linguistic pattern regexes:
+    *   `X is a...`
+    *   `X refers to...`
+    *   `X means...`
+    *   `X (definition)`
+    *   `A Y called X`
+4.  **Glossary & Definition Checks**: Verifies if the page contains a `<dfn>` tag, explanatory tooltips, or links pointing to glossary / definition anchors.
+
+## Status Semantics
+
+*   **FAIL/WARN**: Rare technical jargon or unusual terms are identified on the page but lack inline explanations, glossary links, or `<dfn>` structures.
+*   **PASS**: The text contains no unusually rare words, or all detected jargon terms are accompanied by a definition mechanism.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Unexplained industry jargon | A medical site refers to "myocardial infarction" without defining it or linking to a glossary. |
+| Unexplained idioms | Using regional idioms ("spill the beans") that non-native speakers or screen reader users may not understand. |
+
+## Suggested fix
+
+Provide inline definitions for technical jargon or idioms on their first use, link to a dedicated glossary page, or use the HTML `<dfn>` element.
+
+```html
+<!-- FAILED - Unexplained technical term -->
+<p>We use a specialized obfuscation pipeline to secure user payloads.</p>
+
+<!-- PASSED - Term defined inline via parenthetical -->
+<p>We use a specialized obfuscation (a method of making data unclear or difficult to understand) pipeline to secure user payloads.</p>
+
+<!-- PASSED - Term defined via semantic HTML dfn tag -->
+<p>We use a specialized <dfn title="A method of making data unclear or difficult to understand">obfuscation</dfn> pipeline.</p>
+```
+
+## Known limitations
+
+*   **Dependency Fallback**: If the heavy `wordfreq` package is not available on the execution host, the auditor skips the automated frequency check to prevent crashes and defaults to flagging jargon candidates for manual review.
+*   **Vocabulary Scope**: Linguistic models prioritize general web-register text. Specialized terms that are common in a specific industry but rare in general speech might be flagged as jargon.
+
+See [Technique coverage for 3.1.3](/rules/coverage-matrix#3-1-3-unusual-words).

@@ -1,0 +1,68 @@
+---
+title: "3.2.4 Consistent Identification"
+description: "WCAG 3.2.4 — Components that have the same functionality within a set of Web pages are identified consistently."
+---
+
+<Info>
+  **Level AA** · **Engine:** `consistent_id.py` (Python) · **Mode:** Pipeline / Static
+</Info>
+
+## What it checks
+
+WCAG 3.2.4 requires that components performing the same function across different pages of a website are labeled and identified consistently. For example, if a search icon or a shopping cart button appears on multiple pages, it must have the same text description or accessible name everywhere.
+
+## How it works
+
+The Python pipeline performs a cross-page consistent identification audit by comparing component signatures:
+
+1.  **Page Set Crawl**: Crawls up to 10 pages under the specified domain.
+2.  **Interactive Component Extraction**: Scans all crawled pages for buttons, links, search bars, and other interactive elements.
+3.  **Function Classification**: Automatically identifies and groups elements by common functionalities based on text and DOM structure cues:
+    *   **Search**: Links/buttons with terms like `search`, `find`, `lookup`, `検索`.
+    *   **Login / Logout**: Standard auth terminology (`login`, `sign in`, `logout`, `ログイン`).
+    *   **Shopping Cart**: Cart indicators (`cart`, `checkout`, `shopping bag`, `買い物かご`).
+    *   **Social Links**: Known platforms (Twitter, Facebook, Instagram, YouTube, Line).
+    *   **Support / Help**: Chat/help links (`help`, `faq`, `contact`, `support`, `お問い合わせ`).
+4.  **Label Comparison**: Compares the accessible name or label of elements grouped under the same function. If the same functional component uses different labels (e.g. "Find" on one page and "Search" on another), a violation is flagged.
+
+## Status Semantics
+
+*   **FAIL**: Grouped functional components use different accessible names/labels across the crawled page set.
+*   **PASS**: Elements with the same functionality are labeled identically on every page they appear.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Mismatched icon buttons | A header search button is labeled "Search site" on the homepage, but labeled "Go" on subpages. |
+| Inconsistent contact labels | A footer help link is labeled "Contact Us" on some pages and "Get Help" on others. |
+
+## Suggested fix
+
+Ensure that global repeated UI components are defined in a shared layout component (e.g., in a React header/footer) and utilize the same localized label translation keys.
+
+```html
+<!-- FAILED - Inconsistent labels for search function -->
+<!-- Page 1 -->
+<button aria-label="Search site">
+  <i class="icon-search"></i>
+</button>
+
+<!-- Page 2 -->
+<button aria-label="Submit search query"> <!-- Inconsistent name -->
+  <i class="icon-search"></i>
+</button>
+
+<!-- PASSED - Consistent accessible names -->
+<!-- Page 1 & Page 2 -->
+<button aria-label="Search website">
+  <i class="icon-search"></i>
+</button>
+```
+
+## Known limitations
+
+*   **Custom Functionalities**: Non-standard or proprietary widgets (e.g., custom database selectors) might not map to predefined functional categories and can be missed.
+*   **Contextual Differences**: Small variations intended to provide context (e.g., "Login as User" vs "Login as Admin") must be carefully reviewed manually as they may trigger false positives.
+
+See [Technique coverage for 3.2.4](/rules/coverage-matrix#3-2-4-consistent-identification).

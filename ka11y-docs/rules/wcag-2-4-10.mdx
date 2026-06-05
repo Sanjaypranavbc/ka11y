@@ -1,0 +1,67 @@
+---
+title: "2.4.10 Section Headings"
+description: "WCAG 2.4.10 — Section headings are used to organize the content."
+---
+
+<Info>
+  **Level AAA** · **Engine:** `section_headings.py` (Python) · **Mode:** Static
+</Info>
+
+## What it checks
+
+WCAG 2.4.10 requires that headings are used to organize content sections. While other rules (like 1.3.1) focus on the semantic structure of headings that exist, 2.4.10 requires that headings are actually present to group blocks of content logically.
+
+## How it works
+
+The Python pipeline scans the DOM for sectioning elements and validates their headings:
+
+1.  **Section Identification**: Collects all section-like elements including `<section>`, `<article>`, `<main>`, and elements with `role="region"`, `role="main"`, or `role="article"`.
+2.  **Exemption Filter**: Excludes standard container elements that typically do not require headings, such as `<nav>`, `<header>`, `<footer>`, `<aside>`, and their equivalent ARIA roles.
+3.  **Heading Search**: Looks for heading structures associated with each section:
+    *   Direct child heading elements (`<h1>`–`<h6>`).
+    *   `aria-labelledby` attributes pointing to a valid heading element.
+    *   `aria-label` labels describing the section.
+    *   Visual styled headings (e.g., `<div>`, `<span>`, or `<p>` elements nested in the section with `font-weight >= 600` and `font-size >= 16px`).
+4.  **Vagueness Analysis**: Evaluates heading text against a list of vague placeholder words (e.g., "section", "main", "content", "untitled", "more").
+
+## Status Semantics
+
+*   **FAIL**: A non-exempt content section (like a `<section>` block) contains substantial text but lacks a header element or accessible label.
+*   **NEEDS_REVIEW**: A heading element is found, but its text is vague (e.g., "untitled" or "section 1").
+*   **PASS**: All active sections are correctly labeled with descriptive headings.
+
+## Common violations
+
+| Violation | Example |
+|-----------|---------|
+| Missing section titles | A page containing multiple `<section>` blocks with text paragraphs, but no heading tag to name each section. |
+| Vague headings | Using headings like "Section 1" or "More Info" which do not describe the actual topic of the content block. |
+
+## Suggested fix
+
+Add a semantic heading (`<h1>`-`<h6>`) at the beginning of each content section, or use `aria-labelledby` to link a section to its title.
+
+```html
+<!-- FAILED - Section lacks a heading -->
+<section>
+  <p>Our service allows automated audits of accessibility guidelines...</p>
+</section>
+
+<!-- PASSED - Section has a semantic heading -->
+<section>
+  <h2>Automated Auditing Services</h2>
+  <p>Our service allows automated audits of accessibility guidelines...</p>
+</section>
+
+<!-- PASSED - Section labeled via aria-labelledby -->
+<section aria-labelledby="sec-title">
+  <div id="sec-title" class="title-style">Auditing Capabilities</div>
+  <p>Our service allows automated audits of accessibility guidelines...</p>
+</section>
+```
+
+## Known limitations
+
+*   **Trivial Content Exclusion**: Sections with very little text content (less than 80 characters) that contain no complex structures (such as lists, tables, forms, or figures) are treated as decorative/trivial and are skipped to avoid false positives.
+
+See [Technique coverage for 2.4.10](/rules/coverage-matrix#2-4-10-section-headings).
