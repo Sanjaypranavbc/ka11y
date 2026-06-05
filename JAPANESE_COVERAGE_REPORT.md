@@ -1,8 +1,8 @@
 # Japanese Language Coverage Report
 
 > Generated: 2026-04-09  
-> Updated: 2026-04-09 (all gaps resolved)  
-> Scope: a11y-node (24 custom checks + axe-core) and a11y-python (18 WCAG rules)  
+> Updated: 2026-06-05 (coverage counts aligned with new rules)  
+> Scope: a11y-node (29 custom checks + axe-core) and a11y-python (27 WCAG rules)  
 > Target: Japanese websites (lang="ja", CJK character content, Japanese UI patterns)
 
 This report documents how well each rule handles Japanese-language websites — where keyword matching, text analysis, or language-specific patterns are needed.
@@ -46,15 +46,20 @@ This report documents how well each rule handles Japanese-language websites — 
 | 2.4.7 | Focus Visible | Node | N/A | CSS computed style comparison |
 | 2.4.8 | Location | Node | ✅ Full | パンくず, pan-kuzu, panku-zu breadcrumb class patterns added; aria-current and JSON-LD already language-agnostic |
 | 2.4.9 | Link Purpose | Node | ✅ Full | JP generic link patterns added: こちら, 詳細, もっと見る, もっと読む, 続きを読む, さらに, リンク, etc. |
+| 2.4.10 | Section Headings | Python | N/A | Section hierarchy and heading presence is DOM-structural |
 | 2.4.11/12 | Focus Not Obscured | Python | N/A | Pixel overlap check |
 | 2.4.13 | Focus Appearance | Node | N/A | Numeric contrast and pixel measurements |
 | 2.5.2 | Pointer Cancellation | Node | ✅ Full | JP action patterns added: 送信, 購入, 削除, 確認, 登録, 申込, 注文, クリック |
 | 2.5.3 | Label in Name | Python | ✅ Full | CJK substring match (no \b boundary); handles Japanese label text correctly |
 | 2.5.7 | Dragging Movements | Node | N/A | data-* attribute and DOM structure check |
 | 2.5.8 | Target Size | Python | N/A | Pixel measurement; exception detection is DOM-structural |
+| 3.1.2 | Language of Parts | Node | ✅ Full | BCP47 validation and unannotated CJK passage detection |
+| 3.1.3 | Unusual Words | Python | ❌ None | English-only spaCy and word frequency lookup; no JP sensory or jargon handling |
 | 3.1.6 | Pronunciation | Node | ✅ Full | Specifically targets `<ruby>` / `<rt>` — the standard JP pronunciation annotation |
 | 3.2.1 | On Focus | Node | N/A | URL change detection |
 | 3.2.2 | On Input | Node | N/A | URL change detection |
+| 3.2.3 | Consistent Navigation | Python | N/A | Compares navigation links order; string matching is language-agnostic |
+| 3.2.4 | Consistent Identification | Python | N/A | Compares labels of repeated components; string matching is language-agnostic |
 | 3.2.6 | Consistent Help | Node | ✅ Full | ヘルプ, サポート, お問い合わせ, よくある質問, 助け, フリーダイヤル keywords; LINE/SmartHR/Tayori widget selectors added |
 | 3.3.1 | Error Identification | Python | ⚠️ Partial | Structural ARIA check is language-agnostic; error message text is not analyzed for JP |
 | 3.3.2 | Labels or Instructions | Python | ⚠️ Partial | 必須 (required) keyword detected in placeholder heuristic; other JP instruction patterns may be missed |
@@ -171,7 +176,7 @@ These are not regressions — they are architecturally constrained and documente
 - **Usage:** Rules guide and API response messages are locale-aware
 
 **Japanese locale coverage in rules.yml:**
-All 23+ WCAG rules have Japanese translations in `locales/ja.yml`. The locale file is complete — no missing entries.
+All 27+ WCAG rules have Japanese translations in `locales/ja.yml`. The locale file is complete — no missing entries.
 
 ### a11y-python i18n
 - **`i18n/rules.yml`** — Identical canonical English catalog (shared structure)

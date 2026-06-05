@@ -10,11 +10,11 @@
 
 | Metric | Value |
 |---|---|
-| WCAG 2.2 Success Criteria emitted (combined) | **59 of 87** |
-| Overall coverage | **67.8 percent** |
+| WCAG 2.2 Success Criteria emitted (combined) | **63 of 87** |
+| Overall coverage | **72.4 percent** |
 | Level A coverage | **30 of 31** (96.8 percent) |
-| Level AA coverage | **23 of 26** (88.5 percent) |
-| Level AAA coverage | **6 of 30** (20.0 percent) |
+| Level AA coverage | **25 of 26** (96.2 percent) |
+| Level AAA coverage | **8 of 30** (26.7 percent) |
 | Robust principle coverage | **3 of 3** (100 percent) |
 | Custom Node checks shipped | 28 `*.check.js` files in `a11y-node/src/custom-checks/`; plus `src/src/audits/wcag-2.5.1/` three-layer module |
 | Python rendered evaluators | 7 (resize, reflow, text-spacing, hover-focus, orientation, focus-not-obscured min and enhanced) |
@@ -39,17 +39,17 @@
 | Level | Total SCs | Node | Python | Overlap | Combined covered | Missing | Coverage |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | A | 31 | 28 | 9 | 7 | 30 | 1 | **96.8 percent** |
-| AA | 26 | 19 | 12 | 8 | 23 | 3 | **88.5 percent** |
-| AAA | 30 | 5 | 2 | 1 | 6 | 24 | **20.0 percent** |
-| **Total** | **87** | **52** | **23** | **16** | **59** | **28** | **67.8 percent** |
+| AA | 26 | 19 | 14 | 8 | 25 | 1 | **96.2 percent** |
+| AAA | 30 | 5 | 4 | 1 | 8 | 22 | **26.7 percent** |
+| **Total** | **87** | **52** | **27** | **16** | **63** | **24** | **72.4 percent** |
 
 ## Coverage by Principle
 
 | Principle | Total SCs | Node | Python | Combined | Coverage |
 |---|---:|---:|---:|---:|---:|
 | Perceivable (1.x.x) | 29 | 15 | 13 | 19 | **65.5 percent** |
-| Operable (2.x.x) | 34 | 22 | 7 | 24 | **70.6 percent** |
-| Understandable (3.x.x) | 21 | 11 | 2 | 12 | **57.1 percent** |
+| Operable (2.x.x) | 34 | 22 | 8 | 25 | **73.5 percent** |
+| Understandable (3.x.x) | 21 | 11 | 5 | 15 | **71.4 percent** |
 | Robust (4.x.x) | 3 | 3 | 1 | 3 | **100 percent** |
 
 ## Stack Contribution Breakdown
@@ -58,7 +58,7 @@
 |---|---:|---|
 | Overlap between Node and Python | 16 | 1.1.1, 1.2.1, 1.3.1, 1.3.4, 1.4.3, 1.4.4, 1.4.5, 1.4.6, 1.4.12, 2.2.2, 2.4.7, 2.4.13, 2.5.3, 2.5.8, 3.3.2, 4.1.2 |
 | Node-only coverage | 35 | 1.2.2, 1.2.3, 1.3.2, 1.3.5, 1.4.1, 1.4.2, 2.1.1, 2.1.2, 2.1.4, 2.2.1, 2.2.4, 2.4.1, 2.4.2, 2.4.3, 2.4.4, 2.4.5, 2.4.6, 2.4.8, 2.4.9, 2.5.1, 2.5.2, 2.5.4, 2.5.7, 3.1.1, 3.1.2, 3.1.6, 3.2.1, 3.2.2, 3.2.6, 3.3.3, 3.3.4, 3.3.7, 3.3.8, 4.1.1, 4.1.3 |
-| Python-only coverage | 7 | 1.3.3, 1.4.10, 1.4.11, 1.4.13, 2.4.11, 2.4.12, 3.3.1 |
+| Python-only coverage | 11 | 1.3.3, 1.4.10, 1.4.11, 1.4.13, 2.4.10, 2.4.11, 2.4.12, 3.1.3, 3.2.3, 3.2.4, 3.3.1 |
 
 ---
 
@@ -74,9 +74,9 @@
 | Level | High | Medium | Low | Covered |
 |---|---:|---:|---:|---:|
 | A | 13 | 12 | 3 | 28 |
-| AA | 11 | 10 | 1 | 22 |
-| AAA | 2 | 2 | 2 | 6 |
-| **Total** | **26** | **25** | **6** | **57** |
+| AA | 11 | 12 | 1 | 24 |
+| AAA | 2 | 4 | 2 | 8 |
+| **Total** | **26** | **28** | **6** | **60** |
 
 ---
 
@@ -137,7 +137,7 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 2.4.7 | Focus Visible | AA | Yes | Yes | Covered | High | `focus-visible.check.js` interactive Tab snapshot plus `policy_2_4_7.py` outline / box-shadow diff | The keyboard focus indicator must be visible. |
 | 2.4.8 | Location | AAA | Yes | No | Covered | Medium | `location.check.js`: breadcrumb, sitemap, table of contents, active nav state, `aria-current` markers | Users should know where they are within the site structure. |
 | 2.4.9 | Link Purpose (Link Only) | AAA | Yes | No | Covered | Medium | `link-purpose.check.js`: flags generic accessible names ("click here", "read more") without context | Link text alone should make the purpose clear. |
-| 2.4.10 | Section Headings | AAA | No | No | Missing | Not covered | Roadmap | Sections should use helpful headings. |
+| 2.4.10 | Section Headings | AAA | No | Yes | Covered | Medium | `section_headings.py` / `analyze_wcag_2410`: verifies section hierarchy and heading presence | Sections should use helpful headings. |
 | 2.4.11 | Focus Not Obscured (Minimum) | AA | No | Yes | Covered | High | Python rendered focus-not-obscured-minimum evaluator | Focused items should not be fully hidden behind overlays. |
 | 2.4.12 | Focus Not Obscured (Enhanced) | AAA | No | Yes | Covered | High | Python rendered focus-not-obscured-enhanced evaluator | Focused items should not be obscured at all. |
 | 2.4.13 | Focus Appearance | AA | Yes | Yes | Covered | Medium | `focus-appearance.check.js` interactive snapshot plus `policy_2_4_13.py` (outline width 2 px or enclosure plus 3:1 contrast) | Focus indicator size and contrast must be strong enough. |
@@ -151,14 +151,14 @@ The table below is the full WCAG 2.2 inventory. The "How addressed" column names
 | 2.5.8 | Target Size (Minimum) | AA | Yes | Yes | Covered | High | `target_size_auditor.py`: rendered `getBoundingClientRect` vs 24x24 with inline, UA-controlled, and offset exceptions | Tap and click targets need minimum size or safe spacing. |
 | 3.1.1 | Language of Page | A | Yes | No | Covered | High | axe `html-has-lang`, `html-lang-valid` | The main page language must be declared. |
 | 3.1.2 | Language of Parts | AA | Yes | No | Covered | High | axe `valid-lang` rule | Passages in another language should be marked with that language. |
-| 3.1.3 | Unusual Words | AAA | No | No | Missing | Not covered | Roadmap | Uncommon words should be explained. |
+| 3.1.3 | Unusual Words | AAA | No | Yes | Covered | Medium | `unusual_words.py` / `analyze_wcag_313`: detects technical/unusual/jargon terms and verifies explanatory links/glossary | Uncommon words should be explained. |
 | 3.1.4 | Abbreviations | AAA | No | No | Missing | Not covered | Roadmap | Abbreviations should be explained. |
 | 3.1.5 | Reading Level | AAA | No | No | Missing | Not covered | Roadmap | Content should be readable at lower complexity or have support. |
 | 3.1.6 | Pronunciation | AAA | Yes | No | Covered | Low | `pronunciation.check.js`: `<ruby>`, `<bdi>` with `lang`, `<span lang>` containing IPA | When pronunciation affects meaning, it should be provided. |
 | 3.2.1 | On Focus | A | Yes | No | Covered | Medium | `on-focus.check.js`: `onfocus` triggering `window.open` / `location.href` / `submit()` | Focusing an element should not unexpectedly change context. |
 | 3.2.2 | On Input | A | Yes | No | Covered | Medium | `on-input.check.js`: `onchange` on `<select>` / radio / checkbox triggering navigation or submit | Changing a field should not unexpectedly submit or navigate. |
-| 3.2.3 | Consistent Navigation | AA | No | No | Missing | Not covered | Deferred: needs multi-page crawl queue | Repeated navigation should stay in a consistent order. |
-| 3.2.4 | Consistent Identification | AA | No | No | Missing | Not covered | Deferred: needs multi-page crawl queue | The same component should be identified consistently across pages. |
+| 3.2.3 | Consistent Navigation | AA | No | Yes | Covered | Medium | `consistent_nav.py` / `analyze_wcag_323`: compares navigation links order across crawled pages | Repeated navigation should stay in a consistent order. |
+| 3.2.4 | Consistent Identification | AA | No | Yes | Covered | Medium | `consistent_id.py` / `analyze_wcag_324`: compares accessible names and IDs for components across crawled pages | The same component should be identified consistently across pages. |
 | 3.2.5 | Change on Request | AAA | No | No | Missing | Not covered | Roadmap | Context changes should happen only when requested. |
 | 3.2.6 | Consistent Help | AA | Yes | No | Covered | Medium | `consistent-help.check.js`: locates help mechanism (contact, FAQ, chat, support, phone) and records position; single-page scope | Repeated help mechanisms should appear consistently. |
 | 3.3.1 | Error Identification | A | No | Yes | Covered | High | `form_auditor.py`: required plus `aria-describedby` plus role `alert` / `aria-live` | Input errors must be identified clearly. |
@@ -640,9 +640,9 @@ These are the gaps **inside SCs we already cover**. They do not move the SC out 
 
 | Level | Missing count | Missing criteria |
 |---|---:|---|
-| A | 2 | 2.3.1 Three Flashes; 2.5.4 Motion Actuation |
-| AA | 3 | 1.2.5 Audio Description (Prerecorded), 3.2.3 Consistent Navigation, 3.2.4 Consistent Identification |
-| AAA | 24 | 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.3.6, 1.4.7, 1.4.8, 1.4.9, 2.1.3, 2.2.3, 2.2.5, 2.2.6, 2.3.2, 2.3.3, 2.4.10, 2.5.5, 2.5.6, 3.1.3, 3.1.4, 3.1.5, 3.2.5, 3.3.5, 3.3.6, 3.3.9 |
+| A | 1 | 2.3.1 Three Flashes |
+| AA | 1 | 1.2.5 Audio Description (Prerecorded) |
+| AAA | 22 | 1.2.6, 1.2.7, 1.2.8, 1.2.9, 1.3.6, 1.4.7, 1.4.8, 1.4.9, 2.1.3, 2.2.3, 2.2.5, 2.2.6, 2.3.2, 2.3.3, 2.5.5, 2.5.6, 3.1.4, 3.1.5, 3.2.5, 3.3.5, 3.3.6, 3.3.9 |
 
 _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-description.check.js` and is excluded from the covered-count totals._
 
@@ -650,14 +650,14 @@ _Note: 1.2.5 Audio Description (Prerecorded) still remains partial via `audio-de
 
 | Technique family | Missing SCs unlocked | Why this is efficient |
 |---|---:|---|
-| Multi-page crawl queue | 4 (3.2.3, 3.2.4, plus elevates 2.4.5 and 3.2.6 from "single-page scope") | Largest remaining gap; explicitly deferred from 2026-04-23 sprint |
+| Multi-page crawl queue | 2 (elevates 2.4.5 and 3.2.6 from "single-page scope") | Largest remaining gap; explicitly deferred from 2026-04-23 sprint |
 | Media analysis pipeline | 10 (1.2.4 to 1.2.9, 1.4.7, 2.3.1, 2.3.2, plus tightens 1.2.5) | Single pipeline covers prerecorded alternatives, live captions, flash checks, background audio |
-| NLP enrichment (fasttext-langid plus ja_core_news_lg) | 5 (3.1.3, 3.1.4, 3.1.5, 1.3.6, plus elevates 1.3.3 quality) | Language, sensory-instruction, readability cluster naturally |
+| NLP enrichment (fasttext-langid plus ja_core_news_lg) | 4 (3.1.4, 3.1.5, 1.3.6, plus elevates 1.3.3 quality) | Language, sensory-instruction, readability cluster naturally |
 | Stateful workflow replay | 4 (3.3.5, 3.3.6, plus tightens 3.3.7 and 3.3.9) | Help, error-prevention, enhanced authentication |
 | Motion and gesture instrumentation | 2 (2.3.3, 2.5.4) | Motion-from-interaction and motion-actuation share runtime hooks; 2.5.1 shipped 2026-04-30 |
 | Session-state monitor | 3 (2.2.3, 2.2.5, 2.2.6) | Timeout and interruption handling |
 | Deeper interaction simulation | 3 (2.1.3, 2.5.6, 3.2.5) | Keyboard-no-exception, concurrent input, change-on-request |
-| Layout heuristics extension | 2 (1.4.8, 2.4.10) | Section headings and visual presentation |
+| Layout heuristics extension | 1 (1.4.8) | Visual presentation |
 | OCR exception tightening | 1 (1.4.9) | Tightens current 1.4.5 model |
 | Target-size threshold extension | 1 (2.5.5) | Existing 24x24 crawler extended to 44x44 |
 | Dynamic status-message replay | quality boost on 4.1.3 | Needed to verify that live-region updates are actually announced at runtime |

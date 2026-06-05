@@ -10,11 +10,9 @@ This file tracks Japanese-site coverage readiness for the same implemented WCAG 
 
 ## Current Rule Coverage (Implementation-Level)
 
-Coverage counts are unchanged from global implementation coverage because no new SCs were added:
-
-- `a11y-node`: **47** SCs
-- `a11y-python`: **18** SCs
-- Combined: **53 / 87** SCs (**60.9%**)
+- `a11y-node`: **52** SCs
+- `a11y-python`: **27** SCs
+- Combined: **63 / 87** SCs (**72.4%**)
 
 ## Japanese Enablement Added
 
