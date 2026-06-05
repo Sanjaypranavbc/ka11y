@@ -155,7 +155,7 @@ services:
   # ── React + nginx frontend ─────────────────────────────────────────────────
   frontend:
     build:
-      context: ./a11y-frontend-sdk
+      context: ./ka11y-frontend-sdk
       dockerfile: Dockerfile
       args:
         VITE_API_URL: "https://a11y-api.bluecaffeine.in" # http:localhost:8000/

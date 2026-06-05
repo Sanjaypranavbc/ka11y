@@ -31,7 +31,7 @@
   localized (English + Japanese) and tested.
 
 ```
-Browser / Frontend (a11y-frontend-sdk)
+Browser / Frontend (ka11y-frontend-sdk)
             │  HTTPS
             ▼
    ka11y-python  (orchestrator: crawl, snapshot, merge, report, persistence)

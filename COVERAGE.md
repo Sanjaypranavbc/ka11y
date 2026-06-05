@@ -2,7 +2,7 @@
 
 **Report date:** 2026-06-04
 **Scope:** Combined coverage across `ka11y-python` (FastAPI + Playwright + OCR + CV pipeline) and `ka11y-node` (axe-core 4.11.1 + AccessLint core + **32 custom checks**).
-**Service naming note:** the backend services are `ka11y-python` and `ka11y-node`; only the frontend SDK is named `a11y-frontend-sdk`. Engine/module names and `KA11Y_*` env vars retain the `ka11y` prefix.
+**Service naming note:** the core service and documentation directories (`ka11y-python`, `ka11y-node`, `ka11y-frontend-sdk`, and `ka11y-docs`) use the `ka11y` prefix. Only the user-facing frontend content refers to `A11y` / `a11y`.
 **Basis:** Source inspection plus 2026-04-23 sprint additions (1.2.2 captions, 1.2.3 audio description, 1.4.2 audio control, 1.1.1 / 1.4.5 background-image scan, 2.1.2 F85 modal-without-escape), 2026-04-24 node gap-closure pass (F30/F13/F81/F58/F60/G125/G126/G127/G164/F114 heuristics), 2026-04-30 2.5.1 Pointer Gestures three-layer audit module (`src/audits/wcag-2.5.1/`) and 2.5.4 Motion Actuation modularisation (`src/audits/wcag-2.5.4/`), 2026-05-05 2.5.4 hardening (axe rule polarity fix; addEventListener monkey-patch via `motion-listener-detector.js`; expanded UI-alternative + disable-control heuristics), 2026-05-07 2.5.4 UI-alternative scan now hard-requires motion-keyword adjacency (action verb labels alone are no longer enough — closes false-pass on any page with a "Submit"/"Cancel"/"Reset" button) and 1.2.4 live-captions enhancements (YouTube `cc_load_policy`, Vimeo `texttrack`, adjacent CART `[aria-live]`), and 2026-03-26 empirical validation against seven production sites.
 
 ---

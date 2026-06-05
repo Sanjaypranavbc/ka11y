@@ -97,6 +97,6 @@ The system maintains an internal event bus. As each stage (axe-core, image-crawl
 
 - `ka11y-python/`: The core FastAPI application, AI auditors, and Playwright crawlers.
 - `ka11y-node/`: Node.js microservice wrapping `axe-core` for standard DOM audits.
-- `a11y-frontend-sdk/`: A React-based UI components and hooks for integrating ka11y results.
+- `ka11y-frontend-sdk/`: A React-based UI components and hooks for integrating ka11y results.
 - `ka11y-docs/`: Comprehensive technical documentation and WCAG mapping guides.
 - `i18n/`: Multi-language support for audit findings (currently English, Japanese, German).

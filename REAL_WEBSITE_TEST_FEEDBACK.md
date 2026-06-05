@@ -56,10 +56,10 @@ Code changes behind the fix:
   - `ka11y-python/ka11y/api/v1/combined/report.py`
   - `ka11y-python/ka11y/api/v1/combined/routes.py`
 - Frontend consumption:
-  - `a11y-frontend-sdk/src/types/audit.ts`
-  - `a11y-frontend-sdk/src/hooks/useAudit.ts`
-  - `a11y-frontend-sdk/src/pages/Index.tsx`
-  - `a11y-frontend-sdk/src/components/audit/ImageVisualisationTab.tsx`
+  - `ka11y-frontend-sdk/src/types/audit.ts`
+  - `ka11y-frontend-sdk/src/hooks/useAudit.ts`
+  - `ka11y-frontend-sdk/src/pages/Index.tsx`
+  - `ka11y-frontend-sdk/src/components/audit/ImageVisualisationTab.tsx`
 
 Result:
 - “No image audit happened” no longer reproduces on these live sites
@@ -115,7 +115,7 @@ This run did not attempt a performance rewrite. The latency is documented here a
   - passed
 - `npx jest --runInBand tests/custom-checks/focus-appearance.check.test.js tests/custom-checks/meaningful-sequence.check.test.js tests/custom-checks/keyboard-trap.check.test.js`
   - `22 passed`
-- `npm run build` in `a11y-frontend-sdk`
+- `npm run build` in `ka11y-frontend-sdk`
   - passed
 - Live smoke plan completed successfully for both sites
 - Direct live JP Node recheck after restart

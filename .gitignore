@@ -32,8 +32,8 @@ reports/
 test_output/
 ka11y-node/axe_rules.json
 
-# Stale leftover husk from frontend rename (real frontend is a11y-frontend-sdk)
-ka11y-frontend-sdk/
+# Stale leftover husk from frontend rename (real frontend is ka11y-frontend-sdk)
+a11y-frontend-sdk/
 
 # Build/runtime artifacts
 node_modules/
