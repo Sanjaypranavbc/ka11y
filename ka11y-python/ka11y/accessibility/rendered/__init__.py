@@ -1,0 +1,1 @@
+"""ka11y.accessibility.rendered — rendered-layout WCAG checks via Playwright."""

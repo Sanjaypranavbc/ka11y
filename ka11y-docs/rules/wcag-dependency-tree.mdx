@@ -1,0 +1,207 @@
+---
+title: "WCAG Rule Dependency Tree"
+description: "How WCAG 2.1 / 2.2 success criteria depend on each other — a parent rule must pass before a child rule is meaningful to check."
+---
+
+Rules are organized by **what they depend on**, not just by principle number.
+A parent rule must pass before a child rule is meaningful to check.
+
+Legend:
+- `(A)` / `(AA)` / `(AAA)` — conformance level
+- `[✓]` — implemented in ka11y
+- `[—]` — not yet implemented
+- `→` — "enables checking of" / "is prerequisite for"
+
+---
+
+## Root 1 — Semantic Structure
+> Everything that conveys meaning to assistive technology depends on this foundation.
+
+```
+4.1.1  Parsing                             (A)  [✓] node-custom
+└── 4.1.2  Name, Role, Value               (A)  [✓] axe-core + py-pipeline
+    ├── 1.3.1  Info and Relationships       (A)  [✓] py-pipeline
+    │   ├── 1.3.2  Meaningful Sequence      (A)  [✓] node-custom
+    │   │   └── 2.4.6  Headings and Labels (AA)  [✓] axe-core
+    │   │       └── 2.4.10 Section Headings (AAA) [✓] py-rendered
+    │   └── 1.3.3  Sensory Characteristics  (A)  [✓] py-static (NLP)
+    ├── 3.1.1  Language of Page             (A)  [✓] axe-core
+    │   ├── 3.1.2  Language of Parts       (AA)  [✓] node-custom
+    │   └── 3.1.3  Unusual Words          (AAA)  [✓] py-static (NLP)
+    └── 4.1.3  Status Messages             (AA)  [✓] node-custom
+```
+
+**Why**: `4.1.1` ensures the DOM is valid so assistive technologies can parse it.
+`4.1.2` gives every element a name/role/value — without this, structure rules
+(`1.3.x`) and language rules (`3.1.x`) have nothing to operate on.
+
+---
+
+## Root 2 — Text Alternatives
+> Non-text content must have a text equivalent before contrast or image checks apply.
+
+```
+1.1.1  Non-text Content                    (A)  [✓] py-pipeline
+├── 1.4.5  Images of Text                 (AA)  [✓] py-pipeline + node-custom
+│   └── 1.4.3  Contrast (Minimum)         (AA)  [✓] py-pipeline (ContrastEngine)
+│       ├── 1.4.6  Contrast (Enhanced)    (AAA) [✓] py-pipeline (ContrastEngine)
+│       └── 1.4.11  Non-text Contrast     (AA)  [✓] py-pipeline (boundary check)
+└── 1.3.3  Sensory Characteristics         (A)  [✓] py-static (NLP)
+```
+
+**Why**: You can only audit contrast of text that exists. Embedded text in images
+(`1.4.5`) requires OCR to surface (`1.1.1` check), then contrast (`1.4.3`) applies.
+`1.4.6` is the stricter AAA version of the same OCR-driven text contrast pipeline.
+`1.4.11` extends contrast to image-based UI components, so `1.4.3` is its prerequisite.
+
+---
+
+## Root 3 — Keyboard & Focus Chain
+> Keyboard operability is the prerequisite for every focus-related rule.
+
+```
+2.1.1  Keyboard                            (A)  [✓] axe-core
+├── 2.1.2  No Keyboard Trap               (A)  [✓] node-interactive
+│
+└── 2.4.3  Focus Order                     (A)  [✓] axe-core
+    └── 2.4.7  Focus Visible              (AA)  [✓] py-pipeline (simulated)
+        ├── 2.4.11  Focus Not Obscured    (AA)  [✓] py-rendered   ← Minimum: not fully hidden
+        │   └── 2.4.12  Focus Not Obscured (AAA) [✓] py-rendered  ← Enhanced: no overlap at all
+        └── 2.4.13  Focus Appearance     (AAA)  [✓] py-pipeline (simulated)
+```
+
+**Why**: If an element is not keyboard reachable (`2.1.1`), checking whether its
+focus indicator is visible (`2.4.7`) or obscured (`2.4.11/12`) is meaningless.
+`2.4.3` (focus order) is a prerequisite for `2.4.7` because a logical order is
+required before you can evaluate visibility at each focus stop.
+
+---
+
+## Root 4 — Layout & Responsive Rendering
+> All rendered-layout rules share the same prerequisite: the page must render
+> correctly at the baseline viewport before any override scenario is applied.
+
+```
+(baseline render: 1280 × 720)
+├── 1.4.4  Resize Text                    (AA)  [✓] py-rendered   — 200% font scaling
+│   └── 1.4.10  Reflow                   (AA)  [✓] py-rendered   — 320 px width, no h-scroll
+│       └── 1.4.12  Text Spacing         (AA)  [✓] py-rendered   — spacing CSS override
+│
+└── 1.3.4  Orientation                   (AA)  [✓] py-rendered   — portrait ↔ landscape
+```
+
+**Why**: `1.4.4` (text scales without loss) is a prerequisite for `1.4.10` (content
+reflows at 320 px) because a page that clips text at 200% will also fail reflow.
+`1.4.12` adds a spacing override on top of the reflow scenario — if reflow already
+fails, spacing is an incremental check on the same layout.
+
+---
+
+## Root 5 — Dynamic & Time-based Content
+> Moving or time-limited content must be controllable before hover behaviour is relevant.
+
+```
+2.2.2  Pause, Stop, Hide                   (A)  [✓] py-static
+├── 2.2.1  Timing Adjustable               (A)  [—]
+└── 1.4.13  Content on Hover or Focus     (AA)  [✓] py-rendered
+            (popup must be persistent before dismissible/hoverable checks apply)
+```
+
+**Why**: `2.2.2` ensures auto-playing content can be paused. `1.4.13` checks that
+hover-triggered content (tooltips, dropdowns) is dismissible and persistent — the
+persistence requirement directly extends the spirit of `2.2.2`.
+
+---
+
+## Root 6 — Forms & Input Assistance
+> Labels must exist before error messages are meaningful.
+
+```
+3.3.2  Labels or Instructions              (A)  [✓] py-static
+├── 3.3.1  Error Identification            (A)  [✓] py-static
+│   ├── 3.3.3  Error Suggestion           (AA)  [✓] node-custom
+│   └── 3.3.4  Error Prevention           (AA)  [✓] node-custom
+│
+└── 2.5.3  Label in Name                   (A)  [✓] py-pipeline
+    └── 1.3.5  Identify Input Purpose     (AA)  [✓] axe-core
+```
+
+**Why**: A form field must have a visible label (`3.3.2`) before you can check
+whether that label matches the accessible name (`2.5.3`) or whether error
+messages identify the field (`3.3.1`). Error suggestion (`3.3.3`) and prevention
+(`3.3.4`) extend error identification.
+
+---
+
+## Root 7 — Navigation & Wayfinding
+> Page-level navigation depends on the page having a title and bypass mechanism.
+
+```
+2.4.2  Page Titled                         (A)  [✓] axe-core
+└── 2.4.1  Bypass Blocks                   (A)  [✓] axe-core
+    └── 2.4.5  Multiple Ways              (AA)  [✓] node-custom
+
+2.4.4  Link Purpose (In Context)           (A)  [✓] axe-core + node-custom
+└── 3.2.1  On Focus                        (A)  [✓] axe-core + node-custom
+    └── 3.2.2  On Input                    (A)  [✓] axe-core + node-custom
+        ├── 3.2.3  Consistent Navigation  (AA)  [✓] py-pipeline
+        ├── 3.2.4  Consistent Identification (AA)  [✓] py-pipeline
+        └── 3.2.6  Consistent Help         (A)  [✓] node-custom
+```
+
+---
+
+## Root 8 — Pointer & Motion Input
+> Pointer rules share the common prerequisite that the interaction exists.
+
+```
+2.5.1  Pointer Gestures                    (A)  [✓] node-custom
+└── 2.5.2  Pointer Cancellation            (A)  [✓] node-custom
+    └── 2.5.7  Dragging Movements         (AA)  [✓] node-custom
+
+2.5.4  Motion Actuation                    (A)  [✓] node-custom
+2.5.8  Target Size (Minimum)              (AA)  [✓] py-pipeline
+```
+
+---
+
+## Root 9 — Media
+> All media rules share the prerequisite that a media element is present.
+
+```
+(media element detected)
+├── 1.2.1  Audio-only and Video-only        (A)  [✓] py-static + node-custom
+├── 1.2.2  Captions (Prerecorded)           (A)  [✓] node-custom
+│   └── 1.2.4  Captions (Live)            (AA)  [✓] node-custom
+├── 1.2.3  Audio Description or Alt Media   (A)  [✓] node-custom
+│   └── 1.2.5  Audio Description           (AA)  [—]
+└── 1.4.2  Audio Control                    (A)  [✓] node-custom
+```
+
+---
+
+## Full dependency summary (flat view)
+
+| Rule | Depends on | Enables |
+|------|-----------|---------|
+| 4.1.1 | — | 4.1.2 |
+| 4.1.2 | 4.1.1 | 1.3.1, 3.1.1, 4.1.3 |
+| 1.3.1 | 4.1.2 | 1.3.2, 1.3.3, 2.4.6 |
+| 1.3.2 | 1.3.1 | 2.4.6 |
+| 1.3.3 | 1.3.1, 1.1.1 | — |
+| 1.1.1 | — | 1.4.5, 1.4.3, 1.3.3 |
+| 1.4.3 | 1.1.1, 1.4.5 | 1.4.6, 1.4.11 |
+| 1.4.5 | 1.1.1 | 1.4.3 |
+| 1.4.6 | 1.4.3 | — |
+| 2.1.1 | — | 2.1.2, 2.4.3 |
+| 2.4.3 | 2.1.1 | 2.4.7 |
+| 2.4.7 | 2.4.3 | 2.4.11, 2.4.12, 2.4.13 |
+| 2.4.11 | 2.4.7 | 2.4.12 |
+| 1.4.4 | baseline render | 1.4.10 |
+| 1.4.10 | 1.4.4 | 1.4.12 |
+| 3.3.2 | — | 3.3.1, 2.5.3 |
+| 3.3.1 | 3.3.2 | 3.3.3, 3.3.4 |
+| 2.5.3 | 3.3.2 | 1.3.5 |
+| 2.4.2 | — | 2.4.1 |
+| 2.4.1 | 2.4.2 | 2.4.5 |
+| 2.2.2 | — | 2.2.1, 1.4.13 |

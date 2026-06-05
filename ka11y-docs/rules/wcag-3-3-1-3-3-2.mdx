@@ -1,0 +1,235 @@
+---
+title: "3.3.1 + 3.3.2 Forms"
+description: "WCAG 3.3.1 Error Identification and 3.3.2 Labels or Instructions"
+---
+
+<Info>
+  **Level A** · Auditor: `FormAccessibilityAuditor` · File: `ka11y/accessibility/rules/forms/form_auditor.py`
+  Crawler: `AsyncFormCrawler` · File: `ka11y/crawler/forms_crawler.py`
+</Info>
+
+## 3.3.2 — Labels or Instructions
+
+Every interactive form field must have a **programmatically associated, non-empty accessible name**, plus marking for required state and (where appropriate) an `autocomplete` token for input-purpose identification.
+
+### Accessible-name resolution (W3C accname-1.2 priority)
+
+The auditor follows the W3C accname-1.2 spec when deciding whether a field is labelled:
+
+1. `aria-labelledby` — id-refs must resolve to **non-empty** text. Broken refs are not counted.
+2. `aria-label` — non-empty after `trim()`.
+3. **Native `<label for>`** or wrapping `<label>` — text of the label, excluding any nested form controls.
+4. `alt` — only for `<img>`/`<area>`/`<input type="image">`.
+5. Text content.
+6. `title` — last resort.
+
+For radio buttons and checkboxes, the enclosing `<fieldset> > <legend>` is also accepted as a group-level name when no per-input source is present.
+
+### Fields the auditor skips
+
+The auditor only evaluates *data* fields. The crawler explicitly excludes:
+
+- `disabled` inputs
+- `<input type="hidden">`, `<input type="submit">`, `<input type="reset">`, `<input type="button">`, `<input type="image">`, `<input type="file">`
+
+Submit/reset buttons get their accessible name from `value=` or text content (a different rule); they are not audited here.
+
+### Fail conditions
+
+| Violation | Reason |
+|-----------|--------|
+| No label source | Field has no `aria-labelledby` (resolving to text), no `aria-label`, no `<label>`, no fieldset/legend |
+| Placeholder only | `placeholder` is not an accessible label — it disappears on input |
+| Required without marking | Label / placeholder contains a required-indicator (`*`, `(required)`, `必須`, etc.) but the field has neither `required` nor `aria-required="true"` |
+| Personal-data field without `autocomplete` | `<input type="email/tel/password">`, or a `name`/`id` whose final segment indicates personal data (e.g. `user_email`, `confirm-password`, `given-name`), missing the attribute |
+| Personal-data field with `autocomplete="off"` | `off` defeats the WCAG 1.3.5 input-purpose token requirement |
+
+### Autocomplete heuristic
+
+A field is treated as personal-data when **all** of the following hold:
+
+- Tag is `<input>` (with type in `{text, search, url, tel, email, password, number, month, date, week, time, datetime-local}` or empty), `<select>`, or `<textarea>` — `autocomplete` is meaningless on radios, checkboxes, submit buttons, and file pickers, so they are not checked.
+- Either the `type` is `email`/`tel`/`password`, **or** the normalised `name`/`id` (camelCase → kebab-case, trailing digits stripped) matches one of:
+  - Full names: `email`, `phone`, `password`, `username`, `given-name`, `family-name`, `address`, `city`, `zip`/`postcode`, `country`, `cc-number`, `cc-csc`, `dob`/`birthday`, `ssn`, …
+  - **Trailing segment**: the final `-`/`_`-separated segment of the name is one of `email`, `mail`, `phone`, `password`, `name`, `address`, `zip`, …
+
+This is intentionally narrower than the historic substring match — `name="email_marketing_opt_in"` is **not** flagged (trailing segment is `in`), but `name="user_email"` **is** (trailing segment is `email`).
+
+```html
+<!-- Bad -->
+<input type="email" id="email" name="email">
+<input type="email" id="email" name="email" autocomplete="off">
+
+<!-- Good -->
+<input type="email" id="email" name="email" autocomplete="email">
+```
+
+### Required-indicator heuristic
+
+The auditor flags fields whose label or placeholder text contains a recognised required marker but which lack `required` / `aria-required="true"`. The pattern is anchored to avoid false positives:
+
+- `*` surrounded by whitespace / edges (e.g. `"Email *"`, `"* Required"`)
+- `(required)` / `(req)` / `(req.)`
+- `required:` / `required.` / `required,` / trailing `required` (does not match `"Required reading list"`)
+- `必須`, `obligatoire`, `obrigatório`, `pflichtfeld`, `erforderlich`, `requerido` (with appropriate boundaries)
+
+---
+
+## 3.3.1 — Error Identification
+
+When the page communicates a validation error, the error must be:
+
+1. **Programmatically associated** with the field, and
+2. **Announceable** — i.e. delivered through a live region so screen readers pick it up.
+
+The auditor only fires when there is **signal** that an error is being communicated. `aria-describedby` alone is treated as help/instructional text and **does not** trigger a violation — this was the largest historical false-positive source.
+
+### Error-association mechanisms recognised
+
+| Attribute | Treated as | Required to be a live region? |
+|---|---|---|
+| `aria-errormessage="ref-id"` | Unambiguous error association | **Yes** — target must have `role="alert"` / `role="status"` / `role="log"` or `aria-live="polite"`/`"assertive"` |
+| `aria-invalid="true"` (on the field) | Field self-reports an error state | The linked message (via `aria-errormessage` or `aria-describedby`) must exist and be a live region |
+| `aria-describedby="ref-id"` (alone) | **Help text** — no enforcement | n/a — only matters when combined with `aria-invalid="true"` |
+
+### Pass examples
+
+```html
+<!-- Pure help text — no violation -->
+<input id="pwd" type="password"
+       aria-describedby="pwd-hint">
+<span id="pwd-hint">Must be at least 8 characters.</span>
+
+<!-- Error association via aria-errormessage -->
+<input id="email" type="email" aria-required="true"
+       aria-invalid="true"
+       aria-errormessage="email-err">
+<span id="email-err" role="alert">Please enter a valid email address.</span>
+```
+
+### Fail conditions
+
+| Violation | Reason |
+|-----------|--------|
+| `aria-errormessage` target does not exist | Broken id reference — the error message cannot be located |
+| `aria-errormessage` target has no live-region semantics | Screen readers will not announce the error |
+| `aria-invalid="true"` with no associated error message | Field reports error state but nothing is linked |
+| `aria-invalid="true"` linked to a non-live element | Error exists but is not announceable |
+
+### Interactive validation pass (opt-in)
+
+A static crawl can only see errors already present in the DOM. Most real forms render errors dynamically after submit. The crawler supports an **opt-in** post-submit pass:
+
+```python
+from ka11y.crawler.forms_crawler import AsyncFormCrawler
+
+crawler = AsyncFormCrawler(
+    base_url="https://example.com/signup",
+    output_dir="/tmp/audit",
+    interactive_validation=True,
+)
+results = await crawler.crawl()
+```
+
+When enabled, the crawler:
+
+1. Captures the static snapshot.
+2. Installs a capture-phase `submit` listener on every form that calls `preventDefault()`.
+3. Triggers a submit (button click → `requestSubmit` → dispatched event, in order).
+4. Aborts every navigation / XHR / fetch via Playwright `page.route` — the validation runs purely locally, with **no network egress** to the form's `action`.
+5. Re-extracts the form snapshot to capture dynamically-injected `aria-invalid`, error text, and live regions.
+6. Falls back to the static snapshot if the post-submit field count differs (multi-step forms, page replacements).
+
+Default is `False` — opt in per request. See `tests/test_form_crawler_interactive.py` for the network-blocking assertion.
+
+---
+
+## Output
+
+**CSV file:** `audit_form_report.csv`
+
+Columns (in order):
+
+`page_url`, `form_index`, `form_id`, `field_tag`, `field_type`, `field_id`, `field_name`, `label_text`, `has_any_label`, `required`, `aria_invalid`, `wcag_3_3_1_status`, `wcag_3_3_1_violations`, `wcag_3_3_2_status`, `wcag_3_3_2_violations`, `overall_status`, `total_violations`, `error_element_id`, `error_element_role`, `error_has_role_alert`, `error_has_aria_live`, `error_element_text`, `selector`, `element_ref_id`, `frame_path`, `html_snippet`.
+
+A summary row (`── SUMMARY ──`) is appended.
+
+### Crawler-level `FormInputData` additions
+
+The `FormInputData` model exposes more error-association detail than the CSV (consumable by the combined pipeline):
+
+| Field | Meaning |
+|---|---|
+| `aria_errormessage` | Raw `aria-errormessage` attribute |
+| `errormessage_element_id` | First resolving id from `aria-errormessage` |
+| `errormessage_element_text` | Concatenated visible text of all resolved error elements |
+| `errormessage_is_live` | `True` when any resolved element has `role` in `{alert, status, log}` or `aria-live` in `{polite, assertive}` |
+| `error_is_live` | Same, derived from `aria-describedby` targets |
+| `group_legend_text` | Closest `<fieldset> > <legend>` text for radios/checkboxes |
+| `is_disabled` | The input was filtered as disabled (not audited) |
+
+### `summarize()` return keys
+
+| Key | Description |
+|-----|-------------|
+| `total_fields` | All fields audited |
+| `passed` | Fields with no violations |
+| `failed` | Fields with at least one violation |
+| `pass_rate_pct` | `passed / total × 100`, rounded to 1 dp |
+| `wcag_3_3_1_failed` | Fields failing WCAG 3.3.1 |
+| `wcag_3_3_2_failed` | Fields failing WCAG 3.3.2 |
+| `fields_missing_label` | Fields where `has_any_label` is `False` |
+| `fields_with_no_error_container` | Required fields with no `aria-describedby` / `aria-errormessage` target |
+
+## Complete compliant form example
+
+```html
+<form>
+  <fieldset>
+    <legend>Contact preferences</legend>
+    <label><input type="radio" name="contact" value="email"> Email</label>
+    <label><input type="radio" name="contact" value="sms"> SMS</label>
+  </fieldset>
+
+  <div>
+    <label for="name">Full name</label>
+    <input
+      id="name"
+      type="text"
+      name="name"
+      autocomplete="name"
+      required
+      aria-required="true"
+      aria-errormessage="name-err"
+    >
+    <span id="name-err" role="alert">Full name is required.</span>
+  </div>
+
+  <div>
+    <label for="email">Email address</label>
+    <input
+      id="email"
+      type="email"
+      name="email"
+      autocomplete="email"
+      required
+      aria-required="true"
+      aria-describedby="email-hint"
+      aria-errormessage="email-err"
+    >
+    <span id="email-hint">We never share your email.</span>
+    <span id="email-err" role="alert">Please enter a valid email address.</span>
+  </div>
+
+  <button type="submit">Submit</button>
+</form>
+```
+
+## Known limitations
+
+- **Pure-static mode misses dynamic errors** — errors that appear only after submit are not observed unless `interactive_validation=True` is set on the crawler.
+- **Custom ARIA comboboxes** — `aria-labelledby` that references a hidden or lazily-rendered node can miscompute the accessible name.
+- **`title`-only labelling** is accepted (last-resort accname source); the auditor does not warn that this is a weak technique.
+- **Help text vs. error text** is inferred from `aria-invalid` and `aria-errormessage` presence. A site that uses `aria-describedby` for an unmarked error (no `aria-invalid`, no `aria-errormessage`) will pass — this is a deliberate trade-off to eliminate the historical false-positive class.
+
+See [Technique coverage for 3.3.1 / 3.3.2](/rules/coverage-matrix#3-3-1-3-3-2-error-identification-labels-or-instructions).

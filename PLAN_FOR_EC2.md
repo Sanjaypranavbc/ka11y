@@ -1,4 +1,4 @@
-# a11y — Production EC2 Plan + Progress Bar Redesign
+# ka11y — Production EC2 Plan + Progress Bar Redesign
 
 _Scope locked with user (2026-04-24): **production on a t3.large (2 vCPU / 8 GB RAM)**, durable jobs required, full traceback in UI, SSE with replay, Tailwind or MUI frontend._
 
@@ -10,12 +10,12 @@ This document is the single source of truth for the EC2 hardening + progress-bar
 
 | File | Change |
 |---|---|
-| `a11y-python/a11y/api/v1/combined/runner.py:89` | `(el.get("image_src") or "")` — killed `None.get()` crash when `element: None` |
-| `a11y-python/a11y/api/v1/combined/runner.py:325` | Rich failure log: type, stage, file:line:fn, full traceback; same surfaced via `_jobs[...]` and `job_failed` SSE |
-| `a11y-python/a11y/text_detector/text_detector.py:593, 645` | `(det.color_info.get("foreground") or {})` — same None-vs-missing trap |
-| `a11y-python/a11y/crawler/rendered_layout_crawler.py:469` | `el_data.get("rect") or {}` |
-| `a11y-python/a11y/accessibility/rendered/snapshot_collector.py:183` | `item.get("rect") or {}` |
-| `a11y-python/Dockerfile` | `ARG INSTALL_JAPANESE=1` installs `-E japanese` + `ja_core_news_lg`; pre-downloads NLTK corpora; pre-downloads faster-whisper `base` (int8/cpu); `NLTK_DATA=/usr/share/nltk_data` baked in |
+| `ka11y-python/ka11y/api/v1/combined/runner.py:89` | `(el.get("image_src") or "")` — killed `None.get()` crash when `element: None` |
+| `ka11y-python/ka11y/api/v1/combined/runner.py:325` | Rich failure log: type, stage, file:line:fn, full traceback; same surfaced via `_jobs[...]` and `job_failed` SSE |
+| `ka11y-python/ka11y/text_detector/text_detector.py:593, 645` | `(det.color_info.get("foreground") or {})` — same None-vs-missing trap |
+| `ka11y-python/ka11y/crawler/rendered_layout_crawler.py:469` | `el_data.get("rect") or {}` |
+| `ka11y-python/ka11y/accessibility/rendered/snapshot_collector.py:183` | `item.get("rect") or {}` |
+| `ka11y-python/Dockerfile` | `ARG INSTALL_JAPANESE=1` installs `-E japanese` + `ja_core_news_lg`; pre-downloads NLTK corpora; pre-downloads faster-whisper `base` (int8/cpu); `NLTK_DATA=/usr/share/nltk_data` baked in |
 | `docker-compose.yml` | passes `INSTALL_JAPANESE` build arg to the python service |
 
 **Impact**: the combined audit job that failed mid-post-processing now completes; EC2 cold start no longer stalls on NLTK/HF/spaCy downloads.
@@ -54,10 +54,10 @@ Ordered by blast radius.
 
 | # | File | Risk | Fix |
 |---|---|---|---|
-| 1 | `a11y/crawler/crawler.py:194, 375, 376` | CONFIG keys may be missing/None | `(CONFIG.get("crawler") or {}).get(...)` — YAML loader returns `{}` today but one PR away from regressing |
-| 2 | `a11y/crawler/context_factory.py:11` | same | same idiom |
-| 3 | `a11y/i18n/loader.py:67, 74` | locale overrides | guard |
-| 4 | `a11y/api/v1/combined/routes.py:338` `current.get("result", {})` | when job is running/failed, `result` may be absent or `None` | `current.get("result") or {}` |
+| 1 | `ka11y/crawler/crawler.py:194, 375, 376` | CONFIG keys may be missing/None | `(CONFIG.get("crawler") or {}).get(...)` — YAML loader returns `{}` today but one PR away from regressing |
+| 2 | `ka11y/crawler/context_factory.py:11` | same | same idiom |
+| 3 | `ka11y/i18n/loader.py:67, 74` | locale overrides | guard |
+| 4 | `ka11y/api/v1/combined/routes.py:338` `current.get("result", {})` | when job is running/failed, `result` may be absent or `None` | `current.get("result") or {}` |
 | 5 | Unchecked `.strip()` on possibly-None `record.get(...)` throughout converters | frontend shows empty reasons | add a helper `_s(x) = (x or "").strip()` |
 
 Each is a one-line change. Bundle into a single "defensive-None cleanup" PR before the progress-bar work so the progress SSE never dies mid-stream from an unrelated converter crash.
@@ -66,7 +66,7 @@ Each is a one-line change. Bundle into a single "defensive-None cleanup" PR befo
 
 ## 3. Durable job store (replaces in-memory `_jobs`)
 
-**Current**: `a11y/api/v1/combined/store.py` → module-global `_jobs: dict`. Lost on restart. Blocks horizontal scale.
+**Current**: `ka11y/api/v1/combined/store.py` → module-global `_jobs: dict`. Lost on restart. Blocks horizontal scale.
 
 **Requirement from user**: "I don't want audit lost; make the python container perform better." Interpreted as: job state must survive a container restart AND restart must not re-execute an in-flight job blindly.
 
@@ -311,12 +311,12 @@ function AuditProgress({ jobId, onDone }: Props) {
 ### 4.7 Files that change
 
 Backend:
-- `a11y/api/v1/combined/stage_events.py` — add `index/total/weight`, add `stage_progress`, add `job_plan`.
-- `a11y/api/v1/combined/store.py` — SQLite migration, stage_events table, `append_event()`, `events_since(job_id, seq)`.
-- `a11y/api/v1/combined/routes.py:322` — SSE endpoint: honor `Last-Event-ID`, replay from DB, heartbeat loop.
-- `a11y/api/v1/combined/runner.py` — emit `job_plan` at top; pass `index/total` into `_stage_*` helpers.
-- `a11y/api/v1/combined/stages.py` — plumb progress callbacks into `_stage_image_audit`, `_stage_rendered_layout_audit`, `_stage_media_audit`.
-- `a11y/api/v1/combined/constants.py` — `STAGE_WEIGHTS` dict.
+- `ka11y/api/v1/combined/stage_events.py` — add `index/total/weight`, add `stage_progress`, add `job_plan`.
+- `ka11y/api/v1/combined/store.py` — SQLite migration, stage_events table, `append_event()`, `events_since(job_id, seq)`.
+- `ka11y/api/v1/combined/routes.py:322` — SSE endpoint: honor `Last-Event-ID`, replay from DB, heartbeat loop.
+- `ka11y/api/v1/combined/runner.py` — emit `job_plan` at top; pass `index/total` into `_stage_*` helpers.
+- `ka11y/api/v1/combined/stages.py` — plumb progress callbacks into `_stage_image_audit`, `_stage_rendered_layout_audit`, `_stage_media_audit`.
+- `ka11y/api/v1/combined/constants.py` — `STAGE_WEIGHTS` dict.
 
 Frontend:
 - new `apps/web/src/components/AuditProgress.tsx`
@@ -354,7 +354,7 @@ caddy:
 ```
 `Caddyfile`:
 ```
-a11y.example.com {
+ka11y.example.com {
   reverse_proxy /api/* python:8000
   reverse_proxy /* frontend:80
   encode zstd gzip
@@ -380,7 +380,7 @@ a11y.example.com {
 1. ✅ `None.get()` fixes — already landed.
 2. ✅ Dockerfile pre-downloads — already landed.
 3. **Defensive-None cleanup PR** (section 2 table). Small, safe.
-4. **SQLite-backed job store** (section 3). Behind a feature flag env `A11Y_STORE=sqlite|memory` so we can flip back.
+4. **SQLite-backed job store** (section 3). Behind a feature flag env `KA11Y_STORE=sqlite|memory` so we can flip back.
 5. **Event schema upgrade** (section 4.1–4.2): `job_plan`, `index/total/weight`, `stage_progress` types — backend only, no UI yet. Existing frontend ignores unknown events.
 6. **`stage_progress` emission** from `image_audit` first (highest value), then rendered_layout, then media.
 7. **Replay buffer + heartbeat** on the SSE route (section 4.4–4.5).
