@@ -81,7 +81,7 @@ async function run(page, context = {}) {
         ruleId: RULE_ID,
         description: FALLBACK_DESCRIPTION,
         impact: null,
-        status: 'pass',
+        status: 'not_applicable',
         reason: _t(sharedContext, 'No <video> elements found on this page.', 'このページには <video> 要素はありません。'),
         helpUrl: HELP_URL,
       }],

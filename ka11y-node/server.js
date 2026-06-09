@@ -27,11 +27,15 @@ const HealthController        = require('./src/controllers/health.controller');
 const AccessibilityController = require('./src/controllers/accessibility.controller');
 const RulesController         = require('./src/controllers/rules.controller');
 const RulesGuideController    = require('./src/controllers/rulesGuide.controller');
+const WcagController          = require('./src/controllers/wcag.controller');
+const WcagService             = require('./src/services/wcag.service');
 
 const healthController        = new HealthController(logger);
 const accessibilityController = new AccessibilityController(accessibilityService, logger);
 const rulesController         = new RulesController(rulesService, logger);
 const rulesGuideController    = new RulesGuideController(logger);
+const wcagService             = new WcagService(accessibilityService, logger);
+const wcagController          = new WcagController(wcagService, logger);
 
 // 4. Express Setup
 const app = express();
@@ -86,6 +90,7 @@ app.post(`${API_V1}/analyze-accessibility`, (req, res) => accessibilityControlle
 app.post(`${API_V1}/analyse-url`,           (req, res) => accessibilityController.analyseUrl(req, res));
 app.post(`${API_V1}/analyse-url-flat`,      (req, res) => accessibilityController.analyseUrlFlat(req, res));
 app.post(`${API_V1}/rules/:successCriteriaId/analyse-url`, (req, res) => accessibilityController.analyseRuleUrl(req, res));
+app.post(`${API_V1}/analyse-url-wcag`,                    (req, res) => wcagController.analyseUrl(req, res));
 app.get( `${API_V1}/rules`,                 (req, res) => rulesController.getRules(req, res));
 app.get( `${API_V1}/rules/wcag`,            (req, res) => {
   const lang = (req.query.lang || 'en').replace(/[^a-z-]/gi, '').toLowerCase().slice(0, 10);

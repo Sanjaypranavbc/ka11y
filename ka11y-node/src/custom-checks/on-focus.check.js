@@ -40,19 +40,25 @@ async function run(page, context = {}) {
   page.on('framenavigated', onNavigated);
 
   try {
-    // Inject SPA navigation detection
+    // Inject SPA navigation detection — track pathname changes only, not
+    // analytics replaceState calls that only mutate query params/hash.
     await page.evaluate(() => {
       const stateKey = '__navChanges';
       if (window[stateKey] && window[stateKey].originalPush) return;
       const originalPush = history.pushState;
       const originalReplace = history.replaceState;
-      const state = { count: 0, originalPush, originalReplace };
-      state.count = 0;
-      history.pushState = function (...args) { state.count++; return originalPush.apply(history, args); };
-      history.replaceState = function (...args) { state.count++; return originalReplace.apply(history, args); };
-      state.onPop = () => { state.count++; };
+      const state = { pathnameChanged: false, originalPush, originalReplace };
+      const checkPathname = (url) => {
+        if (!url) return;
+        try {
+          const next = new URL(String(url), location.href).pathname;
+          if (next !== location.pathname) state.pathnameChanged = true;
+        } catch (_) {}
+      };
+      history.pushState = function (s, t, url) { checkPathname(url); return originalPush.apply(history, arguments); };
+      history.replaceState = function (s, t, url) { checkPathname(url); return originalReplace.apply(history, arguments); };
+      state.onPop = () => { state.pathnameChanged = true; };
       window.addEventListener('popstate', state.onPop);
-      window.addEventListener('hashchange', state.onPop);
       window[stateKey] = state;
     });
 
@@ -96,19 +102,19 @@ async function run(page, context = {}) {
       await new Promise(r => setTimeout(r, SETTLE_MS));
 
       const currentUrl = page.url();
-      const spaNavChanged = await page.evaluate(() => {
+      const spaPathnameChanged = await page.evaluate(() => {
         const s = window.__navChanges;
-        return !!(s && s.count > 0);
+        return !!(s && s.pathnameChanged);
       }).catch(() => false);
 
-      if (navigationDetected || spaNavChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
+      if (navigationDetected || spaPathnameChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
         violations.push(focusable[i]);
         break; // page may have navigated; unsafe to continue testing other elements
       }
       
-      // Reset SPA counter
+      // Reset SPA pathname flag
       await page.evaluate(() => {
-        if (window.__navChanges) window.__navChanges.count = 0;
+        if (window.__navChanges) window.__navChanges.pathnameChanged = false;
       }).catch(() => {});
     }
   } finally {

@@ -112,7 +112,7 @@ async function run(page, context = {}) {
         ruleId: RULE_ID,
         description: FALLBACK_DESCRIPTION,
         impact: null,
-        status: 'pass',
+        status: 'not_applicable',
         reason: _t(sharedContext, 'No <video> elements or known embedded video players found on this page.', 'このページには <video> 要素や既知の埋め込み動画プレイヤーはありません。'),
         helpUrl: HELP_URL,
       }],

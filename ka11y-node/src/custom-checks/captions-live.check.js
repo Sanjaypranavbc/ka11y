@@ -208,7 +208,7 @@ async function run(page, context = {}) {
         ruleId: RULE_ID,
         description: FALLBACK_DESCRIPTION,
         impact: null,
-        status: 'pass',
+        status: 'not_applicable',
         reason: _t(sharedContext, 'No live audio/video streams detected on this page.', 'このページではライブの音声/動画ストリームは検出されませんでした。'),
         helpUrl: HELP_URL,
       }],

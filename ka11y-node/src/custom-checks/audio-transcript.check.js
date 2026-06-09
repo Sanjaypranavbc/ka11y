@@ -138,7 +138,7 @@ async function run(page, context = {}) {
         ruleId: RULE_ID,
         description: 'Audio-only prerecorded content must have a text alternative',
         impact: null,
-        status: 'pass',
+        status: 'not_applicable',
         reason: renderReasonTemplate(
           'audio_transcript',
           'no_audio',
