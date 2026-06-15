@@ -60,6 +60,8 @@ const STATIC_ORDER = [
   'custom-text-spacing',
   'custom-pause-stop-hide',
   'custom-section-headings',
+  'custom-non-text-contrast',
+  'custom-headings-and-labels',
 ];
 
 const INTERACTIVE_ORDER = [
@@ -69,6 +71,7 @@ const INTERACTIVE_ORDER = [
   'custom-focus-appearance',
   'custom-focus-not-obscured',
   'custom-focus-not-obscured-enhanced',
+  'custom-focus-order',
   'custom-on-focus',
   'custom-on-input',
   'custom-keyboard-trap',
@@ -138,6 +141,9 @@ const LEGACY_META = {
   'custom-section-headings':                    { mode: 'static',      fallbackDescription: 'Section headings must be used to organize content' },
   'custom-focus-not-obscured':                  { mode: 'interactive', fallbackDescription: 'When a UI component receives keyboard focus, it must not be entirely hidden by author-created content' },
   'custom-focus-not-obscured-enhanced':         { mode: 'interactive', fallbackDescription: 'When a UI component receives keyboard focus, it must not be hidden at all by author-created content' },
+  'custom-focus-order':                         { mode: 'interactive', fallbackDescription: 'Navigation order must preserve meaning — focusable elements must follow a logical sequence' },
+  'custom-non-text-contrast':                   { mode: 'static',      fallbackDescription: 'UI components and graphical objects must have a contrast ratio of at least 3:1 against adjacent colours' },
+  'custom-headings-and-labels':                 { mode: 'static',      fallbackDescription: 'Headings and labels must describe topic or purpose — empty or non-descriptive labels fail this criterion' },
 };
 
 function _ruleIdFromFile(file) {

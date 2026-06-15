@@ -474,9 +474,14 @@ class AccessibilityService {
       _installSsrfInterceptor(page);
 
       this._logger.info(`Navigating to ${url}...`);
-      // Use networkidle2 for live URL analysis so SPA and lazy JS content is loaded
-      // before axe/custom checks run.
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs });
+      // 'load' fires once the DOM + subresources are ready, which is enough for
+      // axe + custom checks. 'networkidle2' waits for analytics/ad network
+      // connections to go quiet — that can add 10–30 s on news/SPA sites with
+      // no benefit to the accessibility scan. A short fixed settle gives JS
+      // frameworks time to finish their first render without the open-ended wait.
+      const POST_NAV_SETTLE_MS = parseInt(process.env.POST_NAV_SETTLE_MS) || 1000;
+      await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
+      await new Promise(r => setTimeout(r, POST_NAV_SETTLE_MS));
 
       this._logger.info('Injecting axe-core...');
       await this._injectAxe(page);
@@ -712,9 +717,13 @@ class AccessibilityService {
       _installSsrfInterceptor(page);
 
       this._logger.info(`[flat] Navigating to ${url}...`);
+      const POST_NAV_SETTLE_MS = parseInt(process.env.POST_NAV_SETTLE_MS) || 1000;
       await timings.time(
         { stage: 'axe_core', sub_stage: 'page_navigate', page_url: url, depth },
-        () => page.goto(url, { waitUntil: 'networkidle2', timeout: timeoutMs }),
+        async () => {
+          await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
+          await new Promise(r => setTimeout(r, POST_NAV_SETTLE_MS));
+        },
       );
 
       // Stamp findings with the URL the page actually resolved to, not the URL

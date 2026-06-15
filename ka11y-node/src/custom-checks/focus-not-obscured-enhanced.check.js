@@ -8,8 +8,8 @@ const HELP_URL = 'https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured
 const MODE = 'interactive';
 const FALLBACK_DESCRIPTION = 'When a UI component receives keyboard focus, it must not be hidden at all by author-created content';
 
-const MAX_TABS = 15;
-const SETTLE_MS = 80;
+const MAX_TABS = 10;
+const SETTLE_MS = 40;
 
 function _t(ctx, en, ja, params = {}) {
   return renderLocalizedText({ en, ja }, params, ctx, en);
