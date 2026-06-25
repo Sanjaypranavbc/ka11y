@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const dns = require('dns').promises;
 const { mapResults, mapResultsFlat, mapCustomResultsFlat, axeRuleIdsForCriteria } = require('../utils/axeResultMapper');
+const { generateReport } = require('../utils/reportGenerator');
 const { StageTimings, NULL_TIMINGS } = require('../utils/stageTimings');
 const { runAll, runStaticChecks, mergeWithAxe } = require('../custom-checks/index');
 const { boundedBfs } = require('../utils/crawl');
@@ -353,6 +354,131 @@ class AccessibilityService {
   }
 
   /**
+   * Enriches axe violation/incomplete nodes with bounding box (and optionally
+   * a per-element screenshot) while the Puppeteer page is still open.
+   * Mutates nodes in-place so mapResults / mapResultsFlat can pass the data through.
+   *
+   * @param {object} page         - Puppeteer page
+   * @param {object} axeResults   - Raw axe.run() output
+   * @param {object} [opts]
+   * @param {boolean} [opts.screenshots=false] - Also capture element screenshots
+   */
+  async _enrichViolationNodes(page, axeResults, opts = {}) {
+    const withScreenshots = opts.screenshots === true;
+    const categories = [
+      ...(axeResults.violations || []),
+      ...(axeResults.incomplete || []),
+    ];
+    for (const rule of categories) {
+      for (const node of (rule.nodes || [])) {
+        const selector = Array.isArray(node.target) ? node.target[0] : null;
+        if (!selector || typeof selector !== 'string') continue;
+        try {
+          const el = await page.$(selector);
+          if (!el) continue;
+          node.boundingBox = await el.boundingBox();
+          if (withScreenshots && node.boundingBox) {
+            node.screenshot = await el.screenshot({ encoding: 'base64' }).catch(() => null);
+          }
+        } catch (e) {
+          this._logger.debug(`Element enrichment skipped for "${selector}": ${e.message}`);
+        }
+      }
+    }
+    return axeResults;
+  }
+
+  /**
+   * Analyses a URL and returns a self-contained HTML accessibility report.
+   * Captures the full page screenshot and per-element screenshots for all violations.
+   *
+   * @param {string} url   - Fully-qualified URL
+   * @param {string} lang  - Output language code
+   * @returns {Promise<string>} Self-contained HTML report
+   */
+  async analyseUrlReport(url, lang = 'en') {
+    const { timeoutMs, runOnly } = this._config.axe;
+    let browser = null;
+
+    await _assertPublicUrl(url);
+    await this._acquireSlot();
+    try {
+      this._logger.info(`[report] Launching browser for URL: ${url}`);
+      browser = await this._puppeteer.launch({
+        headless: this._config.browser.headless,
+        executablePath: this._config.browser.executablePath,
+        ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
+        args: this._config.browser.args,
+      });
+
+      const page = await browser.newPage();
+      page.setDefaultTimeout(timeoutMs);
+      page.setDefaultNavigationTimeout(timeoutMs);
+      await page.setBypassCSP(true);
+      await page.setViewport({ width: 1280, height: 800 });
+
+      page.on('console', (msg) => {
+        if (msg.type() === 'error') {
+          this._logger.debug(`[report] Browser console [error]: ${msg.text()}`);
+        }
+      });
+
+      await page.setRequestInterception(true);
+      _installSsrfInterceptor(page);
+
+      const POST_NAV_SETTLE_MS = parseInt(process.env.POST_NAV_SETTLE_MS) || 1000;
+      this._logger.info(`[report] Navigating to ${url}...`);
+      await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
+      await new Promise(r => setTimeout(r, POST_NAV_SETTLE_MS));
+
+      const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth).catch(() => 1280);
+
+      await this._injectAxe(page, '[report]');
+      await this._configureAxeLocale(page, lang, '[report]');
+
+      const axeResults = await this._runAxeWithTimeout(page, runOnly, timeoutMs, '[report]');
+      this._logger.info(
+        `[report] axe.run() — violations: ${axeResults.violations.length}, ` +
+        `incomplete: ${(axeResults.incomplete || []).length}`
+      );
+
+      await this._enrichViolationNodes(page, axeResults, { screenshots: true });
+
+      const pageScreenshot = await page.screenshot({ encoding: 'base64', fullPage: true }).catch((e) => {
+        this._logger.warn(`[report] Full-page screenshot failed: ${e.message}`);
+        return null;
+      });
+
+      let customResults = [];
+      try {
+        customResults = await runAll(page, { lang });
+      } catch (e) {
+        this._logger.warn(`[report] Custom checks failed: ${e.message}`);
+      }
+
+      const findings = [
+        ...mapResultsFlat(axeResults, url, lang),
+        ...mapCustomResultsFlat(customResults, url, lang),
+      ];
+
+      const ORDER = { fail: 0, needs_review: 1, pass: 2 };
+      findings.sort((a, b) => (ORDER[a.status] ?? 3) - (ORDER[b.status] ?? 3));
+
+      this._logger.info(`[report] Generating HTML report — ${findings.length} finding(s).`);
+      return generateReport({ url, findings, pageScreenshot, pageWidth });
+    } catch (err) {
+      this._logger.error(`[report] Error: ${err.message}`);
+      throw err;
+    } finally {
+      if (browser) {
+        await browser.close();
+        this._logger.info('[report] Browser closed.');
+      }
+      this._releaseSlot();
+    }
+  }
+
+  /**
    * Analyzes HTML for accessibility issues.
    *
    * @param {string} html               - Raw HTML string
@@ -479,9 +605,20 @@ class AccessibilityService {
       // connections to go quiet — that can add 10–30 s on news/SPA sites with
       // no benefit to the accessibility scan. A short fixed settle gives JS
       // frameworks time to finish their first render without the open-ended wait.
-      const POST_NAV_SETTLE_MS = parseInt(process.env.POST_NAV_SETTLE_MS) || 1000;
+      const POST_NAV_SETTLE_MS = parseInt(process.env.POST_NAV_SETTLE_MS) || 500;
       await page.goto(url, { waitUntil: 'load', timeout: timeoutMs });
-      await new Promise(r => setTimeout(r, POST_NAV_SETTLE_MS));
+      // Wait for DOM to stop mutating (SPA hydration), capped at POST_NAV_SETTLE_MS
+      await page.waitForFunction((maxMs) => new Promise(resolve => {
+        const deadline = Date.now() + maxMs;
+        let timer;
+        const obs = new MutationObserver(() => {
+          clearTimeout(timer);
+          if (Date.now() >= deadline) { obs.disconnect(); resolve(true); return; }
+          timer = setTimeout(() => { obs.disconnect(); resolve(true); }, 150);
+        });
+        obs.observe(document.body || document.documentElement, { childList: true, subtree: true, attributes: true });
+        timer = setTimeout(() => { obs.disconnect(); resolve(true); }, Math.min(150, maxMs));
+      }), { timeout: POST_NAV_SETTLE_MS + 500 }, POST_NAV_SETTLE_MS).catch(() => {});
 
       this._logger.info('Injecting axe-core...');
       await this._injectAxe(page);

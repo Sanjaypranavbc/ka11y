@@ -2,6 +2,7 @@
 
 const { SsrfGuardError } = require('../services/accessibility.service');
 const { StageTimings } = require('../utils/stageTimings');
+const { generateReport } = require('../utils/reportGenerator');
 
 /**
  * AccessibilityController — SRP: handles HTTP requests for accessibility analysis.
@@ -416,6 +417,42 @@ class AccessibilityController {
         error:   'URL accessibility analysis failed',
         message: err.message,
       });
+    }
+  }
+
+  async analyseUrlReport(req, res) {
+    const { url, lang = 'en' } = req.body;
+
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'url field is required and must be a valid http or https URL' });
+    }
+
+    let parsedUrl;
+    try { parsedUrl = new URL(url); } catch {
+      return res.status(400).json({ error: 'url field must be a valid http or https URL' });
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return res.status(400).json({ error: 'url field must be a valid http or https URL' });
+    }
+
+    try {
+      const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
+      this._logger.info(`analyseUrlReport start url=${url} lang=${safeLang}`);
+      const html = await this._service.analyseUrlReport(url, safeLang);
+      this._logger.info('analyseUrlReport done');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+    } catch (err) {
+      if (err instanceof SsrfGuardError) {
+        this._logger.warn(`analyseUrlReport rejected (SSRF guard): ${err.message}`);
+        return res.status(400).json({ error: 'Invalid URL', message: err.message });
+      }
+      if (/ERR_CERT_/i.test(err.message || '')) {
+        this._logger.warn(`analyseUrlReport rejected (TLS): ${err.message}`);
+        return res.status(502).json({ error: 'Target TLS certificate invalid', message: err.message });
+      }
+      this._logger.error(`analyseUrlReport failed: ${err.message}`);
+      res.status(500).json({ error: 'Report generation failed', message: err.message });
     }
   }
 

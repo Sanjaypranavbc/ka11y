@@ -123,12 +123,30 @@ function cleanReason(summary, fallback) {
  * @param {string|null} criteriaFilter - Optional WCAG SC ID to filter by (e.g. "1.1.1")
  * @returns {Array<object>} Structured rule results sorted by severity
  */
+function _buildElementsFromNodes(nodes, limit = 10) {
+  const result = [];
+  for (const n of (nodes || []).slice(0, limit)) {
+    const html = n.html ? n.html.slice(0, 600) : null;
+    const target = Array.isArray(n.target) ? n.target : [];
+    const selector = typeof target[0] === 'string' ? target[0] : null;
+    if (!html && !selector) continue;
+    result.push({
+      html,
+      selector,
+      target,
+      bounding_box: n.boundingBox || null,
+    });
+  }
+  return result;
+}
+
 function mapResults(axeResults, criteriaFilter = null) {
   const resultMap = {};
 
   // violations → status: "fail"
   for (const rule of axeResults.violations) {
     const node = rule.nodes[0] || {};
+    const elements = _buildElementsFromNodes(rule.nodes);
     resultMap[rule.id] = {
       ruleId:      rule.id,
       description: rule.description,
@@ -136,6 +154,7 @@ function mapResults(axeResults, criteriaFilter = null) {
       status:      'fail',
       reason:      cleanReason(node.failureSummary, rule.help),
       helpUrl:     rule.helpUrl,
+      elements:    elements.length ? elements : undefined,
       _criteriaId: _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags),
     };
   }
@@ -158,6 +177,7 @@ function mapResults(axeResults, criteriaFilter = null) {
   for (const rule of axeResults.incomplete || []) {
     if (resultMap[rule.id]) continue;
     const node = rule.nodes[0] || {};
+    const elements = _buildElementsFromNodes(rule.nodes);
     resultMap[rule.id] = {
       ruleId:      rule.id,
       description: rule.description,
@@ -165,6 +185,7 @@ function mapResults(axeResults, criteriaFilter = null) {
       status:      'incomplete',
       reason:      cleanReason(node.failureSummary, rule.help),
       helpUrl:     rule.helpUrl,
+      elements:    elements.length ? elements : undefined,
       _criteriaId: _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags),
     };
   }
@@ -450,7 +471,9 @@ function mapResultsFlat(axeResults, pageUrl = null, lang = 'en', criteriaFilter 
       tag,
       target,
       selector,
-      page_url: pageUrl,
+      page_url:     pageUrl,
+      bounding_box: (node && node.boundingBox) || null,
+      screenshot:   (node && node.screenshot)   || null,
     };
   }
 

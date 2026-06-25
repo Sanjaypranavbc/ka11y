@@ -75,6 +75,26 @@ class WcagService {
 
   // ── private helpers ───────────────────────────────────────────────────────
 
+  _normalizeElement(el) {
+    if (!el || typeof el !== 'object') return null;
+    // Custom checks may use `snippet` or `outerHTML` instead of `html`
+    const html = el.html || el.snippet || el.outerHTML || null;
+    // Custom checks may use a plain string `target` like "div#main"
+    const rawTarget = el.target;
+    const targetArr = Array.isArray(rawTarget) ? rawTarget
+      : (typeof rawTarget === 'string' && rawTarget ? [rawTarget] : []);
+    const selector = el.selector
+      || (typeof rawTarget === 'string' ? rawTarget : null)
+      || (targetArr[0] || null);
+    return {
+      html,
+      selector,
+      target:       targetArr,
+      bounding_box: el.boundingBox || el.bounding_box || null,
+      detail:       el.detail || null,
+    };
+  }
+
   _buildCriterion(manifest, rules) {
     const base = {
       sc:        manifest.sc,
@@ -102,11 +122,12 @@ class WcagService {
       status:   this._deriveStatus(rules),
       sources:  this._deriveSources(rules),
       findings: rules.map(r => ({
-        ruleId:  r.ruleId,
-        status:  r.status,
-        impact:  r.impact  || null,
-        reason:  r.reason  || '',
-        helpUrl: r.helpUrl || null,
+        ruleId:   r.ruleId,
+        status:   r.status,
+        impact:   r.impact    || null,
+        reason:   r.reason    || '',
+        helpUrl:  r.helpUrl   || null,
+        elements: (r.elements || []).map(el => this._normalizeElement(el)).filter(Boolean),
       })),
     };
   }

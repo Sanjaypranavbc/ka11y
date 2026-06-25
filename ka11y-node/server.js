@@ -88,6 +88,7 @@ const API_V1 = '/api/v1';
 app.get( `${API_V1}/health`,                (req, res) => healthController.getHealth(req, res));
 app.post(`${API_V1}/analyze-accessibility`, (req, res) => accessibilityController.analyze(req, res));
 app.post(`${API_V1}/analyse-url`,           (req, res) => accessibilityController.analyseUrl(req, res));
+app.post(`${API_V1}/analyse-url/report`,    (req, res) => accessibilityController.analyseUrlReport(req, res));
 app.post(`${API_V1}/analyse-url-flat`,      (req, res) => accessibilityController.analyseUrlFlat(req, res));
 app.post(`${API_V1}/rules/:successCriteriaId/analyse-url`, (req, res) => accessibilityController.analyseRuleUrl(req, res));
 app.post(`${API_V1}/analyse-url-wcag`,                    (req, res) => wcagController.analyseUrl(req, res));
