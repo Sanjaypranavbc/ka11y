@@ -111,6 +111,25 @@ async def execute_rule_test(request: TestRuleRequest):
             raise HTTPException(status_code=500, detail=f"Axe-Core error: {exc}")
         return {"status": "success", "findings": findings}
 
+    if request.rule_id in ("wcag_3_2_3", "wcag_3_2_4", "wcag_3_1_3", "wcag_2_4_10"):
+        node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
+        sc = request.rule_id.replace("wcag_", "").replace("_", ".")
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{node_base_url}/api/v1/rules/{sc}/analyse-url",
+                    json={"url": url_str, "lang": request.language},
+                    timeout=120.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                findings = data.get("results") or []
+        except Exception as exc:
+            logger.exception(f"Node proxy for rule {sc} failed")
+            raise HTTPException(status_code=500, detail=f"Node service error for rule {sc}: {exc}")
+        return {"status": "success", "findings": findings}
+
     # ------------------------------------------------------------------
     # Python-based rules
     # ------------------------------------------------------------------
