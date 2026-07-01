@@ -164,7 +164,7 @@ services:
     restart: unless-stopped
 
     depends_on:
-      python:
+      node:
         condition: service_healthy
 
     networks:

@@ -1,7 +1,7 @@
 # =============================================================================
 # a11y-frontend — React (Vite) → nginx reverse proxy
 # Stage 1: build the React app
-# Stage 2: serve with nginx + proxy /api/ → python:8000
+# Stage 2: serve with nginx + proxy /api/ → node:3000
 # =============================================================================
 
 # ── Stage 1: Node builder ─────────────────────────────────────────────────────
@@ -24,7 +24,6 @@ RUN echo "==> [2/4] Source copied"
 RUN echo "==> [3/4] Building React app (vite build)..." && \
     npm run build && \
     echo "==> [3/4] Build complete ($(du -sh dist | cut -f1))"
-
 
 # ── Stage 2: nginx runtime ────────────────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime
