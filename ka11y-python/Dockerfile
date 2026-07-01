@@ -40,7 +40,12 @@ ENV POETRY_NO_INTERACTION=1 \
 # network fails the build loudly instead of shipping a half-populated image.
 ARG INSTALL_JAPANESE=1
 RUN if [ "$INSTALL_JAPANESE" = "1" ]; then \
-        poetry install --only main -E japanese && \
+        for attempt in 1 2 3 4 5; do \
+            poetry install --only main -E japanese && break; \
+            if [ $attempt -eq 5 ]; then exit 1; fi; \
+            echo "[poetry] install attempt $attempt failed; retrying in $((attempt * 10))s..."; \
+            sleep $((attempt * 10)); \
+        done && \
         for attempt in 1 2 3 4 5; do \
             python -m spacy download ja_core_news_lg && break; \
             echo "[spacy] ja_core_news_lg download attempt $attempt failed; retrying in $((attempt * 10))s..."; \
@@ -48,7 +53,12 @@ RUN if [ "$INSTALL_JAPANESE" = "1" ]; then \
         done && \
         python -c "import spacy; spacy.load('ja_core_news_lg')"; \
     else \
-        poetry install --only main; \
+        for attempt in 1 2 3 4 5; do \
+            poetry install --only main && break; \
+            if [ $attempt -eq 5 ]; then exit 1; fi; \
+            echo "[poetry] install attempt $attempt failed; retrying in $((attempt * 10))s..."; \
+            sleep $((attempt * 10)); \
+        done; \
     fi
 
 # English spaCy model (~12MB) — loaded by sensory_auditor + quality_engine

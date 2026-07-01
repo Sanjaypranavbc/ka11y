@@ -233,10 +233,14 @@ class AccessibilityService {
       await injectWithTimeout(async () => {
         await page.addScriptTag({ path: this._axeCorePath });
 
-        // Workaround for Node.js "exports" restrictions in @accesslint/core package.json
-        const alDir = require('path').dirname(require.resolve('@accesslint/core'));
-        const alIifePath = require('path').join(alDir, 'index.iife.js');
-        await page.addScriptTag({ path: alIifePath });
+        // @accesslint/core is optional — skip gracefully if not installed
+        try {
+          const alDir = require('path').dirname(require.resolve('@accesslint/core'));
+          const alIifePath = require('path').join(alDir, 'index.iife.js');
+          await page.addScriptTag({ path: alIifePath });
+        } catch (alErr) {
+          this._logger.debug(`${prefix}@accesslint/core not available, skipping: ${alErr.message}`);
+        }
 
         await waitForAxe();
       });
