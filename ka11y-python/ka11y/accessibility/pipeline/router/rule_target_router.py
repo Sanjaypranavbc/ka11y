@@ -26,7 +26,7 @@ class RuleTargetRouter:
         )
 
         if is_interactive:
-            rules.extend(["1.3.1", "1.4.11", "2.4.7", "2.4.13", "2.5.3", "2.5.8"])
+            rules.append("1.4.11")
 
         # 3. Text Elements (including inputs with values/labels)
         if (

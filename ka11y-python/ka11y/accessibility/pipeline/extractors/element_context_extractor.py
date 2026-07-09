@@ -32,7 +32,6 @@ def _resolve_accessible_name(data: Dict[str, Any]) -> Optional[AccessibleName]:
     input_type = ""
     snippet = data.get("html_snippet") or ""
     if tag == "input":
-        # cheap inline lookup; matches policy_1_3_1's parser
         import re as _re
         m = _re.search(r"\btype\s*=\s*[\"']?([A-Za-z]+)", snippet)
         input_type = m.group(1).lower() if m else "text"

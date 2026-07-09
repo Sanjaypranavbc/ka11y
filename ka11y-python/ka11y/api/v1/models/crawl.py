@@ -6,7 +6,6 @@ class CrawlRequest(BaseModel):
     max_depth: int = Field(default=0, ge=0, le=5)
     run_ocr: bool = True
     run_audit: bool = True
-    run_form_audit: bool = True
 
 
 class CrawlResponse(BaseModel):
@@ -19,7 +18,3 @@ class CrawlResponse(BaseModel):
     ocr_dir: str | None = None
     audit_report: str | None = None
     audit_summary: dict | None = None
-    # Forms pipeline
-    total_fields: int = 0
-    form_audit_report: str | None = None
-    form_audit_summary: dict | None = None

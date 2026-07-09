@@ -13,10 +13,6 @@ from ka11y.api.v1.combined import (
     _make_finding,
     _build_report,
     _alt_text_to_findings,
-    _form_to_findings,
-    _lin_to_findings,
-    _psh_to_findings,
-    _ts_to_findings,
 )
 from ka11y.api.v1.combined.findings import _lang_ctx
 
@@ -415,89 +411,3 @@ class TestConverterHelpers:
         finally:
             _lang_ctx.reset(token)
 
-    # ── _form_to_findings ─────────────────────────────────────────────────
-
-    def test_form_failed_3_3_1_emits_fail(self):
-        records = [{
-            "wcag_3_3_1_status": "FAILED", "wcag_3_3_1_violations": "no aria-describedby",
-            "wcag_3_3_2_status": "PASSED", "html_snippet": "<input>", "tag": "INPUT",
-        }]
-        findings = _form_to_findings(records, self.PAGE)
-        fail_scs = [f["wcag_sc"] for f in findings if f["status"] == "fail"]
-        assert "3.3.1" in fail_scs
-
-    def test_form_failed_3_3_2_emits_fail(self):
-        records = [{
-            "wcag_3_3_1_status": "PASSED",
-            "wcag_3_3_2_status": "FAILED", "wcag_3_3_2_violations": "no label",
-            "html_snippet": "<input>", "tag": "INPUT",
-        }]
-        findings = _form_to_findings(records, self.PAGE)
-        fail_scs = [f["wcag_sc"] for f in findings if f["status"] == "fail"]
-        assert "3.3.2" in fail_scs
-
-    def test_form_both_passed_emits_two_pass_findings(self):
-        records = [{
-            "wcag_3_3_1_status": "PASSED",
-            "wcag_3_3_2_status": "PASSED",
-            "html_snippet": "<input>", "tag": "INPUT",
-        }]
-        findings = _form_to_findings(records, self.PAGE)
-        assert all(f["status"] == "pass" for f in findings)
-        assert len(findings) == 2
-
-    # ── _lin_to_findings ──────────────────────────────────────────────────
-
-    def test_lin_failed_emits_fail(self):
-        records = [{"wcag_2_5_3_status": "FAILED", "wcag_2_5_3_violation": "mismatch", "html_snippet": "<button>", "tag": "BUTTON"}]
-        findings = _lin_to_findings(records, self.PAGE)
-        assert len(findings) == 1
-        assert findings[0]["status"] == "fail"
-
-    def test_lin_na_status_skipped(self):
-        records = [{"wcag_2_5_3_status": "N/A"}]
-        findings = _lin_to_findings(records, self.PAGE)
-        assert findings == []
-
-    def test_lin_passed_emits_pass(self):
-        records = [{"wcag_2_5_3_status": "PASSED", "html_snippet": "<button>", "tag": "BUTTON"}]
-        findings = _lin_to_findings(records, self.PAGE)
-        assert findings[0]["status"] == "pass"
-
-    # ── _psh_to_findings ──────────────────────────────────────────────────
-
-    def test_psh_failed_emits_fail(self):
-        records = [{"wcag_2_2_2_status": "FAILED", "wcag_2_2_2_violation": "no pause", "html_snippet": "<video>", "tag": "VIDEO"}]
-        findings = _psh_to_findings(records, self.PAGE)
-        assert findings[0]["status"] == "fail"
-
-    def test_psh_passed_emits_pass(self):
-        records = [{"wcag_2_2_2_status": "PASSED", "html_snippet": "<video>", "tag": "VIDEO"}]
-        findings = _psh_to_findings(records, self.PAGE)
-        assert findings[0]["status"] == "pass"
-
-    # ── _ts_to_findings ───────────────────────────────────────────────────
-
-    def test_ts_failed_emits_fail(self):
-        records = [{
-            "wcag_2_5_8_status": "FAILED", "wcag_2_5_8_violation": "too small",
-            "html_snippet": "<button>", "tag": "BUTTON",
-            "rendered_width_px": 16, "rendered_height_px": 16,
-        }]
-        findings = _ts_to_findings(records, self.PAGE)
-        assert findings[0]["status"] == "fail"
-
-    def test_ts_na_status_skipped(self):
-        records = [{"wcag_2_5_8_status": "N/A"}]
-        findings = _ts_to_findings(records, self.PAGE)
-        assert findings == []
-
-    def test_ts_passed_emits_pass_with_size_in_reason(self):
-        records = [{
-            "wcag_2_5_8_status": "PASSED",
-            "html_snippet": "<button>", "tag": "BUTTON",
-            "rendered_width_px": 44, "rendered_height_px": 44,
-        }]
-        findings = _ts_to_findings(records, self.PAGE)
-        assert findings[0]["status"] == "pass"
-        assert "44" in findings[0]["reason"]

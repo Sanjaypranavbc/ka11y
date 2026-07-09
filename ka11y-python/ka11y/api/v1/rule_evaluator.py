@@ -24,14 +24,7 @@ from pydantic import BaseModel, HttpUrl
 from ka11y.api.v1.combined.stages import (
     _load_universal_snapshot,
     _stage_media_audit_universal,
-    _stage_form_audit_universal,
-    _stage_label_in_name_universal,
-    _stage_pause_stop_hide_universal,
-    _stage_target_size_universal,
-    _stage_text_spacing_universal,
-    _stage_sensory_audit_universal,
     _stage_image_audit,
-    _stage_rendered_layout_audit,
     _call_node_flat,
 )
 from ka11y.api.v1.combined.store import _jobs
@@ -141,106 +134,26 @@ async def execute_rule_test(request: TestRuleRequest):
             out_path = Path(tmp_dir)
 
             # ── Universal-snapshot rules ──────────────────────────────
-            if request.rule_id in (
-                "wcag_1_2_1", "wcag_1_2_2",
-                "wcag_3_3_1", "wcag_3_3_2", "wcag_1_3_1_form",
-                "wcag_2_5_3", "wcag_2_2_2", "wcag_2_5_8",
-                "wcag_1_4_12", "wcag_1_3_3",
-            ):
+            if request.rule_id in ("wcag_1_2_1", "wcag_1_2_2"):
                 snapshot = await get_or_create_snapshot(out_path)
                 future: asyncio.Future = asyncio.Future()
                 future.set_result(snapshot)
 
-                if request.rule_id in ("wcag_1_2_1", "wcag_1_2_2"):
-                    findings = await asyncio.wait_for(
-                        _stage_media_audit_universal(
-                            url=url_str,
-                            output_dir=out_path,
-                            run_media_audit=request.rule_id == "wcag_1_2_1",
-                            run_captions_audit=request.rule_id == "wcag_1_2_2",
-                            job_id=JOB_ID,
-                            snapshot_task=future,
-                            lang=request.language,
-                        ),
-                        timeout=60.0,
-                    )
-                    # Filter output to match the individually requested rule (e.g. '1.2.1')
-                    target_wcag_num = request.rule_id.replace("wcag_", "").replace("_", ".")
-                    findings = [f for f in findings if target_wcag_num in f.get("wcag_sc", "")]
-
-                elif request.rule_id in ("wcag_3_3_1", "wcag_3_3_2", "wcag_1_3_1_form"):
-                    findings = await asyncio.wait_for(
-                        _stage_form_audit_universal(
-                            url=url_str,
-                            output_dir=out_path,
-                            run_form_audit=True,
-                            job_id=JOB_ID,
-                            snapshot_task=future,
-                        ),
-                        timeout=60.0,
-                    )
-                    findings = [f for f in findings if f.get("rule_id") == request.rule_id]
-
-                elif request.rule_id == "wcag_2_5_3":
-                    findings = await asyncio.wait_for(
-                        _stage_label_in_name_universal(
-                            url=url_str,
-                            output_dir=out_path,
-                            run_label_in_name_audit=True,
-                            job_id=JOB_ID,
-                            snapshot_task=future,
-                        ),
-                        timeout=60.0,
-                    )
-
-                elif request.rule_id == "wcag_2_2_2":
-                    findings = await asyncio.wait_for(
-                        _stage_pause_stop_hide_universal(
-                            url=url_str,
-                            output_dir=out_path,
-                            run_pause_stop_hide_audit=True,
-                            job_id=JOB_ID,
-                            snapshot_task=future,
-                        ),
-                        timeout=60.0,
-                    )
-
-                elif request.rule_id == "wcag_2_5_8":
-                    findings = await asyncio.wait_for(
-                        _stage_target_size_universal(
-                            url=url_str,
-                            output_dir=out_path,
-                            run_target_size_audit=True,
-                            job_id=JOB_ID,
-                            snapshot_task=future,
-                        ),
-                        timeout=60.0,
-                    )
-
-                elif request.rule_id == "wcag_1_4_12":
-                    findings = await asyncio.wait_for(
-                        _stage_text_spacing_universal(
-                            url=url_str,
-                            output_dir=out_path,
-                            run_text_spacing_audit=True,
-                            job_id=JOB_ID,
-                            snapshot_task=future,
-                        ),
-                        timeout=60.0,
-                    )
-
-                elif request.rule_id == "wcag_1_3_3":
-                    findings = await asyncio.wait_for(
-                        _stage_sensory_audit_universal(
-                            url=url_str,
-                            output_dir=out_path,
-                            run_sensory_audit=True,
-                            job_id=JOB_ID,
-                            lang=request.language,
-                            snapshot_task=future,
-                        ),
-                        timeout=60.0,
-                    )
+                findings = await asyncio.wait_for(
+                    _stage_media_audit_universal(
+                        url=url_str,
+                        output_dir=out_path,
+                        run_media_audit=request.rule_id == "wcag_1_2_1",
+                        run_captions_audit=request.rule_id == "wcag_1_2_2",
+                        job_id=JOB_ID,
+                        snapshot_task=future,
+                        lang=request.language,
+                    ),
+                    timeout=60.0,
+                )
+                # Filter output to match the individually requested rule (e.g. '1.2.1')
+                target_wcag_num = request.rule_id.replace("wcag_", "").replace("_", ".")
+                findings = [f for f in findings if target_wcag_num in f.get("wcag_sc", "")]
 
             # ── Image-crawler rules (1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 4.1.2) ──
             elif request.rule_id in ("wcag_1_1_1", "wcag_1_4_5", "wcag_1_4_11", "wcag_4_1_2", "wcag_1_4_3", "wcag_1_4_6"):
@@ -262,24 +175,6 @@ async def execute_rule_test(request: TestRuleRequest):
                 # Filter to only the requested rule's findings
                 target_sc = request.rule_id.replace("wcag_", "").replace("_", ".")
                 findings = [f for f in all_findings if f.get("wcag_sc") == target_sc]
-
-            # ── Layout-crawler rules (1.4.4, 1.4.10, 1.3.4, 1.4.13, 2.4.11, 2.4.12) ──
-            elif request.rule_id in ("wcag_1_4_4", "wcag_1_4_10", "wcag_1_3_4", "wcag_1_4_13", "wcag_2_4_11", "wcag_2_4_12"):
-                findings = await asyncio.wait_for(
-                    _stage_rendered_layout_audit(
-                        url=url_str,
-                        output_dir=out_path,
-                        run_resize_text_audit=request.rule_id == "wcag_1_4_4",
-                        run_reflow_audit=request.rule_id == "wcag_1_4_10",
-                        run_text_spacing_audit=False,
-                        run_orientation_audit=request.rule_id == "wcag_1_3_4",
-                        run_hover_focus_content_audit=request.rule_id == "wcag_1_4_13",
-                        run_focus_not_obscured_min_audit=request.rule_id == "wcag_2_4_11",
-                        run_focus_not_obscured_enh_audit=request.rule_id == "wcag_2_4_12",
-                        job_id=JOB_ID,
-                    ),
-                    timeout=120.0,
-                )
 
             else:
                 raise HTTPException(

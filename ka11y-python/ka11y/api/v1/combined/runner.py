@@ -275,38 +275,10 @@ async def _run_job_body(
             active_stages.append("axe_core")
         if payload.run_ocr or payload.run_image_audit:
             active_stages.append("image_audit")
-        # pipeline stage always runs; it handles 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
+        # pipeline stage always runs; it handles 1.1.1 / 1.4.5 / contrast
         active_stages.append("pipeline")
-        if payload.run_form_audit:
-            active_stages.append("form_audit")
-        if payload.run_pause_stop_hide_audit:
-            active_stages.append("pause_stop_hide")
-        if payload.run_text_spacing_audit:
-            active_stages.append("text_spacing")
-        if any(
-            (
-                payload.run_resize_text_audit,
-                payload.run_reflow_audit,
-                payload.run_text_spacing_audit,
-                payload.run_orientation_audit,
-                payload.run_hover_focus_content_audit,
-                payload.run_focus_not_obscured_min_audit,
-                payload.run_focus_not_obscured_enh_audit,
-            )
-        ):
-            active_stages.append("rendered_layout_audit")
-        if payload.run_media_audit:
+        if payload.run_media_audit or payload.run_captions_audit:
             active_stages.append("media_audit")
-        if payload.run_sensory_audit:
-            active_stages.append("sensory_audit")
-        if payload.run_consistent_navigation_audit:
-            active_stages.append("consistent_navigation")
-        if payload.run_consistent_id_audit:
-            active_stages.append("consistent_identification")
-        if payload.run_unusual_words_audit:
-            active_stages.append("unusual_words")
-        if payload.run_section_headings_audit:
-            active_stages.append("section_headings")
         emit_job_plan(job_id, active_stages)
 
         # Fire axe-core and all Python stages concurrently.
@@ -376,30 +348,14 @@ async def _run_job_body(
                 max_depth=payload.max_depth,
                 run_ocr=payload.run_ocr,
                 run_image_audit=payload.run_image_audit,
-                run_form_audit=payload.run_form_audit,
-                run_label_in_name_audit=payload.run_label_in_name_audit,
                 run_media_audit=payload.run_media_audit,
                 run_captions_audit=payload.run_captions_audit,
-                run_pause_stop_hide_audit=payload.run_pause_stop_hide_audit,
-                run_target_size_audit=payload.run_target_size_audit,
-                run_resize_text_audit=payload.run_resize_text_audit,
-                run_reflow_audit=payload.run_reflow_audit,
-                run_text_spacing_audit=payload.run_text_spacing_audit,
-                run_orientation_audit=payload.run_orientation_audit,
-                run_hover_focus_content_audit=payload.run_hover_focus_content_audit,
-                run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
-                run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
-                run_sensory_audit=payload.run_sensory_audit,
                 lang=resolved_lang,
                 job_id=job_id,
                 step_logger=step_logger,
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
                 success_criteria_id=payload.success_criteria_id,
-                run_consistent_navigation_audit=payload.run_consistent_navigation_audit,
-                run_consistent_id_audit=payload.run_consistent_id_audit,
-                run_unusual_words_audit=payload.run_unusual_words_audit,
-                run_section_headings_audit=payload.run_section_headings_audit,
                 snapshot_urls_event=snapshot_urls_event,
                 snapshot_urls_container=snapshot_urls_container,
             )

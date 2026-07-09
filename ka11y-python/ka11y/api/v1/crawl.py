@@ -6,8 +6,6 @@ FastAPI route for the full ka11y pipeline:
   STEP 1  Crawl        — AsyncImageCrawler              (injected)
   STEP 2  OCR          — OCRPreprocessing + TextClassification  (optional)
   STEP 3  Image Audit  — AltTextAccessibilityAuditor            (injected, optional)
-  STEP 4  Form Crawl   — AsyncFormCrawler                       (injected)
-  STEP 5  Form Audit   — FormAccessibilityAuditor               (injected, optional)
 
 All steps share the same output_dir so every artefact lands in one directory.
 Dependencies are provided via FastAPI's DI system (see api/dependencies.py).
@@ -15,11 +13,9 @@ Dependencies are provided via FastAPI's DI system (see api/dependencies.py).
 
 import traceback
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from ka11y.accessibility.rules.forms.form_auditor import FormAccessibilityAuditor
 from ka11y.text_detector.text_detector import OCRPreprocessing, TextClassification
 from ka11y.config.logger import setup_logger
 
@@ -28,8 +24,6 @@ from ka11y.api.v1.dependencies import (
     get_output_dir,
     get_image_crawler,
     get_alt_text_auditor,
-    get_form_crawler,
-    get_form_auditor,
 )
 from ka11y.api.v1.models.crawl import CrawlRequest, CrawlResponse
 
@@ -50,8 +44,6 @@ async def run_crawler(
     output_dir = get_output_dir(url, config)
     crawler = get_image_crawler(url, max_depth, output_dir)
     auditor = get_alt_text_auditor()
-    form_crawler = get_form_crawler(url, max_depth, output_dir)
-    form_auditor = get_form_auditor(output_dir)
 
     logger.info("=" * 60)
     logger.info("KA11Y PIPELINE START")
@@ -60,16 +52,12 @@ async def run_crawler(
     logger.info(f"  output_dir     : {output_dir}")
     logger.info(f"  run_ocr        : {payload.run_ocr}")
     logger.info(f"  run_audit      : {payload.run_audit}")
-    logger.info(f"  run_form_audit : {payload.run_form_audit}")
     logger.info("=" * 60)
 
     ocr_results = []
     ocr_dir = None
     audit_report = None
     audit_summary = None
-    form_inputs = []
-    form_audit_report = None
-    form_audit_summary = None
 
     try:
         # ── STEP 1 : Image Crawl ─────────────────────────────────────────
@@ -154,40 +142,6 @@ async def run_crawler(
                 f"{failed} failed"
             )
 
-        # ── STEP 4 : Form Crawl ───────────────────────────────────────────
-        logger.info("\nSTEP 4: FORM CRAWL")
-        logger.info("-" * 40)
-
-        # Sync the form crawler's output dir to the image crawler's actual dir
-        # so both pipelines write artefacts to the same folder.
-        form_crawler.output_dir = Path(crawler.output_dir)
-        form_crawler.output_dir.mkdir(parents=True, exist_ok=True)
-
-        form_inputs = await form_crawler.crawl()
-        form_crawler.save_raw_json()
-
-        logger.info(f"Form crawl complete — {len(form_inputs)} input fields found")
-
-        # ── STEP 5 : Form Accessibility Audit (optional) ─────────────────
-        if payload.run_form_audit:
-            logger.info("\nSTEP 5: WCAG 3.3.1 / 3.3.2 FORM AUDIT")
-            logger.info("-" * 40)
-
-            # Keep the form auditor's output path in sync with the shared dir
-            form_auditor.output_dir = Path(crawler.output_dir)
-            form_auditor.output_dir.mkdir(parents=True, exist_ok=True)
-
-            form_records = form_auditor.generate_audit_report(form_inputs=form_inputs)
-            form_audit_report = f"{crawler.output_dir}/audit_form_report.csv"
-            form_audit_summary = FormAccessibilityAuditor.summarize(form_records)
-
-            logger.info(
-                f"Form audit complete — {form_audit_summary['total_fields']} fields, "
-                f"{form_audit_summary['passed']} passed "
-                f"({form_audit_summary['pass_rate_pct']}%), "
-                f"{form_audit_summary['failed']} failed"
-            )
-
         logger.info("\nPIPELINE COMPLETE")
         logger.info("=" * 60)
 
@@ -200,9 +154,6 @@ async def run_crawler(
             ocr_dir=ocr_dir,
             audit_report=audit_report,
             audit_summary=audit_summary,
-            total_fields=len(form_inputs),
-            form_audit_report=form_audit_report,
-            form_audit_summary=form_audit_summary,
         )
 
     except Exception as e:

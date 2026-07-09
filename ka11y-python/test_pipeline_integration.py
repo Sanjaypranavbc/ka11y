@@ -8,7 +8,6 @@ async def main():
         url="https://example.com",
         job_id="test_job",
         run_image_audit=True,
-        run_label_in_name_audit=True
     )
     print(f"SUCCESS: Pipeline executed without crashing.")
     print(f"Total findings returned: {len(findings)}")

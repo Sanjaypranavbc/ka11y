@@ -4,19 +4,13 @@ from ka11y.crawler.browser_pool import leased_context
 
 from .extractors.element_context_extractor import ElementContextExtractor
 from .extractors.semantic_relationship_engine import SemanticRelationshipEngine
-from .runners.interaction_state_runner import InteractionStateRunner
 from .models import ElementContext
 from .decisions.engine import DecisionEngine
 from .decisions.policies.policy_1_1_1 import Policy111
-from .decisions.policies.policy_1_3_1 import Policy131
 from .decisions.policies.policy_1_4_3 import Policy143
 from .decisions.policies.policy_1_4_5 import Policy145
 from .decisions.policies.policy_1_4_6 import Policy146
 from .decisions.policies.policy_1_4_11 import Policy1411
-from .decisions.policies.policy_2_4_7 import Policy247
-from .decisions.policies.policy_2_4_13 import Policy2413
-from .decisions.policies.policy_2_5_3 import Policy253
-from .decisions.policies.policy_2_5_8 import Policy258
 from .formatters.evidence_formatter import EvidenceFormatter
 from ka11y.config.logger import setup_logger
 
@@ -26,9 +20,6 @@ logger = setup_logger(name="KAC", tag="pipeline_stage")
 def _build_policies(
     *,
     run_image_audit: bool,
-    run_label_in_name_audit: bool,
-    run_target_size_audit: bool,
-    run_focus_audit: bool,
     run_contrast_audit: bool,
 ) -> Dict[str, Any]:
     """Pick the active WCAG policies for this run.
@@ -40,14 +31,6 @@ def _build_policies(
     if run_image_audit:
         policies["1.1.1"] = Policy111()
         policies["1.4.5"] = Policy145()
-    if run_label_in_name_audit:
-        policies["2.5.3"] = Policy253()
-        policies["1.3.1"] = Policy131()
-    if run_target_size_audit:
-        policies["2.5.8"] = Policy258()
-    if run_focus_audit:
-        policies["2.4.7"] = Policy247()
-        policies["2.4.13"] = Policy2413()
     if run_contrast_audit:
         policies["1.4.3"] = Policy143()
         policies["1.4.6"] = Policy146()
@@ -87,11 +70,7 @@ def _evaluate_pages(
     return out
 
 
-async def _extract_contexts_for_url(
-    url: str,
-    *,
-    run_focus_audit: bool,
-) -> List[ElementContext]:
+async def _extract_contexts_for_url(url: str) -> List[ElementContext]:
     """Single-URL fallback used when no universal snapshot was built (e.g.
     image-only audit at depth=0). Opens its own page in the shared browser
     pool, mirroring the legacy behaviour."""
@@ -104,8 +83,6 @@ async def _extract_contexts_for_url(
         contexts = await ElementContextExtractor.extract_contexts(page)
         if contexts:
             await SemanticRelationshipEngine.enrich_semantics(page, contexts)
-            if run_focus_audit:
-                await InteractionStateRunner.batch_evaluate_focus(page, contexts)
     return contexts
 
 
@@ -113,9 +90,6 @@ async def _run_pipeline_stage(
     url: str,
     job_id: str,
     run_image_audit: bool,
-    run_label_in_name_audit: bool,
-    run_target_size_audit: bool = True,
-    run_focus_audit: bool = True,
     run_contrast_audit: bool = True,
     lang: str = "en",
     snapshot: Optional[Any] = None,
@@ -137,9 +111,6 @@ async def _run_pipeline_stage(
     try:
         policies = _build_policies(
             run_image_audit=run_image_audit,
-            run_label_in_name_audit=run_label_in_name_audit,
-            run_target_size_audit=run_target_size_audit,
-            run_focus_audit=run_focus_audit,
             run_contrast_audit=run_contrast_audit,
         )
         if not policies:
@@ -161,9 +132,7 @@ async def _run_pipeline_stage(
                 f"({total_contexts} contexts) from the universal snapshot."
             )
         else:
-            contexts = await _extract_contexts_for_url(
-                url, run_focus_audit=run_focus_audit
-            )
+            contexts = await _extract_contexts_for_url(url)
             logger.info(
                 f"Pipeline single-URL fallback extracted {len(contexts)} contexts."
             )

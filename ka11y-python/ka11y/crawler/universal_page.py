@@ -30,9 +30,6 @@ from ka11y.accessibility.pipeline.extractors.element_context_extractor import (
 from ka11y.accessibility.pipeline.extractors.semantic_relationship_engine import (
     SemanticRelationshipEngine,
 )
-from ka11y.accessibility.pipeline.runners.interaction_state_runner import (
-    InteractionStateRunner,
-)
 
 logger = setup_logger(name="KAC", tag="universal_page")
 
@@ -1825,8 +1822,6 @@ class UniversalPageLoader:
         1. ElementContextExtractor.extract_contexts — gathers element data.
         2. SemanticRelationshipEngine.enrich_semantics — resolves aria-*
            references against the document; mutates contexts in place.
-        3. InteractionStateRunner.batch_evaluate_focus — simulates focus
-           and records focus-ring state; mutates contexts in place.
 
         Failures degrade to a warning + an empty entry so DecisionEngine
         can still report "no findings here" rather than the page being
@@ -1837,7 +1832,6 @@ class UniversalPageLoader:
             contexts = await ElementContextExtractor.extract_contexts(page)
             if contexts:
                 await SemanticRelationshipEngine.enrich_semantics(page, contexts)
-                await InteractionStateRunner.batch_evaluate_focus(page, contexts)
         except Exception as exc:  # noqa: BLE001 — pipeline must not abort the crawl
             output.partial = True
             output.warnings.append(
