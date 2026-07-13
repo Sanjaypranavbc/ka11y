@@ -227,6 +227,17 @@ async def submit_combined_audit(payload: CombinedRequest):
     """
     return await _admit_run(payload)
 
+@router.post("/python-only", response_model=JobStatusResponse, status_code=202)
+async def submit_python_only_audit(payload: CombinedRequest):
+    """
+    Submit a Python-only accessibility audit.
+    Overrides the payload to disable Node/axe-core engines.
+    """
+    payload.run_node_audit = False
+    payload.run_axe = False
+    payload.run_accesslint = False
+    return await _admit_run(payload)
+
 
 async def _admit_run(payload: CombinedRequest, *, rerun_of: str | None = None) -> dict:
     """Create the hot-cache entry and enqueue a run through the durable queue.
