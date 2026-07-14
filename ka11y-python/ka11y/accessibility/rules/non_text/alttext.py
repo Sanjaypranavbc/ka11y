@@ -253,12 +253,16 @@ _REPORT_COLUMNS = [
     "contrast_violations_count",
     "wcag_1_1_1_status",
     "wcag_4_1_2_status",
+    "wcag_1_4_3_status",
     "wcag_1_4_5_status",
+    "wcag_1_4_6_status",
     "wcag_1_4_11_status",
     "overall_status",
     "wcag_1_1_1_reason",
     "wcag_4_1_2_reason",
+    "wcag_1_4_3_reason",
     "wcag_1_4_5_reason",
+    "wcag_1_4_6_reason",
     "wcag_1_4_11_reason",
     "screenshot_path",
     "capture_status",
@@ -814,14 +818,18 @@ class AltTextAccessibilityAuditor:
                         "contrast_violations_count": 0,
                         "wcag_1_1_1_status": "INCOMPLETE",
                         "wcag_4_1_2_status": "INCOMPLETE" if is_functional else "N/A",
+                        "wcag_1_4_3_status": "INCOMPLETE",
                         "wcag_1_4_5_status": "INCOMPLETE",
+                        "wcag_1_4_6_status": "INCOMPLETE",
                         "wcag_1_4_11_status": (
                             "INCOMPLETE" if (is_button or is_icon) else "N/A"
                         ),
                         "overall_status": "INCOMPLETE",
                         "wcag_1_1_1_reason": _cs_reason,
                         "wcag_4_1_2_reason": _cs_reason if is_functional else "N/A",
+                        "wcag_1_4_3_reason": _cs_reason,
                         "wcag_1_4_5_reason": _cs_reason,
+                        "wcag_1_4_6_reason": _cs_reason,
                         "wcag_1_4_11_reason": (
                             _cs_reason if (is_button or is_icon) else "N/A"
                         ),
@@ -964,10 +972,57 @@ class AltTextAccessibilityAuditor:
                 component_bbox=_component_bbox,
             )
 
+            # ── WCAG 1.4.3 & 1.4.6 (Text Contrast) ─────────────────────────
+            wcag_1_4_3_pass = None
+            wcag_1_4_3_reason = "N/A — no text detected"
+            wcag_1_4_6_pass = None
+            wcag_1_4_6_reason = "N/A — no text detected"
+
+            if classification in ("logo", "decorative") and not is_button:
+                wcag_1_4_3_reason = f"N/A — 1.4.3 does not apply to {classification} images"
+                wcag_1_4_6_reason = f"N/A — 1.4.6 does not apply to {classification} images"
+            elif effective_has_text and ocr_result and ocr_result.detections:
+                all_aa = []
+                all_aaa = []
+                for det in ocr_result.detections:
+                    ci = det.contrast_info or {}
+                    col = det.color_info or {}
+                    dom = col.get("dominant_contrast") or {}
+                    dom_comp = dom.get("compliance") or {}
+                    if dom_comp:
+                        all_aa.append(dom_comp.get("AA_passes"))
+                        all_aaa.append(dom_comp.get("AAA_passes"))
+                    else:
+                        comp = ci.get("compliance") or {}
+                        all_aa.append(comp.get("AA_passes"))
+                        all_aaa.append(comp.get("AAA_passes"))
+
+                if any(v is False for v in all_aa):
+                    wcag_1_4_3_pass = False
+                    wcag_1_4_3_reason = "FAIL [1.4.3] Text region(s) below minimum contrast"
+                elif any(v is None for v in all_aa):
+                    wcag_1_4_3_pass = None
+                    wcag_1_4_3_reason = "INCOMPLETE [1.4.3] Contrast data unavailable"
+                else:
+                    wcag_1_4_3_pass = True
+                    wcag_1_4_3_reason = "PASS [1.4.3] All text regions meet minimum contrast"
+
+                if any(v is False for v in all_aaa):
+                    wcag_1_4_6_pass = False
+                    wcag_1_4_6_reason = "FAIL [1.4.6] Text region(s) below enhanced contrast"
+                elif any(v is None for v in all_aaa):
+                    wcag_1_4_6_pass = None
+                    wcag_1_4_6_reason = "INCOMPLETE [1.4.6] Contrast data unavailable"
+                else:
+                    wcag_1_4_6_pass = True
+                    wcag_1_4_6_reason = "PASS [1.4.6] All text regions meet enhanced contrast"
+
             # Overall: all definitive checks must pass (None = N/A, skip)
             checks = [wcag_1_1_1_pass]
             if wcag_4_1_2_pass is not None:
                 checks.append(wcag_4_1_2_pass)
+            if wcag_1_4_3_pass is False:
+                checks.append(False)
             if wcag_1_4_5_pass is False:
                 checks.append(False)
             if wcag_1_4_11_pass is False:
@@ -997,10 +1052,36 @@ class AltTextAccessibilityAuditor:
                         if wcag_4_1_2_pass is True
                         else "FAILED" if wcag_4_1_2_pass is False else "N/A"
                     ),
+                    "wcag_1_4_3_status": (
+                        "PASSED"
+                        if wcag_1_4_3_pass is True
+                        else (
+                            "FAILED"
+                            if wcag_1_4_3_pass is False
+                            else (
+                                "INCOMPLETE"
+                                if str(wcag_1_4_3_reason).startswith("INCOMPLETE")
+                                else "N/A"
+                            )
+                        )
+                    ),
                     "wcag_1_4_5_status": (
                         "PASSED"
                         if wcag_1_4_5_pass is True
                         else "FAILED" if wcag_1_4_5_pass is False else "N/A"
+                    ),
+                    "wcag_1_4_6_status": (
+                        "PASSED"
+                        if wcag_1_4_6_pass is True
+                        else (
+                            "FAILED"
+                            if wcag_1_4_6_pass is False
+                            else (
+                                "INCOMPLETE"
+                                if str(wcag_1_4_6_reason).startswith("INCOMPLETE")
+                                else "N/A"
+                            )
+                        )
                     ),
                     "wcag_1_4_11_status": (
                         "PASSED"
@@ -1018,7 +1099,9 @@ class AltTextAccessibilityAuditor:
                     "overall_status": overall,
                     "wcag_1_1_1_reason": wcag_1_1_1_reason,
                     "wcag_4_1_2_reason": wcag_4_1_2_reason,
+                    "wcag_1_4_3_reason": wcag_1_4_3_reason,
                     "wcag_1_4_5_reason": wcag_1_4_5_reason,
+                    "wcag_1_4_6_reason": wcag_1_4_6_reason,
                     "wcag_1_4_11_reason": wcag_1_4_11_reason,
                     "screenshot_path": screenshot_path,
                     "capture_status": capture_status,

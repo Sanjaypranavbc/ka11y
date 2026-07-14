@@ -55,6 +55,8 @@ def make_image(**kwargs) -> ImageData:
 class _MockDetection:
     def __init__(self, text: str):
         self.text = text
+        self.contrast_info = None
+        self.color_info = None
 
 
 class _MockOCRResult:
@@ -583,9 +585,9 @@ class TestAltTextAuditorReport:
             "is_logo", "is_icon", "is_button", "is_functional", "is_decorative",
             "alt_text", "title", "has_ocr_text", "detected_text",
             "contrast_violations_count", "wcag_1_1_1_status", "wcag_4_1_2_status",
-            "wcag_1_4_5_status", "wcag_1_4_11_status",
+            "wcag_1_4_3_status", "wcag_1_4_5_status", "wcag_1_4_6_status", "wcag_1_4_11_status",
             "overall_status", "wcag_1_1_1_reason", "wcag_4_1_2_reason",
-            "wcag_1_4_5_reason", "wcag_1_4_11_reason",
+            "wcag_1_4_3_reason", "wcag_1_4_5_reason", "wcag_1_4_6_reason", "wcag_1_4_11_reason",
             "screenshot_path", "capture_status", "capture_error",
         ]
         assert cols == expected

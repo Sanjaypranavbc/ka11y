@@ -203,7 +203,9 @@ def _infer_classification(path: str) -> str:
         return "button"
     if "/functional/icons/" in p:
         return "icon"
-    if "/functional/logos/" in p or "/informative/logos/" in p:
+    if "/functional/logos/" in p:
+        return "functional_logo"
+    if "/informative/logos/" in p:
         return "logo"
     if "/functional/images/" in p:
         return "image"
@@ -431,11 +433,15 @@ def _build_image_audit_report(records: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "contrast_violations_count": contrast_violations_count,
                 "wcag_1_1_1_status": get_status(record, "1.1.1", default=None),
                 "wcag_4_1_2_status": get_status(record, "4.1.2", default=None),
+                "wcag_1_4_3_status": get_status(record, "1.4.3", default=None),
                 "wcag_1_4_5_status": get_status(record, "1.4.5", default=None),
+                "wcag_1_4_6_status": get_status(record, "1.4.6", default=None),
                 "wcag_1_4_11_status": get_status(record, "1.4.11", default=None),
                 "wcag_1_1_1_reason": get_reason(record, "1.1.1"),
                 "wcag_4_1_2_reason": get_reason(record, "4.1.2"),
+                "wcag_1_4_3_reason": get_reason(record, "1.4.3"),
                 "wcag_1_4_5_reason": get_reason(record, "1.4.5"),
+                "wcag_1_4_6_reason": get_reason(record, "1.4.6"),
                 "wcag_1_4_11_reason": get_reason(record, "1.4.11"),
             }
         )
@@ -631,9 +637,10 @@ def _contrast_to_findings(
         if not result.has_text:
             continue
 
-        # WCAG 1.4.3 Exception: Logos and decorative images have no contrast requirement
+        # WCAG 1.4.3 Exception: Logos and decorative images have no contrast requirement.
+        # Functional components (even if they are logos) should still be evaluated.
         classification = _infer_classification(result.original_path)
-        if classification in ("logo", "decorative"):
+        if classification in ("logo", "decorative") and getattr(result, "category", "") != "button_text":
             continue
 
         for det in result.detections:
@@ -748,7 +755,7 @@ def _contrast_enhanced_to_findings(
 
         # WCAG 1.4.6 Exception: Logos and decorative images have no contrast requirement
         classification = _infer_classification(result.original_path)
-        if classification in ("logo", "decorative"):
+        if classification in ("logo", "decorative") and getattr(result, "category", "") != "button_text":
             continue
 
         for det in result.detections:

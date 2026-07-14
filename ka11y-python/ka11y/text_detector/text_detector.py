@@ -278,14 +278,9 @@ class OCRPreprocessing:
                     # threshold is correctly applied.
                     is_ui_component = category == "button_text"
                     try:
-                        if is_ui_component:
-                            contrast_info = contrast_analyser.analyze_ui_component(
-                                img, clean_bbox
-                            )
-                        else:
-                            contrast_info = contrast_analyser.analyze_text_region(
-                                img, clean_bbox, font_size_px=font_size_px
-                            )
+                        contrast_info = contrast_analyser.analyze_text_region(
+                            img, clean_bbox, font_size_px=font_size_px
+                        )
                     except Exception as e:
                         logger.warning(f"Contrast analysis failed: {e}")
                         contrast_info = None
@@ -330,7 +325,6 @@ class OCRPreprocessing:
                                             ratio,
                                             font_size_px=font_size_px,
                                             is_bold=is_bold,
-                                            is_ui_component=is_ui_component,  # F15
                                         )
                                     )
                                     contrast_checks.append(
@@ -350,7 +344,6 @@ class OCRPreprocessing:
                                         dominant_ratio,
                                         font_size_px=font_size_px,
                                         is_bold=is_bold,
-                                        is_ui_component=is_ui_component,  # F15
                                     )
                                 )
 
@@ -390,21 +383,13 @@ class OCRPreprocessing:
                             ratio_fb,
                             font_size_px=font_size_px,
                             is_bold=is_bold,
-                            is_ui_component=is_ui_component,
                         )
                         if not compliance_fb.get("AA_passes", False):
-                            if is_ui_component:
-                                violations.append(
-                                    f"Fails 1.4.11 Non-text contrast "
-                                    f"{ratio_fb:.2f}:1 (minimum 3:1)"
-                                )
-                            else:
-                                bg_rgb = contrast_info.get(
-                                    "background_color", (255, 255, 255)
-                                )
-
-                                bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
-                                violations.append(f"Fails AA Normal vs BG {bg_hex}")
+                            bg_rgb = contrast_info.get(
+                                "background_color", (255, 255, 255)
+                            )
+                            bg_hex = "#{:02x}{:02x}{:02x}".format(*bg_rgb)
+                            violations.append(f"Fails AA Normal vs BG {bg_hex}")
                     if violations:
                         result.contrast_violations_count += 1
 
