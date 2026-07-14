@@ -76,9 +76,9 @@ services:
     security_opt:
       - seccomp:unconfined
 
-    depends_on:
-      node:
-        condition: service_healthy
+#    depends_on:
+#      node:
+#        condition: service_healthy
 
     networks:
       - ka11y-net
@@ -153,70 +153,70 @@ services:
 
 
   # ── React + nginx frontend ─────────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./ka11y-frontend-sdk
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: "https://a11y-api.bluecaffeine.in" # http:localhost:8000/
-    image: a11y-frontend:latest
-    container_name: a11y-frontend
-    restart: unless-stopped
-
-    depends_on:
-      node:
-        condition: service_healthy
-
-    networks:
-      - ka11y-net
-
-    ports:
-      - "8080:80"
-
-    healthcheck:
-      test:         ["CMD", "wget", "-qO-", "http://localhost:80/"]
-      interval:     30s
-      timeout:      5s
-      start_period: 15s
-      retries:      3
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
+#  frontend:
+#    build:
+#      context: ./ka11y-frontend-sdk
+#      dockerfile: Dockerfile
+#      args:
+#        VITE_API_URL: "https://a11y-api.bluecaffeine.in" # http:localhost:8000/
+#    image: a11y-frontend:latest
+#    container_name: a11y-frontend
+#    restart: unless-stopped
+#
+#    depends_on:
+#      node:
+#        condition: service_healthy
+#
+#    networks:
+#      - ka11y-net
+#
+#    ports:
+#      - "8080:80"
+#
+#    healthcheck:
+#      test:         ["CMD", "wget", "-qO-", "http://localhost:80/"]
+#      interval:     30s
+#      timeout:      5s
+#      start_period: 15s
+#      retries:      3
+#
+#    logging:
+#      driver: json-file
+#      options:
+#        max-size: "10m"
+#        max-file: "5"
 
 
   # ── Mintlify documentation site ────────────────────────────────────────────
-  docs:
-    build:
-      context: ./ka11y-docs
-      dockerfile: Dockerfile
-    image: ka11y-docs:latest
-    container_name: ka11y-docs
-    restart: unless-stopped
-
-    networks:
-      - ka11y-net
-
-    ports:
-      - "3001:3000"
-
-    volumes:
-      - ./ka11y-docs:/docs
-
-    healthcheck:
-      test:         ["CMD", "curl", "-f", "http://localhost:3000/"]
-      interval:     30s
-      timeout:      10s
-      start_period: 30s
-      retries:      5
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
+#  docs:
+#    build:
+#      context: ./ka11y-docs
+#      dockerfile: Dockerfile
+#    image: ka11y-docs:latest
+#    container_name: ka11y-docs
+#    restart: unless-stopped
+#
+#    networks:
+#      - ka11y-net
+#
+#    ports:
+#      - "3001:3000"
+#
+#    volumes:
+#      - ./ka11y-docs:/docs
+#
+#    healthcheck:
+#      test:         ["CMD", "curl", "-f", "http://localhost:3000/"]
+#      interval:     30s
+#      timeout:      10s
+#      start_period: 30s
+#      retries:      5
+#
+#    logging:
+#      driver: json-file
+#      options:
+#        max-size: "10m"
+#        max-file: "5"
 
 
 # ── Networks ───────────────────────────────────────────────────────────────────
