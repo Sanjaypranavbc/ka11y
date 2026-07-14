@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #4e4e4e;
+
+  /* Brand primary — exact Figma tokens */
+  --color-brand-teal: #00ac8f;       /* Green/40 */
+  --color-brand-teal-dark: #005856;  /* Green/100 */
+  --color-brand-green-80: #00806d;   /* Green/80 — button borders, links */
+  --color-brand-green-20: #b5e2dd;   /* Green/20 — active nav bg */
+  --color-brand-gray: #4e4d4e;       /* Gray/100 */
+
+  /* Gray shades — exact Figma tokens */
+  --color-gray-100: #4e4d4e;   /* Gray/100 — primary text */
+  --color-gray-80: #65605a;    /* Gray/80 — secondary text */
+  --color-gray-60: #9f9f9f;    /* Gray/40 in Figma — muted / axis labels */
+  --color-gray-40: #d7d7cf;    /* Gray/20 in Figma — borders / dividers */
+  --color-gray-10: #f6f6f4;    /* Gray/10 — surface / sidebar / card bg */
+
+  /* Teal shades */
+  --color-teal-100: #00ac8f;
+  --color-teal-80: #33c6ad;
+  --color-teal-60: #66d4c2;
+  --color-teal-40: #99e2d6;
+  --color-teal-10: #b5e2dd;
+
+  /* Gradients */
+  --gradient-blue: linear-gradient(135deg, #0b4f8a 0%, #a9c6e8 100%);
+  --gradient-gold: linear-gradient(135deg, #9a3d3d 0%, #e0b45c 100%);
+
+  /* Additional palette */
+  --color-success-900: #1b3a6b;
+  --color-success-500: #4a90d9;
+  --color-success-200: #a9cbee;
+
+  --color-alert-900: #6b5a2e;
+  --color-alert-500: #d2a94a;
+  --color-alert-200: #e8d9a8;
+
+  --color-error-900: #7a2e2e;
+  --color-error-500: #c0604a;
+  --color-error-200: #e8b49a;
+
+  /* Dashboard status colors — matching Figma chart bar colors */
+  --color-status-violation: #c00000;
+  --color-status-review: #114bbf;
+  --color-status-pass: #00b48c;
+
+  /* WCAG conformance level shades (light -> dark) */
+  --color-level-a: #8fe3d2;
+  --color-level-aa: #00a88f;
+  --color-level-aaa: #00695c;
+
+  --color-surface: #f6f6f4;
+  --color-sidebar: #f6f6f4;
+
+  /* Helvetica Neue is licensed and can't be bundled; Inter is the self-hosted fallback. */
+  --font-sans: "Helvetica Neue", var(--font-inter), Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
+
+  --text-h1: 36px;
+  --text-h1--line-height: 1.2;
+  --text-h1--font-weight: 500;
+
+  --text-h2: 32px;
+  --text-h2--line-height: 1.2;
+  --text-h2--font-weight: 500;
+
+  --text-h3: 24px;
+  --text-h3--line-height: 1.3;
+  --text-h3--font-weight: 500;
+
+  --text-p1: 20px;
+  --text-p1--line-height: 1.6;
+  --text-p1--font-weight: 400;
+
+  --text-p2: 18px;
+  --text-p2--line-height: 1.6;
+  --text-p2--font-weight: 400;
+
+  --text-p3: 16px;
+  --text-p3--line-height: 1.6;
+  --text-p3--font-weight: 400;
+
+  --text-p4: 14px;
+  --text-p4--line-height: 1.5;
+  --text-p4--font-weight: 400;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-brand-teal: var(--color-brand-teal);
+  --color-brand-teal-dark: var(--color-brand-teal-dark);
+  --color-brand-green-80: var(--color-brand-green-80);
+  --color-brand-green-20: var(--color-brand-green-20);
+  --color-brand-gray: var(--color-brand-gray);
+
+  --color-gray-100: var(--color-gray-100);
+  --color-gray-80: var(--color-gray-80);
+  --color-gray-60: var(--color-gray-60);
+  --color-gray-40: var(--color-gray-40);
+  --color-gray-10: var(--color-gray-10);
+
+  --color-teal-100: var(--color-teal-100);
+  --color-teal-80: var(--color-teal-80);
+  --color-teal-60: var(--color-teal-60);
+  --color-teal-40: var(--color-teal-40);
+  --color-teal-10: var(--color-teal-10);
+
+  --color-success-900: var(--color-success-900);
+  --color-success-500: var(--color-success-500);
+  --color-success-200: var(--color-success-200);
+
+  --color-alert-900: var(--color-alert-900);
+  --color-alert-500: var(--color-alert-500);
+  --color-alert-200: var(--color-alert-200);
+
+  --color-error-900: var(--color-error-900);
+  --color-error-500: var(--color-error-500);
+  --color-error-200: var(--color-error-200);
+
+  --color-status-violation: var(--color-status-violation);
+  --color-status-review: var(--color-status-review);
+  --color-status-pass: var(--color-status-pass);
+
+  --color-level-a: var(--color-level-a);
+  --color-level-aa: var(--color-level-aa);
+  --color-level-aaa: var(--color-level-aaa);
+
+  --color-surface: var(--color-surface);
+  --color-sidebar: var(--color-sidebar);
+
+  --font-sans: var(--font-sans);
+
+  --text-h1: var(--text-h1);
+  --text-h1--line-height: var(--text-h1--line-height);
+  --text-h1--font-weight: var(--text-h1--font-weight);
+
+  --text-h2: var(--text-h2);
+  --text-h2--line-height: var(--text-h2--line-height);
+  --text-h2--font-weight: var(--text-h2--font-weight);
+
+  --text-h3: var(--text-h3);
+  --text-h3--line-height: var(--text-h3--line-height);
+  --text-h3--font-weight: var(--text-h3--font-weight);
+
+  --text-p1: var(--text-p1);
+  --text-p1--line-height: var(--text-p1--line-height);
+  --text-p1--font-weight: var(--text-p1--font-weight);
+
+  --text-p2: var(--text-p2);
+  --text-p2--line-height: var(--text-p2--line-height);
+  --text-p2--font-weight: var(--text-p2--font-weight);
+
+  --text-p3: var(--text-p3);
+  --text-p3--line-height: var(--text-p3--line-height);
+  --text-p3--font-weight: var(--text-p3--font-weight);
+
+  --text-p4: var(--text-p4);
+  --text-p4--line-height: var(--text-p4--line-height);
+  --text-p4--font-weight: var(--text-p4--font-weight);
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Visible focus ring for keyboard users (WCAG 2.4.7) */
+:focus-visible {
+  outline: 2px solid var(--color-brand-teal);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--color-brand-teal);
+  color: white;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0 0 8px 0;
+}
+
+.skip-link:focus {
+  left: 0;
+}
