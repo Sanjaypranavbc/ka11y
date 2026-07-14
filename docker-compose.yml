@@ -1,10 +1,9 @@
 # =============================================================================
 # ka11y — Docker Compose (project root)
-# Services: ka11y-node · ka11y-python · ka11y-frontend · ka11y-docs
+# Services: ka11y-node · ka11y-python · ka11y-frontend · ka11y-docs · ka11y-ui
 #
 # Port map
-#   host:8080  →  frontend (nginx)  →  internal:80
-#   host:3001  →  docs (Mintlify)   →  internal:3000
+#   host:8080  →  ui (Next.js)      →  internal:3001  (frontend, also 8080, stays disabled below)
 #   host:8000  →  python (FastAPI)  →  internal:8000
 #   host:3000  →  node (axe-core)   →  internal:3000  (debug only; not needed by frontend)
 #
@@ -185,6 +184,46 @@ services:
 #      options:
 #        max-size: "10m"
 #        max-file: "5"
+
+
+  # ── Next.js audit dashboard (ka11y-ui) ─────────────────────────────────────
+  ui:
+    build:
+      context: ./ka11y-ui
+      dockerfile: Dockerfile
+    image: ka11y-ui:latest
+    container_name: ka11y-ui
+    restart: unless-stopped
+
+    depends_on:
+      node:
+        condition: service_healthy
+
+    networks:
+      - ka11y-net
+
+    environment:
+      NODE_ENV: production
+      PORT:     "3001"
+      # Server-side only (no NEXT_PUBLIC_ prefix) — read at request time, so
+      # this can be changed without rebuilding the image.
+      WCAG_API_URL: "http://node:3000/api/v1/analyse-url-wcag"
+
+    ports:
+      - "0.0.0.0:8080:3001"
+
+    healthcheck:
+      test:         ["CMD", "node", "-e", "require('http').get('http://localhost:3001/', r => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval:     30s
+      timeout:      10s
+      start_period: 30s
+      retries:      5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 
   # ── Mintlify documentation site ────────────────────────────────────────────
