@@ -504,10 +504,10 @@ async def _stage_image_audit(
         from ka11y.accessibility.rules.non_text.alttext import (
             AltTextAccessibilityAuditor,
         )
-        from ka11y.crawler.crawler import (
-            AsyncImageCrawler,
-            ImageCrawlerNavigationError,
-        )
+        # Optimized crawler is a drop-in for AsyncImageCrawler (same interface);
+        # the navigation-error type still comes from the original module.
+        from ka11y.crawler.optimized import OptimizedImageCrawler as AsyncImageCrawler
+        from ka11y.crawler.crawler import ImageCrawlerNavigationError
         from ka11y.text_detector.text_detector import (
             OCRPreprocessing,
             TextClassification,

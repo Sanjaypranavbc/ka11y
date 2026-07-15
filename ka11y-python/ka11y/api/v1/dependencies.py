@@ -27,7 +27,8 @@ from ka11y.utils.config_loader import load_config
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ka11y.crawler.crawler import AsyncImageCrawler
+    # The optimized crawler is a drop-in for AsyncImageCrawler (same interface).
+    from ka11y.crawler.optimized import OptimizedImageCrawler as AsyncImageCrawler
     from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
 
 # ── 1. Config ─────────────────────────────────────────────────────────────────
@@ -83,10 +84,11 @@ def get_image_crawler(
     max_depth: int,
     output_dir: Path = Depends(get_output_dir),
 ) -> AsyncImageCrawler:
-    """Provide an AsyncImageCrawler scoped to this request's output dir."""
-    from ka11y.crawler.crawler import AsyncImageCrawler
+    """Provide an image crawler scoped to this request's output dir.
+    Uses the optimized crawler engine (drop-in for AsyncImageCrawler)."""
+    from ka11y.crawler.optimized import OptimizedImageCrawler
 
-    crawler = AsyncImageCrawler(base_url=url, max_depth=max_depth)
+    crawler = OptimizedImageCrawler(base_url=url, max_depth=max_depth)
     crawler.output_dir = str(output_dir)
     Path(crawler.output_dir).mkdir(parents=True, exist_ok=True)
     return crawler
