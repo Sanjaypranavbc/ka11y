@@ -154,7 +154,7 @@ rules:
   "1.2.3":
     name: ""
     description: ""
-    suggested_fix: ""
+    q: ""
 
   "1.2.4":
     name: ""

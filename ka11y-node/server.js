@@ -51,7 +51,7 @@ app.use((req, res, next) => {
 
 // CORS
 app.use((req, res, next) => {
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:3000')
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '*')
     .split(',')
     .map(o => o.trim())
     .filter(Boolean);

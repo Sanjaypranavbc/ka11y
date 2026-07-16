@@ -144,12 +144,16 @@ app = FastAPI(
 app.add_middleware(_RateLimitMiddleware)
 app.add_middleware(_SecurityHeadersMiddleware)
 
-# CORS — allow all origins in development.
+from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # must be False when allow_origins="*"
+    allow_origins=[
+        "http://ec2-34-228-40-177.compute-1.amazonaws.com:8080",
+        "https://a11y.bluecaffeine.in",
+
+    ],
+    allow_credentials=True,   # Set to True if using cookies/auth headers; otherwise False is fine
     allow_methods=["*"],
     allow_headers=["*"],
 )
