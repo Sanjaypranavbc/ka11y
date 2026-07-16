@@ -18,7 +18,7 @@ scripts
 ka11y-python/scripts/
 ka11y-python/scripts/live_stage_audit.py
 ka11y-python/scripts/live_stage_plan.example.yml
-
+.pptx
 
 /ka11y-python/ka11y/devtools/
 /ka11y-python/tests/test_dual_cli_chat.py
@@ -47,3 +47,13 @@ junit.xml
 coverage/
 docs-export
 
+a11y_Internal_Production.pptx
+A11y_POC_to_Production_Proposal_Updated.pptx
+Internal Kao.pptx
+Internal_Kao_TwoWays.pptx
+behaviour-skill.md
+criteria-extraction-rules.md
+.gitignore
+SKILL.md
+MASTER_SYSTEM_ANALYSIS_2026-07-06.md
+json-output-schema.md
