@@ -570,7 +570,7 @@ class AccessibilityService {
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
   async analyseUrl(url, criteriaId = null, lang = 'en') {
-    const { timeoutMs, runOnly } = this._config.axe;
+    const { timeoutMs, runOnly, customChecksTimeoutMs } = this._config.axe;
     let browser = null;
 
     await _assertPublicUrl(url);
@@ -651,7 +651,7 @@ class AccessibilityService {
       );
 
       this._logger.info('Running all custom checks (static + interactive)...');
-      const customResults = await runAll(page, criteriaId != null ? criteriaId : { lang });
+      const customResults = await runAll(page, criteriaId, { lang, timeoutMs: customChecksTimeoutMs });
       this._logger.info(`Custom checks complete — ${customResults.length} SC(s) returned.`);
 
       return mergeWithAxe(mapResults(axeResults, criteriaId, accessLintResults), customResults);
