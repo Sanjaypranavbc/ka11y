@@ -9,7 +9,10 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 },
+    );
   }
 
   const url = body.url?.trim();
@@ -28,7 +31,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(150000),
     });
 
     const data = await upstream.json().catch(() => null);
@@ -44,7 +47,11 @@ export async function POST(request: Request) {
   } catch (err) {
     const timedOut = err instanceof Error && err.name === "TimeoutError";
     return NextResponse.json(
-      { error: timedOut ? "WCAG analysis request timed out" : "Unable to reach the WCAG analysis service" },
+      {
+        error: timedOut
+          ? "WCAG analysis request timed out"
+          : "Unable to reach the WCAG analysis service",
+      },
       { status: 502 },
     );
   }
