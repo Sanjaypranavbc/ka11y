@@ -109,6 +109,7 @@ export default function NewAuditPage() {
       });
       const data = await res.json().catch(() => null);
 
+
       if (!res.ok) {
         setPhase("form");
         setError(data?.error ?? "Failed to start the scan. Please try again.");

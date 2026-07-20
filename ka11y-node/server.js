@@ -51,7 +51,7 @@ app.use((req, res, next) => {
 
 // CORS
 app.use((req, res, next) => {
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '*')
+  const allowedOrigins = ('*')
     .split(',')
     .map(o => o.trim())
     .filter(Boolean);
@@ -74,6 +74,7 @@ app.use(express.urlencoded({ extended: true, limit: config.payload.limit }));
 // Request / Response Logging Middleware
 app.use((req, res, next) => {
   const start = Date.now();
+  console.log("-------inside api-------",req.url)
   logger.info(`→ ${req.method} ${req.url}`);
   res.on('finish', () => {
     const duration = Date.now() - start;
