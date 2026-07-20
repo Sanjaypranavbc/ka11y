@@ -7,13 +7,7 @@ from typing import Any, Dict, List, Type
 from pydantic import BaseModel, Field, ValidationError
 
 from ka11y.config.logger import setup_logger
-from ka11y.crawler.forms_crawler import FormInputData
-from ka11y.crawler.interactive_crawler import InteractiveElementData
 from ka11y.crawler.media_crawler import MediaElementData
-from ka11y.crawler.moving_content_crawler import MovingContentData
-from ka11y.crawler.sensory_crawler import SensoryElementData
-from ka11y.crawler.target_size_crawler import TargetSizeData
-from ka11y.crawler.text_spacing_crawler import TextSpacingData
 from ka11y.crawler.universal_page import PageSnapshot
 from ka11y.utils.step_logger import ExecutionStepLogger
 
@@ -22,13 +16,7 @@ logger = setup_logger(name="KAC", tag="snapshot_normalizer")
 
 class NormalizedPageSnapshot(BaseModel):
     page_url: str
-    forms: List[FormInputData] = Field(default_factory=list)
-    interactive: List[InteractiveElementData] = Field(default_factory=list)
-    target_sizes: List[TargetSizeData] = Field(default_factory=list)
-    moving_content: List[MovingContentData] = Field(default_factory=list)
     media: List[MediaElementData] = Field(default_factory=list)
-    text_spacing: List[TextSpacingData] = Field(default_factory=list)
-    sensory: List[SensoryElementData] = Field(default_factory=list)
     warnings: List[Dict[str, Any]] = Field(default_factory=list)
     element_refs: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     page_summaries: List[Dict[str, Any]] = Field(default_factory=list)
@@ -39,13 +27,7 @@ class NormalizedPageSnapshot(BaseModel):
 
 class SnapshotNormalizer:
     MODEL_MAP: Dict[str, Type[BaseModel]] = {
-        "forms": FormInputData,
-        "interactive": InteractiveElementData,
-        "target_sizes": TargetSizeData,
-        "moving_content": MovingContentData,
         "media": MediaElementData,
-        "text_spacing": TextSpacingData,
-        "sensory": SensoryElementData,
     }
 
     @classmethod
@@ -87,13 +69,7 @@ class SnapshotNormalizer:
                 status="completed",
                 message="Normalized universal snapshot into existing crawler models",
                 context={
-                    "forms": len(normalized.forms),
-                    "interactive": len(normalized.interactive),
-                    "target_sizes": len(normalized.target_sizes),
-                    "moving_content": len(normalized.moving_content),
                     "media": len(normalized.media),
-                    "text_spacing": len(normalized.text_spacing),
-                    "sensory": len(normalized.sensory),
                     "warnings": len(normalized.warnings),
                 },
             )
@@ -142,12 +118,7 @@ class SnapshotNormalizer:
         path = Path(output_dir) / "universal_snapshot_normalized.json"
         payload = {
             "page_url": snapshot.page_url,
-            "forms": [item.model_dump() for item in snapshot.forms],
-            "interactive": [item.model_dump() for item in snapshot.interactive],
-            "target_sizes": [item.model_dump() for item in snapshot.target_sizes],
-            "moving_content": [item.model_dump() for item in snapshot.moving_content],
             "media": [item.model_dump() for item in snapshot.media],
-            "text_spacing": [item.model_dump() for item in snapshot.text_spacing],
             "warnings": snapshot.warnings,
             "element_refs": snapshot.element_refs,
             "page_summaries": snapshot.page_summaries,

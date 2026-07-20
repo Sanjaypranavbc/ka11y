@@ -37,14 +37,10 @@ class CombinedRequest(BaseModel):
     # Pattern + max_length on string fields prevents oversized-payload DoS
     wcag_level: str = Field(default="AAA", pattern=r"^(A|AA|AAA)$")
     success_criteria_id: Optional[str] = Field(default=None, pattern=r"^\d+\.\d+\.\d+$")
-    run_node_audit: bool = True
     run_ocr: bool = True
     run_image_audit: bool = True
     run_media_audit: bool = True
     run_captions_audit: bool = True
-    # ── Node engine toggles ──────────────────────────────────────────────────
-    run_axe: bool = True
-    run_accesslint: bool = True
     lang: str = Field(default="auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$")
 
     @model_validator(mode="after")

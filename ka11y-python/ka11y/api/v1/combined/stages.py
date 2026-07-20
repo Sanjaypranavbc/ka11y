@@ -22,7 +22,6 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -142,56 +141,6 @@ _CRAWL_PER_PAGE_SECONDS = float(os.environ.get("KA11Y_IMAGE_CRAWL_PER_PAGE_SECON
 # budget so OCR/contrast always has time to run on the images that were captured.
 _CRAWL_TIMEOUT_CEILING = float(os.environ.get("KA11Y_IMAGE_CRAWL_TIMEOUT_CEILING", "600"))
 
-# How long Node (``_call_node_flat``) waits for the Python snapshot to publish
-# its discovered-URL list before giving up. The Python snapshot task ALWAYS
-# sets the coordination event in its ``finally`` (success or failure), so this
-# wait normally resolves the instant the snapshot finishes — its only job is to
-# outlast a legitimately slow snapshot. The old 90 s default was ~6× too short
-# for heavy sites (a kao.com/jp snapshot took 561 s), so the wait expired, Node
-# fell back to its independent BFS, hit the 255 s ``flatCrawlBudgetMs`` cliff,
-# and audited only 7 of 50 pages — silently dropping axe coverage on 43 pages.
-# Bounded by the snapshot stage's own budget; the outer ``_JOB_TIMEOUT_SECONDS``
-# (1800 s) remains the real backstop against a hung Python task.
-_SNAPSHOT_URLS_WAIT_SECONDS = float(
-    os.environ.get("KA11Y_SNAPSHOT_URLS_WAIT_SECONDS", str(_STAGE_TIMEOUT_SECONDS))
-)
-
-# HTTP read-timeout sizing for the call to Node's ``/analyse-url-flat``.
-#
-# In snapshot-fed mode Node audits EVERY discovered URL with no internal
-# time budget (unlike its legacy BFS, which self-caps at flatCrawlBudgetMs).
-# A fixed 300 s client timeout therefore silently discarded *all* axe findings
-# on any child crawl that took longer than 300 s end-to-end: the POST timed out
-# mid-crawl, ``_call_node_flat`` raised, and ``node_findings`` came back empty —
-# so deep pages lost their entire axe coverage even though the snapshot fix was
-# feeding Node the right URLs. We now scale the timeout by the number of pages
-# Node will actually audit (a fixed base for connection + the entry page, plus a
-# per-page budget that matches Node's worst-case page cost: navigate + axe +
-# custom checks), bounded by the outer job budget so a runaway crawl still
-# terminates. The legacy single-page / BFS path keeps the 300 s floor.
-_NODE_HTTP_BASE_TIMEOUT_SECONDS = float(
-    os.environ.get("KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS", "60")
-)
-_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS = float(
-    os.environ.get("KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS", "75")
-)
-# Hard ceiling — keep at/under the runner's KA11Y_JOB_TIMEOUT_SECONDS (1800 s)
-# so the HTTP call fails with a clear axe-specific error before the outer job
-# watchdog cancels the whole audit.
-_NODE_HTTP_TIMEOUT_CAP_SECONDS = float(
-    os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1800")
-)
-
-
-def _node_http_timeout(page_count: int) -> float:
-    """Return the httpx timeout (seconds) for a Node flat call of ``page_count`` pages.
-
-    Floors at 300 s (legacy single-page / BFS behaviour), grows linearly with the
-    page count in snapshot-fed mode, and is capped at the job budget.
-    """
-    scaled = _NODE_HTTP_BASE_TIMEOUT_SECONDS + max(1, page_count) * _NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS
-    return min(_NODE_HTTP_TIMEOUT_CAP_SECONDS, max(300.0, scaled))
-
 # Process-wide queue for browser-heavy crawler stages. ``image_audit`` and
 # ``rendered_layout_audit`` each open their own Playwright contexts + image
 # buffers; with _MAX_CONCURRENT_JOBS=4 an unguarded depth>0 audit can spawn
@@ -291,159 +240,6 @@ def _allowed_levels(wcag_level: str) -> set:
     if wcag_level == "AAA":
         levels.add("AAA")
     return levels
-
-
-# ── Node / axe-core caller ────────────────────────────────────────────────────
-
-
-async def _call_node_flat(
-    url: str,
-    node_base_url: str,
-    wcag_level: str = "AAA",
-    lang: str = "en",
-    *,
-    max_depth: int = 0,
-    internal_links: bool = True,
-    max_pages: int = 50,
-    success_criteria_id: Optional[str] = None,
-    job_id: Optional[str] = None,
-    discovered_urls: Optional[List[str]] = None,
-    snapshot_urls_event: Optional[asyncio.Event] = None,
-    snapshot_urls_container: Optional[Dict[str, Any]] = None,
-    snapshot_wait_timeout: float = _SNAPSHOT_URLS_WAIT_SECONDS,
-) -> List[Dict]:
-    """POST to Node's /api/v1/analyse-url-flat. Returns flat element-wise findings.
-
-    ``max_depth`` / ``internal_links`` make Node run its own bounded BFS so it
-    covers the same deeper pages Python does (previously Node only ever audited
-    the root URL, so max_depth had no effect on the axe-core side).
-    ``success_criteria_id`` lets Node run only the axe rules + custom checks for a
-    single WCAG SC, so a per-rule audit doesn't pay for the full rule set.
-
-    ``job_id`` (when supplied) is forwarded to Node which collects per-page
-    timing rows and returns them in the response. Each row is then mirrored
-    into the same ``logs/timings/<job_id>.jsonl`` file the Python stages write
-    to, so the per-(page, stage) summary covers both engines.
-    """
-    endpoint = f"{node_base_url.rstrip('/')}/api/v1/analyse-url-flat"
-
-    # R-1: prefer snapshot-fed mode. If the caller passed a coordination event,
-    # the Python snapshot task fills ``snapshot_urls_container["urls"]`` and
-    # signals the event when the snapshot finishes — and it ALWAYS signals, even
-    # on snapshot failure, via a ``finally`` in ``_run_python_stages``. So this
-    # wait normally resolves the moment the snapshot completes; the timeout only
-    # guards against a Python task that never signals at all (hard crash). On
-    # ``max_depth > 0`` the snapshot is the source of truth: falling back to
-    # Node's independent BFS re-introduces the 255 s ``flatCrawlBudgetMs`` cliff
-    # that silently drops axe coverage on every page past the budget, so we log
-    # the degradation at ERROR rather than letting it pass quietly.
-    if snapshot_urls_event is not None and snapshot_urls_container is not None and not discovered_urls:
-        try:
-            await asyncio.wait_for(
-                snapshot_urls_event.wait(), timeout=snapshot_wait_timeout
-            )
-            urls = snapshot_urls_container.get("urls") or []
-            # Drop the entry URL when it's the only thing the snapshot found
-            # — that's the "no snapshot needed" sentinel and Node already
-            # audits it through its own single-page path.
-            if urls and not (len(urls) == 1 and urls[0] == url):
-                discovered_urls = list(urls)
-        except asyncio.TimeoutError:
-            logger.error(
-                f"[combined] axe_core: snapshot URL wait timed out after "
-                f"{snapshot_wait_timeout}s at max_depth={max_depth} — Node will "
-                f"fall back to independent BFS, which is capped by "
-                f"flatCrawlBudgetMs and will likely UNDER-AUDIT deep pages. "
-                f"Raise KA11Y_SNAPSHOT_URLS_WAIT_SECONDS if the snapshot is "
-                f"legitimately slow on this site."
-            )
-    if max_depth > 0 and not discovered_urls:
-        # Snapshot produced no usable URL list for a multi-page crawl. Node's
-        # BFS would clip on heavy sites, so make the under-coverage explicit in
-        # the logs (the run still proceeds — partial axe coverage beats none).
-        logger.error(
-            f"[combined] axe_core: no snapshot URLs available at "
-            f"max_depth={max_depth} for {url}; Node falls back to its "
-            f"budget-capped BFS and may under-audit deep pages."
-        )
-
-    payload_json: Dict[str, Any] = {
-        "url": url,
-        "level": wcag_level,
-        "lang": lang,
-        "maxDepth": max_depth,
-        "internalLinks": internal_links,
-        "maxPages": max_pages,
-    }
-    if success_criteria_id:
-        payload_json["successCriteriaId"] = success_criteria_id
-    if job_id:
-        payload_json["jobId"] = job_id
-    if discovered_urls:
-        # R-1: when Python's snapshot has already enumerated the pages, send
-        # the full list so Node skips its own BFS (which was capped by
-        # flatCrawlBudgetMs=255s and was the source of the kao.com 3-page
-        # truncation that left a2 unaudited by axe).
-        payload_json["discoveredUrls"] = discovered_urls
-    # Size the read timeout to the work Node will do. In snapshot-fed mode Node
-    # audits every ``discovered_urls`` entry with no internal budget, so a flat
-    # 300 s ceiling dropped all axe findings on large child crawls (see
-    # _node_http_timeout). Fall back to the page count we asked Node to crawl
-    # when the snapshot produced no explicit list.
-    _page_count = len(discovered_urls) if discovered_urls else (max_pages if max_depth > 0 else 1)
-    http_timeout = _node_http_timeout(_page_count)
-    try:
-        async with httpx.AsyncClient(timeout=http_timeout) as client:
-            resp = await client.post(endpoint, json=payload_json)
-            resp.raise_for_status()
-            body = resp.json()
-            # Mirror Node-side per-page timing rows into our shared JSONL so
-            # the run summary attributes time to both engines. Failure here
-            # never breaks the audit — the findings already returned cleanly.
-            if job_id:
-                _mirror_node_timings(job_id, body.get("timings") or [])
-            return body.get("findings", [])
-    except httpx.ConnectError:
-        raise RuntimeError(f"axe_core: Node engine unreachable at {node_base_url}")
-    except httpx.TimeoutException:
-        raise RuntimeError(
-            f"axe_core: Node engine timed out after {http_timeout:.0f}s "
-            f"({_page_count} page(s), {endpoint}) — raise "
-            f"KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS / KA11Y_JOB_TIMEOUT_SECONDS "
-            f"if the crawl legitimately needs longer."
-        )
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 502:
-            raise RuntimeError(f"axe_core: Node engine Bad Gateway ({endpoint})")
-        raise RuntimeError(f"axe_core: Node engine returned {e.response.status_code}")
-    except Exception as e:
-        raise RuntimeError(f"axe_core: unexpected error calling Node: {e}")
-
-
-def _mirror_node_timings(job_id: str, rows: List[Dict[str, Any]]) -> None:
-    """Append Node-engine timing rows to the shared JSONL via stage_timing.
-
-    Row shape from Node mirrors the Python schema (`stage`, `sub_stage`,
-    `page_url`, `depth`, `rule`, `duration_ms`, `item_count`, `status`,
-    `error`, `extra`). Anything malformed is skipped silently.
-    """
-    for row in rows:
-        try:
-            stage_timing.record(
-                job_id,
-                stage=str(row.get("stage") or "axe_core"),
-                duration_ms=float(row.get("duration_ms") or 0.0),
-                status=str(row.get("status") or "ok"),
-                page_url=row.get("page_url"),
-                depth=row.get("depth"),
-                sub_stage=row.get("sub_stage"),
-                rule=row.get("rule"),
-                item_count=row.get("item_count"),
-                error=row.get("error"),
-                extra={**(row.get("extra") or {}), "source": "node"},
-            )
-        except Exception:  # noqa: BLE001 — never let mirroring break a run
-            continue
 
 
 # ── Individual stage coroutines ───────────────────────────────────────────────
@@ -808,50 +604,6 @@ async def _stage_image_audit(
         return [], None, None
 
 
-async def _stage_media_audit(
-    url: str,
-    output_dir: Path,
-    max_depth: int,
-    run_media_audit: bool,
-    job_id: str,
-) -> List[Dict]:
-    """Crawl media elements → 1.2.1 audio-only / video-only check."""
-    _stage_start(job_id, "media_audit")
-    if not run_media_audit:
-        _stage_complete(job_id, "media_audit", 0)
-        return []
-
-    try:
-        from ka11y.accessibility.rules.media.media_auditor import MediaAuditor
-        from ka11y.crawler.media_crawler import AsyncMediaCrawler
-
-        media_crawler = AsyncMediaCrawler(
-            base_url=url, output_dir=str(output_dir), max_depth=max_depth
-        )
-        start_crawl = time.perf_counter()
-        async with time_crawler(
-            output_dir, "media", url, pages_getter=lambda: len(media_items or [])
-        ):
-            media_items = await media_crawler.crawl()
-        _record_crawler_time(job_id, "media_audit", time.perf_counter() - start_crawl)
-        await asyncio.to_thread(media_crawler.save_raw_json)
-
-        findings: List[Dict] = []
-        if run_media_audit:
-            media_auditor = MediaAuditor(output_dir=str(output_dir))
-            records = await asyncio.to_thread(
-                media_auditor.generate_audit_report,
-                [item.model_dump() for item in media_items],
-            )
-            findings = _media_to_findings(records, url)
-
-        _stage_complete(job_id, "media_audit", len(findings))
-        return findings
-    except Exception as _exc:
-        _stage_error_and_warn(job_id, "media_audit", _exc)
-        return []
-
-
 async def _load_universal_snapshot(
     *,
     url: str,
@@ -1005,20 +757,12 @@ async def _run_python_stages(
     internal_links: bool = True,
     max_pages: int = 50,
     success_criteria_id: Optional[str] = None,
-    snapshot_urls_event: Optional[asyncio.Event] = None,
-    snapshot_urls_container: Optional[Dict[str, Any]] = None,
 ) -> PythonStagesResult:
     """
     Run all Python audit stages concurrently.
 
     Returns a :class:`PythonStagesResult` with named ``findings``,
     ``contrast_report``, and ``image_audit_report`` fields.
-
-    ``snapshot_urls_event`` / ``snapshot_urls_container`` (R-1) let a sibling
-    Node task wait for the universal snapshot's discovered URL list before
-    starting its own crawl. We always signal the event before returning so a
-    crash here cannot strand Node — see the ``finally`` block at the bottom
-    of this function.
     """
 
     def _timed(coro):
@@ -1037,39 +781,28 @@ async def _run_python_stages(
     # the previous behaviour for that case).
     snapshot = None
     discovered_urls = [url]
-    try:
-        if static_rules_enabled or max_depth > 0:
-            snapshot = await _load_universal_snapshot(
-                url=url,
-                output_dir=output_dir,
-                max_depth=max_depth,
-                job_id=job_id,
-                step_logger=step_logger,
-                internal_links=internal_links,
-                max_pages=max_pages,
-            )
-            # page_url is now the resolved URL (see universal_page._crawl_one_url),
-            # so two queued links that 301 to the same page collapse to one
-            # page_summary key. Dedupe (order-preserving) before feeding Node so
-            # it doesn't re-audit an identical resolved page.
-            seen_pages: set[str] = set()
-            discovered_urls = []
-            for s in snapshot.page_summaries:
-                pu = s["page_url"]
-                if pu not in seen_pages:
-                    seen_pages.add(pu)
-                    discovered_urls.append(pu)
-            if not discovered_urls:
-                discovered_urls = [url]
-    finally:
-        # R-1: always release the sibling Node task waiting on the snapshot,
-        # even if the snapshot load raised. Without this `finally` an
-        # exception here would leave Node blocked on `Event.wait()` until the
-        # _SNAPSHOT_URLS_WAIT_SECONDS fallback timeout, doubling failure latency.
-        if snapshot_urls_container is not None:
-            snapshot_urls_container["urls"] = list(discovered_urls)
-        if snapshot_urls_event is not None and not snapshot_urls_event.is_set():
-            snapshot_urls_event.set()
+    if static_rules_enabled or max_depth > 0:
+        snapshot = await _load_universal_snapshot(
+            url=url,
+            output_dir=output_dir,
+            max_depth=max_depth,
+            job_id=job_id,
+            step_logger=step_logger,
+            internal_links=internal_links,
+            max_pages=max_pages,
+        )
+        # page_url is now the resolved URL (see universal_page._crawl_one_url),
+        # so two queued links that 301 to the same page collapse to one
+        # page_summary key.
+        seen_pages: set[str] = set()
+        discovered_urls = []
+        for s in snapshot.page_summaries:
+            pu = s["page_url"]
+            if pu not in seen_pages:
+                seen_pages.add(pu)
+                discovered_urls.append(pu)
+        if not discovered_urls:
+            discovered_urls = [url]
 
     snapshot_task = asyncio.Future()
     if snapshot:

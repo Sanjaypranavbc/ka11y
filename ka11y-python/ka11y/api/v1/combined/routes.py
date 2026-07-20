@@ -216,26 +216,12 @@ async def assert_public_url(url: str) -> None:
 @router.post("/", response_model=JobStatusResponse, status_code=202)
 async def submit_combined_audit(payload: CombinedRequest):
     """
-    Submit a combined Python + Node axe-core accessibility audit.
+    Submit an image + video accessibility audit.
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report, or connect to
     **GET /api/v1/combined/{job_id}/stream** for real-time SSE stage events.
-
-    **Graceful degradation**: if Node/axe-core is unavailable the job still
-    completes using Python-only findings; a `warnings` list notes the failure.
     """
-    return await _admit_run(payload)
-
-@router.post("/python-only", response_model=JobStatusResponse, status_code=202)
-async def submit_python_only_audit(payload: CombinedRequest):
-    """
-    Submit a Python-only accessibility audit.
-    Overrides the payload to disable Node/axe-core engines.
-    """
-    payload.run_node_audit = False
-    payload.run_axe = False
-    payload.run_accesslint = False
     return await _admit_run(payload)
 
 

@@ -31,8 +31,13 @@ from ka11y.api.v1.dependencies import (
     get_alt_text_auditor,
 )
 from ka11y.api.v1.models.pipeline import PipelineRequest, PipelineResponse
-from ka11y.crawler.crawler import AsyncImageCrawler
 from ka11y.accessibility.rules.non_text.alttext import AltTextAccessibilityAuditor
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # The optimized crawler is a drop-in for AsyncImageCrawler (same interface).
+    from ka11y.crawler.optimized import OptimizedImageCrawler as AsyncImageCrawler
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 logger = setup_logger(name="KAC", tag="pipeline")

@@ -13,11 +13,11 @@ async def test_dismissed_cookie_ui_is_excluded_from_universal_snapshot():
     <!doctype html>
     <html lang="en">
       <body>
-        <button id="real-action" type="button">Continue</button>
+        <audio id="real-action" controls src="real.mp3"></audio>
 
         <div id="onetrust-consent-sdk" role="dialog" aria-label="Cookie consent">
           <form id="cookie-form">
-            <input id="cookie-pref" name="cookie-pref" placeholder="Cookie preference" />
+            <audio id="cookie-audio" controls src="cookie.mp3"></audio>
             <button
               id="onetrust-reject-all-handler"
               type="button"
@@ -38,6 +38,7 @@ async def test_dismissed_cookie_ui_is_excluded_from_universal_snapshot():
             <html lang="en">
               <body>
                 <div id="frame-cookie-banner" class="cookie-banner" role="dialog" aria-label="Cookie banner">
+                  <audio id="frame-cookie-audio" controls src="framecookie.mp3"></audio>
                   <button
                     id="frame-reject"
                     type="button"
@@ -46,7 +47,7 @@ async def test_dismissed_cookie_ui_is_excluded_from_universal_snapshot():
                     Reject All
                   </button>
                 </div>
-                <button id="frame-real" type="button">Frame CTA</button>
+                <audio id="frame-real" controls src="framereal.mp3"></audio>
               </body>
             </html>
           `);
@@ -81,11 +82,11 @@ async def test_dismissed_cookie_ui_is_excluded_from_universal_snapshot():
                 output=snapshot,
             )
 
-            interactive_ids = {item.get("element_id") for item in snapshot.interactive}
-            form_ids = {item.get("id") for item in snapshot.forms}
+            media_ids = {item.get("element_id") for item in snapshot.media}
 
-            assert interactive_ids == {"real-action", "frame-real"}
-            assert "cookie-pref" not in form_ids
+            assert media_ids == {"real-action", "frame-real"}
+            assert "cookie-audio" not in media_ids
+            assert "frame-cookie-audio" not in media_ids
         finally:
             await context.close()
             await browser.close()

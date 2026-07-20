@@ -89,17 +89,3 @@ async def test_shutdown_is_idempotent():
     await bp.shutdown_pool()
     # Second shutdown must not raise.
     await bp.shutdown_pool()
-
-
-@pytest.mark.asyncio
-async def test_forms_crawler_uses_pool():
-    """The migrated forms_crawler.crawl() picks up a context from the pool."""
-    from ka11y.crawler.forms_crawler import AsyncFormCrawler
-
-    crawler = AsyncFormCrawler(base_url="data:text/html,<form></form>", output_dir="/tmp")
-    # The crawl is allowed to return empty results (no form fields), but it
-    # must not raise and must have used the pool — i.e. afterwards the pool
-    # owns at least one warm browser.
-    results = await crawler.crawl()
-    assert isinstance(results, list)
-    assert len(bp.get_pool()._browsers) == 1  # noqa: SLF001

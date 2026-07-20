@@ -3,8 +3,8 @@ ka11y/api/v1/combined/runner.py
 =================================
 _run_job() — the main background task that orchestrates the full audit.
 
-Fires axe-core (Node) and all Python stages in parallel, resolves results,
-builds the final report, and updates the job store.
+Runs all Python audit stages (image + media), resolves results, builds the
+final report, and updates the job store.
 """
 
 from __future__ import annotations
@@ -32,16 +32,10 @@ from ka11y.utils.run_timing import log_run_timing
 from ka11y.utils.stage_timing import emit_summary as emit_stage_timing_summary
 from .models import CombinedRequest
 from .report import _build_report
-from .stage_events import (
-    _stage_complete,
-    _stage_error_and_warn,
-    _stage_start,
-    emit_job_plan,
-)
+from .stage_events import emit_job_plan
 from .stages import (
     PythonStagesResult,
     _allowed_levels,
-    _call_node_flat,
     _run_python_stages,
 )
 from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
@@ -167,16 +161,14 @@ async def _run_job(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
     """
-    Background task: run axe-core (Node) and Python stages in parallel.
+    Background task: run the Python image + media audit stages.
 
     If *filter_rule* is provided, the final report will only contain findings
     for that specific WCAG SC ID (e.g. "1.1.1").
 
     Graceful degradation:
-    • Uses asyncio.gather(return_exceptions=True) so neither branch cancels the other.
-    • If axe-core fails → Python-only report with a warning entry.
     • If a Python stage fails → other stages continue; warning entry added.
-    • Job fails ONLY when both axe-core AND all Python stages return nothing.
+    • Job fails when all Python stages return nothing.
 
     Concurrency:
     • Bounded by the module-level semaphore so the worker cannot launch more
@@ -241,7 +233,6 @@ async def _run_job_body(
         pass
 
     config = load_config()
-    node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
     domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
     ts = time.strftime("%m%d_%H%M")
     output_dir = Path(
@@ -271,8 +262,6 @@ async def _run_job_body(
 
         # Announce the stage plan to SSE subscribers so the progress bar can render.
         active_stages: list[str] = []
-        if payload.run_node_audit:
-            active_stages.append("axe_core")
         if payload.run_ocr or payload.run_image_audit:
             active_stages.append("image_audit")
         # pipeline stage always runs; it handles 1.1.1 / 1.4.5 / contrast
@@ -280,66 +269,6 @@ async def _run_job_body(
         if payload.run_media_audit or payload.run_captions_audit:
             active_stages.append("media_audit")
         emit_job_plan(job_id, active_stages)
-
-        # Fire axe-core and all Python stages concurrently.
-        #
-        # R-1: When ``max_depth > 0`` the Python stage builds a universal
-        # snapshot that enumerates all pages to audit. Node's independent
-        # ``boundedBfs`` has a hard ``flatCrawlBudgetMs`` cap (255 s by
-        # default) which on big sites like kao.com was clipping the crawl to
-        # 3 pages and silently dropping axe findings on every page beyond
-        # that. We share the snapshot's URL list via a small event/container
-        # pair: Python signals as soon as the snapshot is ready (always — even
-        # on failure, via a finally block), and Node waits up to
-        # _SNAPSHOT_URLS_WAIT_SECONDS for it, then audits exactly the same pages
-        # — no BFS, no clip. The wait must outlast a legitimately slow snapshot
-        # (kao.com/jp took 561 s); the old 90 s default caused Node to give up
-        # early and fall back to its budget-capped BFS, under-auditing 43/50.
-        snapshot_urls_event: asyncio.Event | None = None
-        snapshot_urls_container: dict | None = None
-        if payload.max_depth > 0:
-            snapshot_urls_event = asyncio.Event()
-            snapshot_urls_container = {"urls": None}
-
-        node_task = None
-        if payload.run_node_audit:
-            _stage_start(job_id, "axe_core")
-            # P6: unified crawl runs axe-core inside the Python Playwright pass
-            # (one page load) instead of a second Puppeteer crawl in Node. Same
-            # snapshot-URL handshake, same flat findings shape. Default OFF.
-            from ka11y.crawler.axe_runner import is_unified_enabled, run_axe_unified
-
-            if is_unified_enabled():
-                node_task = asyncio.create_task(
-                    run_axe_unified(
-                        url,
-                        payload.wcag_level,
-                        resolved_lang,
-                        max_depth=payload.max_depth,
-                        internal_links=payload.internal_links,
-                        max_pages=payload.max_pages,
-                        success_criteria_id=payload.success_criteria_id,
-                        job_id=job_id,
-                        snapshot_urls_event=snapshot_urls_event,
-                        snapshot_urls_container=snapshot_urls_container,
-                    )
-                )
-            else:
-                node_task = asyncio.create_task(
-                    _call_node_flat(
-                        url,
-                        node_base_url,
-                        payload.wcag_level,
-                        resolved_lang,
-                        max_depth=payload.max_depth,
-                        internal_links=payload.internal_links,
-                        max_pages=payload.max_pages,
-                        success_criteria_id=payload.success_criteria_id,
-                        job_id=job_id,
-                        snapshot_urls_event=snapshot_urls_event,
-                        snapshot_urls_container=snapshot_urls_container,
-                    )
-                )
 
         python_task = asyncio.create_task(
             _run_python_stages(
@@ -356,31 +285,20 @@ async def _run_job_body(
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
                 success_criteria_id=payload.success_criteria_id,
-                snapshot_urls_event=snapshot_urls_event,
-                snapshot_urls_container=snapshot_urls_container,
             )
         )
 
-        # Top-level audit cap: even if one branch hangs (e.g. a misbehaving
-        # remote axe service or a Playwright deadlock), the job must terminate
-        # rather than block the worker forever. The inner stage timeouts
-        # (_timed in stages.py) bound individual auditors; this is the outer
-        # safety net.
+        # Top-level audit cap: even if the Python stage hangs (e.g. a
+        # Playwright deadlock), the job must terminate rather than block the
+        # worker forever. The inner stage timeouts (_timed in stages.py)
+        # bound individual auditors; this is the outer safety net.
         try:
-            tasks = [python_task]
-            if node_task:
-                tasks.append(node_task)
-
             gathered = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
+                asyncio.gather(python_task, return_exceptions=True),
                 timeout=_JOB_TIMEOUT_SECONDS,
             )
             python_result = gathered[0]
-            node_result = gathered[1] if node_task else []
-
         except asyncio.TimeoutError:
-            if node_task and not node_task.done():
-                node_task.cancel()
             if not python_task.done():
                 python_task.cancel()
             # Surface as a structured failure; the outer except path will
@@ -388,21 +306,6 @@ async def _run_job_body(
             raise TimeoutError(
                 f"audit exceeded {_JOB_TIMEOUT_SECONDS}s overall budget"
             )
-
-        # ── Resolve axe-core result ───────────────────────────────────────────
-        node_findings: List[Dict] = []
-        if payload.run_node_audit:
-            if isinstance(node_result, Exception):
-                _stage_error_and_warn(job_id, "axe_core", node_result)
-            else:
-                node_findings = node_result
-                _stage_complete(job_id, "axe_core", len(node_findings))
-                step_logger.record(
-                    step="axe_core_summary",
-                    status="completed",
-                    message="axe-core results recorded",
-                    context={"finding_count": len(node_findings)},
-                )
 
         # ── Resolve Python result ─────────────────────────────────────────────
         python_findings: List[Dict] = []
@@ -425,7 +328,7 @@ async def _run_job_body(
                 f"unexpected type {type(python_result)!r}; ignoring python findings."
             )
 
-        if not node_findings and not python_findings:
+        if not python_findings:
             raise RuntimeError(
                 "All audit sources failed — no findings could be collected. "
                 "Check warnings for details."
@@ -445,7 +348,7 @@ async def _run_job_body(
         # transparently falls back to a thread (identical behaviour, off-loop).
         from ka11y.store.cpu_pool import run_cpu
 
-        all_findings = await run_cpu(_merge_findings, node_findings, python_findings)
+        all_findings = await run_cpu(_merge_findings, [], python_findings)
 
         # A single-SC audit can come either from the per-rule router (filter_rule)
         # or directly on the request (payload.success_criteria_id); honour whichever
