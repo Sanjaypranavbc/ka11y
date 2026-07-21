@@ -5,13 +5,15 @@ Individual Rule Tester — evaluate a single WCAG rule against any URL.
 
 Architecture notes:
   - Universal-snapshot rules use an in-memory _SNAPSHOT_CACHE to skip re-crawl.
-  - Image rules spin up their own crawlers (no cache).
+  - Image and Layout rules spin up their own crawlers (no cache).
+  - Axe-Core rules proxy to the Node microservice.
   - A dummy job entry is registered in _jobs so stage lifecycle helpers
     (_stage_start / _stage_complete) don't crash with KeyError.
 """
 
 import asyncio
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import Any, Dict
@@ -23,6 +25,7 @@ from ka11y.api.v1.combined.stages import (
     _load_universal_snapshot,
     _stage_media_audit_universal,
     _stage_image_audit,
+    _call_node_flat,
 )
 from ka11y.api.v1.combined.store import _jobs
 from ka11y.utils.step_logger import ExecutionStepLogger
@@ -88,6 +91,37 @@ async def execute_rule_test(request: TestRuleRequest):
             _SNAPSHOT_CACHE[url_str] = snapshot
             return snapshot
         return cached
+
+    # ------------------------------------------------------------------
+    # Axe-Core — proxies to the Node JS microservice (no snapshot needed)
+    # ------------------------------------------------------------------
+    if request.rule_id == "axe_core":
+        node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
+        try:
+            findings = await _call_node_flat(url_str, node_base_url, "AA", request.language)
+        except Exception as exc:
+            logger.exception("Axe-Core proxy failed")
+            raise HTTPException(status_code=500, detail=f"Axe-Core error: {exc}")
+        return {"status": "success", "findings": findings}
+
+    if request.rule_id in ("wcag_3_2_3", "wcag_3_2_4", "wcag_3_1_3", "wcag_2_4_10"):
+        node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
+        sc = request.rule_id.replace("wcag_", "").replace("_", ".")
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{node_base_url}/api/v1/rules/{sc}/analyse-url",
+                    json={"url": url_str, "lang": request.language},
+                    timeout=120.0,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                findings = data.get("results") or []
+        except Exception as exc:
+            logger.exception(f"Node proxy for rule {sc} failed")
+            raise HTTPException(status_code=500, detail=f"Node service error for rule {sc}: {exc}")
+        return {"status": "success", "findings": findings}
 
     # ------------------------------------------------------------------
     # Python-based rules

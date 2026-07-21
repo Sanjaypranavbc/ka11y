@@ -1,4 +1,0 @@
-page_url,element_tag,element_id,sentence,sensory_categories,wcag_1_3_3_status,wcag_1_3_3_violation,overall_status,selector,element_ref_id,frame_path,html_snippet
-https://www.kao.com/global/en/,li,kao-133-20,右側のリンクをクリックしてください。,position,FAILED,"1.3.3: Instruction relies solely on sensory characteristic(s) [position] — ""右側のリンクをクリックしてください。"" — add a non-sensory identifier (e.g. button label or heading text).",FAILED,,,,<li>右側のリンクをクリックしてください。</li>
-,,,,,,,,,,,
-── SUMMARY ──,Elements checked : 1,Violations found : 1,Affected pages : 1,,FAILED,,FAILED,,,,

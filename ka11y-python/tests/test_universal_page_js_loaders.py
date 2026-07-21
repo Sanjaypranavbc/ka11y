@@ -15,7 +15,13 @@ from ka11y.crawler import universal_page
 
 
 _EXPECTED_TOP_KEYS = (
+    "forms",
+    "interactive",
+    "target_sizes",
+    "moving_content",
     "media",
+    "text_spacing",
+    "sensory",
 )
 
 # The inline JS extractor constants the crawler evaluates in-page.
