@@ -74,6 +74,7 @@ from .stage_events import (
 )
 from .store import _jobs
 from ka11y.crawler.universal_page import UniversalPageLoader
+from ka11y.crawler.crawler import ImageCrawlerNavigationError
 from ka11y.utils import stage_timing
 
 
@@ -270,9 +271,6 @@ def _ocr_lang_for_page(page_lang: Optional[str], run_lang: str) -> str:
     if page_base in ("ja", "jp"):
         return "ja"
     if page_base:
-        # Known non-Japanese (Latin) page: if the run language is Japanese the
-        # page would otherwise be mis-OCR'd, so force English; else keep the run
-        # language so a configured Latin language (fr/de/…) is preserved.
         return "en" if run_base in ("ja", "jp") else run_lang
     return run_lang
 
@@ -300,10 +298,7 @@ async def _stage_image_audit(
         from ka11y.accessibility.rules.non_text.alttext import (
             AltTextAccessibilityAuditor,
         )
-        # Optimized crawler is a drop-in for AsyncImageCrawler (same interface);
-        # the navigation-error type still comes from the original module.
-        from ka11y.crawler.optimized import OptimizedImageCrawler as AsyncImageCrawler
-        from ka11y.crawler.crawler import ImageCrawlerNavigationError
+        from ka11y.crawler.optimized.optimized_crawler import OptimizedImageCrawler as AsyncImageCrawler
         from ka11y.text_detector.text_detector import (
             OCRPreprocessing,
             TextClassification,
@@ -327,12 +322,6 @@ async def _stage_image_audit(
             _record_crawler_time(job_id, "image_audit", time.perf_counter() - start_crawl)
             await asyncio.to_thread(image_crawler.save_results)
 
-        # Scale the crawl deadline with the number of pages to visit so a deep
-        # crawl reaches every discovered page (each gets ~_CRAWL_PER_PAGE_SECONDS)
-        # instead of all pages sharing one fixed 300 s budget — which let pages
-        # visited late get no screenshots and silently contribute zero findings.
-        # A single page / small crawl keeps the original 300 s floor; the ceiling
-        # keeps the crawl from eating the OCR portion of the stage budget.
         _crawl_page_count = len(discovered_urls) if discovered_urls else 1
         effective_crawl_timeout = max(
             _CRAWL_TIMEOUT_SECONDS,
@@ -342,11 +331,7 @@ async def _stage_image_audit(
         try:
             await asyncio.wait_for(_crawl_and_save(), timeout=effective_crawl_timeout)
         except asyncio.TimeoutError:
-            # The crawl was clipped by the wall-clock cap, so pages visited late
-            # in the BFS (often the very child page the user cares about) may have
-            # NO screenshots and therefore silently contribute zero image/contrast
-            # findings. Surface this on the report instead of hiding it in the log
-            # so a low child finding-count is explainable, not mysterious.
+
             covered_pages = sorted(
                 {getattr(i, "url", "") for i in image_crawler.images_data if getattr(i, "url", "")}
             )
@@ -367,7 +352,7 @@ async def _stage_image_audit(
                     + (f", {clipped} page(s) not screenshotted" if clipped else "")
                     + " — some pages may show fewer image/contrast findings"
                 )
-            except Exception:  # noqa: BLE001 — a warning must never fail the audit
+            except Exception:
                 pass
 
         ocr_results: list = []
@@ -376,7 +361,6 @@ async def _stage_image_audit(
         findings: List[Dict] = []
         ocr_paths: List[str] = []
 
-        # Emit a crawl-phase completion marker so the bar settles before OCR begins.
         emit_stage_progress(
             job_id,
             "image_audit",
@@ -386,16 +370,6 @@ async def _stage_image_audit(
         )
 
         if run_ocr:
-            # OCR budget scales with the number of crawled pages so a child page
-            # gets the same per-page image coverage it would as the root. The
-            # budget is per_page * pages (capped by a global memory ceiling) and
-            # distributed fairly round-robin across pages, so a page's images
-            # never compete with every sibling for one shared cap — the cross-page
-            # starvation that made the same page yield fewer image findings
-            # (1.1.1, 1.4.3, 1.4.5, 1.4.6) as a child than audited alone. With the
-            # default per_page (60) and max_pages (50) every page gets its full
-            # ~60 either way; only crawls past the ceiling degrade, and they do so
-            # evenly across pages rather than starving the ones visited last.
             distinct_pages = len(
                 {getattr(i, "url", "") for i in image_crawler.images_data if getattr(i, "url", "")}
             ) or 1
@@ -405,7 +379,6 @@ async def _stage_image_audit(
                     get_max_ocr_images_ceiling(),
                 )
             else:
-                # Single page: preserve the exact legacy budget/behaviour.
                 max_ocr_images = get_max_ocr_images_per_run()
             ocr_paths, skipped_ocr_paths = select_ocr_candidate_paths(
                 image_crawler.images_data,
@@ -429,16 +402,6 @@ async def _stage_image_audit(
                             "budget": max_ocr_images,
                         },
                     )
-
-            # Per-page OCR language. The default OCR backend (PaddleOCR) is
-            # mono-lingual: forcing the root URL's language on every page made an
-            # English child of a Japanese root (e.g. /jp → /global/en/...) get
-            # OCR'd with the Japanese model, detecting almost no text and so
-            # losing nearly all its 1.1.1/1.4.3/1.4.6 image+contrast findings.
-            # Group the selected screenshots by the language of the page they
-            # came from and OCR each group with the right model. When every page
-            # resolves to the same language this is a single group — identical to
-            # the previous single-detector behaviour.
             path_to_page: Dict[str, str] = {}
             for _img in image_crawler.images_data:
                 _sp = getattr(_img, "screenshot_path", None)
@@ -497,8 +460,6 @@ async def _stage_image_audit(
                 sub_stage="ocr_save_reports",
             ):
                 await asyncio.to_thread(saver.save_reports)
-            # filename → source page URL, so the contrast report can be grouped
-            # per page in the image visualiser on multi-page crawls.
             page_by_filename: Dict[str, str] = {}
             for _img in image_crawler.images_data:
                 _fn = getattr(_img, "filename", None)
@@ -506,10 +467,6 @@ async def _stage_image_audit(
                 if _fn and _pg:
                     page_by_filename[_fn] = _pg
             contrast_report = _build_contrast_report(ocr_results, page_by_filename)
-            # D-1 fix: thread page_by_filename through so contrast findings (1.4.3,
-            # 1.4.6) are stamped with the page the image actually came from, not
-            # the root URL. Without this, every contrast finding on a multi-page
-            # crawl collapses to the root URL and child pages silently lose them.
             for rule_sc, converter in OCR_RESULT_CONVERTERS:
                 with stage_timing.time_stage(
                     job_id,
@@ -521,7 +478,6 @@ async def _stage_image_audit(
                     findings.extend(
                         converter(ocr_results, url, page_by_filename=page_by_filename)
                     )
-            # 1.4.3/1.4.6 needs_review for images that failed screenshot capture
             findings.extend(
                 _contrast_capture_failed_to_findings(image_crawler.images_data, url)
             )
@@ -550,7 +506,6 @@ async def _stage_image_audit(
             )
             image_audit_report = _build_image_audit_report(records)
             for status_key, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
-                # Strip the wcag_X_Y_Z_status prefix → "X.Y.Z" for the rule field.
                 _rule = (
                     status_key.replace("wcag_", "")
                     .replace("_status", "")
@@ -617,23 +572,12 @@ async def _load_universal_snapshot(
     from ka11y.crawler.snapshot_normalizer import SnapshotNormalizer
     from ka11y.crawler.policy import CrawlPolicy
 
-    # Build the crawl policy explicitly so the request's internal_links /
-    # max_pages controls reach the universal BFS: same_origin == internal-only
-    # (exact hostname), max_pages is the hard RAM/time budget.
-    #
-    # max_links_per_page must scale with max_pages: it was defaulting to 50, so a
-    # crawl with max_pages>50 could never actually reach that many pages — each
-    # page only enqueued its first 50 links, starving deep BFS of child URLs.
     policy = CrawlPolicy(
         max_depth=max_depth,
         max_pages=max_pages,
         max_links_per_page=max(50, max_pages),
         same_origin=internal_links,
     )
-
-    # UniversalPageLoader is imported at module level so tests can patch
-    # `stages.UniversalPageLoader`; the call site below resolves it from the
-    # module namespace.
     start_crawl = time.perf_counter()
     async with time_crawler(
         output_dir, "universal_snapshot", url,
@@ -741,7 +685,6 @@ async def _stage_media_audit_universal(
 
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
-
 async def _run_python_stages(
     *,
     url: str,
@@ -759,7 +702,13 @@ async def _run_python_stages(
     success_criteria_id: Optional[str] = None,
 ) -> PythonStagesResult:
     """
-    Run all Python audit stages concurrently.
+    Run the active Python audit stages concurrently.
+
+    In scope: image audit (1.1.1 alt-text + OCR-derived 1.4.3/1.4.6 contrast)
+    and media audit (1.2.1 audio/video alternative + 1.2.2 captions).
+
+    The pipeline stage (`_run_pipeline_stage`) has been removed — it is out
+    of scope for this run configuration.
 
     Returns a :class:`PythonStagesResult` with named ``findings``,
     ``contrast_report``, and ``image_audit_report`` fields.
@@ -768,20 +717,13 @@ async def _run_python_stages(
     def _timed(coro):
         return asyncio.wait_for(coro, timeout=_STAGE_TIMEOUT_SECONDS)
 
-    static_rules_enabled = any((run_media_audit, run_captions_audit))
+    # A crawl (beyond the single root page) is needed if media/captions are
+    # active, or the caller explicitly asked for depth.
+    needs_crawl = any((run_media_audit, run_captions_audit)) or max_depth > 0
 
-    # 1. Run universal snapshot first.
-    #
-    # The snapshot now ALSO carries per-page pipeline contexts, so building it
-    # at ``max_depth > 0`` is the only way the unified pipeline (1.1.1, 1.4.3,
-    # 1.4.5, 1.4.6, 1.4.11) covers more than the entry URL. Without that, deep
-    # pages were silently losing every pipeline finding even though the BFS
-    # visited them. The image-only ``max_depth=0`` path remains snapshot-free
-    # (the pipeline falls back to its single-URL navigation, which preserves
-    # the previous behaviour for that case).
     snapshot = None
     discovered_urls = [url]
-    if static_rules_enabled or max_depth > 0:
+    if needs_crawl:
         snapshot = await _load_universal_snapshot(
             url=url,
             output_dir=output_dir,
@@ -791,9 +733,6 @@ async def _run_python_stages(
             internal_links=internal_links,
             max_pages=max_pages,
         )
-        # page_url is now the resolved URL (see universal_page._crawl_one_url),
-        # so two queued links that 301 to the same page collapse to one
-        # page_summary key.
         seen_pages: set[str] = set()
         discovered_urls = []
         for s in snapshot.page_summaries:
@@ -805,12 +744,9 @@ async def _run_python_stages(
             discovered_urls = [url]
 
     snapshot_task = asyncio.Future()
-    if snapshot:
-        snapshot_task.set_result(snapshot)
-    else:
-        snapshot_task.set_result(None)
+    snapshot_task.set_result(snapshot)
 
-    results = await asyncio.gather(
+    stage_coros = [
         _heavy(
             _stage_image_audit(
                 url,
@@ -826,17 +762,6 @@ async def _run_python_stages(
                 internal_links=internal_links,
             )
         ),
-        # Snapshot is passed so the pipeline evaluates every BFS-discovered page,
-        # not just the entry URL; with no snapshot it falls back to single-URL mode.
-        _timed(
-            _run_pipeline_stage(
-                url,
-                job_id,
-                run_image_audit=run_image_audit,
-                lang=lang,
-                snapshot=snapshot,
-            )
-        ),
         _timed(
             _stage_media_audit_universal(
                 url,
@@ -849,24 +774,29 @@ async def _run_python_stages(
                 step_logger,
             )
         ),
-        return_exceptions=True,
-    )
+    ]
+    stage_labels = ["image_audit", "media_audit"]
+
+    results = await asyncio.gather(*stage_coros, return_exceptions=True)
 
     all_findings: List[Dict] = []
     contrast_report: Optional[Dict[str, Any]] = None
     image_audit_report: Optional[Dict[str, Any]] = None
 
-    # Image audit returns (findings, contrast_report, image_audit_report)
     img_result = results[0]
-    if not isinstance(img_result, Exception):
+    if isinstance(img_result, Exception):
+        logger.error(f"[combined] job {job_id}: image audit stage failed: {img_result}")
+    else:
         img_findings, contrast_report, image_audit_report = img_result
         all_findings.extend(img_findings)
 
-    # All other stages return a plain findings list
-    for r in results[1:]:
-        if not isinstance(r, Exception):
+    for label, r in zip(stage_labels[1:], results[1:]):
+        if isinstance(r, Exception):
+            logger.error(f"[combined] job {job_id}: {label} stage failed: {r}")
+        else:
             all_findings.extend(r)
 
+    logger.info(f"[combined] job {job_id}: python stages complete, {len(all_findings)} findings")
     return PythonStagesResult(
         findings=all_findings,
         contrast_report=contrast_report,

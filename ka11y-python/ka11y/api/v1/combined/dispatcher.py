@@ -103,25 +103,36 @@ async def enqueue(run_id: str, payload: CombinedRequest, filter_rule: Optional[s
     Fallback: if the dispatcher isn't running (store failed to init), launch the
     job directly so audits never silently stall.
     """
-    await repo.create_run(
-        run_id=run_id,
-        url=str(payload.url),
-        status="queued",
-        lang_requested=payload.lang,
-        wcag_level=payload.wcag_level,
-        params=payload.model_dump(mode="json"),
-        max_depth=payload.max_depth,
-        max_pages=payload.max_pages,
-        submitted_at=_jobs.get(run_id, {}).get("submitted_at") or _now(),
-    )
-    repo.insert_event(run_id, "queued", {"url": str(payload.url)})
+    logger.info("[QUEUE] Enqueuing audit %s for URL: %s",run_id,payload.url,)
+
+    try:
+        await repo.create_run(
+            run_id=run_id,
+            url=str(payload.url),
+            status="queued",
+            lang_requested=payload.lang,
+            wcag_level=payload.wcag_level,
+            params=payload.model_dump(mode="json"),
+            max_depth=payload.max_depth,
+            max_pages=payload.max_pages,
+            submitted_at=_jobs.get(run_id, {}).get("submitted_at") or _now(),
+        )
+        repo.insert_event(run_id, "queued", {"url": str(payload.url)})
+        logger.info("[QUEUE] Audit %s successfully persisted to the queue.", run_id, )
+
+    except Exception:
+        logger.exception("[QUEUE] Failed to save audit %s to the persistent queue.",run_id)
+        raise
+
 
     if not _dispatcher_running:
-        # Legacy path — keep audits running even with the store unavailable.
         from .runner import _run_job
 
         asyncio.create_task(_run_job(run_id, payload, filter_rule))
+        logger.info("[QUEUE] Fallback task created for audit %s.",run_id,)
         return
+
+    logger.info("[QUEUE] Dispatcher is running. Notifying dispatcher for audit %s.",run_id)
     notify()
 
 

@@ -3,8 +3,8 @@ ka11y/api/v1/combined/runner.py
 =================================
 _run_job() — the main background task that orchestrates the full audit.
 
-Fires axe-core (Node) and all Python stages in parallel, resolves results,
-builds the final report, and updates the job store.
+Runs all Python audit stages (image + media), resolves results, builds the
+final report, and updates the job store.
 """
 
 from __future__ import annotations
@@ -32,16 +32,10 @@ from ka11y.utils.run_timing import log_run_timing
 from ka11y.utils.stage_timing import emit_summary as emit_stage_timing_summary
 from .models import CombinedRequest
 from .report import _build_report
-from .stage_events import (
-    _stage_complete,
-    _stage_error_and_warn,
-    _stage_start,
-    emit_job_plan,
-)
+from .stage_events import emit_job_plan
 from .stages import (
     PythonStagesResult,
     _allowed_levels,
-    _call_node_flat,
     _run_python_stages,
 )
 from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
@@ -49,17 +43,7 @@ from ka11y.store import repo
 
 logger = setup_logger(name="KAC", tag="combined")
 
-
-# Outer audit budget — bounds the top-level asyncio.gather of axe+python so
-# a stuck inner branch cannot pin a worker forever. Each inner stage already
-# has a tighter _STAGE_TIMEOUT_SECONDS budget in stages.py.
 _JOB_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1800"))
-
-# Hard cap on concurrent _run_job() background tasks. Without this, every
-# accepted POST spawns a Chromium + axe-core run; at the rate-limiter's
-# 30 req/min ceiling that would launch ~150 browsers in 5 minutes. The
-# semaphore is initialised lazily because asyncio primitives must be bound
-# to a running event loop.
 _MAX_CONCURRENT_JOBS = int(os.environ.get("KA11Y_MAX_CONCURRENT_JOBS", "4"))
 _job_semaphore: asyncio.Semaphore | None = None
 _job_semaphore_loop: Any = None
@@ -92,9 +76,9 @@ def _merge_findings(
     Python finding wins — it carries richer OCR-based contrast data for 1.4.3
     and more precise image-level diagnostics for other criteria.
     """
-    # Index Python findings first so they take precedence in the merge table.
-    merged: dict = {}  # key -> finding dict
-    no_key: list = []  # findings with no dedup key (keep all)
+
+    merged: dict = {}
+    no_key: list = []
 
     def _normalize_target_sig(target: Any) -> str:
         if isinstance(target, str):
@@ -126,12 +110,7 @@ def _merge_findings(
         tag = (el.get("tag") or "").strip().lower()
         el_id = (el.get("element_id") or "").strip().lower()
         html_sig = _normalize_html_sig(str(el.get("html") or ""))
-        # image_src: Python image findings use the src URL as element_id, but axe
-        # findings for the same <img> use CSS selectors.  Provide a stable cross-service
-        # dedup key by normalising the image src when present (§3.2 fix).
         image_src = (el.get("image_src") or "").strip().lower()
-        # Strip the el_id if it looks like a URL — use image_src path instead so it
-        # doesn't collide with a DOM element-id on a different element.
         el_id_is_url = el_id.startswith(("http://", "https://", "//", "/"))
         stable_el_id = el_id if not el_id_is_url else ""
 
@@ -148,17 +127,16 @@ def _merge_findings(
 
     for f in python_findings:
         key = _sig(f)
-        if not key[2]:  # no element identifier
+        if not key[2]:
             no_key.append(f)
         else:
-            merged[key] = f  # Python always wins
-
+            merged[key] = f
     for f in node_findings:
         key = _sig(f)
         if not key[2]:
             no_key.append(f)
         elif key not in merged:
-            merged[key] = f  # axe only added when Python has no match
+            merged[key] = f
 
     return list(merged.values()) + no_key
 
@@ -167,16 +145,14 @@ async def _run_job(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
     """
-    Background task: run axe-core (Node) and Python stages in parallel.
+    Background task: run the Python image + media audit stages.
 
     If *filter_rule* is provided, the final report will only contain findings
     for that specific WCAG SC ID (e.g. "1.1.1").
 
     Graceful degradation:
-    • Uses asyncio.gather(return_exceptions=True) so neither branch cancels the other.
-    • If axe-core fails → Python-only report with a warning entry.
     • If a Python stage fails → other stages continue; warning entry added.
-    • Job fails ONLY when both axe-core AND all Python stages return nothing.
+    • Job fails when all Python stages return nothing.
 
     Concurrency:
     • Bounded by the module-level semaphore so the worker cannot launch more
@@ -185,8 +161,7 @@ async def _run_job(
       acquired so clients polling /combined/{job_id} can observe the queue.
     """
     sem = _get_job_semaphore()
-    if sem.locked() and sem._value <= 0:  # noqa: SLF001
-        # Visible state when a job is admitted but is parked behind the cap.
+    if sem.locked() and sem._value <= 0:
         async with _get_job_lock(job_id):
             if _jobs.get(job_id, {}).get("status") == "pending":
                 _jobs[job_id]["status"] = "queued"
@@ -198,50 +173,38 @@ async def _run_job(
 async def _run_job_body(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
-    """Original body of :func:`_run_job`, gated by the concurrency semaphore."""
+    """Orchestrates one combined audit job: image audit, media/captions
+    audit, and (once wired in) label-in-name — no axe-core, no pipeline."""
     _jobs[job_id]["status"] = "running"
-    # Wall-clock start of real work (before lang detection + stages). Used by
-    # the run-timing logger to separate queue wait from execution time.
     run_started_at = datetime.now(timezone.utc).isoformat()
     _jobs[job_id]["run_started_at"] = run_started_at
-    # Durable store: mark this run as running with its queue-wait, so a polling
-    # client or the /history endpoint reflects live state even across restarts.
     await repo.mark_running(job_id, run_started_at, _jobs[job_id].get("submitted_at"))
     repo.insert_event(job_id, "running", {})
 
-    # Cooperative cancellation (P4): a client may have cancelled while the job
-    # waited in the queue. Bail out before launching browsers/axe.
     try:
         if await repo.is_cancelled(job_id):
             _jobs[job_id]["status"] = "cancelled"
             logger.info("[combined] job %s cancelled before start", job_id)
             return
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
     url = str(payload.url)
 
-    # Resolve the effective language once, up front. When the user selects
-    # "auto" (the default), detect it from the page's <html lang>; otherwise
-    # honour the explicit request. Used for the i18n context, the node/axe
-    # call, the Python stages, and the final report so every stage localises
-    # consistently instead of leaking the literal string "auto".
     if payload.lang == "auto":
         resolved_lang = await detect_page_language(url)
+        logger.info(f"[combined] job {job_id}: detected page language: {resolved_lang}")
     else:
         resolved_lang = payload.lang
 
-    _lang_ctx.set(resolved_lang)  # Inherited by all child tasks via context copy
-    # P3: tag crawler-timing rows with this run so they mirror into stage_timings.
+    _lang_ctx.set(resolved_lang)
     try:
         from ka11y.utils import crawler_timing
-
         crawler_timing.set_run_id(job_id)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
 
     config = load_config()
-    node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
     domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
     ts = time.strftime("%m%d_%H%M")
     output_dir = Path(
@@ -269,105 +232,15 @@ async def _run_job_body(
             },
         )
 
-        # Announce the stage plan to SSE subscribers so the progress bar can render.
         active_stages: list[str] = []
-        if payload.run_node_audit:
-            active_stages.append("axe_core")
         if payload.run_ocr or payload.run_image_audit:
             active_stages.append("image_audit")
-        # pipeline stage always runs; it handles 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
-        active_stages.append("pipeline")
-        if payload.run_form_audit:
-            active_stages.append("form_audit")
-        if payload.run_pause_stop_hide_audit:
-            active_stages.append("pause_stop_hide")
-        if payload.run_text_spacing_audit:
-            active_stages.append("text_spacing")
-        if any(
-            (
-                payload.run_resize_text_audit,
-                payload.run_reflow_audit,
-                payload.run_text_spacing_audit,
-                payload.run_orientation_audit,
-                payload.run_hover_focus_content_audit,
-                payload.run_focus_not_obscured_min_audit,
-                payload.run_focus_not_obscured_enh_audit,
-            )
-        ):
-            active_stages.append("rendered_layout_audit")
-        if payload.run_media_audit:
+        if payload.run_media_audit or payload.run_captions_audit:
             active_stages.append("media_audit")
-        if payload.run_sensory_audit:
-            active_stages.append("sensory_audit")
-        if payload.run_consistent_navigation_audit:
-            active_stages.append("consistent_navigation")
-        if payload.run_consistent_id_audit:
-            active_stages.append("consistent_identification")
-        if payload.run_unusual_words_audit:
-            active_stages.append("unusual_words")
-        if payload.run_section_headings_audit:
-            active_stages.append("section_headings")
+        if getattr(payload, "run_label_in_name_audit", False):
+            active_stages.append("label_in_name")
         emit_job_plan(job_id, active_stages)
-
-        # Fire axe-core and all Python stages concurrently.
-        #
-        # R-1: When ``max_depth > 0`` the Python stage builds a universal
-        # snapshot that enumerates all pages to audit. Node's independent
-        # ``boundedBfs`` has a hard ``flatCrawlBudgetMs`` cap (255 s by
-        # default) which on big sites like kao.com was clipping the crawl to
-        # 3 pages and silently dropping axe findings on every page beyond
-        # that. We share the snapshot's URL list via a small event/container
-        # pair: Python signals as soon as the snapshot is ready (always — even
-        # on failure, via a finally block), and Node waits up to
-        # _SNAPSHOT_URLS_WAIT_SECONDS for it, then audits exactly the same pages
-        # — no BFS, no clip. The wait must outlast a legitimately slow snapshot
-        # (kao.com/jp took 561 s); the old 90 s default caused Node to give up
-        # early and fall back to its budget-capped BFS, under-auditing 43/50.
-        snapshot_urls_event: asyncio.Event | None = None
-        snapshot_urls_container: dict | None = None
-        if payload.max_depth > 0:
-            snapshot_urls_event = asyncio.Event()
-            snapshot_urls_container = {"urls": None}
-
-        node_task = None
-        if payload.run_node_audit:
-            _stage_start(job_id, "axe_core")
-            # P6: unified crawl runs axe-core inside the Python Playwright pass
-            # (one page load) instead of a second Puppeteer crawl in Node. Same
-            # snapshot-URL handshake, same flat findings shape. Default OFF.
-            from ka11y.crawler.axe_runner import is_unified_enabled, run_axe_unified
-
-            if is_unified_enabled():
-                node_task = asyncio.create_task(
-                    run_axe_unified(
-                        url,
-                        payload.wcag_level,
-                        resolved_lang,
-                        max_depth=payload.max_depth,
-                        internal_links=payload.internal_links,
-                        max_pages=payload.max_pages,
-                        success_criteria_id=payload.success_criteria_id,
-                        job_id=job_id,
-                        snapshot_urls_event=snapshot_urls_event,
-                        snapshot_urls_container=snapshot_urls_container,
-                    )
-                )
-            else:
-                node_task = asyncio.create_task(
-                    _call_node_flat(
-                        url,
-                        node_base_url,
-                        payload.wcag_level,
-                        resolved_lang,
-                        max_depth=payload.max_depth,
-                        internal_links=payload.internal_links,
-                        max_pages=payload.max_pages,
-                        success_criteria_id=payload.success_criteria_id,
-                        job_id=job_id,
-                        snapshot_urls_event=snapshot_urls_event,
-                        snapshot_urls_container=snapshot_urls_container,
-                    )
-                )
+        logger.info(f"[combined] job {job_id}: active stages = {active_stages}")
 
         python_task = asyncio.create_task(
             _run_python_stages(
@@ -376,106 +249,48 @@ async def _run_job_body(
                 max_depth=payload.max_depth,
                 run_ocr=payload.run_ocr,
                 run_image_audit=payload.run_image_audit,
-                run_form_audit=payload.run_form_audit,
-                run_label_in_name_audit=payload.run_label_in_name_audit,
                 run_media_audit=payload.run_media_audit,
                 run_captions_audit=payload.run_captions_audit,
-                run_pause_stop_hide_audit=payload.run_pause_stop_hide_audit,
-                run_target_size_audit=payload.run_target_size_audit,
-                run_resize_text_audit=payload.run_resize_text_audit,
-                run_reflow_audit=payload.run_reflow_audit,
-                run_text_spacing_audit=payload.run_text_spacing_audit,
-                run_orientation_audit=payload.run_orientation_audit,
-                run_hover_focus_content_audit=payload.run_hover_focus_content_audit,
-                run_focus_not_obscured_min_audit=payload.run_focus_not_obscured_min_audit,
-                run_focus_not_obscured_enh_audit=payload.run_focus_not_obscured_enh_audit,
-                run_sensory_audit=payload.run_sensory_audit,
                 lang=resolved_lang,
                 job_id=job_id,
                 step_logger=step_logger,
                 internal_links=payload.internal_links,
                 max_pages=payload.max_pages,
                 success_criteria_id=payload.success_criteria_id,
-                run_consistent_navigation_audit=payload.run_consistent_navigation_audit,
-                run_consistent_id_audit=payload.run_consistent_id_audit,
-                run_unusual_words_audit=payload.run_unusual_words_audit,
-                run_section_headings_audit=payload.run_section_headings_audit,
-                snapshot_urls_event=snapshot_urls_event,
-                snapshot_urls_container=snapshot_urls_container,
             )
         )
 
-        # Top-level audit cap: even if one branch hangs (e.g. a misbehaving
-        # remote axe service or a Playwright deadlock), the job must terminate
-        # rather than block the worker forever. The inner stage timeouts
-        # (_timed in stages.py) bound individual auditors; this is the outer
-        # safety net.
         try:
-            tasks = [python_task]
-            if node_task:
-                tasks.append(node_task)
-
             gathered = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
+                asyncio.gather(python_task, return_exceptions=True),
                 timeout=_JOB_TIMEOUT_SECONDS,
             )
             python_result = gathered[0]
-            node_result = gathered[1] if node_task else []
-
         except asyncio.TimeoutError:
-            if node_task and not node_task.done():
-                node_task.cancel()
             if not python_task.done():
                 python_task.cancel()
-            # Surface as a structured failure; the outer except path will
-            # scrub it before broadcasting.
             raise TimeoutError(
                 f"audit exceeded {_JOB_TIMEOUT_SECONDS}s overall budget"
             )
 
-        # ── Resolve axe-core result ───────────────────────────────────────────
-        node_findings: List[Dict] = []
-        if payload.run_node_audit:
-            if isinstance(node_result, Exception):
-                _stage_error_and_warn(job_id, "axe_core", node_result)
-            else:
-                node_findings = node_result
-                _stage_complete(job_id, "axe_core", len(node_findings))
-                step_logger.record(
-                    step="axe_core_summary",
-                    status="completed",
-                    message="axe-core results recorded",
-                    context={"finding_count": len(node_findings)},
-                )
-
-        # ── Resolve Python result ─────────────────────────────────────────────
+        # ── Resolve Python result ────────────────────────────────────────
         python_findings: List[Dict] = []
         contrast_report: Optional[Dict[str, Any]] = None
         image_audit_report: Optional[Dict[str, Any]] = None
 
         if isinstance(python_result, Exception):
-            pass  # all stages failed — warnings already recorded
-        elif isinstance(python_result, PythonStagesResult):
+            logger.error(f"[combined] job {job_id}: python stages failed: {python_result}")
+        else:
             python_findings = python_result.findings
             contrast_report = python_result.contrast_report
             image_audit_report = python_result.image_audit_report
-        elif isinstance(python_result, tuple) and len(python_result) == 3:
-            # Backwards-compat path: pre-dataclass callers / older test mocks.
-            python_findings, contrast_report, image_audit_report = python_result
-        else:
-            # Unexpected return type — degrade gracefully rather than raising
-            logger.warning(
-                f"[combined] job {job_id}: _run_python_stages() returned "
-                f"unexpected type {type(python_result)!r}; ignoring python findings."
-            )
 
-        if not node_findings and not python_findings:
+        if not python_findings:
             raise RuntimeError(
                 "All audit sources failed — no findings could be collected. "
                 "Check warnings for details."
             )
 
-        # Filter Python findings to the requested WCAG level
         allowed = _allowed_levels(payload.wcag_level)
         python_findings = [
             f
@@ -483,17 +298,10 @@ async def _run_job_body(
             if f.get("level") in allowed or f.get("level") is None
         ]
 
-        # P5: merge is pure CPU (sha1 + string normalisation over every finding)
-        # and grows with site size. Route it through the shared process pool for
-        # true multi-core parallelism when KA11Y_CPU_WORKERS>0; otherwise run_cpu
-        # transparently falls back to a thread (identical behaviour, off-loop).
         from ka11y.store.cpu_pool import run_cpu
+        all_findings = await run_cpu(_merge_findings, [], python_findings)
 
-        all_findings = await run_cpu(_merge_findings, node_findings, python_findings)
-
-        # A single-SC audit can come either from the per-rule router (filter_rule)
-        # or directly on the request (payload.success_criteria_id); honour whichever
-        # is set so the final report contains only that criterion's findings.
+        # FIX: this was referenced below but never assigned — restored.
         effective_filter = filter_rule or payload.success_criteria_id
         if effective_filter:
             all_findings = [
@@ -514,19 +322,12 @@ async def _run_job_body(
         report["warnings"] = _jobs[job_id].get("warnings", [])
         report["warning_details"] = _jobs[job_id].get("warning_details", [])
 
-        # P2: content-address every image the report references and repoint the
-        # frontend-facing fields (image_url / element.image_src) at the durable
-        # /api/v1/assets/{id} route. Must run BEFORE the ?path= fallback below so
-        # registered images are served from the asset store, not the legacy path.
         try:
             from ka11y.store.assets import register_report_assets
-
             await register_report_assets(job_id, report)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug("asset registration failed for %s", job_id, exc_info=True)
 
-        # Legacy fallback: any image NOT content-addressed above (no DB asset)
-        # still gets a working URL via the deprecated ?path= endpoint.
         for report_key in ("contrast_report", "image_audit_report"):
             if report.get(report_key):
                 for img in report[report_key].get("images", []):
@@ -556,8 +357,6 @@ async def _run_job_body(
             json.dump(
                 report, fh, indent=2, ensure_ascii=False, default=_json_serializer
             )
-
-        # Slim down the "passes" array for the in-memory 'result' object used by the UI
         if len(report.get("passes", [])) > 100:
             logger.info(f"[combined] Slimming in-memory passes array from {len(report['passes'])} to 100 for job {job_id}")
             report["passes"] = report["passes"][:100]
@@ -575,8 +374,6 @@ async def _run_job_body(
                 }
             )
 
-        # Durable persistence (P0/P1): full report (zlib), flattened findings,
-        # per-page rows, and run summary. All wrapped — never fails the audit.
         await repo.save_report(job_id, report)
         await repo.save_findings(job_id, report)
         await repo.save_pages(
@@ -591,8 +388,6 @@ async def _run_job_body(
         )
         repo.insert_event(job_id, "job_complete", {"summary": report.get("summary")})
 
-        # Append a per-run timing block to logs/run_timings.log (durations are
-        # derived from the timestamps already recorded; no extra measurement).
         job_rec = _jobs.get(job_id, {})
         log_run_timing(
             job_id=job_id,
@@ -605,8 +400,7 @@ async def _run_job_body(
             lang=resolved_lang,
             summary=report.get("summary"),
         )
-        # Render the low-level per-(page, stage, rule) summary alongside the JSONL.
-        # Never raises — safe on missing rows.
+
         emit_stage_timing_summary(job_id)
 
         logger.info(
@@ -657,9 +451,7 @@ async def _run_job_body(
             if running_stages
             else (_jobs[job_id].get("current_stage") or "post_processing")
         )
-        # Internal-only diagnostic detail (file paths, exception type, traceback)
-        # is logged but never surfaced to API clients. Clients receive an opaque
-        # error_id which support staff can correlate against these logs.
+
         error_id = uuid.uuid4().hex
         logger.error(
             f"[combined] job {job_id} (error_id={error_id}) failed during stage "
@@ -686,8 +478,6 @@ async def _run_job_body(
         )
         repo.insert_event(job_id, "job_failed", {"error_id": error_id, "stage": current_stage})
 
-        # Record timing for the failed run too, so the log shows where time went
-        # before the failure (and which stage failed).
         job_rec = _jobs.get(job_id, {})
         log_run_timing(
             job_id=job_id,
@@ -711,8 +501,7 @@ async def _run_job_body(
                 "location": where,
             },
         )
-        # SSE broadcast: client gets opaque error_id + stage only. Exception
-        # type, message, and source location are server-side log signals.
+
         await _broadcast(
             job_id,
             "job_failed",
@@ -725,13 +514,6 @@ async def _run_job_body(
         )
 
     finally:
-        # Stage-event broadcasts are scheduled via loop.create_task() and are not
-        # awaited by their callers. If _close_subscribers() runs before those tasks
-        # execute, subscriber queues are removed first and stage events are silently
-        # lost. Two yields are used: the first allows the broadcast tasks to be
-        # scheduled; the second allows them to complete their queue puts, since each
-        # broadcast task itself does a single non-blocking put_nowait with no further
-        # awaits.
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await _close_subscribers(job_id)

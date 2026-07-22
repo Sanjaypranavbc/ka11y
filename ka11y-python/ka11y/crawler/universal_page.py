@@ -618,6 +618,7 @@ class UniversalPageLoader:
         record_har: bool = False,
         step_logger: ExecutionStepLogger | None = None,
         policy: CrawlPolicy | None = None,
+        seed_url: Optional[List[str]] = None,
     ) -> PageSnapshot:
         """
         Main entry point for universal crawling. Uses a single browser session
@@ -653,7 +654,13 @@ class UniversalPageLoader:
 
         from collections import deque
 
-        queue: deque[tuple[str, int]] = deque([(url, 0)])
+        queue: deque[tuple[str, int]] = deque()
+        if seed_url:
+            for su in seed_url:
+                queue.append((su, 0))
+        else:
+            queue.append((url, 0))
+
         visited: set[str] = set()
 
         from ka11y.crawler.browser_pool import leased_context

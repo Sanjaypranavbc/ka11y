@@ -7,7 +7,7 @@
   "extends": [
     "eslint:recommended",
     "plugin:node/recommended",
-    "plugin:security/recommended"
+    "plugin:security/recommended-legacy"
   ],
   "plugins": [
     "jsx-a11y",

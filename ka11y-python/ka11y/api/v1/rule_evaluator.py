@@ -25,7 +25,6 @@ from ka11y.api.v1.combined.stages import (
     _load_universal_snapshot,
     _stage_media_audit_universal,
     _stage_image_audit,
-    _call_node_flat,
 )
 from ka11y.api.v1.combined.store import _jobs
 from ka11y.utils.step_logger import ExecutionStepLogger
@@ -93,16 +92,8 @@ async def execute_rule_test(request: TestRuleRequest):
         return cached
 
     # ------------------------------------------------------------------
-    # Axe-Core — proxies to the Node JS microservice (no snapshot needed)
+    # Axe-Core logic has been removed as the node runner is no longer supported
     # ------------------------------------------------------------------
-    if request.rule_id == "axe_core":
-        node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
-        try:
-            findings = await _call_node_flat(url_str, node_base_url, "AA", request.language)
-        except Exception as exc:
-            logger.exception("Axe-Core proxy failed")
-            raise HTTPException(status_code=500, detail=f"Axe-Core error: {exc}")
-        return {"status": "success", "findings": findings}
 
     if request.rule_id in ("wcag_3_2_3", "wcag_3_2_4", "wcag_3_1_3", "wcag_2_4_10"):
         node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")

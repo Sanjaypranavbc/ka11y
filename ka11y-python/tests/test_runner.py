@@ -47,9 +47,6 @@ async def test_python_result_non_tuple_does_not_raise():
         "ka11y.api.v1.combined.runner._run_python_stages",
         new=AsyncMock(return_value="not-a-tuple"),
     ), patch(
-        "ka11y.api.v1.combined.runner._call_node_flat",
-        new=AsyncMock(return_value=[]),
-    ), patch(
         "ka11y.api.v1.combined.runner._build_report",
         return_value={
             "summary": {"violations": 0, "needs_review": 0, "passes": 0},
@@ -189,9 +186,6 @@ async def test_python_result_valid_tuple_works_correctly():
         "ka11y.api.v1.combined.runner._run_python_stages",
         new=AsyncMock(return_value=(python_findings, contrast_report, image_audit_report)),
     ), patch(
-        "ka11y.api.v1.combined.runner._call_node_flat",
-        new=AsyncMock(return_value=[]),
-    ), patch(
         "ka11y.api.v1.combined.runner._build_report",
         return_value={
             "summary": {"violations": 1, "needs_review": 0, "passes": 0},
@@ -265,9 +259,6 @@ async def test_python_result_exception_degrades_gracefully():
         "ka11y.api.v1.combined.runner._run_python_stages",
         new=AsyncMock(side_effect=RuntimeError("stages exploded")),
     ), patch(
-        "ka11y.api.v1.combined.runner._call_node_flat",
-        new=AsyncMock(return_value=node_findings),
-    ), patch(
         "ka11y.api.v1.combined.runner._build_report",
         return_value={
             "summary": {"violations": 1, "needs_review": 0, "passes": 0},
@@ -337,9 +328,6 @@ async def test_run_job_forwards_success_criteria_id_to_node_and_python():
         "ka11y.api.v1.combined.runner._run_python_stages",
         new=AsyncMock(return_value=([], None)),
     ) as run_python_stages, patch(
-        "ka11y.api.v1.combined.runner._call_node_flat",
-        new=AsyncMock(return_value=node_findings),
-    ) as call_node_flat, patch(
         "ka11y.api.v1.combined.runner._build_report",
         return_value={
             "summary": {"violations": 0, "needs_review": 0, "passes": 1},
@@ -360,7 +348,6 @@ async def test_run_job_forwards_success_criteria_id_to_node_and_python():
 
         await _run_job(job_id, payload)
 
-        assert call_node_flat.await_args.kwargs["success_criteria_id"] == "1.1.1"
         assert run_python_stages.await_args.kwargs["success_criteria_id"] == "1.1.1"
 
     store._jobs.pop(job_id, None)

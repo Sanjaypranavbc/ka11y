@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # The optimized crawler is a drop-in for AsyncImageCrawler (same interface).
-    from ka11y.crawler.optimized import OptimizedImageCrawler as AsyncImageCrawler
+    from ka11y.crawler.optimized.optimized_crawler import OptimizedImageCrawler as AsyncImageCrawler
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 logger = setup_logger(name="KAC", tag="pipeline")

@@ -220,36 +220,7 @@ async def test_admin_metrics(isolated_db):
     assert m["totals"]["total_runs"] >= 1
 
 
-def test_axe_mapper_shapes_findings():
-    """P6: raw axe.run output maps to the flat finding shape merge/report expect."""
-    from ka11y.crawler.axe_runner import map_axe_results
 
-    raw = {
-        "violations": [
-            {
-                "id": "image-alt",
-                "impact": "critical",
-                "help": "Images must have alternate text",
-                "helpUrl": "https://dequeuniversity.com/rules/axe/image-alt",
-                "tags": ["wcag2a", "wcag111"],
-                "nodes": [{"html": "<img src='x'>", "target": ["#logo"]}],
-            }
-        ],
-        "incomplete": [],
-        "passes": [
-            {"id": "document-title", "tags": ["wcag2a", "wcag242"], "help": "ok", "nodes": []}
-        ],
-    }
-    findings = map_axe_results(raw, "https://example.com")
-    fail = next(f for f in findings if f["status"] == "fail")
-    assert fail["wcag_sc"] == "1.1.1"
-    assert fail["level"] == "A"
-    assert fail["source"] == "axe"
-    assert fail["severity"] == "critical"
-    assert fail["element"]["tag"] == "IMG"
-    assert fail["element"]["selector"] == "#logo"
-    assert fail["element"]["page_url"] == "https://example.com"
-    assert any(f["status"] == "pass" and f["wcag_sc"] == "2.4.2" for f in findings)
 
 
 @pytest.mark.asyncio

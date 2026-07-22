@@ -22,15 +22,11 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from typing import AsyncGenerator
-
 from ka11y.utils.run_timing import compute_run_timing
-
 from pydantic import BaseModel, Field
-
 from .dispatcher import enqueue
 from .models import CombinedRequest, JobStatusResponse
 from .report import apply_reviews
@@ -220,7 +216,8 @@ async def submit_combined_audit(payload: CombinedRequest):
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report, or connect to
-    **GET /api/v1/combined/{job_id}/stream** for real-time SSE stage events.
+    **GET /api/v1/
+    /{job_id}/stream** for real-time SSE stage events.
 
     **Graceful degradation**: if Node/axe-core is unavailable the job still
     completes using Python-only findings; a `warnings` list notes the failure.
@@ -256,17 +253,12 @@ async def _admit_run(payload: CombinedRequest, *, rerun_of: str | None = None) -
         "warnings": [],
     }
 
-    # Durable queue (P4): persist a 'queued' run and let the dispatcher execute
-    # it. Falls back to in-process launch if the store/dispatcher is unavailable.
+
     await enqueue(job_id, payload)
-    if rerun_of:
-        repo.insert_event(job_id, "rerun_of", {"parent_run_id": rerun_of})
     from ka11y.config.logger import setup_logger
     logger = setup_logger(name="KAC", tag="combined")
-    logger.info(
-        f"[combined] job {job_id} {'re-' if rerun_of else ''}submitted for {url}"
-        + (f" (rerun of {rerun_of})" if rerun_of else "")
-    )
+
+    logger.info(f"[combined] Job {job_id} submitted for {url}")
     return _jobs[job_id]
 
 
