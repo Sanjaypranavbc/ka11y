@@ -312,10 +312,19 @@ function _parseRunArgs(criteriaIdOrContext, context) {
 /**
  * Filter a list of check definitions down to those mapped to `criteriaId`.
  * A null/empty criterion means "run everything" (full audit).
+ * `excludeCriteria` (array of SC ids) drops any check mapped to those SCs,
+ * regardless of `criteriaId` — used to fully skip disabled criteria.
  */
-function _selectChecks(checkDefs, criteriaId) {
-  if (!criteriaId) return checkDefs;
-  return checkDefs.filter(d => d && d.check && d.check.SC === criteriaId);
+function _selectChecks(checkDefs, criteriaId, excludeCriteria) {
+  let defs = checkDefs;
+  if (criteriaId) {
+    defs = defs.filter(d => d && d.check && d.check.SC === criteriaId);
+  }
+  if (excludeCriteria && excludeCriteria.length) {
+    const exclude = new Set(excludeCriteria);
+    defs = defs.filter(d => !(d && d.check && exclude.has(d.check.SC)));
+  }
+  return defs;
 }
 
 async function _runChecks(checkDefs, page, context = {}) {
@@ -335,12 +344,12 @@ async function _runChecks(checkDefs, page, context = {}) {
 
 async function runStaticChecks(page, criteriaIdOrContext = null, context = {}) {
   const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
-  return _runChecks(_selectChecks(STATIC_CHECKS, criteriaId), page, ctx);
+  return _runChecks(_selectChecks(STATIC_CHECKS, criteriaId, ctx.excludeCriteria), page, ctx);
 }
 
 async function runInteractiveChecks(page, criteriaIdOrContext = null, context = {}) {
   const { criteriaId, context: ctx } = _parseRunArgs(criteriaIdOrContext, context);
-  const selected = _selectChecks(INTERACTIVE_CHECKS, criteriaId);
+  const selected = _selectChecks(INTERACTIVE_CHECKS, criteriaId, ctx.excludeCriteria);
   if (selected.length === 0) return [];
 
   // Interactive checks must run sequentially (they mutate focus/keyboard/page state)
