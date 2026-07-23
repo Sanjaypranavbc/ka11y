@@ -74,7 +74,7 @@ from .stage_events import (
 )
 from .store import _jobs
 from ka11y.crawler.universal_page import UniversalPageLoader
-from ka11y.crawler.crawler import ImageCrawlerNavigationError
+from ka11y.crawler.optimized.optimized_crawler import ImageCrawlerNavigationError
 from ka11y.utils import stage_timing
 
 

@@ -87,6 +87,15 @@ class OptimizedImageCrawler:
             raw, out
         )
 
+        if not self.visited_urls:
+            raise ImageCrawlerNavigationError(
+                code="zero_pages_crawled",
+                url=self.base_url,
+                host=urlparse(self.base_url).hostname,
+                original_message="Crawl budget or navigation failures resulted in 0 pages being reached.",
+                attempts=1,
+            )
+
     def save_results(self) -> None:
         """Persist images_data as a metadata sidecar. The OCR/audit stages work
         off the in-memory images_data + the copied files, so this is best-effort
@@ -96,4 +105,36 @@ class OptimizedImageCrawler:
         (meta / "images_data.json").write_text(
             json.dumps([i.model_dump() for i in self.images_data], indent=2),
             encoding="utf-8",
+        )
+class ImageCrawlerNavigationError(RuntimeError):
+    """Raised when the image crawler cannot resolve or load the target page."""
+
+    def __init__(
+        self,
+        *,
+        code: str,
+        url: str,
+        host: str | None,
+        original_message: str,
+        attempts: int,
+    ) -> None:
+        self.code = code
+        self.url = url
+        self.host = host
+        self.original_message = original_message
+        self.attempts = attempts
+        super().__init__(self._build_message())
+
+    def _build_message(self) -> str:
+        host_part = f" host={self.host}" if self.host else ""
+        if self.code == "dns_resolution_failed":
+            return (
+                f"dns_resolution_failed{host_part} url={self.url}; image crawl could not "
+                f"resolve the hostname after {self.attempts} attempt(s), so OCR and "
+                f"image-audit checks were skipped. Original error: {self.original_message}"
+            )
+        return (
+            f"page_navigation_failed{host_part} url={self.url}; image crawl could not load "
+            f"the page after {self.attempts} attempt(s), so OCR and image-audit checks were "
+            f"skipped. Original error: {self.original_message}"
         )

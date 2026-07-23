@@ -733,15 +733,7 @@ class BrowserManager:
 
     @staticmethod
     def _reap(pids: set[int]) -> None:
-        if psutil is None:
-            return
-        for pid in pids:
-            try:
-                p = psutil.Process(pid)
-                if "chrome" in p.name().lower() or "headless_shell" in p.name().lower():
-                    p.kill()
-            except psutil.Error:
-                pass
+        pass
 
     @staticmethod
     async def _close_quietly(awaitable) -> None:
@@ -755,13 +747,11 @@ class BrowserManager:
 
     async def _do_restart(self, reason: str) -> None:
         print(f"[browser] restarting: {reason}", file=sys.stderr)
-        stale_pids = {p.pid for p in _chromium_procs()}  # old/dead browser procs
         old_browser, old_pool = self.browser, self.pool
         await self._close_quietly(old_pool.close() if old_pool else None)
         await self._close_quietly(old_browser.close() if old_browser else None)
         await self._launch()  # new browser gets fresh pids
         await asyncio.sleep(0.2)
-        self._reap(stale_pids)  # kill any leftover procs from the old browser
 
     async def restart_if_stale(self, gen: int) -> None:
         """Reactive restart requested by a worker that hit BrowserDown; a no-op
@@ -791,11 +781,9 @@ class BrowserManager:
     async def close(self) -> None:
         self._stop = True
         async with self._restart_lock:
-            stale_pids = {p.pid for p in _chromium_procs()}
             await self._close_quietly(self.pool.close() if self.pool else None)
             await self._close_quietly(self.browser.close() if self.browser else None)
             await asyncio.sleep(0.2)
-            self._reap(stale_pids)  # guarantee no leaked chromium on exit
 
 
 # ---------------------------------------------------------------------------

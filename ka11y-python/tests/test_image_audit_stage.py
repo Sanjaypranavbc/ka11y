@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 
 def test_image_crawler_navigation_error_dns_message_is_frontend_clear():
-    from ka11y.crawler.crawler import ImageCrawlerNavigationError
+    from ka11y.crawler.optimized.optimized_crawler import ImageCrawlerNavigationError
 
     exc = ImageCrawlerNavigationError(
         code="dns_resolution_failed",
@@ -89,7 +89,7 @@ def test_build_image_audit_report_surfaces_all_audited_images():
 async def test_stage_image_audit_surfaces_dns_resolution_warning():
     from ka11y.api.v1.combined import store
     from ka11y.api.v1.combined.stages import _stage_image_audit
-    from ka11y.crawler.crawler import ImageCrawlerNavigationError
+    from ka11y.crawler.optimized.optimized_crawler import ImageCrawlerNavigationError
 
     job_id = "image-audit-dns-warning"
     store._jobs[job_id] = {
@@ -153,7 +153,7 @@ async def test_stage_image_audit_surfaces_dns_resolution_warning():
                 "text classification should not start after a DNS failure"
             )
 
-    with patch("ka11y.crawler.crawler.AsyncImageCrawler", DummyCrawler), patch(
+    with patch("ka11y.crawler.optimized.optimized_crawler.OptimizedImageCrawler", DummyCrawler), patch(
         "ka11y.accessibility.rules.non_text.alttext.AltTextAccessibilityAuditor",
         DummyAuditor,
     ), patch(

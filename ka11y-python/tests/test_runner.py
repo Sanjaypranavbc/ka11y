@@ -182,9 +182,14 @@ async def test_python_result_valid_tuple_works_correctly():
     contrast_report = {"summary": {"total_regions_analysed": 0}, "images": []}
     image_audit_report = {"images": []}
 
+    from ka11y.api.v1.combined.stages import PythonStagesResult
     with patch(
         "ka11y.api.v1.combined.runner._run_python_stages",
-        new=AsyncMock(return_value=(python_findings, contrast_report, image_audit_report)),
+        new=AsyncMock(return_value=PythonStagesResult(
+            findings=python_findings,
+            contrast_report=contrast_report,
+            image_audit_report=image_audit_report,
+        )),
     ), patch(
         "ka11y.api.v1.combined.runner._build_report",
         return_value={
@@ -324,9 +329,10 @@ async def test_run_job_forwards_success_criteria_id_to_node_and_python():
         {"status": "pass", "wcag_sc": "1.1.1", "level": "A", "reason": "ok", "element": None}
     ]
 
+    from ka11y.api.v1.combined.stages import PythonStagesResult
     with patch(
         "ka11y.api.v1.combined.runner._run_python_stages",
-        new=AsyncMock(return_value=([], None)),
+        new=AsyncMock(return_value=PythonStagesResult(findings=[])),
     ) as run_python_stages, patch(
         "ka11y.api.v1.combined.runner._build_report",
         return_value={
