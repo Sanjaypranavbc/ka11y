@@ -30,6 +30,33 @@ from ka11y.crawler.optimized.adapter import build_image_data
 CONFIG = load_config()
 
 
+import csv
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+
+class CrawlSummary(BaseModel):
+    total_images: int = 0
+    informative: int = 0
+    decorative: int = 0
+    functional: int = 0
+    complex: int = 0
+    text_images: int = 0
+    functional_buttons: int = 0
+    functional_icons: int = 0
+    functional_logos: int = 0
+    functional_images: int = 0
+    pages_crawled: int = 0
+
+
+class CrawlReport(BaseModel):
+    base_url: str
+    crawl_date: str
+    summary: CrawlSummary
+    sub_type_breakdown: dict[str, int] = Field(default_factory=dict)
+    images: List[ImageData] = Field(default_factory=list)
+
+
 class OptimizedImageCrawler:
     def __init__(
         self,
@@ -57,10 +84,18 @@ class OptimizedImageCrawler:
         domain = urlparse(base_url).netloc.replace("www.", "").replace(".", "_")
         timestamp = time.strftime("%m%d_%H%M")
         self.output_dir = f"{base_out}/{domain}_{timestamp}"
+        self._create_directories()
+
+    def _create_directories(self) -> None:
+        base = Path(self.output_dir)
+        dirs = [base] + [base / sub for sub in CONFIG.get("directories", [])]
+        dirs.append(base / "metadata")
+        for d in dirs:
+            d.mkdir(parents=True, exist_ok=True)
 
     async def crawl_page(self, discovered_urls: List[str] | None = None) -> None:
         out = Path(self.output_dir)
-        out.mkdir(parents=True, exist_ok=True)
+        self._create_directories()
         raw = out / "_raw"
 
         crawler_cfg = CONFIG.get("crawler", {})
@@ -97,15 +132,98 @@ class OptimizedImageCrawler:
             )
 
     def save_results(self) -> None:
-        """Persist images_data as a metadata sidecar. The OCR/audit stages work
-        off the in-memory images_data + the copied files, so this is best-effort
-        provenance, not a pipeline dependency."""
+        """Persist images_data, images_report.json, and images_with_alt_text.csv matching pranav-v2."""
         meta = Path(self.output_dir) / "metadata"
         meta.mkdir(parents=True, exist_ok=True)
         (meta / "images_data.json").write_text(
             json.dumps([i.model_dump() for i in self.images_data], indent=2),
             encoding="utf-8",
         )
+
+        summary = CrawlSummary(pages_crawled=len(self.visited_urls))
+        sub_breakdown: dict[str, int] = {}
+
+        for img in self.images_data:
+            summary.total_images += 1
+            cls = img.classification
+            if cls == "informative":
+                summary.informative += 1
+            elif cls == "decorative":
+                summary.decorative += 1
+            elif cls == "functional":
+                summary.functional += 1
+                if img.sub_type == "buttons":
+                    summary.functional_buttons += 1
+                elif img.sub_type == "icons":
+                    summary.functional_icons += 1
+                elif img.sub_type == "logos":
+                    summary.functional_logos += 1
+                else:
+                    summary.functional_images += 1
+            elif cls == "complex":
+                summary.complex += 1
+            if img.is_text_image:
+                summary.text_images += 1
+            key = f"{cls}/{img.sub_type}" if img.sub_type else cls
+            sub_breakdown[key] = sub_breakdown.get(key, 0) + 1
+
+        report = CrawlReport(
+            base_url=self.base_url,
+            crawl_date=datetime.now().isoformat(),
+            summary=summary,
+            sub_type_breakdown=sub_breakdown,
+            images=self.images_data,
+        )
+
+        report_path = Path(self.output_dir) / "images_report.json"
+        report_path.write_text(
+            json.dumps(report.model_dump(), indent=2),
+            encoding="utf-8",
+        )
+
+        self._export_csv()
+
+    def _export_csv(self) -> None:
+        if not self.images_data:
+            return
+        csv_path = Path(self.output_dir) / "images_with_alt_text.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "src",
+                    "alt_text",
+                    "title",
+                    "classification",
+                    "sub_type",
+                    "is_functional",
+                    "is_decorative",
+                    "is_complex",
+                    "is_logo",
+                    "is_icon",
+                    "is_button",
+                    "screenshot_path",
+                ],
+            )
+            w.writeheader()
+            for img in self.images_data:
+                w.writerow(
+                    {
+                        "src": img.src,
+                        "alt_text": img.alt_text if img.alt_text is not None else "",
+                        "title": img.title,
+                        "classification": img.classification,
+                        "sub_type": img.sub_type,
+                        "is_functional": img.is_functional,
+                        "is_decorative": img.is_decorative,
+                        "is_complex": img.is_complex,
+                        "is_logo": img.is_logo,
+                        "is_icon": img.is_icon,
+                        "is_button": img.is_button,
+                        "screenshot_path": img.screenshot_path,
+                    }
+                )
+
 class ImageCrawlerNavigationError(RuntimeError):
     """Raised when the image crawler cannot resolve or load the target page."""
 

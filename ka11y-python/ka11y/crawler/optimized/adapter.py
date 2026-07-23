@@ -68,6 +68,21 @@ def _ext(el: dict, captured: Path | None) -> str:
     return tail[1].lower() if len(tail) == 2 and len(tail[1]) <= 5 else "png"
 
 
+def _subpath(classification: str | None, sub_type: str | None) -> Path:
+    cls = classification or "informative"
+    if cls == "functional":
+        sub = sub_type or "images"
+        if sub in ("buttons", "icons", "logos", "images"):
+            return Path("functional") / sub
+        return Path("functional")
+    if cls == "complex":
+        sub = sub_type or "charts"
+        if sub in ("charts", "emojis"):
+            return Path("complex") / sub
+        return Path("complex")
+    return Path(cls)
+
+
 def build_image_data(
     raw_dir: Path, output_dir: Path
 ) -> Tuple[List[ImageData], Dict[str, str], Set[str]]:
@@ -101,6 +116,7 @@ def build_image_data(
 
             src = _src_of(el)
             flags = el.get("flags") or {}
+            classification = el.get("classification")
             sub_type = el.get("sub_type")
 
             # Locate the captured pixel file (screenshot overlay OR download).
@@ -114,11 +130,22 @@ def build_image_data(
             capture_status = "dom_missing"
             if captured is not None:
                 key = src or f"{page_url}#{el.get('id', '')}"
-                digest = hashlib.md5(key.encode("utf-8")).hexdigest()
+                digest = hashlib.md5(key.encode("utf-8")).hexdigest()[:12]
                 ext = _ext(el, captured)
-                dest_dir = output_dir / (el.get("classification") or "images") / (sub_type or "images")
+
+                el_type = el.get("element_type", "")
+                if "svg" in el_type:
+                    prefix = "svg_"
+                    ext = "png"
+                elif sub_type == "buttons" and (flags.get("is_button") or el_type == "button"):
+                    prefix = "btn_"
+                    ext = "png"
+                else:
+                    prefix = "img_"
+
+                dest_dir = output_dir / _subpath(classification, sub_type)
                 dest_dir.mkdir(parents=True, exist_ok=True)
-                filename = f"img_{digest}.{ext}"
+                filename = f"{prefix}{digest}.{ext}"
                 dest = dest_dir / filename
                 try:
                     shutil.copy2(captured, dest)
@@ -134,7 +161,7 @@ def build_image_data(
                 src=src,
                 alt_text=_alt_text(el),
                 title=el.get("title_attr") or "",
-                classification=el.get("classification"),
+                classification=classification,
                 sub_type=sub_type,
                 is_functional=bool(flags.get("is_functional")),
                 is_decorative=bool(flags.get("is_decorative")),
@@ -153,3 +180,4 @@ def build_image_data(
             ))
 
     return images, page_langs, visited
+
