@@ -202,22 +202,75 @@ OVERLAY_CONTAINER_JS = """el => {
     return el;
 }"""
 
-# Cookie-consent handling (ported/trimmed from meghana-v2 cookie_handler):
-# reject-first only (never accept), then strip leftover overlay backdrops.
+# ---------------------------------------------------------------------------
+# Cookie-consent handling — reject-only, never accepts.
+# Covers OneTrust, Cookiebot, Didomi, SourcePoint, TrustArc, Quantcast (QC),
+# Google GDPR, and generic text-matched banners.
+# ---------------------------------------------------------------------------
 COOKIE_STABILIZE_MS = 800
 COOKIE_CLICK_TIMEOUT_MS = 1_500
+
+# Text pattern matched against button/link visible labels.
+# Intentionally broad so translated variants ("Nur notwendige", "Refuser") still
+# hit the word-boundary anchors via substring groups.
 COOKIE_REJECT_RE = re.compile(
-    r"^(reject|decline|no\s*thanks|continue\s*without|deny|reject\s*all|decline\s*all)$",
+    r"(?:^|\b)("
+    r"reject(\s+all)?|decline(\s+all)?|deny"
+    r"|no[,\s]+thanks?"
+    r"|continue\s+without(\s+accepting)?"
+    r"|necessary(\s+only|cookies?\s+only)?"
+    r"|essential(\s+only|cookies?\s+only)?"
+    r"|required(\s+only)?"
+    r"|save\s+(?:my\s+)?(?:preferences|settings|choices)"
+    r"|do\s+not\s+(accept|consent|agree|sell|share)"
+    r"|opt[\s-]out"
+    r"|use\s+necessary(\s+only)?"
+    r")(?:\b|$)",
     re.IGNORECASE,
 )
-COOKIE_REJECT_SELECTOR = "#onetrust-reject-all-handler, .cookie-reject, #W0wltc"
+
+# Explicit selectors for well-known CMP frameworks (checked before text matching).
+COOKIE_REJECT_SELECTOR = (
+    "#onetrust-reject-all-handler,"
+    "#CybotCookiebotDialogBodyButtonDecline,"
+    ".didomi-refuse-all-button,"
+    "[id*='reject-all' i],"
+    "[id*='rejectAll' i],"
+    "[class*='reject-all' i],"
+    "[class*='rejectAll' i],"
+    ".cookie-reject,"
+    ".truste_em_decline,"
+    "#W0wltc,"
+    "[data-testid*='reject' i],"
+    "[aria-label*='reject' i],"
+    "[aria-label*='decline' i]"
+)
+
+# Overlay/backdrop elements stripped from the DOM after every attempt.
 COOKIE_OVERLAY_SELECTORS = [
-    "#onetrust-consent-sdk", "#onetrust-banner-sdk", ".cc-window", ".cookie-banner",
-    "[id*='cookie-banner']", "[id*='cookiebanner']", "[id*='consent-banner']",
-    "[id*='cookie']", "[id*='consent']", "[class*='cookie-banner']",
-    "[class*='cookiebanner']", "[class*='consent-banner']", "[class*='cookie']",
-    "[class*='consent']", ".optanon-alert-box-wrapper", ".onetrust-pc-dark-filter",
-    ".qc-cmp2-container", ".didomi-popup-container", "#CybotCookiebotDialog",
+    "#onetrust-consent-sdk",
+    "#onetrust-banner-sdk",
+    "#CybotCookiebotDialog",
+    ".cc-window",
+    ".cookie-banner",
+    "[id*='cookie-banner']",
+    "[id*='cookiebanner']",
+    "[id*='consent-banner']",
+    "[id*='cookie']",
+    "[id*='consent']",
+    "[class*='cookie-banner']",
+    "[class*='cookiebanner']",
+    "[class*='consent-banner']",
+    "[class*='cookie']",
+    "[class*='consent']",
+    ".optanon-alert-box-wrapper",
+    ".onetrust-pc-dark-filter",
+    ".qc-cmp2-container",
+    ".didomi-popup-container",
+    ".trustarc-banner-container",
+    "[id*='sp_message_container']",  # SourcePoint CMP
+    "[class*='sp-message']",         # SourcePoint CMP
+    "[class*='cmpbox']",             # generic CMP
 ]
 
 
@@ -235,28 +288,44 @@ def _cookie_contexts(page):
 
 
 async def reject_cookies(page) -> str:
-    """Reject cookie-consent banners by default, then remove any leftover overlay.
-    Never accepts. Best-effort and non-fatal. Returns 'rejected', 'removed',
-    'none', or 'error'."""
+    """Reject cookie-consent banners before screenshots are taken.
+
+    Strategy (reject-only — NEVER accepts):
+      1. Try explicit CMP selectors + text-pattern matching in every frame.
+      2. If a reject button was clicked, wait for the animation to settle,
+         then strip remaining overlay elements.
+      3. If no reject button was found, forcefully remove overlays from the
+         DOM so they cannot cover page content in screenshots.
+
+    Returns 'rejected', 'removed', 'none', or 'error'. Non-fatal.
+    """
     try:
         contexts = _cookie_contexts(page)
         rejected = False
         for ctx in contexts:
             for locator in (
-                ctx.get_by_role("button", name=COOKIE_REJECT_RE).first,
-                ctx.locator(
-                    "button, a, input[type='button'], input[type='submit'], [role='button']"
-                ).filter(has_text=COOKIE_REJECT_RE).first,
+                # 1. Framework-specific selectors
                 ctx.locator(COOKIE_REJECT_SELECTOR).first,
+                # 2. ARIA role=button text match
+                ctx.get_by_role("button", name=COOKIE_REJECT_RE).first,
+                # 3. Any interactive element text match
+                ctx.locator(
+                    "button, a[href], input[type='button'], "
+                    "input[type='submit'], [role='button']"
+                ).filter(has_text=COOKIE_REJECT_RE).first,
+                # 4. Generic role=button or role=link text match
+                ctx.locator("[role='button'], [role='link']"
+                            ).filter(has_text=COOKIE_REJECT_RE).first,
             ):
                 try:
                     if await locator.is_visible(timeout=500):
                         await locator.click(timeout=COOKIE_CLICK_TIMEOUT_MS)
                         rejected = True
-                        break
+                        break  # one click per context is enough
                 except PlaywrightError:
                     continue
 
+        # Always clean up overlay elements — whether we clicked or not.
         removed = False
         for ctx in contexts:
             for selector in COOKIE_OVERLAY_SELECTORS:
@@ -810,6 +879,75 @@ async () => {
 }
 """
 
+# ---------------------------------------------------------------------------
+# Gap 1 + 2 ported from pranav-v2 _reveal_hidden_images() + _trigger_lazy_loading()
+# ---------------------------------------------------------------------------
+# Clicks interactive controls (tabs, accordions, dropdowns, modals, carousels,
+# load-more buttons) so images hidden inside those widgets become visible in
+# the DOM before EXTRACT_JS runs.  After clicking, fires IntersectionObserver
+# callbacks and dispatches "lazyload" events on img[data-src] / img[data-lazy-src]
+# / img[data-original] elements so lazy-load libraries resolve their real src.
+#
+# Selector groups and click limit (8 per group) match pranav-v2 exactly.
+# The IntersectionObserver + lazyload dispatch matches pranav-v2's
+# _trigger_lazy_loading() post-scroll block exactly.
+REVEAL_JS = """
+async () => {
+    const pause = ms => new Promise(r => setTimeout(r, ms));
+
+    // --- Gap 1: carousel / tab / accordion / modal reveal ---
+    // Selector groups match pranav-v2 _reveal_hidden_images() exactly.
+    const groups = {
+        tabs:       '[role="tab"], .tab, [data-toggle="tab"], .nav-link',
+        accordions: '[data-toggle="collapse"], .accordion-toggle, .accordion-button, details summary',
+        dropdowns:  '[data-toggle="dropdown"], .dropdown-toggle',
+        modals:     '[data-toggle="modal"]',
+        carousels:  '.carousel-control-next, .slick-next, [data-slide="next"]',
+        load_more:  '.load-more, [data-load-more]',
+    };
+    for (const [name, sel] of Object.entries(groups)) {
+        let els;
+        try { els = Array.from(document.querySelectorAll(sel)); } catch { continue; }
+        // Deduplicate by outerHTML prefix, same as pranav-v2.
+        const seen = new Map();
+        for (const el of els) {
+            const key = (el.outerHTML || "").slice(0, 100);
+            if (!seen.has(key)) seen.set(key, el);
+        }
+        let count = 0;
+        for (const el of Array.from(seen.values()).slice(0, 8)) {
+            try {
+                const cs = window.getComputedStyle(el);
+                const r  = el.getBoundingClientRect();
+                const visible = cs.display !== "none" && cs.visibility !== "hidden"
+                    && r.width > 0 && r.height > 0;
+                if (!visible) continue;
+                el.click();
+                await pause(400);   // pranav-v2 waits 400 ms after each click
+                count++;
+            } catch {}
+        }
+    }
+
+    // --- Gap 2: IntersectionObserver + lazyload event dispatch ---
+    // Matches pranav-v2 _trigger_lazy_loading() post-scroll block exactly:
+    // selector list is img[data-src], img[data-lazy-src], img[data-original].
+    const lazyImgs = document.querySelectorAll(
+        'img[data-src], img[data-lazy-src], img[data-original]'
+    );
+    lazyImgs.forEach(img => {
+        const obs = new IntersectionObserver(entries => {
+            entries.forEach(e => e.target.dispatchEvent(new Event('lazyload')));
+            obs.disconnect();
+        });
+        obs.observe(img);
+    });
+    // Give the observer callbacks and lazy-load libraries time to swap src.
+    // pranav-v2 waits 1000 ms at this point.
+    await pause(1000);
+}
+"""
+
 EXTRACT_JS = r"""
 (embedHosts) => {
     const NOTE_IFRAME = "manual check required — captions/tracks unverifiable via DOM";
@@ -1357,7 +1495,29 @@ EXTRACT_JS = r"""
 
         // --- image bucket (1.1.1 / 1.4.5) ---
         if (tag === "img") {
-            const srcAbs = absUrl(el.currentSrc || attr(el, "src") || "");
+            // Gap 3: full src fallback chain, ported from pranav-v2 _resolve_src().
+            // Priority order matches pranav-v2 exactly:
+            //   src → data-src → data-lazy-src → data-original → data-lazy → data-url
+            // then srcset / data-srcset (first candidate, whitespace-split).
+            // data: URIs are skipped at every step, same as pranav-v2.
+            const _resolveSrc = (el) => {
+                for (const a of ["src", "data-src", "data-lazy-src",
+                                  "data-original", "data-lazy", "data-url"]) {
+                    const v = el.currentSrc && a === "src"
+                        ? el.currentSrc   // prefer browser-resolved currentSrc for "src"
+                        : el.getAttribute(a);
+                    if (v && !v.startsWith("data:")) return absUrl(v);
+                }
+                for (const a of ["srcset", "data-srcset"]) {
+                    const v = el.getAttribute(a);
+                    if (v) {
+                        const first = v.trim().split(",")[0].trim().split(/\s+/)[0];
+                        if (first && !first.startsWith("data:")) return absUrl(first);
+                    }
+                }
+                return null;
+            };
+            const srcAbs = _resolveSrc(el);
             const poster = classifyPoster(el, srcAbs);
             if (poster) {
                 const posterRec = push({
@@ -1782,15 +1942,30 @@ class Crawler:
 
     async def _capture_assets(self, page, elements: list, url: str) -> None:
         """Capture rendered pixels for every visible image/graphic element.
-        If text is overlaid on the image (composited via absolutely-positioned
-        siblings) SCREENSHOT the overlay container so the text is preserved;
-        otherwise DOWNLOAD the original image bytes. Inline SVG, <use> sprites
-        and <canvas> have no fetchable URL, so they fall back to a screenshot.
+
+        Decision matrix per element (evaluated in order):
+
+        1. Icons and logos (sub_type == 'icons' or 'logos', or flags.is_icon /
+           flags.is_logo): ALWAYS screenshot the element in-place, bounded to
+           its on-page position, including its actual background.  This captures
+           the rendered UI rather than the isolated transparent/raw asset file,
+           which is essential for accurate colour-contrast and branding checks.
+
+        2. Text overlaid on the image (overlay container ≠ element): SCREENSHOT
+           the overlay container so the composited text is preserved.
+
+        3. Non-overlay image with a fetchable URL: DOWNLOAD the original bytes.
+
+        4. Inline SVG, <use> sprites, <canvas>, or a failed download:
+           SCREENSHOT the element as a fallback.
+
         Sets on each SCREENSHOT_TYPES element (other elements untouched):
           screenshot    — relative PNG path or None
           asset_file    — relative downloaded-file path or None
-          asset_capture — 'screenshot_overlay' | 'download' | 'screenshot_fallback' | None
-        Every capture is non-fatal; on failure the three fields stay None."""
+          asset_capture — 'screenshot_icon_logo' | 'screenshot_overlay' |
+                          'download' | 'screenshot_fallback' | None
+        Every capture is non-fatal; on failure the three fields stay None.
+        """
         page_slug = url_slug(normalize_url(url))
         shot_dir = self.out_dir / "screenshots" / page_slug
         for el in elements:
@@ -1807,6 +1982,30 @@ class Crawler:
                 handle = await page.query_selector(el["selector"])
                 if handle is None:
                     continue
+
+                # ── Decision: is this element an icon or logo? ──────────────
+                flags = el.get("flags") or {}
+                sub_type = el.get("sub_type") or ""
+                is_icon_or_logo = (
+                    sub_type in ("icons", "logos")
+                    or flags.get("is_icon")
+                    or flags.get("is_logo")
+                )
+
+                if is_icon_or_logo:
+                    # Screenshot the element as rendered on the page (with real
+                    # background) instead of downloading the isolated raw asset.
+                    shot_dir.mkdir(parents=True, exist_ok=True)
+                    rel = Path("screenshots") / page_slug / f"{el['id']}.png"
+                    await handle.screenshot(
+                        path=str(self.out_dir / rel),
+                        timeout=SHOT_TIMEOUT_MS,
+                    )
+                    el["screenshot"] = str(rel)
+                    el["asset_capture"] = "screenshot_icon_logo"
+                    continue
+
+                # ── For all other categories: overlay → download → fallback ──
                 container = await handle.evaluate_handle(OVERLAY_CONTAINER_JS)
                 is_overlay = await container.evaluate("(c, img) => c !== img", handle)
                 url_field = ASSET_URL_FIELD.get(el["element_type"])
@@ -1821,8 +2020,8 @@ class Crawler:
                         el["asset_capture"] = "download"
                         continue  # captured — done with this element
 
-                # Overlay text (screenshot the container), inline graphic with no
-                # URL, or a failed download -> screenshot the rendered pixels.
+                # Overlay text, inline graphic with no URL, or a failed download
+                # -> screenshot the rendered pixels.
                 target = (container.as_element() if is_overlay else handle) or handle
                 shot_dir.mkdir(parents=True, exist_ok=True)
                 rel = Path("screenshots") / page_slug / f"{el['id']}.png"
@@ -1870,6 +2069,14 @@ class Crawler:
         # Trigger lazy-loaded content before the DOM walk.
         await page.evaluate(SCROLL_JS)
         await page.wait_for_timeout(400)
+
+        # Gap 1+2: reveal hidden images (carousel clicks + lazyload dispatch).
+        # Ported from pranav-v2 _reveal_hidden_images() + _trigger_lazy_loading().
+        await page.evaluate(REVEAL_JS)
+        # pranav-v2 has no additional wait after _reveal_hidden_images;
+        # page.wait_for_timeout(500) is called after both steps in crawl_page(),
+        # mirrored here with a short settle before extraction.
+        await page.wait_for_timeout(500)
 
         extraction = await page.evaluate(EXTRACT_JS, VIDEO_EMBED_HOSTS)
 
