@@ -6,67 +6,8 @@ import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
-import { toViolationRows, type ViolationRow, type WcagLevel } from "@/lib/wcagAudit";
+import { toViolationRows, type WcagLevel } from "@/lib/wcagAudit";
 import { cn } from "@/lib/utils";
-
-const DEMO_VIOLATIONS: ViolationRow[] = [
-  {
-    id: "1",
-    title: "Image has no description (alt text)",
-    description: "Screen-reader users won't know what it show",
-    sc: "1.1.1",
-    criterion: "Non-text Content",
-    level: "AAA",
-    tag: "Button",
-    elementTitle: "Missing Alt text on main logo",
-    elementFile: "img_8e5d9115102b.png",
-    elementOcr: "Croppico alt FARMING",
-    fixGuide:
-      "Ensure text meets contrast ratios: 4.5:1 for normal text, 3:1 for large text (18pt / 14pt bold). Use a contrast checker tool to verify. Adjust foreground or background colors until the threshold is met.",
-  },
-  {
-    id: "2",
-    title: "Image has no description (alt text)",
-    description: "Screen-reader users won't know what it show",
-    sc: "1.1.1",
-    criterion: "Non-text Content",
-    level: "AAA",
-    tag: "Button",
-    elementTitle: "Missing Alt text on main logo",
-    elementFile: "img_8e5d9115102b.png",
-    elementOcr: "Croppico alt FARMING",
-    fixGuide:
-      "Ensure text meets contrast ratios: 4.5:1 for normal text, 3:1 for large text (18pt / 14pt bold). Use a contrast checker tool to verify. Adjust foreground or background colors until the threshold is met.",
-  },
-  {
-    id: "3",
-    title: "Insufficient color contrast",
-    description: "Text does not meet minimum contrast ratio requirements",
-    sc: "1.4.3",
-    criterion: "Contrast (Minimum)",
-    level: "AA",
-    tag: "p",
-    elementTitle: "Body text on hero section",
-    elementFile: "hero_section.png",
-    elementOcr: "Welcome to our website",
-    fixGuide:
-      'Add a descriptive alt attribute to the img element. The alt text should convey the purpose and meaning of the image. For decorative images, use alt="" to hide them from assistive technologies.',
-  },
-  {
-    id: "4",
-    title: "Missing form label",
-    description: "Input field lacks an associated label",
-    sc: "1.3.1",
-    criterion: "Info and Relationships",
-    level: "A",
-    tag: "input",
-    elementTitle: "Search input field",
-    elementFile: "search_form.png",
-    elementOcr: "Search...",
-    fixGuide:
-      "Associate a label element with the input using the for/id attribute pair, or wrap the input inside a label element. Alternatively, use aria-label or aria-labelledby attributes.",
-  },
-];
 
 const FIX_GUIDE_PREVIEW_LENGTH = 80;
 
@@ -118,7 +59,7 @@ export default function ViolationsPage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const ALL_VIOLATIONS = useMemo(
-    () => (auditData ? toViolationRows(auditData) : DEMO_VIOLATIONS),
+    () => (auditData ? toViolationRows(auditData) : []),
     [auditData],
   );
 
@@ -171,6 +112,14 @@ export default function ViolationsPage() {
 
       <main className="flex flex-1 flex-col gap-6 min-w-0 px-4 py-6 sm:px-8 sm:py-8 lg:px-16 lg:gap-10 lg:py-10">
 
+        {!auditData ? (
+          <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
+            <p className="text-[16px] leading-6 text-gray-60">
+              Run an audit to see violations here.
+            </p>
+          </div>
+        ) : (
+        <>
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative" ref={dropdownRef}>
@@ -323,6 +272,8 @@ export default function ViolationsPage() {
           ))}
         </div>
         </div>
+        </>
+        )}
 
       </main>
     </>
