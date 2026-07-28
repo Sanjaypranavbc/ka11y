@@ -2333,7 +2333,7 @@ class Crawler:
             "accordions": '[data-toggle="collapse"], .accordion-toggle, .accordion-button, details summary',
             "dropdowns": '[data-toggle="dropdown"], .dropdown-toggle',
             "modals": '[data-toggle="modal"]',
-            "carousels": '.carousel-control-next, .slick-next, [data-slide="next"]',
+            "carousels": '.carousel-control-next, .slick-next, [data-slide="next"], .swiper-button-next, .reel-next, button.next, [aria-label*="next" i]',
             "load_more": ".load-more, [data-load-more]",
         }
         for name, sel in groups.items():
