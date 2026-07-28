@@ -2,6 +2,22 @@
 
 const { getCriteria, CANNOT_AUTOMATE_SC, MANUAL_ONLY_REASON } = require('../utils/wcag22Manifest');
 
+// SCs disabled for /analyse-url-wcag only — skipped entirely (axe rules
+// disabled at the engine, matching custom checks not run) and excluded from
+// the manifest so they don't appear in the response at all.
+const DISABLED_SC = [
+  '1.1.1',
+  '1.4.3',
+  '1.4.5',
+  '1.4.6',
+  '1.4.11',
+  '4.1.2',
+  '1.2.1',
+  '1.2.2',
+  '1.2.3',
+  '1.2.4',
+];
+
 /**
  * WcagService — orchestrates a full WCAG compliance analysis for a URL
  * and maps results back to the complete WCAG 2.1 / 2.2 criteria manifest.
@@ -31,8 +47,10 @@ class WcagService {
   async analyseUrl(url, { wcagVersion = '2.2', lang = 'en' } = {}) {
     this._logger.info(`WcagService.analyseUrl start url=${url} wcag=${wcagVersion} lang=${lang}`);
 
-    // Run full axe-core + all custom checks (no SC filter → get everything)
-    const rawResults = await this._svc.analyseUrl(url, null, lang);
+    // Run full axe-core + all custom checks, except the disabled SCs — those
+    // are skipped at the engine (axe rules disabled, matching custom checks
+    // not run), not just filtered out of the response afterward.
+    const rawResults = await this._svc.analyseUrl(url, null, lang, { excludeCriteria: DISABLED_SC });
 
     // Index results by successCriteriaId for O(1) lookup
     const bySC         = {};
@@ -47,8 +65,9 @@ class WcagService {
       }
     }
 
-    // Build criteria list from manifest — scaffold every SC then fill results
-    const manifest = getCriteria(wcagVersion);
+    // Build criteria list from manifest — scaffold every SC then fill results,
+    // excluding the disabled SCs entirely (not even shown as "not_checked").
+    const manifest = getCriteria(wcagVersion).filter(c => !DISABLED_SC.includes(c.sc));
     const criteria = manifest.map(c => this._buildCriterion(c, bySC[c.sc]));
     const summary  = this._buildSummary(criteria, manifest.length);
 

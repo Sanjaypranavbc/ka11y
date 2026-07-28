@@ -24,7 +24,6 @@ const options = {
     path.resolve(__dirname, '../controllers/accessibility.controller.js'),
     path.resolve(__dirname, '../controllers/rules.controller.js'),
     path.resolve(__dirname, '../controllers/rulesGuide.controller.js'),
-    path.resolve(__dirname, '../controllers/wcag.controller.js')
   ],
 };
 

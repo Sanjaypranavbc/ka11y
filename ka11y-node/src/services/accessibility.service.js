@@ -154,6 +154,24 @@ function _runOnlyForCriteria(criteriaId, defaultRunOnly) {
   return ruleIds.length ? { type: "rule", values: ruleIds } : defaultRunOnly;
 }
 
+/**
+ * Builds an axe `rules` disable map ({ ruleId: { enabled: false } }) for every
+ * axe rule mapped to any SC in `excludeCriteria`, so those rules don't run at
+ * all rather than just being filtered out of the response afterward.
+ *
+ * @param {string[]} excludeCriteria  WCAG SC ids to disable (e.g. ["1.1.1"])
+ * @returns {object}
+ */
+function _buildDisabledAxeRules(excludeCriteria) {
+  const rules = {};
+  for (const sc of excludeCriteria || []) {
+    for (const ruleId of axeRuleIdsForCriteria(sc)) {
+      rules[ruleId] = { enabled: false };
+    }
+  }
+  return rules;
+}
+
 function _allowedLevels(level) {
   const levels = new Set(["A"]);
   if (level === "AA" || level === "AAA") levels.add("AA");
@@ -324,7 +342,7 @@ class AccessibilityService {
    * @param {string} [logPrefix='']       - Optional log prefix
    * @returns {Promise<object>} axe results
    */
-  async _runAxeWithTimeout(page, runOnly, timeoutMs, logPrefix = "") {
+  async _runAxeWithTimeout(page, runOnly, timeoutMs, logPrefix = "", disabledRules = null) {
     const prefix = logPrefix ? `${logPrefix} ` : "";
     const effectiveTimeoutMs =
       Number.isFinite(timeoutMs) && timeoutMs > 0
@@ -343,22 +361,22 @@ class AccessibilityService {
 
     let timeoutHandle;
 
-    const axeRunPromise = page.evaluate((runOptions) => {
+    const axeRunPromise = page.evaluate((runOptions, rulesOption) => {
       return new Promise((resolve, reject) => {
+        const options = {
+          runOnly: runOptions,
+          resultTypes: ["violations", "passes", "incomplete"],
+        };
+        if (rulesOption && Object.keys(rulesOption).length) {
+          options.rules = rulesOption;
+        }
         // eslint-disable-next-line no-undef
-        axe.run(
-          document,
-          {
-            runOnly: runOptions,
-            resultTypes: ["violations", "passes", "incomplete"],
-          },
-          (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
-          },
-        );
+        axe.run(document, options, (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        });
       });
-    }, runOnly);
+    }, runOnly, disabledRules || {});
 
     const timeoutPromise = new Promise((_, reject) => {
       timeoutHandle = setTimeout(async () => {
@@ -660,9 +678,13 @@ class AccessibilityService {
    *
    * @param {string} url                - Fully-qualified URL to crawl
    * @param {string|null} [criteriaId]  - Optional WCAG SC filter (e.g. "1.1.1")
+   * @param {string} [lang]
+   * @param {object} [opts]
+   * @param {string[]} [opts.excludeCriteria]  WCAG SC ids to skip entirely (axe rules disabled, matching custom checks not run)
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
-  async analyseUrl(url, criteriaId = null, lang = "en") {
+  async analyseUrl(url, criteriaId = null, lang = "en", opts = {}) {
+    const { excludeCriteria = [] } = opts;
     const { timeoutMs, runOnly, customChecksTimeoutMs } = this._config.axe;
     let browser = null;
 
@@ -744,10 +766,13 @@ class AccessibilityService {
 
       this._logger.info("Running axe.run() analysis...");
       const axeRunOnly = _runOnlyForCriteria(criteriaId, runOnly);
+      const disabledAxeRules = _buildDisabledAxeRules(excludeCriteria);
       const axeResults = await this._runAxeWithTimeout(
         page,
         axeRunOnly,
         timeoutMs,
+        "",
+        disabledAxeRules,
       );
 
       this._logger.info("Running AccessLint sequentially...");
@@ -776,6 +801,7 @@ class AccessibilityService {
       const customResults = await runAll(page, criteriaId, {
         lang,
         timeoutMs: customChecksTimeoutMs,
+        excludeCriteria,
       });
       this._logger.info(
         `Custom checks complete — ${customResults.length} SC(s) returned.`,
