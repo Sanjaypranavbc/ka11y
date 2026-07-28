@@ -225,6 +225,97 @@ async def submit_combined_audit(payload: CombinedRequest):
     return await _admit_run(payload)
 
 
+@router.get("/combined-test", tags=["combined"])
+async def run_immediate_combined_test(url: str):
+    """
+    Runs immediate parallel accessibility scans (both Python/durable pipelines and Node/axe-core endpoint)
+    and combines their results into a single payload.
+    """
+    import os
+    import httpx
+    
+    await assert_public_url(url)
+    
+    # Node scan call
+    node_url = os.getenv("NODE_BASE_URL", "http://localhost:3000").rstrip("/") + "/api/v1/analyse-url"
+    
+    async def get_node():
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(node_url, json={"url": url})
+                if resp.status_code == 200:
+                    return {"status": "success", "data": resp.json()}
+                return {"status": "error", "message": f"Status code: {resp.status_code}"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    # Python scan call (submit and wait or mock-crawl)
+    async def get_python():
+        try:
+            # We can invoke the combined runner/stages internally or submit to ourselves
+            # For immediate response, let's execute the main combined workflow internally for single URL (max_depth=0)
+            from ka11y.api.v1.combined.stages import _run_python_stages
+            from ka11y.utils.step_logger import ExecutionStepLogger
+            
+            logger_inst = ExecutionStepLogger(output_dir=Path("/tmp"), name="tmp", job_id="immediate")
+            res = await _run_python_stages(
+                url=url,
+                output_dir=Path("/tmp"),
+                max_depth=0,
+                run_ocr=True,
+                run_image_audit=True,
+                run_media_audit=True,
+                run_captions_audit=True,
+                lang="en",
+                job_id="immediate",
+                step_logger=logger_inst,
+                internal_links=True,
+                max_pages=1,
+                success_criteria_id=None
+            )
+            findings = [f for f in res.findings]
+            return {"status": "success", "data": {"findings": findings}}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    node_res, python_res = await asyncio.gather(get_node(), get_python())
+
+    # Count issues
+    total_issues = 0
+    critical = 0
+    warnings = 0
+
+    if node_res["status"] == "success" and isinstance(node_res["data"], dict):
+        results = node_res["data"].get("results") or []
+        for group in results:
+            for rule in group.get("rules", []):
+                if rule.get("status") == "fail":
+                    total_issues += 1
+                    if rule.get("impact") == "critical":
+                        critical += 1
+
+    if python_res["status"] == "success":
+        findings = python_res["data"].get("findings") or []
+        for f in findings:
+            if f.get("status") in ("fail", "FAILED"):
+                total_issues += 1
+                critical += 1
+            elif f.get("status") in ("needs_review", "NEEDS_REVIEW"):
+                warnings += 1
+
+    return {
+        "url": url,
+        "node_result": node_res["data"] if node_res["status"] == "success" else {"error": node_res["message"]},
+        "python_result": python_res["data"] if python_res["status"] == "success" else {"error": python_res["message"]},
+        "combined_summary": {
+            "total_issues": total_issues,
+            "critical": critical,
+            "warnings": warnings
+        }
+    }
+
+
+
 async def _admit_run(payload: CombinedRequest, *, rerun_of: str | None = None) -> dict:
     """Create the hot-cache entry and enqueue a run through the durable queue.
 
