@@ -34,21 +34,13 @@ _SUGGESTED_FIX: dict[str, str] = get_suggested_fixes("en")
 _PYTHON_SEVERITY: dict[str, str] = get_severities()
 
 
-# ---------------------------------------------------------------------------
-# Progress-bar stage weights.
+# Progress-bar stage weights for the currently active stages.
 # Calibrated against a typical t3.large 4–7 min audit (see PLAN_FOR_EC2.md §4.2).
 # Sum is 100 → `index * weight / 100` gives an honest percent-complete.
-# ---------------------------------------------------------------------------
+# NOTE: weights for removed stages (axe_core, pipeline, form_audit, label_in_name,
+# pause_stop_hide, target_size, text_spacing, rendered_layout_audit, sensory_audit)
+# have been deleted. Only active-schema stages remain.
 STAGE_WEIGHTS: dict[str, int] = {
-    "axe_core": 4,
-    "image_audit": 40,
-    "pipeline": 10,  # 2.5.3 / 2.5.8 / 1.1.1 / focus / contrast
-    "form_audit": 2,
-    "label_in_name": 1,
-    "pause_stop_hide": 2,
-    "target_size": 1,
-    "text_spacing": 2,
-    "rendered_layout_audit": 20,
-    "media_audit": 18,
-    "sensory_audit": 2,
+    "image_audit": 62,    # crawl + OCR + alt-text (was 40; scaled up to absorb removed stages)
+    "media_audit": 38,    # universal snapshot + MediaAuditor (was 18)
 }

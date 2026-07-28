@@ -11,31 +11,22 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 
+# Maps a success_criteria_id to the CombinedRequest flags that must be enabled
+# for that SC to produce results. Only flags that exist as active (non-commented)
+# fields on CombinedRequest are listed here. Entries for removed/commented-out
+# flags have been deleted so validate_success_criteria_dependencies never does
+# a getattr() against a nonexistent attribute.
 _SC_STAGE_PREREQUISITES = {
+    # image / OCR audits
     "1.1.1": ("run_image_audit",),
-    "1.2.1": ("run_media_audit",),
-    "1.2.2": ("run_captions_audit",),
-    "1.3.4": ("run_orientation_audit",),
     "1.4.3": ("run_ocr",),
-    "1.4.4": ("run_resize_text_audit",),
     "1.4.5": ("run_image_audit",),
     "1.4.6": ("run_ocr",),
-    "1.4.10": ("run_reflow_audit",),
     "1.4.11": ("run_image_audit",),
-    "1.4.12": ("run_text_spacing_audit",),
-    "1.4.13": ("run_hover_focus_content_audit",),
-    "2.2.2": ("run_pause_stop_hide_audit",),
-    "2.4.11": ("run_focus_not_obscured_min_audit",),
-    "2.4.12": ("run_focus_not_obscured_enh_audit",),
-    "2.5.3": ("run_label_in_name_audit",),
-    "2.5.8": ("run_target_size_audit",),
-    "3.3.1": ("run_form_audit",),
-    "3.3.2": ("run_form_audit",),
     "4.1.2": ("run_image_audit",),
-    "3.2.3": ("run_consistent_navigation_audit",),
-    "3.2.4": ("run_consistent_id_audit",),
-    "3.1.3": ("run_unusual_words_audit",),
-    "2.4.10": ("run_section_headings_audit",),
+    # media / captions audits
+    "1.2.1": ("run_media_audit",),
+    "1.2.2": ("run_captions_audit",),
 }
 
 
@@ -53,32 +44,11 @@ class CombinedRequest(BaseModel):
     # Pattern + max_length on string fields prevents oversized-payload DoS
     wcag_level: str = Field(default="AAA", pattern=r"^(A|AA|AAA)$")
     success_criteria_id: Optional[str] = Field(default=None, pattern=r"^\d+\.\d+\.\d+$")
-    run_node_audit: bool = True
-    run_ocr: bool = True
+    # ── Active audit toggles ─────────────────────────────────────────────────
+    run_ocr: bool = False
     run_image_audit: bool = True
-    run_form_audit: bool = True
-    run_label_in_name_audit: bool = True
     run_media_audit: bool = True
     run_captions_audit: bool = True
-    run_pause_stop_hide_audit: bool = True
-    run_target_size_audit: bool = True
-    # ── Rendered-layout WCAG checks ──────────────────────────────────────────
-    run_resize_text_audit: bool = True
-    run_reflow_audit: bool = True
-    run_text_spacing_audit: bool = True
-    run_orientation_audit: bool = True
-    run_hover_focus_content_audit: bool = True
-    run_focus_not_obscured_min_audit: bool = True
-    run_focus_not_obscured_enh_audit: bool = True
-    run_sensory_audit: bool = True
-    # ── 4 New WCAG checks ────────────────────────────────────────────────────
-    run_consistent_navigation_audit: bool = True
-    run_consistent_id_audit: bool = True
-    run_unusual_words_audit: bool = True
-    run_section_headings_audit: bool = True
-    # ── Node engine toggles ──────────────────────────────────────────────────
-    run_axe: bool = True
-    run_accesslint: bool = True
     lang: str = Field(default="auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$")
 
     @model_validator(mode="after")

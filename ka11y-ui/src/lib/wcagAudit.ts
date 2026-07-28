@@ -134,95 +134,162 @@ function extractColors(text: string): { foreground?: string; background?: string
  * Driven entirely by response fields — no site-specific assumptions —
  * so any analysed URL's response adapts the same way. */
 
-export function toViolationRows(data: WcagAuditResponse): ViolationRow[] {
+export function toViolationRows(data: any): ViolationRow[] {
   const rows: ViolationRow[] = [];
   let rowIndex = 0;
 
-  for (const criterion of data.criteria) {
-    for (const finding of criterion.findings) {
-      if (finding.status !== "fail") continue;
+  if (data.violations) {
+    for (const finding of data.violations) {
+      const el = finding.element || {};
+      const selector = el.selector || el.target;
+      const selectorStr = Array.isArray(selector) ? selector.join(" ") : (selector || "—");
 
-      const elements = finding.elements.length > 0 ? finding.elements : [null];
-      elements.forEach((el) => {
-        rows.push({
-          id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
-          title: finding.reason,
-          description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.principle,
-          sc: criterion.sc,
-          criterion: criterion.name,
-          level: criterion.level,
-          tag: extractTag(el?.html),
-          elementTitle: el?.selector ?? "—",
-          elementFile: finding.ruleId,
-          elementOcr: truncateHtml(el?.html),
-          fixGuide: finding.helpUrl,
-        });
+      rows.push({
+        id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
+        title: finding.reason_code || finding.rule_id || "Violation",
+        description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || finding.reason_code || ""),
+        sc: finding.wcag_sc || "",
+        criterion: finding.criterion || "",
+        level: (finding.level || "A") as WcagLevel,
+        tag: extractTag(el.html),
+        elementTitle: selectorStr,
+        elementFile: finding.rule_id || finding.ruleId || "",
+        elementOcr: truncateHtml(el.html),
+        fixGuide: finding.helpUrl || "",
       });
+    }
+  } else if (data.criteria) {
+    for (const criterion of data.criteria) {
+      for (const finding of criterion.findings) {
+        if (finding.status !== "fail") continue;
+
+        const elements = finding.elements.length > 0 ? finding.elements : [null];
+        elements.forEach((el: any) => {
+          rows.push({
+            id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
+            title: finding.reason,
+            description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.principle,
+            sc: criterion.sc,
+            criterion: criterion.name,
+            level: criterion.level,
+            tag: extractTag(el?.html),
+            elementTitle: el?.selector ?? "—",
+            elementFile: finding.ruleId,
+            elementOcr: truncateHtml(el?.html),
+            fixGuide: finding.helpUrl,
+          });
+        });
+      }
     }
   }
 
   return rows;
 }
 
-export function toPassesRows(data: WcagAuditResponse): PassRow[] {
+export function toPassesRows(data: any): PassRow[] {
   const rows: PassRow[] = [];
   let rowIndex = 0;
 
-  for (const criterion of data.criteria) {
-    for (const finding of criterion.findings) {
-      if (finding.status !== "pass") continue;
+  if (data.passes) {
+    for (const finding of data.passes) {
+      const el = finding.element || {};
+      const colors = extractColors(finding.reason_code || finding.rule_id || "");
 
-      const elements = finding.elements.length > 0 ? finding.elements : [null];
-      elements.forEach((el) => {
-        const colors = extractColors(finding.reason);
-        rows.push({
-          id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
-          reasonTitle: finding.reason,
-          reasonDescription: el?.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
-          sc: criterion.sc,
-          criterion: criterion.name,
-          level: criterion.level,
-          tag: extractTag(el?.html),
-          elementFilename: finding.ruleId,
-          foreground: colors.foreground ?? "—",
-          background: colors.background ?? "—",
-          ocrText: truncateHtml(el?.html),
-          helpUrl: finding.helpUrl,
-        });
+      rows.push({
+        id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
+        reasonTitle: finding.reason_code || finding.rule_id || "Pass",
+        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || "")),
+        sc: finding.wcag_sc || "",
+        criterion: finding.criterion || "",
+        level: (finding.level || "A") as WcagLevel,
+        tag: extractTag(el.html),
+        elementFilename: finding.rule_id || finding.ruleId || "",
+        foreground: colors.foreground ?? "—",
+        background: colors.background ?? "—",
+        ocrText: truncateHtml(el.html),
+        helpUrl: finding.helpUrl || "",
       });
+    }
+  } else if (data.criteria) {
+    for (const criterion of data.criteria) {
+      for (const finding of criterion.findings) {
+        if (finding.status !== "pass") continue;
+
+        const elements = finding.elements.length > 0 ? finding.elements : [null];
+        elements.forEach((el: any) => {
+          const colors = extractColors(finding.reason);
+          rows.push({
+            id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
+            reasonTitle: finding.reason,
+            reasonDescription: el?.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
+            sc: criterion.sc,
+            criterion: criterion.name,
+            level: criterion.level,
+            tag: extractTag(el?.html),
+            elementFilename: finding.ruleId,
+            foreground: colors.foreground ?? "—",
+            background: colors.background ?? "—",
+            ocrText: truncateHtml(el?.html),
+            helpUrl: finding.helpUrl,
+          });
+        });
+      }
     }
   }
 
   return rows;
 }
 
-export function toNeedsReviewRows(data: WcagAuditResponse): ReviewRow[] {
+export function toNeedsReviewRows(data: any): ReviewRow[] {
   const rows: ReviewRow[] = [];
   let rowIndex = 0;
 
-  for (const criterion of data.criteria) {
-    for (const finding of criterion.findings) {
-      if (finding.status !== "incomplete") continue;
+  if (data.needs_review) {
+    for (const finding of data.needs_review) {
+      const el = finding.element || {};
+      const colors = extractColors(finding.reason_code || finding.rule_id || "");
 
-      const elements = finding.elements.length > 0 ? finding.elements : [null];
-      elements.forEach((el) => {
-        const colors = extractColors(finding.reason);
-        rows.push({
-          id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
-          status: "pending",
-          reasonTitle: finding.reason,
-          reasonDescription: el?.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
-          sc: criterion.sc,
-          criterion: criterion.name,
-          level: criterion.level,
-          tag: extractTag(el?.html),
-          elementFilename: finding.ruleId,
-          foreground: colors.foreground ?? "—",
-          background: colors.background ?? "—",
-          ocrText: truncateHtml(el?.html),
-          helpUrl: finding.helpUrl,
-        });
+      rows.push({
+        id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
+        status: "pending",
+        reasonTitle: finding.reason_code || finding.rule_id || "Needs Review",
+        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || "")),
+        sc: finding.wcag_sc || "",
+        criterion: finding.criterion || "",
+        level: (finding.level || "A") as WcagLevel,
+        tag: extractTag(el.html),
+        elementFilename: finding.rule_id || finding.ruleId || "",
+        foreground: colors.foreground ?? "—",
+        background: colors.background ?? "—",
+        ocrText: truncateHtml(el.html),
+        helpUrl: finding.helpUrl || "",
       });
+    }
+  } else if (data.criteria) {
+    for (const criterion of data.criteria) {
+      for (const finding of criterion.findings) {
+        if (finding.status !== "incomplete") continue;
+
+        const elements = finding.elements.length > 0 ? finding.elements : [null];
+        elements.forEach((el: any) => {
+          const colors = extractColors(finding.reason);
+          rows.push({
+            id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
+            status: "pending",
+            reasonTitle: finding.reason,
+            reasonDescription: el?.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
+            sc: criterion.sc,
+            criterion: criterion.name,
+            level: criterion.level,
+            tag: extractTag(el?.html),
+            elementFilename: finding.ruleId,
+            foreground: colors.foreground ?? "—",
+            background: colors.background ?? "—",
+            ocrText: truncateHtml(el?.html),
+            helpUrl: finding.helpUrl,
+          });
+        });
+      }
     }
   }
 

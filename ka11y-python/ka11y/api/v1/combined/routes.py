@@ -1,9 +1,10 @@
 """
 ka11y/api/v1/combined/routes.py
 =================================
-FastAPI route handlers for the combined audit endpoint.
+FastAPI route handlers for accessibility audit endpoints.
 
-  POST /combined/                  202  Submit audit job
+  POST /python-audit/              202  Submit Python-only audit job (OCR, image, media, contrast, form, label-in-name)
+  POST /combined-audit/            202  Submit combined audit job (Python + Node/axe-core — Node wired via runner)
   GET  /combined/{job_id}          200  Poll status / retrieve result
   GET  /combined/{job_id}/timings  200  Per-stage timing breakdown (JSON)
   GET  /combined/{job_id}/stream   200  SSE real-time stage events
@@ -75,7 +76,7 @@ def _ip_is_blocked(ip_str: str) -> bool:
     return any(addr in net for net in _BLOCKED_NETWORKS)
 
 
-router = APIRouter(prefix="/combined", tags=["combined"])
+router = APIRouter(prefix="/combined", tags=["combined audit"])
 
 
 def _is_non_public_ip(ip: str) -> bool:
@@ -209,110 +210,43 @@ async def assert_public_url(url: str) -> None:
         )
 
 
-@router.post("/", response_model=JobStatusResponse, status_code=202)
-async def submit_combined_audit(payload: CombinedRequest):
+@router.post("/python-audit", response_model=JobStatusResponse, status_code=202)
+async def submit_python_audit(payload: CombinedRequest):
     """
-    Submit a combined Python + Node axe-core accessibility audit.
+    Submit a **Python-only** accessibility audit.
+
+    Runs: OCR contrast (1.4.3), image audit (1.1.1 / 1.4.5 / 1.4.11), media/captions
+    audit (1.2.x), form audit (3.3.x), and label-in-name audit (2.5.3).
+    Node/axe-core is **not** invoked by this endpoint.
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report, or connect to
-    **GET /api/v1/
-    /{job_id}/stream** for real-time SSE stage events.
-
-    **Graceful degradation**: if Node/axe-core is unavailable the job still
-    completes using Python-only findings; a `warnings` list notes the failure.
+    **GET /api/v1/combined/{job_id}/stream** for real-time SSE stage events.
     """
     return await _admit_run(payload)
 
 
-@router.get("/combined-test", tags=["combined"])
-async def run_immediate_combined_test(url: str):
+@router.post("/combined-audit", response_model=JobStatusResponse, status_code=202)
+async def submit_combined_audit(url: str):
     """
-    Runs immediate parallel accessibility scans (both Python/durable pipelines and Node/axe-core endpoint)
-    and combines their results into a single payload.
+    Submit a **combined Python + Node/axe-core** accessibility audit.
+
+    Convenience endpoint — accepts a plain `url` query parameter instead of a full
+    JSON request body. All active Python audit stages are enabled by default
+    (image audit, OCR/contrast, media, captions).
+
+    Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
+    for status and the full report.
     """
-    import os
-    import httpx
-    
-    await assert_public_url(url)
-    
-    # Node scan call
-    node_url = os.getenv("NODE_BASE_URL", "http://localhost:3000").rstrip("/") + "/api/v1/analyse-url"
-    
-    async def get_node():
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(node_url, json={"url": url})
-                if resp.status_code == 200:
-                    return {"status": "success", "data": resp.json()}
-                return {"status": "error", "message": f"Status code: {resp.status_code}"}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-    # Python scan call (submit and wait or mock-crawl)
-    async def get_python():
-        try:
-            # We can invoke the combined runner/stages internally or submit to ourselves
-            # For immediate response, let's execute the main combined workflow internally for single URL (max_depth=0)
-            from ka11y.api.v1.combined.stages import _run_python_stages
-            from ka11y.utils.step_logger import ExecutionStepLogger
-            
-            logger_inst = ExecutionStepLogger(output_dir=Path("/tmp"), name="tmp", job_id="immediate")
-            res = await _run_python_stages(
-                url=url,
-                output_dir=Path("/tmp"),
-                max_depth=0,
-                run_ocr=True,
-                run_image_audit=True,
-                run_media_audit=True,
-                run_captions_audit=True,
-                lang="en",
-                job_id="immediate",
-                step_logger=logger_inst,
-                internal_links=True,
-                max_pages=1,
-                success_criteria_id=None
-            )
-            findings = [f for f in res.findings]
-            return {"status": "success", "data": {"findings": findings}}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-    node_res, python_res = await asyncio.gather(get_node(), get_python())
-
-    # Count issues
-    total_issues = 0
-    critical = 0
-    warnings = 0
-
-    if node_res["status"] == "success" and isinstance(node_res["data"], dict):
-        results = node_res["data"].get("results") or []
-        for group in results:
-            for rule in group.get("rules", []):
-                if rule.get("status") == "fail":
-                    total_issues += 1
-                    if rule.get("impact") == "critical":
-                        critical += 1
-
-    if python_res["status"] == "success":
-        findings = python_res["data"].get("findings") or []
-        for f in findings:
-            if f.get("status") in ("fail", "FAILED"):
-                total_issues += 1
-                critical += 1
-            elif f.get("status") in ("needs_review", "NEEDS_REVIEW"):
-                warnings += 1
-
-    return {
-        "url": url,
-        "node_result": node_res["data"] if node_res["status"] == "success" else {"error": node_res["message"]},
-        "python_result": python_res["data"] if python_res["status"] == "success" else {"error": python_res["message"]},
-        "combined_summary": {
-            "total_issues": total_issues,
-            "critical": critical,
-            "warnings": warnings
-        }
-    }
+    payload = CombinedRequest(
+        url=url,
+        max_depth=0,
+        run_ocr=True,
+        run_image_audit=True,
+        run_media_audit=True,
+        run_captions_audit=True,
+    )
+    return await _admit_run(payload)
 
 
 

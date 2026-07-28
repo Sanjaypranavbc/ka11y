@@ -194,6 +194,9 @@ async def save_findings(run_id: str, report: Dict[str, Any]) -> None:
         for key, default_status in buckets:
             for f in report.get(key, []) or []:
                 el = f.get("element") or {}
+                selector = el.get("selector") or el.get("target")
+                if isinstance(selector, list):
+                    selector = json.dumps(selector)
                 rows.append(
                     (
                         run_id,
@@ -203,7 +206,7 @@ async def save_findings(run_id: str, report: Dict[str, Any]) -> None:
                         f.get("status") or default_status,
                         f.get("source") or ("axe" if f.get("axe_rule_id") else "python"),
                         f.get("reason_code"),
-                        el.get("selector") or el.get("target"),
+                        selector,
                         json.dumps(el, default=str)[:4000] if el else None,
                         now,
                     )

@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     // 2. Poll for completion
     const startTime = Date.now();
-    const TIMEOUT_MS = 140000; // 140s to leave margin for Next.js timeout
+    const TIMEOUT_MS = 300000; // 300s to accommodate longer audits
 
     while (Date.now() - startTime < TIMEOUT_MS) {
       const pollRes = await fetch(`${WCAG_API_URL}/${job_id}`, {

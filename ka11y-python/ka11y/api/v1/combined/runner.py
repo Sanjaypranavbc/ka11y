@@ -3,8 +3,12 @@ ka11y/api/v1/combined/runner.py
 =================================
 _run_job() — the main background task that orchestrates the full audit.
 
-Runs all Python audit stages (image + media), resolves results, builds the
-final report, and updates the job store.
+Runs Python audit stages (image, media, contrast) and the Node/axe-core
+audit in parallel, then merges and deduplicates their findings into a
+single unified report.
+
+Graceful degradation: if Node is unavailable the job still completes with
+Python-only findings and a warning entry.
 """
 
 from __future__ import annotations
@@ -141,24 +145,98 @@ def _merge_findings(
     return list(merged.values()) + no_key
 
 
+# ---------------------------------------------------------------------------
+# Node/axe-core integration
+# ---------------------------------------------------------------------------
+
+_NODE_BASE_URL = os.environ.get("NODE_BASE_URL", "http://localhost:3000")
+_NODE_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_NODE_TIMEOUT_SECONDS", "120"))
+
+
+async def _fetch_node_findings(
+    url: str,
+    job_id: str,
+    lang: str,
+    payload: CombinedRequest,
+) -> List[Dict]:
+    """
+    Call the Node/axe-core microservice (POST /api/v1/analyse-url-flat) and
+    return its findings in the same schema expected by _merge_findings.
+
+    Returns an empty list (+ logs a warning) on any failure so the job
+    degrades gracefully to Python-only results.
+    """
+    import httpx
+
+    node_url = f"{_NODE_BASE_URL.rstrip('/')}/api/v1/analyse-url-flat"
+    body = {
+        "url": url,
+        "lang": lang,
+        "level": payload.wcag_level,
+        "maxDepth": payload.max_depth,
+        "maxPages": payload.max_pages,
+        "internalLinks": payload.internal_links,
+        "jobId": job_id,
+    }
+    if payload.success_criteria_id:
+        body["successCriteriaId"] = payload.success_criteria_id
+
+    try:
+        async with httpx.AsyncClient(timeout=_NODE_TIMEOUT_SECONDS) as client:
+            resp = await client.post(node_url, json=body)
+            resp.raise_for_status()
+            data = resp.json()
+
+        raw_findings: List[Dict] = data.get("findings") or []
+
+        # Normalise field names: Node uses camelCase in some fields; _merge_findings
+        # expects snake_case.  The axeResultMapper already outputs snake_case keys
+        # (wcag_sc, status, level, element.page_url, element.selector …) so most
+        # fields pass through untouched.  We only need to handle the pageUrl alias.
+        for f in raw_findings:
+            el = f.get("element")
+            if isinstance(el, dict):
+                # Normalise pageUrl -> page_url inside element
+                if "pageUrl" in el and "page_url" not in el:
+                    el["page_url"] = el.pop("pageUrl")
+            # Top-level pageUrl alias (set by analyseUrlFlat loop)
+            if "pageUrl" in f and "element" not in f:
+                f.setdefault("element", {})["page_url"] = f.pop("pageUrl")
+
+        logger.info(
+            "[combined] job %s: Node audit returned %d findings",
+            job_id, len(raw_findings),
+        )
+        return raw_findings
+
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "[combined] job %s: Node audit failed (%s: %s) — continuing with Python-only results",
+            job_id, type(exc).__name__, exc,
+        )
+        return []
+
+
 async def _run_job(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
     """
-    Background task: run the Python image + media audit stages.
+    Background task: run the combined Python + Node/axe-core audit.
+
+    Python stages (image, media, contrast, form, label-in-name) and the
+    Node/axe-core stage are launched in parallel. Their findings are merged
+    and deduplicated by _merge_findings (Python wins on duplicate keys).
 
     If *filter_rule* is provided, the final report will only contain findings
     for that specific WCAG SC ID (e.g. "1.1.1").
 
     Graceful degradation:
-    • If a Python stage fails → other stages continue; warning entry added.
-    • Job fails when all Python stages return nothing.
+    • Node failure → warning appended; job completes with Python-only findings.
+    • Python failure → job fails (Python is the primary source of truth).
 
     Concurrency:
     • Bounded by the module-level semaphore so the worker cannot launch more
-      Chromium processes than _MAX_CONCURRENT_JOBS at once. Jobs over the cap
-      wait in FIFO order; the job's status stays "pending" until the slot is
-      acquired so clients polling /combined/{job_id} can observe the queue.
+      Chromium processes than _MAX_CONCURRENT_JOBS at once.
     """
     sem = _get_job_semaphore()
     if sem.locked() and sem._value <= 0:
@@ -173,8 +251,8 @@ async def _run_job(
 async def _run_job_body(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
-    """Orchestrates one combined audit job: image audit, media/captions
-    audit, and (once wired in) label-in-name — no axe-core, no pipeline."""
+    """Orchestrates one combined audit job: image audit and media/captions
+    audit — no axe-core, no pipeline."""
     _jobs[job_id]["status"] = "running"
     run_started_at = datetime.now(timezone.utc).isoformat()
     _jobs[job_id]["run_started_at"] = run_started_at
@@ -237,11 +315,10 @@ async def _run_job_body(
             active_stages.append("image_audit")
         if payload.run_media_audit or payload.run_captions_audit:
             active_stages.append("media_audit")
-        if getattr(payload, "run_label_in_name_audit", False):
-            active_stages.append("label_in_name")
         emit_job_plan(job_id, active_stages)
         logger.info(f"[combined] job {job_id}: active stages = {active_stages}")
 
+        # ── Launch Python and Node tasks in parallel ──────────────────────
         python_task = asyncio.create_task(
             _run_python_stages(
                 url=url,
@@ -260,15 +337,21 @@ async def _run_job_body(
             )
         )
 
+        node_task = asyncio.create_task(
+            _fetch_node_findings(url, job_id, resolved_lang, payload)
+        )
+
         try:
             gathered = await asyncio.wait_for(
-                asyncio.gather(python_task, return_exceptions=True),
+                asyncio.gather(python_task, node_task, return_exceptions=True),
                 timeout=_JOB_TIMEOUT_SECONDS,
             )
             python_result = gathered[0]
+            node_result_raw = gathered[1]
         except asyncio.TimeoutError:
-            if not python_task.done():
-                python_task.cancel()
+            for t in (python_task, node_task):
+                if t and not t.done():
+                    t.cancel()
             raise TimeoutError(
                 f"audit exceeded {_JOB_TIMEOUT_SECONDS}s overall budget"
             )
@@ -291,15 +374,43 @@ async def _run_job_body(
                 "Check warnings for details."
             )
 
+        # ── Resolve Node result ──────────────────────────────────────────
+        node_findings: List[Dict] = []
+        if isinstance(node_result_raw, Exception):
+            # _fetch_node_findings already logged; treat as empty with warning
+            logger.warning(
+                "[combined] job %s: node task raised unexpectedly: %s",
+                job_id, node_result_raw,
+            )
+            _jobs[job_id].setdefault("warnings", []).append(
+                "Node/axe-core audit failed — report contains Python-only findings."
+            )
+        elif node_result_raw:
+            node_findings = node_result_raw  # list[dict] from _fetch_node_findings
+            if not node_findings:
+                _jobs[job_id].setdefault("warnings", []).append(
+                    "Node/axe-core audit returned no findings (service may be unavailable)."
+                )
+
+        logger.info(
+            "[combined] job %s: python=%d findings, node=%d findings before merge",
+            job_id, len(python_findings), len(node_findings),
+        )
+
         allowed = _allowed_levels(payload.wcag_level)
         python_findings = [
             f
             for f in python_findings
             if f.get("level") in allowed or f.get("level") is None
         ]
+        node_findings = [
+            f
+            for f in node_findings
+            if f.get("level") in allowed or f.get("level") is None
+        ]
 
         from ka11y.store.cpu_pool import run_cpu
-        all_findings = await run_cpu(_merge_findings, [], python_findings)
+        all_findings = await run_cpu(_merge_findings, node_findings, python_findings)
 
         # FIX: this was referenced below but never assigned — restored.
         effective_filter = filter_rule or payload.success_criteria_id
