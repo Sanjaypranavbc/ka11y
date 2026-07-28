@@ -100,3 +100,45 @@ The system maintains an internal event bus. As each stage (axe-core, image-crawl
 - `ka11y-frontend-sdk/`: A React-based UI components and hooks for integrating ka11y results.
 - `ka11y-docs/`: Comprehensive technical documentation and WCAG mapping guides.
 - `i18n/`: Multi-language support for audit findings (currently English, Japanese, German).
+
+---
+
+## 🔌 Combined Accessibility Endpoint
+
+A combined endpoint is available to run Node and Python checks simultaneously on the same target URL:
+
+### GET `/api/ka11y/combined?url=<target-url>`
+
+**Response Format:**
+```json
+{
+  "url": "https://example.com",
+  "node_result": { ... },
+  "python_result": { ... },
+  "combined_summary": {
+    "total_issues": 3,
+    "critical": 1,
+    "warnings": 2
+  }
+}
+```
+
+### Running Locally
+
+1. **Start the Node service:**
+   ```bash
+   cd ka11y-node
+   npm install
+   npm run dev # Runs on port 3000 by default
+   ```
+
+2. **Start the Python service:**
+   ```bash
+   cd ka11y-python
+   poetry install
+   poetry run uvicorn ka11y.main:app --reload --port 8000
+   ```
+
+3. **Request Combined Results:**
+   Send a `GET` request to `http://localhost:3000/api/ka11y/combined?url=https://example.com`.
+
