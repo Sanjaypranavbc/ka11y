@@ -159,19 +159,28 @@ NOT_PRESENT_NOTE = "element is not present on this page"
 SCREENSHOT_TYPES = {
     "img", "svg_via_img", "svg_inline", "svg_via_object", "svg_via_use",
     "css_background_image", "css_background_svg", "input_image", "canvas",
-    "video_poster",
+    "video_poster", "video",
 }
 # Per asset type, the element field holding a downloadable URL. Types absent
 # here (inline svg, <use> sprites, canvas) have no fetchable source, so they
 # are always screenshotted as a fallback.
 ASSET_URL_FIELD = {
     "img": "src", "svg_via_img": "src", "input_image": "src",
-    "svg_via_object": "data_url", "video_poster": "poster_url",
+    "svg_via_object": "data_url",
     "css_background_image": "resolved_background_url",
     "css_background_svg": "resolved_background_url",
 }
 SHOT_TIMEOUT_MS = 5_000
 DOWNLOAD_TIMEOUT_MS = 30_000
+# Carousel-specific limits.
+# MAX_CAROUSEL_SLIDES: hard cap on how many slide-advances the crawler will
+# attempt for a single carousel, preventing infinite loops on carousels that
+# expose hundreds of items or never settle on a terminal state.
+MAX_CAROUSEL_SLIDES = 20
+# CAROUSEL_ADVANCE_TIMEOUT_MS: how long _capture_carousel_slides waits (via
+# polling) for the active-slide fingerprint to change after clicking the next
+# control.  1 200 ms covers most CSS transition durations with headroom.
+CAROUSEL_ADVANCE_TIMEOUT_MS = 1_200
 
 # Text-overlay detection (ported from meghana-v2 classifier.get_visual_container):
 # if a small image, keep it; otherwise walk up to 3 ancestors and return the
@@ -200,6 +209,166 @@ OVERLAY_CONTAINER_JS = """el => {
         cur = cur.parentElement;
     }
     return el;
+}"""
+
+# ---------------------------------------------------------------------------
+# Carousel / reel / slider detection helpers
+# ---------------------------------------------------------------------------
+# CAROUSEL_DETECT_JS: given any element on the page, walks up the DOM to find
+# the nearest carousel/reel/slider root and returns a descriptor object:
+#   { root: Element|null, slideCount: number, nextSelector: string|null }
+# Detection covers:
+#   • ARIA pattern: role="region" + aria-roledescription="carousel"
+#   • Swiper (.swiper / .swiper-container)
+#   • Slick (.slick-slider)
+#   • Generic [data-carousel], [data-slider], [data-reel]
+#   • reel-show / reel_show class/id patterns  (site-specific)
+#   • Repeated <li>/<div> siblings with role="group"|"tabpanel" inside a
+#     fixed-width overflow-hidden scroll container
+# Returns null when no carousel ancestor is found within 8 ancestor hops.
+CAROUSEL_DETECT_JS = """el => {
+    // Selectors whose first matching ancestor is the carousel root.
+    const ROOT_SELECTORS = [
+        '[role="region"][aria-roledescription]',
+        '[data-carousel]',
+        '[data-slider]',
+        '[data-reel]',
+        '.swiper',
+        '.swiper-container',
+        '.slick-slider',
+        '.reel-show',
+        '.reel_show',
+        '[class*="reel"]',
+        '[id*="reel"]',
+        '[class*="carousel"]',
+        '[class*="slider"]',
+    ];
+    // Next-slide control selectors (tried in order; first match is used).
+    const NEXT_SELECTORS = [
+        '[aria-label*="next" i]',
+        '[aria-label*="Next" i]',
+        '.carousel-control-next',
+        '.slick-next',
+        '.swiper-button-next',
+        '[data-slide="next"]',
+        '[data-action="next"]',
+        '.reel-next',
+        'button.next',
+    ];
+
+    // Walk up at most 8 levels to find a carousel root.
+    let node = el.parentElement;
+    let root = null;
+    for (let i = 0; i < 8 && node && node.tagName !== 'BODY'; i++) {
+        for (const sel of ROOT_SELECTORS) {
+            try {
+                if (node.matches(sel)) { root = node; break; }
+            } catch {}
+        }
+        if (root) break;
+        node = node.parentElement;
+    }
+    if (!root) return null;
+
+    // Count slide items: look for role=group/tabpanel children, then slick/swiper
+    // slide classes, then direct li children, then any direct div children.
+    let slideCount = 0;
+    const byRole = root.querySelectorAll('[role="group"], [role="tabpanel"]');
+    if (byRole.length > 1) {
+        slideCount = byRole.length;
+    } else {
+        const byClass = root.querySelectorAll(
+            '.slick-slide:not(.slick-cloned), .swiper-slide:not(.swiper-slide-duplicate)'
+        );
+        if (byClass.length > 1) {
+            slideCount = byClass.length;
+        } else {
+            // Fallback: direct <li> or <div> children whose dimensions match the root.
+            const rootRect = root.getBoundingClientRect();
+            const items = Array.from(root.children).filter(ch => {
+                const r = ch.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 &&
+                       Math.abs(r.width - rootRect.width) < rootRect.width * 0.2;
+            });
+            if (items.length > 1) slideCount = items.length;
+        }
+    }
+
+    // Find the next-slide control scoped to this root.
+    let nextSelector = null;
+    for (const sel of NEXT_SELECTORS) {
+        try {
+            if (root.querySelector(sel)) { nextSelector = sel; break; }
+        } catch {}
+    }
+
+    return {
+        rootSelector: (root.id ? '#' + CSS.escape(root.id) : null),
+        slideCount: slideCount,
+        nextSelector: nextSelector,
+    };
+}"""
+
+# CAROUSEL_ADVANCE_JS: given a carousel root selector and next-control selector,
+# clicks the next control (or dispatches ArrowRight as a fallback), then polls
+# until the active-slide indicator changes or a timeout elapses.
+# Returns true when the slide changed, false on timeout or no control found.
+CAROUSEL_ADVANCE_JS = """async (args) => {
+    const { rootSelector, nextSelector, timeoutMs } = args;
+    const deadline = Date.now() + (timeoutMs || 1200);
+    const pause = ms => new Promise(r => setTimeout(r, ms));
+
+    // Locate the carousel root.
+    let root = null;
+    if (rootSelector) {
+        try { root = document.querySelector(rootSelector); } catch {}
+    }
+
+    // Helper: fingerprint the current active slide so we can detect a change.
+    const activeFingerprint = (r) => {
+        if (!r) return '';
+        // ARIA: aria-current, aria-selected on slide items
+        const cur = r.querySelector('[aria-current="true"], [aria-selected="true"]');
+        if (cur) return cur.getAttribute('aria-label') || cur.dataset.index || cur.id || cur.className;
+        // Slick: .slick-current class
+        const slickCur = r.querySelector('.slick-current');
+        if (slickCur) return slickCur.innerHTML.slice(0, 80);
+        // Swiper: .swiper-slide-active
+        const swiperCur = r.querySelector('.swiper-slide-active');
+        if (swiperCur) return swiperCur.innerHTML.slice(0, 80);
+        // Transform-based: read translateX of track element
+        const track = r.querySelector('.slick-track, .swiper-wrapper, [data-carousel-track]');
+        if (track) return window.getComputedStyle(track).transform;
+        return r.innerHTML.slice(0, 120);
+    };
+
+    const before = activeFingerprint(root);
+
+    // Pause autoplay if a known API is accessible.
+    try {
+        if (root && root.swiper) { root.swiper.autoplay.stop(); }
+    } catch {}
+
+    // Try clicking the next-control.
+    let clicked = false;
+    if (nextSelector) {
+        const scope = root || document;
+        const btn = scope.querySelector(nextSelector);
+        if (btn) {
+            try { btn.click(); clicked = true; } catch {}
+        }
+    }
+    // Fallback: dispatch ArrowRight on the root element.
+    if (!clicked && root) {
+        root.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    }
+
+    // Poll until the fingerprint changes or deadline passes.
+    while (Date.now() < deadline) {
+        await pause(80);
+        if (activeFingerprint(root) !== before) return true;
+    }
+    return false;
 }"""
 
 # ---------------------------------------------------------------------------
@@ -879,74 +1048,6 @@ async () => {
 }
 """
 
-# ---------------------------------------------------------------------------
-# Gap 1 + 2 ported from pranav-v2 _reveal_hidden_images() + _trigger_lazy_loading()
-# ---------------------------------------------------------------------------
-# Clicks interactive controls (tabs, accordions, dropdowns, modals, carousels,
-# load-more buttons) so images hidden inside those widgets become visible in
-# the DOM before EXTRACT_JS runs.  After clicking, fires IntersectionObserver
-# callbacks and dispatches "lazyload" events on img[data-src] / img[data-lazy-src]
-# / img[data-original] elements so lazy-load libraries resolve their real src.
-#
-# Selector groups and click limit (8 per group) match pranav-v2 exactly.
-# The IntersectionObserver + lazyload dispatch matches pranav-v2's
-# _trigger_lazy_loading() post-scroll block exactly.
-REVEAL_JS = """
-async () => {
-    const pause = ms => new Promise(r => setTimeout(r, ms));
-
-    // --- Gap 1: carousel / tab / accordion / modal reveal ---
-    // Selector groups match pranav-v2 _reveal_hidden_images() exactly.
-    const groups = {
-        tabs:       '[role="tab"], .tab, [data-toggle="tab"], .nav-link',
-        accordions: '[data-toggle="collapse"], .accordion-toggle, .accordion-button, details summary',
-        dropdowns:  '[data-toggle="dropdown"], .dropdown-toggle',
-        modals:     '[data-toggle="modal"]',
-        carousels:  '.carousel-control-next, .slick-next, [data-slide="next"]',
-        load_more:  '.load-more, [data-load-more]',
-    };
-    for (const [name, sel] of Object.entries(groups)) {
-        let els;
-        try { els = Array.from(document.querySelectorAll(sel)); } catch { continue; }
-        // Deduplicate by outerHTML prefix, same as pranav-v2.
-        const seen = new Map();
-        for (const el of els) {
-            const key = (el.outerHTML || "").slice(0, 100);
-            if (!seen.has(key)) seen.set(key, el);
-        }
-        let count = 0;
-        for (const el of Array.from(seen.values()).slice(0, 8)) {
-            try {
-                const cs = window.getComputedStyle(el);
-                const r  = el.getBoundingClientRect();
-                const visible = cs.display !== "none" && cs.visibility !== "hidden"
-                    && r.width > 0 && r.height > 0;
-                if (!visible) continue;
-                el.click();
-                await pause(400);   // pranav-v2 waits 400 ms after each click
-                count++;
-            } catch {}
-        }
-    }
-
-    // --- Gap 2: IntersectionObserver + lazyload event dispatch ---
-    // Matches pranav-v2 _trigger_lazy_loading() post-scroll block exactly:
-    // selector list is img[data-src], img[data-lazy-src], img[data-original].
-    const lazyImgs = document.querySelectorAll(
-        'img[data-src], img[data-lazy-src], img[data-original]'
-    );
-    lazyImgs.forEach(img => {
-        const obs = new IntersectionObserver(entries => {
-            entries.forEach(e => e.target.dispatchEvent(new Event('lazyload')));
-            obs.disconnect();
-        });
-        obs.observe(img);
-    });
-    // Give the observer callbacks and lazy-load libraries time to swap src.
-    // pranav-v2 waits 1000 ms at this point.
-    await pause(1000);
-}
-"""
 
 EXTRACT_JS = r"""
 (embedHosts) => {
@@ -986,7 +1087,7 @@ EXTRACT_JS = r"""
     };
     const isRendered = (el) => {
         const cs = getComputedStyle(el);
-        if (cs.display === "none" || cs.visibility === "hidden") return false;
+        if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) === 0) return false;
         const r = el.getBoundingClientRect();
         return !(r.width === 0 && r.height === 0);
     };
@@ -1247,15 +1348,19 @@ EXTRACT_JS = r"""
         records.push(rec);
         return rec;
     };
-    const baseFields = (el, elementType) => ({
-        id: nextId(),
-        tag_name: el.tagName.toLowerCase(),
-        element_type: elementType,
-        selector: cssPath(el),
-        outer_html_snippet: snippet(el),
-        bounding_box: bbox(el),
-        visible: isVisible(el),
-    });
+    const baseFields = (el, elementType) => {
+        const idStr = nextId();
+        try { el.setAttribute("data-ka11y-id", idStr); } catch {}
+        return {
+            id: idStr,
+            tag_name: el.tagName.toLowerCase(),
+            element_type: elementType,
+            selector: cssPath(el),
+            outer_html_snippet: snippet(el),
+            bounding_box: bbox(el),
+            visible: isVisible(el),
+        };
+    };
     const imageNameFields = (el) => ({
         alt_present: el.hasAttribute("alt"),
         alt_value: attr(el, "alt"),
@@ -1940,6 +2045,135 @@ class Crawler:
         except (PlaywrightError, OSError, ValueError):
             return False
 
+    # ------------------------------------------------------------------
+    # Carousel-aware slide capture
+    # ------------------------------------------------------------------
+
+    async def _capture_carousel_slides(
+        self,
+        page,
+        carousel_elements: list,
+        page_slug: str,
+    ) -> None:
+        """Advance through a carousel's slides, taking a unique screenshot per
+        distinct slide before downloading/screenshotting each element.
+
+        Algorithm:
+          1. Detect the carousel root + slide count + next-control via JS.
+          2. Pause autoplay (if the library API is accessible).
+          3. Loop: advance one slide → wait for state change → screenshot the
+             now-visible image(s) in the carousel.
+          4. Stop when:
+             - all ``carousel_elements`` are captured, OR
+             - the slide count is exhausted, OR
+             - the captured image hash matches a previously-seen hash
+               (back to start on a looping carousel), OR
+             - a hard cap of MAX_CAROUSEL_SLIDES is hit.
+        Duplicate frames are skipped (flagged as 'carousel_duplicate').
+        """
+        if not carousel_elements:
+            return
+
+        shot_dir = self.out_dir / "screenshots" / page_slug
+        shot_dir.mkdir(parents=True, exist_ok=True)
+
+        # Probe the first element's carousel root.
+        try:
+            first_handle = await page.query_selector(carousel_elements[0]["selector"])
+            if first_handle is None:
+                return
+            info = await first_handle.evaluate(CAROUSEL_DETECT_JS)
+        except (PlaywrightError, Exception):
+            info = None
+
+        if not info:
+            return  # not a real carousel — caller will fall back to normal path
+
+        root_selector = info.get("rootSelector")
+        next_selector = info.get("nextSelector")
+        detected_slide_count = info.get("slideCount") or 0
+        max_slides = min(
+            max(detected_slide_count, len(carousel_elements)),
+            MAX_CAROUSEL_SLIDES,
+        )
+
+        seen_hashes: set[str] = set()
+        captured_count = 0
+        # Track which element IDs have been assigned a carousel screenshot so
+        # the regular _capture_assets loop can skip them.
+        processed_ids: set[str] = set()
+
+        for slide_index in range(max_slides):
+            # Advance the carousel before the first capture too (unless this is
+            # the very first slide — we want the initial state on slide 0).
+            if slide_index > 0:
+                try:
+                    changed = await page.evaluate(
+                        CAROUSEL_ADVANCE_JS,
+                        {
+                            "rootSelector": root_selector,
+                            "nextSelector": next_selector,
+                            "timeoutMs": CAROUSEL_ADVANCE_TIMEOUT_MS,
+                        },
+                    )
+                    if not changed:
+                        break  # carousel did not advance — stop
+                except (PlaywrightError, Exception):
+                    break
+
+            # Screenshot every carousel image element that is now visible.
+            slide_has_new_content = False
+            for el in carousel_elements:
+                if el.get("id") in processed_ids:
+                    continue
+                try:
+                    handle = await page.query_selector(el["selector"])
+                    if handle is None:
+                        continue
+                    visible = await handle.is_visible()
+                    if not visible:
+                        continue
+
+                    # Take a screenshot of the visible element.
+                    rel = Path("screenshots") / page_slug / f"{el['id']}_slide{slide_index}.png"
+                    dest = self.out_dir / rel
+                    await handle.screenshot(path=str(dest), timeout=SHOT_TIMEOUT_MS)
+
+                    # Deduplication: hash the raw PNG bytes.
+                    img_bytes = dest.read_bytes()
+                    img_hash = hashlib.md5(img_bytes).hexdigest()
+                    if img_hash in seen_hashes:
+                        # Identical frame — carousel has looped; skip + clean up.
+                        dest.unlink(missing_ok=True)
+                        el.setdefault("asset_capture", "carousel_duplicate")
+                        continue
+
+                    seen_hashes.add(img_hash)
+                    el["screenshot"] = str(rel)
+                    el["asset_capture"] = f"carousel_slide_{slide_index}"
+                    processed_ids.add(el["id"])
+                    slide_has_new_content = True
+                    captured_count += 1
+
+                except (PlaywrightError, Exception):
+                    continue
+
+            if not slide_has_new_content and slide_index > 0:
+                # No new elements appeared after advancing — assume loop-back.
+                break
+
+            if captured_count >= len(carousel_elements):
+                break  # all elements captured
+
+        # Any remaining uncaptured elements: mark so the caller knows.
+        for el in carousel_elements:
+            if el.get("id") not in processed_ids:
+                el.setdefault("asset_capture", "carousel_not_reached")
+
+    # ------------------------------------------------------------------
+    # Main asset capture dispatcher
+    # ------------------------------------------------------------------
+
     async def _capture_assets(self, page, elements: list, url: str) -> None:
         """Capture rendered pixels for every visible image/graphic element.
 
@@ -1959,17 +2193,75 @@ class Crawler:
         4. Inline SVG, <use> sprites, <canvas>, or a failed download:
            SCREENSHOT the element as a fallback.
 
+        For elements that live inside a carousel / reel / slider component:
+          The carousel-aware ``_capture_carousel_slides`` loop is invoked
+          instead, which advances the carousel between captures and deduplicates
+          identical frames so each distinct slide is captured exactly once.
+
         Sets on each SCREENSHOT_TYPES element (other elements untouched):
           screenshot    — relative PNG path or None
           asset_file    — relative downloaded-file path or None
           asset_capture — 'screenshot_icon_logo' | 'screenshot_overlay' |
-                          'download' | 'screenshot_fallback' | None
+                          'download' | 'screenshot_fallback' |
+                          'carousel_slide_<N>' | 'carousel_duplicate' |
+                          'carousel_not_reached' | None
         Every capture is non-fatal; on failure the three fields stay None.
         """
         page_slug = url_slug(normalize_url(url))
         shot_dir = self.out_dir / "screenshots" / page_slug
+
+        # ------------------------------------------------------------------
+        # Pass 1: detect carousel elements and group them by carousel root.
+        # Elements are probed in selector order; only img-type elements that
+        # are inside a carousel root are routed to the carousel path.
+        # ------------------------------------------------------------------
+        carousel_groups: dict[str, list] = {}   # root_selector → [elements]
+        carousel_element_ids: set[str] = set()  # IDs already routed to carousel path
+
         for el in elements:
             if el.get("element_type") not in SCREENSHOT_TYPES:
+                continue
+            
+            # Quick pre-check: only probe elements that might plausibly be in a
+            # carousel (skip icons/logos — those never need slide-advance).
+            flags = el.get("flags") or {}
+            sub_type = el.get("sub_type") or ""
+            is_icon_or_logo = (
+                sub_type in ("icons", "logos")
+                or flags.get("is_icon")
+                or flags.get("is_logo")
+            )
+            if is_icon_or_logo:
+                continue
+            try:
+                handle = await page.query_selector(el["selector"])
+                if handle is None:
+                    continue
+                info = await handle.evaluate(CAROUSEL_DETECT_JS)
+                if info and info.get("slideCount", 0) > 1:
+                    key = info.get("rootSelector") or f"__no_id_{id(info)}"
+                    carousel_groups.setdefault(key, []).append(el)
+                    carousel_element_ids.add(el["id"])
+            except (PlaywrightError, Exception):
+                pass  # non-carousel or detached — handled in Pass 2
+
+        # ------------------------------------------------------------------
+        # Pass 1b: run carousel capture for each detected group.
+        # ------------------------------------------------------------------
+        for _root_key, group in carousel_groups.items():
+            try:
+                await self._capture_carousel_slides(page, group, page_slug)
+            except (PlaywrightError, Exception):
+                pass  # non-fatal: group elements stay with screenshot=None
+
+        # ------------------------------------------------------------------
+        # Pass 2: normal (non-carousel) capture for all remaining elements.
+        # ------------------------------------------------------------------
+        for el in elements:
+            if el.get("element_type") not in SCREENSHOT_TYPES:
+                continue
+            # Skip elements already handled by the carousel path.
+            if el.get("id") in carousel_element_ids:
                 continue
             el["screenshot"] = None
             el["asset_file"] = None
@@ -2033,6 +2325,42 @@ class Crawler:
             except (PlaywrightError, Exception):
                 pass  # detached / offscreen / timeout — leave fields None
 
+    async def _reveal_hidden_images(self, page):
+        """Click tabs, accordions, dropdowns, carousels to expose hidden images using locators."""
+        revealed = 0
+        groups = {
+            "tabs": '[role="tab"], .tab, [data-toggle="tab"], .nav-link',
+            "accordions": '[data-toggle="collapse"], .accordion-toggle, .accordion-button, details summary',
+            "dropdowns": '[data-toggle="dropdown"], .dropdown-toggle',
+            "modals": '[data-toggle="modal"]',
+            "carousels": '.carousel-control-next, .slick-next, [data-slide="next"]',
+            "load_more": ".load-more, [data-load-more]",
+        }
+        for name, sel in groups.items():
+            try:
+                els = await page.locator(sel).all()
+                unique = {
+                    await e.evaluate("el => el.outerHTML.slice(0,100)"): e for e in els
+                }.values()
+                count = 0
+                for el in list(unique)[:8]:
+                    try:
+                        # Opacity check added here as well for visibility
+                        if await el.evaluate("""el => {
+                            const cs = window.getComputedStyle(el);
+                            return cs.display !== "none" && cs.visibility !== "hidden" && parseFloat(cs.opacity) !== 0;
+                        }"""):
+                            await el.click(timeout=1500)
+                            await page.wait_for_timeout(400)
+                            revealed += 1
+                            count += 1
+                    except Exception:
+                        pass
+                if count:
+                    print(f"[crawler]   {name}: clicked {count}")
+            except Exception as e:
+                print(f"[crawler] Toggle group {name} error: {e}")
+
     async def _attempt_page(self, page, url: str, depth: int) -> dict:
         """One navigation+extraction attempt. Returns a terminal doc (success,
         HTTP-4xx failure, or non-HTML skip). Raises on transient/browser errors
@@ -2070,13 +2398,21 @@ class Crawler:
         await page.evaluate(SCROLL_JS)
         await page.wait_for_timeout(400)
 
-        # Gap 1+2: reveal hidden images (carousel clicks + lazyload dispatch).
-        # Ported from pranav-v2 _reveal_hidden_images() + _trigger_lazy_loading().
-        await page.evaluate(REVEAL_JS)
-        # pranav-v2 has no additional wait after _reveal_hidden_images;
-        # page.wait_for_timeout(500) is called after both steps in crawl_page(),
-        # mirrored here with a short settle before extraction.
-        await page.wait_for_timeout(500)
+        # Gap 1: reveal hidden images (carousel clicks etc) using Locators
+        await self._reveal_hidden_images(page)
+        
+        # Gap 2: IntersectionObserver + lazyload dispatch
+        await page.evaluate("""() => {
+            const imgs = document.querySelectorAll("img[data-src],img[data-lazy-src],img[data-original]");
+            imgs.forEach(img => {
+                const obs = new IntersectionObserver(entries => {
+                    entries.forEach(e => e.target.dispatchEvent(new Event('lazyload')));
+                    obs.disconnect();
+                });
+                obs.observe(img);
+            });
+        }""")
+        await page.wait_for_timeout(1000)
 
         extraction = await page.evaluate(EXTRACT_JS, VIDEO_EMBED_HOSTS)
 
