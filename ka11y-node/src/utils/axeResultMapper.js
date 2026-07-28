@@ -162,6 +162,7 @@ function mapResults(axeResults, criteriaFilter = null) {
   // passes → status: "pass" (skip if already marked as fail)
   for (const rule of axeResults.passes) {
     if (resultMap[rule.id]) continue;
+    const elements = _buildElementsFromNodes(rule.nodes);
     resultMap[rule.id] = {
       ruleId:      rule.id,
       description: rule.description,
@@ -169,6 +170,7 @@ function mapResults(axeResults, criteriaFilter = null) {
       status:      'pass',
       reason:      rule.help,
       helpUrl:     rule.helpUrl,
+      elements:    elements.length ? elements : undefined,
       _criteriaId: _normalizeCriterionId(extractSuccessCriteriaId(rule.tags, rule.id), rule.id, rule.tags),
     };
   }

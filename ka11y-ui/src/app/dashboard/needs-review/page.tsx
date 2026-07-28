@@ -9,73 +9,6 @@ import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { toNeedsReviewRows, type ReviewRow, type ReviewStatus, type WcagLevel } from "@/lib/wcagAudit";
 import { cn } from "@/lib/utils";
 
-const DEMO_ITEMS: ReviewRow[] = [
-  {
-    id: "1",
-    status: "pass",
-    reasonTitle: "Text in img_278b93dcc441.png",
-    reasonDescription:
-      '"the p" has a contrast ratio of 10.11:1 — meets the AA large text minimum. Foreground #f5f5f3 on background #3c3c3c.',
-    sc: "1.4.3",
-    criterion: "Contrast (Minimum)",
-    level: "AAA",
-    tag: "img",
-    elementFilename: "img_630bb504868c.png",
-    foreground: "#a8ae8a",
-    background: "#1f2324",
-    ocrText: "flavorful salads right at home;",
-    helpUrl: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum",
-  },
-  {
-    id: "2",
-    status: "pending",
-    reasonTitle: "Text in img_278b93dcc441.png",
-    reasonDescription:
-      '"the p" has a contrast ratio of 10.11:1 — meets the AA large text minimum. Foreground #f5f5f3 on background #3c3c3c.',
-    sc: "1.4.3",
-    criterion: "Contrast (Minimum)",
-    level: "AAA",
-    tag: "img",
-    elementFilename: "img_nature.png",
-    foreground: "#a8ae8a",
-    background: "#1f2324",
-    ocrText: "Harvest at peak nutrition.",
-    helpUrl: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum",
-  },
-  {
-    id: "3",
-    status: "pending",
-    reasonTitle: "Text in img_hero_banner.png",
-    reasonDescription:
-      '"h1" has a contrast ratio of 3.2:1 — below the AA minimum of 4.5:1. Foreground #cccccc on background #999999.',
-    sc: "1.4.3",
-    criterion: "Contrast (Minimum)",
-    level: "AA",
-    tag: "img",
-    elementFilename: "img_hero_banner.png",
-    foreground: "#cccccc",
-    background: "#999999",
-    ocrText: "Fresh from the farm.",
-    helpUrl: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum",
-  },
-  {
-    id: "4",
-    status: "violation",
-    reasonTitle: "Text in img_product_card.png",
-    reasonDescription:
-      '"span" has a contrast ratio of 2.1:1 — fails all contrast thresholds. Foreground #e0e0e0 on background #c0c0c0.',
-    sc: "1.4.3",
-    criterion: "Contrast (Minimum)",
-    level: "A",
-    tag: "img",
-    elementFilename: "img_product_card.png",
-    foreground: "#e0e0e0",
-    background: "#c0c0c0",
-    ocrText: "Organic produce.",
-    helpUrl: "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum",
-  },
-];
-
 const STATUS_LABELS: Record<ReviewStatus, string> = {
   pass: "Pass",
   violation: "Violation",
@@ -202,7 +135,7 @@ export default function NeedsReviewPage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const sourceItems = useMemo(
-    () => (auditData ? toNeedsReviewRows(auditData) : DEMO_ITEMS),
+    () => (auditData ? toNeedsReviewRows(auditData) : []),
     [auditData],
   );
   const [items, setItems] = useState<ReviewRow[]>(sourceItems);
@@ -257,6 +190,14 @@ export default function NeedsReviewPage() {
 
       <main className="flex flex-1 flex-col gap-6 min-w-0 px-4 py-6 sm:px-8 sm:py-8 lg:px-16 lg:gap-10 lg:py-10">
 
+        {!auditData ? (
+          <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
+            <p className="text-[16px] leading-6 text-gray-60">
+              Run an audit to see items that need review here.
+            </p>
+          </div>
+        ) : (
+        <>
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative" ref={dropdownRef}>
@@ -422,6 +363,8 @@ export default function NeedsReviewPage() {
           ))}
         </div>
         </div>
+        </>
+        )}
 
       </main>
     </>

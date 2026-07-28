@@ -91,6 +91,21 @@ export interface ReviewRow {
   helpUrl: string;
 }
 
+export interface PassRow {
+  id: string;
+  reasonTitle: string;
+  reasonDescription: string;
+  sc: string;
+  criterion: string;
+  level: WcagLevel;
+  tag: string;
+  elementFilename: string;
+  foreground: string;
+  background: string;
+  ocrText: string;
+  helpUrl: string;
+}
+
 /* ─── Helpers ─── */
 
 function capitalize(value: string): string {
@@ -141,6 +156,38 @@ export function toViolationRows(data: WcagAuditResponse): ViolationRow[] {
           elementFile: finding.ruleId,
           elementOcr: truncateHtml(el?.html),
           fixGuide: finding.helpUrl,
+        });
+      });
+    }
+  }
+
+  return rows;
+}
+
+export function toPassesRows(data: WcagAuditResponse): PassRow[] {
+  const rows: PassRow[] = [];
+  let rowIndex = 0;
+
+  for (const criterion of data.criteria) {
+    for (const finding of criterion.findings) {
+      if (finding.status !== "pass") continue;
+
+      const elements = finding.elements.length > 0 ? finding.elements : [null];
+      elements.forEach((el) => {
+        const colors = extractColors(finding.reason);
+        rows.push({
+          id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
+          reasonTitle: finding.reason,
+          reasonDescription: el?.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
+          sc: criterion.sc,
+          criterion: criterion.name,
+          level: criterion.level,
+          tag: extractTag(el?.html),
+          elementFilename: finding.ruleId,
+          foreground: colors.foreground ?? "—",
+          background: colors.background ?? "—",
+          ocrText: truncateHtml(el?.html),
+          helpUrl: finding.helpUrl,
         });
       });
     }
