@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const WCAG_API_URL =
   process.env.WCAG_API_URL ??
-  "http://ec2-34-228-40-177.compute-1.amazonaws.com:3000/api/v1/analyse-url-wcag";
+  "http://python:8000/api/v1/combined";
 
 export async function POST(request: Request) {
   let body: { url?: string };
@@ -27,23 +27,65 @@ export async function POST(request: Request) {
   }
 
   try {
-    const upstream = await fetch(WCAG_API_URL, {
+    // 1. Submit combined audit job
+    const submitUrl = new URL(`${WCAG_API_URL}/combined-audit`);
+    submitUrl.searchParams.set("url", url);
+
+    const submitRes = await fetch(submitUrl.toString(), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
-      signal: AbortSignal.timeout(150000),
+      signal: AbortSignal.timeout(10000),
     });
 
-    const data = await upstream.json().catch(() => null);
-
-    if (!upstream.ok) {
+    if (!submitRes.ok) {
+      const data = await submitRes.json().catch(() => null);
       return NextResponse.json(
-        { error: data?.message ?? "WCAG analysis failed" },
-        { status: upstream.status },
+        { error: data?.detail || data?.message || "Failed to start combined audit" },
+        { status: submitRes.status },
       );
     }
 
-    return NextResponse.json(data ?? {}, { status: upstream.status });
+    const { job_id } = await submitRes.json();
+    if (!job_id) {
+      return NextResponse.json({ error: "No job_id returned" }, { status: 500 });
+    }
+
+    // 2. Poll for completion
+    const startTime = Date.now();
+    const TIMEOUT_MS = 140000; // 140s to leave margin for Next.js timeout
+
+    while (Date.now() - startTime < TIMEOUT_MS) {
+      const pollRes = await fetch(`${WCAG_API_URL}/${job_id}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!pollRes.ok) {
+        // Transient error or 404, we could retry, but let's just wait and try again unless it's fatal
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        continue;
+      }
+
+      const jobData = await pollRes.json();
+      
+      if (jobData.status === "completed") {
+        return NextResponse.json(jobData.result || {}, { status: 200 });
+      }
+      
+      if (jobData.status === "failed" || jobData.status === "cancelled") {
+        return NextResponse.json(
+          { error: jobData.error || "Combined audit failed or was cancelled" },
+          { status: 502 },
+        );
+      }
+
+      // Still pending/running
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+
+    return NextResponse.json(
+      { error: "Audit timed out waiting for completion" },
+      { status: 504 },
+    );
+
   } catch (err) {
     const timedOut = err instanceof Error && err.name === "TimeoutError";
     return NextResponse.json(

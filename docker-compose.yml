@@ -207,7 +207,7 @@ services:
       PORT:     "3001"
       # Server-side only (no NEXT_PUBLIC_ prefix) — read at request time, so
       # this can be changed without rebuilding the image.
-      WCAG_API_URL: "http://node:3000/api/v1/analyse-url-wcag"
+      WCAG_API_URL: "http://python:8000/api/v1/combined"
 
     ports:
       - "0.0.0.0:8080:3001"
