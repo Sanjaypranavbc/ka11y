@@ -1,21 +1,25 @@
+"use client";
+
 import { Card } from "@/components/ui/Card";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { pageFindings } from "@/lib/dashboardData";
 
-const COLUMNS = [
-  "Page Name",
-  "URL",
-  "Score",
-  "Findings",
-  "Violations",
-  "Needs Review",
-  "Passes",
-] as const;
-
 export function FindingsTable() {
+  const { t } = useLanguage();
+  const COLUMNS = [
+    t.dashboardPage.findingsTable.columns.pageName,
+    t.dashboardPage.findingsTable.columns.url,
+    t.dashboardPage.findingsTable.columns.score,
+    t.dashboardPage.findingsTable.columns.findings,
+    t.dashboardPage.findingsTable.columns.violations,
+    t.dashboardPage.findingsTable.columns.needsReview,
+    t.dashboardPage.findingsTable.columns.passes,
+  ] as const;
+
   return (
     <Card>
       <h2 className="text-[18px] font-medium leading-[26px] text-gray-100">
-        Findings by Page
+        {t.dashboardPage.findingsTable.title}
       </h2>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left">

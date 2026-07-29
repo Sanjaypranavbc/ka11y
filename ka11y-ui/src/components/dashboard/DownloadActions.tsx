@@ -2,6 +2,7 @@
 
 import { Download, FileText } from "lucide-react";
 import { pageFindings } from "@/lib/dashboardData";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
 
 const BUTTON_CLASS =
@@ -22,6 +23,7 @@ function buildFindingsCsv(): string {
 }
 
 export function DownloadCsvButton({ className }: { className?: string }) {
+  const { t } = useLanguage();
   const handleClick = () => {
     const blob = new Blob([buildFindingsCsv()], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -35,12 +37,13 @@ export function DownloadCsvButton({ className }: { className?: string }) {
   return (
     <button type="button" onClick={handleClick} className={cn(BUTTON_CLASS, className)}>
       <Download size={15} aria-hidden="true" />
-      <span className="hidden sm:inline">Download CSV</span>
+      <span className="hidden sm:inline">{t.downloads.csv}</span>
     </button>
   );
 }
 
 export function DownloadPdfButton({ className }: { className?: string }) {
+  const { t } = useLanguage();
   return (
     <button
       type="button"
@@ -48,7 +51,7 @@ export function DownloadPdfButton({ className }: { className?: string }) {
       className={cn(BUTTON_CLASS, className)}
     >
       <FileText size={15} aria-hidden="true" />
-      <span className="hidden sm:inline">Download PDF</span>
+      <span className="hidden sm:inline">{t.downloads.pdf}</span>
     </button>
   );
 }

@@ -10,24 +10,26 @@ import {
   YAxis,
 } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { wcagLevelBreakdown } from "@/lib/dashboardData";
 
-const DATA = wcagLevelBreakdown.map((row) => ({
-  level: `Level ${row.level}`,
-  Violations: row.violations,
-  "Needs Review": row.needsReview,
-  Passes: row.passes,
-}));
-
 export function WcagLevelBarChart() {
+  const { t } = useLanguage();
+  const DATA = wcagLevelBreakdown.map((row) => ({
+    level: t.dashboardPage.charts.level(row.level),
+    Violations: row.violations,
+    "Needs Review": row.needsReview,
+    Passes: row.passes,
+  }));
+
   return (
     <ChartCard
-      title="WCAG Level Breakdown"
+      title={t.dashboardPage.charts.wcagLevelBreakdown}
       legend={
         <>
-          <LegendItem color="var(--color-status-violation)" label="Violations" />
-          <LegendItem color="var(--color-status-review)" label="Needs Review" />
-          <LegendItem color="var(--color-status-pass)" label="Passes" />
+          <LegendItem color="var(--color-status-violation)" label={t.dashboardPage.charts.violations} />
+          <LegendItem color="var(--color-status-review)" label={t.dashboardPage.charts.needsReview} />
+          <LegendItem color="var(--color-status-pass)" label={t.dashboardPage.charts.passes} />
         </>
       }
     >

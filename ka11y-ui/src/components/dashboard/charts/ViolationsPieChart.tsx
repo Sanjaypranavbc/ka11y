@@ -2,18 +2,20 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { summaryTotals } from "@/lib/dashboardData";
 
-const DATA = [
-  { name: "Violations", value: summaryTotals.violations, color: "var(--color-status-violation)" },
-  { name: "Needs Review", value: summaryTotals.needsReview, color: "var(--color-status-review)" },
-  { name: "Passes", value: summaryTotals.passes, color: "var(--color-status-pass)" },
-];
-
 export function ViolationsPieChart() {
+  const { t } = useLanguage();
+  const DATA = [
+    { name: t.dashboardPage.charts.violations, value: summaryTotals.violations, color: "var(--color-status-violation)" },
+    { name: t.dashboardPage.charts.needsReview, value: summaryTotals.needsReview, color: "var(--color-status-review)" },
+    { name: t.dashboardPage.charts.passes, value: summaryTotals.passes, color: "var(--color-status-pass)" },
+  ];
+
   return (
     <ChartCard
-      title="Findings Overview"
+      title={t.dashboardPage.charts.findingsOverview}
       legend={DATA.map((d) => (
         <LegendItem key={d.name} color={d.color} label={d.name} />
       ))}

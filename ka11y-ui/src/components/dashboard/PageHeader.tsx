@@ -1,5 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 
 interface PageHeaderProps {
   title: string;
@@ -8,6 +11,8 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, target, actions }: PageHeaderProps) {
+  const { t } = useLanguage();
+
   return (
     <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-10 px-4 py-4 sm:px-8 sm:py-0 sm:h-20 lg:px-16">
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -16,7 +21,7 @@ export function PageHeader({ title, target, actions }: PageHeaderProps) {
         </span>
         {target && (
           <p className="flex items-center gap-1.5 text-[14px] leading-6 text-brand-green-80 sm:text-[16px]">
-            <span>Target :</span>
+            <span>{t.common.target}</span>
             <a
               href={target}
               target="_blank"
@@ -24,7 +29,7 @@ export function PageHeader({ title, target, actions }: PageHeaderProps) {
               className="inline-flex items-center gap-1 text-gray-40 hover:text-brand-green-80"
             >
               <span className="hidden sm:inline">{target}</span>
-              <span className="sm:hidden">link</span>
+              <span className="sm:hidden">{t.common.link}</span>
               <ExternalLink size={13} aria-hidden="true" />
             </a>
           </p>
