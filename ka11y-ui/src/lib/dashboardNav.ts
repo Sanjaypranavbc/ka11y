@@ -1,13 +1,7 @@
 export interface DashboardNavItem {
   href: string;
   label: string;
-  iconName:
-    | "dashboard"
-    | "violations"
-    | "needs-review"
-    | "passes"
-    | "image-visualisation"
-    | "settings";
+  iconName: "dashboard" | "violations" | "needs-review" | "passes" | "settings";
 }
 
 export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
@@ -15,7 +9,6 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { href: "/dashboard/violations", label: "Violations", iconName: "violations" },
   { href: "/dashboard/needs-review", label: "Needs Review", iconName: "needs-review" },
   { href: "/dashboard/passes", label: "Passes", iconName: "passes" },
-  { href: "/dashboard/image-visualisation", label: "Image Visualisation", iconName: "image-visualisation" },
   { href: "/dashboard/settings", label: "Settings", iconName: "settings" },
 ];
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Plus, ChevronLeft, ChevronRight, Image as ImageVisualIcon } from "lucide-react";
+import { LogOut, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
   DashboardIcon,
@@ -21,7 +21,6 @@ const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   violations: ViolationsIcon,
   "needs-review": NeedsReviewIcon,
   passes: PassesIcon,
-  "image-visualisation": ImageVisualIcon,
   settings: SettingsNavIcon,
 };
 
@@ -34,7 +33,6 @@ export function Sidebar() {
     violations: t.nav.violations,
     "needs-review": t.nav.needsReview,
     passes: t.nav.passes,
-    "image-visualisation": t.nav.imageVisualisation,
     settings: t.nav.settings,
   };
 

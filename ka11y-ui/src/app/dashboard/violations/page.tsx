@@ -5,6 +5,7 @@ import { ChevronDown, X, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ElementImage } from "@/components/dashboard/ElementImage";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { toViolationRows, type WcagLevel } from "@/lib/wcagAudit";
@@ -249,7 +250,7 @@ export default function ViolationsPage() {
 
               <div className="flex-[227] min-w-0 border-b border-r border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="text-[14px] font-medium leading-5 text-gray-100">{violation.elementTitle}</p>
-                <div className="h-[61px] w-[105px] overflow-hidden rounded-[8px] bg-gray-40 shadow-[0px_0px_18px_0px_rgba(0,0,0,0.09)]" />
+                <ElementImage srcs={violation.imageUrls} className="h-[61px] w-[105px]" />
                 <div className="flex flex-col gap-2 text-[12px] leading-5">
                   <div className="flex gap-1">
                     <span className="w-9 shrink-0 text-gray-80">{t.violations.file}</span>

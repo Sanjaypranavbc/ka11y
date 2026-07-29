@@ -5,6 +5,7 @@ import { ChevronDown, X, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ElementImage } from "@/components/dashboard/ElementImage";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { toPassesRows, type WcagLevel } from "@/lib/wcagAudit";
@@ -209,7 +210,7 @@ export default function PassesPage() {
 
               <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="font-medium text-gray-100">{item.elementFilename}</p>
-                <div className="h-[90px] w-[105px] overflow-hidden rounded-[8px] bg-gray-40 shadow-[0px_0px_18px_0px_rgba(0,0,0,0.09)]" />
+                <ElementImage srcs={item.imageUrls} className="h-[90px] w-[105px]" />
                 <div className="flex flex-col gap-2 text-[12px] leading-5">
                   <div className="flex gap-1">
                     <span className="shrink-0 text-gray-80">{t.passes.foreground}</span>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, LogOut, Plus, Image as ImageVisualIcon } from "lucide-react";
+import { Menu, X, LogOut, Plus } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { DashboardIcon, ViolationsIcon, NeedsReviewIcon, PassesIcon, SettingsNavIcon } from "@/components/ui/NavIcons";
 import { DASHBOARD_NAV_ITEMS, isNavItemActive } from "@/lib/dashboardNav";
@@ -15,7 +15,6 @@ const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   violations: ViolationsIcon,
   "needs-review": NeedsReviewIcon,
   passes: PassesIcon,
-  "image-visualisation": ImageVisualIcon,
   settings: SettingsNavIcon,
 };
 
@@ -28,7 +27,6 @@ export function MobileNav() {
     violations: t.nav.violations,
     "needs-review": t.nav.needsReview,
     passes: t.nav.passes,
-    "image-visualisation": t.nav.imageVisualisation,
     settings: t.nav.settings,
   };
 
