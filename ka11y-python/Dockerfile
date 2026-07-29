@@ -102,6 +102,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # these cheap layers, not the dependency/model/browser layers above.
 COPY ka11y/ ./ka11y/
 COPY i18n/   ./i18n/
+COPY enrich_audit.py ./
 
 # Pre-create the logs directory so it exists in the image layer.
 # The python_logs Docker volume is mounted over this path at runtime;

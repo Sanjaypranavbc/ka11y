@@ -468,6 +468,44 @@ async def _run_job_body(
             json.dump(
                 report, fh, indent=2, ensure_ascii=False, default=_json_serializer
             )
+
+        # Trigger automated Gemini report enrichment (enriched_report.json + token_usage.json)
+        try:
+            import sys
+            import pathlib
+            
+            # Dynamically find the parent folder of the ka11y package
+            curr = pathlib.Path(__file__).resolve().parent
+            python_root = None
+            for parent in [curr] + list(curr.parents):
+                if parent.name == "ka11y" and (parent / "api").is_dir():
+                    python_root = str(parent.parent)
+                    break
+                    
+            if python_root:
+                if python_root not in sys.path:
+                    sys.path.insert(0, python_root)
+            from enrich_audit import enrich_report_in_pipeline
+            
+            logger.info(f"[combined] Starting automated Gemini enrichment for job {job_id} into {output_dir}")
+            enrich_report_in_pipeline(report, output_dir)
+        except Exception as e:
+            import os
+            import sys
+            import pathlib
+            diag_root = python_root if 'python_root' in locals() else 'not_set'
+            file_loc = str(pathlib.Path(__file__).resolve())
+            app_exists = os.path.exists('/app')
+            app_contents = os.listdir('/app') if app_exists else 'no /app directory'
+            logger.error(
+                f"[combined] Automated enrichment failed (skipping): {e}\n"
+                f"  __file__ location: {file_loc}\n"
+                f"  Resolved python_root: {diag_root}\n"
+                f"  sys.path: {sys.path}\n"
+                f"  Contents of /app: {app_contents}",
+                exc_info=True
+            )
+
         if len(report.get("passes", [])) > 100:
             logger.info(f"[combined] Slimming in-memory passes array from {len(report['passes'])} to 100 for job {job_id}")
             report["passes"] = report["passes"][:100]
