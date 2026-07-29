@@ -1,3 +1,5 @@
+import type { ContrastReport } from "@/lib/auditImages";
+
 export type WcagLevel = "A" | "AA" | "AAA";
 
 export type FindingStatus = "pass" | "fail" | "incomplete" | "not_applicable" | string;
@@ -54,7 +56,15 @@ export interface WcagAuditResponse {
   wcagVersion: string;
   analyzedAt: string;
   summary: WcagAuditSummary;
-  criteria: WcagCriterion[];
+  // node-shape findings (fallback path in the derivers)
+  criteria?: WcagCriterion[];
+  // combined-audit flat findings arrays (primary path in the derivers)
+  violations?: unknown[];
+  passes?: unknown[];
+  needs_review?: unknown[];
+  // per-image contrast data that drives the Image Visualiser page
+  contrast_report?: ContrastReport | null;
+  image_audit_report?: ContrastReport | null;
 }
 
 /* ─── Row shapes consumed by the Violations / Needs Review tables ─── */

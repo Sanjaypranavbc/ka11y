@@ -2,6 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { topFailingCriteria, type WcagLevel } from "@/lib/dashboardData";
 
 const LEVEL_COLOR: Record<WcagLevel, string> = {
@@ -20,14 +21,16 @@ const DATA = topFailingCriteria
   }));
 
 export function TopFailingCriteriaChart() {
+  const { t } = useLanguage();
+
   return (
     <ChartCard
-      title="Top Failing WCAG Criteria"
+      title={t.dashboardPage.charts.topFailingCriteria}
       legend={
         <>
-          <LegendItem color={LEVEL_COLOR.A} label="Level A" />
-          <LegendItem color={LEVEL_COLOR.AA} label="Level AA" />
-          <LegendItem color={LEVEL_COLOR.AAA} label="Level AAA" />
+          <LegendItem color={LEVEL_COLOR.A} label={t.dashboardPage.charts.level("A")} />
+          <LegendItem color={LEVEL_COLOR.AA} label={t.dashboardPage.charts.level("AA")} />
+          <LegendItem color={LEVEL_COLOR.AAA} label={t.dashboardPage.charts.level("AAA")} />
         </>
       }
     >

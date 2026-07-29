@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, X } from "lucide-react";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 
 export function ScanCompleteModal({
   url,
@@ -13,6 +14,7 @@ export function ScanCompleteModal({
   onViewNeedsReview: () => void;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div
       role="dialog"
@@ -24,7 +26,7 @@ export function ScanCompleteModal({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t.scanModal.close}
           className="absolute right-4 top-4 text-gray-60 hover:text-gray-100"
         >
           <X size={20} aria-hidden="true" />
@@ -34,10 +36,12 @@ export function ScanCompleteModal({
           <CheckCircle2 size={48} className="text-brand-teal-dark" aria-hidden="true" />
           <div className="flex flex-col gap-2">
             <h2 id="scan-complete-title" className="text-[20px] font-medium leading-7 text-gray-100">
-              Your analysis is completed
+              {t.scanModal.title}
             </h2>
             <p className="text-[14px] leading-5 text-gray-80">
-              Accessibility scan for <span className="font-medium text-gray-100">{url}</span> finished. Choose where to go next.
+              {t.scanModal.descriptionPrefix && `${t.scanModal.descriptionPrefix} `}
+              <span className="font-medium text-gray-100">{url}</span>{" "}
+              {t.scanModal.descriptionSuffix}
             </p>
           </div>
 
@@ -47,14 +51,14 @@ export function ScanCompleteModal({
               onClick={onViewViolations}
               className="w-full rounded-[16px] bg-brand-green-80 px-6 py-3 text-[16px] font-medium leading-6 text-white hover:opacity-90"
             >
-              View Violations
+              {t.scanModal.viewViolations}
             </button>
             <button
               type="button"
               onClick={onViewNeedsReview}
               className="w-full rounded-[16px] border border-brand-teal bg-white px-6 py-3 text-[16px] font-medium leading-6 text-brand-teal-dark hover:bg-brand-green-20"
             >
-              View Needs Review
+              {t.scanModal.viewNeedsReview}
             </button>
           </div>
         </div>

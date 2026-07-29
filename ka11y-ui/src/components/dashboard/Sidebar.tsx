@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { LogOut, Plus, ChevronLeft, ChevronRight, Image as ImageVisualIcon } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
   DashboardIcon,
@@ -13,6 +13,7 @@ import {
   SettingsNavIcon,
 } from "@/components/ui/NavIcons";
 import { DASHBOARD_NAV_ITEMS, isNavItemActive } from "@/lib/dashboardNav";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
 
 const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
@@ -20,12 +21,22 @@ const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   violations: ViolationsIcon,
   "needs-review": NeedsReviewIcon,
   passes: PassesIcon,
+  "image-visualisation": ImageVisualIcon,
   settings: SettingsNavIcon,
 };
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const { t } = useLanguage();
+  const NAV_LABEL: Record<string, string> = {
+    dashboard: t.nav.dashboard,
+    violations: t.nav.violations,
+    "needs-review": t.nav.needsReview,
+    passes: t.nav.passes,
+    "image-visualisation": t.nav.imageVisualisation,
+    settings: t.nav.settings,
+  };
 
   return (
     <aside
@@ -40,7 +51,7 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => setCollapsed((v) => !v)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? t.nav.expandSidebar : t.nav.collapseSidebar}
           aria-pressed={collapsed}
           className={cn(
             "inline-flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-[0px_0px_6px_rgba(0,0,0,0.09)] text-gray-60 hover:text-brand-teal",
@@ -65,12 +76,12 @@ export function Sidebar() {
           )}
         >
           <Plus size={16} aria-hidden="true" />
-          {!collapsed && "New Audit"}
+          {!collapsed && t.nav.newAudit}
         </Link>
       </div>
 
       {/* Nav */}
-      <nav aria-label="Dashboard" className="mt-5 flex-1 px-4">
+      <nav aria-label={t.nav.dashboardNavLabel} className="mt-5 flex-1 px-4">
         <ul className="flex flex-col gap-1">
           {DASHBOARD_NAV_ITEMS.map((item) => {
             const active = isNavItemActive(pathname, item.href);
@@ -87,7 +98,7 @@ export function Sidebar() {
                   )}
                 >
                   <Icon size={24} />
-                  {!collapsed && item.label}
+                  {!collapsed && NAV_LABEL[item.iconName]}
                 </Link>
               </li>
             );
@@ -105,7 +116,7 @@ export function Sidebar() {
           )}
         >
           <LogOut size={16} aria-hidden="true" />
-          {!collapsed && "Logout"}
+          {!collapsed && t.nav.logout}
         </button>
       </div>
     </aside>

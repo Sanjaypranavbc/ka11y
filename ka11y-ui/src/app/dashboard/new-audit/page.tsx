@@ -1,35 +1,37 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowUp, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
 import { ScanCompleteModal } from "@/components/dashboard/ScanCompleteModal";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
+import type { Translations } from "@/lib/i18n/translations";
 import type { WcagAuditResponse } from "@/lib/wcagAudit";
 import { cn } from "@/lib/utils";
 
 type WcagLevel = "A" | "AA" | "AAA";
 type ScanPhase = "form" | "scanning";
 
-const SCAN_STEPS = [
-  { id: "axe-header",      type: "header" as const, label: "axe-core WCAG scan" },
-  { id: "img-alt",         type: "step"   as const, label: "Image alt-text (1.1.1)",            findings: 17 },
-  { id: "unified",         type: "step"   as const, label: "Unified pipeline",                   findings: 92 },
-  { id: "form-fields",     type: "step"   as const, label: "Form fields (3.3.1 / 3.3.2)",        findings: 12 },
-  { id: "moving",          type: "step"   as const, label: "Moving content (2.2.2)",              findings:  0 },
-  { id: "text-spacing",    type: "step"   as const, label: "Text spacing (1.4.12)",               findings: 18 },
-  { id: "rendered-header", type: "header" as const, label: "Rendered layout checks" },
-  { id: "media",           type: "step"   as const, label: "Media audit (1.2.1)",                 findings:  2 },
-  { id: "sensory",         type: "step"   as const, label: "Sensory characteristics (1.3.3)",     findings:  1 },
-  { id: "consistent-nav",  type: "step"   as const, label: "Consistent navigation (3.2.3)",       findings:  0 },
-  { id: "consistent-id",   type: "step"   as const, label: "Consistent identification (3.2.4)",   findings:  3 },
-  { id: "unusual",         type: "step"   as const, label: "Unusual words (3.1.3)",               findings:  4 },
-  { id: "section",         type: "step"   as const, label: "Section headings (2.4.10)",           findings:  2 },
-];
-
-const ACTUAL_STEPS = SCAN_STEPS.filter((s) => s.type === "step");
+function buildScanSteps(t: Translations) {
+  return [
+    { id: "axe-header",      type: "header" as const, label: t.newAudit.steps.axeHeader },
+    { id: "img-alt",         type: "step"   as const, label: t.newAudit.steps.imgAlt,         findings: 17 },
+    { id: "unified",         type: "step"   as const, label: t.newAudit.steps.unified,        findings: 92 },
+    { id: "form-fields",     type: "step"   as const, label: t.newAudit.steps.formFields,     findings: 12 },
+    { id: "moving",          type: "step"   as const, label: t.newAudit.steps.moving,         findings:  0 },
+    { id: "text-spacing",    type: "step"   as const, label: t.newAudit.steps.textSpacing,    findings: 18 },
+    { id: "rendered-header", type: "header" as const, label: t.newAudit.steps.renderedHeader },
+    { id: "media",           type: "step"   as const, label: t.newAudit.steps.media,          findings:  2 },
+    { id: "sensory",         type: "step"   as const, label: t.newAudit.steps.sensory,        findings:  1 },
+    { id: "consistent-nav",  type: "step"   as const, label: t.newAudit.steps.consistentNav,  findings:  0 },
+    { id: "consistent-id",   type: "step"   as const, label: t.newAudit.steps.consistentId,   findings:  3 },
+    { id: "unusual",         type: "step"   as const, label: t.newAudit.steps.unusual,        findings:  4 },
+    { id: "section",         type: "step"   as const, label: t.newAudit.steps.section,        findings:  2 },
+  ];
+}
 
 function DoneIcon() {
   return (
@@ -66,6 +68,9 @@ function RingIcon({ spin }: { spin: boolean }) {
 export default function NewAuditPage() {
   const router = useRouter();
   const { setAuditData } = useAuditData();
+  const { t } = useLanguage();
+  const SCAN_STEPS = useMemo(() => buildScanSteps(t), [t]);
+  const ACTUAL_STEPS = useMemo(() => SCAN_STEPS.filter((s) => s.type === "step"), [SCAN_STEPS]);
   const [url, setUrl] = useState("");
   const [depth, setDepth] = useState(2);
   const [wcagLevel, setWcagLevel] = useState<WcagLevel>("AA");
@@ -91,7 +96,7 @@ export default function NewAuditPage() {
   async function handleRun() {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) {
-      setError("Enter a URL to scan");
+      setError(t.newAudit.errorEmptyUrl);
       return;
     }
 
@@ -109,10 +114,9 @@ export default function NewAuditPage() {
       });
       const data = await res.json().catch(() => null);
 
-
       if (!res.ok) {
         setPhase("form");
-        setError(data?.error ?? "Failed to start the scan. Please try again.");
+        setError(data?.error ?? t.newAudit.errorGeneric);
         return;
       }
 
@@ -121,7 +125,7 @@ export default function NewAuditPage() {
       setCompletedCount(totalSteps);
     } catch {
       setPhase("form");
-      setError("Unable to reach the scan service. Please try again.");
+      setError(t.newAudit.errorUnreachable);
     } finally {
       setSubmitting(false);
     }
@@ -156,7 +160,7 @@ export default function NewAuditPage() {
             {/* Progress bar */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between text-[14px] leading-6 text-gray-100 sm:text-[16px]">
-                <span>Audit Progress</span>
+                <span>{t.newAudit.auditProgress}</span>
                 <span>{progress}%</span>
               </div>
               <div className="relative h-2 w-full overflow-hidden rounded-full bg-gray-40">
@@ -193,7 +197,7 @@ export default function NewAuditPage() {
                     </div>
                     {status === "done" && (
                       <span className="shrink-0 text-[13px] leading-6 text-gray-100 sm:text-[16px]">
-                        {step.findings} Findings
+                        {t.newAudit.findingsCount(step.findings)}
                       </span>
                     )}
                   </div>
@@ -234,9 +238,9 @@ export default function NewAuditPage() {
 
           {/* Page heading */}
           <div className="border-b border-gray-40 pb-4">
-            <h1 className="text-[24px] font-medium leading-[32px] text-gray-100">New Audit</h1>
+            <h1 className="text-[24px] font-medium leading-[32px] text-gray-100">{t.newAudit.heading}</h1>
             <p className="mt-2 text-[18px] leading-[26px] text-gray-80">
-              Enter a URL and run an audit to see accessibility findings.
+              {t.newAudit.subheading}
             </p>
           </div>
 
@@ -246,14 +250,14 @@ export default function NewAuditPage() {
             {/* Target URL */}
             <div className="flex flex-col gap-2">
               <label htmlFor="target-url" className="text-[16px] leading-6 text-gray-100">
-                Target URL
+                {t.newAudit.targetUrlLabel}
               </label>
               <input
                 id="target-url"
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com"
+                placeholder={t.newAudit.targetUrlPlaceholder}
                 className="h-12 w-full rounded-[8px] border border-gray-60 bg-white px-4 text-[16px] leading-6 text-gray-100 placeholder:text-gray-60 focus:border-brand-teal focus:outline-none"
               />
             </div>
@@ -264,7 +268,7 @@ export default function NewAuditPage() {
               {/* Max Depth */}
               <div className="flex flex-1 flex-col gap-2">
                 <label htmlFor="max-depth" className="text-[16px] leading-6 text-gray-100">
-                  Max Depth
+                  {t.newAudit.maxDepthLabel}
                 </label>
                 <div className="flex h-12 items-center justify-between rounded-[8px] border border-gray-40 bg-white px-4">
                   <span className="text-[16px] leading-6 text-gray-100">{depth}</span>
@@ -272,7 +276,7 @@ export default function NewAuditPage() {
                     <button
                       type="button"
                       onClick={() => setDepth((d) => d + 1)}
-                      aria-label="Increase depth"
+                      aria-label={t.newAudit.increaseDepth}
                       className="flex h-4 w-4 items-center justify-center text-gray-60 hover:text-gray-100"
                     >
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -282,7 +286,7 @@ export default function NewAuditPage() {
                     <button
                       type="button"
                       onClick={() => setDepth((d) => Math.max(0, d - 1))}
-                      aria-label="Decrease depth"
+                      aria-label={t.newAudit.decreaseDepth}
                       className="flex h-4 w-4 items-center justify-center text-gray-60 hover:text-gray-100"
                     >
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -295,8 +299,8 @@ export default function NewAuditPage() {
 
               {/* WCAG Level */}
               <div className="flex flex-1 flex-col gap-2">
-                <span className="text-[16px] leading-6 text-gray-100">WCAG Level</span>
-                <div className="flex items-center gap-2" role="radiogroup" aria-label="WCAG Level">
+                <span className="text-[16px] leading-6 text-gray-100">{t.newAudit.wcagLevelLabel}</span>
+                <div className="flex items-center gap-2" role="radiogroup" aria-label={t.newAudit.wcagLevelLabel}>
                   {(["A", "AA", "AAA"] as WcagLevel[]).map((level) => (
                     <button
                       key={level}
@@ -323,22 +327,22 @@ export default function NewAuditPage() {
               <div className="flex items-start gap-6">
                 <AlertTriangle size={24} className="mt-0.5 shrink-0 text-[#f8c33d]" aria-hidden="true" />
                 <p className="text-[16px] leading-6 text-gray-100">
-                  Scans deeper than 0 level take longer to process.<br />
-                  We will run this in the background and notify you via email.
+                  {t.newAudit.warning}<br />
+                  {t.newAudit.warningLine2}
                 </p>
               </div>
 
               {/* Notification email */}
               <div className="flex flex-col gap-2">
                 <label htmlFor="notify-email" className="text-[16px] leading-6 text-gray-100">
-                  Notification Email
+                  {t.newAudit.notificationEmailLabel}
                 </label>
                 <input
                   id="notify-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
+                  placeholder={t.newAudit.notificationEmailPlaceholder}
                   className="h-12 w-full rounded-[8px] border border-gray-40 bg-white px-4 text-[16px] leading-6 text-gray-100 placeholder:text-gray-60 focus:border-brand-teal focus:outline-none"
                 />
               </div>
@@ -357,7 +361,7 @@ export default function NewAuditPage() {
               className="flex w-full items-center justify-center gap-2 rounded-[16px] bg-brand-green-80 px-6 py-4 text-[16px] font-medium leading-6 text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <ArrowUp size={16} aria-hidden="true" />
-              {submitting ? "Starting Scan…" : "Run Accessibility Scan"}
+              {submitting ? t.newAudit.submitting : t.newAudit.submit}
             </button>
           </div>
 
