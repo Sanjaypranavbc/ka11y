@@ -81,6 +81,7 @@ export default function NewAuditPage() {
   const [error, setError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<WcagAuditResponse | null>(null);
   const [modalDismissed, setModalDismissed] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
 
   const totalSteps = ACTUAL_STEPS.length;
   const progress = Math.round((completedCount / totalSteps) * 100);
@@ -104,6 +105,8 @@ export default function NewAuditPage() {
     setSubmitting(true);
     setCompletedCount(0);
     setModalDismissed(false);
+    setScanResult(null);
+    setJobId(null);
     setPhase("scanning");
 
     try {
@@ -114,22 +117,84 @@ export default function NewAuditPage() {
       });
       const data = await res.json().catch(() => null);
 
-      if (!res.ok) {
+      if (!res.ok || !data?.jobId) {
         setPhase("form");
         setError(data?.error ?? t.newAudit.errorGeneric);
+        setSubmitting(false);
         return;
       }
 
-      setScanResult(data as WcagAuditResponse);
-      setAuditData(data as WcagAuditResponse);
-      setCompletedCount(totalSteps);
+      setJobId(data.jobId);
     } catch {
       setPhase("form");
       setError(t.newAudit.errorUnreachable);
-    } finally {
       setSubmitting(false);
     }
   }
+
+  // Polls the job status from the browser in short-lived requests instead of
+  // holding one connection open for the whole audit — a reverse proxy in
+  // front of the app (Apache/nginx/ALB) will kill a single long-lived
+  // request well before a real audit (routinely 100s+) finishes.
+  useEffect(() => {
+    if (phase !== "scanning" || !jobId || scanResult) return;
+
+    let cancelled = false;
+    const startTime = Date.now();
+    const TIMEOUT_MS = 300000;
+    let timer: ReturnType<typeof setTimeout>;
+
+    async function poll() {
+      try {
+        const res = await fetch(`/api/wcag-audit/${jobId}`);
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+
+        if (!res.ok) {
+          setPhase("form");
+          setError(data?.error ?? t.newAudit.errorGeneric);
+          setSubmitting(false);
+          return;
+        }
+
+        if (data.status === "completed") {
+          setScanResult(data.result as WcagAuditResponse);
+          setAuditData(data.result as WcagAuditResponse);
+          setCompletedCount(totalSteps);
+          setSubmitting(false);
+          return;
+        }
+
+        if (data.status === "failed" || data.status === "cancelled") {
+          setPhase("form");
+          setError(data.error ?? t.newAudit.errorGeneric);
+          setSubmitting(false);
+          return;
+        }
+
+        if (Date.now() - startTime > TIMEOUT_MS) {
+          setPhase("form");
+          setError(t.newAudit.errorGeneric);
+          setSubmitting(false);
+          return;
+        }
+
+        timer = setTimeout(poll, 3000);
+      } catch {
+        if (!cancelled) {
+          setPhase("form");
+          setError(t.newAudit.errorUnreachable);
+          setSubmitting(false);
+        }
+      }
+    }
+
+    poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [phase, jobId, scanResult, totalSteps, t, setAuditData]);
 
   /* ─── Scanning screen ─── */
   if (phase === "scanning") {
