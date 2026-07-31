@@ -3,7 +3,8 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, ChevronUp, X, ExternalLink, CheckSquare, AlertTriangle } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
+// Download CSV/PDF not scoped for this sprint — commented out, not removed.
+// import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ElementImage } from "@/components/dashboard/ElementImage";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
@@ -183,8 +184,8 @@ export default function NeedsReviewPage() {
   const headerActions = (
     <>
       <LanguageToggle />
-      <DownloadCsvButton />
-      <DownloadPdfButton />
+      {/* <DownloadCsvButton /> */}
+      {/* <DownloadPdfButton /> */}
     </>
   );
 

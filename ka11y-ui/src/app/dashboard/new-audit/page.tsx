@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowUp, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
+// Download CSV/PDF not scoped for this sprint — commented out, not removed.
+// import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
 import { ScanCompleteModal } from "@/components/dashboard/ScanCompleteModal";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
@@ -214,8 +215,8 @@ export default function NewAuditPage() {
           </div>
           <div className="flex items-center gap-2 sm:gap-6">
             <LanguageToggle />
-            <DownloadCsvButton />
-            <DownloadPdfButton />
+            {/* <DownloadCsvButton /> */}
+            {/* <DownloadPdfButton /> */}
           </div>
         </header>
 
@@ -293,8 +294,8 @@ export default function NewAuditPage() {
         <span className="text-[24px] font-medium leading-tight text-brand-teal sm:text-[32px] sm:leading-[42px]">A11Y</span>
         <div className="flex items-center gap-2 sm:gap-6">
           <LanguageToggle />
-          <DownloadCsvButton />
-          <DownloadPdfButton />
+          {/* <DownloadCsvButton /> */}
+          {/* <DownloadPdfButton /> */}
         </div>
       </header>
 

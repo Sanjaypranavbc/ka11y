@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
+// Download CSV/PDF not scoped for this sprint — commented out, not removed.
+// import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
 import { ViolationsPieChart } from "@/components/dashboard/charts/ViolationsPieChart";
 import { PerformanceGauge } from "@/components/dashboard/charts/PerformanceGauge";
 import { WcagLevelBarChart } from "@/components/dashboard/charts/WcagLevelBarChart";
@@ -17,8 +18,8 @@ export default function DashboardPage() {
         actions={
           <>
             <LanguageToggle />
-            <DownloadCsvButton />
-            <DownloadPdfButton />
+            {/* <DownloadCsvButton /> */}
+            {/* <DownloadPdfButton /> */}
           </>
         }
       />
