@@ -487,8 +487,8 @@ async def _run_job_body(
                     sys.path.insert(0, python_root)
             from enrich_audit import enrich_report_in_pipeline
             
-            logger.info(f"[combined] Starting automated Gemini enrichment for job {job_id} into {output_dir}")
-            enrich_report_in_pipeline(report, output_dir)
+            logger.info(f"[combined] Starting automated Gemini enrichment for job {job_id} into {output_dir} (language={resolved_lang})")
+            enrich_report_in_pipeline(report, output_dir, language=resolved_lang)
         except Exception as e:
             import os
             import sys

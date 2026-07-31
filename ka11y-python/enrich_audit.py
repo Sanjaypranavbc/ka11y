@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 enrich_audit.py
 ================
@@ -28,11 +28,22 @@ from typing import Literal, Optional
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 from pydantic import BaseModel, Field
 
 DEFAULT_MODEL = "gemini-3.5-flash"
 
-SYSTEM_INSTRUCTION = (
+# --------------------------------------------------------------------------
+# Language support
+# --------------------------------------------------------------------------
+# Add more entries here as you enrich sites in other languages. The key is
+# whatever you pass via --language (CLI) or language= (pipeline call).
+LANGUAGE_NAMES = {
+    "en": "English",
+    "ja": "Japanese",
+}
+
+BASE_SYSTEM_INSTRUCTION = (
     "You are a Web Accessibility Remediation Expert specializing in WCAG 2.1/2.2 (Levels A, AA, AAA).\n\n"
     "You will be given an array of accessibility violation objects extracted from an automated audit\n"
     "(axe-core / custom Python rules / OCR-based image analysis). For EACH violation:\n\n"
@@ -47,6 +58,25 @@ SYSTEM_INSTRUCTION = (
     "4. Keep the reason under 60 words and the fix under 80 words. No preamble, no markdown headers.\n\n"
     "Return one entry per input violation, in the same order, echoing its finding_id and wcag_sc."
 )
+
+
+def build_system_instruction(language: str = "en") -> str:
+    """Return the system instruction, appending an explicit output-language
+    directive when language != 'en'. Gemini defaults to the language of the
+    PROMPT/instruction, not the language of the audited page's content, so
+    this must be stated explicitly for non-English sites."""
+    if language == "en":
+        return BASE_SYSTEM_INSTRUCTION
+
+    lang_name = LANGUAGE_NAMES.get(language, language)
+    language_directive = (
+        f"\n\nIMPORTANT - OUTPUT LANGUAGE: Write dynamic_reason, dynamic_suggested_fix, and "
+        f"user_impact entirely in {lang_name} ({language}), regardless of the language used in "
+        f"this instruction. Keep finding_id and wcag_sc as-is (do not translate identifiers/codes). "
+        f"Any HTML/CSS/ARIA code snippets inside the fix should remain in code syntax (untranslated), "
+        f"but the surrounding explanation must be in {lang_name}."
+    )
+    return BASE_SYSTEM_INSTRUCTION + language_directive
 
 
 # --------------------------------------------------------------------------
@@ -138,6 +168,7 @@ def call_gemini_batch(
     client: genai.Client,
     model_name: str,
     trimmed_batch: list[dict],
+    system_instruction: str,
     max_retries: int = 1,
     backoff_seconds: float = 2.0,
 ):
@@ -147,18 +178,38 @@ def call_gemini_batch(
 
     for attempt in range(max_retries + 1):
         try:
-            interaction = client.interactions.create(
+            # interaction = client.interactions.create(
+            #     model=model_name,
+            #     input=prompt,
+            #     system_instruction=system_instruction,
+            #     response_format={
+            #         "type": "text",
+            #         "mime_type": "application/json",
+            #         "schema": EnrichmentBatch.model_json_schema(),
+            #
+            #     },
+            # )
+            response = client.models.generate_content(
                 model=model_name,
-                input=prompt,
-                system_instruction=SYSTEM_INSTRUCTION,
-                response_format={
-                    "type": "text",
-                    "mime_type": "application/json",
-                    "schema": EnrichmentBatch.model_json_schema(),
-                },
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+
+                    response_mime_type="application/json",
+                    response_schema=EnrichmentBatch,
+
+                    temperature=0.2,
+
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level="minimal"
+                    ),
+                ),
             )
-            parsed = EnrichmentBatch.model_validate_json(interaction.output_text).items
-            return parsed, interaction.usage, attempt
+            # parsed = EnrichmentBatch.model_validate_json(interaction.output_text).items
+            parsed = response.parsed.items
+            usage = response.usage_metadata
+            # return parsed, interaction.usage, attempt
+            return parsed, usage, attempt
         except Exception as e:
             last_err = e
             if attempt < max_retries:
@@ -190,6 +241,7 @@ def enrich_violations(
     batch_size: int,
     batches_log: list[dict],
     totals: dict,
+    system_instruction: str,
     delay_between_batches: float = 1.0,
 ) -> None:
     """Enrich `violations` in place, batch by batch, logging token usage."""
@@ -215,17 +267,19 @@ def enrich_violations(
         totals["api_calls"] += 1
 
         try:
-            items, usage, retries_attempted = call_gemini_batch(client, model_name, chunk)
+            items, usage, retries_attempted = call_gemini_batch(
+                client, model_name, chunk, system_instruction
+            )
             record["latency_ms"] = (time.perf_counter() - start) * 1000.0
             totals["retries"] += retries_attempted
 
             if usage:
-                in_tok = getattr(usage, "total_input_tokens", 0) or 0
-                out_tok = getattr(usage, "total_output_tokens", 0) or 0
-                thought_tok = getattr(usage, "total_thought_tokens", 0) or 0
-                cached_tok = getattr(usage, "total_cached_tokens", 0) or 0
-                tool_tok = getattr(usage, "total_tool_use_tokens", 0) or 0
-                tot_tok = getattr(usage, "total_tokens", 0) or 0
+                in_tok = getattr(usage, "prompt_token_count", 0) or 0
+                out_tok = getattr(usage, "candidates_token_count", 0) or 0
+                thought_tok = getattr(usage, "thoughts_token_count", 0) or 0
+                cached_tok = getattr(usage, "cached_content_token_count", 0) or 0
+                tool_tok = getattr(usage, "tool_use_prompt_token_count", 0) or 0
+                tot_tok = getattr(usage, "total_token_count", 0) or 0
 
                 record["input_tokens"] = in_tok
                 record["output_tokens"] = out_tok
@@ -327,11 +381,18 @@ def run_enrichment(
     price_output: float = 0.30,
     api_key: Optional[str] = None,
     print_table: bool = True,
+    language: str = "en",
 ) -> dict:
     """Enrich report["violations"] and write enriched_report.json + token_usage.json
     to output_dir. Returns the token_usage dict. Never raises for a missing/bad
     API key - it writes an (unenriched) report and an empty usage file instead,
-    so pipeline callers don't crash."""
+    so pipeline callers don't crash.
+
+    language: output language for dynamic_reason / dynamic_suggested_fix /
+        user_impact (e.g. "en", "ja"). Gemini follows the language of the
+        PROMPT, not the language of the audited page, so this must be passed
+        explicitly for non-English sites (e.g. language="ja" for Melt Beauty,
+        The Answer)."""
     load_dotenv()
     api_key = api_key or os.environ.get("GEMINI_API_KEY")
 
@@ -349,6 +410,7 @@ def run_enrichment(
             "run_started_at": run_started_at,
             "run_completed_at": datetime.now(timezone.utc).isoformat(),
             "model": model_name,
+            "language": language,
             "violations_enriched": len(violations),
             "batches": batches_log,
             "totals": totals,
@@ -368,9 +430,11 @@ def run_enrichment(
     client = genai.Client(api_key=api_key)
     batches_log: list[dict] = []
     totals = new_totals()
+    system_instruction = build_system_instruction(language)
 
-    print(f"Enriching {len(violations)} violations using model '{model_name}'...")
-    enrich_violations(violations, client, model_name, batch_size, batches_log, totals)
+    lang_label = LANGUAGE_NAMES.get(language, language)
+    print(f"Enriching {len(violations)} violations using model '{model_name}' (output language: {lang_label})...")
+    enrich_violations(violations, client, model_name, batch_size, batches_log, totals, system_instruction)
     finalize_totals(totals, len(violations), price_input, price_output)
 
     usage_data = write_outputs(batches_log, totals)
@@ -387,11 +451,16 @@ def enrich_report_in_pipeline(
     model_name: str = DEFAULT_MODEL,
     price_input: float = 0.075,
     price_output: float = 0.30,
+    language: str = "en",
 ) -> None:
     """Backward-compatible entry point for pipeline/orchestrator callers
     (e.g. ka11y/api/v1/combined/runner.py). Thin wrapper around
     run_enrichment() - kept so existing `from enrich_audit import
-    enrich_report_in_pipeline` call sites don't need to change."""
+    enrich_report_in_pipeline` call sites don't need to change.
+
+    Pass language="ja" for Japanese-language sites (e.g. Melt Beauty,
+    The Answer) so dynamic_reason/dynamic_suggested_fix come back in
+    Japanese instead of defaulting to English."""
     run_enrichment(
         report=report,
         output_dir=output_dir,
@@ -400,6 +469,7 @@ def enrich_report_in_pipeline(
         model_name=model_name,
         price_input=price_input,
         price_output=price_output,
+        language=language,
     )
 
 
@@ -420,6 +490,15 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--price-input", type=float, default=0.075, help="USD per 1M input tokens (default: 0.075).")
     parser.add_argument("--price-output", type=float, default=0.30, help="USD per 1M output tokens (default: 0.30).")
+    parser.add_argument(
+        "--language",
+        default="en",
+        help=(
+            "Output language for dynamic_reason / dynamic_suggested_fix / user_impact "
+            f"(default: en). Supported: {', '.join(LANGUAGE_NAMES.keys())}. "
+            "Use 'ja' for Japanese-language sites."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -453,6 +532,7 @@ def main() -> int:
         model_name=args.model,
         price_input=args.price_input,
         price_output=args.price_output,
+        language=args.language,
     )
     print(f"Success! Enriched report and token usage files written to: {out_dir}")
     print(f"Total Wall-Clock Time: {time.perf_counter() - start:.2f} seconds")
