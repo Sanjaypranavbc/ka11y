@@ -151,6 +151,7 @@ app.add_middleware(
     allow_origins=[
         "http://ec2-34-228-40-177.compute-1.amazonaws.com:8080",
         "https://a11y.bluecaffeine.in",
+        "http://localhost:3001",
 
     ],
     allow_credentials=True,   # Set to True if using cookies/auth headers; otherwise False is fine
