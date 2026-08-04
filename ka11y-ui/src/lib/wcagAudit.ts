@@ -38,23 +38,55 @@ export interface WcagCriterion {
   findings: WcagFinding[];
 }
 
+// Matches ka11y-python/ka11y/api/v1/combined/report.py _build_report()'s
+// summary block — the shape the combined-audit backend actually returns.
+export interface WcagStatusCounts {
+  violations: number;
+  needs_review: number;
+  passes: number;
+}
+
 export interface WcagAuditSummary {
-  total: number;
-  checked: number;
-  passed: number;
-  failed: number;
-  needsReview: number;
-  notChecked: number;
-  notApplicable: number;
-  manualOnly: number;
+  total_findings: number;
+  violations: number;
+  needs_review: number;
+  passes: number;
+  manual_review_required?: number;
+  score: number | null;
+  by_severity?: Record<string, number>;
+  by_level?: Record<string, WcagStatusCounts>;
+  by_wcag_sc?: Record<string, WcagStatusCounts>;
+  by_source?: Record<string, WcagStatusCounts>;
+  by_page?: Record<string, WcagStatusCounts>;
+  page_count?: number;
+}
+
+export interface WcagReportPage {
+  page_url: string;
+  summary: {
+    total_findings: number;
+    violations: number;
+    needs_review: number;
+    passes: number;
+    score: number | null;
+  };
+  violations: unknown[];
+  needs_review: unknown[];
+  passes: unknown[];
 }
 
 export interface WcagAuditResponse {
   url: string;
-  wcagVersion: string;
-  analyzedAt: string;
-  summary: WcagAuditSummary;
-  criteria: WcagCriterion[];
+  wcagVersion?: string;
+  analyzedAt?: string;
+  summary?: WcagAuditSummary;
+  // node-shape findings (fallback path in the derivers)
+  criteria?: WcagCriterion[];
+  // combined-audit flat findings arrays (primary path in the derivers)
+  violations?: unknown[];
+  passes?: unknown[];
+  needs_review?: unknown[];
+  pages?: WcagReportPage[];
 }
 
 /* ─── Row shapes consumed by the Violations / Needs Review tables ─── */
@@ -70,6 +102,7 @@ export interface ViolationRow {
   elementTitle: string;
   elementFile: string;
   elementOcr: string;
+  imageUrls: string[];
   fixGuide: string;
 }
 
@@ -85,6 +118,7 @@ export interface ReviewRow {
   level: WcagLevel;
   tag: string;
   elementFilename: string;
+  imageUrls: string[];
   foreground: string;
   background: string;
   ocrText: string;
@@ -100,6 +134,7 @@ export interface PassRow {
   level: WcagLevel;
   tag: string;
   elementFilename: string;
+  imageUrls: string[];
   foreground: string;
   background: string;
   ocrText: string;
@@ -122,6 +157,80 @@ function truncateHtml(html: string | null | undefined, max = 90): string {
   if (!html) return "—";
   const clean = html.replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+/** Turn a captured-crop path/asset ref into a browser-loadable URL.
+ * Accepts an /api/v1/assets/{id} path (same-origin, proxied to Python by
+ * next.config) or an absolute http(s) URL. A bare filesystem path is NOT
+ * loadable and is dropped. */
+function assetToUrl(u: unknown): string | null {
+  if (typeof u !== "string") return null;
+  const s = u.trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith("/api/")) return s;
+  return null;
+}
+
+/** Resolve an HTML <img src> (which may be absolute, root-relative, or
+ * page-relative) against the page it was found on, so it points at the real
+ * origin instead of the dashboard's. */
+function htmlSrcToUrl(u: unknown, pageUrl: unknown): string | null {
+  if (typeof u !== "string") return null;
+  const s = u.trim();
+  if (!s || s.startsWith("data:")) return s || null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (typeof pageUrl === "string" && pageUrl) {
+    try {
+      return new URL(s, pageUrl).href;
+    } catch {
+      /* fall through */
+    }
+  }
+  return null;
+}
+
+/** Ordered list of browser-loadable image URLs for a finding's element:
+ * the captured crop (asset) first, then the original image parsed from the
+ * element HTML. ElementImage tries them in order and only shows the neutral
+ * box when every candidate fails. */
+function pickImageUrls(el: any): string[] {
+  if (!el) return [];
+  const out: string[] = [];
+  const add = (u: string | null) => {
+    if (u && !out.includes(u)) out.push(u);
+  };
+
+  // 1. Captured crop / registered asset (most accurate for the finding).
+  add(assetToUrl(el.image_src));
+  add(assetToUrl(el.image_url));
+  add(assetToUrl(el.asset_url));
+
+  // 2. Original image from the element HTML, resolved to an absolute URL.
+  // Lazy-loaded <img>s often leave src empty and carry the real URL in
+  // srcset / data-src / data-* — try each so those still render.
+  const html: string | undefined = el.html;
+  if (html) {
+    // Direct src / common lazy-load attributes.
+    for (const attr of ["src", "data-src", "data-original", "data-lazy-src"]) {
+      const m = html.match(
+        new RegExp(`<img[^>]*\\s${attr}\\s*=\\s*["']([^"']+)["']`, "i"),
+      );
+      if (m) add(htmlSrcToUrl(m[1], el.page_url));
+    }
+    // srcset / data-srcset: take the first URL of the candidate list.
+    const ss = html.match(/\s(?:data-)?srcset\s*=\s*["']([^"']+)["']/i);
+    if (ss) {
+      const first = ss[1].split(",")[0]?.trim().split(/\s+/)[0];
+      add(htmlSrcToUrl(first, el.page_url));
+    }
+    // CSS background-image: url(...) on the element.
+    const bg = html.match(/background-image\s*:\s*url\(\s*["']?([^"')]+)["']?\s*\)/i);
+    if (bg) add(htmlSrcToUrl(bg[1], el.page_url));
+  }
+  add(htmlSrcToUrl(el.src, el.page_url));
+
+  return out;
 }
 
 function extractColors(text: string): { foreground?: string; background?: string } {
@@ -147,14 +256,15 @@ export function toViolationRows(data: any): ViolationRow[] {
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
         title: finding.reason_code || finding.rule_id || "Violation",
-        description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || finding.reason_code || ""),
+        description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || finding.reason_code || ""),
         sc: finding.wcag_sc || "",
-        criterion: finding.criterion || "",
+        criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
         elementTitle: selectorStr,
         elementFile: finding.rule_id || finding.ruleId || "",
         elementOcr: truncateHtml(el.html),
+        imageUrls: pickImageUrls(el),
         fixGuide: finding.helpUrl || "",
       });
     }
@@ -176,6 +286,7 @@ export function toViolationRows(data: any): ViolationRow[] {
             elementTitle: el?.selector ?? "—",
             elementFile: finding.ruleId,
             elementOcr: truncateHtml(el?.html),
+            imageUrls: pickImageUrls(el),
             fixGuide: finding.helpUrl,
           });
         });
@@ -198,12 +309,13 @@ export function toPassesRows(data: any): PassRow[] {
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
         reasonTitle: finding.reason_code || finding.rule_id || "Pass",
-        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || "")),
+        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || "")),
         sc: finding.wcag_sc || "",
-        criterion: finding.criterion || "",
+        criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
         elementFilename: finding.rule_id || finding.ruleId || "",
+        imageUrls: pickImageUrls(el),
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
         ocrText: truncateHtml(el.html),
@@ -227,6 +339,7 @@ export function toPassesRows(data: any): PassRow[] {
             level: criterion.level,
             tag: extractTag(el?.html),
             elementFilename: finding.ruleId,
+            imageUrls: pickImageUrls(el),
             foreground: colors.foreground ?? "—",
             background: colors.background ?? "—",
             ocrText: truncateHtml(el?.html),
@@ -253,12 +366,13 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
         status: "pending",
         reasonTitle: finding.reason_code || finding.rule_id || "Needs Review",
-        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || "")),
+        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || "")),
         sc: finding.wcag_sc || "",
-        criterion: finding.criterion || "",
+        criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
         elementFilename: finding.rule_id || finding.ruleId || "",
+        imageUrls: pickImageUrls(el),
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
         ocrText: truncateHtml(el.html),
@@ -283,6 +397,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
             level: criterion.level,
             tag: extractTag(el?.html),
             elementFilename: finding.ruleId,
+            imageUrls: pickImageUrls(el),
             foreground: colors.foreground ?? "—",
             background: colors.background ?? "—",
             ocrText: truncateHtml(el?.html),
@@ -294,4 +409,124 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
   }
 
   return rows;
+}
+
+/* ─── Dashboard overview selectors ───
+ * Read straight off the real report shape (report.py _build_report()):
+ * summary.{violations,needs_review,passes,score,by_level,by_wcag_sc} and
+ * the per-page `pages` array. No site-specific assumptions. */
+
+export interface DashboardSummary {
+  violations: number;
+  needsReview: number;
+  passes: number;
+  score: number | null;
+}
+
+export function getDashboardSummary(data: WcagAuditResponse): DashboardSummary {
+  const s = data.summary;
+  return {
+    violations: s?.violations ?? (data.violations?.length ?? 0),
+    needsReview: s?.needs_review ?? (data.needs_review?.length ?? 0),
+    passes: s?.passes ?? (data.passes?.length ?? 0),
+    score: s?.score ?? null,
+  };
+}
+
+export interface LevelBreakdownRow {
+  level: WcagLevel;
+  violations: number;
+  needsReview: number;
+  passes: number;
+}
+
+const DASHBOARD_LEVELS: WcagLevel[] = ["A", "AA", "AAA"];
+
+export function getLevelBreakdown(data: WcagAuditResponse): LevelBreakdownRow[] {
+  const byLevel = data.summary?.by_level ?? {};
+  return DASHBOARD_LEVELS.map((level) => {
+    const counts = byLevel[level];
+    return {
+      level,
+      violations: counts?.violations ?? 0,
+      needsReview: counts?.needs_review ?? 0,
+      passes: counts?.passes ?? 0,
+    };
+  });
+}
+
+export interface TopFailingCriterion {
+  code: string;
+  label: string;
+  level: WcagLevel;
+  count: number;
+}
+
+/** Findings carry their own `level` and `criterion_name`; the summary's
+ * by_wcag_sc bucket only has counts, so pull the display metadata from the
+ * first finding seen for each SC. */
+function scMetadata(data: WcagAuditResponse): Record<string, { level: WcagLevel; label: string }> {
+  const meta: Record<string, { level: WcagLevel; label: string }> = {};
+  const collect = (findings: unknown[] | undefined) => {
+    for (const raw of findings ?? []) {
+      const f = raw as { wcag_sc?: string; level?: WcagLevel; criterion_name?: string };
+      if (f.wcag_sc && !meta[f.wcag_sc]) {
+        meta[f.wcag_sc] = { level: f.level ?? "A", label: f.criterion_name || f.wcag_sc };
+      }
+    }
+  };
+  collect(data.violations);
+  collect(data.needs_review);
+  collect(data.passes);
+  return meta;
+}
+
+export function getTopFailingCriteria(data: WcagAuditResponse, limit = 8): TopFailingCriterion[] {
+  const byScRaw = data.summary?.by_wcag_sc ?? {};
+  const meta = scMetadata(data);
+
+  return Object.entries(byScRaw)
+    .map(([code, counts]) => ({
+      code,
+      label: meta[code]?.label || code,
+      level: meta[code]?.level ?? "A",
+      count: counts.violations,
+    }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+export interface DashboardPageFinding {
+  pageName: string;
+  url: string;
+  score: number | null;
+  findings: number;
+  violations: number;
+  needsReview: number;
+  passes: number;
+}
+
+function derivePageName(pageUrl: string, index: number): string {
+  try {
+    const u = new URL(pageUrl);
+    const segment = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean).pop();
+    if (!segment) return "Home Page";
+    const words = segment.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ");
+    return words.replace(/\b\w/g, (c) => c.toUpperCase()) || `Page ${index + 1}`;
+  } catch {
+    return `Page ${index + 1}`;
+  }
+}
+
+export function getDashboardPageFindings(data: WcagAuditResponse): DashboardPageFinding[] {
+  return (data.pages ?? []).map((page, index) => ({
+    pageName: derivePageName(page.page_url, index),
+    url: page.page_url,
+    score: page.summary.score,
+    findings: page.summary.total_findings,
+    violations: page.summary.violations,
+    needsReview: page.summary.needs_review,
+    passes: page.summary.passes,
+  }));
 }

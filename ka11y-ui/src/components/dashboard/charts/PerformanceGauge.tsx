@@ -2,18 +2,20 @@
 
 import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
-import { sitePerformanceScore } from "@/lib/dashboardData";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 
-const DATA = [{ name: "score", value: sitePerformanceScore, fill: "var(--color-brand-teal)" }];
+export function PerformanceGauge({ score }: { score: number | null }) {
+  const { t } = useLanguage();
+  const value = score ?? 0;
+  const DATA = [{ name: "score", value, fill: "var(--color-brand-teal)" }];
 
-export function PerformanceGauge() {
   return (
     <ChartCard
-      title="Site Performance Score"
+      title={t.dashboardPage.charts.sitePerformanceScore}
       legend={
         <>
-          <LegendItem color="var(--color-brand-teal)" label="Pass Percentage" />
-          <LegendItem color="var(--color-gray-40)" label="Action Needed" />
+          <LegendItem color="var(--color-brand-teal)" label={t.dashboardPage.charts.passPercentage} />
+          <LegendItem color="var(--color-gray-40)" label={t.dashboardPage.charts.actionNeeded} />
         </>
       }
     >
@@ -37,7 +39,7 @@ export function PerformanceGauge() {
           </RadialBarChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="text-h1 font-medium text-brand-gray">{sitePerformanceScore}%</span>
+          <span className="text-h1 font-medium text-brand-gray">{score === null ? "—" : `${value}%`}</span>
         </div>
       </div>
     </ChartCard>

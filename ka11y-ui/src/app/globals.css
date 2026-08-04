@@ -195,3 +195,13 @@ body {
 .skip-link:focus {
   left: 0;
 }
+
+/* Indeterminate loading bar for images that are still fetching (ElementImage). */
+@keyframes element-image-loading {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}

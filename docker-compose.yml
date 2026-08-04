@@ -131,6 +131,10 @@ services:
     ports:
       - "0.0.0.0:8000:8000"
 
+    env_file:
+      - path: ./ka11y-python/.env
+        required: false
+
     volumes:
       - ./output/crawled_images:/app/crawled_images
       - ./output/logs:/app/logs

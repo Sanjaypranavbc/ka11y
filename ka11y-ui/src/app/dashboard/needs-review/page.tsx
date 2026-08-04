@@ -3,17 +3,15 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, ChevronUp, X, ExternalLink, CheckSquare, AlertTriangle } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
+import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ElementImage } from "@/components/dashboard/ElementImage";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { toNeedsReviewRows, type ReviewRow, type ReviewStatus, type WcagLevel } from "@/lib/wcagAudit";
+import type { Translations } from "@/lib/i18n/translations";
+import { useInfiniteReveal } from "@/lib/useInfiniteReveal";
 import { cn } from "@/lib/utils";
-
-const STATUS_LABELS: Record<ReviewStatus, string> = {
-  pass: "Pass",
-  violation: "Violation",
-  pending: "Pending",
-};
 
 const STATUS_STYLES: Record<ReviewStatus, string> = {
   pass: "bg-gray-10 text-gray-100",
@@ -33,10 +31,12 @@ function ManualActionPopup({
   onMoveToPass,
   onMoveToViolation,
   onClose,
+  t,
 }: {
   onMoveToPass: () => void;
   onMoveToViolation: () => void;
   onClose: () => void;
+  t: Translations;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -56,8 +56,8 @@ function ManualActionPopup({
       className="absolute right-0 top-full z-20 mt-1 w-[280px] rounded-[8px] bg-white shadow-[0px_0px_8px_rgba(0,0,0,0.12)]"
     >
       <div className="border-b border-gray-10 px-6 py-4">
-        <p className="text-[16px] font-medium leading-6 text-gray-100">Manual Action</p>
-        <p className="mt-1 text-[14px] leading-5 text-gray-100">Update the status of this item manually.</p>
+        <p className="text-[16px] font-medium leading-6 text-gray-100">{t.needsReview.manualAction.title}</p>
+        <p className="mt-1 text-[14px] leading-5 text-gray-100">{t.needsReview.manualAction.description}</p>
       </div>
       <div className="flex flex-col gap-4 px-6 py-4">
         <button
@@ -67,9 +67,9 @@ function ManualActionPopup({
         >
           <CheckSquare size={24} className="mt-0.5 shrink-0 text-brand-teal-dark" aria-hidden="true" />
           <div className="flex flex-col gap-2">
-            <span className="text-[14px] font-bold leading-5 text-brand-teal-dark underline">Move to Pass</span>
+            <span className="text-[14px] font-bold leading-5 text-brand-teal-dark underline">{t.needsReview.manualAction.moveToPass}</span>
             <span className="text-[14px] leading-5 text-gray-80">
-              Mark this item as passed if it no longer exists or is already fixed
+              {t.needsReview.manualAction.moveToPassDescription}
             </span>
           </div>
         </button>
@@ -81,9 +81,9 @@ function ManualActionPopup({
         >
           <AlertTriangle size={24} className="mt-0.5 shrink-0 text-gray-80" aria-hidden="true" />
           <div className="flex flex-col gap-2">
-            <span className="text-[14px] font-bold leading-5 text-gray-100">Move to Violation</span>
+            <span className="text-[14px] font-bold leading-5 text-gray-100">{t.needsReview.manualAction.moveToViolation}</span>
             <span className="text-[14px] leading-5 text-gray-80">
-              Keep this item as a violation that needs to be fixed.
+              {t.needsReview.manualAction.moveToViolationDescription}
             </span>
           </div>
         </button>
@@ -98,12 +98,14 @@ function ReviewButton({
   setOpenId,
   onMoveToPass,
   onMoveToViolation,
+  t,
 }: {
   itemId: string;
   openId: string | null;
   setOpenId: (id: string | null) => void;
   onMoveToPass: () => void;
   onMoveToViolation: () => void;
+  t: Translations;
 }) {
   const isOpen = openId === itemId;
   return (
@@ -113,7 +115,7 @@ function ReviewButton({
         onClick={() => setOpenId(isOpen ? null : itemId)}
         className="flex items-center gap-2 rounded-[8px] bg-brand-teal px-4 py-2 text-[14px] leading-5 text-white hover:opacity-90"
       >
-        Review
+        {t.needsReview.review}
         {isOpen ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
       </button>
       {isOpen && (
@@ -121,6 +123,7 @@ function ReviewButton({
           onMoveToPass={() => { onMoveToPass(); setOpenId(null); }}
           onMoveToViolation={() => { onMoveToViolation(); setOpenId(null); }}
           onClose={() => setOpenId(null)}
+          t={t}
         />
       )}
     </div>
@@ -129,6 +132,12 @@ function ReviewButton({
 
 export default function NeedsReviewPage() {
   const { auditData } = useAuditData();
+  const { t } = useLanguage();
+  const STATUS_LABELS: Record<ReviewStatus, string> = {
+    pass: t.needsReview.status.pass,
+    violation: t.needsReview.status.violation,
+    pending: t.needsReview.status.pending,
+  };
   const [activeFilters, setActiveFilters] = useState<WcagLevel[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
@@ -170,13 +179,17 @@ export default function NeedsReviewPage() {
       ? items
       : items.filter((item) => activeFilters.includes(item.level));
 
+  const { visibleItems, visibleCount, hasMore, sentinelRef } = useInfiniteReveal(
+    filtered,
+    activeFilters.join(","),
+  );
+
   const LEVELS: WcagLevel[] = ["A", "AA", "AAA"];
 
   const headerActions = (
     <>
       <LanguageToggle />
       <DownloadCsvButton />
-      <DownloadPdfButton />
     </>
   );
 
@@ -193,7 +206,7 @@ export default function NeedsReviewPage() {
         {!auditData ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
             <p className="text-[16px] leading-6 text-gray-60">
-              Run an audit to see items that need review here.
+              {t.needsReview.emptyState}
             </p>
           </div>
         ) : (
@@ -206,7 +219,7 @@ export default function NeedsReviewPage() {
               onClick={() => setDropdownOpen((v) => !v)}
               className="flex items-center gap-2 rounded-[16px] border border-gray-40 bg-gray-10 px-4 py-2 text-[14px] leading-6 text-gray-100 sm:text-[16px]"
             >
-              WCAG Level
+              {t.filters.wcagLevel}
               <ChevronDown
                 size={16}
                 aria-hidden="true"
@@ -234,7 +247,7 @@ export default function NeedsReviewPage() {
 
           {activeFilters.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[14px] leading-6 text-gray-80 sm:text-[16px]">WCAG Level:</span>
+              <span className="text-[14px] leading-6 text-gray-80 sm:text-[16px]">{t.filters.wcagLevel}:</span>
               {activeFilters.map((level) => (
                 <span
                   key={level}
@@ -244,7 +257,7 @@ export default function NeedsReviewPage() {
                   <button
                     type="button"
                     onClick={() => toggleFilter(level)}
-                    aria-label={`Remove ${level} filter`}
+                    aria-label={t.filters.removeFilter(level)}
                     className="flex items-center hover:opacity-70"
                   >
                     <X size={14} aria-hidden="true" />
@@ -256,14 +269,14 @@ export default function NeedsReviewPage() {
                 onClick={() => setActiveFilters([])}
                 className="text-[14px] leading-6 text-gray-100 underline sm:text-[16px]"
               >
-                Clear All
+                {t.filters.clearAll}
               </button>
             </div>
           )}
         </div>
 
         <p className="text-[14px] leading-6 text-gray-100 sm:text-[16px]">
-          Showing {filtered.length} of {filtered.length} items ({items.length} total)
+          {t.needsReview.showing(visibleCount, filtered.length, items.length)}
         </p>
 
         {/* Table — horizontally scrollable, page does not scroll */}
@@ -272,18 +285,18 @@ export default function NeedsReviewPage() {
 
           {/* Header */}
           <div className="flex w-full bg-gray-10 text-[14px] font-bold leading-6 text-gray-100">
-            <div className="flex-[110] min-w-0 p-4">Status</div>
-            <div className="flex-[318] min-w-0 p-4">Reason</div>
-            <div className="flex-[76] min-w-0 p-4">SC</div>
-            <div className="flex-[146] min-w-0 p-4">Criterion</div>
-            <div className="flex-[76] min-w-0 p-4">Level</div>
-            <div className="flex-[76] min-w-0 p-4">Tag</div>
-            <div className="flex-[318] min-w-0 border-r border-gray-10 p-4">Element</div>
-            <div className="flex-[184] min-w-0 p-4">Action</div>
+            <div className="flex-[110] min-w-0 p-4">{t.needsReview.columns.status}</div>
+            <div className="flex-[318] min-w-0 p-4">{t.needsReview.columns.reason}</div>
+            <div className="flex-[76] min-w-0 p-4">{t.needsReview.columns.sc}</div>
+            <div className="flex-[146] min-w-0 p-4">{t.needsReview.columns.criterion}</div>
+            <div className="flex-[76] min-w-0 p-4">{t.needsReview.columns.level}</div>
+            <div className="flex-[76] min-w-0 p-4">{t.needsReview.columns.tag}</div>
+            <div className="flex-[318] min-w-0 border-r border-gray-10 p-4">{t.needsReview.columns.element}</div>
+            <div className="flex-[184] min-w-0 p-4">{t.needsReview.columns.action}</div>
           </div>
 
           {/* Rows */}
-          {filtered.map((item) => (
+          {visibleItems.map((item) => (
             <div key={item.id} className="flex w-full border-b border-gray-10 bg-white text-[14px] leading-5">
 
               <div className="flex-[110] min-w-0 border-b border-gray-10 px-4 py-6">
@@ -302,11 +315,11 @@ export default function NeedsReviewPage() {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-brand-teal-dark underline"
                   >
-                    Learn More <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
+                    {t.needsReview.learnMore} <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
                   </a>
                 ) : (
                   <button type="button" className="inline-flex items-center gap-1.5 text-brand-teal-dark underline">
-                    Learn More <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
+                    {t.needsReview.learnMore} <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -329,23 +342,23 @@ export default function NeedsReviewPage() {
 
               <div className="flex-[318] min-w-0 border-b border-r border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="font-medium text-gray-100">{item.elementFilename}</p>
-                <div className="h-[90px] w-[105px] overflow-hidden rounded-[8px] bg-gray-40 shadow-[0px_0px_18px_0px_rgba(0,0,0,0.09)]" />
+                <ElementImage srcs={item.imageUrls} className="h-[90px] w-[105px]" />
                 <div className="flex flex-col gap-2 text-[12px] leading-5">
                   <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">Foreground:</span>
+                    <span className="shrink-0 text-gray-80">{t.needsReview.foreground}</span>
                     <span className="text-gray-100">{item.foreground}</span>
                   </div>
                   <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">Background:</span>
+                    <span className="shrink-0 text-gray-80">{t.needsReview.background}</span>
                     <span className="text-gray-100">{item.background}</span>
                   </div>
                   <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">OCR Text:</span>
+                    <span className="shrink-0 text-gray-80">{t.needsReview.ocrText}</span>
                     <span className="text-gray-100">{item.ocrText}</span>
                   </div>
                 </div>
                 <button type="button" className="inline-flex items-center gap-1.5 text-[14px] leading-5 text-brand-teal-dark underline">
-                  View Full Audit <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
+                  {t.needsReview.viewFullAudit} <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
                 </button>
               </div>
 
@@ -356,11 +369,13 @@ export default function NeedsReviewPage() {
                   setOpenId={setOpenActionId}
                   onMoveToPass={() => updateStatus(item.id, "pass")}
                   onMoveToViolation={() => updateStatus(item.id, "violation")}
+                  t={t}
                 />
               </div>
 
             </div>
           ))}
+          {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-1" />}
         </div>
         </div>
         </>

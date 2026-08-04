@@ -3,10 +3,14 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, X, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
+import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ElementImage } from "@/components/dashboard/ElementImage";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { toViolationRows, type WcagLevel } from "@/lib/wcagAudit";
+import type { Translations } from "@/lib/i18n/translations";
+import { useInfiniteReveal } from "@/lib/useInfiniteReveal";
 import { cn } from "@/lib/utils";
 
 const FIX_GUIDE_PREVIEW_LENGTH = 80;
@@ -27,10 +31,12 @@ function FixGuideCell({
   text,
   expanded,
   onToggle,
+  t,
 }: {
   text: string;
   expanded: boolean;
   onToggle: () => void;
+  t: Translations;
 }) {
   const isLong = text.length > FIX_GUIDE_PREVIEW_LENGTH;
   return (
@@ -44,7 +50,7 @@ function FixGuideCell({
           onClick={onToggle}
           className="text-left text-[14px] leading-5 text-brand-teal-dark underline"
         >
-          {expanded ? "Show less" : "Read more"}
+          {expanded ? t.violations.showLess : t.violations.readMore}
         </button>
       )}
     </div>
@@ -53,6 +59,7 @@ function FixGuideCell({
 
 export default function ViolationsPage() {
   const { auditData } = useAuditData();
+  const { t } = useLanguage();
   const [activeFilters, setActiveFilters] = useState<WcagLevel[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -92,13 +99,17 @@ export default function ViolationsPage() {
       ? ALL_VIOLATIONS
       : ALL_VIOLATIONS.filter((v) => activeFilters.includes(v.level));
 
+  const { visibleItems, visibleCount, hasMore, sentinelRef } = useInfiniteReveal(
+    filtered,
+    activeFilters.join(","),
+  );
+
   const LEVELS: WcagLevel[] = ["A", "AA", "AAA"];
 
   const headerActions = (
     <>
       <LanguageToggle />
       <DownloadCsvButton />
-      <DownloadPdfButton />
     </>
   );
 
@@ -115,7 +126,7 @@ export default function ViolationsPage() {
         {!auditData ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
             <p className="text-[16px] leading-6 text-gray-60">
-              Run an audit to see violations here.
+              {t.violations.emptyState}
             </p>
           </div>
         ) : (
@@ -128,7 +139,7 @@ export default function ViolationsPage() {
               onClick={() => setDropdownOpen((v) => !v)}
               className="flex items-center gap-2 rounded-[16px] border border-gray-40 bg-gray-10 px-4 py-2 text-[14px] leading-6 text-gray-100 sm:text-[16px]"
             >
-              WCAG Level
+              {t.filters.wcagLevel}
               <ChevronDown
                 size={16}
                 aria-hidden="true"
@@ -156,7 +167,7 @@ export default function ViolationsPage() {
 
           {activeFilters.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[14px] leading-6 text-gray-80 sm:text-[16px]">WCAG Level:</span>
+              <span className="text-[14px] leading-6 text-gray-80 sm:text-[16px]">{t.filters.wcagLevel}:</span>
               {activeFilters.map((level) => (
                 <span
                   key={level}
@@ -166,7 +177,7 @@ export default function ViolationsPage() {
                   <button
                     type="button"
                     onClick={() => toggleFilter(level)}
-                    aria-label={`Remove ${level} filter`}
+                    aria-label={t.filters.removeFilter(level)}
                     className="flex items-center hover:opacity-70"
                   >
                     <X size={14} aria-hidden="true" />
@@ -178,14 +189,14 @@ export default function ViolationsPage() {
                 onClick={() => setActiveFilters([])}
                 className="text-[14px] leading-6 text-gray-100 underline sm:text-[16px]"
               >
-                Clear All
+                {t.filters.clearAll}
               </button>
             </div>
           )}
         </div>
 
         <p className="text-[14px] leading-6 text-gray-100 sm:text-[16px]">
-          Showing {filtered.length} of {filtered.length} violations ({ALL_VIOLATIONS.length} total)
+          {t.violations.showing(visibleCount, filtered.length, ALL_VIOLATIONS.length)}
         </p>
 
         {/* Table — horizontally scrollable, page does not scroll */}
@@ -194,17 +205,17 @@ export default function ViolationsPage() {
 
           {/* Header row */}
           <div className="flex w-full bg-gray-10 text-[14px] font-bold leading-6 text-gray-100">
-            <div className="flex-[227] min-w-0 p-4">Reason</div>
-            <div className="flex-[112] min-w-0 p-4">SC</div>
-            <div className="flex-[146] min-w-0 p-4">Criterion</div>
-            <div className="flex-[112] min-w-0 p-4">Level</div>
-            <div className="flex-[112] min-w-0 p-4">Tag</div>
-            <div className="flex-[227] min-w-0 border-r border-gray-10 p-4">Element</div>
-            <div className="flex-[184] min-w-0 p-4">Fix Guide</div>
+            <div className="flex-[227] min-w-0 p-4">{t.violations.columns.reason}</div>
+            <div className="flex-[112] min-w-0 p-4">{t.violations.columns.sc}</div>
+            <div className="flex-[146] min-w-0 p-4">{t.violations.columns.criterion}</div>
+            <div className="flex-[112] min-w-0 p-4">{t.violations.columns.level}</div>
+            <div className="flex-[112] min-w-0 p-4">{t.violations.columns.tag}</div>
+            <div className="flex-[227] min-w-0 border-r border-gray-10 p-4">{t.violations.columns.element}</div>
+            <div className="flex-[184] min-w-0 p-4">{t.violations.columns.fixGuide}</div>
           </div>
 
           {/* Data rows */}
-          {filtered.map((violation) => (
+          {visibleItems.map((violation) => (
             <div key={violation.id} className="flex w-full border-b border-gray-10 bg-white text-[14px] leading-5">
 
               <div className="flex-[227] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
@@ -217,11 +228,11 @@ export default function ViolationsPage() {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-brand-teal-dark underline"
                   >
-                    Learn More <LinkIcon />
+                    {t.violations.learnMore} <LinkIcon />
                   </a>
                 ) : (
                   <button type="button" className="inline-flex items-center gap-1.5 text-brand-teal-dark underline">
-                    Learn More <LinkIcon />
+                    {t.violations.learnMore} <LinkIcon />
                   </button>
                 )}
               </div>
@@ -244,19 +255,19 @@ export default function ViolationsPage() {
 
               <div className="flex-[227] min-w-0 border-b border-r border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="text-[14px] font-medium leading-5 text-gray-100">{violation.elementTitle}</p>
-                <div className="h-[61px] w-[105px] overflow-hidden rounded-[8px] bg-gray-40 shadow-[0px_0px_18px_0px_rgba(0,0,0,0.09)]" />
+                <ElementImage srcs={violation.imageUrls} className="h-[61px] w-[105px]" />
                 <div className="flex flex-col gap-2 text-[12px] leading-5">
                   <div className="flex gap-1">
-                    <span className="w-9 shrink-0 text-gray-80">File:</span>
+                    <span className="w-9 shrink-0 text-gray-80">{t.violations.file}</span>
                     <span className="text-gray-100">{violation.elementFile}</span>
                   </div>
                   <div className="flex gap-1">
-                    <span className="w-9 shrink-0 text-gray-80">OCR:</span>
+                    <span className="w-9 shrink-0 text-gray-80">{t.violations.ocr}</span>
                     <span className="text-gray-100">{violation.elementOcr}</span>
                   </div>
                 </div>
                 <button type="button" className="inline-flex items-center gap-1.5 text-[14px] leading-5 text-brand-teal-dark underline">
-                  View Full Audit <LinkIcon />
+                  {t.violations.viewFullAudit} <LinkIcon />
                 </button>
               </div>
 
@@ -265,11 +276,13 @@ export default function ViolationsPage() {
                   text={violation.fixGuide}
                   expanded={expandedRows.has(violation.id)}
                   onToggle={() => toggleRow(violation.id)}
+                  t={t}
                 />
               </div>
 
             </div>
           ))}
+          {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-1" />}
         </div>
         </div>
         </>

@@ -3,10 +3,13 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, X, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
+import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { ElementImage } from "@/components/dashboard/ElementImage";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { toPassesRows, type WcagLevel } from "@/lib/wcagAudit";
+import { useInfiniteReveal } from "@/lib/useInfiniteReveal";
 import { cn } from "@/lib/utils";
 
 function LevelBadge({ level }: { level: WcagLevel }) {
@@ -19,6 +22,7 @@ function LevelBadge({ level }: { level: WcagLevel }) {
 
 export default function PassesPage() {
   const { auditData } = useAuditData();
+  const { t } = useLanguage();
   const [activeFilters, setActiveFilters] = useState<WcagLevel[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -49,13 +53,17 @@ export default function PassesPage() {
       ? items
       : items.filter((item) => activeFilters.includes(item.level));
 
+  const { visibleItems, visibleCount, hasMore, sentinelRef } = useInfiniteReveal(
+    filtered,
+    activeFilters.join(","),
+  );
+
   const LEVELS: WcagLevel[] = ["A", "AA", "AAA"];
 
   const headerActions = (
     <>
       <LanguageToggle />
       <DownloadCsvButton />
-      <DownloadPdfButton />
     </>
   );
 
@@ -72,7 +80,7 @@ export default function PassesPage() {
         {!auditData ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
             <p className="text-[16px] leading-6 text-gray-60">
-              Run an audit to see passed checks here.
+              {t.passes.emptyState}
             </p>
           </div>
         ) : (
@@ -85,7 +93,7 @@ export default function PassesPage() {
               onClick={() => setDropdownOpen((v) => !v)}
               className="flex items-center gap-2 rounded-[16px] border border-gray-40 bg-gray-10 px-4 py-2 text-[14px] leading-6 text-gray-100 sm:text-[16px]"
             >
-              WCAG Level
+              {t.filters.wcagLevel}
               <ChevronDown
                 size={16}
                 aria-hidden="true"
@@ -113,7 +121,7 @@ export default function PassesPage() {
 
           {activeFilters.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[14px] leading-6 text-gray-80 sm:text-[16px]">WCAG Level:</span>
+              <span className="text-[14px] leading-6 text-gray-80 sm:text-[16px]">{t.filters.wcagLevel}:</span>
               {activeFilters.map((level) => (
                 <span
                   key={level}
@@ -123,7 +131,7 @@ export default function PassesPage() {
                   <button
                     type="button"
                     onClick={() => toggleFilter(level)}
-                    aria-label={`Remove ${level} filter`}
+                    aria-label={t.filters.removeFilter(level)}
                     className="flex items-center hover:opacity-70"
                   >
                     <X size={14} aria-hidden="true" />
@@ -135,14 +143,14 @@ export default function PassesPage() {
                 onClick={() => setActiveFilters([])}
                 className="text-[14px] leading-6 text-gray-100 underline sm:text-[16px]"
               >
-                Clear All
+                {t.filters.clearAll}
               </button>
             </div>
           )}
         </div>
 
         <p className="text-[14px] leading-6 text-gray-100 sm:text-[16px]">
-          Showing {filtered.length} of {filtered.length} items ({items.length} total)
+          {t.passes.showing(visibleCount, filtered.length, items.length)}
         </p>
 
         {/* Table — horizontally scrollable, page does not scroll */}
@@ -151,22 +159,22 @@ export default function PassesPage() {
 
           {/* Header */}
           <div className="flex w-full bg-gray-10 text-[14px] font-bold leading-6 text-gray-100">
-            <div className="flex-[110] min-w-0 p-4">Status</div>
-            <div className="flex-[318] min-w-0 p-4">Reason</div>
-            <div className="flex-[76] min-w-0 p-4">SC</div>
-            <div className="flex-[146] min-w-0 p-4">Criterion</div>
-            <div className="flex-[76] min-w-0 p-4">Level</div>
-            <div className="flex-[76] min-w-0 p-4">Tag</div>
-            <div className="flex-[318] min-w-0 p-4">Element</div>
+            <div className="flex-[110] min-w-0 p-4">{t.passes.columns.status}</div>
+            <div className="flex-[318] min-w-0 p-4">{t.passes.columns.reason}</div>
+            <div className="flex-[76] min-w-0 p-4">{t.passes.columns.sc}</div>
+            <div className="flex-[146] min-w-0 p-4">{t.passes.columns.criterion}</div>
+            <div className="flex-[76] min-w-0 p-4">{t.passes.columns.level}</div>
+            <div className="flex-[76] min-w-0 p-4">{t.passes.columns.tag}</div>
+            <div className="flex-[318] min-w-0 p-4">{t.passes.columns.element}</div>
           </div>
 
           {/* Rows */}
-          {filtered.map((item) => (
+          {visibleItems.map((item) => (
             <div key={item.id} className="flex w-full border-b border-gray-10 bg-white text-[14px] leading-5">
 
               <div className="flex-[110] min-w-0 border-b border-gray-10 px-4 py-6">
                 <span className="inline-flex items-center rounded-[8px] bg-gray-10 px-3 py-1 text-[14px] leading-5 text-gray-100">
-                  Pass
+                  {t.passes.statusPass}
                 </span>
               </div>
 
@@ -180,11 +188,11 @@ export default function PassesPage() {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-brand-teal-dark underline"
                   >
-                    Learn More <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
+                    {t.passes.learnMore} <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
                   </a>
                 ) : (
                   <button type="button" className="inline-flex items-center gap-1.5 text-brand-teal-dark underline">
-                    Learn More <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
+                    {t.passes.learnMore} <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -207,28 +215,29 @@ export default function PassesPage() {
 
               <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="font-medium text-gray-100">{item.elementFilename}</p>
-                <div className="h-[90px] w-[105px] overflow-hidden rounded-[8px] bg-gray-40 shadow-[0px_0px_18px_0px_rgba(0,0,0,0.09)]" />
+                <ElementImage srcs={item.imageUrls} className="h-[90px] w-[105px]" />
                 <div className="flex flex-col gap-2 text-[12px] leading-5">
                   <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">Foreground:</span>
+                    <span className="shrink-0 text-gray-80">{t.passes.foreground}</span>
                     <span className="text-gray-100">{item.foreground}</span>
                   </div>
                   <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">Background:</span>
+                    <span className="shrink-0 text-gray-80">{t.passes.background}</span>
                     <span className="text-gray-100">{item.background}</span>
                   </div>
                   <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">OCR Text:</span>
+                    <span className="shrink-0 text-gray-80">{t.passes.ocrText}</span>
                     <span className="text-gray-100">{item.ocrText}</span>
                   </div>
                 </div>
                 <button type="button" className="inline-flex items-center gap-1.5 text-[14px] leading-5 text-brand-teal-dark underline">
-                  View Full Audit <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
+                  {t.passes.viewFullAudit} <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
                 </button>
               </div>
 
             </div>
           ))}
+          {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-1" />}
         </div>
         </div>
         </>

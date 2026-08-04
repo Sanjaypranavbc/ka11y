@@ -10,24 +10,27 @@ import {
   YAxis,
 } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
-import { wcagLevelBreakdown } from "@/lib/dashboardData";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
+import type { LevelBreakdownRow } from "@/lib/wcagAudit";
 
-const DATA = wcagLevelBreakdown.map((row) => ({
-  level: `Level ${row.level}`,
-  Violations: row.violations,
-  "Needs Review": row.needsReview,
-  Passes: row.passes,
-}));
+export function WcagLevelBarChart({ breakdown }: { breakdown: LevelBreakdownRow[] }) {
+  const { t } = useLanguage();
+  const DATA = breakdown.map((row) => ({
+    level: t.dashboardPage.charts.level(row.level),
+    Violations: row.violations,
+    "Needs Review": row.needsReview,
+    Passes: row.passes,
+  }));
+  const maxCount = Math.max(1, ...breakdown.map((row) => row.violations + row.needsReview + row.passes));
 
-export function WcagLevelBarChart() {
   return (
     <ChartCard
-      title="WCAG Level Breakdown"
+      title={t.dashboardPage.charts.wcagLevelBreakdown}
       legend={
         <>
-          <LegendItem color="var(--color-status-violation)" label="Violations" />
-          <LegendItem color="var(--color-status-review)" label="Needs Review" />
-          <LegendItem color="var(--color-status-pass)" label="Passes" />
+          <LegendItem color="var(--color-status-violation)" label={t.dashboardPage.charts.violations} />
+          <LegendItem color="var(--color-status-review)" label={t.dashboardPage.charts.needsReview} />
+          <LegendItem color="var(--color-status-pass)" label={t.dashboardPage.charts.passes} />
         </>
       }
     >
@@ -42,8 +45,7 @@ export function WcagLevelBarChart() {
               tick={{ fill: "var(--color-gray-60)", fontSize: 13 }}
             />
             <YAxis
-              domain={[0, 250]}
-              ticks={[0, 50, 100, 150, 200, 250]}
+              domain={[0, maxCount]}
               tickLine={false}
               axisLine={false}
               tick={{ fill: "var(--color-gray-60)", fontSize: 12 }}

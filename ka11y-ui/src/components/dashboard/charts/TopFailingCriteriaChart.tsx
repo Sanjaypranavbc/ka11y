@@ -2,7 +2,8 @@
 
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
-import { topFailingCriteria, type WcagLevel } from "@/lib/dashboardData";
+import { useLanguage } from "@/components/dashboard/LanguageContext";
+import type { TopFailingCriterion, WcagLevel } from "@/lib/wcagAudit";
 
 const LEVEL_COLOR: Record<WcagLevel, string> = {
   A: "var(--color-level-a)",
@@ -10,24 +11,23 @@ const LEVEL_COLOR: Record<WcagLevel, string> = {
   AAA: "var(--color-level-aaa)",
 };
 
-const DATA = topFailingCriteria
-  .slice()
-  .sort((a, b) => b.count - a.count)
-  .map((row) => ({
+export function TopFailingCriteriaChart({ criteria }: { criteria: TopFailingCriterion[] }) {
+  const { t } = useLanguage();
+  const DATA = criteria.map((row) => ({
     name: `${row.code} ${row.label}`,
     count: row.count,
     fill: LEVEL_COLOR[row.level],
   }));
+  const maxCount = Math.max(1, ...criteria.map((row) => row.count));
 
-export function TopFailingCriteriaChart() {
   return (
     <ChartCard
-      title="Top Failing WCAG Criteria"
+      title={t.dashboardPage.charts.topFailingCriteria}
       legend={
         <>
-          <LegendItem color={LEVEL_COLOR.A} label="Level A" />
-          <LegendItem color={LEVEL_COLOR.AA} label="Level AA" />
-          <LegendItem color={LEVEL_COLOR.AAA} label="Level AAA" />
+          <LegendItem color={LEVEL_COLOR.A} label={t.dashboardPage.charts.level("A")} />
+          <LegendItem color={LEVEL_COLOR.AA} label={t.dashboardPage.charts.level("AA")} />
+          <LegendItem color={LEVEL_COLOR.AAA} label={t.dashboardPage.charts.level("AAA")} />
         </>
       }
     >
@@ -37,8 +37,7 @@ export function TopFailingCriteriaChart() {
             <CartesianGrid horizontal={false} stroke="var(--color-gray-40)" strokeDasharray="3 3" />
             <XAxis
               type="number"
-              domain={[0, 20]}
-              ticks={[0, 5, 10, 15, 20]}
+              domain={[0, maxCount]}
               tickLine={false}
               axisLine={false}
               tick={{ fill: "var(--color-gray-60)", fontSize: 12 }}
