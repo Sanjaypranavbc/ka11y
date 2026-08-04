@@ -117,6 +117,7 @@ export interface ViolationRow {
   elementOcr: string;
   imageUrls: string[];
   fixGuide: string;
+  helpUrl: string;
   pageUrl: string;
 }
 
@@ -169,10 +170,27 @@ function extractTag(html: string | null | undefined): string {
   return match ? match[1] : "—";
 }
 
-function truncateHtml(html: string | null | undefined, max = 90): string {
+/** Backend reasons (i18n/rules.yml) are authored as ordered sentences:
+ * what broke → who it affects → what to do. The Reason cell renders the first
+ * sentence as its heading and the remainder as supporting detail. */
+function splitReason(reason: string): { head: string; rest: string } {
+  const text = reason.trim();
+  // Split only on a sentence end followed by a capitalised word, so decimals
+  // ("4.76"), SC ids ("1.4.3") and 'e.g. "…"' stay intact.
+  const parts = text.split(/(?<=[.!?])\s+(?=[A-Z])/);
+  return { head: parts[0] || text, rest: parts.slice(1).join(" ") };
+}
+
+/** The API only ships raw element HTML, so derive something readable from it:
+ * the alt text when present, otherwise the visible text with tags stripped. */
+function extractReadableText(html: string | null | undefined, max = 90): string {
   if (!html) return "—";
-  const clean = html.replace(/\s+/g, " ").trim();
-  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+  const alt = html.match(/\balt\s*=\s*["']([^"']*)["']/i);
+  const text = (alt ? alt[1] : html.replace(/<[^>]*>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "—";
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 /** Turn a captured-crop path/asset ref into a browser-loadable URL.
@@ -269,19 +287,22 @@ export function toViolationRows(data: any): ViolationRow[] {
       const selector = el.selector || el.target;
       const selectorStr = Array.isArray(selector) ? selector.join(" ") : (selector || "—");
 
+      const reason = splitReason(finding.reason || finding.reason_code || finding.rule_id || "Violation");
+
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
-        title: capitalize(finding.reason || finding.reason_code || finding.rule_id || "Violation"),
-        description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || finding.reason_code || ""),
+        title: capitalize(reason.head),
+        description: reason.rest,
         sc: finding.wcag_sc || "",
         criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
         elementTitle: selectorStr,
         elementFile: finding.rule_id || finding.ruleId || "",
-        elementOcr: truncateHtml(el.html),
+        elementOcr: extractReadableText(el.html),
         imageUrls: pickImageUrls(el),
-        fixGuide: finding.help_url || "",
+        fixGuide: finding.suggested_fix || "",
+        helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
     }
@@ -302,9 +323,10 @@ export function toViolationRows(data: any): ViolationRow[] {
             tag: extractTag(el?.html),
             elementTitle: el?.selector ?? "—",
             elementFile: finding.ruleId,
-            elementOcr: truncateHtml(el?.html),
+            elementOcr: extractReadableText(el?.html),
             imageUrls: pickImageUrls(el),
-            fixGuide: finding.helpUrl,
+            fixGuide: "",
+            helpUrl: finding.helpUrl,
             pageUrl: el?.page_url || data.url || "",
           });
         });
@@ -324,10 +346,12 @@ export function toPassesRows(data: any): PassRow[] {
       const el = finding.element || {};
       const colors = extractColors(finding.reason_code || finding.rule_id || "");
 
+      const reason = splitReason(finding.reason || finding.reason_code || finding.rule_id || "Pass");
+
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
-        reasonTitle: capitalize(finding.reason || finding.reason_code || finding.rule_id || "Pass"),
-        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || "")),
+        reasonTitle: capitalize(reason.head),
+        reasonDescription: reason.rest || el.detail || "",
         sc: finding.wcag_sc || "",
         criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
@@ -336,7 +360,7 @@ export function toPassesRows(data: any): PassRow[] {
         imageUrls: pickImageUrls(el),
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
-        ocrText: truncateHtml(el.html),
+        ocrText: extractReadableText(el.html),
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
@@ -361,7 +385,7 @@ export function toPassesRows(data: any): PassRow[] {
             imageUrls: pickImageUrls(el),
             foreground: colors.foreground ?? "—",
             background: colors.background ?? "—",
-            ocrText: truncateHtml(el?.html),
+            ocrText: extractReadableText(el?.html),
             helpUrl: finding.helpUrl,
             pageUrl: el?.page_url || data.url || "",
           });
@@ -382,11 +406,13 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
       const el = finding.element || {};
       const colors = extractColors(finding.reason_code || finding.rule_id || "");
 
+      const reason = splitReason(finding.reason || finding.reason_code || finding.rule_id || "Needs Review");
+
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
         status: "pending",
-        reasonTitle: capitalize(finding.reason || finding.reason_code || finding.rule_id || "Needs Review"),
-        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || "")),
+        reasonTitle: capitalize(reason.head),
+        reasonDescription: reason.rest || el.detail || "",
         sc: finding.wcag_sc || "",
         criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
@@ -395,7 +421,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
         imageUrls: pickImageUrls(el),
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
-        ocrText: truncateHtml(el.html),
+        ocrText: extractReadableText(el.html),
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
@@ -421,7 +447,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
             imageUrls: pickImageUrls(el),
             foreground: colors.foreground ?? "—",
             background: colors.background ?? "—",
-            ocrText: truncateHtml(el?.html),
+            ocrText: extractReadableText(el?.html),
             helpUrl: finding.helpUrl,
             pageUrl: el?.page_url || data.url || "",
           });

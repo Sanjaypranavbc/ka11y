@@ -367,7 +367,7 @@ export default function NeedsReviewPage() {
               </div>
 
               <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
-                <p className="font-medium text-gray-100">{item.elementFilename}</p>
+                <p className="font-medium break-words text-gray-100">{item.elementFilename}</p>
                 <ElementImage srcs={item.imageUrls} className="h-[90px] w-[105px]" />
                 <div className="flex flex-col gap-2 text-[12px] leading-5">
                   <div className="flex gap-1">
@@ -380,7 +380,7 @@ export default function NeedsReviewPage() {
                   </div>
                   <div className="flex gap-1">
                     <span className="shrink-0 text-gray-80">{t.needsReview.ocrText}</span>
-                    <span className="text-gray-100">{item.ocrText}</span>
+                    <span className="min-w-0 break-words text-gray-100">{item.ocrText}</span>
                   </div>
                 </div>
                 <button type="button" className="inline-flex items-center gap-1.5 text-[14px] leading-5 text-brand-teal-dark underline">
