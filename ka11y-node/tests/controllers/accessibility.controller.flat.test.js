@@ -58,7 +58,7 @@ describe('AccessibilityController.analyseUrlFlat', () => {
         discoveredUrls: [],
       }),
     );
-    expect(res.json).toHaveBeenCalledWith({ url: 'https://example.com', findings });
+    expect(res.json).toHaveBeenCalledWith({ url: 'https://example.com', findings, scannedPages: [] });
   });
 
   test('forwards maxDepth / internalLinks / maxPages (clamped) to the service', async () => {

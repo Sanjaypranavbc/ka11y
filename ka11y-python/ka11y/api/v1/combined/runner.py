@@ -158,13 +158,14 @@ async def _fetch_node_findings(
     job_id: str,
     lang: str,
     payload: CombinedRequest,
-) -> List[Dict]:
+) -> Dict[str, List[Dict]]:
     """
     Call the Node/axe-core microservice (POST /api/v1/analyse-url-flat) and
-    return its findings in the same schema expected by _merge_findings.
+    return its findings (in the schema expected by _merge_findings) plus the
+    list of pages Node's own BFS crawl visited (success and failed).
 
-    Returns an empty list (+ logs a warning) on any failure so the job
-    degrades gracefully to Python-only results.
+    Returns `{"findings": [], "scanned_pages": []}` (+ logs a warning) on any
+    failure so the job degrades gracefully to Python-only results.
     """
     import httpx
 
@@ -188,6 +189,7 @@ async def _fetch_node_findings(
             data = resp.json()
 
         raw_findings: List[Dict] = data.get("findings") or []
+        scanned_pages: List[Dict] = data.get("scannedPages") or []
 
         # Normalise field names: Node uses camelCase in some fields; _merge_findings
         # expects snake_case.  The axeResultMapper already outputs snake_case keys
@@ -204,17 +206,17 @@ async def _fetch_node_findings(
                 f.setdefault("element", {})["page_url"] = f.pop("pageUrl")
 
         logger.info(
-            "[combined] job %s: Node audit returned %d findings",
-            job_id, len(raw_findings),
+            "[combined] job %s: Node audit returned %d findings across %d page(s)",
+            job_id, len(raw_findings), len(scanned_pages),
         )
-        return raw_findings
+        return {"findings": raw_findings, "scanned_pages": scanned_pages}
 
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "[combined] job %s: Node audit failed (%s: %s) — continuing with Python-only results",
             job_id, type(exc).__name__, exc,
         )
-        return []
+        return {"findings": [], "scanned_pages": []}
 
 
 async def _run_job(
@@ -376,6 +378,7 @@ async def _run_job_body(
 
         # ── Resolve Node result ──────────────────────────────────────────
         node_findings: List[Dict] = []
+        node_scanned_pages: List[Dict] = []
         if isinstance(node_result_raw, Exception):
             # _fetch_node_findings already logged; treat as empty with warning
             logger.warning(
@@ -386,11 +389,19 @@ async def _run_job_body(
                 "Node/axe-core audit failed — report contains Python-only findings."
             )
         elif node_result_raw:
-            node_findings = node_result_raw  # list[dict] from _fetch_node_findings
+            node_findings = node_result_raw.get("findings") or []
+            node_scanned_pages = node_result_raw.get("scanned_pages") or []
             if not node_findings:
                 _jobs[job_id].setdefault("warnings", []).append(
                     "Node/axe-core audit returned no findings (service may be unavailable)."
                 )
+
+        # Union of both engines' independent crawls — each may visit a
+        # slightly different page set, and either can carry failures the
+        # other doesn't. `_build_report` dedups by normalised URL.
+        crawled_pages: List[Dict] = list(node_scanned_pages)
+        if not isinstance(python_result, Exception):
+            crawled_pages.extend(getattr(python_result, "crawled_pages", None) or [])
 
         logger.info(
             "[combined] job %s: python=%d findings, node=%d findings before merge",
@@ -429,6 +440,7 @@ async def _run_job_body(
             lang=resolved_lang,
             contrast_report=contrast_report,
             image_audit_report=image_audit_report,
+            crawled_pages=crawled_pages,
         )
         report["warnings"] = _jobs[job_id].get("warnings", [])
         report["warning_details"] = _jobs[job_id].get("warning_details", [])

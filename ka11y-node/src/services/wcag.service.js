@@ -1,6 +1,14 @@
 'use strict';
 
 const { getCriteria, CANNOT_AUTOMATE_SC, MANUAL_ONLY_REASON } = require('../utils/wcag22Manifest');
+const { getSitemapUrls } = require('../utils/sitemap');
+const { assertPublicUrl } = require('./accessibility.service');
+
+const STATUS_RANK = { fail: 0, incomplete: 1, pass: 2, not_applicable: 3 };
+
+// Max tabs open at once within the single shared browser used for a
+// multi-page (maxDepth > 0) audit. Bounds memory regardless of maxDepth.
+const BATCH_CONCURRENCY = parseInt(process.env.WCAG_BATCH_CONCURRENCY) || 5;
 
 // SCs disabled for /analyse-url-wcag only — skipped entirely (axe rules
 // disabled at the engine, matching custom checks not run) and excluded from
@@ -42,27 +50,53 @@ class WcagService {
    * @param {object} opts
    * @param {'2.1'|'2.2'} opts.wcagVersion
    * @param {string}       opts.lang
+   * @param {number}       opts.maxDepth  Extra pages to scan from the site's
+   *                                      sitemap.xml on top of `url`. 0 = only
+   *                                      `url` itself (default).
    * @returns {Promise<object>}
    */
-  async analyseUrl(url, { wcagVersion = '2.2', lang = 'en' } = {}) {
-    this._logger.info(`WcagService.analyseUrl start url=${url} wcag=${wcagVersion} lang=${lang}`);
+  async analyseUrl(url, { wcagVersion = '2.2', lang = 'en', maxDepth = 0 } = {}) {
+    const depth = Number.isInteger(maxDepth) && maxDepth > 0 ? maxDepth : 0;
+    this._logger.info(
+      `WcagService.analyseUrl start url=${url} wcag=${wcagVersion} lang=${lang} maxDepth=${depth}`
+    );
 
-    // Run full axe-core + all custom checks, except the disabled SCs — those
-    // are skipped at the engine (axe rules disabled, matching custom checks
-    // not run), not just filtered out of the response afterward.
-    const rawResults = await this._svc.analyseUrl(url, null, lang, { excludeCriteria: DISABLED_SC });
+    const pageUrls = await this._resolvePageUrls(url, depth);
 
-    // Index results by successCriteriaId for O(1) lookup
+    // Audit every page under ONE shared browser with bounded tab concurrency
+    // (see AccessibilityService.analyseUrlsBatch) — a page failing doesn't
+    // abort the rest; it's reported in failedPages instead.
+    const { results: perPageGroups, failedPages } = await this._svc.analyseUrlsBatch(pageUrls, {
+      lang,
+      excludeCriteria: DISABLED_SC,
+      concurrency: BATCH_CONCURRENCY,
+    });
+
+    if (perPageGroups.length === 0) {
+      throw new Error(`Analysis failed for all ${pageUrls.length} page(s)`);
+    }
+
+    // Index results by successCriteriaId, merging same-ruleId findings across pages.
     const bySC         = {};
-    const bestPractice = [];
+    const bestPractice  = [];
 
-    for (const group of (rawResults || [])) {
-      const { successCriteriaId, rules } = group;
-      if (!successCriteriaId || successCriteriaId === 'best-practice') {
-        bestPractice.push(...(rules || []));
-      } else {
-        bySC[successCriteriaId] = rules || [];
+    for (const { url: pageUrl, rawResults } of perPageGroups) {
+      for (const group of rawResults) {
+        const { successCriteriaId, rules } = group;
+        const tagged = (rules || []).map(r => ({
+          ...r,
+          elements: (r.elements || []).map(el => ({ ...el, pageUrl })),
+        }));
+        if (!successCriteriaId || successCriteriaId === 'best-practice') {
+          bestPractice.push(...tagged);
+        } else {
+          (bySC[successCriteriaId] ||= []).push(...tagged);
+        }
       }
+    }
+
+    for (const sc of Object.keys(bySC)) {
+      bySC[sc] = this._mergeRulesByRuleId(bySC[sc]);
     }
 
     // Build criteria list from manifest — scaffold every SC then fill results,
@@ -72,7 +106,8 @@ class WcagService {
     const summary  = this._buildSummary(criteria, manifest.length);
 
     this._logger.info(
-      `WcagService.analyseUrl done checked=${summary.checked} ` +
+      `WcagService.analyseUrl done pages=${perPageGroups.length}/${pageUrls.length} ` +
+      `(${failedPages.length} failed) checked=${summary.checked} ` +
       `fail=${summary.failed} needs_review=${summary.needsReview} pass=${summary.passed}`
     );
 
@@ -80,9 +115,12 @@ class WcagService {
       url,
       wcagVersion,
       analyzedAt: new Date().toISOString(),
+      maxDepth: depth,
+      scannedUrls: perPageGroups.map(g => g.url),
+      failedPages,
       summary,
       criteria,
-      bestPractice: bestPractice.map(r => ({
+      bestPractice: this._mergeRulesByRuleId(bestPractice).map(r => ({
         ruleId:  r.ruleId,
         status:  r.status,
         impact:  r.impact || null,
@@ -93,6 +131,61 @@ class WcagService {
   }
 
   // ── private helpers ───────────────────────────────────────────────────────
+
+  /**
+   * Resolve the ordered list of page URLs to scan: `url` itself, plus (when
+   * `depth` > 0) up to `depth` more pages pulled from the site's sitemap.xml.
+   * Sitemap lookup failures fall back to just `[url]` so a single-page scan
+   * never breaks because a site has no sitemap.
+   *
+   * @param {string} url
+   * @param {number} depth
+   * @returns {Promise<string[]>}
+   */
+  async _resolvePageUrls(url, depth) {
+    if (depth <= 0) return [url];
+    try {
+      const sitemapUrls = await getSitemapUrls(url, { assertPublicUrl, logger: this._logger });
+      const extra = sitemapUrls.filter(u => u !== url).slice(0, depth);
+      return [url, ...extra];
+    } catch (err) {
+      this._logger.warn(`WcagService: sitemap lookup failed for ${url}: ${err.message}`);
+      return [url];
+    }
+  }
+
+  /**
+   * Merge rule results that share a `ruleId` (e.g. found on multiple pages)
+   * into one entry: worst status wins (fail > incomplete > pass >
+   * not_applicable), elements from every page are concatenated (capped).
+   *
+   * @param {Array<object>} rules
+   * @returns {Array<object>}
+   */
+  _mergeRulesByRuleId(rules) {
+    const MAX_ELEMENTS = 20;
+    const byId = new Map();
+
+    for (const rule of rules) {
+      const existing = byId.get(rule.ruleId);
+      if (!existing) {
+        byId.set(rule.ruleId, { ...rule, elements: [...(rule.elements || [])] });
+        continue;
+      }
+      if ((STATUS_RANK[rule.status] ?? 4) < (STATUS_RANK[existing.status] ?? 4)) {
+        existing.status  = rule.status;
+        existing.reason  = rule.reason;
+        existing.impact  = rule.impact;
+      }
+      existing.elements.push(...(rule.elements || []));
+    }
+
+    for (const merged of byId.values()) {
+      if (merged.elements.length > MAX_ELEMENTS) merged.elements.length = MAX_ELEMENTS;
+    }
+
+    return [...byId.values()];
+  }
 
   _normalizeElement(el) {
     if (!el || typeof el !== 'object') return null;
@@ -111,6 +204,7 @@ class WcagService {
       target:       targetArr,
       bounding_box: el.boundingBox || el.bounding_box || null,
       detail:       el.detail || null,
+      page_url:     el.pageUrl || el.page_url || null,
     };
   }
 

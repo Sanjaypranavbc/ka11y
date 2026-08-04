@@ -147,7 +147,7 @@ export default function NewAuditPage() {
       const res = await fetch("/api/wcag-audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmedUrl }),
+        body: JSON.stringify({ url: trimmedUrl, maxDepth: depth }),
       });
       const data = await res.json().catch(() => null);
 

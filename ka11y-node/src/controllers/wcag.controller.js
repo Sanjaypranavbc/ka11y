@@ -42,6 +42,15 @@ class WcagController {
    *                 type: string
    *                 default: "en"
    *                 example: "en"
+   *               maxDepth:
+   *                 type: integer
+   *                 default: 0
+   *                 minimum: 0
+   *                 maximum: 10
+   *                 description: >
+   *                   Extra pages to scan from the site's sitemap.xml, on top
+   *                   of the given URL. 0 = scan only the given URL. 1 = scan
+   *                   the given URL plus 1 more page from the sitemap, etc.
    *     responses:
    *       200:
    *         description: Full WCAG compliance report
@@ -51,7 +60,7 @@ class WcagController {
    *         description: Server or browser error
    */
   async analyseUrl(req, res) {
-    const { url, wcagVersion = '2.2', lang = 'en' } = req.body;
+    const { url, wcagVersion = '2.2', lang = 'en', maxDepth = 0 } = req.body;
 
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'url field is required and must be a string' });
@@ -65,11 +74,16 @@ class WcagController {
       return res.status(400).json({ error: 'url must be a valid http or https URL' });
     }
 
+    const depthNum = Number(maxDepth);
+    if (!Number.isInteger(depthNum) || depthNum < 0 || depthNum > 10) {
+      return res.status(400).json({ error: 'maxDepth must be an integer between 0 and 10' });
+    }
+
     const version  = ['2.1', '2.2'].includes(wcagVersion) ? wcagVersion : '2.2';
     const safeLang = /^[a-z]{2}(-[a-zA-Z]{2,4})?$/.test(lang) ? lang : 'en';
 
     try {
-      const result = await this._service.analyseUrl(url, { wcagVersion: version, lang: safeLang });
+      const result = await this._service.analyseUrl(url, { wcagVersion: version, lang: safeLang, maxDepth: depthNum });
       res.json(result);
     } catch (err) {
       if (err instanceof SsrfGuardError) {

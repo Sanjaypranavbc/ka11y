@@ -40,6 +40,11 @@ class PythonStagesResult(BaseModel):
     findings: List[Dict[str, Any]] = Field(default_factory=list)
     contrast_report: Optional[Dict[str, Any]] = None
     image_audit_report: Optional[Dict[str, Any]] = None
+    # Pages Python's own crawl (UniversalPageLoader, via _load_universal_snapshot)
+    # visited — success and failed — as {page_url, depth?, status, error?}.
+    # Empty when the run didn't need a crawl (max_depth=0 and no media/captions
+    # stage requested it).
+    crawled_pages: List[Dict[str, Any]] = Field(default_factory=list)
 
 from ka11y.config.logger import setup_logger
 from ka11y.utils.crawler_settings import (
@@ -723,6 +728,7 @@ async def _run_python_stages(
 
     snapshot = None
     discovered_urls = [url]
+    crawled_pages: List[Dict[str, Any]] = []
     if needs_crawl:
         snapshot = await _load_universal_snapshot(
             url=url,
@@ -740,8 +746,22 @@ async def _run_python_stages(
             if pu not in seen_pages:
                 seen_pages.add(pu)
                 discovered_urls.append(pu)
+                crawled_pages.append({"page_url": pu, "depth": s.get("depth"), "status": "success"})
         if not discovered_urls:
             discovered_urls = [url]
+
+        # A page a warning names but that never made it into page_summaries
+        # never successfully loaded — surface it as a failed scan. (Warnings
+        # about sub-extractors on an already-succeeded page, e.g.
+        # frame/category/pipeline extract issues, are excluded by this check
+        # since their page_url IS in `seen_pages`.)
+        seen_failed: set[str] = set()
+        for w in snapshot.warnings:
+            pu = w.get("page_url")
+            if not pu or pu in seen_pages or pu in seen_failed:
+                continue
+            seen_failed.add(pu)
+            crawled_pages.append({"page_url": pu, "status": "failed", "error": w.get("message")})
 
     snapshot_task = asyncio.Future()
     snapshot_task.set_result(snapshot)
@@ -801,4 +821,5 @@ async def _run_python_stages(
         findings=all_findings,
         contrast_report=contrast_report,
         image_audit_report=image_audit_report,
+        crawled_pages=crawled_pages,
     )

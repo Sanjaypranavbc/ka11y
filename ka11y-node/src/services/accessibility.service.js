@@ -684,8 +684,6 @@ class AccessibilityService {
    * @returns {Promise<Array<object>>} Structured accessibility results
    */
   async analyseUrl(url, criteriaId = null, lang = "en", opts = {}) {
-    const { excludeCriteria = [] } = opts;
-    const { timeoutMs, runOnly, customChecksTimeoutMs } = this._config.axe;
     let browser = null;
 
     await _assertPublicUrl(url);
@@ -699,7 +697,41 @@ class AccessibilityService {
         args: this._config.browser.args,
       });
 
-      const page = await browser.newPage();
+      return await this._auditOnePage(browser, url, criteriaId, lang, opts);
+    } catch (err) {
+      this._logger.error(
+        `Error during URL accessibility analysis: ${err.message}`,
+      );
+      throw err;
+    } finally {
+      if (browser) {
+        await browser.close();
+        this._logger.info("Browser closed.");
+      }
+      this._releaseSlot();
+    }
+  }
+
+  /**
+   * Audit one page on an already-launched, caller-owned browser. Opens its
+   * own tab and closes it when done (success or failure) so callers that
+   * share one browser across many URLs (see `analyseUrlsBatch`) never hold
+   * more open tabs than their concurrency limit.
+   *
+   * @param {import('puppeteer').Browser} browser
+   * @param {string} url
+   * @param {string|null} criteriaId
+   * @param {string} lang
+   * @param {object} opts
+   * @param {string[]} [opts.excludeCriteria]
+   * @returns {Promise<Array<object>>} Structured accessibility results (same shape as analyseUrl)
+   */
+  async _auditOnePage(browser, url, criteriaId = null, lang = "en", opts = {}) {
+    const { excludeCriteria = [] } = opts;
+    const { timeoutMs, runOnly, customChecksTimeoutMs } = this._config.axe;
+
+    const page = await browser.newPage();
+    try {
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
       await page.setBypassCSP(true);
@@ -813,16 +845,103 @@ class AccessibilityService {
       );
     } catch (err) {
       this._logger.error(
-        `Error during URL accessibility analysis: ${err.message}`,
+        `Error auditing page ${url}: ${err.message}`,
       );
       throw err;
     } finally {
+      await page.close().catch(() => {});
+    }
+  }
+
+  /**
+   * Audit many URLs under ONE shared browser instance with bounded tab
+   * concurrency — used for multi-page audits (see WcagService `maxDepth`).
+   *
+   * This avoids two problems a naive per-URL `analyseUrl()` loop/parallel run
+   * would have: (1) launching one Chromium *process* per URL, which spikes
+   * memory linearly with page count, and (2) holding many global launch slots
+   * (`_acquireSlot`) at once for a single request, starving other concurrent
+   * callers. Here the whole batch only ever holds one slot, and at most
+   * `concurrency` tabs are open at a time regardless of how many URLs are
+   * queued.
+   *
+   * A failure on one page (timeout, nav error, blocked page, etc.) is caught
+   * and recorded in `failedPages` — it does not abort the rest of the batch.
+   *
+   * @param {string[]} urls
+   * @param {object} [opts]
+   * @param {string|null} [opts.criteriaId]
+   * @param {string} [opts.lang]
+   * @param {string[]} [opts.excludeCriteria]
+   * @param {number} [opts.concurrency=5]  Max tabs open at once within the shared browser.
+   * @returns {Promise<{
+   *   results: Array<{url: string, rawResults: Array<object>}>,
+   *   failedPages: Array<{url: string, error: string}>,
+   * }>}
+   */
+  async analyseUrlsBatch(urls, opts = {}) {
+    const {
+      criteriaId = null,
+      lang = "en",
+      excludeCriteria = [],
+      concurrency = 5,
+    } = opts;
+
+    const results = [];
+    const failedPages = [];
+
+    // SSRF-guard every URL up front. A bad host is just another failed page,
+    // not a reason to abort the whole batch.
+    const safeUrls = [];
+    for (const url of urls) {
+      try {
+        await _assertPublicUrl(url);
+        safeUrls.push(url);
+      } catch (err) {
+        failedPages.push({ url, error: err.message });
+      }
+    }
+
+    if (safeUrls.length === 0) return { results, failedPages };
+
+    let browser = null;
+    await this._acquireSlot();
+    try {
+      this._logger.info(
+        `Launching Puppeteer browser for batch of ${safeUrls.length} page(s), concurrency=${concurrency}`,
+      );
+      browser = await this._puppeteer.launch({
+        headless: this._config.browser.headless,
+        executablePath: this._config.browser.executablePath,
+        ignoreHTTPSErrors: this._config.browser.ignoreHTTPSErrors,
+        args: this._config.browser.args,
+      });
+
+      let nextIndex = 0;
+      const runWorker = async () => {
+        while (nextIndex < safeUrls.length) {
+          const url = safeUrls[nextIndex++];
+          try {
+            const rawResults = await this._auditOnePage(browser, url, criteriaId, lang, { excludeCriteria });
+            results.push({ url, rawResults });
+          } catch (err) {
+            this._logger.warn(`analyseUrlsBatch: page ${url} failed: ${err.message}`);
+            failedPages.push({ url, error: err.message });
+          }
+        }
+      };
+
+      const workerCount = Math.max(1, Math.min(concurrency, safeUrls.length));
+      await Promise.all(Array.from({ length: workerCount }, runWorker));
+    } finally {
       if (browser) {
         await browser.close();
-        this._logger.info("Browser closed.");
+        this._logger.info("Batch browser closed.");
       }
       this._releaseSlot();
     }
+
+    return { results, failedPages };
   }
 
   /**
@@ -851,6 +970,12 @@ class AccessibilityService {
       // fall back to the legacy boundedBfs path so existing callers are
       // unchanged.
       discoveredUrls = [],
+      // Optional caller-owned collector (same pattern as `timings`): when
+      // provided, every page this crawl visits — success or failure — is
+      // pushed onto it as { url, depth, status, error? }. The method's
+      // return value (the flat findings array) is unchanged either way, so
+      // callers that don't need this keep working exactly as before.
+      scannedPages = null,
     } = options;
     const { timeoutMs } = this._config.axe;
     let browser = null;
@@ -875,23 +1000,31 @@ class AccessibilityService {
       const seen = new Set(); // cross-page dedup of identical findings
 
       // Per-page audit closure shared by both the snapshot-fed and BFS paths.
+      // Also the single place that records success/failure per page for
+      // `scannedPages`, so both crawl modes get it for free.
       const auditOne = async (pageUrl, depth) => {
-        const { findings, links } = await this._auditPageFlat(
-          browser,
-          pageUrl,
-          level,
-          lang,
-          successCriteriaId,
-          { timings, depth },
-        );
-        for (const f of findings) {
-          // Dedup across pages by (pageUrl, ruleId, selector, status).
-          const key = `${f.pageUrl || pageUrl}|${f.ruleId || f.rule_id || ""}|${f.selector || f.target || ""}|${f.status}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          allFindings.push(f);
+        try {
+          const { findings, links } = await this._auditPageFlat(
+            browser,
+            pageUrl,
+            level,
+            lang,
+            successCriteriaId,
+            { timings, depth },
+          );
+          for (const f of findings) {
+            // Dedup across pages by (pageUrl, ruleId, selector, status).
+            const key = `${f.pageUrl || pageUrl}|${f.ruleId || f.rule_id || ""}|${f.selector || f.target || ""}|${f.status}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            allFindings.push(f);
+          }
+          if (scannedPages) scannedPages.push({ url: pageUrl, depth, status: "success" });
+          return links;
+        } catch (err) {
+          if (scannedPages) scannedPages.push({ url: pageUrl, depth, status: "failed", error: err.message });
+          throw err;
         }
-        return links;
       };
 
       let pagesCrawled = 0;
@@ -1157,3 +1290,4 @@ class AccessibilityService {
 
 module.exports = AccessibilityService;
 module.exports.SsrfGuardError = SsrfGuardError;
+module.exports.assertPublicUrl = _assertPublicUrl;

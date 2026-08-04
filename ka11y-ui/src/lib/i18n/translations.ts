@@ -98,6 +98,11 @@ export const translations = {
       wcagLevel: "WCAG Level",
       clearAll: "Clear All",
       removeFilter: (level: string) => `Remove ${level} filter`,
+      page: "Page",
+      allPages: "All Pages",
+      pageFailed: "Failed",
+      pageFailedMessage: (error: string | null) =>
+        `This page failed to scan${error ? `: ${error}` : "."}`,
     },
     violations: {
       showing: (shown: number, filtered: number, total: number) =>
@@ -273,6 +278,11 @@ export const translations = {
       wcagLevel: "WCAGレベル",
       clearAll: "すべてクリア",
       removeFilter: (level: string) => `${level}フィルターを削除`,
+      page: "ページ",
+      allPages: "すべてのページ",
+      pageFailed: "失敗",
+      pageFailedMessage: (error: string | null) =>
+        `このページのスキャンに失敗しました${error ? `：${error}` : "。"}`,
     },
     violations: {
       showing: (shown: number, filtered: number, total: number) =>

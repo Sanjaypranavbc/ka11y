@@ -167,6 +167,17 @@ def apply_reviews(report: Dict[str, Any], reviews: Dict[str, Dict[str, Any]]) ->
         ps["manual_review_required"] = len(pnr)
         ps["score"] = round(100.0 * len(pp) / d, 1) if d else None
         page["summary"] = ps
+
+    # Keep pages_scanned's per-page counts in sync with the just-repartitioned
+    # `pages` summaries (failed entries have no `pages` counterpart — untouched).
+    pages_by_url = {p["page_url"]: p["summary"] for p in (report.get("pages", []) or [])}
+    for ps_entry in report.get("pages_scanned", []) or []:
+        summary = pages_by_url.get(ps_entry["page_url"])
+        if summary:
+            ps_entry["violations"] = summary["violations"]
+            ps_entry["needs_review"] = summary["needs_review"]
+            ps_entry["passes"] = summary["passes"]
+
     return report
 
 
@@ -176,6 +187,7 @@ def _build_report(
     lang: str = "en",
     contrast_report: Optional[Dict[str, Any]] = None,
     image_audit_report: Optional[Dict[str, Any]] = None,
+    crawled_pages: Optional[List[Dict]] = None,
 ) -> Dict[str, Any]:
     """
     Merge axe + Python flat findings into the final combined report.
@@ -322,6 +334,50 @@ def _build_report(
         )
     )
 
+    # ── Pages scanned (success + failed), independent of findings ───────────
+    # `pages` above only contains pages that produced at least one finding —
+    # a page that failed to crawl (nav timeout, 404, etc.) never appears there.
+    # `crawled_pages` carries the raw per-page outcome from each engine's own
+    # BFS crawl (Node's boundedBfs + Python's UniversalPageLoader), so we can
+    # surface a complete list including failures, deduped by the same
+    # normalisation `_page_of` uses above so a page already in `pages` isn't
+    # duplicated as a second "success" row.
+    pages_scanned: List[Dict[str, Any]] = []
+    seen_scanned_urls: set = set()
+    for p in pages:
+        pages_scanned.append(
+            {
+                "page_url": p["page_url"],
+                "status": "success",
+                "violations": p["summary"]["violations"],
+                "needs_review": p["summary"]["needs_review"],
+                "passes": p["summary"]["passes"],
+                "error": None,
+            }
+        )
+        seen_scanned_urls.add(p["page_url"])
+
+    for cp in (crawled_pages or []):
+        raw_url = cp.get("url") or cp.get("page_url") or ""
+        if not raw_url:
+            continue
+        normalized = _REPORT_URL_POLICY.normalize_url(raw_url)
+        page_url = _canonicalize_url(normalized) if normalized else (normalized or raw_url)
+        if not page_url or page_url in seen_scanned_urls:
+            continue
+        seen_scanned_urls.add(page_url)
+        status = cp.get("status") or "success"
+        pages_scanned.append(
+            {
+                "page_url": page_url,
+                "status": status,
+                "violations": 0,
+                "needs_review": 0,
+                "passes": 0,
+                "error": cp.get("error") if status == "failed" else None,
+            }
+        )
+
     return {
         "url": url,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -352,6 +408,7 @@ def _build_report(
         "needs_review": needs_review,
         "passes": passes,
         "pages": pages,
+        "pages_scanned": pages_scanned,
         "contrast_report": contrast_report,
         "image_audit_report": image_audit_report,
     }

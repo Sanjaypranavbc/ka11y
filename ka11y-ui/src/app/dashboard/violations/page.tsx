@@ -6,9 +6,10 @@ import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ElementImage } from "@/components/dashboard/ElementImage";
+import { PageFilterDropdown } from "@/components/dashboard/PageFilterDropdown";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { toViolationRows, type WcagLevel } from "@/lib/wcagAudit";
+import { toViolationRows, getScannedPages, type WcagLevel } from "@/lib/wcagAudit";
 import type { Translations } from "@/lib/i18n/translations";
 import { useInfiniteReveal } from "@/lib/useInfiniteReveal";
 import { cn } from "@/lib/utils";
@@ -63,12 +64,18 @@ export default function ViolationsPage() {
   const [activeFilters, setActiveFilters] = useState<WcagLevel[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [selectedPage, setSelectedPage] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const ALL_VIOLATIONS = useMemo(
     () => (auditData ? toViolationRows(auditData) : []),
     [auditData],
   );
+  const scannedPages = useMemo(
+    () => (auditData ? getScannedPages(auditData) : []),
+    [auditData],
+  );
+  const selectedPageInfo = scannedPages.find((p) => p.page_url === selectedPage) ?? null;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -94,10 +101,14 @@ export default function ViolationsPage() {
     });
   }
 
+  const byPage = selectedPage
+    ? ALL_VIOLATIONS.filter((v) => v.pageUrl === selectedPage)
+    : ALL_VIOLATIONS;
+
   const filtered =
     activeFilters.length === 0
-      ? ALL_VIOLATIONS
-      : ALL_VIOLATIONS.filter((v) => activeFilters.includes(v.level));
+      ? byPage
+      : byPage.filter((v) => activeFilters.includes(v.level));
 
   const { visibleItems, visibleCount, hasMore, sentinelRef } = useInfiniteReveal(
     filtered,
@@ -193,8 +204,23 @@ export default function ViolationsPage() {
               </button>
             </div>
           )}
+
+          <PageFilterDropdown
+            pages={scannedPages}
+            selected={selectedPage}
+            onChange={setSelectedPage}
+            t={t}
+          />
         </div>
 
+        {selectedPageInfo?.status === "failed" ? (
+          <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
+            <p className="text-[16px] leading-6 text-gray-60">
+              {t.filters.pageFailedMessage(selectedPageInfo.error)}
+            </p>
+          </div>
+        ) : (
+        <>
         <p className="text-[14px] leading-6 text-gray-100 sm:text-[16px]">
           {t.violations.showing(visibleCount, filtered.length, ALL_VIOLATIONS.length)}
         </p>
@@ -285,6 +311,8 @@ export default function ViolationsPage() {
           {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-1" />}
         </div>
         </div>
+        </>
+        )}
         </>
         )}
 

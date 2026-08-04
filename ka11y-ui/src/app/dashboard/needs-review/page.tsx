@@ -6,9 +6,10 @@ import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ElementImage } from "@/components/dashboard/ElementImage";
+import { PageFilterDropdown } from "@/components/dashboard/PageFilterDropdown";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { toNeedsReviewRows, type ReviewRow, type ReviewStatus, type WcagLevel } from "@/lib/wcagAudit";
+import { toNeedsReviewRows, getScannedPages, type ReviewRow, type ReviewStatus, type WcagLevel } from "@/lib/wcagAudit";
 import type { Translations } from "@/lib/i18n/translations";
 import { useInfiniteReveal } from "@/lib/useInfiniteReveal";
 import { cn } from "@/lib/utils";
@@ -141,12 +142,18 @@ export default function NeedsReviewPage() {
   const [activeFilters, setActiveFilters] = useState<WcagLevel[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
+  const [selectedPage, setSelectedPage] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const sourceItems = useMemo(
     () => (auditData ? toNeedsReviewRows(auditData) : []),
     [auditData],
   );
+  const scannedPages = useMemo(
+    () => (auditData ? getScannedPages(auditData) : []),
+    [auditData],
+  );
+  const selectedPageInfo = scannedPages.find((p) => p.page_url === selectedPage) ?? null;
   const [items, setItems] = useState<ReviewRow[]>(sourceItems);
   const [syncedSource, setSyncedSource] = useState(sourceItems);
   if (sourceItems !== syncedSource) {
@@ -174,10 +181,14 @@ export default function NeedsReviewPage() {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, status } : item)));
   }
 
+  const byPage = selectedPage
+    ? items.filter((item) => item.pageUrl === selectedPage)
+    : items;
+
   const filtered =
     activeFilters.length === 0
-      ? items
-      : items.filter((item) => activeFilters.includes(item.level));
+      ? byPage
+      : byPage.filter((item) => activeFilters.includes(item.level));
 
   const { visibleItems, visibleCount, hasMore, sentinelRef } = useInfiniteReveal(
     filtered,
@@ -273,8 +284,23 @@ export default function NeedsReviewPage() {
               </button>
             </div>
           )}
+
+          <PageFilterDropdown
+            pages={scannedPages}
+            selected={selectedPage}
+            onChange={setSelectedPage}
+            t={t}
+          />
         </div>
 
+        {selectedPageInfo?.status === "failed" ? (
+          <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
+            <p className="text-[16px] leading-6 text-gray-60">
+              {t.filters.pageFailedMessage(selectedPageInfo.error)}
+            </p>
+          </div>
+        ) : (
+        <>
         <p className="text-[14px] leading-6 text-gray-100 sm:text-[16px]">
           {t.needsReview.showing(visibleCount, filtered.length, items.length)}
         </p>
@@ -378,6 +404,8 @@ export default function NeedsReviewPage() {
           {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-1" />}
         </div>
         </div>
+        </>
+        )}
         </>
         )}
 

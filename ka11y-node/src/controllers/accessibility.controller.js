@@ -342,6 +342,7 @@ class AccessibilityController {
             .filter((u) => typeof u === 'string' && u.length > 0 && u.length < 2048)
             .slice(0, safeMaxPages)
         : [];
+      const scannedPages = [];
       const findings = await this._service.analyseUrlFlat(url, wcagLevel, safeLang, {
         maxDepth: safeMaxDepth,
         maxPages: safeMaxPages,
@@ -349,9 +350,13 @@ class AccessibilityController {
         successCriteriaId: filter,
         timings: timings || undefined,
         discoveredUrls: safeDiscoveredUrls,
+        scannedPages,
       });
-      this._logger.info(`analyseUrlFlat done findings=${findings.length}`);
-      const response = { url, findings };
+      this._logger.info(
+        `analyseUrlFlat done findings=${findings.length} ` +
+        `pages=${scannedPages.length} (${scannedPages.filter(p => p.status === 'failed').length} failed)`
+      );
+      const response = { url, findings, scannedPages };
       if (timings) response.timings = timings.toArray();
       res.json(response);
     } catch (err) {

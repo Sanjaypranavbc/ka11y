@@ -75,6 +75,18 @@ export interface WcagReportPage {
   passes: unknown[];
 }
 
+// Matches report.py _build_report()'s `pages_scanned` — every page either
+// engine's crawl visited, success or failed, independent of whether it
+// produced any findings (unlike `pages`, which only lists pages with data).
+export interface WcagPageScan {
+  page_url: string;
+  status: "success" | "failed";
+  violations: number;
+  needs_review: number;
+  passes: number;
+  error: string | null;
+}
+
 export interface WcagAuditResponse {
   url: string;
   wcagVersion?: string;
@@ -87,6 +99,7 @@ export interface WcagAuditResponse {
   passes?: unknown[];
   needs_review?: unknown[];
   pages?: WcagReportPage[];
+  pages_scanned?: WcagPageScan[];
 }
 
 /* ─── Row shapes consumed by the Violations / Needs Review tables ─── */
@@ -104,6 +117,7 @@ export interface ViolationRow {
   elementOcr: string;
   imageUrls: string[];
   fixGuide: string;
+  pageUrl: string;
 }
 
 export type ReviewStatus = "pass" | "violation" | "pending";
@@ -123,6 +137,7 @@ export interface ReviewRow {
   background: string;
   ocrText: string;
   helpUrl: string;
+  pageUrl: string;
 }
 
 export interface PassRow {
@@ -139,6 +154,7 @@ export interface PassRow {
   background: string;
   ocrText: string;
   helpUrl: string;
+  pageUrl: string;
 }
 
 /* ─── Helpers ─── */
@@ -266,6 +282,7 @@ export function toViolationRows(data: any): ViolationRow[] {
         elementOcr: truncateHtml(el.html),
         imageUrls: pickImageUrls(el),
         fixGuide: finding.helpUrl || "",
+        pageUrl: el.page_url || data.url || "",
       });
     }
   } else if (data.criteria) {
@@ -288,6 +305,7 @@ export function toViolationRows(data: any): ViolationRow[] {
             elementOcr: truncateHtml(el?.html),
             imageUrls: pickImageUrls(el),
             fixGuide: finding.helpUrl,
+            pageUrl: el?.page_url || data.url || "",
           });
         });
       }
@@ -320,6 +338,7 @@ export function toPassesRows(data: any): PassRow[] {
         background: colors.background ?? "—",
         ocrText: truncateHtml(el.html),
         helpUrl: finding.helpUrl || "",
+        pageUrl: el.page_url || data.url || "",
       });
     }
   } else if (data.criteria) {
@@ -344,6 +363,7 @@ export function toPassesRows(data: any): PassRow[] {
             background: colors.background ?? "—",
             ocrText: truncateHtml(el?.html),
             helpUrl: finding.helpUrl,
+            pageUrl: el?.page_url || data.url || "",
           });
         });
       }
@@ -377,6 +397,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
         background: colors.background ?? "—",
         ocrText: truncateHtml(el.html),
         helpUrl: finding.helpUrl || "",
+        pageUrl: el.page_url || data.url || "",
       });
     }
   } else if (data.criteria) {
@@ -402,6 +423,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
             background: colors.background ?? "—",
             ocrText: truncateHtml(el?.html),
             helpUrl: finding.helpUrl,
+            pageUrl: el?.page_url || data.url || "",
           });
         });
       }
@@ -507,7 +529,7 @@ export interface DashboardPageFinding {
   passes: number;
 }
 
-function derivePageName(pageUrl: string, index: number): string {
+export function derivePageName(pageUrl: string, index: number): string {
   try {
     const u = new URL(pageUrl);
     const segment = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean).pop();
@@ -529,4 +551,11 @@ export function getDashboardPageFindings(data: WcagAuditResponse): DashboardPage
     needsReview: page.summary.needs_review,
     passes: page.summary.passes,
   }));
+}
+
+/** Every page either engine's crawl visited (success or failed), for the
+ * per-page filter dropdown on the Violations / Needs Review / Passes tables.
+ * Falls back to `[]` for older cached responses that predate this field. */
+export function getScannedPages(data: WcagAuditResponse): WcagPageScan[] {
+  return data.pages_scanned ?? [];
 }
