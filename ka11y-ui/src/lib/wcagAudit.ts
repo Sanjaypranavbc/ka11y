@@ -559,3 +559,85 @@ export function getDashboardPageFindings(data: WcagAuditResponse): DashboardPage
 export function getScannedPages(data: WcagAuditResponse): WcagPageScan[] {
   return data.pages_scanned ?? [];
 }
+
+/* ─── CSV export ───
+ * Raw finding fields (wcag_sc, criterion_name, level, severity, reason,
+ * suggested_fix, element.page_url) come straight from report.py's
+ * _build_report() / findings.py — same fields the row adapters above read,
+ * just unformatted for a flat export. */
+
+interface WcagRawFinding {
+  wcag_sc?: string;
+  criterion_name?: string;
+  level?: string;
+  severity?: string | null;
+  reason?: string;
+  reason_code?: string;
+  suggested_fix?: string | null;
+  element?: { page_url?: string | null } | null;
+}
+
+function csvEscape(value: unknown): string {
+  const str = value === null || value === undefined ? "" : String(value);
+  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+function csvSection(title: string, headers: string[], rows: unknown[][]): string {
+  const lines = [
+    title,
+    headers.map(csvEscape).join(","),
+    ...rows.map((row) => row.map(csvEscape).join(",")),
+  ];
+  return lines.join("\n");
+}
+
+/** Builds a single CSV (Violations / Needs Review / Passes sections, in that
+ * order) from the real audit report. Adds a "Page URL" column to every
+ * section only when the audit covered more than one page — a single-page
+ * audit's CSV stays exactly as narrow as the requested column set. */
+export function buildFindingsCsv(data: WcagAuditResponse): string {
+  const multiPage = getScannedPages(data).length > 1;
+  const pageUrlOf = (f: WcagRawFinding) => f.element?.page_url || data.url || "";
+
+  const violations = (data.violations ?? []) as WcagRawFinding[];
+  const needsReview = (data.needs_review ?? []) as WcagRawFinding[];
+  const passes = (data.passes ?? []) as WcagRawFinding[];
+
+  const violationsSection = csvSection(
+    "Violations",
+    ["WCAG SC", "Severity", "Level", "Reason", "Suggested Fix", ...(multiPage ? ["Page URL"] : [])],
+    violations.map((f) => [
+      f.wcag_sc ?? "",
+      f.severity ?? "",
+      f.level ?? "",
+      f.reason ?? f.reason_code ?? "",
+      f.suggested_fix ?? "",
+      ...(multiPage ? [pageUrlOf(f)] : []),
+    ]),
+  );
+
+  const needsReviewSection = csvSection(
+    "Needs Review",
+    ["WCAG SC", "Criterion", "Level", "Reason", ...(multiPage ? ["Page URL"] : [])],
+    needsReview.map((f) => [
+      f.wcag_sc ?? "",
+      f.criterion_name ?? "",
+      f.level ?? "",
+      f.reason ?? f.reason_code ?? "",
+      ...(multiPage ? [pageUrlOf(f)] : []),
+    ]),
+  );
+
+  const passesSection = csvSection(
+    "Passes",
+    ["WCAG SC", "Criterion", "Level", ...(multiPage ? ["Page URL"] : [])],
+    passes.map((f) => [
+      f.wcag_sc ?? "",
+      f.criterion_name ?? "",
+      f.level ?? "",
+      ...(multiPage ? [pageUrlOf(f)] : []),
+    ]),
+  );
+
+  return [violationsSection, "", needsReviewSection, "", passesSection].join("\n");
+}
