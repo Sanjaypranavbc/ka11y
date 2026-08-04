@@ -186,7 +186,13 @@ function splitReason(reason: string): { head: string; rest: string } {
 function extractReadableText(html: string | null | undefined, max = 90): string {
   if (!html) return "—";
   const alt = html.match(/\balt\s*=\s*["']([^"']*)["']/i);
-  const text = (alt ? alt[1] : html.replace(/<[^>]*>/g, " "))
+  const text = (alt
+    ? alt[1]
+    : html
+        // The API truncates element HTML at 600 chars, so the last tag is
+        // often unterminated — drop it too, or its raw markup leaks through.
+        .replace(/<[^>]*>/g, " ")
+        .replace(/<[^>]*$/, " "))
     .replace(/\s+/g, " ")
     .trim();
   if (!text) return "—";

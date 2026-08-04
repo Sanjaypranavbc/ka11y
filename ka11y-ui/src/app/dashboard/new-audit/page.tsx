@@ -175,9 +175,11 @@ export default function NewAuditPage() {
 
     let cancelled = false;
     const startTime = Date.now();
-    // Deeper crawls visit more pages and legitimately take longer — scale the
-    // client-side wait budget instead of abandoning a healthy in-progress job.
-    const TIMEOUT_MS = 300000 + depth * 300000;
+    // The server (KA11Y_JOB_TIMEOUT_SECONDS, 30 min) decides when a job is
+    // actually dead, so wait just past that rather than guessing per depth —
+    // a shorter client budget abandons healthy multi-page crawls mid-run.
+    // A genuine failure still stops early via the status === "failed" branch.
+    const TIMEOUT_MS = 1_860_000;
     let timer: ReturnType<typeof setTimeout>;
 
     async function poll() {
@@ -239,7 +241,7 @@ export default function NewAuditPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [phase, jobId, scanResult, totalSteps, t, setAuditData, router, depth]);
+  }, [phase, jobId, scanResult, totalSteps, t, setAuditData, router]);
 
   /* ─── Scanning screen ─── */
   if (phase === "scanning") {
