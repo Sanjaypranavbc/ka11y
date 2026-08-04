@@ -4,9 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowUp, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-// Download CSV/PDF not scoped for this sprint — commented out, not removed.
-// import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
-import { ScanCompleteModal } from "@/components/dashboard/ScanCompleteModal";
+import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import type { Translations } from "@/lib/i18n/translations";
@@ -15,6 +13,33 @@ import { cn } from "@/lib/utils";
 
 type WcagLevel = "A" | "AA" | "AAA";
 type ScanPhase = "form" | "scanning";
+
+interface JobStage {
+  name: string;
+  status: string;
+  findings_count?: number;
+}
+
+// Mirrors ka11y-python/ka11y/api/v1/combined/constants.py STAGE_WEIGHTS —
+// the only two stages the backend actually tracks lifecycle for.
+const STAGE_WEIGHTS: Record<string, number> = { image_audit: 62, media_audit: 38 };
+const STAGE_WEIGHT_TOTAL = Object.values(STAGE_WEIGHTS).reduce((a, b) => a + b, 0);
+
+// Real progress from the backend's own stage lifecycle (poll response),
+// not a local timer. A stage only counts once the API reports it
+// completed/errored; the final jump to 100 is gated on job status
+// "completed" so post-stage report building/merging isn't shown as done
+// early.
+function computeRealProgress(stages: JobStage[], jobStatus: string | null): number {
+  if (jobStatus === "completed") return 100;
+  const done = stages.reduce((sum, s) => {
+    if (s.status === "completed" || s.status === "error") {
+      return sum + (STAGE_WEIGHTS[s.name] ?? 0);
+    }
+    return sum;
+  }, 0);
+  return Math.min(95, Math.round((done / STAGE_WEIGHT_TOTAL) * 100));
+}
 
 function buildScanSteps(t: Translations) {
   return [
@@ -81,19 +106,26 @@ export default function NewAuditPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<WcagAuditResponse | null>(null);
-  const [modalDismissed, setModalDismissed] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [jobStages, setJobStages] = useState<JobStage[]>([]);
+  const [jobStatus, setJobStatus] = useState<string | null>(null);
 
   const totalSteps = ACTUAL_STEPS.length;
-  const progress = Math.round((completedCount / totalSteps) * 100);
   const isDone = completedCount >= totalSteps;
-  const showCompleteModal = phase === "scanning" && isDone && !!scanResult && !modalDismissed;
+  // The percentage shown is driven entirely by the real backend stage data
+  // polled below — it is not a function of the cosmetic step animation.
+  const progress = computeRealProgress(jobStages, jobStatus);
 
+  // Cosmetic step animation only — advances the visible step list while the
+  // real audit runs in the background. Capped one step short of totalSteps
+  // so it can never reach 100% on its own; only the real poll result
+  // (data.status === "completed") is allowed to call setCompletedCount(totalSteps).
   useEffect(() => {
     if (phase !== "scanning" || isDone) return;
+    if (completedCount >= totalSteps - 1) return;
     const timer = setTimeout(() => setCompletedCount((c) => c + 1), 1200);
     return () => clearTimeout(timer);
-  }, [phase, completedCount, isDone]);
+  }, [phase, completedCount, isDone, totalSteps]);
 
   async function handleRun() {
     const trimmedUrl = url.trim();
@@ -105,9 +137,10 @@ export default function NewAuditPage() {
     setError(null);
     setSubmitting(true);
     setCompletedCount(0);
-    setModalDismissed(false);
     setScanResult(null);
     setJobId(null);
+    setJobStages([]);
+    setJobStatus(null);
     setPhase("scanning");
 
     try {
@@ -158,11 +191,20 @@ export default function NewAuditPage() {
           return;
         }
 
+        // Real stage lifecycle from the backend — drives the progress bar
+        // (see computeRealProgress) independently of the cosmetic step list.
+        setJobStages((data.stages as JobStage[]) ?? []);
+        setJobStatus(data.status ?? null);
+
         if (data.status === "completed") {
           setScanResult(data.result as WcagAuditResponse);
           setAuditData(data.result as WcagAuditResponse);
           setCompletedCount(totalSteps);
           setSubmitting(false);
+          // Brief pause so the user sees every step marked done before the
+          // redirect, then land on the dashboard with the real result already
+          // in AuditDataContext (no modal — straight to the real data).
+          setTimeout(() => router.push("/dashboard"), 600);
           return;
         }
 
@@ -195,7 +237,7 @@ export default function NewAuditPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [phase, jobId, scanResult, totalSteps, t, setAuditData]);
+  }, [phase, jobId, scanResult, totalSteps, t, setAuditData, router]);
 
   /* ─── Scanning screen ─── */
   if (phase === "scanning") {
@@ -215,8 +257,7 @@ export default function NewAuditPage() {
           </div>
           <div className="flex items-center gap-2 sm:gap-6">
             <LanguageToggle />
-            {/* <DownloadCsvButton /> */}
-            {/* <DownloadPdfButton /> */}
+            <DownloadCsvButton />
           </div>
         </header>
 
@@ -273,15 +314,6 @@ export default function NewAuditPage() {
 
           </div>
         </main>
-
-        {showCompleteModal && scanResult && (
-          <ScanCompleteModal
-            url={scanResult.url}
-            onViewViolations={() => router.push("/dashboard/violations")}
-            onViewNeedsReview={() => router.push("/dashboard/needs-review")}
-            onClose={() => setModalDismissed(true)}
-          />
-        )}
       </>
     );
   }
@@ -294,8 +326,7 @@ export default function NewAuditPage() {
         <span className="text-[24px] font-medium leading-tight text-brand-teal sm:text-[32px] sm:leading-[42px]">A11Y</span>
         <div className="flex items-center gap-2 sm:gap-6">
           <LanguageToggle />
-          {/* <DownloadCsvButton /> */}
-          {/* <DownloadPdfButton /> */}
+          <DownloadCsvButton />
         </div>
       </header>
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const WCAG_API_URL =
   process.env.WCAG_API_URL ??
-  "http://python:8000/api/v1/combined";
+  "http://localhost:8000/api/v1/combined";
 
 // Submits the job and returns immediately with a jobId. The client polls
 // GET /api/wcag-audit/[jobId] for progress — this endpoint must never block,

@@ -11,16 +11,17 @@ import {
 } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { wcagLevelBreakdown } from "@/lib/dashboardData";
+import type { LevelBreakdownRow } from "@/lib/wcagAudit";
 
-export function WcagLevelBarChart() {
+export function WcagLevelBarChart({ breakdown }: { breakdown: LevelBreakdownRow[] }) {
   const { t } = useLanguage();
-  const DATA = wcagLevelBreakdown.map((row) => ({
+  const DATA = breakdown.map((row) => ({
     level: t.dashboardPage.charts.level(row.level),
     Violations: row.violations,
     "Needs Review": row.needsReview,
     Passes: row.passes,
   }));
+  const maxCount = Math.max(1, ...breakdown.map((row) => row.violations + row.needsReview + row.passes));
 
   return (
     <ChartCard
@@ -44,8 +45,7 @@ export function WcagLevelBarChart() {
               tick={{ fill: "var(--color-gray-60)", fontSize: 13 }}
             />
             <YAxis
-              domain={[0, 250]}
-              ticks={[0, 50, 100, 150, 200, 250]}
+              domain={[0, maxCount]}
               tickLine={false}
               axisLine={false}
               tick={{ fill: "var(--color-gray-60)", fontSize: 12 }}

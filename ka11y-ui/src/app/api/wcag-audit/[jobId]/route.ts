@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const WCAG_API_URL =
   process.env.WCAG_API_URL ??
-  "http://python:8000/api/v1/combined";
+  "http://localhost:8000/api/v1/combined";
 
 // Single, short-lived status check — the client calls this repeatedly
 // instead of one request blocking for the whole audit.

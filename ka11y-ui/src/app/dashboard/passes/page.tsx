@@ -3,13 +3,13 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, X, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-// Download CSV/PDF not scoped for this sprint — commented out, not removed.
-// import { DownloadCsvButton, DownloadPdfButton } from "@/components/dashboard/DownloadActions";
+import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ElementImage } from "@/components/dashboard/ElementImage";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { toPassesRows, type WcagLevel } from "@/lib/wcagAudit";
+import { useInfiniteReveal } from "@/lib/useInfiniteReveal";
 import { cn } from "@/lib/utils";
 
 function LevelBadge({ level }: { level: WcagLevel }) {
@@ -53,13 +53,17 @@ export default function PassesPage() {
       ? items
       : items.filter((item) => activeFilters.includes(item.level));
 
+  const { visibleItems, visibleCount, hasMore, sentinelRef } = useInfiniteReveal(
+    filtered,
+    activeFilters.join(","),
+  );
+
   const LEVELS: WcagLevel[] = ["A", "AA", "AAA"];
 
   const headerActions = (
     <>
       <LanguageToggle />
-      {/* <DownloadCsvButton /> */}
-      {/* <DownloadPdfButton /> */}
+      <DownloadCsvButton />
     </>
   );
 
@@ -146,7 +150,7 @@ export default function PassesPage() {
         </div>
 
         <p className="text-[14px] leading-6 text-gray-100 sm:text-[16px]">
-          {t.passes.showing(filtered.length, filtered.length, items.length)}
+          {t.passes.showing(visibleCount, filtered.length, items.length)}
         </p>
 
         {/* Table — horizontally scrollable, page does not scroll */}
@@ -165,7 +169,7 @@ export default function PassesPage() {
           </div>
 
           {/* Rows */}
-          {filtered.map((item) => (
+          {visibleItems.map((item) => (
             <div key={item.id} className="flex w-full border-b border-gray-10 bg-white text-[14px] leading-5">
 
               <div className="flex-[110] min-w-0 border-b border-gray-10 px-4 py-6">
@@ -233,6 +237,7 @@ export default function PassesPage() {
 
             </div>
           ))}
+          {hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-1" />}
         </div>
         </div>
         </>

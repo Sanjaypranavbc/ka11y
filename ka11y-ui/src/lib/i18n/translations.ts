@@ -31,6 +31,7 @@ export const translations = {
       message: (title: string) => `${title} is coming soon.`,
     },
     dashboardPage: {
+      emptyState: "Run an audit to see your accessibility dashboard here.",
       charts: {
         findingsOverview: "Findings Overview",
         violations: "Violations",
@@ -56,14 +57,6 @@ export const translations = {
         },
       },
     },
-    scanModal: {
-      title: "Your analysis is completed",
-      descriptionPrefix: "Accessibility scan for",
-      descriptionSuffix: "finished. Choose where to go next.",
-      viewViolations: "View Violations",
-      viewNeedsReview: "View Needs Review",
-      close: "Close",
-    },
     newAudit: {
       heading: "New Audit",
       subheading: "Enter a URL and run an audit to see accessibility findings.",
@@ -73,8 +66,9 @@ export const translations = {
       increaseDepth: "Increase depth",
       decreaseDepth: "Decrease depth",
       wcagLevelLabel: "WCAG Level",
-      warning: "Scans deeper than 0 level take longer to process.",
-      warningLine2: "We will run this in the background and notify you via email.",
+      warning: "Scans deeper than Level 0 take longer to process.",
+      warningLine2:
+        "We will run this in the background and notify you via email.",
       notificationEmailLabel: "Notification Email",
       notificationEmailPlaceholder: "Enter your email",
       submit: "Run Accessibility Scan",
@@ -154,9 +148,11 @@ export const translations = {
         title: "Manual Action",
         description: "Update the status of this item manually.",
         moveToPass: "Move to Pass",
-        moveToPassDescription: "Mark this item as passed if it no longer exists or is already fixed",
+        moveToPassDescription:
+          "Mark this item as passed if it no longer exists or is already fixed",
         moveToViolation: "Move to Violation",
-        moveToViolationDescription: "Keep this item as a violation that needs to be fixed.",
+        moveToViolationDescription:
+          "Keep this item as a violation that needs to be fixed.",
       },
     },
     passes: {
@@ -208,6 +204,7 @@ export const translations = {
       message: (title: string) => `${title}は近日公開予定です。`,
     },
     dashboardPage: {
+      emptyState: "監査を実行すると、ここにアクセシビリティダッシュボードが表示されます。",
       charts: {
         findingsOverview: "検出結果の概要",
         violations: "違反",
@@ -233,17 +230,10 @@ export const translations = {
         },
       },
     },
-    scanModal: {
-      title: "解析が完了しました",
-      descriptionPrefix: "",
-      descriptionSuffix: "のアクセシビリティスキャンが完了しました。次に進む項目を選択してください。",
-      viewViolations: "違反を表示",
-      viewNeedsReview: "要確認項目を表示",
-      close: "閉じる",
-    },
     newAudit: {
       heading: "新規監査",
-      subheading: "URLを入力して監査を実行すると、アクセシビリティの検出結果が表示されます。",
+      subheading:
+        "URLを入力して監査を実行すると、アクセシビリティの検出結果が表示されます。",
       targetUrlLabel: "対象URL",
       targetUrlPlaceholder: "https://example.com",
       maxDepthLabel: "最大深度",
@@ -251,14 +241,16 @@ export const translations = {
       decreaseDepth: "深度を減らす",
       wcagLevelLabel: "WCAGレベル",
       warning: "深度0より深いスキャンは処理に時間がかかります。",
-      warningLine2: "このスキャンはバックグラウンドで実行され、完了時にメールでお知らせします。",
+      warningLine2:
+        "このスキャンはバックグラウンドで実行され、完了時にメールでお知らせします。",
       notificationEmailLabel: "通知先メールアドレス",
       notificationEmailPlaceholder: "メールアドレスを入力",
       submit: "アクセシビリティスキャンを実行",
       submitting: "スキャンを開始しています…",
       errorEmptyUrl: "スキャンするURLを入力してください",
       errorGeneric: "スキャンを開始できませんでした。もう一度お試しください。",
-      errorUnreachable: "スキャンサービスに接続できません。もう一度お試しください。",
+      errorUnreachable:
+        "スキャンサービスに接続できません。もう一度お試しください。",
       auditProgress: "監査の進捗",
       findingsCount: (n: number) => `${n} 件の検出`,
       steps: {
@@ -331,9 +323,11 @@ export const translations = {
         title: "手動操作",
         description: "この項目の状態を手動で更新します。",
         moveToPass: "合格にする",
-        moveToPassDescription: "この項目がすでに存在しない、または修正済みの場合は合格としてマークします",
+        moveToPassDescription:
+          "この項目がすでに存在しない、または修正済みの場合は合格としてマークします",
         moveToViolation: "違反のままにする",
-        moveToViolationDescription: "この項目を修正が必要な違反として保持します。",
+        moveToViolationDescription:
+          "この項目を修正が必要な違反として保持します。",
       },
     },
     passes: {

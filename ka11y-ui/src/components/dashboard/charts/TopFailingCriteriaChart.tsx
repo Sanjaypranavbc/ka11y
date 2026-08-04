@@ -3,7 +3,7 @@
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { topFailingCriteria, type WcagLevel } from "@/lib/dashboardData";
+import type { TopFailingCriterion, WcagLevel } from "@/lib/wcagAudit";
 
 const LEVEL_COLOR: Record<WcagLevel, string> = {
   A: "var(--color-level-a)",
@@ -11,17 +11,14 @@ const LEVEL_COLOR: Record<WcagLevel, string> = {
   AAA: "var(--color-level-aaa)",
 };
 
-const DATA = topFailingCriteria
-  .slice()
-  .sort((a, b) => b.count - a.count)
-  .map((row) => ({
+export function TopFailingCriteriaChart({ criteria }: { criteria: TopFailingCriterion[] }) {
+  const { t } = useLanguage();
+  const DATA = criteria.map((row) => ({
     name: `${row.code} ${row.label}`,
     count: row.count,
     fill: LEVEL_COLOR[row.level],
   }));
-
-export function TopFailingCriteriaChart() {
-  const { t } = useLanguage();
+  const maxCount = Math.max(1, ...criteria.map((row) => row.count));
 
   return (
     <ChartCard
@@ -40,8 +37,7 @@ export function TopFailingCriteriaChart() {
             <CartesianGrid horizontal={false} stroke="var(--color-gray-40)" strokeDasharray="3 3" />
             <XAxis
               type="number"
-              domain={[0, 20]}
-              ticks={[0, 5, 10, 15, 20]}
+              domain={[0, maxCount]}
               tickLine={false}
               axisLine={false}
               tick={{ fill: "var(--color-gray-60)", fontSize: 12 }}

@@ -3,14 +3,14 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { ChartCard, LegendItem } from "@/components/dashboard/ChartCard";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { summaryTotals } from "@/lib/dashboardData";
+import type { DashboardSummary } from "@/lib/wcagAudit";
 
-export function ViolationsPieChart() {
+export function ViolationsPieChart({ summary }: { summary: DashboardSummary }) {
   const { t } = useLanguage();
   const DATA = [
-    { name: t.dashboardPage.charts.violations, value: summaryTotals.violations, color: "var(--color-status-violation)" },
-    { name: t.dashboardPage.charts.needsReview, value: summaryTotals.needsReview, color: "var(--color-status-review)" },
-    { name: t.dashboardPage.charts.passes, value: summaryTotals.passes, color: "var(--color-status-pass)" },
+    { name: t.dashboardPage.charts.violations, value: summary.violations, color: "var(--color-status-violation)" },
+    { name: t.dashboardPage.charts.needsReview, value: summary.needsReview, color: "var(--color-status-review)" },
+    { name: t.dashboardPage.charts.passes, value: summary.passes, color: "var(--color-status-pass)" },
   ];
 
   return (

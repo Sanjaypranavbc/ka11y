@@ -38,28 +38,55 @@ export interface WcagCriterion {
   findings: WcagFinding[];
 }
 
+// Matches ka11y-python/ka11y/api/v1/combined/report.py _build_report()'s
+// summary block — the shape the combined-audit backend actually returns.
+export interface WcagStatusCounts {
+  violations: number;
+  needs_review: number;
+  passes: number;
+}
+
 export interface WcagAuditSummary {
-  total: number;
-  checked: number;
-  passed: number;
-  failed: number;
-  needsReview: number;
-  notChecked: number;
-  notApplicable: number;
-  manualOnly: number;
+  total_findings: number;
+  violations: number;
+  needs_review: number;
+  passes: number;
+  manual_review_required?: number;
+  score: number | null;
+  by_severity?: Record<string, number>;
+  by_level?: Record<string, WcagStatusCounts>;
+  by_wcag_sc?: Record<string, WcagStatusCounts>;
+  by_source?: Record<string, WcagStatusCounts>;
+  by_page?: Record<string, WcagStatusCounts>;
+  page_count?: number;
+}
+
+export interface WcagReportPage {
+  page_url: string;
+  summary: {
+    total_findings: number;
+    violations: number;
+    needs_review: number;
+    passes: number;
+    score: number | null;
+  };
+  violations: unknown[];
+  needs_review: unknown[];
+  passes: unknown[];
 }
 
 export interface WcagAuditResponse {
   url: string;
-  wcagVersion: string;
-  analyzedAt: string;
-  summary: WcagAuditSummary;
+  wcagVersion?: string;
+  analyzedAt?: string;
+  summary?: WcagAuditSummary;
   // node-shape findings (fallback path in the derivers)
   criteria?: WcagCriterion[];
   // combined-audit flat findings arrays (primary path in the derivers)
   violations?: unknown[];
   passes?: unknown[];
   needs_review?: unknown[];
+  pages?: WcagReportPage[];
 }
 
 /* ─── Row shapes consumed by the Violations / Needs Review tables ─── */
@@ -229,9 +256,9 @@ export function toViolationRows(data: any): ViolationRow[] {
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
         title: finding.reason_code || finding.rule_id || "Violation",
-        description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || finding.reason_code || ""),
+        description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || finding.reason_code || ""),
         sc: finding.wcag_sc || "",
-        criterion: finding.criterion || "",
+        criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
         elementTitle: selectorStr,
@@ -282,9 +309,9 @@ export function toPassesRows(data: any): PassRow[] {
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
         reasonTitle: finding.reason_code || finding.rule_id || "Pass",
-        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || "")),
+        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || "")),
         sc: finding.wcag_sc || "",
-        criterion: finding.criterion || "",
+        criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
         elementFilename: finding.rule_id || finding.ruleId || "",
@@ -339,9 +366,9 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
         status: "pending",
         reasonTitle: finding.reason_code || finding.rule_id || "Needs Review",
-        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion || "")),
+        reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || "")),
         sc: finding.wcag_sc || "",
-        criterion: finding.criterion || "",
+        criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
         elementFilename: finding.rule_id || finding.ruleId || "",
@@ -382,4 +409,124 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
   }
 
   return rows;
+}
+
+/* ─── Dashboard overview selectors ───
+ * Read straight off the real report shape (report.py _build_report()):
+ * summary.{violations,needs_review,passes,score,by_level,by_wcag_sc} and
+ * the per-page `pages` array. No site-specific assumptions. */
+
+export interface DashboardSummary {
+  violations: number;
+  needsReview: number;
+  passes: number;
+  score: number | null;
+}
+
+export function getDashboardSummary(data: WcagAuditResponse): DashboardSummary {
+  const s = data.summary;
+  return {
+    violations: s?.violations ?? (data.violations?.length ?? 0),
+    needsReview: s?.needs_review ?? (data.needs_review?.length ?? 0),
+    passes: s?.passes ?? (data.passes?.length ?? 0),
+    score: s?.score ?? null,
+  };
+}
+
+export interface LevelBreakdownRow {
+  level: WcagLevel;
+  violations: number;
+  needsReview: number;
+  passes: number;
+}
+
+const DASHBOARD_LEVELS: WcagLevel[] = ["A", "AA", "AAA"];
+
+export function getLevelBreakdown(data: WcagAuditResponse): LevelBreakdownRow[] {
+  const byLevel = data.summary?.by_level ?? {};
+  return DASHBOARD_LEVELS.map((level) => {
+    const counts = byLevel[level];
+    return {
+      level,
+      violations: counts?.violations ?? 0,
+      needsReview: counts?.needs_review ?? 0,
+      passes: counts?.passes ?? 0,
+    };
+  });
+}
+
+export interface TopFailingCriterion {
+  code: string;
+  label: string;
+  level: WcagLevel;
+  count: number;
+}
+
+/** Findings carry their own `level` and `criterion_name`; the summary's
+ * by_wcag_sc bucket only has counts, so pull the display metadata from the
+ * first finding seen for each SC. */
+function scMetadata(data: WcagAuditResponse): Record<string, { level: WcagLevel; label: string }> {
+  const meta: Record<string, { level: WcagLevel; label: string }> = {};
+  const collect = (findings: unknown[] | undefined) => {
+    for (const raw of findings ?? []) {
+      const f = raw as { wcag_sc?: string; level?: WcagLevel; criterion_name?: string };
+      if (f.wcag_sc && !meta[f.wcag_sc]) {
+        meta[f.wcag_sc] = { level: f.level ?? "A", label: f.criterion_name || f.wcag_sc };
+      }
+    }
+  };
+  collect(data.violations);
+  collect(data.needs_review);
+  collect(data.passes);
+  return meta;
+}
+
+export function getTopFailingCriteria(data: WcagAuditResponse, limit = 8): TopFailingCriterion[] {
+  const byScRaw = data.summary?.by_wcag_sc ?? {};
+  const meta = scMetadata(data);
+
+  return Object.entries(byScRaw)
+    .map(([code, counts]) => ({
+      code,
+      label: meta[code]?.label || code,
+      level: meta[code]?.level ?? "A",
+      count: counts.violations,
+    }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+export interface DashboardPageFinding {
+  pageName: string;
+  url: string;
+  score: number | null;
+  findings: number;
+  violations: number;
+  needsReview: number;
+  passes: number;
+}
+
+function derivePageName(pageUrl: string, index: number): string {
+  try {
+    const u = new URL(pageUrl);
+    const segment = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean).pop();
+    if (!segment) return "Home Page";
+    const words = segment.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ");
+    return words.replace(/\b\w/g, (c) => c.toUpperCase()) || `Page ${index + 1}`;
+  } catch {
+    return `Page ${index + 1}`;
+  }
+}
+
+export function getDashboardPageFindings(data: WcagAuditResponse): DashboardPageFinding[] {
+  return (data.pages ?? []).map((page, index) => ({
+    pageName: derivePageName(page.page_url, index),
+    url: page.page_url,
+    score: page.summary.score,
+    findings: page.summary.total_findings,
+    violations: page.summary.violations,
+    needsReview: page.summary.needs_review,
+    passes: page.summary.passes,
+  }));
 }

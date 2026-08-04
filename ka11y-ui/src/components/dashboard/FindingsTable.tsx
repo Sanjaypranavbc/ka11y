@@ -2,9 +2,9 @@
 
 import { Card } from "@/components/ui/Card";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { pageFindings } from "@/lib/dashboardData";
+import type { DashboardPageFinding } from "@/lib/wcagAudit";
 
-export function FindingsTable() {
+export function FindingsTable({ rows }: { rows: DashboardPageFinding[] }) {
   const { t } = useLanguage();
   const COLUMNS = [
     t.dashboardPage.findingsTable.columns.pageName,
@@ -37,7 +37,7 @@ export function FindingsTable() {
             </tr>
           </thead>
           <tbody>
-            {pageFindings.map((row) => (
+            {rows.map((row) => (
               <tr key={row.url} className="border-b border-gray-40 last:border-0">
                 <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.pageName}</td>
                 <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">
@@ -50,7 +50,7 @@ export function FindingsTable() {
                     {row.url}
                   </a>
                 </td>
-                <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.score}%</td>
+                <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.score === null ? "—" : `${row.score}%`}</td>
                 <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.findings}</td>
                 <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.violations}</td>
                 <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.needsReview}</td>
