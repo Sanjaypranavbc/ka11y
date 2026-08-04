@@ -271,7 +271,7 @@ export function toViolationRows(data: any): ViolationRow[] {
 
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
-        title: finding.reason_code || finding.rule_id || "Violation",
+        title: capitalize(finding.reason || finding.reason_code || finding.rule_id || "Violation"),
         description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || finding.reason_code || ""),
         sc: finding.wcag_sc || "",
         criterion: finding.criterion_name || "",
@@ -281,7 +281,7 @@ export function toViolationRows(data: any): ViolationRow[] {
         elementFile: finding.rule_id || finding.ruleId || "",
         elementOcr: truncateHtml(el.html),
         imageUrls: pickImageUrls(el),
-        fixGuide: finding.helpUrl || "",
+        fixGuide: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
     }
@@ -326,7 +326,7 @@ export function toPassesRows(data: any): PassRow[] {
 
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
-        reasonTitle: finding.reason_code || finding.rule_id || "Pass",
+        reasonTitle: capitalize(finding.reason || finding.reason_code || finding.rule_id || "Pass"),
         reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || "")),
         sc: finding.wcag_sc || "",
         criterion: finding.criterion_name || "",
@@ -337,7 +337,7 @@ export function toPassesRows(data: any): PassRow[] {
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
         ocrText: truncateHtml(el.html),
-        helpUrl: finding.helpUrl || "",
+        helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
     }
@@ -385,7 +385,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
         status: "pending",
-        reasonTitle: finding.reason_code || finding.rule_id || "Needs Review",
+        reasonTitle: capitalize(finding.reason || finding.reason_code || finding.rule_id || "Needs Review"),
         reasonDescription: el.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : (finding.criterion_name || "")),
         sc: finding.wcag_sc || "",
         criterion: finding.criterion_name || "",
@@ -396,7 +396,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
         ocrText: truncateHtml(el.html),
-        helpUrl: finding.helpUrl || "",
+        helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
     }

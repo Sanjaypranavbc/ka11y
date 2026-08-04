@@ -236,7 +236,7 @@ export default function ViolationsPage() {
             <div className="flex-[146] min-w-0 p-4">{t.violations.columns.criterion}</div>
             <div className="flex-[112] min-w-0 p-4">{t.violations.columns.level}</div>
             <div className="flex-[112] min-w-0 p-4">{t.violations.columns.tag}</div>
-            <div className="flex-[227] min-w-0 border-r border-gray-10 p-4">{t.violations.columns.element}</div>
+            <div className="flex-[227] min-w-0 p-4">{t.violations.columns.element}</div>
             <div className="flex-[184] min-w-0 p-4">{t.violations.columns.fixGuide}</div>
           </div>
 
@@ -279,7 +279,7 @@ export default function ViolationsPage() {
                 {violation.tag}
               </div>
 
-              <div className="flex-[227] min-w-0 border-b border-r border-gray-10 px-4 py-6 flex flex-col gap-4">
+              <div className="flex-[227] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="text-[14px] font-medium leading-5 text-gray-100">{violation.elementTitle}</p>
                 <ElementImage srcs={violation.imageUrls} className="h-[61px] w-[105px]" />
                 <div className="flex flex-col gap-2 text-[12px] leading-5">

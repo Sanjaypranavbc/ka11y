@@ -317,7 +317,7 @@ export default function NeedsReviewPage() {
             <div className="flex-[146] min-w-0 p-4">{t.needsReview.columns.criterion}</div>
             <div className="flex-[76] min-w-0 p-4">{t.needsReview.columns.level}</div>
             <div className="flex-[76] min-w-0 p-4">{t.needsReview.columns.tag}</div>
-            <div className="flex-[318] min-w-0 border-r border-gray-10 p-4">{t.needsReview.columns.element}</div>
+            <div className="flex-[318] min-w-0 p-4">{t.needsReview.columns.element}</div>
             <div className="flex-[184] min-w-0 p-4">{t.needsReview.columns.action}</div>
           </div>
 
@@ -366,7 +366,7 @@ export default function NeedsReviewPage() {
                 {item.tag}
               </div>
 
-              <div className="flex-[318] min-w-0 border-b border-r border-gray-10 px-4 py-6 flex flex-col gap-4">
+              <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="font-medium text-gray-100">{item.elementFilename}</p>
                 <ElementImage srcs={item.imageUrls} className="h-[90px] w-[105px]" />
                 <div className="flex flex-col gap-2 text-[12px] leading-5">

@@ -76,6 +76,7 @@ export const translations = {
       errorEmptyUrl: "Enter a URL to scan",
       errorGeneric: "Failed to start the scan. Please try again.",
       errorUnreachable: "Unable to reach the scan service. Please try again.",
+      errorStillRunning: "The scan is taking longer than expected. It may still be running on the server, check back shortly or try again.",
       auditProgress: "Audit Progress",
       findingsCount: (n: number) => `${n} Findings`,
       steps: {
@@ -256,6 +257,8 @@ export const translations = {
       errorGeneric: "スキャンを開始できませんでした。もう一度お試しください。",
       errorUnreachable:
         "スキャンサービスに接続できません。もう一度お試しください。",
+      errorStillRunning:
+        "スキャンに予想より時間がかかっています。サーバー側で処理が続いている可能性があります。しばらくしてから確認するか、再度お試しください。",
       auditProgress: "監査の進捗",
       findingsCount: (n: number) => `${n} 件の検出`,
       steps: {

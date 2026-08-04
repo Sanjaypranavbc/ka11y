@@ -175,7 +175,9 @@ export default function NewAuditPage() {
 
     let cancelled = false;
     const startTime = Date.now();
-    const TIMEOUT_MS = 300000;
+    // Deeper crawls visit more pages and legitimately take longer — scale the
+    // client-side wait budget instead of abandoning a healthy in-progress job.
+    const TIMEOUT_MS = 300000 + depth * 300000;
     let timer: ReturnType<typeof setTimeout>;
 
     async function poll() {
@@ -217,7 +219,7 @@ export default function NewAuditPage() {
 
         if (Date.now() - startTime > TIMEOUT_MS) {
           setPhase("form");
-          setError(t.newAudit.errorGeneric);
+          setError(t.newAudit.errorStillRunning);
           setSubmitting(false);
           return;
         }
@@ -237,7 +239,7 @@ export default function NewAuditPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [phase, jobId, scanResult, totalSteps, t, setAuditData, router]);
+  }, [phase, jobId, scanResult, totalSteps, t, setAuditData, router, depth]);
 
   /* ─── Scanning screen ─── */
   if (phase === "scanning") {
