@@ -524,8 +524,15 @@ async def _run_job_body(
         # must never turn a completed, stored audit into a failed one.
         if payload.email:
             from ka11y.utils.report_mail import send_report_email
+            from ka11y.utils.report_pdf import build_report_pdf
 
-            await asyncio.to_thread(send_report_email, payload.email, report, job_id)
+            # Rendered here rather than inside the mail thread: Chromium is
+            # driven by Playwright's async API, which needs this event loop.
+            # Returns None on failure, in which case the CSV still goes out.
+            pdf_bytes = await build_report_pdf(report)
+            await asyncio.to_thread(
+                send_report_email, payload.email, report, job_id, pdf_bytes
+            )
 
         job_rec = _jobs.get(job_id, {})
         log_run_timing(

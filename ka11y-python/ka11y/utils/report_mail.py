@@ -26,6 +26,7 @@ logger = setup_logger(name="KAC", tag="mailer")
 # Same name the Download CSV button produces (DownloadActions.tsx), so the
 # emailed attachment and the browser download are indistinguishable.
 _CSV_FILENAME = "a11y-findings.csv"
+_PDF_FILENAME = "a11y-findings.pdf"
 
 
 def _body(site_url: str, summary: Dict[str, Any], pages_scanned: int) -> str:
@@ -38,7 +39,7 @@ def _body(site_url: str, summary: Dict[str, Any], pages_scanned: int) -> str:
         f"Needs review:  {summary.get('needs_review', 0)}\n"
         f"Passes:        {summary.get('passes', 0)}\n"
         f"Score:         {score_line}\n\n"
-        "Full results are attached as a CSV.\n"
+        "Full results are attached as a PDF and a CSV.\n"
     )
 
 
@@ -46,6 +47,7 @@ def send_report_email(
     to_email: str,
     report: Dict[str, Any],
     job_id: Optional[str] = None,
+    pdf_bytes: Optional[bytes] = None,
 ) -> bool:
     """Email *report* to *to_email* with the findings CSV attached.
 
@@ -70,11 +72,18 @@ def send_report_email(
         pages_scanned = len(report.get("pages_scanned") or []) or 1
         host = urlparse(site_url).hostname or site_url
 
+        # PDF first so it is the attachment the recipient sees first; it is
+        # omitted rather than fatal when rendering failed upstream.
+        attachments = []
+        if pdf_bytes:
+            attachments.append((_PDF_FILENAME, pdf_bytes, "pdf"))
+        attachments.append((_CSV_FILENAME, build_findings_csv(report), "csv"))
+
         sender.send_email(
             receiver_email=to_email,
             subject=f"Accessibility report — {host}",
             body_text=_body(site_url, summary, pages_scanned),
-            attachments=[(_CSV_FILENAME, build_findings_csv(report))],
+            attachments=attachments,
         )
         logger.info("[mailer] job %s: report emailed to %s", job_id, to_email)
         return True

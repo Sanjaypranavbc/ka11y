@@ -26,14 +26,15 @@ import smtplib
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple, Union
 
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="mailer")
 
-# (filename, content) pairs — content is text, encoded UTF-8 at attach time.
-Attachment = Tuple[str, str]
+# (filename, content, mime_subtype). Text content is encoded UTF-8 at attach
+# time; bytes are attached as-is, which is what the rendered PDF needs.
+Attachment = Tuple[str, Union[str, bytes], str]
 
 # Placeholder values shipped in .env_sample; treated as "not configured" so a
 # half-filled .env fails the same way an absent one does.
@@ -111,8 +112,9 @@ class GmailSender:
             body.attach(MIMEText(body_html, "html", "utf-8"))
         msg.attach(body)
 
-        for filename, content in attachments or ():
-            part = MIMEApplication(content.encode("utf-8"), _subtype="csv")
+        for filename, content, subtype in attachments or ():
+            raw = content.encode("utf-8") if isinstance(content, str) else content
+            part = MIMEApplication(raw, _subtype=subtype)
             part.add_header("Content-Disposition", "attachment", filename=filename)
             msg.attach(part)
 
