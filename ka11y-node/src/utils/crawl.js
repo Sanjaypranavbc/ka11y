@@ -85,7 +85,7 @@ function withTimeout(promise, ms, label) {
 async function boundedBfs({
   baseUrl,
   maxDepth = 0,
-  maxPages = 50,
+  maxPages = 20,
   internalLinksOnly = true,
   visit,
   log = () => {},

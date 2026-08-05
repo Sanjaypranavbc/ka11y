@@ -287,7 +287,7 @@ class AccessibilityController {
       successCriteriaId = null,
       maxDepth = 0,
       internalLinks = true,
-      maxPages = 50,
+      maxPages = 20,
       // Optional: when supplied, every per-page sub-stage is collected and
       // returned to the Python caller so it can mirror the rows into its
       // shared logs/timings/<jobId>.jsonl file. Untrusted clients can omit
@@ -318,9 +318,9 @@ class AccessibilityController {
     }
 
     // Crawl controls. Clamp to safe ranges so a client can't request an
-    // unbounded crawl (depth capped at 5; pages at 200 → matches Python caps).
+    // unbounded crawl (depth capped at 5; pages at 20 → matches Python caps).
     const safeMaxDepth = Math.min(Math.max(parseInt(maxDepth, 10) || 0, 0), 5);
-    const safeMaxPages = Math.min(Math.max(parseInt(maxPages, 10) || 50, 1), 200);
+    const safeMaxPages = Math.min(Math.max(parseInt(maxPages, 10) || 20, 1), 20);
     const safeInternalLinks = internalLinks !== false; // default true
 
     try {

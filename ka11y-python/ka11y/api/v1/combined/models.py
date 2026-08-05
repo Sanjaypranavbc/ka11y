@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 
 # Maps a success_criteria_id to the CombinedRequest flags that must be enabled
@@ -39,8 +39,9 @@ class CombinedRequest(BaseModel):
     # — in both the Python crawl and the Node BFS — regardless of this flag.
     internal_links: bool = True
     # Hard page budget for the whole crawl (RAM/time ceiling), independent of
-    # depth. Capped at 200 to match the Node-side clamp.
-    max_pages: int = Field(default=50, ge=1, le=200)
+    # depth. Accepts up to 200 but is clamped to 20 below — callers never get
+    # a validation error for an out-of-policy value, the policy is just applied.
+    max_pages: int = Field(default=20, ge=1, le=200)
     # Pattern + max_length on string fields prevents oversized-payload DoS
     wcag_level: str = Field(default="AAA", pattern=r"^(A|AA|AAA)$")
     success_criteria_id: Optional[str] = Field(default=None, pattern=r"^\d+\.\d+\.\d+$")
@@ -50,6 +51,11 @@ class CombinedRequest(BaseModel):
     run_media_audit: bool = True
     run_captions_audit: bool = True
     lang: str = Field(default="auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$")
+
+    @field_validator("max_pages")
+    @classmethod
+    def _cap_max_pages(cls, v: int) -> int:
+        return min(v, 20)
 
     @model_validator(mode="after")
     def validate_success_criteria_dependencies(self) -> "CombinedRequest":

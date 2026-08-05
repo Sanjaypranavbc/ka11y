@@ -290,7 +290,7 @@ async def _stage_image_audit(
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
     discovered_urls: List[str] | None = None,
-    max_pages: int = 50,
+    max_pages: int = 20,
     internal_links: bool = True,
 ) -> Tuple[List[Dict], Optional[Dict[str, Any]]]:
     """Crawl images → OCR → 1.1.1 alt-text + 1.4.3 contrast."""
@@ -572,7 +572,7 @@ async def _load_universal_snapshot(
     job_id: str,
     step_logger: ExecutionStepLogger | None,
     internal_links: bool = True,
-    max_pages: int = 50,
+    max_pages: int = 20,
 ):
     from ka11y.crawler.snapshot_normalizer import SnapshotNormalizer
     from ka11y.crawler.policy import CrawlPolicy
@@ -703,7 +703,7 @@ async def _run_python_stages(
     lang: str = "en",
     step_logger: ExecutionStepLogger | None = None,
     internal_links: bool = True,
-    max_pages: int = 50,
+    max_pages: int = 20,
     success_criteria_id: Optional[str] = None,
 ) -> PythonStagesResult:
     """
