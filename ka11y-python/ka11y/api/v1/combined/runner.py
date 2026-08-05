@@ -150,7 +150,13 @@ def _merge_findings(
 # ---------------------------------------------------------------------------
 
 _NODE_BASE_URL = os.environ.get("NODE_BASE_URL", "http://localhost:3000")
-_NODE_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_NODE_TIMEOUT_SECONDS", "120"))
+# MUST stay above Node's own crawl budget (ka11y-node app.config.js
+# `flatCrawlBudgetMs`, default 255 s). Node deliberately stops at that budget and
+# returns PARTIAL findings; if we give up first, the except-branch below discards
+# every axe-core finding and the run silently degrades to Python-only results.
+# This was previously 120 s — less than half Node's budget — so any crawl over
+# 2 minutes (routine at max_depth 1-2) lost all axe findings.
+_NODE_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_NODE_TIMEOUT_SECONDS", "300"))
 
 
 async def _fetch_node_findings(
@@ -510,6 +516,16 @@ async def _run_job_body(
             output_dir=str(output_dir),
         )
         repo.insert_event(job_id, "job_complete", {"summary": report.get("summary")})
+
+        # Deep crawls (max_depth 1-2) run longer than a browser will wait, so the
+        # frontend stops polling and the finished report is delivered here.
+        # Dispatched only after the run is fully persisted above, runs in a thread
+        # because smtplib blocks, and swallows its own errors — a delivery problem
+        # must never turn a completed, stored audit into a failed one.
+        if payload.email:
+            from ka11y.utils.report_mail import send_report_email
+
+            await asyncio.to_thread(send_report_email, payload.email, report, job_id)
 
         job_rec = _jobs.get(job_id, {})
         log_run_timing(

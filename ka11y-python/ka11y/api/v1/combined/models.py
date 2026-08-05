@@ -51,6 +51,15 @@ class CombinedRequest(BaseModel):
     run_media_audit: bool = True
     run_captions_audit: bool = True
     lang: str = Field(default="auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$")
+    # Where to send the finished report. Deep crawls outlive the browser's wait,
+    # so the result is emailed instead of polled for. Validated with a plain
+    # pattern rather than pydantic's EmailStr, which needs the `email-validator`
+    # package this project doesn't depend on.
+    email: Optional[str] = Field(
+        default=None,
+        max_length=254,
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+    )
 
     @field_validator("max_pages")
     @classmethod

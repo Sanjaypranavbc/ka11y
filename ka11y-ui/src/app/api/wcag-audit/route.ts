@@ -10,7 +10,7 @@ const WCAG_API_URL =
 // nginx default timeouts of ~60s) gets killed well before a real audit
 // (routinely 100s+) finishes.
 export async function POST(request: Request) {
-  let body: { url?: string; maxDepth?: number };
+  let body: { url?: string; maxDepth?: number; wcagLevel?: string; email?: string };
   try {
     body = await request.json();
   } catch {
@@ -40,10 +40,22 @@ export async function POST(request: Request) {
       ? Math.min(Math.max(Math.trunc(rawDepth), 0), 5)
       : 0;
 
+  // Conformance level to report against. The backend filter is cumulative —
+  // "AA" returns A + AA findings and suppresses AAA. Anything unrecognised
+  // falls back to AA rather than silently widening the result set to AAA.
+  const wcagLevel = ["A", "AA", "AAA"].includes(body.wcagLevel ?? "")
+    ? (body.wcagLevel as string)
+    : "AA";
+
   try {
     const submitUrl = new URL(`${WCAG_API_URL}/combined-audit`);
     submitUrl.searchParams.set("url", url);
     submitUrl.searchParams.set("max_depth", String(maxDepth));
+    submitUrl.searchParams.set("wcag_level", wcagLevel);
+    // Only sent when the user supplied one. A deep crawl outlives the browser's
+    // wait, so this is how the finished report reaches them.
+    const email = body.email?.trim();
+    if (email) submitUrl.searchParams.set("email", email);
 
     const submitRes = await fetch(submitUrl.toString(), {
       method: "POST",

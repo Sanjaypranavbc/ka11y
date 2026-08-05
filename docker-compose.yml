@@ -103,6 +103,20 @@ services:
       KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS: "60"
       KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS: "75"
 
+      # ── Report email (Gmail SMTP) ────────────────────────────────────────
+      # Deep crawls (max_depth 1-2) outlive the browser's wait, so the finished
+      # report is emailed with the findings CSV attached instead.
+      # Values are substituted from the .env file sitting next to this compose
+      # file — NEVER hardcode the password here, this file is committed.
+      # SENDER_PASSWORD must be a 16-character Google App Password (requires
+      # 2-Step Verification on the sender account), not the account password.
+      # With the credentials unset the audit still runs normally and simply
+      # logs that the email was skipped.
+      SMTP_SERVER:      "${SMTP_SERVER:-smtp.gmail.com}"
+      SMTP_PORT:        "${SMTP_PORT:-587}"
+      SENDER_EMAIL:     "${SENDER_EMAIL:-}"
+      SENDER_PASSWORD:  "${SENDER_PASSWORD:-}"
+
       # ── Durable store (SQLite WAL) + assets + telemetry ──────────────────
       # Source of truth for run state, reports, findings, assets metadata and
       # per-(page,stage,rule) telemetry. Lives on the ka11y_db named volume so

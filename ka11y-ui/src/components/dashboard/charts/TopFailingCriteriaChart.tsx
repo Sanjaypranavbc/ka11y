@@ -16,6 +16,7 @@ export function TopFailingCriteriaChart({ criteria }: { criteria: TopFailingCrit
   const DATA = criteria.map((row) => ({
     name: `${row.code} ${row.label}`,
     count: row.count,
+    pagesAffected: row.pagesAffected,
     fill: LEVEL_COLOR[row.level],
   }));
   const maxCount = Math.max(1, ...criteria.map((row) => row.count));
@@ -52,6 +53,15 @@ export function TopFailingCriteriaChart({ criteria }: { criteria: TopFailingCrit
             />
             <Tooltip
               cursor={{ fill: "var(--color-gray-10)" }}
+              // The bar length is the violation count; the page spread is the
+              // part that says whether it's one bad page or a site-wide pattern.
+              formatter={(value, _name, item) => [
+                t.dashboardPage.charts.issuesAcrossPages(
+                  Number(value),
+                  (item?.payload as { pagesAffected?: number })?.pagesAffected ?? 0,
+                ),
+                "",
+              ]}
               contentStyle={{
                 borderRadius: 10,
                 border: "none",

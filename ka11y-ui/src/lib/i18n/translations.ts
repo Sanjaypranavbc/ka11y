@@ -43,6 +43,8 @@ export const translations = {
         wcagLevelBreakdown: "WCAG Level Breakdown",
         topFailingCriteria: "Top Failing WCAG Criteria",
         level: (l: string) => `Level ${l}`,
+        issuesAcrossPages: (n: number, pages: number) =>
+          pages > 1 ? `${n} issues across ${pages} pages` : `${n} issues`,
       },
       findingsTable: {
         title: "Findings by Page",
@@ -74,6 +76,12 @@ export const translations = {
       submit: "Run Accessibility Scan",
       submitting: "Starting Scan…",
       errorEmptyUrl: "Enter a URL to scan",
+      errorEmailRequired:
+        "Enter a valid email address — multi-page scans are delivered by email.",
+      queuedTitle: "Scan started",
+      queuedMessage: (email: string) =>
+        `This scan covers multiple pages and takes a while. We'll email the report to ${email} when it's ready — you can close this page.`,
+      queuedNewScan: "Start another scan",
       errorGeneric: "Failed to start the scan. Please try again.",
       errorUnreachable: "Unable to reach the scan service. Please try again.",
       errorStillRunning: "The scan is taking longer than expected. It may still be running on the server, check back shortly or try again.",
@@ -222,6 +230,8 @@ export const translations = {
         wcagLevelBreakdown: "WCAGレベル別内訳",
         topFailingCriteria: "違反の多いWCAG基準",
         level: (l: string) => `レベル ${l}`,
+        issuesAcrossPages: (n: number, pages: number) =>
+          pages > 1 ? `${pages}ページで${n}件の問題` : `${n}件の問題`,
       },
       findingsTable: {
         title: "ページ別検出結果",
@@ -254,6 +264,12 @@ export const translations = {
       submit: "アクセシビリティスキャンを実行",
       submitting: "スキャンを開始しています…",
       errorEmptyUrl: "スキャンするURLを入力してください",
+      errorEmailRequired:
+        "有効なメールアドレスを入力してください。複数ページのスキャン結果はメールで送信されます。",
+      queuedTitle: "スキャンを開始しました",
+      queuedMessage: (email: string) =>
+        `このスキャンは複数ページを対象とするため時間がかかります。完了後、${email}宛にレポートをメールで送信します。このページは閉じていただいて構いません。`,
+      queuedNewScan: "別のスキャンを開始",
       errorGeneric: "スキャンを開始できませんでした。もう一度お試しください。",
       errorUnreachable:
         "スキャンサービスに接続できません。もう一度お試しください。",

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowUp, ExternalLink } from "lucide-react";
+import { AlertTriangle, ArrowUp, CheckCircle2, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
@@ -12,7 +12,10 @@ import type { WcagAuditResponse } from "@/lib/wcagAudit";
 import { cn } from "@/lib/utils";
 
 type WcagLevel = "A" | "AA" | "AAA";
-type ScanPhase = "form" | "scanning";
+// "queued" is the terminal state for a deep crawl (depth > 0): the job is
+// accepted and the report is emailed when it finishes, so the browser never
+// polls and never lands on the dashboard.
+type ScanPhase = "form" | "scanning" | "queued";
 
 interface JobStage {
   name: string;
@@ -98,7 +101,7 @@ export default function NewAuditPage() {
   const SCAN_STEPS = useMemo(() => buildScanSteps(t), [t]);
   const ACTUAL_STEPS = useMemo(() => SCAN_STEPS.filter((s) => s.type === "step"), [SCAN_STEPS]);
   const [url, setUrl] = useState("");
-  const [depth, setDepth] = useState(2);
+  const [depth, setDepth] = useState(0);
   const [wcagLevel, setWcagLevel] = useState<WcagLevel>("AA");
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<ScanPhase>("form");
@@ -134,6 +137,14 @@ export default function NewAuditPage() {
       return;
     }
 
+    // A multi-page crawl runs longer than the browser will wait, so its result
+    // is delivered by email — without an address there is no way to hand it back.
+    const trimmedEmail = email.trim();
+    if (depth > 0 && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedEmail)) {
+      setError(t.newAudit.errorEmailRequired);
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
     setCompletedCount(0);
@@ -147,13 +158,26 @@ export default function NewAuditPage() {
       const res = await fetch("/api/wcag-audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmedUrl, maxDepth: depth }),
+        body: JSON.stringify({
+          url: trimmedUrl,
+          maxDepth: depth,
+          wcagLevel,
+          email: trimmedEmail || undefined,
+        }),
       });
       const data = await res.json().catch(() => null);
 
       if (!res.ok || !data?.jobId) {
         setPhase("form");
         setError(data?.error ?? t.newAudit.errorGeneric);
+        setSubmitting(false);
+        return;
+      }
+
+      // Deep crawl: the job is running and will be emailed. Stop here rather
+      // than polling for minutes and timing the browser out.
+      if (depth > 0) {
+        setPhase("queued");
         setSubmitting(false);
         return;
       }
@@ -242,6 +266,42 @@ export default function NewAuditPage() {
       clearTimeout(timer);
     };
   }, [phase, jobId, scanResult, totalSteps, t, setAuditData, router]);
+
+  /* ─── Queued screen (deep crawl — result arrives by email) ─── */
+  if (phase === "queued") {
+    return (
+      <>
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-10 px-4 py-4 sm:h-20 sm:px-8 sm:py-0 lg:px-16">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+            <span className="text-[24px] font-medium leading-tight text-brand-teal sm:text-[32px] sm:leading-[42px]">A11Y</span>
+          </div>
+          <LanguageToggle />
+        </header>
+
+        <main className="flex flex-1 items-center justify-center px-4 py-6 sm:px-8 lg:px-16">
+          <div className="flex w-full max-w-[560px] flex-col items-center gap-4 rounded-[16px] bg-gray-10 px-6 py-10 text-center sm:px-10">
+            <CheckCircle2 size={48} className="text-brand-teal-dark" aria-hidden="true" />
+            <h2 className="text-[20px] font-medium leading-7 text-gray-100 sm:text-[24px]">
+              {t.newAudit.queuedTitle}
+            </h2>
+            <p className="text-[14px] leading-6 text-gray-80 sm:text-[16px]">
+              {t.newAudit.queuedMessage(email.trim())}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setPhase("form");
+                setCompletedCount(0);
+              }}
+              className="mt-2 h-12 rounded-[8px] bg-brand-teal-dark px-6 text-[16px] leading-6 text-white"
+            >
+              {t.newAudit.queuedNewScan}
+            </button>
+          </div>
+        </main>
+      </>
+    );
+  }
 
   /* ─── Scanning screen ─── */
   if (phase === "scanning") {

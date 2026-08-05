@@ -247,6 +247,7 @@ export default function ViolationsPage() {
               <div className="flex-[227] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
                 <p className="font-bold text-gray-100">{violation.title}</p>
                 <p className="text-gray-80">{violation.description}</p>
+                {/* Learn More — hidden per review; restore by uncommenting.
                 {/^https?:\/\//.test(violation.helpUrl) ? (
                   <a
                     href={violation.helpUrl}
@@ -261,6 +262,7 @@ export default function ViolationsPage() {
                     {t.violations.learnMore} <LinkIcon />
                   </button>
                 )}
+                */}
               </div>
 
               <div className="flex-[112] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
@@ -292,9 +294,11 @@ export default function ViolationsPage() {
                     <span className="min-w-0 break-words text-gray-100">{violation.elementOcr}</span>
                   </div>
                 </div>
+                {/* View Full Audit — hidden per review; restore by uncommenting.
                 <button type="button" className="inline-flex items-center gap-1.5 text-[14px] leading-5 text-brand-teal-dark underline">
                   {t.violations.viewFullAudit} <LinkIcon />
                 </button>
+                */}
               </div>
 
               <div className="flex-[184] min-w-0 border-b border-gray-10 px-4 py-6">

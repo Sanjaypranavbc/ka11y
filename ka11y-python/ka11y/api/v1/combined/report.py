@@ -258,6 +258,11 @@ def _build_report(
     by_page: Dict[str, Dict[str, int]] = {}
     page_buckets: Dict[str, Dict[str, List[Dict]]] = {}
     page_order: List[str] = []
+    # Distinct pages on which each SC has at least one VIOLATION. `sc_count`
+    # above counts findings, which on a multi-page crawl conflates "47 problems
+    # on one page" with "one problem repeated across 47 pages". This resolves
+    # into summary.by_wcag_sc[sc]["pages_affected"] below.
+    sc_failing_pages: Dict[str, set] = {}
     for f in all_findings:
         page_url = _page_of(f)
         if page_url not in by_page:
@@ -278,6 +283,12 @@ def _build_report(
         )
         by_page[page_url][bucket_key] += 1
         page_buckets[page_url][bucket_key].append(f)
+        if status == "fail":
+            sc_failing_pages.setdefault(f.get("wcag_sc") or "unknown", set()).add(page_url)
+
+    # Additive only — existing by_wcag_sc consumers keep working untouched.
+    for sc_key, sc_bucket in sc_count.items():
+        sc_bucket["pages_affected"] = len(sc_failing_pages.get(sc_key, ()))
 
     # Compliance score: pass-rate = passes / (passes + violations), as a 0–100
     # percentage. needs_review is deliberately excluded (it is neither a pass nor

@@ -44,6 +44,9 @@ export interface WcagStatusCounts {
   violations: number;
   needs_review: number;
   passes: number;
+  /** Distinct pages carrying at least one violation for this key. Only
+   * populated on summary.by_wcag_sc; absent on older reports. */
+  pages_affected?: number;
 }
 
 export interface WcagAuditSummary {
@@ -514,6 +517,9 @@ export interface TopFailingCriterion {
   label: string;
   level: WcagLevel;
   count: number;
+  /** How many distinct pages this criterion fails on — distinguishes
+   * "47 problems on one page" from "one problem across 47 pages". */
+  pagesAffected: number;
 }
 
 /** Findings carry their own `level` and `criterion_name`; the summary's
@@ -545,6 +551,7 @@ export function getTopFailingCriteria(data: WcagAuditResponse, limit = 8): TopFa
       label: meta[code]?.label || code,
       level: meta[code]?.level ?? "A",
       count: counts.violations,
+      pagesAffected: counts.pages_affected ?? 0,
     }))
     .filter((c) => c.count > 0)
     .sort((a, b) => b.count - a.count)

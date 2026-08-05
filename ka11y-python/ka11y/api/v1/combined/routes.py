@@ -231,6 +231,8 @@ async def submit_combined_audit(
     url: str,
     max_depth: int = Query(0, ge=0, le=5),
     max_pages: int = Query(20, ge=1, le=200),
+    wcag_level: str = Query("AAA", pattern=r"^(A|AA|AAA)$"),
+    email: str | None = Query(None, max_length=254),
 ):
     """
     Submit a **combined Python + Node/axe-core** accessibility audit.
@@ -243,6 +245,8 @@ async def submit_combined_audit(
     `max_pages` (default 20): page budget for the whole crawl; values above the
     20-page policy ceiling are silently capped rather than rejected (see
     ``CombinedRequest._cap_max_pages``).
+    `wcag_level` (A | AA | AAA): conformance level to report against. The filter
+    is cumulative — "AA" returns A + AA findings and suppresses AAA.
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report.
@@ -251,6 +255,8 @@ async def submit_combined_audit(
         url=url,
         max_depth=max_depth,
         max_pages=max_pages,
+        wcag_level=wcag_level,
+        email=email,
         run_ocr=True,
         run_image_audit=True,
         run_media_audit=True,

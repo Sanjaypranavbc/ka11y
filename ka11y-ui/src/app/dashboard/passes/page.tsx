@@ -207,6 +207,7 @@ export default function PassesPage() {
               <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
                 <p className="font-bold text-gray-100">{item.reasonTitle}</p>
                 <p className="text-gray-80">{item.reasonDescription}</p>
+                {/* Learn More — hidden per review; restore by uncommenting.
                 {/^https?:\/\//.test(item.helpUrl) ? (
                   <a
                     href={item.helpUrl}
@@ -221,6 +222,7 @@ export default function PassesPage() {
                     {t.passes.learnMore} <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
                   </button>
                 )}
+                */}
               </div>
 
               <div className="flex-[76] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
@@ -256,9 +258,11 @@ export default function PassesPage() {
                     <span className="min-w-0 break-words text-gray-100">{item.ocrText}</span>
                   </div>
                 </div>
+                {/* View Full Audit — hidden per review; restore by uncommenting.
                 <button type="button" className="inline-flex items-center gap-1.5 text-[14px] leading-5 text-brand-teal-dark underline">
                   {t.passes.viewFullAudit} <ExternalLink size={14} className="shrink-0" aria-hidden="true" />
                 </button>
+                */}
               </div>
 
             </div>
