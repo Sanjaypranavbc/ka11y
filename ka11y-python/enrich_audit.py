@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -25,13 +26,23 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
-DEFAULT_MODEL = "gemini-3.5-flash"
+DEFAULT_MODEL = "gemini-3.6-flash"
+
+# Explicit per-request HTTP timeout for the Gemini client. Without this, the
+# SDK's default is generous enough that a stalled connection can hang far
+# longer than the batch-level retry logic below expects — and since this
+# module is invoked synchronously from an async pipeline (see runner.py),
+# a single hung call blocks that whole process, not just this one job.
+# Bounding it here means a stuck call fails fast and actually reaches the
+# retry/backoff path instead of hanging indefinitely.
+GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "60000"))
 
 # --------------------------------------------------------------------------
 # Language support
@@ -128,6 +139,43 @@ def find_audit_root_dir(input_path: Path) -> Path:
         if parent.parent.name == "crawled_images":
             return parent
     return resolved_path.parent
+
+
+def _slugify_page_url(page_url: str, max_len: int = 60) -> str:
+    parsed = urlparse(page_url)
+    raw = (parsed.netloc + parsed.path).strip("/") or "root"
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", raw).strip("-").lower()
+    return slug[:max_len] or "page"
+
+
+def write_pagewise_reports(report: dict, out_dir: Path) -> list[str]:
+    """Write one enriched JSON file per crawled page into out_dir/pages/,
+    alongside the combined enriched_report.json.
+
+    Each page entry in report["pages"] already carries the *same* finding
+    objects as the flat violations/needs_review/passes arrays (see
+    ka11y/api/v1/combined/report.py::_build_report), so once enrich_violations()
+    has mutated those findings in place, every page's own violations/
+    needs_review/passes list is already enriched too — this just re-serialises
+    that per-page slice into its own file for depth-audit callers who want a
+    page-by-page artifact instead of parsing the combined file.
+
+    No-op (returns []) for a report with no `pages` array."""
+    pages = report.get("pages") or []
+    if not pages:
+        return []
+
+    pages_dir = Path(out_dir) / "pages"
+    pages_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[str] = []
+    for i, page in enumerate(pages, start=1):
+        slug = _slugify_page_url(page.get("page_url", ""))
+        path = pages_dir / f"page_{i}_{slug}.json"
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(page, f, indent=2, ensure_ascii=False)
+        written.append(str(path))
+    return written
 
 
 def trim_finding(finding: dict) -> dict:
@@ -326,10 +374,18 @@ def enrich_violations(
 
 def finalize_totals(totals: dict, violation_count: int, price_input: float, price_output: float) -> None:
     totals["avg_tokens_per_violation"] = totals["total_tokens"] / violation_count if violation_count else 0.0
-    totals["estimated_cost_usd"] = (
-        totals["input_tokens"] * price_input / 1_000_000.0
-        + totals["output_tokens"] * price_output / 1_000_000.0
+    billable_output_tokens = (
+            totals["output_tokens"] + totals["thought_tokens"]
     )
+
+    totals["estimated_cost_usd"] = ((totals["input_tokens"] * price_input)
+                                           + (billable_output_tokens * price_output)
+                                   ) / 1_000_000.0
+
+    # totals["estimated_cost_usd"] = (
+    #     totals["input_tokens"] * price_input / 1_000_000.0
+    #     + totals["output_tokens"] * price_output / 1_000_000.0
+    # )
 
 
 def print_summary_table(batches: list[dict], totals: dict) -> None:
@@ -377,8 +433,8 @@ def run_enrichment(
     report_filename: str = "combined_report.json",
     batch_size: int = 10,
     model_name: str = DEFAULT_MODEL,
-    price_input: float = 0.075,
-    price_output: float = 0.30,
+    price_input = 1.50,
+    price_output = 7.50,
     api_key: Optional[str] = None,
     print_table: bool = True,
     language: str = "en",
@@ -405,6 +461,7 @@ def run_enrichment(
     def write_outputs(batches_log: list[dict], totals: dict) -> dict:
         with open(out_dir / "enriched_report.json", "w", encoding="utf-8") as f:
             json.dump(report_copy, f, indent=2, ensure_ascii=False)
+        write_pagewise_reports(report_copy, out_dir)
         usage_data = {
             "report_file": report_filename,
             "run_started_at": run_started_at,
@@ -427,7 +484,10 @@ def run_enrichment(
         print("No violations to enrich. Writing unmodified report.")
         return write_outputs([], new_totals())
 
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=GEMINI_HTTP_TIMEOUT_MS),
+    )
     batches_log: list[dict] = []
     totals = new_totals()
     system_instruction = build_system_instruction(language)

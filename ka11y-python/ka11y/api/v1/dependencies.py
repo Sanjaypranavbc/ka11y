@@ -88,10 +88,7 @@ def get_image_crawler(
     Uses the optimized crawler engine (drop-in for AsyncImageCrawler)."""
     from ka11y.crawler.optimized.optimized_crawler import OptimizedImageCrawler
 
-    crawler = OptimizedImageCrawler(base_url=url, max_depth=max_depth)
-    crawler.output_dir = str(output_dir)
-    Path(crawler.output_dir).mkdir(parents=True, exist_ok=True)
-    return crawler
+    return OptimizedImageCrawler(base_url=url, max_depth=max_depth, output_dir=output_dir)
 
 
 # ── 4. Auditors ───────────────────────────────────────────────────────────────

@@ -65,6 +65,7 @@ class OptimizedImageCrawler:
         max_pages: int | None = None,
         internal_links: bool = True,
         job_id: str | None = None,
+        output_dir: str | Path | None = None,
     ) -> None:
         self.base_url = base_url
         self.max_depth = max_depth
@@ -80,10 +81,22 @@ class OptimizedImageCrawler:
         self.visited_urls: Set[str] = set()
         self.page_langs: Dict[str, str] = {}
 
-        base_out = CONFIG["input"]["output_dir"]
-        domain = urlparse(base_url).netloc.replace("www.", "").replace(".", "_")
-        timestamp = time.strftime("%m%d_%H%M")
-        self.output_dir = f"{base_out}/{domain}_{timestamp}"
+        if output_dir is not None:
+            # Caller (e.g. the combined-audit pipeline) already owns a
+            # per-job output directory — write into it directly instead of
+            # inventing a second, disconnected one. Without this, every
+            # audit split its artifacts across two sibling directories: this
+            # crawler's own `<domain>_<timestamp>` (images, OCR, metadata)
+            # and the job's real `<domain>_<timestamp>_<job_id>_combined`
+            # (reports) — and since the self-generated name has no job_id,
+            # concurrent same-domain jobs within the same minute could even
+            # collide.
+            self.output_dir = str(output_dir)
+        else:
+            base_out = CONFIG["input"]["output_dir"]
+            domain = urlparse(base_url).netloc.replace("www.", "").replace(".", "_")
+            timestamp = time.strftime("%m%d_%H%M")
+            self.output_dir = f"{base_out}/{domain}_{timestamp}"
         self._create_directories()
 
     def _create_directories(self) -> None:

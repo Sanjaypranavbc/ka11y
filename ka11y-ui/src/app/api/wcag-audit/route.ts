@@ -10,7 +10,7 @@ const WCAG_API_URL =
 // nginx default timeouts of ~60s) gets killed well before a real audit
 // (routinely 100s+) finishes.
 export async function POST(request: Request) {
-  let body: { url?: string };
+  let body: { url?: string; depth?: number; wcagLevel?: string };
   try {
     body = await request.json();
   } catch {
@@ -31,9 +31,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Enter a valid URL" }, { status: 400 });
   }
 
+  // Clamp/validate here too — the backend also enforces these bounds, but
+  // failing fast avoids a round trip for an obviously bad value.
+  const depth = Number.isFinite(body.depth)
+    ? Math.min(Math.max(Math.trunc(body.depth as number), 0), 5)
+    : 0;
+  const wcagLevel = ["A", "AA", "AAA"].includes(body.wcagLevel ?? "")
+    ? (body.wcagLevel as string)
+    : "AAA";
+
   try {
     const submitUrl = new URL(`${WCAG_API_URL}/combined-audit`);
     submitUrl.searchParams.set("url", url);
+    submitUrl.searchParams.set("max_depth", String(depth));
+    submitUrl.searchParams.set("wcag_level", wcagLevel);
 
     const submitRes = await fetch(submitUrl.toString(), {
       method: "POST",

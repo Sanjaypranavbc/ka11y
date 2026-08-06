@@ -23,7 +23,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from typing import AsyncGenerator
 from ka11y.utils.run_timing import compute_run_timing
@@ -227,20 +227,31 @@ async def submit_python_audit(payload: CombinedRequest):
 
 
 @router.post("/combined-audit", response_model=JobStatusResponse, status_code=202)
-async def submit_combined_audit(url: str):
+async def submit_combined_audit(
+    url: str,
+    max_depth: int = Query(default=0, ge=0, le=5),
+    wcag_level: str = Query(default="AAA", pattern=r"^(A|AA|AAA)$"),
+    max_pages: int = Query(default=50, ge=1, le=200),
+):
     """
     Submit a **combined Python + Node/axe-core** accessibility audit.
 
-    Convenience endpoint — accepts a plain `url` query parameter instead of a full
+    Convenience endpoint — accepts plain query parameters instead of a full
     JSON request body. All active Python audit stages are enabled by default
     (image audit, OCR/contrast, media, captions).
+
+    `max_depth` (0 = single page, up to 5) previously had no way to be set
+    through this endpoint and was always forced to 0, silently ignoring any
+    crawl depth the caller asked for — it is now a real query parameter.
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report.
     """
     payload = CombinedRequest(
         url=url,
-        max_depth=0,
+        max_depth=max_depth,
+        wcag_level=wcag_level,
+        max_pages=max_pages,
         run_ocr=True,
         run_image_audit=True,
         run_media_audit=True,

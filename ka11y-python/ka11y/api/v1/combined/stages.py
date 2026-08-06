@@ -310,6 +310,7 @@ async def _stage_image_audit(
             max_pages=max_pages,
             internal_links=internal_links,
             job_id=job_id,
+            output_dir=output_dir,
         )
 
         async def _crawl_and_save() -> None:

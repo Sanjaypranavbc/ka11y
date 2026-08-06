@@ -47,6 +47,25 @@ from ka11y.store import repo
 
 logger = setup_logger(name="KAC", tag="combined")
 
+
+def _ensure_ka11y_python_root_on_sys_path() -> Optional[str]:
+    """Add the ka11y-python/ directory (parent of the `ka11y` package) to
+    sys.path so top-level pipeline scripts — enrich_audit.py,
+    generate_summary_report.py — can be imported regardless of how this
+    process was launched (uvicorn, pytest, Docker WORKDIR, ...). Returns the
+    resolved root, or None if it couldn't be located."""
+    import sys
+    import pathlib
+
+    curr = pathlib.Path(__file__).resolve().parent
+    for parent in [curr] + list(curr.parents):
+        if parent.name == "ka11y" and (parent / "api").is_dir():
+            root = str(parent.parent)
+            if root not in sys.path:
+                sys.path.insert(0, root)
+            return root
+    return None
+
 _JOB_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1800"))
 _MAX_CONCURRENT_JOBS = int(os.environ.get("KA11Y_MAX_CONCURRENT_JOBS", "4"))
 _job_semaphore: asyncio.Semaphore | None = None
@@ -150,7 +169,13 @@ def _merge_findings(
 # ---------------------------------------------------------------------------
 
 _NODE_BASE_URL = os.environ.get("NODE_BASE_URL", "http://localhost:3000")
-_NODE_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_NODE_TIMEOUT_SECONDS", "120"))
+# In snapshot-fed mode Node audits every discovered URL with no internal time
+# budget of its own, so a flat HTTP timeout silently drops ALL axe findings on
+# any crawl whose page count makes it run longer than that flat value (e.g. a
+# few dozen pages easily exceeds 120s). Scale with the requested page budget
+# instead, capped at the overall job timeout so this can never outlive the job.
+_NODE_HTTP_BASE_TIMEOUT_SECONDS = float(os.environ.get("KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS", "60"))
+_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS = float(os.environ.get("KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS", "75"))
 
 
 async def _fetch_node_findings(
@@ -181,8 +206,17 @@ async def _fetch_node_findings(
     if payload.success_criteria_id:
         body["successCriteriaId"] = payload.success_criteria_id
 
+    # page_budget: the actual page count isn't known until the crawl finishes,
+    # so scale against the requested ceiling (payload.max_pages) rather than
+    # a real count that doesn't exist yet at call time.
+    page_budget = max(1, payload.max_pages)
+    node_timeout = min(
+        _NODE_HTTP_BASE_TIMEOUT_SECONDS + _NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS * page_budget,
+        float(_JOB_TIMEOUT_SECONDS),
+    )
+
     try:
-        async with httpx.AsyncClient(timeout=_NODE_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=node_timeout) as client:
             resp = await client.post(node_url, json=body)
             resp.raise_for_status()
             data = resp.json()
@@ -385,11 +419,19 @@ async def _run_job_body(
             _jobs[job_id].setdefault("warnings", []).append(
                 "Node/axe-core audit failed — report contains Python-only findings."
             )
-        elif node_result_raw:
-            node_findings = node_result_raw  # list[dict] from _fetch_node_findings
+        else:
+            # list[dict] from _fetch_node_findings — [] both on a caught
+            # failure (timeout, connection refused, ...) and on a genuinely
+            # empty result, so warn either way instead of staying silent.
+            # `elif node_result_raw:` previously guarded this branch, but an
+            # empty list is falsy, so the warning could never fire for the
+            # most common failure mode (Node call failed inside
+            # _fetch_node_findings and returned [] rather than raising).
+            node_findings = node_result_raw or []
             if not node_findings:
                 _jobs[job_id].setdefault("warnings", []).append(
-                    "Node/axe-core audit returned no findings (service may be unavailable)."
+                    "Node/axe-core audit returned no findings (service may be unavailable, "
+                    "timed out, or found nothing) — report contains Python-only findings."
                 )
 
         logger.info(
@@ -470,25 +512,23 @@ async def _run_job_body(
             )
 
         # Trigger automated Gemini report enrichment (enriched_report.json + token_usage.json)
+        enrichment_ok = False
         try:
-            import sys
-            import pathlib
-            
-            # Dynamically find the parent folder of the ka11y package
-            curr = pathlib.Path(__file__).resolve().parent
-            python_root = None
-            for parent in [curr] + list(curr.parents):
-                if parent.name == "ka11y" and (parent / "api").is_dir():
-                    python_root = str(parent.parent)
-                    break
-                    
-            if python_root:
-                if python_root not in sys.path:
-                    sys.path.insert(0, python_root)
+            python_root = _ensure_ka11y_python_root_on_sys_path()
             from enrich_audit import enrich_report_in_pipeline
-            
+
             logger.info(f"[combined] Starting automated Gemini enrichment for job {job_id} into {output_dir} (language={resolved_lang})")
-            enrich_report_in_pipeline(report, output_dir, language=resolved_lang)
+            # enrich_report_in_pipeline() makes dozens of sequential, blocking
+            # Gemini calls (one per batch of ~10 violations) with no explicit
+            # HTTP timeout. Running it inline on the event loop — as opposed
+            # to a worker thread — meant a single hung call froze this whole
+            # async server (every other job, the health check, everything)
+            # for as long as that call stayed hung, since nothing else could
+            # ever get a turn on the blocked loop.
+            await asyncio.to_thread(
+                enrich_report_in_pipeline, report, output_dir, language=resolved_lang
+            )
+            enrichment_ok = True
         except Exception as e:
             import os
             import sys
@@ -505,6 +545,54 @@ async def _run_job_body(
                 f"  Contents of /app: {app_contents}",
                 exc_info=True
             )
+
+        # Consolidated Markdown summary report — multi-page crawls only
+        # (max_depth >= 1). Built right after enrichment, before the job is
+        # marked completed, so it ships inside this same audit response
+        # instead of requiring a separate post-processing step.
+        if payload.max_depth >= 1:
+            try:
+                _ensure_ka11y_python_root_on_sys_path()
+                from generate_summary_report import run_summary_report
+
+                # dynamic_reason / dynamic_suggested_fix only exist on the
+                # enriched copy enrich_report_in_pipeline wrote to disk — the
+                # in-memory `report` used for the API response is never
+                # mutated by enrichment. Read it back when available; fall
+                # back to the unenriched `report` (dynamic fields simply
+                # absent from the table) so a partial enrichment failure
+                # doesn't also block the summary report.
+                source_report = report
+                enriched_path = output_dir / "enriched_report.json"
+                if enrichment_ok and enriched_path.is_file():
+                    with open(enriched_path, "r", encoding="utf-8") as fh:
+                        source_report = json.load(fh)
+
+                # Same blocking-call concern as the enrichment step above —
+                # run_summary_report() makes one more synchronous Gemini call.
+                summary_markdown = await asyncio.to_thread(
+                    run_summary_report,
+                    source_report,
+                    output_dir,
+                    depth=payload.max_depth,
+                    language=resolved_lang,
+                )
+                if summary_markdown:
+                    report["summary_report"] = {
+                        "format": "markdown",
+                        "content": summary_markdown,
+                        "path": str(output_dir / "summary_report.md"),
+                        "token_usage_path": str(output_dir / "summary_token_usage.json"),
+                    }
+                    logger.info(
+                        f"[combined] job {job_id}: consolidated summary report written to "
+                        f"{output_dir / 'summary_report.md'}"
+                    )
+            except Exception:
+                logger.error(
+                    f"[combined] job {job_id}: consolidated summary report generation failed (skipping)",
+                    exc_info=True,
+                )
 
         if len(report.get("passes", [])) > 100:
             logger.info(f"[combined] Slimming in-memory passes array from {len(report['passes'])} to 100 for job {job_id}")

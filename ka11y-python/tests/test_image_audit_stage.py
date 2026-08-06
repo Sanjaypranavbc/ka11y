@@ -116,6 +116,7 @@ async def test_stage_image_audit_surfaces_dns_resolution_warning():
             max_pages: int = 50,
             internal_links: bool = True,
             job_id: str | None = None,
+            output_dir: str | None = None,
         ):
             self.base_url = base_url
             self.max_depth = max_depth
@@ -123,7 +124,7 @@ async def test_stage_image_audit_surfaces_dns_resolution_warning():
             self.internal_links = internal_links
             self.job_id = job_id
             self.images_data = []
-            self.output_dir = "/tmp/ka11y-image-audit-test"
+            self.output_dir = output_dir or "/tmp/ka11y-image-audit-test"
 
         async def crawl_page(self, **kwargs):
             raise ImageCrawlerNavigationError(
