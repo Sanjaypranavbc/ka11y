@@ -202,6 +202,37 @@ function extractReadableText(html: string | null | undefined, max = 90): string 
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
+/** Name of the captured image file backing a finding.
+ * The backend ships it as `element.image_reference` (the crawler's own
+ * `img_<hash>.png` / `svg_<hash>.png` filename). Falls back to the basename of
+ * the captured-crop path. NEVER the rule id — that is the check that ran, not
+ * a file, and showing it made every row of a rule look like the same asset. */
+function pickImageFilename(el: any): string {
+  if (!el) return "";
+  const ref = el.image_reference;
+  if (typeof ref === "string" && ref.trim()) return ref.trim();
+  const src = el.image_src;
+  if (typeof src === "string" && src.trim() && !src.startsWith("/api/")) {
+    const base = src.split(/[\\/]/).pop();
+    if (base) return base.split("?")[0];
+  }
+  return "";
+}
+
+/** OCR text read out of the captured image, as shipped in
+ * `element.image_text`. Only when the backend sent none do we fall back to the
+ * element's own alt/visible text — previously that fallback was the ONLY
+ * source, so the "OCR" column was really showing the alt attribute and
+ * contradicted the image next to it. */
+function pickOcrText(el: any, max = 90): string {
+  const text = el?.image_text;
+  if (typeof text === "string" && text.trim()) {
+    const clean = text.replace(/\s+/g, " ").trim();
+    return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+  }
+  return "—";
+}
+
 /** Turn a captured-crop path/asset ref into a browser-loadable URL.
  * Accepts an /api/v1/assets/{id} path (same-origin, proxied to Python by
  * next.config) or an absolute http(s) URL. A bare filesystem path is NOT
@@ -307,8 +338,8 @@ export function toViolationRows(data: any): ViolationRow[] {
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
         elementTitle: selectorStr,
-        elementFile: finding.rule_id || finding.ruleId || "",
-        elementOcr: extractReadableText(el.html),
+        elementFile: pickImageFilename(el),
+        elementOcr: pickOcrText(el),
         imageUrls: pickImageUrls(el),
         fixGuide: finding.suggested_fix || "",
         helpUrl: finding.help_url || "",
@@ -331,7 +362,7 @@ export function toViolationRows(data: any): ViolationRow[] {
             level: criterion.level,
             tag: extractTag(el?.html),
             elementTitle: el?.selector ?? "—",
-            elementFile: finding.ruleId,
+            elementFile: pickImageFilename(el),
             elementOcr: extractReadableText(el?.html),
             imageUrls: pickImageUrls(el),
             fixGuide: "",
@@ -365,11 +396,11 @@ export function toPassesRows(data: any): PassRow[] {
         criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
-        elementFilename: finding.rule_id || finding.ruleId || "",
+        elementFilename: pickImageFilename(el),
         imageUrls: pickImageUrls(el),
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
-        ocrText: extractReadableText(el.html),
+        ocrText: pickOcrText(el),
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
@@ -390,7 +421,7 @@ export function toPassesRows(data: any): PassRow[] {
             criterion: criterion.name,
             level: criterion.level,
             tag: extractTag(el?.html),
-            elementFilename: finding.ruleId,
+            elementFilename: pickImageFilename(el),
             imageUrls: pickImageUrls(el),
             foreground: colors.foreground ?? "—",
             background: colors.background ?? "—",
@@ -426,11 +457,11 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
         criterion: finding.criterion_name || "",
         level: (finding.level || "A") as WcagLevel,
         tag: extractTag(el.html),
-        elementFilename: finding.rule_id || finding.ruleId || "",
+        elementFilename: pickImageFilename(el),
         imageUrls: pickImageUrls(el),
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
-        ocrText: extractReadableText(el.html),
+        ocrText: pickOcrText(el),
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
@@ -452,7 +483,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
             criterion: criterion.name,
             level: criterion.level,
             tag: extractTag(el?.html),
-            elementFilename: finding.ruleId,
+            elementFilename: pickImageFilename(el),
             imageUrls: pickImageUrls(el),
             foreground: colors.foreground ?? "—",
             background: colors.background ?? "—",

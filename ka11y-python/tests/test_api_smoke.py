@@ -396,8 +396,8 @@ class TestConverterHelpers:
         assert findings == []
 
     def test_alt_text_fallback_reason_uses_specific_missing_alt_template(self):
-        # A status-only FAILED record (no explicit reason) resolves the specific
-        # `fail_missing_alt` reason template — preferred over the generic rule
+        # A status-only FAILED record (no alt text at all) resolves the specific
+        # `missing_alt` reason template — preferred over the generic rule
         # description because it tells the user exactly what to fix. The reason
         # is still localised from the active (ja) context.
         token = _lang_ctx.set("ja")
@@ -405,9 +405,26 @@ class TestConverterHelpers:
             records = [{"wcag_1_1_1_status": "FAILED", "src": "x.png"}]
             findings = _alt_text_to_findings(records, self.PAGE)
             assert len(findings) == 1
-            assert findings[0]["reason_code"] == "fail_missing_alt"
+            assert findings[0]["reason_code"] == "missing_alt"
             # Localised (Japanese) and specific to the missing-alt case.
             assert findings[0]["reason"].startswith("画像")
         finally:
             _lang_ctx.reset(token)
+
+    def test_alt_text_present_but_failing_does_not_claim_alt_is_missing(self):
+        # Client-reported bug: an <img alt="YouTube"> that failed 1.1.1 for a
+        # wording reason was rendered with the "no alt attribute" message. The
+        # reason code must describe the actual defect, not a missing attribute.
+        records = [
+            {
+                "wcag_1_1_1_status": "FAILED",
+                "src": "youtube.png",
+                "alt_text": "YouTube",
+                "classification": "functional",
+                "sub_type": "icons",
+            }
+        ]
+        findings = _alt_text_to_findings(records, self.PAGE)
+        assert findings[0]["reason_code"] == "icon_terse"
+        assert "YouTube" in findings[0]["reason"]
 

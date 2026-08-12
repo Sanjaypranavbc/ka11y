@@ -256,6 +256,53 @@ async def test_register_report_assets_rewrites_urls(isolated_db, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_each_finding_keeps_its_own_image(isolated_db, tmp_path):
+    """Re-registering an already-stored image must not hand back a different
+    image's asset id.
+
+    Regression: one crop is registered once per rule that fired on it (1.1.1,
+    then 4.1.2, 1.4.5, …). The second INSERT OR IGNORE is a no-op, and reading
+    ``lastrowid`` after it returned the PREVIOUS insert's row — so the later
+    findings rendered whichever image happened to be registered before them
+    (the client saw a Kao logo next to every social-icon finding).
+    """
+    from ka11y.store.assets import register_report_assets
+
+    await repo.create_run(
+        run_id="run-dup", url="https://e.com", status="running",
+        lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
+        max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
+    )
+    kao = tmp_path / "kao.png"
+    kao.write_bytes(b"\x89PNG_kao")
+    youtube = tmp_path / "youtube.png"
+    youtube.write_bytes(b"\x89PNG_youtube")
+
+    def _finding(sc, path):
+        return {"wcag_sc": sc, "status": "fail",
+                "element": {"selector": "img", "image_src": str(path)}}
+
+    report = {
+        "violations": [
+            _finding("1.1.1", kao),
+            _finding("1.1.1", youtube),
+            # Same two images again, now under the second rule.
+            _finding("4.1.2", kao),
+            _finding("4.1.2", youtube),
+        ],
+        "needs_review": [], "passes": [],
+    }
+    await register_report_assets("run-dup", report)
+
+    urls = [f["element"]["image_src"] for f in report["violations"]]
+    assert all(u.startswith("/api/v1/assets/") for u in urls)
+    # Same image → same asset both times; different images → different assets.
+    assert urls[0] == urls[2], "second finding for the same image got a different asset"
+    assert urls[1] == urls[3], "second finding for the same image got a different asset"
+    assert urls[0] != urls[1], "two different images collapsed onto one asset"
+
+
+@pytest.mark.asyncio
 async def test_crawler_timing_mirrors_to_db(isolated_db, tmp_path, monkeypatch):
     """P3: crawler rows mirror into stage_timings when a run_id is in context."""
     from ka11y.utils import crawler_timing

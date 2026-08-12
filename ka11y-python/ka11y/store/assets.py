@@ -94,18 +94,36 @@ async def put_asset(
             tmp.write_bytes(raw)
             os.replace(tmp, dest)  # atomic publish
 
-        asset_id = await get_db().execute(
-            "INSERT OR IGNORE INTO assets "
-            "(run_id, page_url, kind, rel_path, sha256, mime, width, height, bytes) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (run_id, page_url, kind, rel_path, sha, mime, width, height, len(raw)),
-        )
-        if not asset_id:
-            row = await get_db().query_one(
+        # The id MUST be read back with a SELECT rather than taken from
+        # ``lastrowid``. ``INSERT OR IGNORE`` that hits the UNIQUE(run_id,
+        # rel_path) constraint leaves ``sqlite3_last_insert_rowid()`` pointing at
+        # the PREVIOUS successful insert, so trusting lastrowid handed the caller
+        # a *different image's* asset id. That is exactly what happened for every
+        # image referenced by more than one finding (the same crop is registered
+        # once per rule: 1.1.1, then 4.1.2, 1.4.5, 1.4.11 …) — the first finding
+        # got the right thumbnail and every later one rendered whichever image
+        # was inserted before it. Insert + select run in one writer callback so
+        # they are atomic against concurrent registrations.
+        def _insert_and_resolve(conn) -> int:
+            conn.execute(
+                "INSERT OR IGNORE INTO assets "
+                "(run_id, page_url, kind, rel_path, sha256, mime, width, height, bytes) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (run_id, page_url, kind, rel_path, sha, mime, width, height, len(raw)),
+            )
+            row = conn.execute(
                 "SELECT id FROM assets WHERE run_id=? AND rel_path=?",
                 (run_id, rel_path),
+            ).fetchone()
+            return int(row["id"]) if row else 0
+
+        asset_id = await get_db().run_write(_insert_and_resolve)
+        if not asset_id:
+            logger.warning(
+                "[store] put_asset(run=%s kind=%s) could not resolve an asset id",
+                run_id, kind,
             )
-            asset_id = row["id"] if row else 0
+            return None
         return AssetRef(asset_id=int(asset_id), rel_path=rel_path, sha256=sha, bytes=len(raw))
     except Exception:  # noqa: BLE001
         logger.warning("[store] put_asset(run=%s kind=%s) failed", run_id, kind, exc_info=True)

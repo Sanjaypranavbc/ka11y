@@ -432,8 +432,16 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
 
 def _check_1_1_1_logo(alt: str) -> tuple[bool, str]:
     """
-    Logo: alt MUST include the word 'logo' (or 'home' for linked logos).
-    W3C WAI: format is '[Brand name] logo'.
+    Logo: the alt text must identify the brand or the link destination.
+
+    The literal word "logo" is NOT required. W3C WAI (Images Tutorial →
+    "Functional Images") gives ``alt="Kao"`` / ``alt="Home"`` as correct names
+    for a linked site logo — a screen reader already announces the role, so
+    "… logo" is optional wording, not a conformance requirement. Requiring it
+    turned every correctly-labelled brand logo into a false violation.
+
+    Fails only when the name is missing, empty, or purely generic
+    ("image", "logo" on its own, …).
     """
     if not alt or _is_empty(alt) or _norm(alt) in _EMPTY_OR_GENERIC:
         return False, "FAIL [1.1.1] Logo has empty/missing alt text"
@@ -443,15 +451,20 @@ def _check_1_1_1_logo(alt: str) -> tuple[bool, str]:
         return True, f"PASS [1.1.1] Logo alt includes logo/home keyword: '{alt}'"
 
     return (
-        False,
-        f"FAIL [1.1.1] Logo alt must include 'logo' or 'home' (or local equivalents). Found: '{alt}'",
+        True,
+        f"PASS [1.1.1] Logo alt names the brand or destination: '{alt}'",
     )
 
 
 def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
     """
-    Icon: alt must describe the ACTION or include 'icon'.
-    Social brand icons require '<Brand> icon' — brand name alone is insufficient.
+    Icon: alt must describe the ACTION, name the destination, or include 'icon'.
+
+    A social/brand icon named after its service (``alt="YouTube"`` on a link to
+    the YouTube channel) HAS an adequate text alternative: the name identifies
+    where the link goes, which is exactly what 1.1.1 asks for. Demanding the
+    literal suffix "icon" produced false violations on every correctly-labelled
+    social link, so brand-only names now pass.
     """
     if not alt or _is_empty(alt) or _norm(alt) in _EMPTY_OR_GENERIC:
         return False, "FAIL [1.1.1] Icon has empty/missing alt text"
@@ -460,9 +473,8 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
 
     if norm in _SOCIAL_BRAND_NAMES:
         return (
-            False,
-            f"FAIL [1.1.1] Social icon alt '{alt}' must include 'icon' "
-            f"(e.g. '{alt} icon'). Brand name alone is not sufficient per WCAG 1.1.1.",
+            True,
+            f"PASS [1.1.1] Icon alt names the linked service: '{alt}'",
         )
 
     has_qualifier = bool(re.search(r"\b(icon|logo|button|link)\b", norm))
@@ -533,9 +545,11 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
     accessible name. Uses alt (aria-label/title resolution already happened
     in the crawler/classifier via element.evaluate context).
 
-    Logo  → name must include 'logo'.
-    Icon  → brand-only name is insufficient.
-    Button → any non-empty, non-generic name is acceptable.
+    4.1.2 asks whether a name EXISTS and is programmatically determinable — not
+    how it is phrased. ``alt="Kao"`` on the Kao logo and ``alt="YouTube"`` on a
+    social link are both valid accessible names, so the only failure mode here
+    is a missing or purely generic name. (Wording quality is 1.1.1's concern,
+    and is reported there.)
     """
     name = (alt or "").strip()
 
@@ -547,20 +561,10 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
 
     norm = _norm(name)
 
-    if sub_type == "logos":
-        if any(w in norm for w in _LOGO_WORDS) or any(w in norm for w in _HOME_WORDS):
-            return True, f"PASS [4.1.2] Logo accessible name includes keyword: '{name}'"
-        return (
-            False,
-            f"FAIL [4.1.2] Logo accessible name '{name}' must include 'logo' or 'home'.",
-        )
-
-    if sub_type == "icons" and norm in _SOCIAL_BRAND_NAMES:
-        return (
-            False,
-            f"FAIL [4.1.2] Icon accessible name '{name}' is brand name only "
-            f"— must say '{name} icon'.",
-        )
+    if sub_type == "logos" and (
+        any(w in norm for w in _LOGO_WORDS) or any(w in norm for w in _HOME_WORDS)
+    ):
+        return True, f"PASS [4.1.2] Logo accessible name includes keyword: '{name}'"
 
     return True, f"PASS [4.1.2] Accessible name is present and meaningful: '{name}'"
 

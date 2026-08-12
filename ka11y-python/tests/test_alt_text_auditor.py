@@ -258,12 +258,14 @@ class TestCheck111Logo:
         passed, _ = _check_1_1_1_logo("企業ロゴ")
         assert passed is True
 
-    def test_brand_name_without_logo_fails(self):
+    def test_brand_name_without_logo_word_passes(self):
+        # W3C WAI names a linked site logo after the brand or the destination;
+        # the literal word "logo" is optional wording, not a requirement.
         passed, msg = _check_1_1_1_logo("Brand Name")
-        assert passed is False
-        assert "logo" in msg.lower()
+        assert passed is True
+        assert "PASS" in msg
 
-    def test_fail_message_shows_found_alt(self):
+    def test_pass_message_shows_found_alt(self):
         _, msg = _check_1_1_1_logo("Company Name")
         assert "Company Name" in msg
 
@@ -280,11 +282,11 @@ class TestCheck111Icon:
         passed, msg = _check_1_1_1_icon("")
         assert passed is False
 
-    def test_social_brand_name_alone_fails(self):
-        # "twitter" alone is insufficient
+    def test_social_brand_name_alone_passes(self):
+        # "twitter" names the linked service — an adequate text alternative.
         passed, msg = _check_1_1_1_icon("twitter")
-        assert passed is False
-        assert "icon" in msg.lower()
+        assert passed is True
+        assert "PASS" in msg
 
     def test_social_brand_plus_icon_passes(self):
         passed, _ = _check_1_1_1_icon("Twitter icon")
@@ -306,8 +308,13 @@ class TestCheck111Icon:
         passed, msg = _check_1_1_1_icon("arrow")
         assert passed is True
 
-    def test_single_char_fails(self):
+    def test_single_char_brand_passes(self):
+        # "X" is the brand name of the service, not a stray initial.
         passed, _ = _check_1_1_1_icon("X")
+        assert passed is True
+
+    def test_single_char_non_brand_fails(self):
+        passed, _ = _check_1_1_1_icon("Q")
         assert passed is False
 
     def test_generic_alt_image_fails(self):
@@ -318,9 +325,9 @@ class TestCheck111Icon:
         passed, _ = _check_1_1_1_icon(None)
         assert passed is False
 
-    def test_facebook_brand_alone_fails(self):
+    def test_facebook_brand_alone_passes(self):
         passed, _ = _check_1_1_1_icon("facebook")
-        assert passed is False
+        assert passed is True
 
     def test_facebook_icon_passes(self):
         passed, _ = _check_1_1_1_icon("Facebook icon")
@@ -403,15 +410,21 @@ class TestCheck412:
         passed, _ = _check_4_1_2("サービスロゴ", "logos")
         assert passed is True
 
-    def test_logo_subtype_without_logo_fails(self):
+    def test_logo_subtype_without_logo_word_passes(self):
+        # 4.1.2 asks whether a name exists, not how it is phrased.
         passed, msg = _check_4_1_2("Brand Name", "logos")
-        assert passed is False
-        assert "logo" in msg.lower()
+        assert passed is True
+        assert "PASS" in msg
 
-    def test_icon_subtype_social_brand_only_fails(self):
+    def test_icon_subtype_social_brand_only_passes(self):
         passed, msg = _check_4_1_2("twitter", "icons")
+        assert passed is True
+        assert "PASS" in msg
+
+    def test_missing_name_still_fails(self):
+        passed, msg = _check_4_1_2("", "icons")
         assert passed is False
-        assert "icon" in msg.lower()
+        assert "No accessible name" in msg
 
     def test_icon_subtype_with_icon_passes(self):
         passed, _ = _check_4_1_2("Twitter icon", "icons")
@@ -520,7 +533,7 @@ class TestAltTextAuditorReport:
         assert records[0]["wcag_4_1_2_status"] == "PASSED"
         assert records[0]["overall_status"] == "PASSED"
 
-    def test_functional_logo_bad_alt_fails_both_rules(self, tmp_output):
+    def test_functional_logo_named_after_brand_passes_both_rules(self, tmp_output):
         img = make_image(
             classification="functional", sub_type="logos",
             is_functional=True, is_logo=True,
@@ -529,11 +542,25 @@ class TestAltTextAuditorReport:
         records = AltTextAccessibilityAuditor().generate_audit_report(
             images_data=[img], ocr_results=[], output_dir=tmp_output
         )
+        assert records[0]["wcag_1_1_1_status"] == "PASSED"
+        assert records[0]["wcag_4_1_2_status"] == "PASSED"
+
+    def test_functional_logo_without_any_name_fails_both_rules(self, tmp_output):
+        img = make_image(
+            classification="functional", sub_type="logos",
+            is_functional=True, is_logo=True,
+            alt_text="",
+        )
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[], output_dir=tmp_output
+        )
         assert records[0]["wcag_1_1_1_status"] == "FAILED"
         assert records[0]["wcag_4_1_2_status"] == "FAILED"
         assert records[0]["overall_status"] == "FAILED"
 
-    def test_functional_icon_social_brand_only_fails(self, tmp_output):
+    def test_functional_icon_social_brand_only_passes(self, tmp_output):
+        # The client-reported false positive: a YouTube/Twitter link icon whose
+        # alt names the service must not be reported as missing alt text.
         img = make_image(
             classification="functional", sub_type="icons",
             is_functional=True, is_icon=True,
@@ -542,7 +569,7 @@ class TestAltTextAuditorReport:
         records = AltTextAccessibilityAuditor().generate_audit_report(
             images_data=[img], ocr_results=[], output_dir=tmp_output
         )
-        assert records[0]["wcag_1_1_1_status"] == "FAILED"
+        assert records[0]["wcag_1_1_1_status"] == "PASSED"
 
     def test_non_functional_image_has_na_for_4_1_2(self, tmp_output):
         img = make_image(
@@ -658,7 +685,7 @@ class TestAltTextAuditorReport:
         img = make_image(
             classification="functional", sub_type="logos",
             is_functional=True, is_logo=True,
-            alt_text="brand",  # missing 'logo' word — both checks fail
+            alt_text="image",  # generic name — no usable accessible name
         )
         records = AltTextAccessibilityAuditor().generate_audit_report(
             images_data=[img], ocr_results=[], output_dir=tmp_output

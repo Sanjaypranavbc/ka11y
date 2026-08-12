@@ -17,6 +17,10 @@ import contextvars
 import os
 from typing import Any, Dict, List, Optional
 
+from ka11y.accessibility.rules.non_text.alttext import (
+    _EMPTY_OR_GENERIC as _EMPTY_OR_GENERIC_ALT,
+    _norm as _norm_alt,
+)
 from ka11y.config.logger import setup_logger
 from ka11y.utils.url_canonical import canonicalize_url as _canonicalize_url
 from ka11y.i18n.loader import (
@@ -162,6 +166,64 @@ def _make_finding(
 def _is_incomplete_reason(reason: str) -> bool:
     """Identify manual-review reasons that should surface as needs_review."""
     return reason.strip().upper().startswith("INCOMPLETE")
+
+
+# ── Alt-text reason-code selection ────────────────────────────────────────────
+#
+# The localized reason shown in the UI comes from `reason_code` → i18n YAML.
+# Every 1.1.1 failure used to be emitted as `fail_missing_alt` ("this image has
+# no alt attribute"), regardless of why it actually failed — so an <img> that
+# DOES carry alt="YouTube" was reported to the client as having no alt text.
+# The code is now derived from the record itself so the message matches the
+# defect. Derived from fields, never by parsing the English reason string.
+
+
+def _alt_is_generic(value: Optional[str]) -> bool:
+    """True when the alt text is present but carries no information."""
+    if value is None:
+        return False
+    return _norm_alt(value) in _EMPTY_OR_GENERIC_ALT
+
+
+def _alt_text_reason_code(record: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+    """Pick the i18n reason code + params for a FAILED 1.1.1 record."""
+    alt = record.get("alt_text")
+    params: Dict[str, Any] = {"name": alt or ""}
+    classification = str(record.get("classification") or "").strip().lower()
+    sub_type = str(record.get("sub_type") or "").strip().lower()
+
+    # No alt attribute at all — the only case that is genuinely "missing alt".
+    if alt is None:
+        return "missing_alt", params
+
+    if classification == "decorative":
+        # Marked decorative yet exposing a description (or vice versa).
+        return "decorative_invalid", params
+
+    if not str(alt).strip():
+        return "missing_alt", params
+
+    if _alt_is_generic(alt):
+        return "generic_alt", params
+
+    if sub_type == "logos":
+        return "logo_review", params
+
+    if sub_type == "icons":
+        return "icon_terse", params
+
+    if record.get("has_ocr_text"):
+        # Informative image whose alt does not convey the text baked into it.
+        params["ocr_text"] = record.get("detected_text") or ""
+        return "alt_text_mismatch", params
+
+    return "generic_alt", params
+
+
+def _incomplete_reason_code(record: Dict[str, Any]) -> str:
+    """`capture_failed` only when the screenshot really could not be captured."""
+    capture_status = str(record.get("capture_status") or "ok")
+    return "capture_failed" if capture_status != "ok" else "needs_review_unknown"
 
 
 def _record_element_kwargs(
@@ -490,7 +552,7 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     rule_id="python_1_1_1_alt",
                     wcag_sc="1.1.1",
                     status="needs_review",
-                    reason_code="capture_failed",
+                    reason_code=_incomplete_reason_code(r),
                     reason=reason or None,
                     severity=_PYTHON_SEVERITY["1.1.1"],
                     element_html=element_html,
@@ -503,13 +565,15 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                 )
             )
         elif status_raw == "FAILED":
+            fail_code, fail_params = _alt_text_reason_code(r)
             findings.append(
                 _make_finding(
                     source="python",
                     rule_id="python_1_1_1_alt",
                     wcag_sc="1.1.1",
                     status="fail",
-                    reason_code="fail_missing_alt",
+                    reason_code=fail_code,
+                    reason_params=fail_params,
                     reason=reason or None,
                     severity=_PYTHON_SEVERITY["1.1.1"],
                     element_html=element_html,
@@ -569,7 +633,7 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     rule_id="python_4_1_2_name_role_value",
                     wcag_sc="4.1.2",
                     status="needs_review",
-                    reason_code="capture_failed",
+                    reason_code=_incomplete_reason_code(r),
                     reason=reason or None,
                     severity=sev,
                     element_html=element_html,
@@ -882,7 +946,7 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     rule_id="python_1_4_5_images_of_text",
                     wcag_sc="1.4.5",
                     status="needs_review",
-                    reason_code="capture_failed",
+                    reason_code=_incomplete_reason_code(r),
                     reason=reason or None,
                     severity=sev,
                     element_html=element_html,

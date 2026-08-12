@@ -157,6 +157,27 @@ _NODE_BASE_URL = os.environ.get("NODE_BASE_URL", "http://localhost:3000")
 # This was previously 120 s — less than half Node's budget — so any crawl over
 # 2 minutes (routine at max_depth 1-2) lost all axe findings.
 _NODE_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_NODE_TIMEOUT_SECONDS", "300"))
+# A fixed ceiling is wrong for multi-page crawls: Node audits every page in the
+# requested set, so the wall time scales with `max_pages`. The deployment already
+# configures the two knobs below (see docker-compose.yml) but nothing read them,
+# so the client timeout stayed at 300 s and any crawl slower than that had ALL of
+# its axe-core findings discarded by the except-branch — the run silently
+# degraded to Python-only findings with a single warning line.
+_NODE_HTTP_BASE_TIMEOUT = int(
+    os.environ.get("KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS", "60")
+)
+_NODE_HTTP_PER_PAGE_TIMEOUT = int(
+    os.environ.get("KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS", "75")
+)
+
+
+def _node_http_timeout(max_pages: int) -> float:
+    """Read timeout for the Node call: base + per-page, never below the flat
+    ``KA11Y_NODE_TIMEOUT_SECONDS`` floor (which must stay above Node's own
+    ``flatCrawlBudgetMs``) and never above the job's overall budget."""
+    pages = max(1, int(max_pages or 1))
+    scaled = _NODE_HTTP_BASE_TIMEOUT + _NODE_HTTP_PER_PAGE_TIMEOUT * pages
+    return float(min(max(scaled, _NODE_TIMEOUT_SECONDS), _JOB_TIMEOUT_SECONDS))
 
 
 async def _fetch_node_findings(
@@ -188,8 +209,9 @@ async def _fetch_node_findings(
     if payload.success_criteria_id:
         body["successCriteriaId"] = payload.success_criteria_id
 
+    timeout_s = _node_http_timeout(payload.max_pages)
     try:
-        async with httpx.AsyncClient(timeout=_NODE_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=timeout_s) as client:
             resp = await client.post(node_url, json=body)
             resp.raise_for_status()
             data = resp.json()
@@ -219,8 +241,9 @@ async def _fetch_node_findings(
 
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "[combined] job %s: Node audit failed (%s: %s) — continuing with Python-only results",
-            job_id, type(exc).__name__, exc,
+            "[combined] job %s: Node audit failed after %.0fs budget (%s: %s) — "
+            "continuing with Python-only results",
+            job_id, timeout_s, type(exc).__name__, exc,
         )
         return {"findings": [], "scanned_pages": []}
 

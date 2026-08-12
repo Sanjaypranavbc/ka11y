@@ -68,6 +68,51 @@ def _ext(el: dict, captured: Path | None) -> str:
     return tail[1].lower() if len(tail) == 2 and len(tail[1]) <= 5 else "png"
 
 
+def _sha1_of(path: Path) -> str:
+    """Content hash of a captured file, used to tell "same image reused" from
+    "different element that merely shares a src"."""
+    h = hashlib.sha1()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _unique_basename(
+    taken: Dict[str, str],
+    prefix: str,
+    digest: str,
+    ext: str,
+    element_id: str,
+    content_hash: str,
+) -> str:
+    """Return the basename this capture should be stored under.
+
+    Basenames are the pipeline's join key: OCR results are correlated back to
+    images by ``Path(filename).name`` alone (see ``_build_ocr_index``). Naming
+    the file after ``md5(src)`` therefore collapsed every element sharing a src
+    onto ONE file — a logo in the sticky header and the same logo in the footer
+    render differently, so the second copy overwrote the first and both records
+    then pointed at one screenshot with one OCR result. Identical bytes still
+    share a name (that keeps OCR work deduplicated, which is the point of
+    hashing the src); only genuinely different pixels get a suffix.
+    """
+    base = f"{prefix}{digest}.{ext}"
+    seen = taken.get(base)
+    if seen is None or seen == content_hash:
+        taken[base] = content_hash
+        return base
+
+    suffix = hashlib.md5(element_id.encode("utf-8")).hexdigest()[:6]
+    candidate = f"{prefix}{digest}_{suffix}.{ext}"
+    n = 1
+    while taken.get(candidate) not in (None, content_hash):
+        candidate = f"{prefix}{digest}_{suffix}_{n}.{ext}"
+        n += 1
+    taken[candidate] = content_hash
+    return candidate
+
+
 def _subpath(classification: str | None, sub_type: str | None) -> Path:
     cls = classification or "informative"
     if cls == "functional":
@@ -94,6 +139,10 @@ def build_image_data(
     images: List[ImageData] = []
     page_langs: Dict[str, str] = {}
     visited: Set[str] = set()
+    # basename → content hash, across the whole run (basenames are the OCR
+    # correlation key, so they must be unique per distinct set of pixels even
+    # across classification sub-directories).
+    taken_basenames: Dict[str, str] = {}
 
     for jf in sorted(raw_dir.glob("*.json")):
         try:
@@ -145,9 +194,16 @@ def build_image_data(
 
                 dest_dir = output_dir / _subpath(classification, sub_type)
                 dest_dir.mkdir(parents=True, exist_ok=True)
-                filename = f"{prefix}{digest}.{ext}"
-                dest = dest_dir / filename
                 try:
+                    filename = _unique_basename(
+                        taken_basenames,
+                        prefix,
+                        digest,
+                        ext,
+                        str(el.get("id") or f"{page_url}#{src}"),
+                        _sha1_of(captured),
+                    )
+                    dest = dest_dir / filename
                     shutil.copy2(captured, dest)
                     screenshot_path = str(dest)
                     capture_status = "ok"
