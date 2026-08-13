@@ -284,16 +284,32 @@ export default function ViolationsPage() {
               <div className="flex-[227] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="text-[14px] font-medium leading-5 break-words text-gray-100">{violation.elementTitle}</p>
                 <ElementImage srcs={violation.imageUrls} className="h-[61px] w-[105px]" />
-                <div className="flex flex-col gap-2 text-[12px] leading-5">
-                  <div className="flex gap-1">
-                    <span className="w-9 shrink-0 text-gray-80">{t.violations.file}</span>
-                    <span className="min-w-0 break-words text-gray-100">{violation.elementFile}</span>
+                {/* Each line appears only when the finding actually carries
+                    that value. Most rules are not image rules, so rendering
+                    these unconditionally printed a bare "OCR:" on rows that
+                    never went near an image. */}
+                {(violation.elementFile || violation.elementAlt || violation.elementOcr) && (
+                  <div className="flex flex-col gap-2 text-[12px] leading-5">
+                    {violation.elementFile && (
+                      <div className="flex gap-1">
+                        <span className="shrink-0 text-gray-80">{t.violations.file}</span>
+                        <span className="min-w-0 break-words text-gray-100">{violation.elementFile}</span>
+                      </div>
+                    )}
+                    {violation.elementAlt && (
+                      <div className="flex gap-1">
+                        <span className="shrink-0 text-gray-80">{t.violations.alt}</span>
+                        <span className="min-w-0 break-words text-gray-100">{violation.elementAlt}</span>
+                      </div>
+                    )}
+                    {violation.elementOcr && (
+                      <div className="flex gap-1">
+                        <span className="shrink-0 text-gray-80">{t.violations.ocr}</span>
+                        <span className="min-w-0 break-words text-gray-100">{violation.elementOcr}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-1">
-                    <span className="w-9 shrink-0 text-gray-80">{t.violations.ocr}</span>
-                    <span className="min-w-0 break-words text-gray-100">{violation.elementOcr}</span>
-                  </div>
-                </div>
+                )}
                 {/* View Full Audit — hidden per review; restore by uncommenting.
                 <button type="button" className="inline-flex items-center gap-1.5 text-[14px] leading-5 text-brand-teal-dark underline">
                   {t.violations.viewFullAudit} <LinkIcon />

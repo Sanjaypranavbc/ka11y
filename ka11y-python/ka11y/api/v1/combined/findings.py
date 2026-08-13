@@ -185,12 +185,29 @@ def _alt_is_generic(value: Optional[str]) -> bool:
     return _norm_alt(value) in _EMPTY_OR_GENERIC_ALT
 
 
+def _alt_reason_params(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Placeholder values shared by every 1.1.1 reason template."""
+    return {
+        "name": record.get("alt_text") or "",
+        "ocr_text": record.get("detected_text") or "",
+    }
+
+
 def _alt_text_reason_code(record: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
-    """Pick the i18n reason code + params for a FAILED 1.1.1 record."""
+    """Pick the i18n reason code + params for a 1.1.1 record.
+
+    The auditor stamps ``wcag_1_1_1_code`` whenever its branch knows the exact
+    situation; that always wins. The derivation below only covers branches that
+    did not name one.
+    """
     alt = record.get("alt_text")
-    params: Dict[str, Any] = {"name": alt or ""}
+    params = _alt_reason_params(record)
     classification = str(record.get("classification") or "").strip().lower()
     sub_type = str(record.get("sub_type") or "").strip().lower()
+
+    explicit = str(record.get("wcag_1_1_1_code") or "").strip()
+    if explicit:
+        return explicit, params
 
     # No alt attribute at all — the only case that is genuinely "missing alt".
     if alt is None:
@@ -214,16 +231,23 @@ def _alt_text_reason_code(record: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
 
     if record.get("has_ocr_text"):
         # Informative image whose alt does not convey the text baked into it.
-        params["ocr_text"] = record.get("detected_text") or ""
         return "alt_text_mismatch", params
 
     return "generic_alt", params
 
 
-def _incomplete_reason_code(record: Dict[str, Any]) -> str:
-    """`capture_failed` only when the screenshot really could not be captured."""
+def _incomplete_reason_code(record: Dict[str, Any], sc: str = "1.1.1") -> str:
+    """`capture_failed` only when the screenshot really could not be captured.
+
+    A needs_review verdict that the rule reached deliberately (an unverifiable
+    long description, an OCR/alt mismatch) carries its own code and must not be
+    mislabelled as a capture failure.
+    """
     capture_status = str(record.get("capture_status") or "ok")
-    return "capture_failed" if capture_status != "ok" else "needs_review_unknown"
+    if capture_status != "ok":
+        return "capture_failed"
+    explicit = str(record.get(f"wcag_{sc.replace('.', '_')}_code") or "").strip()
+    return explicit or "needs_review_unknown"
 
 
 def _record_element_kwargs(
@@ -553,6 +577,7 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     wcag_sc="1.1.1",
                     status="needs_review",
                     reason_code=_incomplete_reason_code(r),
+                    reason_params=_alt_reason_params(r),
                     reason=reason or None,
                     severity=_PYTHON_SEVERITY["1.1.1"],
                     element_html=element_html,
@@ -633,7 +658,7 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
                     rule_id="python_4_1_2_name_role_value",
                     wcag_sc="4.1.2",
                     status="needs_review",
-                    reason_code=_incomplete_reason_code(r),
+                    reason_code=_incomplete_reason_code(r, "4.1.2"),
                     reason=reason or None,
                     severity=sev,
                     element_html=element_html,
@@ -946,7 +971,7 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
                     rule_id="python_1_4_5_images_of_text",
                     wcag_sc="1.4.5",
                     status="needs_review",
-                    reason_code=_incomplete_reason_code(r),
+                    reason_code=_incomplete_reason_code(r, "1.4.5"),
                     reason=reason or None,
                     severity=sev,
                     element_html=element_html,

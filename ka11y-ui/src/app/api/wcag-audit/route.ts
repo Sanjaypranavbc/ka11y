@@ -10,7 +10,13 @@ const WCAG_API_URL =
 // nginx default timeouts of ~60s) gets killed well before a real audit
 // (routinely 100s+) finishes.
 export async function POST(request: Request) {
-  let body: { url?: string; maxDepth?: number; wcagLevel?: string; email?: string };
+  let body: {
+    url?: string;
+    maxDepth?: number;
+    wcagLevel?: string;
+    email?: string;
+    lang?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -47,11 +53,23 @@ export async function POST(request: Request) {
     ? (body.wcagLevel as string)
     : "AA";
 
+  // Language the findings themselves are rendered in. The backend defaults to
+  // "auto", which detects the *audited page's* language — so an English site
+  // came back with English reasons even with JA selected in the dashboard.
+  // The UI's toggle is an explicit user choice, so pass it through instead.
+  // The backend resolves locales by filename (i18n/locales/<lang>.yml), where
+  // Japanese is "ja"; sending the UI's "jp" finds no file and silently falls
+  // back to English, so map it here. Unknown values fall back to "auto" so the
+  // old detect-the-page behaviour still applies when nothing was chosen.
+  const UI_LANG_TO_LOCALE: Record<string, string> = { en: "en", jp: "ja" };
+  const lang = UI_LANG_TO_LOCALE[body.lang ?? ""] ?? "auto";
+
   try {
     const submitUrl = new URL(`${WCAG_API_URL}/combined-audit`);
     submitUrl.searchParams.set("url", url);
     submitUrl.searchParams.set("max_depth", String(maxDepth));
     submitUrl.searchParams.set("wcag_level", wcagLevel);
+    submitUrl.searchParams.set("lang", lang);
     // Only sent when the user supplied one. A deep crawl outlives the browser's
     // wait, so this is how the finished report reaches them.
     const email = body.email?.trim();

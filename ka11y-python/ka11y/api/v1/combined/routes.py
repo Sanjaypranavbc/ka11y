@@ -233,6 +233,7 @@ async def submit_combined_audit(
     max_pages: int = Query(20, ge=1, le=200),
     wcag_level: str = Query("AAA", pattern=r"^(A|AA|AAA)$"),
     email: str | None = Query(None, max_length=254),
+    lang: str = Query("auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$"),
 ):
     """
     Submit a **combined Python + Node/axe-core** accessibility audit.
@@ -247,6 +248,10 @@ async def submit_combined_audit(
     ``CombinedRequest._cap_max_pages``).
     `wcag_level` (A | AA | AAA): conformance level to report against. The filter
     is cumulative — "AA" returns A + AA findings and suppresses AAA.
+    `lang`: language every reason/criterion string is rendered in. Defaults to
+    "auto", which detects the audited page's own language — pass an explicit
+    locale ("en", "ja") when the caller has a user-chosen language, otherwise an
+    English site always reports in English regardless of that choice.
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report.
@@ -257,6 +262,7 @@ async def submit_combined_audit(
         max_pages=max_pages,
         wcag_level=wcag_level,
         email=email,
+        lang=lang,
         run_ocr=True,
         run_image_audit=True,
         run_media_audit=True,

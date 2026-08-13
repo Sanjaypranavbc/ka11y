@@ -258,6 +258,7 @@ _REPORT_COLUMNS = [
     "wcag_1_4_6_status",
     "wcag_1_4_11_status",
     "overall_status",
+    "wcag_1_1_1_code",
     "wcag_1_1_1_reason",
     "wcag_4_1_2_reason",
     "wcag_1_4_3_reason",
@@ -384,10 +385,94 @@ def _check_1_1_1_missing_alt(
     )
 
 
-def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool, str]:
+_CSS_BACKGROUND_TYPES = {"css_background_image", "css_background_svg"}
+
+
+def _context_exemption(img, alt_text) -> tuple[bool | None, str, str] | None:
+    """WCAG 1.1.1 situations that are decided by CONTEXT, not by this element's
+    own alt attribute. Returns ``(pass, reason, reason_code)`` when one applies,
+    otherwise ``None`` so the normal per-classification checks run.
+
+    SC 1.1.1 requires that an equivalent text alternative exist — by any valid
+    mechanism. Two situations are routinely mis-reported when the <img> is
+    judged in isolation:
+
+    1. A CSS background image. Backgrounds are overwhelmingly presentational;
+       one behind an element that has its own text, or that is not the sole
+       content of a control, conveys nothing that needs an alternative.
+       Reporting each of them turns every styled panel on a page into a
+       violation.
+    2. An image with no accessible name of its own that sits inside a link or
+       button which IS already labelled (visible text, aria-label,
+       aria-labelledby). The control communicates the purpose — that is exactly
+       what the criterion asks for — so the image needs no separate
+       alternative.
     """
-    Informative: alt must convey visible text detected by OCR.
-    At least one OCR word (>=3 chars) must appear in the alt text.
+    element_type = (getattr(img, "element_type", None) or "").strip().lower()
+    has_own_name = bool((alt_text or "").strip())
+    in_control = bool(getattr(img, "in_link", False) or getattr(img, "in_button", False))
+    control_named = bool(getattr(img, "in_labeled_control", False))
+
+    # ── 1. CSS background images ─────────────────────────────────────────
+    if element_type in _CSS_BACKGROUND_TYPES and not has_own_name:
+        if getattr(img, "has_own_text_content", False):
+            return (
+                True,
+                "PASS [1.1.1] CSS background image sits behind the element's own "
+                "text content — presentational, no text alternative required.",
+                "decorative_valid",
+            )
+        if not in_control or control_named:
+            return (
+                True,
+                "PASS [1.1.1] CSS background image conveys no information that is "
+                "not already available as text — treated as presentational.",
+                "decorative_valid",
+            )
+        # Sole content of an unlabelled control → it IS carrying the meaning.
+        return (
+            False,
+            "FAIL [1.1.1] CSS background image is the only content of a link/button "
+            "with no accessible name — the control's purpose is conveyed by the "
+            "image alone. Add text, aria-label, or aria-labelledby to the control.",
+            "missing_alt",
+        )
+
+    # ── 2. Image inside an already-labelled control ──────────────────────
+    if not has_own_name and in_control and control_named:
+        if getattr(img, "alt_present", True):
+            # alt="" inside a labelled control is the textbook correct pattern.
+            return (
+                True,
+                "PASS [1.1.1] Image is inside a link/button that already has an "
+                "accessible name; an empty alt is the correct pattern here.",
+                "functional_redundant",
+            )
+        return (
+            None,
+            "INCOMPLETE [1.1.1] The containing link/button already has an accessible "
+            "name, so the purpose is conveyed — but this image has no alt attribute "
+            "at all, so a screen reader may announce its file name. Add alt=\"\" to "
+            "mark it decorative, or alt text if it adds information.",
+            "needs_review_labeled_control",
+        )
+
+    return None
+
+
+def _check_1_1_1_informative(
+    alt: str, detected_texts: list[str]
+) -> tuple[bool | None, str]:
+    """
+    Informative: the alternative should convey the information in the image,
+    including any meaningful text baked into it.
+
+    OCR is evidence of what is displayed, never proof of what is available to
+    assistive technology, and it misreads decorative flourishes, watermarks and
+    stylised type routinely. A mismatch between OCR output and the alt text is
+    therefore raised for review (``None``) rather than asserted as a failure —
+    a human can see in one glance whether the alt covers the image, and an
+    incorrect violation costs the reader far more than a review item.
     """
     norm_alt = _norm(alt or "")
 
@@ -425,8 +510,10 @@ def _check_1_1_1_informative(alt: str, detected_texts: list[str]) -> tuple[bool,
         return True, f"PASS [1.1.1] OCR word(s) found in alt: {matched}"
 
     return (
-        False,
-        f"FAIL [1.1.1] OCR words {ocr_words[:5]} not found in alt text '{alt}'",
+        None,
+        f"INCOMPLETE [1.1.1] Text read from the image ({ocr_words[:5]}) does not "
+        f"appear in the alt text '{alt}'. Check whether that text carries "
+        f"information the alt text needs to convey.",
     )
 
 
@@ -539,7 +626,9 @@ def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 
 
-def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
+def _check_4_1_2(
+    alt: str, sub_type: str, *, control_named: bool = False
+) -> tuple[bool, str]:
     """
     WCAG 4.1.2: functional image must have a programmatically determinable
     accessible name. Uses alt (aria-label/title resolution already happened
@@ -554,6 +643,16 @@ def _check_4_1_2(alt: str, sub_type: str) -> tuple[bool, str]:
     name = (alt or "").strip()
 
     if not name or _norm(name) in _EMPTY_OR_GENERIC:
+        # The name may come from the containing control rather than the image:
+        # `<button aria-label="Search"><img alt=""></button>` exposes a name and
+        # a role, which is all 4.1.2 requires.
+        if control_named:
+            return (
+                True,
+                "PASS [4.1.2] The containing link/button exposes its own "
+                "accessible name, so the component's name and role are "
+                "programmatically determinable.",
+            )
         return (
             False,
             f"FAIL [4.1.2] No accessible name found. alt='{alt}'",
@@ -821,6 +920,7 @@ class AltTextAccessibilityAuditor:
                         "detected_text": "",
                         "contrast_violations_count": 0,
                         "wcag_1_1_1_status": "INCOMPLETE",
+                        "wcag_1_1_1_code": "capture_failed",
                         "wcag_4_1_2_status": "INCOMPLETE" if is_functional else "N/A",
                         "wcag_1_4_3_status": "INCOMPLETE",
                         "wcag_1_4_5_status": "INCOMPLETE",
@@ -877,9 +977,28 @@ class AltTextAccessibilityAuditor:
             # ── WCAG checks ──────────────────────────────────────────────
             wcag_4_1_2_pass = None
             wcag_4_1_2_reason = "N/A — not a functional image"
+            # Machine-readable code for the localized UI message. Set wherever
+            # the branch knows the specific situation; falls back to a derived
+            # code in the finding converter when left empty.
+            wcag_1_1_1_code = ""
+
+            # Context-driven situations are decided before per-classification
+            # checks: an alternative supplied by the containing control, or a
+            # purely presentational background, satisfies 1.1.1 no matter what
+            # this element's own alt attribute looks like.
+            _exemption = _context_exemption(img, alt_text)
+
+            if _exemption is not None:
+                wcag_1_1_1_pass, wcag_1_1_1_reason, wcag_1_1_1_code = _exemption
+                if classification == "functional":
+                    wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(
+                        alt_text,
+                        sub_type,
+                        control_named=bool(getattr(img, "in_labeled_control", False)),
+                    )
 
             # Handle missing_alt as a special decorative sub-type
-            if sub_type == "missing_alt" or (
+            elif sub_type == "missing_alt" or (
                 classification == "decorative" and alt_text is None
             ):
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_missing_alt(
@@ -895,6 +1014,12 @@ class AltTextAccessibilityAuditor:
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_informative(
                     alt_text, detected_texts
                 )
+                if wcag_1_1_1_pass is None:
+                    wcag_1_1_1_code = "needs_review_ocr_mismatch"
+                elif wcag_1_1_1_pass is False:
+                    wcag_1_1_1_code = (
+                        "generic_alt" if (alt_text or "").strip() else "missing_alt"
+                    )
 
             elif classification == "functional":
                 if sub_type == "logos":
@@ -904,19 +1029,47 @@ class AltTextAccessibilityAuditor:
                 else:  # buttons / images
                     wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_button(alt_text)
 
-                wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(alt_text, sub_type)
+                wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(
+                    alt_text,
+                    sub_type,
+                    control_named=bool(getattr(img, "in_labeled_control", False)),
+                )
 
             elif classification == "complex":
-                # Complex images need long descriptions; check alt is non-empty
-                wcag_1_1_1_pass = (
-                    bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
+                # A chart/diagram needs BOTH a short name AND an equivalent long
+                # description (data table, aria-describedby, longdesc, caption,
+                # or surrounding prose). A short alt alone cannot convey the
+                # trends the graphic shows, but we cannot see whether nearby
+                # prose already does — so that case is raised for review rather
+                # than reported as a certain failure.
+                _has_name = bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
+                _has_long_desc = (
+                    img.has_long_description()
+                    if hasattr(img, "has_long_description")
+                    else False
                 )
-                wcag_1_1_1_reason = (
-                    f"PASS [1.1.1] Complex image has alt: '{alt_text}'"
-                    if wcag_1_1_1_pass
-                    else "FAIL [1.1.1] Complex image (chart/diagram) must have "
-                    "a meaningful alt or long description"
-                )
+                if not _has_name:
+                    wcag_1_1_1_pass = False
+                    wcag_1_1_1_reason = (
+                        "FAIL [1.1.1] Complex image (chart/diagram) has no text "
+                        "alternative identifying what it shows."
+                    )
+                    wcag_1_1_1_code = "missing_alt"
+                elif _has_long_desc:
+                    wcag_1_1_1_pass = True
+                    wcag_1_1_1_reason = (
+                        f"PASS [1.1.1] Complex image has alt '{alt_text}' and an "
+                        "associated long description."
+                    )
+                else:
+                    wcag_1_1_1_pass = None
+                    wcag_1_1_1_reason = (
+                        f"INCOMPLETE [1.1.1] Complex image is identified as "
+                        f"'{alt_text}', but no long description is programmatically "
+                        "associated with it. Confirm the data/trends it shows are "
+                        "available as text nearby, or add a description."
+                    )
+                    wcag_1_1_1_code = "needs_review_long_description"
 
             else:
                 wcag_1_1_1_pass = (
@@ -1021,8 +1174,10 @@ class AltTextAccessibilityAuditor:
                     wcag_1_4_6_pass = True
                     wcag_1_4_6_reason = "PASS [1.4.6] All text regions meet enhanced contrast"
 
-            # Overall: all definitive checks must pass (None = N/A, skip)
-            checks = [wcag_1_1_1_pass]
+            # Overall: all definitive checks must pass (None = N/A, skip).
+            # 1.1.1 is tri-state now — an unresolved (None) result is neither a
+            # pass nor a failure, so it must not drag `overall` to FAILED.
+            checks = [] if wcag_1_1_1_pass is None else [wcag_1_1_1_pass]
             if wcag_4_1_2_pass is not None:
                 checks.append(wcag_4_1_2_pass)
             if wcag_1_4_3_pass is False:
@@ -1050,7 +1205,12 @@ class AltTextAccessibilityAuditor:
                     "has_ocr_text": has_ocr_text,
                     "detected_text": detected_joined,
                     "contrast_violations_count": contrast_count,
-                    "wcag_1_1_1_status": "PASSED" if wcag_1_1_1_pass else "FAILED",
+                    "wcag_1_1_1_status": (
+                        "PASSED"
+                        if wcag_1_1_1_pass is True
+                        else "FAILED" if wcag_1_1_1_pass is False else "INCOMPLETE"
+                    ),
+                    "wcag_1_1_1_code": wcag_1_1_1_code,
                     "wcag_4_1_2_status": (
                         "PASSED"
                         if wcag_4_1_2_pass is True

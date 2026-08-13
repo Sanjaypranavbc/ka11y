@@ -24,12 +24,18 @@ from typing import Dict, List, Set, Tuple
 
 from ka11y.crawler.models import ImageData
 
-# Image-classified element types that become an ImageData record. (``area`` is
-# an image-map sub-part with no standalone pixels, so it is excluded.)
+# Image-classified element types that become an ImageData record.
 _IMAGE_TYPES = {
     "img", "svg_via_img", "svg_inline", "svg_via_use", "svg_via_object",
     "css_background_image", "css_background_svg", "input_image", "canvas",
+    # An image-map <area> has no standalone pixels, but WCAG 1.1.1 still
+    # requires each interactive area to carry a text alternative naming its
+    # destination. Excluding it silently dropped every image-map violation.
+    "area",
 }
+# Element types that are audited from the DOM alone — there is nothing to
+# screenshot, so a missing capture is expected rather than a capture failure.
+_NO_PIXEL_TYPES = {"area"}
 # Per type, the element field holding the source URL (for hashing + file_format).
 _SRC_FIELD = {
     "img": "src", "svg_via_img": "src", "input_image": "src",
@@ -176,7 +182,13 @@ def build_image_data(
 
             filename = ""
             screenshot_path = ""
-            capture_status = "dom_missing"
+            # No-pixel elements are fully auditable from the DOM; marking them
+            # "ok" keeps them out of the capture-failed → needs_review path.
+            capture_status = (
+                "ok"
+                if el.get("element_type") in _NO_PIXEL_TYPES
+                else "dom_missing"
+            )
             if captured is not None:
                 key = src or f"{page_url}#{el.get('id', '')}"
                 digest = hashlib.md5(key.encode("utf-8")).hexdigest()[:12]
@@ -212,6 +224,8 @@ def build_image_data(
                     capture_status = "failed"
 
             dec = el.get("decorative_signals") or {}
+            ctx = el.get("functional_context") or {}
+            cplx = el.get("complex_signals") or {}
             images.append(ImageData(
                 url=page_url,
                 src=src,
@@ -233,6 +247,18 @@ def build_image_data(
                 capture_status=capture_status,
                 aria_hidden="true" if dec.get("aria_hidden") else None,
                 role=el.get("role"),
+                # Accessible-name context — the auditor needs the whole picture,
+                # not just this element's own alt attribute.
+                element_type=el.get("element_type"),
+                alt_present=bool(el.get("alt_present")),
+                in_link=bool(ctx.get("in_link")),
+                in_button=bool(ctx.get("in_button")),
+                in_labeled_control=bool(ctx.get("is_in_labeled_control")),
+                has_own_text_content=bool(el.get("has_own_text_content")),
+                figcaption_text=el.get("figcaption_text"),
+                aria_describedby_text=cplx.get("aria_describedby_text"),
+                has_longdesc=bool(cplx.get("has_longdesc")),
+                in_figure=bool(cplx.get("in_figure")),
             ))
 
     return images, page_langs, visited

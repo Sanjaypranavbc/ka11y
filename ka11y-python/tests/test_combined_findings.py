@@ -11,6 +11,10 @@ from ka11y.api.v1.combined import (
     _name_role_value_to_findings,
     _non_text_contrast_to_findings,
 )
+from ka11y.api.v1.combined.findings import (
+    _alt_text_to_findings,
+    _images_of_text_to_findings,
+)
 from ka11y.api.v1.combined.models import CombinedRequest
 from ka11y.api.v1.combined.stages import _allowed_levels
 
@@ -246,3 +250,64 @@ def test_pass_converters_include_element_metadata_when_available():
         "image_text": None,
         "page_url": PAGE_URL,
     }
+
+
+# ── Reason codes must describe the actual defect ──────────────────────────────
+
+
+def test_auditor_supplied_reason_code_wins_over_derivation():
+    """The rule knows exactly which situation it hit; the converter must not
+    second-guess it with a code derived from the record's fields."""
+    findings = _alt_text_to_findings(
+        [
+            {
+                "wcag_1_1_1_status": "INCOMPLETE",
+                "wcag_1_1_1_code": "needs_review_long_description",
+                "wcag_1_1_1_reason": "INCOMPLETE [1.1.1] no long description",
+                "alt_text": "Revenue by quarter",
+                "classification": "complex",
+                "capture_status": "ok",
+                "src": "/chart.png",
+                "url": PAGE_URL,
+            }
+        ],
+        PAGE_URL,
+    )
+    assert findings[0]["status"] == "needs_review"
+    assert findings[0]["reason_code"] == "needs_review_long_description"
+    # The {name} placeholder is filled, not left blank.
+    assert "Revenue by quarter" in findings[0]["reason"]
+
+
+def test_needs_review_code_does_not_leak_across_criteria():
+    """A 1.1.1-specific code must not be reused as the 1.4.5 message."""
+    record = {
+        "wcag_1_1_1_status": "INCOMPLETE",
+        "wcag_1_1_1_code": "needs_review_ocr_mismatch",
+        "wcag_1_4_5_status": "INCOMPLETE",
+        "wcag_1_4_5_reason": "INCOMPLETE [1.4.5] manual check",
+        "alt_text": "A photo",
+        "detected_text": "SALE",
+        "capture_status": "ok",
+        "src": "/x.png",
+        "url": PAGE_URL,
+    }
+    of_text = _images_of_text_to_findings([record], PAGE_URL)
+    assert of_text[0]["reason_code"] != "needs_review_ocr_mismatch"
+
+
+def test_capture_failure_still_reports_as_capture_failure():
+    findings = _alt_text_to_findings(
+        [
+            {
+                "wcag_1_1_1_status": "INCOMPLETE",
+                "wcag_1_1_1_code": "capture_failed",
+                "capture_status": "timeout",
+                "alt_text": "",
+                "src": "/x.png",
+                "url": PAGE_URL,
+            }
+        ],
+        PAGE_URL,
+    )
+    assert findings[0]["reason_code"] == "capture_failed"

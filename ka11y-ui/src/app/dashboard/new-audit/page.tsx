@@ -97,7 +97,7 @@ function RingIcon({ spin }: { spin: boolean }) {
 export default function NewAuditPage() {
   const router = useRouter();
   const { setAuditData } = useAuditData();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const SCAN_STEPS = useMemo(() => buildScanSteps(t), [t]);
   const ACTUAL_STEPS = useMemo(() => SCAN_STEPS.filter((s) => s.type === "step"), [SCAN_STEPS]);
   const [url, setUrl] = useState("");
@@ -163,6 +163,12 @@ export default function NewAuditPage() {
           maxDepth: depth,
           wcagLevel,
           email: trimmedEmail || undefined,
+          // The backend renders every reason/criterion string server-side and
+          // defaults to detecting the *audited page's* language. Without this
+          // the dashboard chrome follows the toggle while the findings come
+          // back in the site's language — JA selected, English site, English
+          // reasons. The toggle is the user's choice, so it wins.
+          lang,
         }),
       });
       const data = await res.json().catch(() => null);

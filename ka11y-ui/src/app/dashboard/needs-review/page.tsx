@@ -131,6 +131,12 @@ function ReviewButton({
   );
 }
 
+/** A contrast colour is only meaningful on contrast findings; the adapters
+ * fill the rest with an em dash placeholder. */
+function hasColor(value: string): boolean {
+  return Boolean(value) && value !== "—";
+}
+
 export default function NeedsReviewPage() {
   const { auditData } = useAuditData();
   const { t } = useLanguage();
@@ -369,21 +375,39 @@ export default function NeedsReviewPage() {
               </div>
 
               <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
-                <p className="font-medium break-words text-gray-100">{item.elementFilename}</p>
+                {item.elementFilename && (
+                  <p className="font-medium break-words text-gray-100">{item.elementFilename}</p>
+                )}
                 <ElementImage srcs={item.imageUrls} className="h-[90px] w-[105px]" />
+                {/* Only render the detail lines this finding actually has —
+                    contrast colours belong to contrast rules and OCR text to
+                    image rules, so showing every label on every row printed a
+                    column of "—" placeholders. */}
                 <div className="flex flex-col gap-2 text-[12px] leading-5">
-                  <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">{t.needsReview.foreground}</span>
-                    <span className="text-gray-100">{item.foreground}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">{t.needsReview.background}</span>
-                    <span className="text-gray-100">{item.background}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    <span className="shrink-0 text-gray-80">{t.needsReview.ocrText}</span>
-                    <span className="min-w-0 break-words text-gray-100">{item.ocrText}</span>
-                  </div>
+                  {hasColor(item.foreground) && (
+                    <div className="flex gap-1">
+                      <span className="shrink-0 text-gray-80">{t.needsReview.foreground}</span>
+                      <span className="text-gray-100">{item.foreground}</span>
+                    </div>
+                  )}
+                  {hasColor(item.background) && (
+                    <div className="flex gap-1">
+                      <span className="shrink-0 text-gray-80">{t.needsReview.background}</span>
+                      <span className="text-gray-100">{item.background}</span>
+                    </div>
+                  )}
+                  {item.altText && (
+                    <div className="flex gap-1">
+                      <span className="shrink-0 text-gray-80">{t.needsReview.altText}</span>
+                      <span className="min-w-0 break-words text-gray-100">{item.altText}</span>
+                    </div>
+                  )}
+                  {item.ocrText && (
+                    <div className="flex gap-1">
+                      <span className="shrink-0 text-gray-80">{t.needsReview.ocrText}</span>
+                      <span className="min-w-0 break-words text-gray-100">{item.ocrText}</span>
+                    </div>
+                  )}
                 </div>
                 {/* View Full Audit — hidden per review; restore by uncommenting.
                 <button type="button" className="inline-flex items-center gap-1.5 text-[14px] leading-5 text-brand-teal-dark underline">

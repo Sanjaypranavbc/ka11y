@@ -208,10 +208,13 @@ class TestCheck111Informative:
         assert passed is True
         assert "PASS" in msg
 
-    def test_good_alt_ocr_no_match_fails(self):
+    def test_good_alt_ocr_no_match_needs_review(self):
+        # OCR is evidence of what is displayed, not proof of what assistive
+        # tech receives — and it misreads watermarks and stylised type. A
+        # mismatch is raised for a human, never asserted as a violation.
         passed, msg = _check_1_1_1_informative("Mountain scenery", ["Buy", "Now", "Sale"])
-        assert passed is False
-        assert "FAIL" in msg
+        assert passed is None
+        assert "INCOMPLETE" in msg
 
     def test_case_insensitive_ocr_match(self):
         passed, _ = _check_1_1_1_informative("SALE banner", ["SALE"])
@@ -558,6 +561,69 @@ class TestAltTextAuditorReport:
         assert records[0]["wcag_4_1_2_status"] == "FAILED"
         assert records[0]["overall_status"] == "FAILED"
 
+    def test_image_in_labeled_button_passes_both_rules(self, tmp_output):
+        # <button aria-label="Search"><img alt=""></button> — the control
+        # carries the name, so the empty alt is the correct pattern.
+        img = make_image(
+            classification="decorative", is_decorative=True, alt_text="",
+            alt_present=True, in_button=True, in_labeled_control=True,
+        )
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[], output_dir=tmp_output
+        )
+        assert records[0]["wcag_1_1_1_status"] == "PASSED"
+
+    def test_unnamed_image_in_labeled_link_is_not_a_violation(self, tmp_output):
+        # <a href="/x">Read more <img src="arrow.png"></a> — the link is named
+        # by its text. The missing alt attribute is worth a look, but reporting
+        # it as a 1.1.1 violation is a false positive.
+        img = make_image(
+            classification="functional", sub_type="icons", is_functional=True,
+            is_icon=True, alt_text=None, alt_present=False,
+            in_link=True, in_labeled_control=True,
+        )
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[], output_dir=tmp_output
+        )
+        assert records[0]["wcag_1_1_1_status"] == "INCOMPLETE"
+        assert records[0]["wcag_4_1_2_status"] == "PASSED"
+
+    def test_unnamed_image_as_sole_content_of_link_still_fails(self, tmp_output):
+        # <a href="/x"><img src="yt.svg"></a> — nothing names the link.
+        img = make_image(
+            classification="functional", sub_type="icons", is_functional=True,
+            is_icon=True, alt_text=None, alt_present=False,
+            in_link=True, in_labeled_control=False,
+        )
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[], output_dir=tmp_output
+        )
+        assert records[0]["wcag_1_1_1_status"] == "FAILED"
+        assert records[0]["wcag_4_1_2_status"] == "FAILED"
+
+    def test_decorative_css_background_is_not_a_violation(self, tmp_output):
+        # A styled panel with a background image conveys nothing extra.
+        img = make_image(
+            classification="informative", sub_type="images",
+            element_type="css_background_image", alt_text=None,
+            alt_present=False, has_own_text_content=True,
+        )
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[], output_dir=tmp_output
+        )
+        assert records[0]["wcag_1_1_1_status"] == "PASSED"
+
+    def test_css_background_as_sole_content_of_unlabeled_link_fails(self, tmp_output):
+        img = make_image(
+            classification="functional", sub_type="images", is_functional=True,
+            element_type="css_background_image", alt_text=None,
+            alt_present=False, in_link=True, in_labeled_control=False,
+        )
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[], output_dir=tmp_output
+        )
+        assert records[0]["wcag_1_1_1_status"] == "FAILED"
+
     def test_functional_icon_social_brand_only_passes(self, tmp_output):
         # The client-reported false positive: a YouTube/Twitter link icon whose
         # alt names the service must not be reported as missing alt text.
@@ -613,7 +679,7 @@ class TestAltTextAuditorReport:
             "alt_text", "title", "has_ocr_text", "detected_text",
             "contrast_violations_count", "wcag_1_1_1_status", "wcag_4_1_2_status",
             "wcag_1_4_3_status", "wcag_1_4_5_status", "wcag_1_4_6_status", "wcag_1_4_11_status",
-            "overall_status", "wcag_1_1_1_reason", "wcag_4_1_2_reason",
+            "overall_status", "wcag_1_1_1_code", "wcag_1_1_1_reason", "wcag_4_1_2_reason",
             "wcag_1_4_3_reason", "wcag_1_4_5_reason", "wcag_1_4_6_reason", "wcag_1_4_11_reason",
             "screenshot_path", "capture_status", "capture_error",
         ]
@@ -647,7 +713,21 @@ class TestAltTextAuditorReport:
         )
         assert records == []
 
-    def test_complex_image_non_empty_alt_passes(self, tmp_output):
+    def test_complex_image_with_long_description_passes(self, tmp_output):
+        img = make_image(
+            classification="complex", is_complex=True,
+            alt_text="Bar chart showing revenue by quarter",
+            aria_describedby_text="Q1 12%, Q2 18%, Q3 21%, Q4 25%",
+        )
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[], output_dir=tmp_output
+        )
+        assert records[0]["wcag_1_1_1_status"] == "PASSED"
+        assert records[0]["wcag_1_4_5_status"] == "PASSED"
+
+    def test_complex_image_without_long_description_needs_review(self, tmp_output):
+        # A short label cannot convey a chart's data; we cannot see whether the
+        # surrounding prose does, so this is raised for review, not failed.
         img = make_image(
             classification="complex", is_complex=True,
             alt_text="Bar chart showing revenue by quarter",
@@ -655,8 +735,8 @@ class TestAltTextAuditorReport:
         records = AltTextAccessibilityAuditor().generate_audit_report(
             images_data=[img], ocr_results=[], output_dir=tmp_output
         )
-        assert records[0]["wcag_1_1_1_status"] == "PASSED"
-        assert records[0]["wcag_1_4_5_status"] == "PASSED"
+        assert records[0]["wcag_1_1_1_status"] == "INCOMPLETE"
+        assert records[0]["overall_status"] == "PASSED"
 
     def test_complex_image_empty_alt_fails(self, tmp_output):
         img = make_image(classification="complex", is_complex=True, alt_text="")

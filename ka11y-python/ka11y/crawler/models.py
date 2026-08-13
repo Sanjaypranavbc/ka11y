@@ -45,6 +45,39 @@ class ImageData(BaseModel):
     aria_hidden: Optional[str] = None
     role: Optional[str] = None
 
+    # ── Accessible-name context (WCAG 1.1.1 / 4.1.2) ─────────────────────────
+    # SC 1.1.1 asks whether an equivalent text alternative exists — by ANY valid
+    # mechanism, not whether this element carries an `alt` attribute. An image
+    # inside a control that already has an accessible name is named by that
+    # control, so judging the <img> in isolation reports false violations
+    # (`<button aria-label="Search"><img alt=""></button>` is conformant).
+    # The crawler already computes all of this per element; these fields carry
+    # it through to the auditor.
+    element_type: Optional[str] = None  # img | svg_inline | css_background_image | area | …
+    alt_present: bool = True  # False = no alt attribute at all (vs alt="")
+    in_link: bool = False
+    in_button: bool = False
+    # The containing link/button exposes its own accessible name (visible text,
+    # aria-label, aria-labelledby) independently of this image.
+    in_labeled_control: bool = False
+    # The element carries its own rendered text (a CSS background behind text is
+    # decoration, not the sole carrier of information).
+    has_own_text_content: bool = False
+
+    # ── Long-description context (WCAG 1.1.1 complex-image situation) ────────
+    figcaption_text: Optional[str] = None
+    aria_describedby_text: Optional[str] = None
+    has_longdesc: bool = False
+    in_figure: bool = False
+
+    def has_long_description(self) -> bool:
+        """True when a programmatically associated long description exists."""
+        return bool(
+            self.has_longdesc
+            or (self.aria_describedby_text or "").strip()
+            or (self.figcaption_text or "").strip()
+        )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Rich per-element metadata — captures everything WCAG rule-checkers need.

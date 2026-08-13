@@ -117,6 +117,7 @@ export interface ViolationRow {
   tag: string;
   elementTitle: string;
   elementFile: string;
+  elementAlt: string;
   elementOcr: string;
   imageUrls: string[];
   fixGuide: string;
@@ -139,6 +140,7 @@ export interface ReviewRow {
   imageUrls: string[];
   foreground: string;
   background: string;
+  altText: string;
   ocrText: string;
   helpUrl: string;
   pageUrl: string;
@@ -156,6 +158,7 @@ export interface PassRow {
   imageUrls: string[];
   foreground: string;
   background: string;
+  altText: string;
   ocrText: string;
   helpUrl: string;
   pageUrl: string;
@@ -178,28 +181,18 @@ function extractTag(html: string | null | undefined): string {
  * sentence as its heading and the remainder as supporting detail. */
 function splitReason(reason: string): { head: string; rest: string } {
   const text = reason.trim();
+  // Japanese (and Chinese) sentences end in 。！？ with no following space and
+  // no capital letter, so the Latin rule below never matched them: `head` took
+  // the WHOLE reason and the table rendered an entire paragraph in bold. Split
+  // on the CJK terminators first, before falling back to the Latin rule.
+  const cjk = text.match(/^[\s\S]*?[。！？]/);
+  if (cjk && cjk[0].length < text.length) {
+    return { head: cjk[0], rest: text.slice(cjk[0].length).trim() };
+  }
   // Split only on a sentence end followed by a capitalised word, so decimals
   // ("4.76"), SC ids ("1.4.3") and 'e.g. "…"' stay intact.
   const parts = text.split(/(?<=[.!?])\s+(?=[A-Z])/);
   return { head: parts[0] || text, rest: parts.slice(1).join(" ") };
-}
-
-/** The API only ships raw element HTML, so derive something readable from it:
- * the alt text when present, otherwise the visible text with tags stripped. */
-function extractReadableText(html: string | null | undefined, max = 90): string {
-  if (!html) return "—";
-  const alt = html.match(/\balt\s*=\s*["']([^"']*)["']/i);
-  const text = (alt
-    ? alt[1]
-    : html
-        // The API truncates element HTML at 600 chars, so the last tag is
-        // often unterminated — drop it too, or its raw markup leaks through.
-        .replace(/<[^>]*>/g, " ")
-        .replace(/<[^>]*$/, " "))
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!text) return "—";
-  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 /** Name of the captured image file backing a finding.
@@ -219,18 +212,32 @@ function pickImageFilename(el: any): string {
   return "";
 }
 
-/** OCR text read out of the captured image, as shipped in
- * `element.image_text`. Only when the backend sent none do we fall back to the
- * element's own alt/visible text — previously that fallback was the ONLY
- * source, so the "OCR" column was really showing the alt attribute and
- * contradicted the image next to it. */
+/** Text OCR actually read out of the captured image (`element.image_text`).
+ * Returns "" when the finding has none — most rules are not image rules, and
+ * labelling an element's alt attribute as "OCR" (the old behaviour) put text
+ * next to the picture that flatly contradicted it. Callers hide the row when
+ * this is empty rather than printing an empty "OCR:" label. */
 function pickOcrText(el: any, max = 90): string {
   const text = el?.image_text;
-  if (typeof text === "string" && text.trim()) {
-    const clean = text.replace(/\s+/g, " ").trim();
-    return clean.length > max ? `${clean.slice(0, max)}…` : clean;
-  }
-  return "—";
+  if (typeof text !== "string" || !text.trim()) return "";
+  const clean = text.replace(/\s+/g, " ").trim();
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+/** The element's own alt attribute, parsed from the finding's element HTML.
+ * This is what the alt-text rules are actually about, so it is shown under its
+ * own label instead of being passed off as OCR output. Empty string when the
+ * element has no alt attribute (which is itself the finding, in that case). */
+function pickAltText(el: any, max = 90): string {
+  const html: string | undefined = el?.html;
+  if (!html) return "";
+  // Require the attribute to start a token, so `data-alt` / `xlink:alt` on the
+  // element are not mistaken for the real alt attribute (`\balt` matches both).
+  const m = html.match(/(?:^|[\s"'])alt\s*=\s*["']([^"']*)["']/i);
+  if (!m) return "";
+  const clean = m[1].replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 }
 
 /** Turn a captured-crop path/asset ref into a browser-loadable URL.
@@ -339,6 +346,7 @@ export function toViolationRows(data: any): ViolationRow[] {
         tag: extractTag(el.html),
         elementTitle: selectorStr,
         elementFile: pickImageFilename(el),
+        elementAlt: pickAltText(el),
         elementOcr: pickOcrText(el),
         imageUrls: pickImageUrls(el),
         fixGuide: finding.suggested_fix || "",
@@ -351,19 +359,24 @@ export function toViolationRows(data: any): ViolationRow[] {
       for (const finding of criterion.findings) {
         if (finding.status !== "fail") continue;
 
+        // Split here too, not just in the `violations` branch above: the whole
+        // reason landing in `title` renders an entire paragraph in bold.
+        const reason = splitReason(finding.reason || finding.ruleId || "Violation");
+
         const elements = finding.elements.length > 0 ? finding.elements : [null];
         elements.forEach((el: any) => {
           rows.push({
             id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
-            title: finding.reason,
-            description: finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.principle,
+            title: capitalize(reason.head),
+            description: reason.rest || (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.principle),
             sc: criterion.sc,
             criterion: criterion.name,
             level: criterion.level,
             tag: extractTag(el?.html),
             elementTitle: el?.selector ?? "—",
             elementFile: pickImageFilename(el),
-            elementOcr: extractReadableText(el?.html),
+            elementAlt: pickAltText(el),
+            elementOcr: pickOcrText(el),
             imageUrls: pickImageUrls(el),
             fixGuide: "",
             helpUrl: finding.helpUrl,
@@ -400,6 +413,7 @@ export function toPassesRows(data: any): PassRow[] {
         imageUrls: pickImageUrls(el),
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
+        altText: pickAltText(el),
         ocrText: pickOcrText(el),
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
@@ -410,13 +424,17 @@ export function toPassesRows(data: any): PassRow[] {
       for (const finding of criterion.findings) {
         if (finding.status !== "pass") continue;
 
+        // Same split as the `passes` branch above — an unsplit reason renders
+        // the whole paragraph in bold.
+        const reason = splitReason(finding.reason || finding.ruleId || "Pass");
+
         const elements = finding.elements.length > 0 ? finding.elements : [null];
         elements.forEach((el: any) => {
           const colors = extractColors(finding.reason);
           rows.push({
             id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
-            reasonTitle: finding.reason,
-            reasonDescription: el?.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
+            reasonTitle: capitalize(reason.head),
+            reasonDescription: reason.rest || el?.detail || (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
             sc: criterion.sc,
             criterion: criterion.name,
             level: criterion.level,
@@ -425,7 +443,8 @@ export function toPassesRows(data: any): PassRow[] {
             imageUrls: pickImageUrls(el),
             foreground: colors.foreground ?? "—",
             background: colors.background ?? "—",
-            ocrText: extractReadableText(el?.html),
+            altText: pickAltText(el),
+            ocrText: pickOcrText(el),
             helpUrl: finding.helpUrl,
             pageUrl: el?.page_url || data.url || "",
           });
@@ -461,6 +480,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
         imageUrls: pickImageUrls(el),
         foreground: colors.foreground ?? "—",
         background: colors.background ?? "—",
+        altText: pickAltText(el),
         ocrText: pickOcrText(el),
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
@@ -471,14 +491,18 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
       for (const finding of criterion.findings) {
         if (finding.status !== "incomplete") continue;
 
+        // Same split as the `needs_review` branch above — an unsplit reason
+        // renders the whole paragraph in bold.
+        const reason = splitReason(finding.reason || finding.ruleId || "Needs Review");
+
         const elements = finding.elements.length > 0 ? finding.elements : [null];
         elements.forEach((el: any) => {
           const colors = extractColors(finding.reason);
           rows.push({
             id: `${criterion.sc}-${finding.ruleId}-${rowIndex++}`,
             status: "pending",
-            reasonTitle: finding.reason,
-            reasonDescription: el?.detail ?? (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
+            reasonTitle: capitalize(reason.head),
+            reasonDescription: reason.rest || el?.detail || (finding.impact ? `Impact: ${capitalize(finding.impact)}` : criterion.name),
             sc: criterion.sc,
             criterion: criterion.name,
             level: criterion.level,
@@ -487,7 +511,8 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
             imageUrls: pickImageUrls(el),
             foreground: colors.foreground ?? "—",
             background: colors.background ?? "—",
-            ocrText: extractReadableText(el?.html),
+            altText: pickAltText(el),
+            ocrText: pickOcrText(el),
             helpUrl: finding.helpUrl,
             pageUrl: el?.page_url || data.url || "",
           });
