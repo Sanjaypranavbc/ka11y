@@ -223,6 +223,32 @@ def build_image_data(
                     filename = ""
                     capture_status = "failed"
 
+            # WCAG 1.4.11 (Non-text Contrast) needs the component's boundary
+            # measured against its *surrounding page background*, not just
+            # the tightly-cropped pixels in `screenshot_path` above. When the
+            # crawler captured a padded "context" screenshot alongside the
+            # element crop (icon/logo elements only — see
+            # optimized/engine.py's `_capture_assets`), copy it into the
+            # output dir too and carry its path + the element's local bbox
+            # through so `_check_1_4_11` can measure real boundary contrast
+            # instead of falling back to an OCR-text-in-image proxy.
+            full_page_screenshot_path = ""
+            page_bbox = None
+            ctx_rel = el.get("context_screenshot")
+            ctx_bbox = el.get("context_bbox")
+            if ctx_rel and ctx_bbox and capture_status == "ok":
+                ctx_src = raw_dir / ctx_rel
+                if ctx_src.exists():
+                    try:
+                        ctx_dest = dest_dir / f"ctx_{digest}.png"
+                        shutil.copy2(ctx_src, ctx_dest)
+                        full_page_screenshot_path = str(ctx_dest)
+                        bx, by = ctx_bbox.get("x", 0), ctx_bbox.get("y", 0)
+                        bw, bh = ctx_bbox.get("width", 0), ctx_bbox.get("height", 0)
+                        page_bbox = [(bx, by), (bx + bw, by + bh)]
+                    except OSError:
+                        pass  # non-fatal: 1.4.11 falls back to the OCR-text proxy
+
             dec = el.get("decorative_signals") or {}
             ctx = el.get("functional_context") or {}
             cplx = el.get("complex_signals") or {}
@@ -245,6 +271,8 @@ def build_image_data(
                 screenshot_path=screenshot_path,
                 filename=filename,
                 capture_status=capture_status,
+                full_page_screenshot_path=full_page_screenshot_path or None,
+                page_bbox=page_bbox,
                 aria_hidden="true" if dec.get("aria_hidden") else None,
                 role=el.get("role"),
                 # Accessible-name context — the auditor needs the whole picture,

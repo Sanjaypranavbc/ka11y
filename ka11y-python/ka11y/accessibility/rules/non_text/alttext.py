@@ -69,7 +69,13 @@ _EMPTY_OR_GENERIC: set[str] = {
     "decorative",
 }
 
-# Social/brand icon names — must be paired with "icon" to be acceptable
+# Social/brand icon names — must be paired with "icon" to be acceptable.
+# NOTE on "x": collides in principle with the (inadequate) alt="X" some sites
+# use for generic modal/dialog close controls, but close controls are almost
+# always classified functional/buttons (routed through _check_1_1_1_button,
+# not this function) rather than functional/icons, and an explicit test
+# (test_single_char_brand_passes) locks in "X" as the correct brand name for
+# the X/formerly-Twitter icon — so it is kept.
 _SOCIAL_BRAND_NAMES: set[str] = {
     "facebook",
     "twitter",
@@ -488,7 +494,14 @@ def _check_1_1_1_informative(
 
     raw_ocr = " ".join(detected_texts)
     norm_ocr = _norm(raw_ocr)
-    ocr_words = [w for w in norm_ocr.split() if len(w) >= 3]
+    # The >=3-char floor is calibrated for Latin script, where 1-2 char
+    # tokens are usually noise. Complete CJK words are routinely 1-2
+    # characters (e.g. "検索" = "Search"), so any token containing a
+    # non-ASCII character bypasses the length floor instead of being
+    # silently dropped and reported as a spurious PASS.
+    ocr_words = [
+        w for w in norm_ocr.split() if len(w) >= 3 or not w.isascii()
+    ]
     # Also include 2-letter uppercase abbreviations from the original OCR text
     # (e.g. "UI", "AI", "OK") which are lost by _norm's lowercasing.
     abbr_words = [
@@ -590,7 +603,7 @@ def _check_1_1_1_icon(alt: str) -> tuple[bool, str]:
     )
 
 
-def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
+def _check_1_1_1_button(alt: str) -> tuple[bool | None, str]:
     """Button: alt must describe the action/purpose of the control."""
     if not alt or _is_empty(alt) or _norm(alt) in _EMPTY_OR_GENERIC:
         return False, "FAIL [1.1.1] Button has empty/missing accessible name"
@@ -607,12 +620,33 @@ def _check_1_1_1_button(alt: str) -> tuple[bool, str]:
             f"PASS [1.1.1] Button alt contains action word(s) {matched}: '{alt}'",
         )
 
-    # Require at least 3 chars to filter out uninformative initials like "ab" or "OK" shortcuts
-    if len(norm) >= 3 and not norm.isdigit():
+    if len(norm) < 3 or norm.isdigit():
+        return (
+            False,
+            f"FAIL [1.1.1] Button alt '{alt}' is not descriptive or is too short (min 3 chars)",
+        )
+
+    # Not a recognised action word. A real (if unlisted) description is
+    # usually multiple words ("Profile picture", "Shopping cart") or a
+    # single word containing a vowel ("Rotate", "Bookmark") — accept those.
+    # Meaningless filler ("xyz", "asdf", "qwerty"-without-vowel-runs) has
+    # neither, so it is raised for review instead of an automatic PASS,
+    # which previously accepted any 3+ character non-numeric string as a
+    # valid action description.
+    words = norm.split()
+    looks_like_words = len(words) >= 2 or any(v in norm for v in "aeiou")
+    if looks_like_words and re.search(r"[a-z]{2}|[^\x00-\x7F]", norm):
         return (
             True,
             f"PASS [1.1.1] Button alt is non-empty: '{alt}' "
             f"(verify it describes the button action)",
+        )
+
+    if re.search(r"[a-z]{2}|[^\x00-\x7F]", norm):
+        return (
+            None,
+            f"INCOMPLETE [1.1.1] Button alt '{alt}' is not a recognised action "
+            "word. Confirm it describes what the button does.",
         )
 
     return (
@@ -698,20 +732,31 @@ def _check_1_4_5(
             "PASS [1.4.5] Complex chart/diagram uses text as part of essential presentation",
         )
 
-    # ---------------- F12 FIX ----------------
-    # Apply logo exception ONLY if classifier confidently says it's a logo
-
+    # Logo/logotype exception. WCAG 1.4.5's own "Essential" exception uses
+    # logotypes as its canonical example — a *plain* wordmark used as an
+    # organisation's brand identity (no special stylisation) is still exempt,
+    # not just an artistically stylised one. So this is a blanket exemption
+    # once the classifier confidently says "logo", not just a "customised
+    # branding text" special case.
+    #
+    # NOTE: a previous "F12 FIX" attempted to carve out a FAIL for
+    # `sub_type == "logos" and has_ocr_text`, on the theory that OCR-readable
+    # text meant "plain wordmark, not exempt" — but that check could never
+    # run (this `is_logo` branch always fired first, since the classifier
+    # sets `is_logo=True` for every element with `sub_type == "logos"") and,
+    # more importantly, its premise was wrong: an OCR-readable plain wordmark
+    # is still a logotype under WCAG's own exception, not a violation. It has
+    # been removed rather than "fixed" into working, since making it work
+    # would have turned normal text logos into false 1.4.5 failures. The
+    # actual gap this was reaching for — a promotional graphic or CTA banner
+    # that gets misclassified as a "logo" by the classifier's keyword
+    # heuristics — is a classifier-precision problem, not a 1.4.5-logic one.
     if is_logo:
         return (
             True,
-            "PASS [1.4.5] Logo/logotype exception — customised branding text is exempt",
-        )
-
-    if sub_type == "logos" and has_ocr_text:
-        return (
-            False,
-            "FAIL [1.4.5] Image stored as logo but contains readable text "
-            "(likely plain wordmark, not exempt)",
+            "PASS [1.4.5] Logo/logotype exception — logotype text (including "
+            "plain wordmarks) is exempt under WCAG's 'essential presentation' "
+            "exception.",
         )
 
     if not has_ocr_text:
@@ -1008,7 +1053,27 @@ class AltTextAccessibilityAuditor:
                 )
 
             elif classification == "decorative":
-                wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(alt_text)
+                # An element hidden from assistive tech (aria-hidden="true" or
+                # role="presentation"/"none") is excluded from the accessibility
+                # tree entirely — any alt text it carries is never exposed to AT,
+                # so it cannot be a 1.1.1 violation regardless of alt content.
+                # Without this check, a non-empty `alt` on an aria-hidden image
+                # (e.g. a decorative logo the author still labelled) was reported
+                # as "must have alt=\"\" (empty)", a false FAIL.
+                if _is_aria_hidden_from_at(
+                    getattr(img, "aria_hidden", None), getattr(img, "role", None)
+                ):
+                    wcag_1_1_1_pass = True
+                    wcag_1_1_1_reason = (
+                        "PASS [1.1.1] Element is hidden from assistive tech "
+                        '(aria-hidden="true" or role="presentation"); its alt '
+                        "text, if any, is not exposed to AT."
+                    )
+                    wcag_1_1_1_code = "decorative_valid"
+                else:
+                    wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(
+                        alt_text
+                    )
 
             elif classification == "informative":
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_informative(
@@ -1028,6 +1093,8 @@ class AltTextAccessibilityAuditor:
                     wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_icon(alt_text)
                 else:  # buttons / images
                     wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_button(alt_text)
+                    if wcag_1_1_1_pass is None:
+                        wcag_1_1_1_code = "needs_review_generic_alt"
 
                 wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(
                     alt_text,
@@ -1114,9 +1181,15 @@ class AltTextAccessibilityAuditor:
                 )
 
             # ── WCAG 1.4.11 (Non-text Contrast) ─────────────────────────
-            # F14 fix: supply the full-page screenshot and bounding-box so
-            # _check_1_4_11 can measure boundary contrast against the real
-            # surrounding page background instead of cropped-screenshot pixels.
+            # F14 fix: supply the padded context screenshot and local
+            # bounding-box (populated by the crawler for icon/logo elements —
+            # see optimized/engine.py's `_capture_assets` and
+            # optimized/adapter.py) so _check_1_4_11 can measure boundary
+            # contrast against the real surrounding page background instead
+            # of falling back to the OCR-text-in-image proxy. Elements the
+            # crawler couldn't capture context for (edge-of-viewport, capture
+            # failure, non-icon/logo UI components) leave these unset and
+            # _check_1_4_11 falls back to Path 2 below.
             _full_page_img = getattr(img, "full_page_screenshot_path", None) or None
             _component_bbox = getattr(img, "page_bbox", None) or None
             wcag_1_4_11_pass, wcag_1_4_11_reason = _check_1_4_11(
@@ -1135,9 +1208,17 @@ class AltTextAccessibilityAuditor:
             wcag_1_4_6_pass = None
             wcag_1_4_6_reason = "N/A — no text detected"
 
-            if classification in ("logo", "decorative") and not is_button:
-                wcag_1_4_3_reason = f"N/A — 1.4.3 does not apply to {classification} images"
-                wcag_1_4_6_reason = f"N/A — 1.4.6 does not apply to {classification} images"
+            # NOTE: the classifier never sets `classification` to the literal
+            # string "logo" — logo images are `classification in
+            # ("functional", "informative")` with `sub_type == "logos"` (see
+            # classifier.py). Checking for "logo" here meant the WCAG 1.4.3
+            # logotype-text exemption could never fire; branded wordmark text
+            # was evaluated for contrast like ordinary body text instead of
+            # being exempted, as WCAG explicitly allows for logo text.
+            if (classification == "decorative" or sub_type == "logos") and not is_button:
+                _exempt_label = "logo" if sub_type == "logos" else classification
+                wcag_1_4_3_reason = f"N/A — 1.4.3 does not apply to {_exempt_label} images"
+                wcag_1_4_6_reason = f"N/A — 1.4.6 does not apply to {_exempt_label} images"
             elif effective_has_text and ocr_result and ocr_result.detections:
                 all_aa = []
                 all_aaa = []
@@ -1174,19 +1255,86 @@ class AltTextAccessibilityAuditor:
                     wcag_1_4_6_pass = True
                     wcag_1_4_6_reason = "PASS [1.4.6] All text regions meet enhanced contrast"
 
-            # Overall: all definitive checks must pass (None = N/A, skip).
-            # 1.1.1 is tri-state now — an unresolved (None) result is neither a
-            # pass nor a failure, so it must not drag `overall` to FAILED.
-            checks = [] if wcag_1_1_1_pass is None else [wcag_1_1_1_pass]
-            if wcag_4_1_2_pass is not None:
-                checks.append(wcag_4_1_2_pass)
-            if wcag_1_4_3_pass is False:
-                checks.append(False)
-            if wcag_1_4_5_pass is False:
-                checks.append(False)
-            if wcag_1_4_11_pass is False:
-                checks.append(False)
-            overall = "PASSED" if all(checks) else "FAILED"
+            # Per-criterion status strings, computed once so both the CSV row
+            # and `overall` agree on the same tri/quad-state classification.
+            wcag_1_1_1_status = (
+                "PASSED"
+                if wcag_1_1_1_pass is True
+                else "FAILED" if wcag_1_1_1_pass is False else "INCOMPLETE"
+            )
+            wcag_4_1_2_status = (
+                "PASSED"
+                if wcag_4_1_2_pass is True
+                else "FAILED" if wcag_4_1_2_pass is False else "N/A"
+            )
+            wcag_1_4_3_status = (
+                "PASSED"
+                if wcag_1_4_3_pass is True
+                else (
+                    "FAILED"
+                    if wcag_1_4_3_pass is False
+                    else (
+                        "INCOMPLETE"
+                        if str(wcag_1_4_3_reason).startswith("INCOMPLETE")
+                        else "N/A"
+                    )
+                )
+            )
+            wcag_1_4_5_status = (
+                "PASSED"
+                if wcag_1_4_5_pass is True
+                else "FAILED" if wcag_1_4_5_pass is False else "N/A"
+            )
+            wcag_1_4_6_status = (
+                "PASSED"
+                if wcag_1_4_6_pass is True
+                else (
+                    "FAILED"
+                    if wcag_1_4_6_pass is False
+                    else (
+                        "INCOMPLETE"
+                        if str(wcag_1_4_6_reason).startswith("INCOMPLETE")
+                        else "N/A"
+                    )
+                )
+            )
+            wcag_1_4_11_status = (
+                "PASSED"
+                if wcag_1_4_11_pass is True
+                else (
+                    "FAILED"
+                    if wcag_1_4_11_pass is False
+                    else (
+                        "INCOMPLETE"
+                        if str(wcag_1_4_11_reason).startswith("INCOMPLETE")
+                        else "N/A"
+                    )
+                )
+            )
+
+            # Overall: FAILED if any criterion definitively failed; otherwise
+            # INCOMPLETE if any applicable criterion is still unresolved
+            # (needs review); otherwise PASSED. Previously an element whose
+            # only applicable criterion was unresolved (e.g. 1.1.1 INCOMPLETE,
+            # everything else N/A) fell through `all([]) == True` and was
+            # reported as a definitive PASSED alongside its own "needs review"
+            # reason text.
+            # 1.4.6 (AAA Enhanced contrast) is intentionally excluded here, as
+            # in the original logic — it's an AAA-only criterion and doesn't
+            # gate the A/AA-focused overall verdict.
+            _statuses = (
+                wcag_1_1_1_status,
+                wcag_4_1_2_status,
+                wcag_1_4_3_status,
+                wcag_1_4_5_status,
+                wcag_1_4_11_status,
+            )
+            if any(s == "FAILED" for s in _statuses):
+                overall = "FAILED"
+            elif any(s == "INCOMPLETE" for s in _statuses):
+                overall = "INCOMPLETE"
+            else:
+                overall = "PASSED"
 
             records.append(
                 {
@@ -1205,61 +1353,13 @@ class AltTextAccessibilityAuditor:
                     "has_ocr_text": has_ocr_text,
                     "detected_text": detected_joined,
                     "contrast_violations_count": contrast_count,
-                    "wcag_1_1_1_status": (
-                        "PASSED"
-                        if wcag_1_1_1_pass is True
-                        else "FAILED" if wcag_1_1_1_pass is False else "INCOMPLETE"
-                    ),
+                    "wcag_1_1_1_status": wcag_1_1_1_status,
                     "wcag_1_1_1_code": wcag_1_1_1_code,
-                    "wcag_4_1_2_status": (
-                        "PASSED"
-                        if wcag_4_1_2_pass is True
-                        else "FAILED" if wcag_4_1_2_pass is False else "N/A"
-                    ),
-                    "wcag_1_4_3_status": (
-                        "PASSED"
-                        if wcag_1_4_3_pass is True
-                        else (
-                            "FAILED"
-                            if wcag_1_4_3_pass is False
-                            else (
-                                "INCOMPLETE"
-                                if str(wcag_1_4_3_reason).startswith("INCOMPLETE")
-                                else "N/A"
-                            )
-                        )
-                    ),
-                    "wcag_1_4_5_status": (
-                        "PASSED"
-                        if wcag_1_4_5_pass is True
-                        else "FAILED" if wcag_1_4_5_pass is False else "N/A"
-                    ),
-                    "wcag_1_4_6_status": (
-                        "PASSED"
-                        if wcag_1_4_6_pass is True
-                        else (
-                            "FAILED"
-                            if wcag_1_4_6_pass is False
-                            else (
-                                "INCOMPLETE"
-                                if str(wcag_1_4_6_reason).startswith("INCOMPLETE")
-                                else "N/A"
-                            )
-                        )
-                    ),
-                    "wcag_1_4_11_status": (
-                        "PASSED"
-                        if wcag_1_4_11_pass is True
-                        else (
-                            "FAILED"
-                            if wcag_1_4_11_pass is False
-                            else (
-                                "INCOMPLETE"
-                                if str(wcag_1_4_11_reason).startswith("INCOMPLETE")
-                                else "N/A"
-                            )
-                        )
-                    ),
+                    "wcag_4_1_2_status": wcag_4_1_2_status,
+                    "wcag_1_4_3_status": wcag_1_4_3_status,
+                    "wcag_1_4_5_status": wcag_1_4_5_status,
+                    "wcag_1_4_6_status": wcag_1_4_6_status,
+                    "wcag_1_4_11_status": wcag_1_4_11_status,
                     "overall_status": overall,
                     "wcag_1_1_1_reason": wcag_1_1_1_reason,
                     "wcag_4_1_2_reason": wcag_4_1_2_reason,

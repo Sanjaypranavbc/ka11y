@@ -12,6 +12,14 @@ class DetailedDetection(BaseModel):
     contrast_info: Optional[Dict[str, Any]] = None
     color_info: Optional[Dict[str, Any]] = None  # New field for color palette
     wcag_violations: List[str] = Field(default_factory=list)
+    # True when contrast could not be determined at all (segmentation/colour
+    # extraction failed) rather than being determined and passing. Without
+    # this, a detection whose analysis errored out looked identical to one
+    # that was checked and found compliant — both had `wcag_violations == []`
+    # — silently deflating violation counts for exactly the low-contrast
+    # images most likely to make segmentation fail (foreground/background
+    # luminance nearly identical).
+    needs_review: bool = False
 
 
 class TextDetectionResult(BaseModel):
@@ -22,6 +30,7 @@ class TextDetectionResult(BaseModel):
     has_text: bool = False
     detections: List[DetailedDetection] = Field(default_factory=list)
     contrast_violations_count: int = 0
+    contrast_needs_review_count: int = 0
     new_path: Optional[str] = None
     category: str = "other"  # button, logo, informational, other
 
@@ -34,6 +43,7 @@ class TextDetectionReport(BaseModel):
     total_images_scanned: int = 0
     images_with_text: int = 0
     images_with_contrast_violations: int = 0
+    images_with_contrast_needs_review: int = 0
     results: List[TextDetectionResult] = Field(default_factory=list)
 
 

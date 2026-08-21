@@ -131,8 +131,16 @@ def _gate_1_is_prerecorded(item: Dict[str, Any]) -> Optional[Tuple[str, str, int
             1,
         )
 
-    # Explicit live labeling
+    # Explicit live labeling. Genuine live badges/labels are short
+    # ("Live", "LIVE NOW", "Watch Live") — scanning arbitrary long prose in
+    # `nearby_text` for the bare word "live" false-matches ordinary sentences
+    # like "This interview was recorded live in our studio last year and is
+    # now archived", wrongly exempting prerecorded media that actually needs
+    # a transcript. Cap the scan to short, label-like text.
+    _LIVE_LABEL_MAX_LEN = 40
     for text in [aria_label, nearby_text]:
+        if not text or len(text) > _LIVE_LABEL_MAX_LEN:
+            continue
         if re.search(r"\blive\b", text):
             return (
                 "N/A",
@@ -151,31 +159,44 @@ def _gate_2_media_type(item: Dict[str, Any]) -> str:
     Returns one of:
       "audio_only"    — <audio> tag (always audio-only)
       "video_only"    — <video> tag that likely has no audio track
-      "synchronized"  — <video> tag with indicators of both audio + video
+      "synchronized"  — <video> tag with strong indicators of audio + video
+      "unknown"       — <video> tag with no reliable signal either way
 
     Note: Accurately detecting whether a <video> has an audio track
-    requires JS media API access. The crawler extracts `is_muted` as a hint.
+    requires JS media API access (audioTracks / webkitAudioDecodedByteCount),
+    which is generally unpopulated until the browser has actually started
+    loading the media — not reliably available from a static crawl pass. The
+    crawler extracts `is_muted` / `has_loop` / `has_autoplay` as heuristic
+    hints only.
     """
     tag = (item.get("tag") or "").upper()
 
     if tag == "AUDIO":
         return "audio_only"
 
-    # For <video>, we assume it is synchronized (has both audio and video)
-    # unless there are strong indicators of video-only:
-    #   - muted attribute set AND no audio-related tracks
-    #   - Very short silent loops (common for decorative background videos)
     if tag == "VIDEO":
         is_muted = item.get("is_muted", False)
         has_loop = item.get("has_loop", False)
         has_autoplay = item.get("has_autoplay", False)
 
-        # Muted autoplay loop = likely decorative/video-only background
+        # Muted autoplay loop = likely decorative/video-only background.
         if is_muted and has_loop and has_autoplay:
             return "video_only"
 
-        # Default assumption: synchronized media
-        # In the future, the crawler could check videoElement.audioTracks
+        # Default assumption: synchronized media. This is a deliberate
+        # prior, not a certainty — most <video> elements do carry audio, and
+        # assuming otherwise by default would misroute the common case away
+        # from the (much more frequently applicable and already
+        # well-covered) 1.2.2 captions pipeline. The known gap this leaves —
+        # a silent, non-autoplaying, click-to-play video with no muted/loop
+        # signal is indistinguishable from a normal synchronized video using
+        # only static HTML attributes — is called out explicitly in the
+        # 1.2.1 N/A reason text below (see `_audit_single`) rather than
+        # silently asserted, so a reviewer skimming results can tell this
+        # was a default, not a confirmed fact. A real fix needs an actual
+        # audio-track check (`audioTracks`/`webkitAudioDecodedByteCount`),
+        # which requires the browser to have started loading the media —
+        # not reliably available from a static crawl pass.
         return "synchronized"
 
     return "synchronized"
@@ -191,17 +212,39 @@ def _gate_3_is_labeled_alternative(
     of existing text content (e.g., "Audio version of the above article"),
     then WCAG 1.2.1 does not require a separate transcript.
 
-    Returns ("N/A", reason, 3) if exempt, else None to continue.
+    Returns ("N/A", reason, 3) if exempt, ("NEEDS_REVIEW", reason, 3) if the
+    signal is weaker (see below), else None to continue.
     """
     aria_label = _normalize(item.get("aria_label") or "")
     nearby_text = _normalize(item.get("nearby_text") or "")
 
+    # `aria_label` is a deliberate, author-set accessible name — a keyword
+    # match there is a trustworthy, high-confidence signal, so it's a
+    # confident exemption.
     for keyword in _MEDIA_ALT_KEYWORDS:
-        if keyword in aria_label or keyword in nearby_text:
+        if keyword in aria_label:
             return (
                 "N/A",
                 f"Media is a clearly labeled alternative for existing text content "
-                f"(matched: '{keyword}'). Exempt from 1.2.1.",
+                f"(matched: '{keyword}' in its accessible name). Exempt from 1.2.1.",
+                3,
+            )
+
+    # `nearby_text` is arbitrary surrounding prose, not a deliberate label —
+    # a substring match there can be a coincidental mention (e.g. unrelated
+    # accessibility-statement boilerplate near the element) rather than the
+    # media actually being a labeled alternative. Confidently exempting
+    # every such match previously hid genuine missing-transcript violations
+    # behind an authoritative-looking N/A with no way to tell it was a
+    # guess. Surface it as NEEDS_REVIEW instead so a human confirms it.
+    for keyword in _MEDIA_ALT_KEYWORDS:
+        if keyword in nearby_text:
+            return (
+                "NEEDS_REVIEW",
+                f"Nearby text mentions '{keyword}', which may mean this media is "
+                "a labeled alternative for existing text content (exempt from "
+                "1.2.1) — or may be an unrelated, coincidental mention. Confirm "
+                "whether this media is genuinely a text alternative.",
                 3,
             )
 
@@ -315,21 +358,132 @@ def _gate_5_validate_track_url(track_url: str) -> Optional[Tuple[str, str, int]]
     """
     if not track_url:
         return ("FAILED", "Track element is present but src attribute is missing or empty. (F8 violation)", 5)
-        
+
     try:
         # Use HEAD to quickly check if the file exists without downloading it
         resp = requests.head(track_url, timeout=5, allow_redirects=True)
-        if resp.status_code >= 400 and resp.status_code != 405:
-            # 405 Method Not Allowed occasionally happens for HEAD, but mostly it's 404
-            if resp.status_code == 404:
+        status_code = resp.status_code
+
+        # A server that blanket-405s HEAD requests (including for files that
+        # don't exist) would previously make ANY track URL pass Gate 5
+        # unconditionally — including genuinely broken ones. Retry with GET
+        # (streamed, closed immediately without reading the body) so a real
+        # 404/500 on such a server is still caught here rather than only
+        # surfacing later as a silent downgrade to NEEDS_REVIEW when the
+        # download-and-parse step fails.
+        if status_code == 405:
+            get_resp = requests.get(track_url, timeout=5, allow_redirects=True, stream=True)
+            status_code = get_resp.status_code
+            get_resp.close()
+
+        if status_code >= 400:
+            if status_code == 404:
                 return ("FAILED", f"Caption file URL returned 404 Not Found: {track_url} (F8 violation)", 5)
-            return ("FAILED", f"Caption file URL returned HTTP error {resp.status_code}: {track_url} (F8 violation)", 5)
+            return ("FAILED", f"Caption file URL returned HTTP error {status_code}: {track_url} (F8 violation)", 5)
     except Exception as e:
         # Network errors = broken link
         return ("FAILED", f"Caption file URL is unreachable: {str(e)} (F8 violation)", 5)
-        
+
     return None
-    
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WCAG 1.2.3 — Audio Description or Media Alternative (Prerecorded), Level A
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _check_1_2_3_audio_description(
+    item: Dict[str, Any], tracks: List[Dict[str, Any]]
+) -> Tuple[str, str]:
+    """
+    WCAG 1.2.3: Synchronized video must have either an audio-description
+    track (or equivalent full alternative) for visual-only information, or
+    be exempt because that information is already conveyed in the audio.
+
+    Whether a given video's visual track carries information the audio
+    doesn't (e.g. on-screen text, a silent demonstration) is a judgment call
+    this auditor cannot make automatically — most synchronized video (talking-
+    head interviews, screencasts with narration) needs no audio description
+    at all, so a blanket FAILED here would be a false positive on the
+    majority of ordinary video content. This mirrors the same automation
+    ceiling already documented for judgment-heavy criteria elsewhere in this
+    codebase (e.g. WCAG 2.5.4's "all findings need manual review").
+
+    Returns (status, violation_message).
+    """
+    for track in tracks:
+        kind = _normalize(track.get("kind") or "")
+        if kind == "descriptions":
+            return (
+                "PASSED",
+                f"Video has an audio-description track ({track.get('src') or 'inline'}).",
+            )
+
+    gate3 = _gate_3_is_labeled_alternative(item)
+    if gate3:
+        _, violation, _ = gate3
+        return ("N/A", violation)
+
+    return (
+        "NEEDS_REVIEW",
+        "No <track kind=\"descriptions\"> found. WCAG 1.2.3 requires audio "
+        "description (or a full text/media alternative) ONLY if the video "
+        "track conveys information not already available from the audio "
+        "(e.g. on-screen text, a silent demonstration) — confirm whether "
+        "that applies to this video.",
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WCAG 1.4.2 — Audio Control, Level A
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _check_1_4_2_audio_control(item: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    WCAG 1.4.2: Audio that plays automatically for more than 3 seconds must
+    be either mutable/stoppable independently of the system volume, or not
+    play audibly without user action in the first place.
+
+    Reuses attributes the crawler already captures (has_autoplay, is_muted,
+    has_controls) — no new capture step required. Cannot detect a custom
+    (non-native-`controls`) pause/stop mechanism implemented in JS elsewhere
+    on the page, or the exact clip duration (the native-`<3s`-exemption), so
+    a FAIL here is reported as a strong (F23-pattern) signal, not an
+    absolute — the message says so.
+
+    Returns (status, violation_message).
+    """
+    if not item.get("has_autoplay"):
+        return ("N/A", "Media does not autoplay. WCAG 1.4.2 does not apply.")
+
+    if item.get("is_muted"):
+        return (
+            "PASSED",
+            "Media autoplays muted — no audio plays automatically, so WCAG "
+            "1.4.2 does not require a stop/pause mechanism.",
+        )
+
+    if item.get("has_controls"):
+        return (
+            "PASSED",
+            "Media autoplays with audible sound, but native playback "
+            "controls (which include pause and volume) are present, "
+            "satisfying WCAG 1.4.2.",
+        )
+
+    tag = (item.get("tag") or "media").lower()
+    return (
+        "FAILED",
+        f"This {tag} autoplays with audible sound and has no native "
+        "controls attribute. WCAG 1.4.2 requires a way to pause, stop, or "
+        "independently control the volume of automatically-playing audio "
+        "(F23 failure pattern). If a custom pause/mute control exists "
+        "elsewhere on the page (implemented in JS rather than the native "
+        "`controls` attribute), verify it before treating this as a "
+        "confirmed violation.",
+    )
+
 
 def _download_and_parse_vtt(track_url: str) -> Optional[str]:
     """
@@ -393,6 +547,10 @@ class MediaAuditor:
         "wcag_1_2_2_status",
         "wcag_1_2_2_violation",
         "wcag_1_2_2_gate_reached",
+        "wcag_1_2_3_status",
+        "wcag_1_2_3_violation",
+        "wcag_1_4_2_status",
+        "wcag_1_4_2_violation",
         "transcript_type",
         "transcript_url_or_text",
         "quality_report",
@@ -451,6 +609,10 @@ class MediaAuditor:
             "wcag_1_2_2_status": "N/A",
             "wcag_1_2_2_violation": "",
             "wcag_1_2_2_gate_reached": 0,
+            "wcag_1_2_3_status": "N/A",
+            "wcag_1_2_3_violation": "",
+            "wcag_1_4_2_status": "N/A",
+            "wcag_1_4_2_violation": "",
             "html_snippet": (item.get("html_snippet") or "")[:400],
             "transcript_type": None,
             "transcript_url_or_text": None,
@@ -459,6 +621,15 @@ class MediaAuditor:
             "element_ref_id": item.get("element_ref_id"),
             "frame_path": item.get("frame_path"),
         }
+
+        # ── WCAG 1.4.2 (Audio Control) ──────────────────────────────────────
+        # Applies to any automatically-playing audio regardless of live/
+        # prerecorded status or media type classification, so it's computed
+        # independently of (and before) the 1.2.1/1.2.2/1.2.3 gate pipeline
+        # below, which all only apply to prerecorded content.
+        status_1_4_2, violation_1_4_2 = _check_1_4_2_audio_control(item)
+        base["wcag_1_4_2_status"] = status_1_4_2
+        base["wcag_1_4_2_violation"] = violation_1_4_2
 
         # ── Gate 1: Is it prerecorded? ────────────────────────────────────
         gate1 = _gate_1_is_prerecorded(item)
@@ -478,19 +649,45 @@ class MediaAuditor:
         media_type = _gate_2_media_type(item)
         base["media_type"] = media_type
 
-        # Synchronized media → 1.2.1 does not apply
+        # Synchronized media → 1.2.1 does not apply.
+        #
+        # NOTE: `_gate_2_media_type` only returns "synchronized" as a
+        # default assumption, not a confirmed fact — static HTML attributes
+        # give no reliable signal for real audio-track presence outside the
+        # confident muted+loop+autoplay video-only pattern (handled
+        # separately, above). It defaults to "synchronized" deliberately
+        # (most <video> elements do carry audio, and flipping the default
+        # would misroute the common case away from the 1.2.2 captions
+        # pipeline), but that means a genuinely silent, non-autoplaying,
+        # click-to-play video is indistinguishable from a normal
+        # synchronized one here — the reason text says so explicitly rather
+        # than silently asserting confidence.
         if media_type == "synchronized":
             base.update({
                 "wcag_1_2_1_status": "N/A",
                 "wcag_1_2_1_violation": (
-                    "Synchronized media (has both audio and video tracks). "
-                    "WCAG 1.2.1 does not apply — see 1.2.2 / 1.2.3."
+                    "Assumed synchronized media (no muted+loop+autoplay "
+                    "video-only signal detected) — WCAG 1.2.1 is reported "
+                    "N/A on that assumption. If this video is actually "
+                    "silent, it needs a 1.2.1 text/audio alternative "
+                    "instead; static HTML attributes cannot confirm "
+                    "audio-track presence either way. See 1.2.2 / 1.2.3."
                 ),
                 "wcag_1_2_1_gate_reached": 2,
             })
-            
+
+            # ── WCAG 1.2.3 (Audio Description or Media Alternative) ─────────
+            # Cheap (track/label inspection only, no network/transcription),
+            # so it always runs for synchronized media regardless of the
+            # run_1_2_2 flag below.
+            status_1_2_3, violation_1_2_3 = _check_1_2_3_audio_description(
+                item, item.get("tracks") or []
+            )
+            base["wcag_1_2_3_status"] = status_1_2_3
+            base["wcag_1_2_3_violation"] = violation_1_2_3
+
             # ── 1.2.2 Flow for Synchronized Media ─────────────────────────────
-            
+
             if not run_1_2_2:
                 return base
 
@@ -567,9 +764,33 @@ class MediaAuditor:
             )
             
             base["quality_report"] = report
+            status = report["overall_status"]
+            message = report["message"]
+
+            # WCAG 1.2.2 requires *captions* — dialogue text AND non-speech
+            # audio cues (music, sound effects, speaker changes). A
+            # kind="subtitles" track is only required to carry translated
+            # dialogue, so Gate 6's word-error-rate check above (dialogue
+            # accuracy only) confirms the track matches the audio but can't
+            # confirm non-speech cues are present. Accepting "subtitles" at
+            # Gate 4 avoids false-failing the common real-world pattern of
+            # compliant tracks mislabeled kind="subtitles", but a clean WER
+            # score alone shouldn't be reported as a confident 1.2.2 PASS —
+            # cap it at NEEDS_REVIEW so a reviewer confirms non-speech
+            # cues are covered.
+            if track_kind == "subtitles" and status in ("PASS", "PASSED"):
+                status = "NEEDS_REVIEW"
+                message = (
+                    f"{message} Track is kind=\"subtitles\" — dialogue "
+                    "accuracy checked, but WCAG 1.2.2 captions must also "
+                    "describe non-speech audio (music, sound effects, "
+                    "speaker changes); confirm those are covered or change "
+                    "the track to kind=\"captions\"."
+                )
+
             base.update({
-                "wcag_1_2_2_status": report["overall_status"],
-                "wcag_1_2_2_violation": report["message"],
+                "wcag_1_2_2_status": status,
+                "wcag_1_2_2_violation": message,
                 "wcag_1_2_2_gate_reached": 6,
             })
             return base

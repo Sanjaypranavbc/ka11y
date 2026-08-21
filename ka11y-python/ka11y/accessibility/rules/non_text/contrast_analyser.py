@@ -156,24 +156,28 @@ def check_wcag_compliance(
 ) -> Dict[str, Any]:
     """
     WCAG 2.1 AA/AAA thresholds:
-      Large text  = ≥24px regular  OR  ≥18.5px bold
+      Large text  = ≥24px regular  OR  ≥18.6667px bold (14pt = 14 * 96/72 px)
       AA  normal  : 4.5:1
       AA  large   : 3.0:1
       AAA normal  : 7.0:1
       AAA large   : 4.5:1
+      Non-text/UI (1.4.11): 3.0:1 — AA only, WCAG defines no AAA tier for it.
     """
     if is_ui_component:
         return {
             "contrast_ratio": round(ratio, 2),
             "AA_passes": ratio >= 3.0,  # ✅ normalize key name
-            "AAA_passes": ratio >= 3.0,  # (AAA same as AA for UI components)
+            # WCAG 1.4.11 (Non-text Contrast) is AA-only — there is no AAA
+            # success criterion for it, so "AAA_passes" is not applicable
+            # rather than a fabricated pass/fail value.
+            "AAA_passes": None,
             "is_ui_component": True,
             "aa_threshold_used": 3.0,
         }
     # Cast to plain Python bool: font_size_px may be np.float64 (from
     # np.linalg.norm in bbox_height_rotated), which makes comparisons return
     # np.bool_ — not JSON-serializable by the standard library encoder.
-    is_large = bool((font_size_px >= 24) or (is_bold and font_size_px >= 18.5))
+    is_large = bool((font_size_px >= 24) or (is_bold and font_size_px >= 18.6667))
 
     aa_threshold = 3.0 if is_large else 4.5
     aaa_threshold = 4.5 if is_large else 7.0
@@ -184,6 +188,7 @@ def check_wcag_compliance(
         "AAA_passes": bool(ratio >= aaa_threshold),
         "is_large_text": is_large,
         "aa_threshold_used": aa_threshold,
+        "aaa_threshold_used": aaa_threshold,
     }
 
 
@@ -228,6 +233,12 @@ def analyze_text_region(
             return {"error": "Segmentation failed"}
 
         fg_rgb, bg_rgb = get_average_rgb(region, mask)
+        # Always scored against the text-size thresholds (never the 3:1
+        # is_ui_component shortcut) — WCAG 1.4.3/1.4.6 apply to text based on
+        # its own size/weight, not on whether it sits inside a button. The
+        # separate 1.4.11 (non-text/UI boundary contrast) approximation is
+        # computed independently in alttext.py's `_check_1_4_11`, directly
+        # off `contrast_ratio` below, against its own 3:1 threshold.
         compliance = check_wcag_compliance(
             ratio, font_size_px=font_size_px, is_bold=is_bold
         )

@@ -18,12 +18,23 @@ def estimate_boldness(img, bbox):
 
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    text_pixels = np.sum(thresh == 0)
+    dark_pixels = np.sum(thresh == 0)
     total_pixels = thresh.size
 
-    density = text_pixels / total_pixels
+    dark_density = dark_pixels / total_pixels
 
-    return density > 0.35  # tune if needed
+    # Text is virtually always the minority pixel class within a tight OCR
+    # bounding box (letterforms are thinner than their background) — whether
+    # it's dark text on a light background or light text on a dark one.
+    # Hardcoding "dark pixels = text" (the previous behaviour) reads light/
+    # white text on a dark background — a common hero-banner/CTA pattern —
+    # backwards: the dark *background* becomes the majority, pushing density
+    # past the bold threshold and misclassifying ordinary-weight text as
+    # bold. Taking the minority class keeps the dark-text-on-light case
+    # identical while fixing the inverted case.
+    stroke_density = min(dark_density, 1.0 - dark_density)
+
+    return stroke_density > 0.35  # tune if needed
 
 
 def bbox_height_rotated(bbox):

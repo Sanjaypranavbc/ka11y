@@ -402,7 +402,20 @@ def _check_speaker_ids(
     If Deepgram detects multiple distinct speakers (speaker_count > 1)
     but the transcript has zero labels → FAIL.
     """
-    patterns = _SPEAKER_PATTERNS.get(lang, _SPEAKER_PATTERNS["en"])
+    if lang not in _SPEAKER_PATTERNS:
+        # Only "en"/"ja" have real pattern tables. Silently falling back to
+        # the English patterns here would run Latin-script, capital-letter
+        # regexes against a language that may have no case distinction at
+        # all (e.g. Korean, Chinese) and never match — reporting correctly
+        # labeled speakers as a confident FAILED. Without a pattern table
+        # for this language, no automated verdict can be trusted.
+        return _check_result(
+            "speaker_ids", "NEEDS_REVIEW",
+            f"Speaker-label detection is not supported for language '{lang}' "
+            "(only English and Japanese pattern tables exist). Manual review required.",
+            labels_found=0,
+        )
+    patterns = _SPEAKER_PATTERNS[lang]
     found_labels = []
     for pattern in patterns:
         matches = pattern.findall(dev_transcript)
@@ -455,17 +468,41 @@ def _check_non_speech_events(dev_transcript: str, lang: str = "en") -> Dict[str,
     all_descriptors = bracketed + parenthesized
 
     if not all_descriptors:
+        # This function only sees the developer-provided transcript text —
+        # it has no signal about whether the *source audio* actually
+        # contains any non-speech events worth noting (that would need
+        # audio-event detection, not text analysis). Asserting FAILED
+        # unconditionally here treated "no descriptors" as "must have
+        # missed some", which tanks an accurate, fully-equivalent
+        # transcript of e.g. a plainly-narrated article with no music/
+        # sound effects in the source. Without evidence of what the audio
+        # actually contains, this is a review item, not a confirmed defect.
         return _check_result(
             "non_speech_events",
-            "FAILED",
+            "NEEDS_REVIEW",
             "No bracketed audio event descriptors found in transcript "
-            "(e.g., [applause], [music], [laughter]). "
-            "WCAG 1.2.1 requires noting significant non-speech sounds.",
+            "(e.g., [applause], [music], [laughter]). WCAG 1.2.1 requires "
+            "noting significant non-speech sounds — confirm whether the "
+            "source audio has any that this transcript is missing.",
             events_found=[],
         )
 
+    if lang not in _AUDIO_EVENT_KEYWORDS:
+        # Only "en"/"ja" have real keyword tables — silently falling back to
+        # English keywords would never match non-English event descriptors
+        # and misreport them as unrecognised.
+        return _check_result(
+            "non_speech_events",
+            "NEEDS_REVIEW",
+            f"Found {len(all_descriptors)} bracketed descriptor(s), but "
+            f"audio-event keyword matching is not supported for language "
+            f"'{lang}' (only English and Japanese keyword lists exist). "
+            "Manual review required.",
+            events_found=[d.strip() for d in all_descriptors[:10]],
+        )
+
     # Check if any descriptors match known audio event keywords
-    keywords = _AUDIO_EVENT_KEYWORDS.get(lang, _AUDIO_EVENT_KEYWORDS["en"])
+    keywords = _AUDIO_EVENT_KEYWORDS[lang]
     matched_events = []
     for desc in all_descriptors:
         desc_lower = desc.lower().strip()
@@ -998,7 +1035,7 @@ def evaluate_captions_quality(
         
         if not gt_clean.strip():
             if not caption_clean.strip():
-                 status = "PASS"
+                 status = "PASSED"
                  msg = "No speech detected in audio, and no captions provided."
                  error_rate = 0.0
             else:
@@ -1007,12 +1044,17 @@ def evaluate_captions_quality(
                  error_rate = None
         else:
             error_rate = wer(gt_clean, caption_clean)
-            
+
             # Threshold Explanation for UI
             metric_info = "Metrics: Excellent (<15%), Needs Review (15-40%), Poor (>40%)"
-            
-            if error_rate < 0.15:
-                status = "PASS"
+
+            # `<=` to match `_check_verbatim`'s `_WER_PASS` boundary — the
+            # two functions previously used different operators (`<` here
+            # vs `<=` there) at the *same* documented 15% threshold, so a
+            # caption/transcript at exactly 15% WER got PASSED from one
+            # check and NEEDS_REVIEW from the other for an identical score.
+            if error_rate <= _WER_PASS:
+                status = "PASSED"
                 msg = f"Captions match audio accurately. (WER: {error_rate:.1%}). {metric_info}"
             elif error_rate > 0.40:
                 status = "FAILED"

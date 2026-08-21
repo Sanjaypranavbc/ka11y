@@ -51,7 +51,9 @@ _LOGO_KEYWORDS = [
 
 _ICON_KEYWORDS = [
     "icon",
-    "ico",
+    # NOTE: bare "ico" was removed — as a 3-char substring it false-matched
+    # ordinary words like "silicon", "unicorn", "reciprocal" in src/class
+    # names, misclassifying unrelated informative images as icons.
     "symbol",
     "glyph",
     "sprite",

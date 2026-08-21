@@ -272,14 +272,22 @@ class OCRPreprocessing:
                     # ✅ F5: detect bold text
                     is_bold = estimate_boldness(img, clean_bbox)
 
-                    # ✅ F15: route UI components (buttons/icons) through
-                    # analyze_ui_component so the is_ui_component path in
-                    # check_wcag_compliance is reachable and the 3:1 AA
-                    # threshold is correctly applied.
-                    is_ui_component = category == "button_text"
+                    # NOTE on UI components (buttons/icons): this OCR
+                    # detection is *text* baked into an image, so it is
+                    # always scored against the WCAG 1.4.3/1.4.6 text-size
+                    # thresholds below (via `is_bold`/`font_size_px`) — never
+                    # the 3:1 `is_ui_component` shortcut in
+                    # check_wcag_compliance. That shortcut is for the
+                    # component's own boundary/fill contrast (WCAG 1.4.11),
+                    # a different visual feature computed separately by
+                    # `contrast_analyser.analyze_ui_component()` (real page
+                    # context, in alttext.py's `_check_1_4_11`) or, as a
+                    # fallback approximation, by comparing this same
+                    # detection's raw `contrast_ratio` against 3:1 directly —
+                    # not by relaxing this text's own compliance dict.
                     try:
                         contrast_info = contrast_analyser.analyze_text_region(
-                            img, clean_bbox, font_size_px=font_size_px
+                            img, clean_bbox, font_size_px=font_size_px, is_bold=is_bold
                         )
                     except Exception as e:
                         logger.warning(f"Contrast analysis failed: {e}")
@@ -393,11 +401,31 @@ class OCRPreprocessing:
                     if violations:
                         result.contrast_violations_count += 1
 
+                    # Contrast genuinely couldn't be determined (analysis
+                    # raised, or segmentation/colour extraction reported an
+                    # error/needs_review) — distinct from "determined and
+                    # passed". Both previously left `violations == []` with
+                    # no way to tell them apart, silently deflating violation
+                    # counts on exactly the low-contrast images most likely
+                    # to make segmentation fail.
+                    contrast_undetermined = (
+                        color_info is None
+                        and not violations
+                        and (
+                            contrast_info is None
+                            or contrast_info.get("error")
+                            or contrast_info.get("needs_review")
+                        )
+                    )
+                    if contrast_undetermined:
+                        result.contrast_needs_review_count += 1
+
                     result.detections.append(
                         DetailedDetection(
                             text=text,
                             confidence=float(conf),
                             bbox=clean_bbox,
+                            needs_review=contrast_undetermined,
                             contrast_info=contrast_info,
                             color_info=color_info,
                             wcag_violations=violations,
@@ -532,6 +560,9 @@ class TextClassification:
         images_with_violations = sum(
             1 for r in self.results if r.contrast_violations_count > 0
         )
+        images_with_needs_review = sum(
+            1 for r in self.results if r.contrast_needs_review_count > 0
+        )
 
         report = TextDetectionReport(
             scan_date=datetime.utcnow().isoformat(),
@@ -539,6 +570,7 @@ class TextClassification:
             total_images_scanned=len(self.results),
             images_with_text=images_with_text,
             images_with_contrast_violations=images_with_violations,
+            images_with_contrast_needs_review=images_with_needs_review,
             results=self.results,
         )
 
@@ -568,6 +600,7 @@ class TextClassification:
         print(f"Total images: {len(self.results)}")
         print(f"With text: {images_with_text}")
         print(f"Contrast violations: {images_with_violations}")
+        print(f"Contrast needs review (could not be determined): {images_with_needs_review}")
         print("Reports saved to:")
         print(f"  - {json_file}")
         print(f"  - {csv_file}")
@@ -672,6 +705,25 @@ class TextClassification:
                                     comp.get("AAA_passes"),
                                 ]
                             )
+                    elif det.needs_review:
+                        # Contrast could not be determined — surface it as a
+                        # NEEDS_REVIEW row instead of silently omitting the
+                        # detection, which previously made this report look
+                        # identical to "checked and passed".
+                        writer.writerow(
+                            [
+                                result.filename,
+                                result.original_path,
+                                det.text,
+                                "N/A",
+                                "N/A",
+                                "NEEDS_REVIEW",
+                                "NEEDS_REVIEW",
+                                "NEEDS_REVIEW",
+                                "NEEDS_REVIEW",
+                                "NEEDS_REVIEW",
+                            ]
+                        )
 
     def _generate_contrast_json(self, output_path):
         """Generate JSON report only for contrast analysis"""
@@ -692,6 +744,22 @@ class TextClassification:
                             ),
                             "contrast_checks": det.color_info.get("contrast_checks"),
                             "wcag_violations": det.wcag_violations,
+                            "needs_review": False,
+                        }
+                    )
+                elif det.needs_review:
+                    # Surface undetermined-contrast detections instead of
+                    # silently omitting them (see DetailedDetection.needs_review).
+                    contrast_data.append(
+                        {
+                            "image": result.filename,
+                            "image_path": result.original_path,
+                            "text": det.text,
+                            "foreground": None,
+                            "background_palette": None,
+                            "contrast_checks": None,
+                            "wcag_violations": det.wcag_violations,
+                            "needs_review": True,
                         }
                     )
 

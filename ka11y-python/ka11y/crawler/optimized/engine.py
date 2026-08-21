@@ -2295,6 +2295,48 @@ class Crawler:
                     )
                     el["screenshot"] = str(rel)
                     el["asset_capture"] = "screenshot_icon_logo"
+
+                    # WCAG 1.4.11 (Non-text Contrast) needs this component's
+                    # contrast measured against its *surrounding page
+                    # background* — the tight element screenshot above has no
+                    # context to measure a boundary against. Capture a second,
+                    # padded screenshot via a viewport-relative clip rect
+                    # (elementHandle.screenshot() has no margin option) and
+                    # record the element's bbox local to that crop. Best-effort
+                    # only: skip elements touching the viewport edge (no real
+                    # context to measure) and never let a failure here affect
+                    # the primary capture above — 1.4.11 falls back to its
+                    # existing OCR-text-in-image proxy when this is absent.
+                    try:
+                        pad = 40
+                        vp_rect = await handle.bounding_box()
+                        viewport = page.viewport_size or {"width": 1280, "height": 800}
+                        if vp_rect and vp_rect["width"] > 0 and vp_rect["height"] > 0:
+                            cx0 = max(0, vp_rect["x"] - pad)
+                            cy0 = max(0, vp_rect["y"] - pad)
+                            cx1 = min(viewport["width"], vp_rect["x"] + vp_rect["width"] + pad)
+                            cy1 = min(viewport["height"], vp_rect["y"] + vp_rect["height"] + pad)
+                            cw, ch = cx1 - cx0, cy1 - cy0
+                            touches_edge = (
+                                cx0 <= 0 or cy0 <= 0
+                                or cx1 >= viewport["width"] or cy1 >= viewport["height"]
+                            )
+                            if cw > 4 and ch > 4 and not touches_edge:
+                                ctx_rel = Path("screenshots") / page_slug / f"{el['id']}_context.png"
+                                await page.screenshot(
+                                    path=str(self.out_dir / ctx_rel),
+                                    clip={"x": cx0, "y": cy0, "width": cw, "height": ch},
+                                    timeout=SHOT_TIMEOUT_MS,
+                                )
+                                el["context_screenshot"] = str(ctx_rel)
+                                el["context_bbox"] = {
+                                    "x": vp_rect["x"] - cx0,
+                                    "y": vp_rect["y"] - cy0,
+                                    "width": vp_rect["width"],
+                                    "height": vp_rect["height"],
+                                }
+                    except (PlaywrightError, Exception):
+                        pass  # non-fatal: 1.4.11 falls back to the OCR-text proxy
                     continue
 
                 # ── For all other categories: overlay → download → fallback ──

@@ -1175,7 +1175,49 @@ def _media_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                 reason=r.get("wcag_1_2_2_violation") or "Rule 1.2.2 evaluates to N/A for this element.",
                 severity=None, **_record_element_kwargs(r, page_url)
             ))
-            
+
+        # WCAG 1.2.3 — Audio Description or Media Alternative (Prerecorded)
+        s_123 = get_status(r, "1.2.3", default="")
+        if s_123 == "PASSED":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_3_media", wcag_sc="1.2.3", status="pass",
+                reason=r.get("wcag_1_2_3_violation") or "Synchronized media has an audio-description track.",
+                severity=None, **_record_element_kwargs(r, page_url)
+            ))
+        elif s_123 == "NEEDS_REVIEW":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_3_media", wcag_sc="1.2.3", status="needs_review",
+                reason=r.get("wcag_1_2_3_violation") or "Manual review required for audio description.",
+                severity=_PYTHON_SEVERITY.get("1.2.3", "medium"), **_record_element_kwargs(r, page_url)
+            ))
+        elif s_123 == "N/A":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_2_3_media", wcag_sc="1.2.3", status="inapplicable",
+                reason=r.get("wcag_1_2_3_violation") or "Rule 1.2.3 evaluates to N/A for this element.",
+                severity=None, **_record_element_kwargs(r, page_url)
+            ))
+
+        # WCAG 1.4.2 — Audio Control
+        s_142 = get_status(r, "1.4.2", default="")
+        if s_142 == "FAILED":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_4_2_media", wcag_sc="1.4.2", status="fail",
+                reason=r.get("wcag_1_4_2_violation") or "Autoplaying audio has no way to pause, stop, or control volume.",
+                severity=_PYTHON_SEVERITY.get("1.4.2", "high"), **_record_element_kwargs(r, page_url)
+            ))
+        elif s_142 == "PASSED":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_4_2_media", wcag_sc="1.4.2", status="pass",
+                reason=r.get("wcag_1_4_2_violation") or "Autoplaying audio is mutable/stoppable.",
+                severity=None, **_record_element_kwargs(r, page_url)
+            ))
+        elif s_142 == "N/A":
+            findings.append(_make_finding(
+                source="python", rule_id="python_1_4_2_media", wcag_sc="1.4.2", status="inapplicable",
+                reason=r.get("wcag_1_4_2_violation") or "Rule 1.4.2 evaluates to N/A for this element.",
+                severity=None, **_record_element_kwargs(r, page_url)
+            ))
+
     return findings
 
 

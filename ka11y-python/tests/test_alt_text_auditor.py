@@ -736,7 +736,11 @@ class TestAltTextAuditorReport:
             images_data=[img], ocr_results=[], output_dir=tmp_output
         )
         assert records[0]["wcag_1_1_1_status"] == "INCOMPLETE"
-        assert records[0]["overall_status"] == "PASSED"
+        # Overall must reflect the unresolved 1.1.1 result, not a definitive
+        # PASSED — this element still needs a human to confirm the chart's
+        # data is described somewhere. (Previously `all([])==True` let an
+        # element with zero confirmed-passing checks report PASSED.)
+        assert records[0]["overall_status"] == "INCOMPLETE"
 
     def test_complex_image_empty_alt_fails(self, tmp_output):
         img = make_image(classification="complex", is_complex=True, alt_text="")

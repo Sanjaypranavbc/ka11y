@@ -23,6 +23,8 @@ from ka11y.accessibility.rules.media.media_auditor import (
     _gate_2_media_type,
     _gate_3_is_labeled_alternative,
     _gate_4_find_transcript,
+    _check_1_2_3_audio_description,
+    _check_1_4_2_audio_control,
 )
 
 
@@ -117,7 +119,9 @@ class TestGate2MediaType:
         assert _gate_2_media_type(_make_item(tag="AUDIO")) == "audio_only"
 
     def test_video_tag_default_is_synchronized(self):
-        """<video> without muted+loop+autoplay = assumed synchronized."""
+        """<video> without muted+loop+autoplay = assumed synchronized (a
+        deliberate default prior, not a confirmed fact — see the reason
+        text MediaAuditor attaches to the resulting 1.2.1 N/A record)."""
         item = _make_item(tag="VIDEO")
         assert _gate_2_media_type(item) == "synchronized"
 
@@ -128,6 +132,61 @@ class TestGate2MediaType:
         )
         assert _gate_2_media_type(item) == "video_only"
 
+
+
+# =============================================================================
+# WCAG 1.2.3 — Audio Description or Media Alternative
+# =============================================================================
+
+
+class TestCheck123AudioDescription:
+    def test_descriptions_track_passes(self):
+        item = _make_item(tag="VIDEO")
+        tracks = [{"kind": "descriptions", "src": "/desc.vtt"}]
+        status, _ = _check_1_2_3_audio_description(item, tracks)
+        assert status == "PASSED"
+
+    def test_labeled_alternative_is_exempt(self):
+        item = _make_item(tag="VIDEO", aria_label="Audio version of the article above")
+        status, _ = _check_1_2_3_audio_description(item, [])
+        assert status == "N/A"
+
+    def test_no_signal_needs_review(self):
+        """Whether the video track conveys visual-only info is a judgment
+        call this auditor can't make automatically — most ordinary
+        synchronized video needs no audio description at all, so this is
+        reported for review rather than a confident FAILED."""
+        item = _make_item(tag="VIDEO")
+        status, _ = _check_1_2_3_audio_description(item, [])
+        assert status == "NEEDS_REVIEW"
+
+
+# =============================================================================
+# WCAG 1.4.2 — Audio Control
+# =============================================================================
+
+
+class TestCheck142AudioControl:
+    def test_no_autoplay_is_na(self):
+        item = _make_item(has_autoplay=False)
+        status, _ = _check_1_4_2_audio_control(item)
+        assert status == "N/A"
+
+    def test_autoplay_muted_passes(self):
+        item = _make_item(has_autoplay=True, is_muted=True)
+        status, _ = _check_1_4_2_audio_control(item)
+        assert status == "PASSED"
+
+    def test_autoplay_with_controls_passes(self):
+        item = _make_item(has_autoplay=True, is_muted=False, has_controls=True)
+        status, _ = _check_1_4_2_audio_control(item)
+        assert status == "PASSED"
+
+    def test_autoplay_audible_no_controls_fails(self):
+        item = _make_item(has_autoplay=True, is_muted=False, has_controls=False)
+        status, violation = _check_1_4_2_audio_control(item)
+        assert status == "FAILED"
+        assert "pause" in violation.lower() or "stop" in violation.lower()
 
 
 # =============================================================================
@@ -145,16 +204,21 @@ class TestGate3LabeledAlternative:
         assert result[0] == "N/A"
 
     def test_audio_alternative_in_nearby_text(self):
+        """A match in surrounding prose (not the element's own accessible
+        name) is a weaker signal than an aria-label match — it could be a
+        coincidental mention rather than this media genuinely being a
+        labeled alternative, so it's raised for review rather than a
+        confident N/A exemption."""
         item = _make_item(nearby_text="This is an audio alternative for the report.")
         result = _gate_3_is_labeled_alternative(item)
         assert result is not None
-        assert result[0] == "N/A"
+        assert result[0] == "NEEDS_REVIEW"
 
     def test_japanese_audio_alternative(self):
         item = _make_item(nearby_text="代替音声はこちら")
         result = _gate_3_is_labeled_alternative(item)
         assert result is not None
-        assert result[0] == "N/A"
+        assert result[0] == "NEEDS_REVIEW"
 
     def test_no_alternative_labels(self):
         """Normal media without alt labels — gate continues."""
@@ -257,6 +321,11 @@ class TestMediaAuditorIntegration:
         records = auditor.generate_audit_report(items)
         assert records[0]["wcag_1_2_1_status"] == "N/A"
         assert records[0]["wcag_1_2_1_gate_reached"] == 2
+        # The default-synchronized assumption is stated as an assumption,
+        # not asserted as a confirmed fact (see media_auditor.py's Gate-2
+        # handling) — a reviewer skimming results can tell static HTML
+        # attributes couldn't actually confirm audio-track presence.
+        assert "assumed" in records[0]["wcag_1_2_1_violation"].lower()
 
 
     def test_labeled_alternative_exempt(self, tmp_path):
@@ -378,12 +447,18 @@ class TestQualityEngineTextChecks:
         assert result["status"] == "PASSED"
         assert len(result["events_found"]) >= 2
 
-    def test_non_speech_events_missing_fails(self):
+    def test_non_speech_events_missing_needs_review(self):
+        """No bracketed descriptors doesn't prove the transcript is missing
+        anything — this function has no signal about whether the source
+        audio actually contains non-speech events to note, so it's a
+        review item rather than a confirmed FAILED (a perfectly accurate
+        transcript of audio with no music/sound-effects would otherwise be
+        wrongly tanked)."""
         from ka11y.accessibility.rules.media.quality_engine import _check_non_speech_events
 
         transcript = "Hello everyone. Welcome to the show. Thank you."
         result = _check_non_speech_events(transcript)
-        assert result["status"] == "FAILED"
+        assert result["status"] == "NEEDS_REVIEW"
 
     def test_transcript_preparation_vtt(self):
         from ka11y.accessibility.rules.media.quality_engine import _prepare_transcript

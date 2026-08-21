@@ -45,6 +45,17 @@ class ImageData(BaseModel):
     aria_hidden: Optional[str] = None
     role: Optional[str] = None
 
+    # ── Page-context capture (WCAG 1.4.11 Non-text Contrast) ─────────────────
+    # A padded screenshot around the element (icon/logo elements only — see
+    # optimized/engine.py's `_capture_assets`) plus the element's bounding box
+    # local to that image, so boundary contrast can be measured against the
+    # real surrounding page background instead of the element's own isolated
+    # pixels. Absent when the crawler couldn't capture context (edge-of-page
+    # elements, capture failures, or element types this isn't wired for yet);
+    # `_check_1_4_11` falls back to an OCR-text-in-image proxy in that case.
+    full_page_screenshot_path: Optional[str] = None
+    page_bbox: Optional[list[tuple[int, int]]] = None
+
     # ── Accessible-name context (WCAG 1.1.1 / 4.1.2) ─────────────────────────
     # SC 1.1.1 asks whether an equivalent text alternative exists — by ANY valid
     # mechanism, not whether this element carries an `alt` attribute. An image
