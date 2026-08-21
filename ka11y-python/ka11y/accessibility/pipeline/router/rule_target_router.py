@@ -29,11 +29,17 @@ class RuleTargetRouter:
             rules.append("1.4.11")
 
         # 3. Text Elements (including inputs with values/labels)
-        if (
-            element.accessible_name
-            or element.visual.ocr_text
-            or element.visual.visible_label_text
-        ):
+        # Contrast rules require *rendered* text — an accessible name sourced
+        # from alt/aria-label/title describes the element but paints no
+        # pixels, so there is nothing on screen to contrast-check. Gating on
+        # `is_visible` keeps e.g. <img alt="..."> from being routed to a
+        # text-contrast check against its own (irrelevant) computed styles.
+        has_rendered_text = (
+            (element.accessible_name is not None and element.accessible_name.is_visible)
+            or bool(element.visual.ocr_text)
+            or bool(element.visual.visible_label_text)
+        )
+        if has_rendered_text:
             rules.extend(["1.4.3", "1.4.6"])
 
         # Order-preserving dedup. `list(set(...))` produced a non-deterministic

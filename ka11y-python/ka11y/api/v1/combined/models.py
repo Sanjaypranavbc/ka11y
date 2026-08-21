@@ -46,7 +46,7 @@ class CombinedRequest(BaseModel):
     wcag_level: str = Field(default="AAA", pattern=r"^(A|AA|AAA)$")
     success_criteria_id: Optional[str] = Field(default=None, pattern=r"^\d+\.\d+\.\d+$")
     # ── Active audit toggles ─────────────────────────────────────────────────
-    run_ocr: bool = False
+    run_ocr: bool = True
     run_image_audit: bool = True
     run_media_audit: bool = True
     run_captions_audit: bool = True

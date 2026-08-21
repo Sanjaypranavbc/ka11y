@@ -245,7 +245,16 @@ def build_image_data(
                         full_page_screenshot_path = str(ctx_dest)
                         bx, by = ctx_bbox.get("x", 0), ctx_bbox.get("y", 0)
                         bw, bh = ctx_bbox.get("width", 0), ctx_bbox.get("height", 0)
-                        page_bbox = [(bx, by), (bx + bw, by + bh)]
+                        # getBoundingClientRect() gives sub-pixel floats;
+                        # ImageData.page_bbox is list[tuple[int, int]], so an
+                        # unrounded float here raised a pydantic ValidationError
+                        # at ImageData(...) construction below — uncaught, which
+                        # aborted build_image_data() for the *whole page* and
+                        # silently zeroed out every image on it.
+                        page_bbox = [
+                            (round(bx), round(by)),
+                            (round(bx + bw), round(by + bh)),
+                        ]
                     except OSError:
                         pass  # non-fatal: 1.4.11 falls back to the OCR-text proxy
 
