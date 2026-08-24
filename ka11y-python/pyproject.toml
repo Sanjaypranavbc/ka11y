@@ -13,7 +13,6 @@ rich = ">=14.3.1,<15.0.0"
 aiohttp = ">=3.13.3,<4.0.0"
 bs4 = ">=0.0.2,<0.0.3"
 easyocr = ">=1.7.2,<2.0.0"
-opencv-python-headless = ">=4.13.0.90,<5.0.0.0"
 python-dotenv = ">=1.2.1,<2.0.0"
 pydantic = ">=2.12.5,<3.0.0"
 logger = ">=1.4,<2.0"
@@ -21,7 +20,7 @@ transformers = ">=4.34.0,<6.0.0"
 accelerate = ">=1.12.0,<2.0.0"
 pillow = ">=12.1.1,<13.0.0"
 google-generativeai = ">=0.8.6,<0.9.0"
-pyyaml = ">=6.0.3,<7.0.0"
+pyyaml = ">=6.0.2,<7.0.0"
 torch = { version = ">=2.10.0,<3.0.0", source = "pytorch-cpu" }
 torchvision = { version = ">=0.25.0,<0.26.0", source = "pytorch-cpu" }
 pandas = "^3.0.1"
@@ -47,6 +46,14 @@ keybert = "^0.8.4"
 sentence-transformers = "^2.7.0"
 psutil = "^7.2.2"
 tldextract = "^5.3.1"
+paddleocr = "^3.7.0"
+# Exact pin, not a caret range: paddlepaddle 3.3.x's oneDNN-accelerated CPU
+# path crashes on PP-OCR's text-detection model ("NotImplementedError:
+# ConvertPirAttribute2RuntimeAttribute not support [...]") — a gap in the
+# newer PIR executor's oneDNN kernel coverage. 3.2.2 runs the same models
+# correctly with acceleration on. A caret range would let `poetry update`
+# silently reintroduce 3.3.x.
+paddlepaddle = "==3.2.2"
 
 [tool.poetry.extras]
 japanese = ["sudachipy", "sudachidict-core"]

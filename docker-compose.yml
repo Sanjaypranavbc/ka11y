@@ -154,6 +154,10 @@ services:
       - ./output/db:/data/db
       - ./output/assets:/data/assets
       - huggingface_cache:/root/.cache/huggingface
+      # PaddleOCR's detection/recognition/orientation models (~100MB,
+      # downloaded lazily on first Japanese-language audit). Without this,
+      # every container restart re-downloads them on the next Japanese page.
+      - paddlex_models:/root/.paddlex/official_models
 
     healthcheck:
       test:         ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
@@ -283,3 +287,4 @@ networks:
 
 volumes:
   huggingface_cache:
+  paddlex_models:

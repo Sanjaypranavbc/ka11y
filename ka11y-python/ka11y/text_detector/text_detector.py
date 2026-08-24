@@ -61,15 +61,38 @@ def _get_ocr_executor() -> ThreadPoolExecutor:
                 )
     return _ocr_executor
 
+# Engine selection is per-language, not a single global preference:
+# PaddleOCR's recognition models handle Japanese/CJK text meaningfully
+# better than EasyOCR's, so Japanese pages route to PaddleOCR; every other
+# language routes to EasyOCR (lighter — a 2-model pipeline instead of
+# PaddleOCR's, and the one this project has run in production the longest).
+from ka11y.text_detector.ocrbase import OCRReader as EasyOCRReader
+
+_PADDLEOCR_AVAILABLE = True
 try:
-    from ka11y.text_detector.paddleocrbase import OCRReader, PaddleOCR
+    from ka11y.text_detector.paddleocrbase import OCRReader as PaddleOCRReader, PaddleOCR
 
     # Verify it can actually be initialized (detects missing paddleocr lib)
     if PaddleOCR is None:
         raise ImportError("PaddleOCR not functional")
 except (ImportError, RuntimeError):
-    logger.info("PaddleOCR not available, falling back to EasyOCR")
-    from ka11y.text_detector.ocrbase import OCRReader
+    _PADDLEOCR_AVAILABLE = False
+    logger.info(
+        "PaddleOCR not available — Japanese pages will use EasyOCR instead"
+    )
+
+_JAPANESE_LANGS = {"ja", "jp"}
+
+
+def _select_ocr_reader_class(lang: str):
+    if lang in _JAPANESE_LANGS:
+        if _PADDLEOCR_AVAILABLE:
+            return PaddleOCRReader
+        logger.warning(
+            f"lang={lang!r} requested PaddleOCR but it is not installed — "
+            "using EasyOCR instead"
+        )
+    return EasyOCRReader
 
 
 class OCRPreprocessing:
@@ -112,10 +135,11 @@ class OCRPreprocessing:
 
         Path(self.contrast_dir).mkdir(parents=True, exist_ok=True)
 
-        # logger.info("Initializing EasyOCR Reader (loading models)...")
-        logger.info(f"Initializing OCR Reader for lang={lang}...")
-        self.reader = OCRReader(source_directory, lang=lang)
-        # logger.info("EasyOCR Reader initialized")
+        reader_cls = _select_ocr_reader_class(lang)
+        logger.info(
+            f"Initializing OCR Reader for lang={lang} (engine={reader_cls.__module__})..."
+        )
+        self.reader = reader_cls(source_directory, lang=lang)
         logger.info("OCR Reader initialized")
 
         self.results: List[TextDetectionResult] = []

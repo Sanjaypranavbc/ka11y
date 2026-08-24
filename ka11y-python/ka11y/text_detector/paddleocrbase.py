@@ -40,7 +40,22 @@ def get_ocr_reader(lang: str = "en") -> Optional[PaddleOCR]:
         readers = {}
         _thread_local.readers = readers
     if paddle_lang not in readers:
-        readers[paddle_lang] = PaddleOCR(lang=paddle_lang)
+        # PaddleOCR's default pipeline (PaddleX's OCR.yaml) also runs a
+        # document-orientation classifier and a UVDoc geometric-unwarping
+        # model ahead of detection — built for photographed/scanned paper
+        # pages. This project's images are flat web screenshots (icons,
+        # logos, banners), never photographed documents, so that
+        # preprocessing has no upside here and a real downside: unwarping
+        # can remap coordinates, and the rest of the pipeline
+        # (text_detector.detect_text_in_image) assumes the bbox this
+        # returns lines up directly with the *original* image file it
+        # loads separately for contrast/colour analysis. Disabling both
+        # keeps detection running against the original, unmodified pixels.
+        readers[paddle_lang] = PaddleOCR(
+            lang=paddle_lang,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+        )
     return readers[paddle_lang]
 
 
