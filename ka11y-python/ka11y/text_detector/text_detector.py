@@ -6,6 +6,8 @@ import shutil
 import sys
 import gc
 import csv
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
@@ -29,6 +31,35 @@ config = load_config()
 
 logger = setup_logger(name="KAC", tag="text_detector")
 logger.info("Logger initialized")
+
+# ---------------------------------------------------------------------------
+# OCR worker pool — process-wide and persistent (created once, reused by
+# every scan_directory() call), not a fresh pool per audit run. OCR
+# inference (EasyOCR/PaddleOCR) is CPU-bound but releases the GIL during
+# the actual numpy/torch/opencv compute, so running several images
+# concurrently on a multi-core box cuts wall time substantially instead of
+# pinning a single core for the whole scan. Each worker thread lazily loads
+# its own OCR reader on first use (see ocrbase.get_ocr_reader) and keeps it
+# for the life of the process — a fresh-pool-per-call design would instead
+# pay that model-load cost again on every audit.
+# Override the worker count with $KA11Y_OCR_WORKERS; default is a
+# conservative slice of the box so OCR doesn't starve everything else
+# running concurrently (Playwright, other audit jobs, uvicorn itself).
+# ---------------------------------------------------------------------------
+_OCR_MAX_WORKERS = max(1, int(os.environ.get("KA11Y_OCR_WORKERS", "4")))
+_ocr_executor: Optional[ThreadPoolExecutor] = None
+_ocr_executor_lock = threading.Lock()
+
+
+def _get_ocr_executor() -> ThreadPoolExecutor:
+    global _ocr_executor
+    if _ocr_executor is None:
+        with _ocr_executor_lock:
+            if _ocr_executor is None:
+                _ocr_executor = ThreadPoolExecutor(
+                    max_workers=_OCR_MAX_WORKERS, thread_name_prefix="ocr-worker"
+                )
+    return _ocr_executor
 
 try:
     from ka11y.text_detector.paddleocrbase import OCRReader, PaddleOCR
@@ -478,8 +509,13 @@ class OCRPreprocessing:
                     if Path(file).suffix.lower() in image_extensions:
                         image_files.append(os.path.join(root, file))
 
-        for idx, image_path in enumerate(image_files, 1):
-            result = self.detect_text_in_image(image_path)
+        # OCR for each image is independent (own file, own result object), so
+        # run the batch through a persistent worker pool instead of one image
+        # at a time. executor.map preserves input order in the results it
+        # yields even though the underlying work completes out of order, so
+        # this is a drop-in replacement for the old sequential loop.
+        executor = _get_ocr_executor()
+        for result in executor.map(self.detect_text_in_image, image_files):
             self.results.append(result)
 
             if result.has_text:
@@ -492,9 +528,12 @@ class OCRPreprocessing:
                     )
             else:
                 print("  . No text")
-            
-            # Forced memory flush after each image to prevent OOM spikes
-            gc.collect()
+
+        # One GC pass for the whole batch instead of one per image — the old
+        # per-image gc.collect() was a blanket OOM guard that cost real time
+        # on every single iteration; a single end-of-batch pass gives most of
+        # the same memory-pressure relief without paying that cost N times.
+        gc.collect()
 
         if self.skipped_images:
             logger.warning(

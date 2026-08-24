@@ -14,17 +14,18 @@ except ImportError:
     PaddleOCR = None
 
 # ---------------------------------------------------------------------------
-# Module-level singleton — PaddleOCR models are loaded once per process
-# rather than once per PaddleOCRReader instance. Double-checked locking
-# ensures thread safety without holding the lock on every readtext() call.
+# Thread-local reader cache — PaddleOCR models are loaded once per *thread*
+# rather than once per process, mirroring ocrbase.py. text_detector's
+# scan_directory() runs OCR for multiple images concurrently via a worker
+# thread pool, and PaddleOCR gives no guarantee that a shared instance is
+# safe to call concurrently from multiple threads — each worker thread gets
+# and keeps its own instance instead.
 # ---------------------------------------------------------------------------
-_readers: dict[str, PaddleOCR] = {}
-_reader_lock = threading.Lock()
+_thread_local = threading.local()
 
 
 def get_ocr_reader(lang: str = "en") -> Optional[PaddleOCR]:
-    """Return the shared PaddleOCR instance, initialising it on first call."""
-    global _readers
+    """Return this thread's PaddleOCR instance, initialising it on first use."""
     if PaddleOCR is None:
         return None
 
@@ -34,11 +35,13 @@ def get_ocr_reader(lang: str = "en") -> Optional[PaddleOCR]:
     if lang in ("ja", "jp"):
         paddle_lang = "japan"
 
-    if paddle_lang not in _readers:
-        with _reader_lock:
-            if paddle_lang not in _readers:
-                _readers[paddle_lang] = PaddleOCR(lang=paddle_lang)
-    return _readers[paddle_lang]
+    readers = getattr(_thread_local, "readers", None)
+    if readers is None:
+        readers = {}
+        _thread_local.readers = readers
+    if paddle_lang not in readers:
+        readers[paddle_lang] = PaddleOCR(lang=paddle_lang)
+    return readers[paddle_lang]
 
 
 class OCRReader:

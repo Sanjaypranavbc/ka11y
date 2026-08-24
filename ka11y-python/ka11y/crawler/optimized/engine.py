@@ -172,6 +172,11 @@ ASSET_URL_FIELD = {
 }
 SHOT_TIMEOUT_MS = 5_000
 DOWNLOAD_TIMEOUT_MS = 30_000
+# How many asset downloads _capture_assets runs concurrently per page (see
+# Pass 2b). Bounds outbound connections on image-heavy pages; downloads go
+# through BrowserContext.request, which is safe for concurrent use unlike
+# Page/ElementHandle screenshots.
+DOWNLOAD_CONCURRENCY = 10
 # Carousel-specific limits.
 # MAX_CAROUSEL_SLIDES: hard cap on how many slide-advances the crawler will
 # attempt for a single carousel, preventing infinite loops on carousels that
@@ -2256,7 +2261,22 @@ class Crawler:
 
         # ------------------------------------------------------------------
         # Pass 2: normal (non-carousel) capture for all remaining elements.
+        #
+        # Split into a DOM-decision phase (2a, sequential — query_selector /
+        # evaluate_handle / on-page screenshots all operate on the shared
+        # `page`/CDP session and are not safe to run concurrently) and a
+        # download phase (2b, concurrent). Only asset downloads are
+        # parallelized: they go through BrowserContext.request, which
+        # Playwright documents as safe for concurrent use — unlike
+        # Page/ElementHandle screenshots, which stay sequential here. This
+        # is what turns the majority-case (real <img src> with no overlay)
+        # from N sequential round-trips into one bounded concurrent batch.
         # ------------------------------------------------------------------
+        # (el, asset_url, dest_path, fallback_target) — fallback_target is
+        # the already-resolved handle to screenshot if the download fails,
+        # so phase 2b never needs to re-query a possibly-stale selector.
+        download_jobs: list[tuple[dict, str, Path, object]] = []
+
         for el in elements:
             if el.get("element_type") not in SCREENSHOT_TYPES:
                 continue
@@ -2344,28 +2364,63 @@ class Crawler:
                 is_overlay = await container.evaluate("(c, img) => c !== img", handle)
                 url_field = ASSET_URL_FIELD.get(el["element_type"])
                 asset_url = el.get(url_field) if url_field else None
+                target = (container.as_element() if is_overlay else handle) or handle
 
-                # Non-overlay image with a fetchable URL -> download the bytes.
+                # Non-overlay image with a fetchable URL -> queue the download
+                # for the concurrent batch below instead of awaiting it here.
+                # `target` travels with the job as the fallback screenshot if
+                # the download fails.
                 if not is_overlay and asset_url:
                     ext = _asset_ext(asset_url)
                     rel = Path("assets") / page_slug / f"{el['id']}{ext}"
-                    if await self._download_asset(page, asset_url, self.out_dir / rel):
-                        el["asset_file"] = str(rel)
-                        el["asset_capture"] = "download"
-                        continue  # captured — done with this element
+                    download_jobs.append((el, asset_url, self.out_dir / rel, target))
+                    continue  # resolved in phase 2b
 
-                # Overlay text, inline graphic with no URL, or a failed download
-                # -> screenshot the rendered pixels.
-                target = (container.as_element() if is_overlay else handle) or handle
+                # Overlay text or inline graphic with no fetchable URL ->
+                # screenshot the rendered pixels now (sequential — shares the
+                # page with every other on-page capture in this pass).
                 shot_dir.mkdir(parents=True, exist_ok=True)
                 rel = Path("screenshots") / page_slug / f"{el['id']}.png"
                 await target.screenshot(path=str(self.out_dir / rel),
                                         timeout=SHOT_TIMEOUT_MS)
                 el["screenshot"] = str(rel)
-                el["asset_capture"] = ("screenshot_overlay" if is_overlay
-                                       else "screenshot_fallback")
+                el["asset_capture"] = "screenshot_overlay" if is_overlay else "screenshot_fallback"
             except (PlaywrightError, Exception):
                 pass  # detached / offscreen / timeout — leave fields None
+
+        # ------------------------------------------------------------------
+        # Pass 2b: resolve every queued download concurrently. Bounded by a
+        # semaphore so a page with hundreds of images doesn't open hundreds
+        # of simultaneous connections at once.
+        # ------------------------------------------------------------------
+        if download_jobs:
+            sem = asyncio.Semaphore(DOWNLOAD_CONCURRENCY)
+
+            async def _bounded_download(asset_url: str, dest: Path) -> bool:
+                async with sem:
+                    return await self._download_asset(page, asset_url, dest)
+
+            outcomes = await asyncio.gather(
+                *(_bounded_download(url, dest) for _el, url, dest, _target in download_jobs),
+                return_exceptions=True,
+            )
+
+            # Fallback screenshots for failed downloads must stay sequential
+            # (same page/CDP session as the rest of this pass).
+            for (el, _url, dest, target), ok in zip(download_jobs, outcomes):
+                if ok is True:
+                    el["asset_file"] = str(dest.relative_to(self.out_dir))
+                    el["asset_capture"] = "download"
+                    continue
+                try:
+                    shot_dir.mkdir(parents=True, exist_ok=True)
+                    rel = Path("screenshots") / page_slug / f"{el['id']}.png"
+                    await target.screenshot(path=str(self.out_dir / rel),
+                                            timeout=SHOT_TIMEOUT_MS)
+                    el["screenshot"] = str(rel)
+                    el["asset_capture"] = "screenshot_fallback"
+                except (PlaywrightError, Exception):
+                    pass  # detached / offscreen / timeout — leave fields None
 
     async def _reveal_hidden_images(self, page):
         """Click tabs, accordions, dropdowns, carousels to expose hidden images using locators."""
