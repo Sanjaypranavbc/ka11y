@@ -37,8 +37,13 @@ _IMAGE_TYPES = {
 # screenshot, so a missing capture is expected rather than a capture failure.
 _NO_PIXEL_TYPES = {"area"}
 # Per type, the element field holding the source URL (for hashing + file_format).
+# `svg_via_use` points at a sprite reference (`sprite.svg#icon-menu`, or a bare
+# `#icon-menu` for an in-document <symbol>) — not a fetchable asset, but it is
+# the element's real source and is what findings should show instead of the
+# synthesized `svg_<hash>.png` name.
 _SRC_FIELD = {
     "img": "src", "svg_via_img": "src", "input_image": "src",
+    "svg_via_use": "use_href",
     "svg_via_object": "data_url", "css_background_image": "resolved_background_url",
     "css_background_svg": "resolved_background_url",
 }

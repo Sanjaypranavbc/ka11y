@@ -16,10 +16,12 @@ from __future__ import annotations
 import contextvars
 import os
 from typing import Any, Dict, List, Optional
+from urllib.parse import unquote, urlsplit
 
 from ka11y.accessibility.rules.non_text.alttext import (
     _EMPTY_OR_GENERIC as _EMPTY_OR_GENERIC_ALT,
     _norm as _norm_alt,
+    _is_brand_logo,
 )
 from ka11y.config.logger import setup_logger
 from ka11y.utils.url_canonical import canonicalize_url as _canonicalize_url
@@ -43,6 +45,46 @@ _lang_ctx: contextvars.ContextVar[str] = contextvars.ContextVar(
 )
 
 logger = setup_logger(name="KAC", tag="combined")
+
+
+# ── Image file-name resolution ───────────────────────────────────────────────
+#
+# The crawler stores every captured image under a synthesized hash basename
+# (`img_<md5(src)[:12]>.<ext>`, see crawler/optimized/adapter._unique_basename).
+# That name is an internal join key — it lets OCR results be correlated back to
+# images by basename alone — and must never be shown to a user as "the file
+# name": it does not match anything on the audited site. Findings reference the
+# real file instead, taken from the last path segment of the image `src` URL.
+
+
+def _source_filename(src: Optional[str], fallback: Optional[str] = None) -> Optional[str]:
+    """Real image file name as it appears on the site, from the `src` URL.
+
+    ``https://site.example/assets/hero-banner.png?v=2`` → ``hero-banner.png``.
+    For an SVG sprite reference the ``#fragment`` names the specific icon and is
+    kept: ``assets/sprite.svg#icon-menu`` → ``sprite.svg#icon-menu``, and a bare
+    in-document ``#icon-menu`` → ``#icon-menu``. Falls back to ``fallback``
+    (typically the crawler's internal hash name) for ``data:`` URIs and for srcs
+    whose path has no usable trailing segment.
+    """
+    if not src:
+        return fallback
+    s = src.strip()
+    if not s or s.lower().startswith("data:"):
+        return fallback
+    try:
+        parts = urlsplit(s)
+    except ValueError:
+        return fallback
+    name = unquote(parts.path.rsplit("/", 1)[-1]).strip()
+    frag = unquote(parts.fragment).strip()
+    # Keep the fragment only for SVG sprite / <symbol> references, where it is
+    # the icon's identity. On ordinary assets a fragment is meaningless noise.
+    if frag and (not name or name.lower().endswith(".svg")):
+        name = f"{name}#{frag}" if name else f"#{frag}"
+    if not name or name in (".", "..") or len(name) > 255:
+        return fallback
+    return name
 
 
 # ── Finding factory ───────────────────────────────────────────────────────────
@@ -563,7 +605,11 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
         element_id = r.get("src") or r.get("filename") or None
 
         path = r.get("screenshot_path")
-        filename = r.get("filename")
+        # `image_reference` is surfaced to users as the image's file name, so it
+        # must be the real file from the audited site — not the crawler's
+        # internal hash basename (`img_<md5(src)>.<ext>`). Fall back to that
+        # internal name only when `src` has no usable file segment.
+        filename = _source_filename(r.get("src"), r.get("filename"))
         detected_text = r.get("detected_text")
 
         if status_raw == "PASSED" and "manual review" in reason.lower():
@@ -648,7 +694,11 @@ def _name_role_value_to_findings(records: List[Dict], page_url: str) -> List[Dic
         element_id = r.get("src") or r.get("filename") or None
 
         path = r.get("screenshot_path")
-        filename = r.get("filename")
+        # `image_reference` is surfaced to users as the image's file name, so it
+        # must be the real file from the audited site — not the crawler's
+        # internal hash basename (`img_<md5(src)>.<ext>`). Fall back to that
+        # internal name only when `src` has no usable file segment.
+        filename = _source_filename(r.get("src"), r.get("filename"))
         detected_text = r.get("detected_text")
 
         if status_raw == "INCOMPLETE":
@@ -715,21 +765,36 @@ def _contrast_to_findings(
     ocr_results: list,
     page_url: str,
     page_by_filename: Optional[Dict[str, str]] = None,
+    src_by_filename: Optional[Dict[str, str]] = None,
 ) -> List[Dict]:
     # page_by_filename maps OCR result.filename → the page the image was scraped
     # from; without it every contrast finding on a multi-page crawl collapses to
     # the root page_url and child pages silently lose 1.4.3 findings in the UI.
+    # src_by_filename maps that same internal name → the image's src URL, so the
+    # finding can reference the real file name instead of the hash basename.
     findings = []
     _by_fn = page_by_filename or {}
+    _src_by_fn = src_by_filename or {}
     for result in ocr_results:
         _pu = _by_fn.get(result.filename) or page_url
         if not result.has_text:
             continue
+        display_name = _source_filename(
+            _src_by_fn.get(result.filename), result.filename
+        )
 
         # WCAG 1.4.3 Exception: Logos and decorative images have no contrast requirement.
         # Functional components (even if they are logos) should still be evaluated.
         classification = _infer_classification(result.original_path)
-        if classification in ("logo", "decorative") and getattr(result, "category", "") != "button_text":
+        # Logotype text is exempt from contrast minimums. Skip both the
+        # classifier's own logo bucket and brand marks it missed (e.g. a Kao
+        # header wordmark the classifier tagged "informative").
+        _is_logo_like = classification == "logo" or _is_brand_logo(
+            _src_by_fn.get(result.filename), None
+        )
+        if (_is_logo_like or classification == "decorative") and getattr(
+            result, "category", ""
+        ) != "button_text":
             continue
 
         for det in result.detections:
@@ -758,10 +823,10 @@ def _contrast_to_findings(
             text_snippet = (det.text or "")[:60].replace('"', "'")
             text_type = "large text" if is_large else "normal text"
             element_html = f'<img-text fg="{fg_hex}" bg="{bg_hex}" ratio="{ratio_str}">{text_snippet}</img-text>'
-            image_label = f'{result.filename} -- "{text_snippet}"'
+            image_label = f'{display_name} -- "{text_snippet}"'
 
             common_params = {
-                "filename": result.filename,
+                "filename": display_name,
                 "image_label": image_label,
                 "ratio": ratio_str,
                 "fg_hex": fg_hex,
@@ -783,7 +848,7 @@ def _contrast_to_findings(
                         element_id=None,
                         element_tag="img",
                         image_src=result.original_path,
-                        image_reference=result.filename,
+                        image_reference=display_name,
                         image_text=det.text,
                         page_url=_pu,
                     )
@@ -803,7 +868,7 @@ def _contrast_to_findings(
                         element_id=None,
                         element_tag="img",
                         image_src=result.original_path,
-                        image_reference=result.filename,
+                        image_reference=display_name,
                         image_text=det.text,
                         page_url=_pu,
                     )
@@ -822,7 +887,7 @@ def _contrast_to_findings(
                         element_id=result.filename,
                         element_tag="img",
                         image_src=result.original_path,
-                        image_reference=result.filename,
+                        image_reference=display_name,
                         image_text=det.text,
                         page_url=_pu,
                     )
@@ -834,17 +899,30 @@ def _contrast_enhanced_to_findings(
     ocr_results: list,
     page_url: str,
     page_by_filename: Optional[Dict[str, str]] = None,
+    src_by_filename: Optional[Dict[str, str]] = None,
 ) -> List[Dict]:
     findings = []
     _by_fn = page_by_filename or {}
+    _src_by_fn = src_by_filename or {}
     for result in ocr_results:
         _pu = _by_fn.get(result.filename) or page_url
         if not result.has_text:
             continue
+        display_name = _source_filename(
+            _src_by_fn.get(result.filename), result.filename
+        )
 
         # WCAG 1.4.6 Exception: Logos and decorative images have no contrast requirement
         classification = _infer_classification(result.original_path)
-        if classification in ("logo", "decorative") and getattr(result, "category", "") != "button_text":
+        # Logotype text is exempt from contrast minimums. Skip both the
+        # classifier's own logo bucket and brand marks it missed (e.g. a Kao
+        # header wordmark the classifier tagged "informative").
+        _is_logo_like = classification == "logo" or _is_brand_logo(
+            _src_by_fn.get(result.filename), None
+        )
+        if (_is_logo_like or classification == "decorative") and getattr(
+            result, "category", ""
+        ) != "button_text":
             continue
 
         for det in result.detections:
@@ -873,10 +951,10 @@ def _contrast_enhanced_to_findings(
             text_snippet = (det.text or "")[:60].replace('"', "'")
             text_type = "large text" if is_large else "normal text"
             element_html = f'<img-text fg="{fg_hex}" bg="{bg_hex}" ratio="{ratio_str}">{text_snippet}</img-text>'
-            image_label = f'{result.filename} -- "{text_snippet}"'
+            image_label = f'{display_name} -- "{text_snippet}"'
 
             common_params = {
-                "filename": result.filename,
+                "filename": display_name,
                 "image_label": image_label,
                 "ratio": ratio_str,
                 "fg_hex": fg_hex,
@@ -898,7 +976,7 @@ def _contrast_enhanced_to_findings(
                         element_id=None,
                         element_tag="img",
                         image_src=result.original_path,
-                        image_reference=result.filename,
+                        image_reference=display_name,
                         image_text=det.text,
                         page_url=_pu,
                     )
@@ -918,7 +996,7 @@ def _contrast_enhanced_to_findings(
                         element_id=None,
                         element_tag="img",
                         image_src=result.original_path,
-                        image_reference=result.filename,
+                        image_reference=display_name,
                         image_text=det.text,
                         page_url=_pu,
                     )
@@ -937,7 +1015,7 @@ def _contrast_enhanced_to_findings(
                         element_id=result.filename,
                         element_tag="img",
                         image_src=result.original_path,
-                        image_reference=result.filename,
+                        image_reference=display_name,
                         image_text=det.text,
                         page_url=_pu,
                     )
@@ -961,7 +1039,11 @@ def _images_of_text_to_findings(records: List[Dict], page_url: str) -> List[Dict
         element_id = r.get("src") or r.get("filename") or None
 
         path = r.get("screenshot_path")
-        filename = r.get("filename")
+        # `image_reference` is surfaced to users as the image's file name, so it
+        # must be the real file from the audited site — not the crawler's
+        # internal hash basename (`img_<md5(src)>.<ext>`). Fall back to that
+        # internal name only when `src` has no usable file segment.
+        filename = _source_filename(r.get("src"), r.get("filename"))
         detected_text = r.get("detected_text")
 
         if status_raw == "INCOMPLETE":
@@ -1043,7 +1125,11 @@ def _non_text_contrast_to_findings(records: List[Dict], page_url: str) -> List[D
         element_id = r.get("src") or r.get("filename") or None
 
         path = r.get("screenshot_path")
-        filename = r.get("filename")
+        # `image_reference` is surfaced to users as the image's file name, so it
+        # must be the real file from the audited site — not the crawler's
+        # internal hash basename (`img_<md5(src)>.<ext>`). Fall back to that
+        # internal name only when `src` has no usable file segment.
+        filename = _source_filename(r.get("src"), r.get("filename"))
         detected_text = r.get("detected_text")
 
         if needs_review:
@@ -1235,7 +1321,7 @@ def _contrast_capture_failed_to_findings(
         if capture_status == "ok":
             continue
         src = getattr(img, "src", "") or ""
-        filename = getattr(img, "filename", "") or ""
+        filename = _source_filename(src, getattr(img, "filename", "") or "")
         url = getattr(img, "url", "") or page_url
         capture_error = getattr(img, "capture_error", None)
         capture_params = {

@@ -439,6 +439,9 @@ COOKIE_OVERLAY_SELECTORS = [
     "[class*='consent']",
     ".optanon-alert-box-wrapper",
     ".onetrust-pc-dark-filter",
+    "#onetrust-pc-sdk",               # OneTrust preference-centre modal
+    "#ot-sdk-btn-floating",           # OneTrust persistent "Cookie Settings" launcher
+    ".ot-floating-button",
     ".qc-cmp2-container",
     ".didomi-popup-container",
     ".trustarc-banner-container",
@@ -1062,6 +1065,20 @@ EXTRACT_JS = r"""
     const nextId = () => "el_" + String(++counter).padStart(4, "0");
     const SKIP_TAGS = new Set(["script","style","noscript","template","meta",
                                "link","title","head","base","track","source","br","wbr"]);
+    // OneTrust / Optanon cookie-consent widget markup. This is the CMP
+    // vendor's DOM, injected on every page — not the audited site's own
+    // content — so Kao does not want its banner, preference centre, or the
+    // persistent "Cookie Settings" launcher counted as findings. Any element
+    // inside one of these is dropped from the crawl (reject_cookies removes
+    // the visible overlay for screenshots; this also covers the persistent
+    // launcher and anything left hidden in the DOM).
+    const CONSENT_SCOPE_SEL = [
+        "#onetrust-consent-sdk", "#onetrust-banner-sdk", "#onetrust-pc-sdk",
+        "#ot-sdk-btn", "#ot-sdk-btn-floating", ".ot-floating-button",
+        ".onetrust-pc-dark-filter", ".optanon-alert-box-wrapper",
+        '[id^="onetrust-"]', '[id^="ot-sdk-"]',
+        '[class*="onetrust-"]', '[class*="optanon"]', '[class^="ot-sdk-"]'
+    ].join(",");
 
     // ---------- generic helpers ----------
     const cssPath = (el) => {
@@ -1521,6 +1538,7 @@ EXTRACT_JS = r"""
         const tag = el.tagName.toLowerCase();
         if (SKIP_TAGS.has(tag)) continue;
         if (el.ownerSVGElement) continue; // svg internals handled via svg root
+        if (el.closest(CONSENT_SCOPE_SEL)) continue; // OneTrust/Optanon CMP — out of audit scope
         const criteria = [];
         let rec = null;
 

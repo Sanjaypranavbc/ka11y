@@ -19,6 +19,7 @@ from ka11y.accessibility.rules.non_text.alttext import (
     _check_1_1_1_missing_alt,
     _check_1_4_5,
     _check_4_1_2,
+    _is_brand_logo,
     _is_empty,
     _norm,
 )
@@ -133,6 +134,25 @@ class TestIsEmpty:
 # ── _check_1_1_1_decorative ──────────────────────────────────────────────────
 
 
+class TestIsBrandLogo:
+    def test_brand_alt_text(self):
+        assert _is_brand_logo("https://x.com/a.png", "Kao") is True
+        assert _is_brand_logo("https://x.com/a.png", "花王") is True
+        assert _is_brand_logo("https://x.com/a.png", "KAO Corporation") is True
+
+    def test_brand_logo_asset_path(self):
+        assert _is_brand_logo("https://www.kao.com/dam/kao-logo.svg", None) is True
+        assert _is_brand_logo("/assets/img/KAO_logo_header.png", None) is True
+        assert _is_brand_logo("https://cdn.x.com/logo/kao/mark.svg", None) is True
+
+    def test_not_a_brand_logo(self):
+        assert _is_brand_logo("https://kao.com/products/kaoline-cleanser.jpg", None) is False
+        assert _is_brand_logo("https://x.com/hero/kaotic-banner.png", "Summer sale") is False
+        assert _is_brand_logo("https://x.com/assets/company-logo.svg", "Acme") is False
+        assert _is_brand_logo(None, None) is False
+        assert _is_brand_logo("", "") is False
+
+
 class TestCheck111Decorative:
     def test_empty_alt_passes(self):
         passed, msg = _check_1_1_1_decorative("")
@@ -143,14 +163,24 @@ class TestCheck111Decorative:
         passed, _ = _check_1_1_1_decorative("nan")
         assert passed is True
 
-    def test_descriptive_alt_fails(self):
+    def test_descriptive_alt_needs_review(self):
+        # `alt` here is the resolved accessible name, not the raw attribute.
+        # A decorative-classified image that still exposes a descriptive name
+        # is a conflicting signal, not a certain violation → INCOMPLETE.
         passed, msg = _check_1_1_1_decorative("A red flower")
-        assert passed is False
-        assert "FAIL" in msg
+        assert passed is None
+        assert "INCOMPLETE" in msg
 
-    def test_fail_message_includes_found_value(self):
+    def test_needs_review_message_includes_found_value(self):
         _, msg = _check_1_1_1_decorative("decorative image")
         assert "decorative image" in msg
+
+    def test_generic_resolved_name_passes(self):
+        # A placeholder name ("image", "spacer", …) resolved onto a decorative
+        # image is effectively unnamed — conformant, not a FAIL.
+        for name in ("image", "photo", "spacer", "graphic of"):
+            passed, _ = _check_1_1_1_decorative(name)
+            assert passed is True, name
 
     def test_single_space_alt_passes(self):
         # space-only is treated as empty by _is_empty
@@ -478,7 +508,9 @@ class TestAltTextAuditorReport:
         assert records[0]["wcag_1_1_1_status"] == "PASSED"
         assert records[0]["overall_status"] == "PASSED"
 
-    def test_decorative_with_alt_text_fails(self, tmp_output):
+    def test_decorative_with_alt_text_needs_review(self, tmp_output):
+        # A decorative-classified image whose empty alt is overridden by an
+        # aria-label/title is a conflicting signal, not a definite violation.
         img = make_image(
             classification="decorative", is_decorative=True,
             alt_text="Some description", sub_type="decorative",
@@ -486,8 +518,9 @@ class TestAltTextAuditorReport:
         records = AltTextAccessibilityAuditor().generate_audit_report(
             images_data=[img], ocr_results=[], output_dir=tmp_output
         )
-        assert records[0]["wcag_1_1_1_status"] == "FAILED"
-        assert records[0]["overall_status"] == "FAILED"
+        assert records[0]["wcag_1_1_1_status"] == "INCOMPLETE"
+        assert records[0]["wcag_1_1_1_code"] == "needs_review_decorative_conflict"
+        assert records[0]["overall_status"] == "INCOMPLETE"
 
     def test_missing_alt_fails(self, tmp_output):
         img = make_image(
@@ -547,6 +580,26 @@ class TestAltTextAuditorReport:
         )
         assert records[0]["wcag_1_1_1_status"] == "PASSED"
         assert records[0]["wcag_4_1_2_status"] == "PASSED"
+
+    def test_kao_brand_logo_exempt_from_contrast_even_when_misclassified(self, tmp_output):
+        # Classifier tagged the Kao header wordmark "informative" (not "logos"),
+        # so the generic sub_type exemption does not fire. The brand-logo
+        # matcher must still exempt it from 1.4.3 / 1.4.6 — logotype text has no
+        # contrast minimum under WCAG.
+        img = make_image(
+            classification="informative",
+            sub_type=None,
+            src="https://www.kao.com/content/dam/sites/kao/kao-logo.svg",
+            filename="kao-logo.svg",
+            alt_text="Kao",
+        )
+        ocr = _MockOCRResult(filename="kao-logo.svg", has_text=True, texts=["Kao"])
+        records = AltTextAccessibilityAuditor().generate_audit_report(
+            images_data=[img], ocr_results=[ocr], output_dir=tmp_output
+        )
+        assert records[0]["wcag_1_4_3_status"] == "N/A"
+        assert records[0]["wcag_1_4_6_status"] == "N/A"
+        assert "logo" in records[0]["wcag_1_4_3_reason"].lower()
 
     def test_functional_logo_without_any_name_fails_both_rules(self, tmp_output):
         img = make_image(

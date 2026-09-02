@@ -187,9 +187,15 @@ export default function NeedsReviewPage() {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, status } : item)));
   }
 
+  // A row leaves this list the moment it is triaged (Move to Pass / Violation) —
+  // no refresh needed. The change is scoped to the current report view and is
+  // not persisted; running a new audit rebuilds the list from source. The
+  // manual-action copy in translations states this.
+  const pending = items.filter((item) => item.status === "pending");
+
   const byPage = selectedPage
-    ? items.filter((item) => item.pageUrl === selectedPage)
-    : items;
+    ? pending.filter((item) => item.pageUrl === selectedPage)
+    : pending;
 
   const filtered =
     activeFilters.length === 0
@@ -308,7 +314,7 @@ export default function NeedsReviewPage() {
         ) : (
         <>
         <p className="text-[14px] leading-6 text-gray-100 sm:text-[16px]">
-          {t.needsReview.showing(visibleCount, filtered.length, items.length)}
+          {t.needsReview.showing(visibleCount, filtered.length, pending.length)}
         </p>
 
         {/* Table — horizontally scrollable, page does not scroll */}

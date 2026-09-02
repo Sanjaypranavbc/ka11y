@@ -106,6 +106,7 @@ reason_templates:
     needs_review_ocr_mismatch: "Text was read from this image (\"{ocr_text}\") that does not appear in its description \"{name}\". Check whether that text carries information the description needs to convey — automated text recognition also picks up watermarks and stylised lettering that need no alternative."
     needs_review_labeled_control: "The link or button around this image already has its own accessible name, so its purpose is conveyed. The image itself has no alt attribute though, so a screen reader may read out its file name. Add alt=\"\" to mark it decorative, or alt text if it adds information."
     needs_review_long_description: "This chart or diagram is identified as \"{name}\", but no long description is linked to it. A short label cannot convey the data or trends it shows. Confirm the same information appears as text nearby, or add a description (a data table, aria-describedby, or a caption)."
+    needs_review_decorative_conflict: "This image is marked decorative (empty alt, role=\"presentation\", or aria-hidden) but still exposes the name \"{name}\" through an aria-label, aria-labelledby, or title. Decide which is right: if it is decorative, remove the label; if it carries information, remove the decorative marking and give it real alt text."
 
   "1.2.1":
     fail_no_alt:        "Pre-recorded audio or video has no transcript or text alternative. People who can't hear or see the media won't get the content. Add a transcript link or a track element."

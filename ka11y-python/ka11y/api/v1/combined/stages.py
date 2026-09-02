@@ -466,11 +466,15 @@ async def _stage_image_audit(
             ):
                 await asyncio.to_thread(saver.save_reports)
             page_by_filename: Dict[str, str] = {}
+            src_by_filename: Dict[str, str] = {}
             for _img in image_crawler.images_data:
                 _fn = getattr(_img, "filename", None)
                 _pg = getattr(_img, "url", None)
+                _sc = getattr(_img, "src", None)
                 if _fn and _pg:
                     page_by_filename[_fn] = _pg
+                if _fn and _sc:
+                    src_by_filename[_fn] = _sc
             contrast_report = _build_contrast_report(ocr_results, page_by_filename)
             for rule_sc, converter in OCR_RESULT_CONVERTERS:
                 with stage_timing.time_stage(
@@ -481,7 +485,12 @@ async def _stage_image_audit(
                     extra={"input_count": len(ocr_results)},
                 ):
                     findings.extend(
-                        converter(ocr_results, url, page_by_filename=page_by_filename)
+                        converter(
+                            ocr_results,
+                            url,
+                            page_by_filename=page_by_filename,
+                            src_by_filename=src_by_filename,
+                        )
                     )
             findings.extend(
                 _contrast_capture_failed_to_findings(image_crawler.images_data, url)

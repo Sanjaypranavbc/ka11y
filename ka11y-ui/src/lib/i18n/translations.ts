@@ -162,13 +162,14 @@ export const translations = {
       review: "Review",
       manualAction: {
         title: "Manual Action",
-        description: "Update the status of this item manually.",
+        description:
+          "Set this item's status manually. Once you choose, the row leaves the review list right away — no refresh needed. The change applies to this report view only; it isn't saved, and running a new audit rebuilds the list.",
         moveToPass: "Move to Pass",
         moveToPassDescription:
-          "Mark this item as passed if it no longer exists or is already fixed",
+          "Use when the item no longer exists or is already fixed. It leaves the review list immediately.",
         moveToViolation: "Move to Violation",
         moveToViolationDescription:
-          "Keep this item as a violation that needs to be fixed.",
+          "Use to confirm this is a real violation to fix. It leaves the review list immediately.",
       },
     },
     passes: {
@@ -355,13 +356,14 @@ export const translations = {
       review: "確認",
       manualAction: {
         title: "手動操作",
-        description: "この項目の状態を手動で更新します。",
+        description:
+          "この項目の状態を手動で設定します。選択すると、その行はすぐに確認リストから消えます（再読み込みは不要）。変更はこのレポート表示にのみ適用され、保存されません。新しい監査を実行するとリストは再生成されます。",
         moveToPass: "合格にする",
         moveToPassDescription:
-          "この項目がすでに存在しない、または修正済みの場合は合格としてマークします",
+          "項目がすでに存在しない、または修正済みの場合に使用します。すぐに確認リストから外れます。",
         moveToViolation: "違反のままにする",
         moveToViolationDescription:
-          "この項目を修正が必要な違反として保持します。",
+          "実際に修正が必要な違反であることを確認する場合に使用します。すぐに確認リストから外れます。",
       },
     },
     passes: {

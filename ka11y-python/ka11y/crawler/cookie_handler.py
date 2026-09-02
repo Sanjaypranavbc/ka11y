@@ -86,6 +86,9 @@ _OVERLAY_SELECTORS = [
     "[class*='consent']",
     ".optanon-alert-box-wrapper",
     ".onetrust-pc-dark-filter",
+    "#onetrust-pc-sdk",               # OneTrust preference-centre modal
+    "#ot-sdk-btn-floating",           # OneTrust persistent "Cookie Settings" launcher
+    ".ot-floating-button",
     ".qc-cmp2-container",
     ".didomi-popup-container",
     ".trustarc-banner-container",

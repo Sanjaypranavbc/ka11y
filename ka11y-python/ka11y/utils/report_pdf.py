@@ -502,9 +502,10 @@ def _element_cell(finding: Dict[str, Any], images: Dict[str, str]) -> "_Raw":
     if uri:
         parts.append(f"<img class='thumb' src='{uri}' alt=''/>")
 
-    # Name the image underneath it. `image_reference` is the crawler's own
-    # filename and the most recognisable label; asset URLs resolve to sha256
-    # filenames, which would be noise, so those fall back to nothing.
+    # Name the image underneath it. `image_reference` is the image's real file
+    # name from its src URL (see findings._source_filename), which is the most
+    # recognisable label; asset URLs resolve to sha256 filenames, which would be
+    # noise, so those fall back to nothing.
     name = element.get("image_reference") or ""
     if not name and src and not src.startswith("/api/v1/"):
         name = Path(src).name

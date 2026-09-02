@@ -44,6 +44,25 @@ const _PRIVATE_IP_RE = [
   /^fe80:/i, // IPv6 link-local (fe80::/10)
 ];
 
+// OneTrust / Optanon cookie-consent widget markup. This is the CMP vendor's
+// injected DOM (banner, preference centre, persistent "Cookie Settings"
+// launcher), present on every page and not the audited site's own content, so
+// it is excluded from the axe scan. Passed to axe.run() as an `exclude`
+// context; `include` still defaults to the whole document.
+const CONSENT_EXCLUDE_SELECTORS = [
+  "#onetrust-consent-sdk",
+  "#onetrust-banner-sdk",
+  "#onetrust-pc-sdk",
+  "#ot-sdk-btn-floating",
+  ".ot-floating-button",
+  ".onetrust-pc-dark-filter",
+  ".optanon-alert-box-wrapper",
+  '[id^="onetrust-"]',
+  '[id^="ot-sdk-"]',
+  '[class*="onetrust-"]',
+  '[class*="optanon"]',
+];
+
 // Bug 4 fix: typed error so controllers can distinguish client input failures
 // (bad URL / private IP) from internal server errors and return 400 vs 500.
 class SsrfGuardError extends Error {
@@ -361,7 +380,7 @@ class AccessibilityService {
 
     let timeoutHandle;
 
-    const axeRunPromise = page.evaluate((runOptions, rulesOption) => {
+    const axeRunPromise = page.evaluate((runOptions, rulesOption, excludeSelectors) => {
       return new Promise((resolve, reject) => {
         const options = {
           runOnly: runOptions,
@@ -370,13 +389,26 @@ class AccessibilityService {
         if (rulesOption && Object.keys(rulesOption).length) {
           options.rules = rulesOption;
         }
+        // Exclude OneTrust/Optanon consent-widget nodes from the scan. Only
+        // selectors actually present are passed so the context stays `document`
+        // (unchanged behaviour) on pages with no such widget.
+        const present = (excludeSelectors || []).filter((sel) => {
+          try {
+            return document.querySelector(sel) !== null;
+          } catch (_) {
+            return false;
+          }
+        });
+        const context = present.length
+          ? { exclude: present.map((sel) => [sel]) }
+          : document;
         // eslint-disable-next-line no-undef
-        axe.run(document, options, (err, results) => {
+        axe.run(context, options, (err, results) => {
           if (err) reject(err);
           else resolve(results);
         });
       });
-    }, runOnly, disabledRules || {});
+    }, runOnly, disabledRules || {}, CONSENT_EXCLUDE_SELECTORS);
 
     const timeoutPromise = new Promise((_, reject) => {
       timeoutHandle = setTimeout(async () => {

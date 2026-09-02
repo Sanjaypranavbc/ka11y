@@ -293,6 +293,52 @@ def _is_empty(value) -> bool:
     return str(value).strip().lower() in {"nan", "none", "", "null"}
 
 
+# ---------------------------------------------------------------------------
+# Brand-logo exemption (WCAG 1.4.3 / 1.4.6)
+# ---------------------------------------------------------------------------
+# WCAG's contrast minimums explicitly exempt logotype text. The classifier's
+# generic `sub_type == "logos"` path already carries that exemption, but a
+# brand mark that the classifier misses (a plain header ``<img alt="Kao">``,
+# an inline SVG wordmark, a filename with no "logo" keyword) would still be
+# contrast-checked and can false-fail. This is a small, explicit allow-list of
+# brand-logo signals — currently Kao — consulted in addition to the classifier.
+# Keep it brand-agnostic in shape so more entries can be added.
+_BRAND_LOGO_NAME_TOKENS: set[str] = {
+    "kao",
+    "花王",
+    "kao corporation",
+    "kao corp",
+    "kao group",
+    "kao logo",
+    "花王株式会社",
+    "花王グループ",
+    "花王ロゴ",
+}
+# src / filename patterns: a brand token adjacent to a logo/brand-mark token
+# (either order), or an explicit "<brand>-logo" style asset name. Bounded by
+# path separators so "kao" does not match inside unrelated words.
+_BRAND_LOGO_SRC_RE = re.compile(
+    r"(?:^|[./_-])kao(?:[./_-]).{0,40}?(?:logo|brand|wordmark|logomark|brandmark)"
+    r"|(?:logo|brand|wordmark|logomark|brandmark).{0,40}?(?:^|[./_-])kao(?:[./_-]|$)"
+    r"|(?:^|[./_-])kao[-_]?(?:corp|group)?[-_]?logo(?:[./_-]|$)",
+    re.IGNORECASE,
+)
+
+
+def _is_brand_logo(src: str | None, alt: str | None, title: str | None = "") -> bool:
+    """True when an image is a recognised brand logo (Kao today).
+
+    Used to extend the WCAG 1.4.3 / 1.4.6 logotype-text exemption to brand
+    marks the classifier did not tag as ``sub_type == "logos"``.
+    """
+    if _norm(alt or "") in _BRAND_LOGO_NAME_TOKENS:
+        return True
+    if _norm(title or "") in _BRAND_LOGO_NAME_TOKENS:
+        return True
+    s = (src or "").lower()
+    return bool(s) and _BRAND_LOGO_SRC_RE.search(s) is not None
+
+
 def _build_ocr_index(ocr_results: list) -> dict:
     """Pre-build a {basename → TextDetectionResult} lookup so per-image
     queries become O(1). Avoids the prior O(n × m) Path-allocation hot loop
@@ -350,13 +396,31 @@ def _ocr_result_for_file(ocr_results: list, filename: str, index: dict | None = 
 # ---------------------------------------------------------------------------
 
 
-def _check_1_1_1_decorative(alt: str) -> tuple[bool, str]:
-    """Decorative images MUST have alt='' (empty string)."""
-    if alt == "" or _is_empty(alt):
-        return True, "PASS [1.1.1] Decorative image correctly has empty alt"
+def _check_1_1_1_decorative(alt: str) -> tuple[bool | None, str]:
+    """Decorative images should expose no meaningful accessible name.
+
+    ``alt`` here is the *resolved accessible name* (see
+    ``optimized/adapter._alt_text``), not necessarily the literal ``alt``
+    attribute. In the live pipeline an image is only classified ``decorative``
+    when it carries ``alt=""`` (or ``role=presentation``/``aria-hidden``), so a
+    non-empty value here means the empty ``alt`` is being overridden by an
+    ``aria-label`` / ``aria-labelledby`` / ``title``, or the classifier is
+    wrong. Neither is the clean "author forgot ``alt=\"\"``" failure the old
+    hard-FAIL implied:
+
+      * empty / whitespace / placeholder token ("image", "spacer", …)
+        → PASS (effectively unnamed, conformant)
+      * a real descriptive name → INCOMPLETE (conflicting signals, needs a
+        human to decide whether the image is decorative or informative)
+    """
+    if alt == "" or _is_empty(alt) or _norm(alt) in _EMPTY_OR_GENERIC:
+        return True, "PASS [1.1.1] Decorative image has no meaningful accessible name"
     return (
-        False,
-        f"FAIL [1.1.1] Decorative image must have alt=\"\" (empty). Found: '{alt}'",
+        None,
+        f"INCOMPLETE [1.1.1] Image is classified decorative but exposes the "
+        f"accessible name '{alt}'. If it is purely decorative, set alt=\"\" and "
+        f"remove any aria-label/aria-labelledby/title; if it conveys "
+        f"information, it should not be marked decorative.",
     )
 
 
@@ -1074,6 +1138,10 @@ class AltTextAccessibilityAuditor:
                     wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_decorative(
                         alt_text
                     )
+                    if wcag_1_1_1_pass is True:
+                        wcag_1_1_1_code = "decorative_valid"
+                    elif wcag_1_1_1_pass is None:
+                        wcag_1_1_1_code = "needs_review_decorative_conflict"
 
             elif classification == "informative":
                 wcag_1_1_1_pass, wcag_1_1_1_reason = _check_1_1_1_informative(
@@ -1215,8 +1283,15 @@ class AltTextAccessibilityAuditor:
             # logotype-text exemption could never fire; branded wordmark text
             # was evaluated for contrast like ordinary body text instead of
             # being exempted, as WCAG explicitly allows for logo text.
-            if (classification == "decorative" or sub_type == "logos") and not is_button:
-                _exempt_label = "logo" if sub_type == "logos" else classification
+            _brand_logo = _is_brand_logo(src, alt_text, title)
+            if (
+                classification == "decorative" or sub_type == "logos" or _brand_logo
+            ) and not is_button:
+                _exempt_label = (
+                    "logo"
+                    if (sub_type == "logos" or _brand_logo)
+                    else classification
+                )
                 wcag_1_4_3_reason = f"N/A — 1.4.3 does not apply to {_exempt_label} images"
                 wcag_1_4_6_reason = f"N/A — 1.4.6 does not apply to {_exempt_label} images"
             elif effective_has_text and ocr_result and ocr_result.detections:
