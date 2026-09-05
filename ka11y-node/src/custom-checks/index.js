@@ -62,6 +62,12 @@ const STATIC_ORDER = [
   'custom-section-headings',
   'custom-non-text-contrast',
   'custom-headings-and-labels',
+  'custom-sign-language',
+  'custom-low-background-audio',
+  'custom-no-timing',
+  'custom-interstitials',
+  'custom-reauth-data-loss',
+  'custom-session-timeouts',
 ];
 
 const INTERACTIVE_ORDER = [
@@ -144,6 +150,12 @@ const LEGACY_META = {
   'custom-focus-order':                         { mode: 'interactive', fallbackDescription: 'Navigation order must preserve meaning — focusable elements must follow a logical sequence' },
   'custom-non-text-contrast':                   { mode: 'static',      fallbackDescription: 'UI components and graphical objects must have a contrast ratio of at least 3:1 against adjacent colours' },
   'custom-headings-and-labels':                 { mode: 'static',      fallbackDescription: 'Headings and labels must describe topic or purpose — empty or non-descriptive labels fail this criterion' },
+  'custom-sign-language':                    { mode: 'static',      fallbackDescription: 'Sign language prerecorded content must have an alternative such as sign language translation' },
+  'custom-low-background-audio':             { mode: 'static',      fallbackDescription: 'For pre-recorded audio that contains primarily speech, background sounds are at least 20 dB lower than the foreground speech' },
+  'custom-no-timing':                        { mode: 'static',      fallbackDescription: 'Timing is not an essential part of the event or activity presented by the content, except for non-interactive synchronized media and real-time events' },
+  'custom-interstitials':                    { mode: 'static',      fallbackDescription: 'Interruptions can be postponed or suppressed by the user, except for interruptions involving an emergency' },
+  'custom-reauth-data-loss':                 { mode: 'static',      fallbackDescription: 'When an authenticated session expires, users can continue the activity without loss of data after re-authenticating' },
+  'custom-session-timeouts':                 { mode: 'static',      fallbackDescription: 'Users are warned of the duration of any user inactivity that could cause data loss, unless the data is preserved for more than 20 hours' },
 };
 
 function _ruleIdFromFile(file) {
