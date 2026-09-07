@@ -10,6 +10,33 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// U+2028/U+2029 are valid inside JSON strings but are treated as line
+// terminators inside JS string/statement contexts. Built via fromCharCode so
+// the raw characters (which would themselves act as line terminators) never
+// appear literally in this source file.
+const LINE_SEPARATOR = String.fromCharCode(0x2028);
+const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
+
+/**
+ * Serialize a value to JSON that is safe to embed inside an inline <script>
+ * element. `JSON.stringify` does not escape "<", ">" or "&", so a "</script>"
+ * (or "<!--" / "<script") sequence inside attacker-influenced data — e.g. the
+ * raw element HTML and reason text scraped from the audited page — would
+ * otherwise terminate the script element early and let the remainder of the
+ * payload be parsed as live HTML/JS. Escaping "<" / ">" / "&" to their \uXXXX
+ * forms keeps the result valid JSON/JS while making script-context breakout
+ * impossible; U+2028/U+2029 are escaped too since they are illegal unescaped
+ * inside a JS string literal.
+ */
+function jsonForScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .split(LINE_SEPARATOR).join('\\u2028')
+    .split(PARAGRAPH_SEPARATOR).join('\\u2029');
+}
+
 /**
  * Generates a self-contained HTML accessibility report with:
  * - Full page screenshot with colored bounding-box overlays on failing elements
@@ -27,6 +54,7 @@ function generateReport({ url, findings, pageScreenshot, pageWidth = 1280 }) {
   const passCount   = findings.filter(f => f.status === 'pass').length;
   const failCount   = findings.filter(f => f.status === 'fail').length;
   const reviewCount = findings.filter(f => f.status === 'needs_review').length;
+  const safePageWidth = Number.isFinite(Number(pageWidth)) ? Number(pageWidth) : 1280;
 
   // Build overlay marker data (only for elements that have a bounding box)
   const markers = violations
@@ -38,7 +66,7 @@ function generateReport({ url, findings, pageScreenshot, pageWidth = 1280 }) {
     .filter(Boolean);
 
   // Slim down findings for inline JSON (avoid serializing the full-page screenshot inside each element)
-  const violationsJson = JSON.stringify(
+  const violationsJson = jsonForScript(
     violations.map(f => ({
       rule_id:        f.rule_id || f.ruleId || '',
       status:         f.status,
@@ -58,7 +86,7 @@ function generateReport({ url, findings, pageScreenshot, pageWidth = 1280 }) {
     }))
   );
 
-  const markersJson = JSON.stringify(markers);
+  const markersJson = jsonForScript(markers);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -158,12 +186,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script>
 const V=${violationsJson};
 const M=${markersJson};
-const PW=${pageWidth};
+const PW=${safePageWidth};
 const C={fail:'#e53e3e',needs_review:'#dd6b20'};
 const BG={fail:'rgba(229,62,62,.1)',needs_review:'rgba(221,107,32,.1)'};
 let act=-1,sx=1,sy=1;
 
-function eh(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function eh(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 function init(){
   const img=document.getElementById('pi');
@@ -202,7 +230,7 @@ function openFinding(i){
   document.getElementById('db').innerHTML=
     '<div class="df"><div class="dl">Rule ID</div><div class="dv"><strong>'+eh(f.rule_id)+'</strong></div></div>'+
     '<div class="df"><div class="dl">Status</div><div class="dv"><span class="sb '+(f.status==='fail'?'sb-fail':'sb-review')+'">'+(f.status==='fail'?'Fail':'Needs Review')+'</span></div></div>'+
-    '<div class="df"><div class="dl">WCAG Criterion</div><div class="dv">SC '+eh(f.wcag_sc||'')+' '+eh(f.criterion_name||'')+(f.level?' (Level '+eh(f.level)+')')+'</div></div>'+
+    '<div class="df"><div class="dl">WCAG Criterion</div><div class="dv">SC '+eh(f.wcag_sc||'')+' '+eh(f.criterion_name||'')+(f.level?' (Level '+eh(f.level)+')':'')+'</div></div>'+
     (f.severity?'<div class="df"><div class="dl">Severity</div><div class="dv">'+eh(f.severity)+'</div></div>':'')+
     '<div class="df"><div class="dl">Issue</div><div class="dv">'+eh(f.reason||'')+'</div></div>'+
     (f.suggested_fix?'<div class="df"><div class="dl">Suggested Fix</div><div class="dv">'+eh(f.suggested_fix)+'</div></div>':'')+

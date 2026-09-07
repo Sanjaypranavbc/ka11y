@@ -72,6 +72,10 @@ class SsrfGuardError extends Error {
   }
 }
 
+function _ipIsBlocked(ip) {
+  return _PRIVATE_IP_RE.some((re) => re.test(ip));
+}
+
 async function _assertPublicUrl(url) {
   const { hostname } = new URL(url);
   let addresses;
@@ -90,7 +94,7 @@ async function _assertPublicUrl(url) {
     );
   }
   for (const { address: ip } of addresses) {
-    if (_PRIVATE_IP_RE.some((re) => re.test(ip))) {
+    if (_ipIsBlocked(ip)) {
       throw new SsrfGuardError(
         `SSRF guard: ${hostname} resolves to blocked IP ${ip}`,
       );
@@ -98,21 +102,67 @@ async function _assertPublicUrl(url) {
   }
 }
 
+// Security fix (SECURITY_REVIEW_production.md, Vuln 2): the interceptor used to
+// only regex-match the hostname against literal private IPs, so (a) a redirect
+// to a private/internal DNS name (non-IP-literal) sailed through untouched, and
+// (b) DNS rebinding defeated the one-time _assertPublicUrl() check on the root
+// URL, since the browser's own resolution was never re-checked. Every non-IP
+// hostname is now resolved here too, mirroring _assertPublicUrl and the
+// Python-side guard (ka11y-python/ka11y/crawler/_ssrf_guard.py). Resolutions
+// are cached briefly since this fires on every request, not just navigations.
+const _DNS_CACHE_TTL_MS = 30_000;
+const _dnsBlockCache = new Map(); // hostname -> { blocked: boolean, until: number }
+
+async function _hostnameResolvesToBlocked(hostname) {
+  const host = hostname.replace(/^\[|\]$/g, ""); // strip IPv6 brackets, e.g. "[::1]"
+  if (!host) return false;
+
+  // Literal IP address — no DNS involved, check directly.
+  if (/^[0-9.]+$/.test(host) || host.includes(":")) {
+    return _ipIsBlocked(host);
+  }
+
+  const cached = _dnsBlockCache.get(host);
+  const now = Date.now();
+  if (cached && cached.until > now) return cached.blocked;
+
+  let blocked;
+  try {
+    const addresses = await dns.lookup(host, { all: true, verbatim: true });
+    blocked =
+      !Array.isArray(addresses) ||
+      addresses.length === 0 ||
+      addresses.some(({ address }) => _ipIsBlocked(address));
+  } catch {
+    // Fail closed: an unresolvable host is not a host we can vouch for.
+    blocked = true;
+  }
+  _dnsBlockCache.set(host, { blocked, until: now + _DNS_CACHE_TTL_MS });
+  return blocked;
+}
+
 // Bug 2 fix: block SSRF via redirect-time hops. Install this interceptor on every
 // Puppeteer page used for live-URL analysis so that even if the initial DNS check
 // passes, a server-side redirect to a private IP is blocked before the browser follows it.
 function _installSsrfInterceptor(page) {
-  page.on("request", (request) => {
+  page.on("request", async (request) => {
+    let blocked = false;
     try {
-      const { hostname } = new URL(request.url());
-      if (_PRIVATE_IP_RE.some((re) => re.test(hostname))) {
-        request.abort("addressunreachable");
-        return;
+      const { protocol, hostname } = new URL(request.url());
+      // Only network-fetched http(s) requests can reach an internal host;
+      // data:/blob:/about: etc. have no hostname and are left alone.
+      if (protocol === "http:" || protocol === "https:") {
+        blocked = await _hostnameResolvesToBlocked(hostname);
       }
     } catch {
       /* invalid URL — let the request continue and fail naturally */
     }
-    request.continue();
+    try {
+      if (blocked) request.abort("addressunreachable");
+      else request.continue();
+    } catch {
+      /* request interception already resolved (e.g. page navigated away) */
+    }
   });
 }
 
@@ -1323,3 +1373,5 @@ class AccessibilityService {
 module.exports = AccessibilityService;
 module.exports.SsrfGuardError = SsrfGuardError;
 module.exports.assertPublicUrl = _assertPublicUrl;
+// Exported for security regression tests (see tests/services/accessibility.ssrf.test.js).
+module.exports.installSsrfInterceptor = _installSsrfInterceptor;
