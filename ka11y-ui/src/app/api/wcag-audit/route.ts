@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const WCAG_API_URL =
   process.env.WCAG_API_URL ??
-  "http://localhost:8000/api/v1/combined";
+  "https://a11y-api.bluecaffeine.in/api/v1/combined";
 
 // Submits the job and returns immediately with a jobId. The client polls
 // GET /api/wcag-audit/[jobId] for progress — this endpoint must never block,
@@ -84,14 +84,20 @@ export async function POST(request: Request) {
 
     if (!submitRes.ok) {
       return NextResponse.json(
-        { error: data?.detail || data?.message || "Failed to start combined audit" },
+        {
+          error:
+            data?.detail || data?.message || "Failed to start combined audit",
+        },
         { status: submitRes.status },
       );
     }
 
     const jobId = data?.job_id;
     if (!jobId) {
-      return NextResponse.json({ error: "No job_id returned" }, { status: 502 });
+      return NextResponse.json(
+        { error: "No job_id returned" },
+        { status: 502 },
+      );
     }
 
     return NextResponse.json({ jobId }, { status: 202 });

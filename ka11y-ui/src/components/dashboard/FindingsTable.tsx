@@ -9,7 +9,7 @@ export function FindingsTable({ rows }: { rows: DashboardPageFinding[] }) {
   const COLUMNS = [
     t.dashboardPage.findingsTable.columns.pageName,
     t.dashboardPage.findingsTable.columns.url,
-    t.dashboardPage.findingsTable.columns.score,
+    t.dashboardPage.findingsTable.columns.passRate,
     t.dashboardPage.findingsTable.columns.findings,
     t.dashboardPage.findingsTable.columns.violations,
     t.dashboardPage.findingsTable.columns.needsReview,
@@ -52,9 +52,9 @@ export function FindingsTable({ rows }: { rows: DashboardPageFinding[] }) {
                 </td>
                 <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.score === null ? "—" : `${row.score}%`}</td>
                 <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.findings}</td>
-                <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.violations}</td>
-                <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.needsReview}</td>
-                <td className="px-3 py-4 text-[16px] leading-6 text-gray-80">{row.passes}</td>
+                <td className="px-3 py-4 text-[16px] font-medium leading-6 text-[var(--color-status-violation)]">{row.violations}</td>
+                <td className="px-3 py-4 text-[16px] font-medium leading-6 text-[var(--color-status-review)]">{row.needsReview}</td>
+                <td className="px-3 py-4 text-[16px] font-medium leading-6 text-[var(--color-status-pass)]">{row.passes}</td>
               </tr>
             ))}
           </tbody>

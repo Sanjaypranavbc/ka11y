@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { translations, type Lang, type Translations } from "@/lib/i18n/translations";
 
 const STORAGE_KEY = "kao:lang";
@@ -13,18 +13,27 @@ interface LanguageContextValue {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-function readStoredLang(): Lang {
-  if (typeof window === "undefined") return "en";
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === "jp" ? "jp" : "en";
-}
-
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(readStoredLang);
+  const [lang, setLangState] = useState<Lang>("en");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === "jp") {
+        setLangState("jp");
+      }
+    } catch {
+      // localStorage unavailable or restricted
+    }
+  }, []);
 
   function setLang(next: Lang) {
     setLangState(next);
-    window.localStorage.setItem(STORAGE_KEY, next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      // localStorage unavailable or restricted
+    }
   }
 
   return (

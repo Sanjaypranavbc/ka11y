@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import { ChevronDown, ChevronUp, X, ExternalLink, CheckSquare, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
@@ -14,12 +14,6 @@ import type { Translations } from "@/lib/i18n/translations";
 import { useInfiniteReveal } from "@/lib/useInfiniteReveal";
 import { cn } from "@/lib/utils";
 
-const STATUS_STYLES: Record<ReviewStatus, string> = {
-  pass: "bg-gray-10 text-gray-100",
-  violation: "bg-[#fde8e4] text-[#c00000]",
-  pending: "bg-gray-10 text-gray-80",
-};
-
 function LevelBadge({ level }: { level: WcagLevel }) {
   return (
     <span className="inline-flex items-center justify-center rounded-[8px] bg-brand-green-20 px-2 py-1 text-[14px] leading-5 text-brand-teal-dark">
@@ -28,7 +22,7 @@ function LevelBadge({ level }: { level: WcagLevel }) {
   );
 }
 
-function ManualActionPopup({
+function VerdictPopover({
   onMoveToPass,
   onMoveToViolation,
   onClose,
@@ -40,6 +34,7 @@ function ManualActionPopup({
   t: Translations;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [selectedVerdict, setSelectedVerdict] = useState<"pass" | "fail">("pass");
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -51,42 +46,85 @@ function ManualActionPopup({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [onClose]);
 
+  function handleUpdate() {
+    if (selectedVerdict === "pass") {
+      onMoveToPass();
+    } else {
+      onMoveToViolation();
+    }
+    onClose();
+  }
+
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full z-20 mt-1 w-[280px] rounded-[8px] bg-white shadow-[0px_0px_8px_rgba(0,0,0,0.12)]"
+      className="absolute right-0 top-full z-30 mt-2 w-[320px] sm:w-[350px] rounded-[16px] border border-gray-200 bg-white p-5 shadow-xl text-left"
     >
-      <div className="border-b border-gray-10 px-6 py-4">
-        <p className="text-[16px] font-medium leading-6 text-gray-100">{t.needsReview.manualAction.title}</p>
-        <p className="mt-1 text-[14px] leading-5 text-gray-100">{t.needsReview.manualAction.description}</p>
+      <h3 className="text-[16px] font-bold text-gray-900">{t.needsReview.verdictTitle}</h3>
+      <p className="mt-1 text-[13px] leading-relaxed text-gray-500">{t.needsReview.verdictSubtitle}</p>
+
+      <div className="mt-4 flex flex-col gap-3">
+        {/* Mark as Pass Radio Box */}
+        <label
+          onClick={() => setSelectedVerdict("pass")}
+          className={cn(
+            "flex cursor-pointer items-start gap-3 rounded-[12px] p-3.5 border transition-all",
+            selectedVerdict === "pass"
+              ? "border-brand-teal bg-[#e6f4f1]"
+              : "border-transparent hover:border-gray-200"
+          )}
+        >
+          <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-brand-teal">
+            {selectedVerdict === "pass" && (
+              <div className="h-2 w-2 rounded-full bg-brand-teal" />
+            )}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[14px] font-bold text-brand-teal-dark">{t.needsReview.markAsPass}</span>
+            <span className="mt-0.5 text-[12px] text-gray-600">{t.needsReview.markAsPassDesc}</span>
+          </div>
+        </label>
+
+        {/* Mark as Fail Radio Box */}
+        <label
+          onClick={() => setSelectedVerdict("fail")}
+          className={cn(
+            "flex cursor-pointer items-start gap-3 rounded-[12px] p-3.5 border transition-all",
+            selectedVerdict === "fail"
+              ? "border-red-400 bg-red-50/70"
+              : "border-transparent hover:border-gray-200"
+          )}
+        >
+          <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-red-600">
+            {selectedVerdict === "fail" && (
+              <div className="h-2 w-2 rounded-full bg-red-600" />
+            )}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[14px] font-bold text-[#c00000]">{t.needsReview.markAsFail}</span>
+            <span className="mt-0.5 text-[12px] text-gray-600">{t.needsReview.markAsFailDesc}</span>
+          </div>
+        </label>
       </div>
-      <div className="flex flex-col gap-4 px-6 py-4">
+
+      {/* Divider */}
+      <div className="my-4 border-t border-gray-100" />
+
+      {/* Buttons */}
+      <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={onMoveToPass}
-          className="flex items-start gap-2 rounded-[8px] p-2 text-left hover:bg-gray-10"
+          onClick={handleUpdate}
+          className="rounded-[8px] bg-brand-teal px-5 py-2 text-[14px] font-medium text-white hover:opacity-90 transition-opacity"
         >
-          <CheckSquare size={24} className="mt-0.5 shrink-0 text-brand-teal-dark" aria-hidden="true" />
-          <div className="flex flex-col gap-2">
-            <span className="text-[14px] font-bold leading-5 text-brand-teal-dark underline">{t.needsReview.manualAction.moveToPass}</span>
-            <span className="text-[14px] leading-5 text-gray-80">
-              {t.needsReview.manualAction.moveToPassDescription}
-            </span>
-          </div>
+          {t.needsReview.update}
         </button>
-        <div className="h-px bg-gray-10" />
         <button
           type="button"
-          onClick={onMoveToViolation}
-          className="flex items-start gap-2 rounded-[8px] p-2 text-left hover:bg-gray-10"
+          onClick={onClose}
+          className="rounded-[8px] border border-gray-300 bg-white px-5 py-2 text-[14px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          <AlertTriangle size={24} className="mt-0.5 shrink-0 text-gray-80" aria-hidden="true" />
-          <div className="flex flex-col gap-2">
-            <span className="text-[14px] font-bold leading-5 text-gray-100">{t.needsReview.manualAction.moveToViolation}</span>
-            <span className="text-[14px] leading-5 text-gray-80">
-              {t.needsReview.manualAction.moveToViolationDescription}
-            </span>
-          </div>
+          {t.needsReview.cancel}
         </button>
       </div>
     </div>
@@ -114,13 +152,13 @@ function ReviewButton({
       <button
         type="button"
         onClick={() => setOpenId(isOpen ? null : itemId)}
-        className="flex items-center gap-2 rounded-[8px] bg-brand-teal px-4 py-2 text-[14px] leading-5 text-white hover:opacity-90"
+        className="flex items-center gap-2 rounded-[8px] bg-brand-teal-dark px-4 py-2 text-[14px] font-medium leading-5 text-white whitespace-nowrap shrink-0 hover:opacity-90 transition-opacity"
       >
-        {t.needsReview.review}
+        {t.needsReview.chooseVerdict}
         {isOpen ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
       </button>
       {isOpen && (
-        <ManualActionPopup
+        <VerdictPopover
           onMoveToPass={() => { onMoveToPass(); setOpenId(null); }}
           onMoveToViolation={() => { onMoveToViolation(); setOpenId(null); }}
           onClose={() => setOpenId(null)}
@@ -224,7 +262,15 @@ export default function NeedsReviewPage() {
         actions={headerActions}
       />
 
-      <main className="flex flex-1 flex-col gap-6 min-w-0 px-4 py-6 sm:px-8 sm:py-8 lg:px-16 lg:gap-10 lg:py-10">
+      <main className="flex flex-1 flex-col gap-6 min-w-0 px-4 py-6 sm:px-8 sm:py-8 lg:px-16 lg:gap-8 lg:py-10">
+
+        {/* Page heading */}
+        <div className="border-b border-gray-40 pb-4">
+          <h1 className="text-[24px] font-medium leading-[32px] text-gray-100">{t.needsReview.heading}</h1>
+          <p className="mt-2 text-[16px] leading-[24px] text-gray-80">
+            {t.needsReview.subheading}
+          </p>
+        </div>
 
         {!auditData ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
@@ -323,25 +369,17 @@ export default function NeedsReviewPage() {
 
           {/* Header */}
           <div className="flex w-full bg-gray-10 text-[14px] font-bold leading-6 text-gray-100">
-            <div className="flex-[110] min-w-0 p-4">{t.needsReview.columns.status}</div>
             <div className="flex-[318] min-w-0 p-4">{t.needsReview.columns.reason}</div>
             <div className="flex-[76] min-w-0 p-4">{t.needsReview.columns.sc}</div>
             <div className="flex-[146] min-w-0 p-4">{t.needsReview.columns.criterion}</div>
             <div className="flex-[76] min-w-0 p-4">{t.needsReview.columns.level}</div>
-            <div className="flex-[76] min-w-0 p-4">{t.needsReview.columns.tag}</div>
             <div className="flex-[318] min-w-0 p-4">{t.needsReview.columns.element}</div>
-            <div className="flex-[184] min-w-0 p-4">{t.needsReview.columns.action}</div>
+            <div className="flex-[220] min-w-[170px] p-4">{t.needsReview.columns.yourVerdict}</div>
           </div>
 
           {/* Rows */}
           {visibleItems.map((item) => (
             <div key={item.id} className="flex w-full border-b border-gray-10 bg-white text-[14px] leading-5">
-
-              <div className="flex-[110] min-w-0 border-b border-gray-10 px-4 py-6">
-                <span className={cn("inline-flex items-center rounded-[8px] px-3 py-1 text-[14px] leading-5", STATUS_STYLES[item.status])}>
-                  {STATUS_LABELS[item.status]}
-                </span>
-              </div>
 
               <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
                 <p className="font-bold text-gray-100">{item.reasonTitle}</p>
@@ -374,10 +412,6 @@ export default function NeedsReviewPage() {
 
               <div className="flex-[76] min-w-0 border-b border-gray-10 px-4 py-6">
                 <LevelBadge level={item.level} />
-              </div>
-
-              <div className="flex-[76] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
-                {item.tag}
               </div>
 
               <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
@@ -422,7 +456,7 @@ export default function NeedsReviewPage() {
                 */}
               </div>
 
-              <div className="flex-[184] min-w-0 border-b border-gray-10 px-4 py-6">
+              <div className="flex-[220] min-w-[170px] border-b border-gray-10 px-4 py-6">
                 <ReviewButton
                   itemId={item.id}
                   openId={openActionId}

@@ -11,7 +11,7 @@ export const translations = {
     },
     nav: {
       dashboard: "Dashboard",
-      violations: "Violations",
+      violations: "Fail",
       needsReview: "Needs Review",
       passes: "Passes",
       settings: "Settings",
@@ -33,8 +33,14 @@ export const translations = {
     dashboardPage: {
       emptyState: "Run an audit to see your accessibility dashboard here.",
       charts: {
+        auditSummary: "Audit Summary",
+        totalFindings: "Total findings",
+        items: "Items",
+        reviewFindings: "Review findings",
+        viewPassed: "View passed",
+        viewFailed: "View failed",
         findingsOverview: "Findings Overview",
-        violations: "Violations",
+        violations: "Fail",
         needsReview: "Needs Review",
         passes: "Passes",
         sitePerformanceScore: "Site Performance Score",
@@ -51,9 +57,10 @@ export const translations = {
         columns: {
           pageName: "Page Name",
           url: "URL",
-          score: "Score",
+          passRate: "Pass Rate",
+          score: "Pass Rate",
           findings: "Findings",
-          violations: "Violations",
+          violations: "Fail",
           needsReview: "Needs Review",
           passes: "Passes",
         },
@@ -64,17 +71,29 @@ export const translations = {
       subheading: "Enter a URL and run an audit to see accessibility findings.",
       targetUrlLabel: "Target URL",
       targetUrlPlaceholder: "https://example.com",
-      maxDepthLabel: "Max Depth",
+      maxDepthLabel: "Crawl Depth",
       increaseDepth: "Increase depth",
       decreaseDepth: "Decrease depth",
-      wcagLevelLabel: "WCAG Level",
+      wcagLevelLabel: "WCAG 2.2 Level",
       warning: "Scans deeper than Level 0 take longer to process.",
       warningLine2:
         "We will run this in the background and notify you via email.",
       notificationEmailLabel: "Notification Email",
       notificationEmailPlaceholder: "Enter your email",
-      submit: "Run Accessibility Scan",
-      submitting: "Starting Scan…",
+      submit: "Run Audit",
+      submitting: "Running…",
+      submitArrow: ">",
+      crawlDepthLevels: [
+        {
+          label: "Level 0 - This page only",
+          body: "Scans just the URL you entered. No linked pages are crawled. Fastest option.",
+        },
+        {
+          label: "Level 1 & 2 - This page and its links",
+          body: "The number sets how many link-hops deep the crawl goes — 1 follows direct links, 2 follows the links on those pages, and so on. Takes longer as the number goes up, so we'll run it in the background and email you when it's done.",
+        },
+      ],
+      crawlDepthDescription: "Scans just the URL you entered. No linked pages are crawled. Fastest option.",
       errorEmptyUrl: "Enter a URL to scan",
       errorEmailRequired:
         "Enter a valid email address — multi-page scans are delivered by email.",
@@ -114,9 +133,11 @@ export const translations = {
         `This page failed to scan${error ? `: ${error}` : "."}`,
     },
     violations: {
+      heading: "Failed Checks",
+      subheading: "Review accessibility issues that failed the audit and require attention.",
       showing: (shown: number, filtered: number, total: number) =>
-        `Showing ${shown} of ${filtered} violations (${total} total)`,
-      emptyState: "Run an audit to see violations here.",
+        `Showing ${shown} of ${filtered} fails (${total} total)`,
+      emptyState: "Run an audit to see fails here.",
       columns: {
         reason: "Reason",
         sc: "SC",
@@ -135,12 +156,14 @@ export const translations = {
       showLess: "Show less",
     },
     needsReview: {
+      heading: "Needs Review",
+      subheading: "Review findings that require manual verification before they can be marked as passed or failed.",
       showing: (shown: number, filtered: number, total: number) =>
         `Showing ${shown} of ${filtered} items (${total} total)`,
       emptyState: "Run an audit to see items that need review here.",
       status: {
         pass: "Pass",
-        violation: "Violation",
+        violation: "Fail",
         pending: "Pending",
       },
       columns: {
@@ -151,7 +174,8 @@ export const translations = {
         level: "Level",
         tag: "Tag",
         element: "Element",
-        action: "Action",
+        action: "Your Verdict",
+        yourVerdict: "Your Verdict",
       },
       learnMore: "Learn More",
       foreground: "Foreground:",
@@ -159,7 +183,16 @@ export const translations = {
       altText: "Alt Text:",
       ocrText: "OCR Text:",
       viewFullAudit: "View Full Audit",
-      review: "Review",
+      review: "Choose verdict",
+      chooseVerdict: "Choose verdict",
+      verdictTitle: "Verdict for this item",
+      verdictSubtitle: "Check whether this item meets the WCAG success criterion",
+      markAsPass: "Mark as Pass",
+      markAsPassDesc: "Meets the criterion or already fixed.",
+      markAsFail: "Mark as Fail",
+      markAsFailDesc: "Does not meet the criterion and needs to be fixed.",
+      update: "Update",
+      cancel: "Cancel",
       manualAction: {
         title: "Manual Action",
         description:
@@ -167,12 +200,14 @@ export const translations = {
         moveToPass: "Move to Pass",
         moveToPassDescription:
           "Use when the item no longer exists or is already fixed. It leaves the review list immediately.",
-        moveToViolation: "Move to Violation",
+        moveToViolation: "Move to Fail",
         moveToViolationDescription:
-          "Use to confirm this is a real violation to fix. It leaves the review list immediately.",
+          "Use to confirm this is a real fail to fix. It leaves the review list immediately.",
       },
     },
     passes: {
+      heading: "Passed Checks",
+      subheading: "Review accessibility checks that meet the selected WCAG criteria.",
       showing: (shown: number, filtered: number, total: number) =>
         `Showing ${shown} of ${filtered} items (${total} total)`,
       emptyState: "Run an audit to see passed checks here.",
@@ -202,7 +237,7 @@ export const translations = {
     },
     nav: {
       dashboard: "ダッシュボード",
-      violations: "違反",
+      violations: "不合格",
       needsReview: "要確認",
       passes: "合格",
       settings: "設定",
@@ -224,15 +259,21 @@ export const translations = {
     dashboardPage: {
       emptyState: "監査を実行すると、ここにアクセシビリティダッシュボードが表示されます。",
       charts: {
+        auditSummary: "監査サマリー",
+        totalFindings: "総検出数",
+        items: "項目",
+        reviewFindings: "要確認項目を表示",
+        viewPassed: "合格項目を表示",
+        viewFailed: "不合格項目を表示",
         findingsOverview: "検出結果の概要",
-        violations: "違反",
+        violations: "不合格",
         needsReview: "要確認",
         passes: "合格",
         sitePerformanceScore: "サイトパフォーマンススコア",
         passPercentage: "合格率",
         actionNeeded: "対応が必要",
         wcagLevelBreakdown: "WCAGレベル別内訳",
-        topFailingCriteria: "違反の多いWCAG基準",
+        topFailingCriteria: "不合格の多いWCAG基準",
         level: (l: string) => `レベル ${l}`,
         issuesAcrossPages: (n: number, pages: number) =>
           pages > 1 ? `${pages}ページで${n}件の問題` : `${n}件の問題`,
@@ -242,9 +283,10 @@ export const translations = {
         columns: {
           pageName: "ページ名",
           url: "URL",
-          score: "スコア",
+          passRate: "合格率",
+          score: "合格率",
           findings: "検出数",
-          violations: "違反",
+          violations: "不合格",
           needsReview: "要確認",
           passes: "合格",
         },
@@ -256,17 +298,29 @@ export const translations = {
         "URLを入力して監査を実行すると、アクセシビリティの検出結果が表示されます。",
       targetUrlLabel: "対象URL",
       targetUrlPlaceholder: "https://example.com",
-      maxDepthLabel: "最大深度",
+      maxDepthLabel: "クロール深度",
       increaseDepth: "深度を増やす",
       decreaseDepth: "深度を減らす",
-      wcagLevelLabel: "WCAGレベル",
+      wcagLevelLabel: "WCAG 2.2 レベル",
       warning: "深度0より深いスキャンは処理に時間がかかります。",
       warningLine2:
         "このスキャンはバックグラウンドで実行され、完了時にメールでお知らせします。",
       notificationEmailLabel: "通知先メールアドレス",
       notificationEmailPlaceholder: "メールアドレスを入力",
-      submit: "アクセシビリティスキャンを実行",
-      submitting: "スキャンを開始しています…",
+      submit: "監査を実行",
+      submitting: "実行中…",
+      submitArrow: ">",
+      crawlDepthLevels: [
+        {
+          label: "レベル0 - このページのみ",
+          body: "入力したURLのみをスキャンします。リンク先のページはクロールされません。最も高速なオプションです。",
+        },
+        {
+          label: "レベル1 & 2 - このページとそのリンク",
+          body: "この数字はクロールのリンクホップ数を設定します。1は直接リンク、2はそのページのリンクをたどいます。数字が大きくなるほど時間がかかります。バックグラウンドで実行し、完了時にメールでご連絡します。",
+        },
+      ],
+      crawlDepthDescription: "入力したURLのみをスキャンします。リンク先のページはクロールされません。最も高速なオプションです。",
       errorEmptyUrl: "スキャンするURLを入力してください",
       errorEmailRequired:
         "有効なメールアドレスを入力してください。複数ページのスキャン結果はメールで送信されます。",
@@ -308,9 +362,11 @@ export const translations = {
         `このページのスキャンに失敗しました${error ? `：${error}` : "。"}`,
     },
     violations: {
+      heading: "失敗したチェック",
+      subheading: "監査で失敗したアクセシビリティの問題を確認し、対応してください。",
       showing: (shown: number, filtered: number, total: number) =>
         `${filtered}件中${shown}件を表示（全${total}件）`,
-      emptyState: "監査を実行すると、ここに違反が表示されます。",
+      emptyState: "監査を実行すると、ここに不合格項目が表示されます。",
       columns: {
         reason: "理由",
         sc: "達成基準",
@@ -329,12 +385,14 @@ export const translations = {
       showLess: "閉じる",
     },
     needsReview: {
+      heading: "要確認",
+      subheading: "合格または不合格と判定する前に手動確認が必要な項目です。",
       showing: (shown: number, filtered: number, total: number) =>
         `${filtered}件中${shown}件を表示（全${total}件）`,
       emptyState: "監査を実行すると、ここに要確認項目が表示されます。",
       status: {
         pass: "合格",
-        violation: "違反",
+        violation: "不合格",
         pending: "保留中",
       },
       columns: {
@@ -345,7 +403,8 @@ export const translations = {
         level: "レベル",
         tag: "タグ",
         element: "要素",
-        action: "操作",
+        action: "判定",
+        yourVerdict: "判定",
       },
       learnMore: "詳細を見る",
       foreground: "前景色：",
@@ -353,7 +412,16 @@ export const translations = {
       altText: "代替テキスト：",
       ocrText: "OCRテキスト：",
       viewFullAudit: "監査の全文を表示",
-      review: "確認",
+      review: "判定を選択",
+      chooseVerdict: "判定を選択",
+      verdictTitle: "この項目の判定",
+      verdictSubtitle: "WCAG達成基準を満たしているか確認してください",
+      markAsPass: "合格とする",
+      markAsPassDesc: "基準を満たしているか、修正済みです。",
+      markAsFail: "不合格とする",
+      markAsFailDesc: "基準を満たしておらず、修正が必要です。",
+      update: "更新",
+      cancel: "キャンセル",
       manualAction: {
         title: "手動操作",
         description:
@@ -361,12 +429,14 @@ export const translations = {
         moveToPass: "合格にする",
         moveToPassDescription:
           "項目がすでに存在しない、または修正済みの場合に使用します。すぐに確認リストから外れます。",
-        moveToViolation: "違反のままにする",
+        moveToViolation: "不合格にする",
         moveToViolationDescription:
-          "実際に修正が必要な違反であることを確認する場合に使用します。すぐに確認リストから外れます。",
+          "実際に修正が必要な不合格であることを確認する場合に使用します。すぐに確認リストから外れます。",
       },
     },
     passes: {
+      heading: "合格したチェック",
+      subheading: "選択されたWCAG基準を満たしているアクセシビリティチェックを確認します。",
       showing: (shown: number, filtered: number, total: number) =>
         `${filtered}件中${shown}件を表示（全${total}件）`,
       emptyState: "監査を実行すると、ここに合格した項目が表示されます。",

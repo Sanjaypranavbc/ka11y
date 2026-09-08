@@ -3,8 +3,7 @@
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
-import { ViolationsPieChart } from "@/components/dashboard/charts/ViolationsPieChart";
-import { PerformanceGauge } from "@/components/dashboard/charts/PerformanceGauge";
+import { AuditSummaryCard } from "@/components/dashboard/AuditSummaryCard";
 import { WcagLevelBarChart } from "@/components/dashboard/charts/WcagLevelBarChart";
 import { TopFailingCriteriaChart } from "@/components/dashboard/charts/TopFailingCriteriaChart";
 import { FindingsTable } from "@/components/dashboard/FindingsTable";
@@ -41,10 +40,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            <div className="grid gap-6 lg:grid-cols-2">
-              <ViolationsPieChart summary={getDashboardSummary(auditData)} />
-              <PerformanceGauge score={getDashboardSummary(auditData).score} />
-            </div>
+            <AuditSummaryCard summary={getDashboardSummary(auditData)} />
 
             <div className="grid gap-6 lg:grid-cols-2">
               <WcagLevelBarChart breakdown={getLevelBreakdown(auditData)} />
