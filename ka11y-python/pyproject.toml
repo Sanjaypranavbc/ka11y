@@ -46,6 +46,9 @@ keybert = "^0.8.4"
 sentence-transformers = "^2.7.0"
 psutil = "^7.2.2"
 tldextract = "^5.3.1"
+# New unified Gemini SDK used by enrich_audit.py (google.genai) — a distinct
+# package from the older google-generativeai (google.generativeai) above.
+google-genai = "^2.14.0"
 paddleocr = "^3.7.0"
 # Exact pin, not a caret range: paddlepaddle 3.3.x's oneDNN-accelerated CPU
 # path crashes on PP-OCR's text-detection model ("NotImplementedError:
@@ -54,6 +57,12 @@ paddleocr = "^3.7.0"
 # correctly with acceleration on. A caret range would let `poetry update`
 # silently reintroduce 3.3.x.
 paddlepaddle = "==3.2.2"
+# Arize observability (ka11y/observability/tracing.py). arize-otel brings the
+# OpenTelemetry SDK + OTLP exporters and registers the tracer provider; the
+# openinference instrumentor turns every google-genai generate_content() call
+# into an LLM span. Both are inert unless ARIZE_SPACE_ID/ARIZE_API_KEY are set.
+arize-otel = "^0.13.0"
+openinference-instrumentation-google-genai = "^1.4.5"
 
 [tool.poetry.extras]
 japanese = ["sudachipy", "sudachidict-core"]

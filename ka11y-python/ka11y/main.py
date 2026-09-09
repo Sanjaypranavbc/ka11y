@@ -80,6 +80,16 @@ logger.info("Configuration loaded successfully")
 async def lifespan(app: FastAPI):
     logger.info("ka11y API starting up")
 
+    # Arize tracing. Must come first: it auto-instruments the google-genai SDK,
+    # and only calls made after that point produce spans. No-op (and never
+    # raises) when ARIZE_SPACE_ID/ARIZE_API_KEY are unset.
+    try:
+        from ka11y.observability import init_tracing
+
+        init_tracing()
+    except Exception:  # noqa: BLE001
+        logger.exception("tracing failed to initialise; running untraced")
+
     # Durable store: open SQLite (WAL) and start the single writer thread before
     # anything that might persist. Degrades to memory-only if it can't start.
     try:
@@ -131,6 +141,14 @@ async def lifespan(app: FastAPI):
             shutdown_db()
         except Exception:  # noqa: BLE001
             logger.exception("SQLite store shutdown failed")
+        try:
+            from ka11y.observability import shutdown_tracing
+
+            # Flushes whatever the batch processor still holds, so the spans
+            # from the last job in flight aren't lost on redeploy.
+            shutdown_tracing()
+        except Exception:  # noqa: BLE001
+            logger.exception("tracing shutdown failed")
         logger.info("ka11y API shutting down")
 
 

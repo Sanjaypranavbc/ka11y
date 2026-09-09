@@ -245,8 +245,17 @@ export default function ViolationsPage() {
             <div key={violation.id} className="flex w-full border-b border-gray-10 bg-white text-[14px] leading-5">
 
               <div className="flex-[227] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
-                <p className="font-bold text-gray-100">{violation.title}</p>
+                {violation.title && <p className="font-bold text-gray-100">{violation.title}</p>}
                 <p className="text-gray-80">{violation.description}</p>
+                {/* Who the issue actually blocks. Only the LLM enrichment step
+                    produces this, and only for high/critical findings, so it
+                    stays hidden rather than printing a bare label. */}
+                {violation.userImpact && (
+                  <p className="text-[12px] leading-5 text-gray-80">
+                    <span className="font-bold">{t.violations.userImpact}</span>{" "}
+                    {violation.userImpact}
+                  </p>
+                )}
                 {/* Learn More — hidden per review; restore by uncommenting.
                 {/^https?:\/\//.test(violation.helpUrl) ? (
                   <a

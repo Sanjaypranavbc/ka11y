@@ -47,6 +47,25 @@ from ka11y.store import repo
 
 logger = setup_logger(name="KAC", tag="combined")
 
+
+def _ensure_ka11y_python_root_on_sys_path() -> Optional[str]:
+    """Add the ka11y-python/ directory (parent of the `ka11y` package) to
+    sys.path so the top-level enrich_audit.py module — which lives beside
+    the package, not inside it — can be imported regardless of how this
+    process was launched (uvicorn, pytest, Docker WORKDIR, ...). Returns the
+    resolved root, or None if it couldn't be located."""
+    import sys
+
+    curr = Path(__file__).resolve().parent
+    for parent in [curr] + list(curr.parents):
+        if parent.name == "ka11y" and (parent / "api").is_dir():
+            root = str(parent.parent)
+            if root not in sys.path:
+                sys.path.insert(0, root)
+            return root
+    return None
+
+
 _JOB_TIMEOUT_SECONDS = int(os.environ.get("KA11Y_JOB_TIMEOUT_SECONDS", "1800"))
 _MAX_CONCURRENT_JOBS = int(os.environ.get("KA11Y_MAX_CONCURRENT_JOBS", "4"))
 _job_semaphore: asyncio.Semaphore | None = None
@@ -503,6 +522,48 @@ async def _run_job_body(
                             f"/api/v1/combined/{job_id}/image"
                             f"?path={quote(src, safe='')}"
                         )
+
+        # Enrich violations with a dynamic (Gemini-generated) reason and
+        # suggested fix, mutating `report["violations"]` in place so the
+        # dynamic fields are present in the file written below, the DB save,
+        # the websocket broadcast, and the API response the UI reads — not
+        # just a side-channel enriched_report.json. Best-effort: any failure
+        # (missing GEMINI_API_KEY, network error, import error) is logged and
+        # swallowed so the audit still completes with the static reason/fix.
+        try:
+            _ensure_ka11y_python_root_on_sys_path()
+            from enrich_audit import enrich_report_in_pipeline
+
+            logger.info(
+                "[combined] job %s: starting Gemini enrichment (language=%s)",
+                job_id, resolved_lang,
+            )
+            # enrich_report_in_pipeline() makes sequential, blocking Gemini
+            # calls (one per batch of ~10 violations). Running that inline on
+            # the event loop would freeze every other job and the health
+            # check for as long as a call stayed hung, since nothing else on
+            # this async server could get a turn — push it to a worker thread.
+            usage = await asyncio.to_thread(
+                enrich_report_in_pipeline,
+                report,
+                output_dir,
+                language=resolved_lang,
+                session_id=job_id,
+            )
+            # Cost is no longer reported: the token accounting in
+            # enrich_audit.py is commented out, so estimated_cost_usd is
+            # always 0.0 and printing it would just be misleading.
+            logger.info(
+                "[combined] job %s: enrichment done — %d violation(s), %d batch(es)",
+                job_id,
+                len(report.get("violations", [])),
+                len((usage or {}).get("batches", [])),
+            )
+        except Exception:
+            logger.warning(
+                "[combined] job %s: enrichment failed (skipping, falling back to static reason/fix)",
+                job_id, exc_info=True,
+            )
 
         report_path = output_dir / "combined_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:

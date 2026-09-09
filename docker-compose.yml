@@ -75,6 +75,15 @@ services:
     security_opt:
       - seccomp:unconfined
 
+    depends_on:
+      # Wait for the collector to be up so the first job's spans aren't dropped
+      # while Phoenix is still booting. required:false keeps this advisory —
+      # `docker compose up python` on its own, or a Phoenix that never turns
+      # healthy, must not stop the audit API from starting.
+      phoenix:
+        condition: service_healthy
+        required: false
+
 #    depends_on:
 #      node:
 #        condition: service_healthy
@@ -85,6 +94,33 @@ services:
     environment:
       NODE_BASE_URL:        "http://node:3000"
       DEEPGRAM_API_KEY:     "${DEEPGRAM_API_KEY}"
+      # Gemini key for enrich_audit.py's dynamic reason / suggested fix. The
+      # enrichment step is best-effort: with this unset the audit still
+      # completes, falling back to the static reason/fix on every finding.
+      GEMINI_API_KEY:       "${GEMINI_API_KEY}"
+
+      # ── Tracing (ka11y/observability/tracing.py) ─────────────────────────
+      # Traces each Gemini enrichment call (model, input, tokens, latency,
+      # errors) to Arize AX or to the local phoenix service below. Every value
+      # comes from the .env file next to this compose file — no keys here.
+      # Leave them all empty and tracing stays off; the audit is unaffected.
+      ARIZE_SPACE_ID:       "${ARIZE_SPACE_ID:-}"
+      ARIZE_API_KEY:        "${ARIZE_API_KEY:-}"
+      ARIZE_PROJECT_NAME:   "${ARIZE_PROJECT_NAME:-ka11y}"
+      # Arize AX collector override. Applies to the Arize backend only and is
+      # normally empty (the SDK's own otlp.arize.com default).
+      ARIZE_COLLECTOR_ENDPOINT: "${ARIZE_COLLECTOR_ENDPOINT:-}"
+      ARIZE_TRANSPORT:      "${ARIZE_TRANSPORT:-grpc}"
+      # Which backend wins: "phoenix" (local UI on :6006), "arize" (Arize AX),
+      # or unset/"auto" — auto uses Arize AX whenever the credentials above are
+      # set, which is the behaviour this stack had before Phoenix existed.
+      # Flip this one line in .env to switch; credentials stay in place.
+      KA11Y_TRACING_BACKEND: "${KA11Y_TRACING_BACKEND:-}"
+      # Where the local Phoenix listens on the compose network. Service name,
+      # never localhost — localhost inside this container is this container.
+      # Read only when the backend resolves to phoenix; Arize AX ignores it.
+      PHOENIX_COLLECTOR_ENDPOINT: "${PHOENIX_COLLECTOR_ENDPOINT:-http://phoenix:4317}"
+
       PYTHONUNBUFFERED:     "1"
       PYTHONDONTWRITEBYTECODE: "1"
       # How long the Node axe task waits for the Python universal snapshot's
@@ -164,6 +200,65 @@ services:
       interval:     30s
       timeout:      15s
       start_period: 90s
+      retries:      5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+
+  # ── Arize Phoenix — local tracing UI ───────────────────────────────────────
+  # Self-hosted OpenTelemetry collector + UI for the Gemini enrichment traces
+  # (ka11y-python/ka11y/observability/tracing.py). Runs entirely on this host:
+  # nothing is sent to Arize AX while the python service points here.
+  #   UI            http://localhost:6006
+  #   OTLP/gRPC     phoenix:4317   (what the python container uses)
+  #   OTLP/HTTP     phoenix:6006/v1/traces
+  phoenix:
+    # Pinned, not :latest — a Phoenix upgrade changes the trace store schema,
+    # and an unattended pull mid-incident is not what you want from telemetry.
+    image: arizephoenix/phoenix:version-20.8.0
+    container_name: ka11y-phoenix
+    restart: unless-stopped
+
+    networks:
+      - ka11y-net
+
+    environment:
+      # Traces live in a SQLite DB under this directory. Without it Phoenix
+      # keeps them in the container filesystem and every restart loses the
+      # history you were comparing against.
+      PHOENIX_WORKING_DIR: "/mnt/data"
+
+    ports:
+      # UI + OTLP/HTTP collector. Bound to loopback by default: Phoenix has no
+      # authentication and its spans contain prompts and page content, so it
+      # must not be reachable from outside the host it runs on. Set
+      # PHOENIX_BIND_HOST=0.0.0.0 in .env only when the browser is on another
+      # machine, and put it behind the reverse proxy's auth if that host is
+      # public.
+      - "${PHOENIX_BIND_HOST:-127.0.0.1}:6006:6006"
+      # OTLP/gRPC collector, for tracing an audit run started on the host
+      # (`poetry run python enrich_audit.py ...`). Containers reach it as
+      # phoenix:4317 over ka11y-net without this mapping.
+      - "127.0.0.1:4317:4317"
+
+    volumes:
+      - phoenix_data:/mnt/data
+
+    healthcheck:
+      # The Phoenix image is distroless — no shell, no curl, no wget. Its own
+      # interpreter is the only thing available to probe with.
+      test:
+        - CMD
+        - /usr/bin/python3.13
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:6006/healthz', timeout=5)"
+      interval:     30s
+      timeout:      10s
+      start_period: 30s
       retries:      5
 
     logging:
@@ -288,3 +383,5 @@ networks:
 volumes:
   huggingface_cache:
   paddlex_models:
+  # Phoenix's SQLite trace store, so local traces survive `docker compose down`.
+  phoenix_data:

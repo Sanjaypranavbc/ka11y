@@ -72,8 +72,8 @@ def build_findings_csv(report: Dict[str, Any]) -> str:
                 f.get("wcag_sc") or "",
                 f.get("severity") or "",
                 f.get("level") or "",
-                f.get("reason") or f.get("reason_code") or "",
-                f.get("suggested_fix") or "",
+                f.get("dynamic_reason") or f.get("reason") or f.get("reason_code") or "",
+                f.get("dynamic_suggested_fix") or f.get("suggested_fix") or "",
                 *page_cell(f),
             ]
             for f in violations
@@ -88,7 +88,7 @@ def build_findings_csv(report: Dict[str, Any]) -> str:
                 f.get("wcag_sc") or "",
                 f.get("criterion_name") or "",
                 f.get("level") or "",
-                f.get("reason") or f.get("reason_code") or "",
+                f.get("dynamic_reason") or f.get("reason") or f.get("reason_code") or "",
                 *page_cell(f),
             ]
             for f in needs_review

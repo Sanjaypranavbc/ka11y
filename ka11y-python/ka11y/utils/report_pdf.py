@@ -588,8 +588,8 @@ def build_report_html(
             f.get("wcag_sc") or "",
             f.get("severity") or "",
             f.get("level") or "",
-            f.get("reason") or f.get("reason_code") or "",
-            f.get("suggested_fix") or "",
+            f.get("dynamic_reason") or f.get("reason") or f.get("reason_code") or "",
+            f.get("dynamic_suggested_fix") or f.get("suggested_fix") or "",
             _element_cell(f, images),
             *page_col(f),
         ]
@@ -600,7 +600,7 @@ def build_report_html(
             f.get("wcag_sc") or "",
             f.get("criterion_name") or "",
             f.get("level") or "",
-            f.get("reason") or f.get("reason_code") or "",
+            f.get("dynamic_reason") or f.get("reason") or f.get("reason_code") or "",
             _element_cell(f, images),
             *page_col(f),
         ]

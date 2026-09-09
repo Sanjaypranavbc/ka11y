@@ -211,7 +211,7 @@ export default function PassesPage() {
               </div>
 
               <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
-                <p className="font-bold text-gray-100">{item.reasonTitle}</p>
+                {item.reasonTitle && <p className="font-bold text-gray-100">{item.reasonTitle}</p>}
                 <p className="text-gray-80">{item.reasonDescription}</p>
                 {/* Learn More — hidden per review; restore by uncommenting.
                 {/^https?:\/\//.test(item.helpUrl) ? (

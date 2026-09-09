@@ -121,6 +121,9 @@ export interface ViolationRow {
   elementOcr: string;
   imageUrls: string[];
   fixGuide: string;
+  /** Who this blocks and how — only produced by the LLM enrichment step, and
+   * only for high/critical findings, so it is empty on most rows. */
+  userImpact: string;
   helpUrl: string;
   pageUrl: string;
 }
@@ -167,6 +170,14 @@ export interface PassRow {
 /* ─── Helpers ─── */
 
 function capitalize(value: string): string {
+  // Only upper-case a first word that is plain letters. `dynamic_reason` often
+  // opens with the offending identifier itself — a filename, attribute or
+  // selector ("img-slogan-en.svg contains…") — and force-capitalising that
+  // shows the reader a name that does not exist on their page. Authored
+  // rules.yml reasons already start with a capital, and severity words
+  // ("serious") are plain letters, so both keep the old behaviour.
+  const firstWord = value.split(/\s/, 1)[0];
+  if (!/^[a-z]+$/.test(firstWord)) return value;
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
@@ -192,7 +203,40 @@ function splitReason(reason: string): { head: string; rest: string } {
   // Split only on a sentence end followed by a capitalised word, so decimals
   // ("4.76"), SC ids ("1.4.3") and 'e.g. "…"' stay intact.
   const parts = text.split(/(?<=[.!?])\s+(?=[A-Z])/);
-  return { head: parts[0] || text, rest: parts.slice(1).join(" ") };
+  const head = parts[0] || text;
+  const rest = parts.slice(1).join(" ");
+  // A single long sentence has nothing to promote to a heading — bolding the
+  // whole thing renders the cell as one heavy paragraph. `dynamic_reason` is
+  // usually exactly that (one sentence, under 60 words), and a few authored
+  // rules.yml reasons are too, so demote anything past heading length to plain
+  // body text instead. The cutoff sits well above a normal head (~64 chars).
+  if (!rest && head.length > 120) return { head: "", rest: head };
+  return { head, rest };
+}
+
+/** The reason/fix fields a finding may carry, from either engine. All optional:
+ * the `dynamic_*` pair exists only after enrichment, and Node/axe findings
+ * carry neither `reason_code` nor `suggested_fix`. */
+interface EnrichableFinding {
+  reason?: string | null;
+  suggested_fix?: string | null;
+  dynamic_reason?: string | null;
+  dynamic_suggested_fix?: string | null;
+}
+
+/** Reason text to display. `dynamic_reason` is the per-element explanation
+ * written by the Gemini enrichment step (see ka11y-python/enrich_audit.py),
+ * which cites the finding's own values — the real filename, the OCR'd text,
+ * the measured contrast ratio. It is absent whenever enrichment was skipped
+ * (no GEMINI_API_KEY, an API failure, or a Node/axe finding, which is never
+ * enriched), so the static rules.yml reason stays the fallback. */
+function pickReason(finding: EnrichableFinding): string {
+  return finding.dynamic_reason || finding.reason || "";
+}
+
+/** Fix text to display, dynamic first — same fallback rule as pickReason. */
+function pickFix(finding: EnrichableFinding): string {
+  return finding.dynamic_suggested_fix || finding.suggested_fix || "";
 }
 
 /** Name of the captured image file backing a finding.
@@ -334,7 +378,7 @@ export function toViolationRows(data: any): ViolationRow[] {
       const selector = el.selector || el.target;
       const selectorStr = Array.isArray(selector) ? selector.join(" ") : (selector || "—");
 
-      const reason = splitReason(finding.reason || finding.reason_code || finding.rule_id || "Violation");
+      const reason = splitReason(pickReason(finding) || finding.reason_code || finding.rule_id || "Violation");
 
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
@@ -349,7 +393,8 @@ export function toViolationRows(data: any): ViolationRow[] {
         elementAlt: pickAltText(el),
         elementOcr: pickOcrText(el),
         imageUrls: pickImageUrls(el),
-        fixGuide: finding.suggested_fix || "",
+        fixGuide: pickFix(finding),
+        userImpact: finding.user_impact || "",
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
       });
@@ -361,7 +406,7 @@ export function toViolationRows(data: any): ViolationRow[] {
 
         // Split here too, not just in the `violations` branch above: the whole
         // reason landing in `title` renders an entire paragraph in bold.
-        const reason = splitReason(finding.reason || finding.ruleId || "Violation");
+        const reason = splitReason(pickReason(finding) || finding.ruleId || "Violation");
 
         const elements = finding.elements.length > 0 ? finding.elements : [null];
         elements.forEach((el: any) => {
@@ -378,7 +423,8 @@ export function toViolationRows(data: any): ViolationRow[] {
             elementAlt: pickAltText(el),
             elementOcr: pickOcrText(el),
             imageUrls: pickImageUrls(el),
-            fixGuide: "",
+            fixGuide: pickFix(finding),
+            userImpact: finding.user_impact || "",
             helpUrl: finding.helpUrl,
             pageUrl: el?.page_url || data.url || "",
           });
@@ -399,7 +445,7 @@ export function toPassesRows(data: any): PassRow[] {
       const el = finding.element || {};
       const colors = extractColors(finding.reason_code || finding.rule_id || "");
 
-      const reason = splitReason(finding.reason || finding.reason_code || finding.rule_id || "Pass");
+      const reason = splitReason(pickReason(finding) || finding.reason_code || finding.rule_id || "Pass");
 
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
@@ -426,7 +472,7 @@ export function toPassesRows(data: any): PassRow[] {
 
         // Same split as the `passes` branch above — an unsplit reason renders
         // the whole paragraph in bold.
-        const reason = splitReason(finding.reason || finding.ruleId || "Pass");
+        const reason = splitReason(pickReason(finding) || finding.ruleId || "Pass");
 
         const elements = finding.elements.length > 0 ? finding.elements : [null];
         elements.forEach((el: any) => {
@@ -465,7 +511,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
       const el = finding.element || {};
       const colors = extractColors(finding.reason_code || finding.rule_id || "");
 
-      const reason = splitReason(finding.reason || finding.reason_code || finding.rule_id || "Needs Review");
+      const reason = splitReason(pickReason(finding) || finding.reason_code || finding.rule_id || "Needs Review");
 
       rows.push({
         id: finding.finding_id || `${finding.wcag_sc}-${finding.rule_id}-${rowIndex++}`,
@@ -493,7 +539,7 @@ export function toNeedsReviewRows(data: any): ReviewRow[] {
 
         // Same split as the `needs_review` branch above — an unsplit reason
         // renders the whole paragraph in bold.
-        const reason = splitReason(finding.reason || finding.ruleId || "Needs Review");
+        const reason = splitReason(pickReason(finding) || finding.ruleId || "Needs Review");
 
         const elements = finding.elements.length > 0 ? finding.elements : [null];
         elements.forEach((el: any) => {
@@ -669,6 +715,9 @@ interface WcagRawFinding {
   reason?: string;
   reason_code?: string;
   suggested_fix?: string | null;
+  /** Written by the Gemini enrichment step; absent when it was skipped. */
+  dynamic_reason?: string | null;
+  dynamic_suggested_fix?: string | null;
   element?: { page_url?: string | null } | null;
 }
 
@@ -705,8 +754,8 @@ export function buildFindingsCsv(data: WcagAuditResponse): string {
       f.wcag_sc ?? "",
       f.severity ?? "",
       f.level ?? "",
-      f.reason ?? f.reason_code ?? "",
-      f.suggested_fix ?? "",
+      f.dynamic_reason || f.reason || f.reason_code || "",
+      f.dynamic_suggested_fix || f.suggested_fix || "",
       ...(multiPage ? [pageUrlOf(f)] : []),
     ]),
   );
@@ -718,7 +767,7 @@ export function buildFindingsCsv(data: WcagAuditResponse): string {
       f.wcag_sc ?? "",
       f.criterion_name ?? "",
       f.level ?? "",
-      f.reason ?? f.reason_code ?? "",
+      f.dynamic_reason || f.reason || f.reason_code || "",
       ...(multiPage ? [pageUrlOf(f)] : []),
     ]),
   );
