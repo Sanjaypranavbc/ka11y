@@ -30,6 +30,18 @@ export const translations = {
     comingSoon: {
       message: (title: string) => `${title} is coming soon.`,
     },
+    login: {
+      signIn: "Sign in",
+      subtitle: "Access your accessibility audits and reports.",
+      emailLabel: "Email",
+      emailPlaceholder: "sample@email.com",
+      passwordLabel: "Password",
+      passwordPlaceholder: "••••••••",
+      keepMeSignedIn: "Keep me signed in",
+      forgotPassword: "Forgot password?",
+      signUpText: "New to Kao A11Y?",
+      signUpLink: "Sign up",
+    },
     dashboardPage: {
       emptyState: "Run an audit to see your accessibility dashboard here.",
       charts: {
@@ -255,6 +267,18 @@ export const translations = {
     },
     comingSoon: {
       message: (title: string) => `${title}は近日公開予定です。`,
+    },
+    login: {
+      signIn: "サインイン",
+      subtitle: "アクセシビリティ監査とレポートにアクセスします。",
+      emailLabel: "メールアドレス",
+      emailPlaceholder: "sample@email.com",
+      passwordLabel: "パスワード",
+      passwordPlaceholder: "••••••••",
+      keepMeSignedIn: "ログイン状態を保持する",
+      forgotPassword: "パスワードをお忘れですか？",
+      signUpText: "Kao A11Yのご利用が初めてですか？",
+      signUpLink: "新規登録",
     },
     dashboardPage: {
       emptyState: "監査を実行すると、ここにアクセシビリティダッシュボードが表示されます。",

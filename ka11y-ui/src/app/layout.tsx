@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Baloo_2, Inter } from "next/font/google";
+import { LanguageProvider } from "@/components/dashboard/LanguageContext";
 import "./globals.css";
 
 const baloo2 = Baloo_2({
@@ -29,7 +30,7 @@ export default function RootLayout({
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>
-        {children}
+        <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
   );
