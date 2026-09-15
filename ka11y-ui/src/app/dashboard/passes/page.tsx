@@ -94,6 +94,14 @@ export default function PassesPage() {
 
       <main className="flex flex-1 flex-col gap-6 min-w-0 px-4 py-6 sm:px-8 sm:py-8 lg:px-16 lg:gap-10 lg:py-10">
 
+        {/* Page heading */}
+        <div className="border-b border-gray-40 pb-4">
+          <h1 className="text-[24px] font-medium leading-[32px] text-gray-100">{t.passes.heading}</h1>
+          <p className="mt-2 text-[16px] leading-[24px] text-gray-80">
+            {t.passes.subheading}
+          </p>
+        </div>
+
         {!auditData ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
             <p className="text-[16px] leading-6 text-gray-60">
@@ -191,27 +199,19 @@ export default function PassesPage() {
 
           {/* Header */}
           <div className="flex w-full bg-gray-10 text-[14px] font-bold leading-6 text-gray-100">
-            <div className="flex-[110] min-w-0 p-4">{t.passes.columns.status}</div>
-            <div className="flex-[318] min-w-0 p-4">{t.passes.columns.reason}</div>
-            <div className="flex-[76] min-w-0 p-4">{t.passes.columns.sc}</div>
-            <div className="flex-[146] min-w-0 p-4">{t.passes.columns.criterion}</div>
-            <div className="flex-[76] min-w-0 p-4">{t.passes.columns.level}</div>
-            <div className="flex-[76] min-w-0 p-4">{t.passes.columns.tag}</div>
-            <div className="flex-[318] min-w-0 p-4">{t.passes.columns.element}</div>
+            <div className="flex-[350] min-w-0 p-4">{t.passes.columns.reason}</div>
+            <div className="flex-[80] min-w-0 p-4">{t.passes.columns.sc}</div>
+            <div className="flex-[180] min-w-0 p-4">{t.passes.columns.criterion}</div>
+            <div className="flex-[80] min-w-0 p-4">{t.passes.columns.level}</div>
+            <div className="flex-[280] min-w-0 p-4">{t.passes.columns.element}</div>
           </div>
 
           {/* Rows */}
           {visibleItems.map((item) => (
             <div key={item.id} className="flex w-full border-b border-gray-10 bg-white text-[14px] leading-5">
 
-              <div className="flex-[110] min-w-0 border-b border-gray-10 px-4 py-6">
-                <span className="inline-flex items-center rounded-[8px] bg-gray-10 px-3 py-1 text-[14px] leading-5 text-gray-100">
-                  {t.passes.statusPass}
-                </span>
-              </div>
-
-              <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
-                {item.reasonTitle && <p className="font-bold text-gray-100">{item.reasonTitle}</p>}
+              <div className="flex-[350] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
+                <p className="font-bold text-gray-100">{item.reasonTitle}</p>
                 <p className="text-gray-80">{item.reasonDescription}</p>
                 {/* Learn More — hidden per review; restore by uncommenting.
                 {/^https?:\/\//.test(item.helpUrl) ? (
@@ -231,23 +231,19 @@ export default function PassesPage() {
                 */}
               </div>
 
-              <div className="flex-[76] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
+              <div className="flex-[80] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
                 {item.sc}
               </div>
 
-              <div className="flex-[146] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
+              <div className="flex-[180] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
                 {item.criterion}
               </div>
 
-              <div className="flex-[76] min-w-0 border-b border-gray-10 px-4 py-6">
+              <div className="flex-[80] min-w-0 border-b border-gray-10 px-4 py-6">
                 <LevelBadge level={item.level} />
               </div>
 
-              <div className="flex-[76] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
-                {item.tag}
-              </div>
-
-              <div className="flex-[318] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
+              <div className="flex-[280] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
                 {item.elementFilename && (
                   <p className="font-medium break-words text-gray-100">{item.elementFilename}</p>
                 )}

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const WCAG_API_URL =
   process.env.WCAG_API_URL ??
-  "http://localhost:8000/api/v1/combined";
+  "http://ec2-34-228-40-177.compute-1.amazonaws.com:8000/api/v1/combined";
 
 // Single, short-lived status check — the client calls this repeatedly
 // instead of one request blocking for the whole audit.
@@ -21,7 +21,9 @@ export async function GET(
 
     if (!pollRes.ok) {
       return NextResponse.json(
-        { error: data?.detail || data?.message || "Failed to fetch scan status" },
+        {
+          error: data?.detail || data?.message || "Failed to fetch scan status",
+        },
         { status: pollRes.status },
       );
     }

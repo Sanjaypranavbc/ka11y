@@ -35,14 +35,30 @@ from pydantic import BaseModel, Field
 
 from ka11y.observability import (
     SpanKind,
+    add_span_event,
     flush_tracing,
     init_tracing,
     record_span_error,
+    set_span_attributes,
     set_span_output,
-    # Only used by the token accounting, which is commented out below — kept
-    # imported so re-enabling it is a pure uncomment.
     set_token_counts,
     traced_span,
+)
+from ka11y.observability.attributes import (
+    ENRICH_API_CALLS,
+    ENRICH_BATCH_INDEX,
+    ENRICH_BATCH_SIZE,
+    ENRICH_COST_USD,
+    ENRICH_FAILURES,
+    ENRICH_LANGUAGE,
+    ENRICH_RETRIES,
+    ENRICH_VIOLATION_COUNT,
+    EVENT_BATCHES_FAILED,
+    LLM_TOKEN_COUNT_CACHED,
+    LLM_TOKEN_COUNT_THOUGHTS,
+    LLM_TOKEN_COUNT_TOOL_USE,
+    SPAN_ENRICHMENT_BATCH,
+    SPAN_ENRICHMENT_RUN,
 )
 
 DEFAULT_MODEL = "gemini-3.6-flash"
@@ -331,10 +347,10 @@ def enrich_violations(
         # instrumentation emits inside call_gemini_batch(). Tracing off (the
         # default) makes this a non-recording span whose setters do nothing.
         with traced_span(
-            "enrichment.batch",
+            SPAN_ENRICHMENT_BATCH,
             attributes={
-                "enrichment.batch_index": batch_idx,
-                "enrichment.violation_count": len(chunk),
+                ENRICH_BATCH_INDEX: batch_idx,
+                ENRICH_VIOLATION_COUNT: len(chunk),
                 "llm.model_name": model_name,
             },
             session_id=session_id,
@@ -346,42 +362,52 @@ def enrich_violations(
                 record["latency_ms"] = (time.perf_counter() - start) * 1000.0
                 totals["retries"] += retries_attempted
 
-                # ── token / cost accounting: DISABLED ────────────────────
-                # Per-batch token bookkeeping off Gemini's usage_metadata.
-                # Uncomment this block (plus finalize_totals() and
-                # print_summary_table() in run_enrichment) to restore the
-                # counts. While it stays commented out, `record` and `totals`
-                # keep their zeroed token fields, token_usage.json keeps its
-                # shape with zeros, and the tracing spans carry no
-                # llm.token_count.* attributes — so Phoenix/Arize show
-                # latency, model and errors but no token or cost roll-up.
-                # if usage:
-                #     in_tok = getattr(usage, "prompt_token_count", 0) or 0
-                #     out_tok = getattr(usage, "candidates_token_count", 0) or 0
-                #     thought_tok = getattr(usage, "thoughts_token_count", 0) or 0
-                #     cached_tok = getattr(usage, "cached_content_token_count", 0) or 0
-                #     tool_tok = getattr(usage, "tool_use_prompt_token_count", 0) or 0
-                #     tot_tok = getattr(usage, "total_token_count", 0) or 0
-                #
-                #     record["input_tokens"] = in_tok
-                #     record["output_tokens"] = out_tok
-                #     record["total_tokens"] = tot_tok
-                #
-                #     totals["input_tokens"] += in_tok
-                #     totals["output_tokens"] += out_tok
-                #     totals["thought_tokens"] += thought_tok
-                #     totals["cached_tokens"] += cached_tok
-                #     totals["tool_use_tokens"] += tool_tok
-                #     totals["total_tokens"] += tot_tok
-                #
-                #     # Thought tokens are billed as output, so they belong in
-                #     # the completion count Arize rolls up for cost.
-                #     set_token_counts(
-                #         span,
-                #         prompt=in_tok,
-                #         completion=out_tok + thought_tok,
-                #         total=tot_tok,
-                #     )
+                # ── token / cost accounting ─────────────────────────────
+                # Per-batch bookkeeping off Gemini's usage_metadata. This is
+                # the only place the real counts are available: the response
+                # object is discarded right after this block, so anything not
+                # read here is gone. It feeds three sinks at once —
+                # token_usage.json on disk, the run totals, and the span Arize
+                # rolls cost up from.
+                if usage:
+                    in_tok = getattr(usage, "prompt_token_count", 0) or 0
+                    out_tok = getattr(usage, "candidates_token_count", 0) or 0
+                    thought_tok = getattr(usage, "thoughts_token_count", 0) or 0
+                    cached_tok = getattr(usage, "cached_content_token_count", 0) or 0
+                    tool_tok = getattr(usage, "tool_use_prompt_token_count", 0) or 0
+                    tot_tok = getattr(usage, "total_token_count", 0) or 0
+
+                    record["input_tokens"] = in_tok
+                    record["output_tokens"] = out_tok
+                    record["total_tokens"] = tot_tok
+
+                    totals["input_tokens"] += in_tok
+                    totals["output_tokens"] += out_tok
+                    totals["thought_tokens"] += thought_tok
+                    totals["cached_tokens"] += cached_tok
+                    totals["tool_use_tokens"] += tool_tok
+                    totals["total_tokens"] += tot_tok
+
+                    # Thought tokens are billed as output, so they belong in
+                    # the completion count Arize rolls up for cost.
+                    set_token_counts(
+                        span,
+                        prompt=in_tok,
+                        completion=out_tok + thought_tok,
+                        total=tot_tok,
+                    )
+                    # Kinds OpenInference has no standard key for. Cached and
+                    # tool-use tokens are billed differently from plain input,
+                    # so a cost figure derived only from the three standard
+                    # counts is an estimate — these make the gap visible.
+                    set_span_attributes(
+                        span,
+                        {
+                            LLM_TOKEN_COUNT_THOUGHTS: thought_tok or None,
+                            LLM_TOKEN_COUNT_CACHED: cached_tok or None,
+                            LLM_TOKEN_COUNT_TOOL_USE: tool_tok or None,
+                        },
+                    )
 
                 enriched_by_id = {item.finding_id: item for item in items}
                 for entry in chunk:
@@ -424,7 +450,6 @@ def enrich_violations(
             time.sleep(delay_between_batches)
 
 
-# Unused while the token accounting in run_enrichment() is commented out.
 def finalize_totals(totals: dict, violation_count: int, price_input: float, price_output: float) -> None:
     totals["avg_tokens_per_violation"] = totals["total_tokens"] / violation_count if violation_count else 0.0
     billable_output_tokens = (
@@ -441,7 +466,6 @@ def finalize_totals(totals: dict, violation_count: int, price_input: float, pric
     # )
 
 
-# Unused while the summary print in run_enrichment() is commented out.
 def print_summary_table(batches: list[dict], totals: dict) -> None:
     headers = ["Batch", "Items", "Input Tokens", "Output Tokens", "Total Tokens", "Latency (ms)", "Status"]
     col_widths = [len(h) for h in headers]
@@ -572,12 +596,12 @@ def run_enrichment(
     # the google-genai instrumentation emits under them) hang off this one, so
     # a trace shows the run's cost and failure count in a single place.
     with traced_span(
-        "enrichment.run",
+        SPAN_ENRICHMENT_RUN,
         kind=SpanKind.CHAIN,
         attributes={
-            "enrichment.violation_count": len(violations),
-            "enrichment.batch_size": batch_size,
-            "enrichment.language": language,
+            ENRICH_VIOLATION_COUNT: len(violations),
+            ENRICH_BATCH_SIZE: batch_size,
+            ENRICH_LANGUAGE: language,
             "llm.model_name": model_name,
         },
         session_id=session_id,
@@ -593,27 +617,43 @@ def run_enrichment(
             system_instruction,
             session_id=session_id,
         )
-        # ── token / cost accounting: DISABLED ────────────────────────────
-        # Run-level roll-up and the per-1M-token cost estimate. Uncomment
-        # together with the per-batch block in enrich_violations() to bring
-        # the numbers back; price_input / price_output are inert until then.
-        # finalize_totals(totals, len(violations), price_input, price_output)
-        # set_token_counts(
-        #     run_span,
-        #     prompt=totals["input_tokens"],
-        #     completion=totals["output_tokens"] + totals["thought_tokens"],
-        #     total=totals["total_tokens"],
-        # )
-        # The run span still carries the call/retry/failure counts, which is
-        # what the totals dict holds while the token fields stay at zero.
+        # ── token / cost accounting ──────────────────────────────────────
+        # Run-level roll-up and the per-1M-token cost estimate, mirrored onto
+        # the run span so one job's total spend is a single attribute rather
+        # than a sum over its batch spans.
+        finalize_totals(totals, len(violations), price_input, price_output)
+        set_token_counts(
+            run_span,
+            prompt=totals["input_tokens"],
+            completion=totals["output_tokens"] + totals["thought_tokens"],
+            total=totals["total_tokens"],
+        )
+        set_span_attributes(
+            run_span,
+            {
+                ENRICH_API_CALLS: totals["api_calls"],
+                ENRICH_RETRIES: totals["retries"],
+                ENRICH_FAILURES: totals["failures"],
+                ENRICH_COST_USD: totals["estimated_cost_usd"],
+                LLM_TOKEN_COUNT_THOUGHTS: totals["thought_tokens"] or None,
+                LLM_TOKEN_COUNT_CACHED: totals["cached_tokens"] or None,
+                LLM_TOKEN_COUNT_TOOL_USE: totals["tool_use_tokens"] or None,
+            },
+        )
+        if totals["failures"]:
+            # Batch failures are swallowed so the audit keeps its static
+            # reason/fix text; the run still succeeded, but a run where most
+            # batches failed should not look identical to a clean one.
+            add_span_event(
+                run_span,
+                EVENT_BATCHES_FAILED,
+                {"failed": totals["failures"], "total": totals["api_calls"]},
+            )
         set_span_output(run_span, totals)
 
     usage_data = write_outputs(batches_log, totals)
-    # ── token / cost accounting: DISABLED ────────────────────────────────
-    # The GEMINI ENRICHMENT SUMMARY table printed to stdout. `print_table`
-    # is inert while this is commented out.
-    # if print_table:
-    #     print_summary_table(batches_log, totals)
+    if print_table:
+        print_summary_table(batches_log, totals)
     return usage_data
 
 
@@ -652,6 +692,11 @@ def enrich_report_in_pipeline(
         language=language,
         mutate_in_place=True,
         session_id=session_id,
+        # The stdout summary table is a CLI affordance; inside the API server
+        # it would interleave with request logs. The same numbers reach the
+        # pipeline through the returned usage dict, token_usage.json and the
+        # run span.
+        print_table=False,
     )
 
 

@@ -162,6 +162,17 @@ app = FastAPI(
 app.add_middleware(_RateLimitMiddleware)
 app.add_middleware(_SecurityHeadersMiddleware)
 
+# Added after the two above, so Starlette runs it *outside* them: a request
+# rejected by the rate limiter still produces a span with its 429, which is
+# the case you most want to see on the dashboard. It stays inside CORS, which
+# short-circuits preflight OPTIONS we have no interest in tracing.
+try:
+    from ka11y.observability.middleware import TracingMiddleware
+
+    app.add_middleware(TracingMiddleware)
+except Exception:  # noqa: BLE001
+    logger.exception("HTTP tracing middleware not installed; requests run untraced")
+
 from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(

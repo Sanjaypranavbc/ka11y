@@ -134,6 +134,14 @@ export default function ViolationsPage() {
 
       <main className="flex flex-1 flex-col gap-6 min-w-0 px-4 py-6 sm:px-8 sm:py-8 lg:px-16 lg:gap-10 lg:py-10">
 
+        {/* Page heading */}
+        <div className="border-b border-gray-40 pb-4">
+          <h1 className="text-[24px] font-medium leading-[32px] text-gray-100">{t.violations.heading}</h1>
+          <p className="mt-2 text-[16px] leading-[24px] text-gray-80">
+            {t.violations.subheading}
+          </p>
+        </div>
+
         {!auditData ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
             <p className="text-[16px] leading-6 text-gray-60">
@@ -235,9 +243,8 @@ export default function ViolationsPage() {
             <div className="flex-[112] min-w-0 p-4">{t.violations.columns.sc}</div>
             <div className="flex-[146] min-w-0 p-4">{t.violations.columns.criterion}</div>
             <div className="flex-[112] min-w-0 p-4">{t.violations.columns.level}</div>
-            <div className="flex-[112] min-w-0 p-4">{t.violations.columns.tag}</div>
             <div className="flex-[227] min-w-0 p-4">{t.violations.columns.element}</div>
-            <div className="flex-[184] min-w-0 p-4">{t.violations.columns.fixGuide}</div>
+            <div className="flex-[296] min-w-0 p-4">{t.violations.columns.fixGuide}</div>
           </div>
 
           {/* Data rows */}
@@ -286,10 +293,6 @@ export default function ViolationsPage() {
                 <LevelBadge level={violation.level} />
               </div>
 
-              <div className="flex-[112] min-w-0 border-b border-gray-10 px-4 py-6 text-gray-80">
-                {violation.tag}
-              </div>
-
               <div className="flex-[227] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="text-[14px] font-medium leading-5 break-words text-gray-100">{violation.elementTitle}</p>
                 <ElementImage srcs={violation.imageUrls} className="h-[61px] w-[105px]" />
@@ -326,7 +329,7 @@ export default function ViolationsPage() {
                 */}
               </div>
 
-              <div className="flex-[184] min-w-0 border-b border-gray-10 px-4 py-6">
+              <div className="flex-[296] min-w-0 border-b border-gray-10 px-4 py-6">
                 <FixGuideCell
                   text={violation.fixGuide}
                   expanded={expandedRows.has(violation.id)}

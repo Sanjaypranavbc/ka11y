@@ -43,6 +43,15 @@ from .stages import (
     _run_python_stages,
 )
 from .store import _broadcast, _close_subscribers, _get_job_lock, _jobs
+from ka11y.observability import attributes as attrs
+from ka11y.observability import (
+    SpanKind,
+    capture_context,
+    current_span,
+    record_span_error,
+    set_span_attributes,
+    traced_span,
+)
 from ka11y.store import repo
 
 logger = setup_logger(name="KAC", tag="combined")
@@ -229,42 +238,72 @@ async def _fetch_node_findings(
         body["successCriteriaId"] = payload.success_criteria_id
 
     timeout_s = _node_http_timeout(payload.max_pages)
-    try:
-        async with httpx.AsyncClient(timeout=timeout_s) as client:
-            resp = await client.post(node_url, json=body)
-            resp.raise_for_status()
-            data = resp.json()
+    # The Node engine is the one part of an audit that runs in another process,
+    # so without this span a job's trace has an unexplained gap exactly as wide
+    # as axe-core's crawl. Its failures are swallowed (Python-only degradation),
+    # which makes the span the only place they are visible as errors.
+    with traced_span(
+        attrs.SPAN_NODE_AXE,
+        kind=SpanKind.TOOL,
+        session_id=job_id,
+        attributes={
+            attrs.JOB_ID: job_id,
+            attrs.JOB_URL: url,
+            attrs.NODE_ENDPOINT: node_url,
+            attrs.NODE_TIMEOUT_S: timeout_s,
+            attrs.JOB_MAX_DEPTH: payload.max_depth,
+            attrs.JOB_MAX_PAGES: payload.max_pages,
+        },
+    ) as node_span:
+        try:
+            async with httpx.AsyncClient(timeout=timeout_s) as client:
+                resp = await client.post(node_url, json=body)
+                set_span_attributes(node_span, {attrs.HTTP_STATUS_CODE: resp.status_code})
+                resp.raise_for_status()
+                data = resp.json()
 
-        raw_findings: List[Dict] = data.get("findings") or []
-        scanned_pages: List[Dict] = data.get("scannedPages") or []
+            raw_findings: List[Dict] = data.get("findings") or []
+            scanned_pages: List[Dict] = data.get("scannedPages") or []
 
-        # Normalise field names: Node uses camelCase in some fields; _merge_findings
-        # expects snake_case.  The axeResultMapper already outputs snake_case keys
-        # (wcag_sc, status, level, element.page_url, element.selector …) so most
-        # fields pass through untouched.  We only need to handle the pageUrl alias.
-        for f in raw_findings:
-            el = f.get("element")
-            if isinstance(el, dict):
-                # Normalise pageUrl -> page_url inside element
-                if "pageUrl" in el and "page_url" not in el:
-                    el["page_url"] = el.pop("pageUrl")
-            # Top-level pageUrl alias (set by analyseUrlFlat loop)
-            if "pageUrl" in f and "element" not in f:
-                f.setdefault("element", {})["page_url"] = f.pop("pageUrl")
+            # Normalise field names: Node uses camelCase in some fields; _merge_findings
+            # expects snake_case.  The axeResultMapper already outputs snake_case keys
+            # (wcag_sc, status, level, element.page_url, element.selector …) so most
+            # fields pass through untouched.  We only need to handle the pageUrl alias.
+            for f in raw_findings:
+                el = f.get("element")
+                if isinstance(el, dict):
+                    # Normalise pageUrl -> page_url inside element
+                    if "pageUrl" in el and "page_url" not in el:
+                        el["page_url"] = el.pop("pageUrl")
+                # Top-level pageUrl alias (set by analyseUrlFlat loop)
+                if "pageUrl" in f and "element" not in f:
+                    f.setdefault("element", {})["page_url"] = f.pop("pageUrl")
 
-        logger.info(
-            "[combined] job %s: Node audit returned %d findings across %d page(s)",
-            job_id, len(raw_findings), len(scanned_pages),
-        )
-        return {"findings": raw_findings, "scanned_pages": scanned_pages}
+            logger.info(
+                "[combined] job %s: Node audit returned %d findings across %d page(s)",
+                job_id, len(raw_findings), len(scanned_pages),
+            )
+            set_span_attributes(
+                node_span,
+                {
+                    attrs.NODE_FINDING_COUNT: len(raw_findings),
+                    attrs.CRAWLER_PAGES_CRAWLED: len(scanned_pages),
+                    attrs.STATUS: "ok",
+                },
+            )
+            return {"findings": raw_findings, "scanned_pages": scanned_pages}
 
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "[combined] job %s: Node audit failed after %.0fs budget (%s: %s) — "
-            "continuing with Python-only results",
-            job_id, timeout_s, type(exc).__name__, exc,
-        )
-        return {"findings": [], "scanned_pages": []}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[combined] job %s: Node audit failed after %.0fs budget (%s: %s) — "
+                "continuing with Python-only results",
+                job_id, timeout_s, type(exc).__name__, exc,
+            )
+            record_span_error(node_span, exc)
+            set_span_attributes(
+                node_span, {attrs.STATUS: "degraded", attrs.NODE_FINDING_COUNT: 0}
+            )
+            return {"findings": [], "scanned_pages": []}
 
 
 async def _run_job(
@@ -299,6 +338,90 @@ async def _run_job(
 
 
 async def _run_job_body(
+    job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
+) -> None:
+    """Open the job's trace and run it.
+
+    This is the root of an audit's trace: every crawler, page, stage, rule and
+    Gemini span below hangs off it, and ``session.id = job_id`` groups them in
+    Arize even across the process restarts a long queue can straddle.
+
+    It is deliberately a *new* trace rather than a child of the HTTP request.
+    The submit endpoint answers 202 in milliseconds and the audit then runs for
+    minutes on a background task that inherited the request's context; nesting
+    would give the trace a root that ended long before its children and a
+    top-level latency of 50 ms. The request is recorded as a span *link*
+    instead, so "which call started this audit?" is still one click away.
+    """
+    link = capture_context()
+    with traced_span(
+        attrs.SPAN_AUDIT_JOB,
+        kind=SpanKind.AGENT,
+        session_id=job_id,
+        root=True,
+        link_to=link,
+        attributes={
+            attrs.JOB_ID: job_id,
+            attrs.JOB_URL: str(payload.url),
+            attrs.JOB_LANG: payload.lang,
+            attrs.JOB_WCAG_LEVEL: payload.wcag_level,
+            attrs.JOB_MAX_DEPTH: payload.max_depth,
+            attrs.JOB_MAX_PAGES: payload.max_pages,
+            attrs.JOB_FILTER_RULE: filter_rule,
+        },
+    ) as job_span:
+        try:
+            await _run_job_body_inner(job_id, payload, filter_rule)
+        finally:
+            # _run_job_body_inner swallows its own failures and records them as
+            # job status, so the terminal status — not an exception — is the
+            # only reliable signal of how the audit actually ended. Wrapped
+            # because this runs on the way out of a job that may itself be
+            # unwinding: a telemetry slip here must not mask the real error.
+            try:
+                _stamp_job_outcome(job_span, job_id)
+            except Exception:  # noqa: BLE001
+                logger.debug("could not stamp job outcome on span", exc_info=True)
+
+
+def _stamp_job_outcome(job_span: Any, job_id: str) -> None:
+    """Copy the job's terminal state onto its root span."""
+    state = _jobs.get(job_id, {}) or {}
+    status = state.get("status")
+    summary = ((state.get("result") or {}).get("summary") or {})
+    set_span_attributes(
+        job_span,
+        {
+            attrs.JOB_STATUS: status,
+            attrs.VIOLATION_COUNT: summary.get("violations"),
+            attrs.FINDING_COUNT: sum(
+                v
+                for v in (
+                    summary.get("violations"),
+                    summary.get("needs_review"),
+                    summary.get("passes"),
+                )
+                if isinstance(v, int)
+            )
+            or None,
+            attrs.JOB_NEEDS_REVIEW_COUNT: summary.get("needs_review"),
+            attrs.JOB_PASS_COUNT: summary.get("passes"),
+            attrs.JOB_ERROR_ID: state.get("error_id"),
+            attrs.JOB_ERROR_STAGE: state.get("error_stage"),
+        },
+    )
+    if status in ("failed", "timeout"):
+        from opentelemetry.trace import Status, StatusCode
+
+        # The user-facing error message is deliberately generic; error_id is
+        # what ties the span to the full traceback in the application log.
+        detail = state.get("error_id") or status
+        job_span.set_status(
+            Status(StatusCode.ERROR, f"job {status} (error_id={detail})")
+        )
+
+
+async def _run_job_body_inner(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
     """Orchestrates one combined audit job: image audit and media/captions
@@ -367,6 +490,9 @@ async def _run_job_body(
             active_stages.append("media_audit")
         emit_job_plan(job_id, active_stages)
         logger.info(f"[combined] job {job_id}: active stages = {active_stages}")
+        set_span_attributes(
+            current_span(), {attrs.JOB_ACTIVE_STAGES: ",".join(active_stages)}
+        )
 
         # ── Launch Python and Node tasks in parallel ──────────────────────
         python_task = asyncio.create_task(
@@ -550,14 +676,25 @@ async def _run_job_body(
                 language=resolved_lang,
                 session_id=job_id,
             )
-            # Cost is no longer reported: the token accounting in
-            # enrich_audit.py is commented out, so estimated_cost_usd is
-            # always 0.0 and printing it would just be misleading.
+            enrich_totals = (usage or {}).get("totals") or {}
             logger.info(
-                "[combined] job %s: enrichment done — %d violation(s), %d batch(es)",
+                "[combined] job %s: enrichment done — %d violation(s), %d batch(es), "
+                "%d token(s), $%.5f",
                 job_id,
                 len(report.get("violations", [])),
                 len((usage or {}).get("batches", [])),
+                enrich_totals.get("total_tokens") or 0,
+                enrich_totals.get("estimated_cost_usd") or 0.0,
+            )
+            # Roll the LLM spend up onto the job span so a job's cost is
+            # readable without opening its enrichment subtree.
+            set_span_attributes(
+                current_span(),
+                {
+                    attrs.JOB_LLM_TOTAL_TOKENS: enrich_totals.get("total_tokens"),
+                    attrs.JOB_LLM_COST_USD: enrich_totals.get("estimated_cost_usd"),
+                    attrs.JOB_LLM_API_CALLS: enrich_totals.get("api_calls"),
+                },
             )
         except Exception:
             logger.warning(

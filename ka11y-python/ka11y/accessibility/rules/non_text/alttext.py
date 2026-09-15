@@ -36,6 +36,7 @@ from pathlib import Path
 from datetime import datetime
 
 from ka11y.config.logger import setup_logger
+from ka11y.observability.spans import traced_auditor
 from ka11y.accessibility.rules.non_text import contrast_analyser
 
 logger = setup_logger(name="KAC", tag="audit")
@@ -959,6 +960,11 @@ class AltTextAccessibilityAuditor:
     and runs WCAG 1.1.1 + 4.1.2 checks for every crawled image.
     """
 
+    @traced_auditor(
+        "alt_text",
+        rules=("1.1.1", "4.1.2", "1.4.5", "1.4.11"),
+        input_arg="images_data",
+    )
     def generate_audit_report(
         self,
         images_data: list,  # List[ImageData]

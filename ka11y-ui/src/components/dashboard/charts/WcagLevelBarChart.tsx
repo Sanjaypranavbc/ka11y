@@ -17,9 +17,9 @@ export function WcagLevelBarChart({ breakdown }: { breakdown: LevelBreakdownRow[
   const { t } = useLanguage();
   const DATA = breakdown.map((row) => ({
     level: t.dashboardPage.charts.level(row.level),
-    Violations: row.violations,
-    "Needs Review": row.needsReview,
-    Passes: row.passes,
+    [t.dashboardPage.charts.violations]: row.violations,
+    [t.dashboardPage.charts.needsReview]: row.needsReview,
+    [t.dashboardPage.charts.passes]: row.passes,
   }));
   const maxCount = Math.max(1, ...breakdown.map((row) => row.violations + row.needsReview + row.passes));
 
@@ -60,9 +60,9 @@ export function WcagLevelBarChart({ breakdown }: { breakdown: LevelBreakdownRow[
                 padding: "10px 14px",
               }}
             />
-            <Bar dataKey="Violations" fill="var(--color-status-violation)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-            <Bar dataKey="Needs Review" fill="var(--color-status-review)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-            <Bar dataKey="Passes" fill="var(--color-status-pass)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey={t.dashboardPage.charts.violations} fill="var(--color-status-violation)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey={t.dashboardPage.charts.needsReview} fill="var(--color-status-review)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey={t.dashboardPage.charts.passes} fill="var(--color-status-pass)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>

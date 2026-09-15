@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import contextlib
 import hashlib
 import ipaddress
 import json
@@ -129,6 +130,46 @@ _BROWSER_DOWN_MARKERS = (
     "websocket",
     "browser has disconnected",
 )
+
+
+# ── tracing ──────────────────────────────────────────────────────────────────
+# Imported lazily-but-once here (rather than inside _process_page) because the
+# crawler calls these on every page; the module-level guard keeps engine.py
+# importable in an install without the tracing extras.
+try:
+    from ka11y.observability.spans import page_span as _observability_page_span
+    from ka11y.observability.spans import stamp_page_outcome as _stamp_page_outcome
+except Exception:  # noqa: BLE001
+
+    @contextlib.contextmanager
+    def _observability_page_span(*_args, **_kwargs):
+        yield None
+
+    def _stamp_page_outcome(*_args, **_kwargs) -> None:
+        return
+
+
+def _page_span(url: str, depth: int):
+    return _observability_page_span(url, depth, crawler="image")
+
+
+def _stamp_page_span(doc: dict) -> None:
+    """Map one page document onto its ``crawler.page`` span.
+
+    ``processing_status`` is the crawler's own vocabulary ("captured",
+    "skipped", "failed"); it is passed through unchanged so the span and the
+    page JSON on disk describe the outcome with the same word."""
+    try:
+        _stamp_page_outcome(
+            status=doc.get("processing_status"),
+            resolved_url=doc.get("page_url"),
+            http_status=doc.get("http_status"),
+            page_lang=doc.get("page_lang"),
+            element_count=len(doc.get("elements") or []),
+            error=doc.get("failure_reason"),
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 class BrowserDown(Exception):
@@ -1958,6 +1999,10 @@ class Crawler:
         tmp = path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.rename(path)
+        # Every page outcome — captured, skipped by robots, or failed after
+        # its retries — is written exactly once through here, which makes this
+        # the single place that can stamp the page span with what happened.
+        _stamp_page_span(doc)
 
     def _stub_doc(
         self,
@@ -2564,6 +2609,17 @@ class Crawler:
         }
 
     async def _process_page(self, context, url: str, depth: int) -> None:
+        """Open a ``crawler.page`` span for this URL and process it.
+
+        One span per page visited is what turns "the crawl took 90s" into
+        "three pages each burned 30s retrying". The span is opened here rather
+        than in ``_worker`` so the retry loop, asset capture and extraction all
+        fall inside it; ``_write_page_json`` stamps the outcome on the way out.
+        """
+        with _page_span(url, depth):
+            await self._process_page_inner(context, url, depth)
+
+    async def _process_page_inner(self, context, url: str, depth: int) -> None:
         if not await self.robots.allowed(url):
             doc = self._stub_doc(url, depth, "skipped", "robots.txt disallow", None, False)
             self._write_page_json(doc)

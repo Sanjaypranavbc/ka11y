@@ -106,8 +106,8 @@ export function Sidebar() {
 
       {/* Logout */}
       <div className="border-t border-gray-40 px-6 py-5">
-        <button
-          type="button"
+        <Link
+          href="/login"
           className={cn(
             "inline-flex items-center gap-2 text-[16px] leading-6 text-brand-green-80 hover:opacity-80",
             collapsed && "justify-center",
@@ -115,7 +115,7 @@ export function Sidebar() {
         >
           <LogOut size={16} aria-hidden="true" />
           {!collapsed && t.nav.logout}
-        </button>
+        </Link>
       </div>
     </aside>
   );

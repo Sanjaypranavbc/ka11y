@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from ka11y.observability import tracing
+from ka11y.observability import attributes, tracing
 
 
 @pytest.fixture(autouse=True)
@@ -310,12 +310,8 @@ def test_spans_are_harmless_when_tracing_is_off():
 # ── enrichment wiring ───────────────────────────────────────────────────────
 def test_enrichment_run_emits_nested_spans(monkeypatch, tmp_path):
     """End-to-end check of the wiring in enrich_audit.py: one run span, one
-    span per batch beneath it, and a batch whose Gemini call blew up marked
-    ERROR even though the run carries on.
-
-    No token assertions: the token/cost accounting in enrich_audit.py is
-    commented out, so spans deliberately carry no llm.token_count.* — the
-    absence is asserted at the end of this test."""
+    span per batch beneath it, a batch whose Gemini call blew up marked ERROR
+    even though the run carries on, and the token/cost roll-up on both."""
     import sys
     from pathlib import Path
 
@@ -384,11 +380,38 @@ def test_enrichment_run_emits_nested_spans(monkeypatch, tmp_path):
     assert report["violations"][0]["dynamic_reason"] == "dynamic reason"
     assert report["violations"][2]["dynamic_enrichment_failed"] is True
 
-    # Token accounting is commented out in enrich_audit.py: usage_metadata is
-    # not read, so no span carries a count and token_usage.json reports zeros.
-    # Flip this test with the code if the accounting is ever re-enabled.
+    # ── token / cost accounting ──────────────────────────────────────────
+    # Only the first batch returned usage (the second raised), so the run
+    # totals must equal that one batch — a run that double-counted or that
+    # credited the failed batch would still "have tokens", which is why the
+    # exact numbers are asserted rather than mere presence.
+    ok_batch = batches[0]
+    assert ok_batch.attributes[tracing.TOKEN_COUNT_PROMPT] == 120
+    # Thought tokens are billed as output, so they belong in the completion
+    # count Arize rolls cost up from: 60 candidates + 10 thoughts.
+    assert ok_batch.attributes[tracing.TOKEN_COUNT_COMPLETION] == 70
+    assert ok_batch.attributes[tracing.TOKEN_COUNT_TOTAL] == 190
+    assert ok_batch.attributes[attributes.LLM_TOKEN_COUNT_THOUGHTS] == 10
+    # The failed batch never saw a usage object; it must carry no counts at
+    # all rather than zeros, so averages aren't dragged down by phantom calls.
     assert not any(
-        key.startswith("llm.token_count")
-        for span in exporter.get_finished_spans()
-        for key in span.attributes
+        key.startswith("llm.token_count") for key in batches[1].attributes
     )
+
+    assert run.attributes[tracing.TOKEN_COUNT_PROMPT] == 120
+    assert run.attributes[tracing.TOKEN_COUNT_COMPLETION] == 70
+    assert run.attributes[tracing.TOKEN_COUNT_TOTAL] == 190
+    assert run.attributes[attributes.ENRICH_API_CALLS] == 2
+    assert run.attributes[attributes.ENRICH_FAILURES] == 1
+    # run_enrichment()'s default prices are USD 1.50 / 7.50 per 1M tokens:
+    # (120 * 1.50 + 70 * 7.50) / 1e6.
+    assert run.attributes[attributes.ENRICH_COST_USD] == pytest.approx(0.000705)
+    assert any(e.name == "enrichment.batches_failed" for e in run.events)
+
+    # token_usage.json is the on-disk mirror of the same numbers — the two
+    # sinks are populated from one place and must not drift.
+    import json
+
+    usage_file = json.loads((tmp_path / "token_usage.json").read_text())
+    assert usage_file["totals"]["total_tokens"] == 190
+    assert usage_file["totals"]["estimated_cost_usd"] == pytest.approx(0.000705)

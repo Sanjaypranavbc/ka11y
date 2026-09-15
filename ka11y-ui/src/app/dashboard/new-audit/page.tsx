@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowUp, CheckCircle2, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
@@ -102,6 +102,7 @@ export default function NewAuditPage() {
   const ACTUAL_STEPS = useMemo(() => SCAN_STEPS.filter((s) => s.type === "step"), [SCAN_STEPS]);
   const [url, setUrl] = useState("");
   const [depth, setDepth] = useState(0);
+  const [showCrawlTooltip, setShowCrawlTooltip] = useState(false);
   const [wcagLevel, setWcagLevel] = useState<WcagLevel>("AA");
   const [email, setEmail] = useState("");
   const [phase, setPhase] = useState<ScanPhase>("form");
@@ -321,7 +322,7 @@ export default function NewAuditPage() {
             <span className="text-[24px] font-medium leading-tight text-brand-teal sm:text-[32px] sm:leading-[42px]">A11Y</span>
             <div className="flex items-center gap-1.5 text-[14px] leading-6 sm:text-[16px]">
               <span className="text-brand-green-80">Target :</span>
-              <span className="hidden text-gray-40 sm:inline">{url || "https://samplesite.com/"}</span>
+              <span className="hidden text-[#65605A] sm:inline">{url || "https://samplesite.com/"}</span>
               <ExternalLink size={14} className="shrink-0 text-brand-green-80" />
             </div>
           </div>
@@ -429,14 +430,46 @@ export default function NewAuditPage() {
               />
             </div>
 
-            {/* Max Depth + WCAG Level */}
+            {/* Crawl Depth + WCAG Level */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
 
-              {/* Max Depth */}
-              <div className="flex flex-1 flex-col gap-2">
-                <label htmlFor="max-depth" className="text-[16px] leading-6 text-gray-100">
-                  {t.newAudit.maxDepthLabel}
-                </label>
+              {/* Crawl Depth */}
+              <div className="relative flex flex-1 flex-col gap-2">
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="max-depth" className="text-[16px] leading-6 text-gray-100">
+                    {t.newAudit.maxDepthLabel}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCrawlTooltip((prev) => !prev)}
+                    onMouseEnter={() => setShowCrawlTooltip(true)}
+                    onMouseLeave={() => setShowCrawlTooltip(false)}
+                    aria-label="Crawl depth information"
+                    className="inline-flex items-center justify-center text-brand-teal transition-transform hover:scale-105 focus:outline-none"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                      <circle cx="10" cy="10" r="8.5" stroke="#00AC8F" strokeWidth="1.8" fill="white" />
+                      <path d="M10 5.8V11.2M10 13.8V14.2" stroke="#00AC8F" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Helper Tooltip Popover */}
+                {showCrawlTooltip && (
+                  <div
+                    className="absolute left-0 top-9 z-50 w-[300px] sm:w-[350px] rounded-[12px] border border-gray-200 bg-white p-4 sm:p-5 shadow-xl transition-all"
+                    onMouseEnter={() => setShowCrawlTooltip(true)}
+                    onMouseLeave={() => setShowCrawlTooltip(false)}
+                  >
+                    {t.newAudit.crawlDepthLevels.map((lvl, idx) => (
+                      <div key={idx} className={cn(idx > 0 && "mt-4 border-t border-gray-100 pt-4")}>
+                        <h4 className="text-[14px] font-bold text-gray-900">{lvl.label}</h4>
+                        <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">{lvl.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="flex h-12 items-center justify-between rounded-[8px] border border-gray-40 bg-white px-4">
                   <span className="text-[16px] leading-6 text-gray-100">{depth}</span>
                   <div className="flex flex-col gap-1">
@@ -527,7 +560,7 @@ export default function NewAuditPage() {
               disabled={submitting}
               className="flex w-full items-center justify-center gap-2 rounded-[16px] bg-brand-green-80 px-6 py-4 text-[16px] font-medium leading-6 text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <ArrowUp size={16} aria-hidden="true" />
+              <ChevronRight size={18} className="stroke-[2.5]" aria-hidden="true" />
               {submitting ? t.newAudit.submitting : t.newAudit.submit}
             </button>
           </div>

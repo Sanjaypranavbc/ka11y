@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import type { WcagAuditResponse } from "@/lib/wcagAudit";
 
 const STORAGE_KEY = "kao:last-audit";
@@ -12,22 +12,27 @@ interface AuditDataContextValue {
 
 const AuditDataContext = createContext<AuditDataContextValue | null>(null);
 
-function readStoredAuditData(): WcagAuditResponse | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : null;
-  } catch {
-    return null;
-  }
-}
-
 export function AuditDataProvider({ children }: { children: ReactNode }) {
-  const [auditData, setAuditDataState] = useState<WcagAuditResponse | null>(readStoredAuditData);
+  const [auditData, setAuditDataState] = useState<WcagAuditResponse | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        setAuditDataState(JSON.parse(stored));
+      }
+    } catch {
+      // sessionStorage unavailable or parse error
+    }
+  }, []);
 
   function setAuditData(data: WcagAuditResponse) {
     setAuditDataState(data);
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch {
+      // sessionStorage unavailable
+    }
   }
 
   return (

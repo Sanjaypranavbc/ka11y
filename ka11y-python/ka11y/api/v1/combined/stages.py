@@ -16,6 +16,8 @@ _run_python_stages() gathers all stages concurrently.
 from __future__ import annotations
 
 import asyncio
+import functools
+import inspect
 import json
 import os
 import time
@@ -81,6 +83,8 @@ from .store import _jobs
 from ka11y.crawler.universal_page import UniversalPageLoader
 from ka11y.crawler.optimized.optimized_crawler import ImageCrawlerNavigationError
 from ka11y.utils import stage_timing
+from ka11y.observability import attributes as attrs
+from ka11y.observability import SpanKind, set_span_attributes, traced_span
 
 
 async def _run_pipeline_stage(
@@ -184,6 +188,77 @@ async def _heavy(coro, *, timeout: float = _STAGE_TIMEOUT_SECONDS):
 logger = setup_logger(name="KAC", tag="combined")
 
 
+# ── stage tracing ─────────────────────────────────────────────────────────────
+def _finding_count(result: Any) -> Optional[int]:
+    """Findings produced by a stage, whichever shape it returns them in.
+
+    Stages are not uniform: media returns a bare list, image_audit returns
+    ``(findings, contrast_report, image_audit_report)``. Rather than teach each
+    call site, normalise here — and return None (rather than 0) for anything
+    unrecognised, so a future stage shape shows as "not reported" instead of
+    silently reading as a stage that found nothing."""
+    if isinstance(result, list):
+        return len(result)
+    if isinstance(result, tuple) and result and isinstance(result[0], list):
+        return len(result[0])
+    findings = getattr(result, "findings", None)  # PythonStagesResult
+    if isinstance(findings, list):
+        return len(findings)
+    return None
+
+
+def _traced_stage(stage: str, *, span_name: Optional[str] = None):
+    """Wrap a stage coroutine in its own ``stage.<name>`` span.
+
+    Applied to the coroutine rather than to the call site in
+    :func:`_run_python_stages` on purpose: ``rule_evaluator`` invokes the same
+    stages directly for single-rule evaluation, and instrumenting the function
+    keeps that path traced too.
+
+    ``job_id`` / ``url`` are read off the bound arguments so the decorator
+    works whether a caller passes them positionally or by keyword — the two
+    existing callers differ on exactly that.
+    """
+
+    def decorator(fn):
+        signature = inspect.signature(fn)
+
+        @functools.wraps(fn)
+        async def wrapper(*args, **kwargs):
+            try:
+                bound = signature.bind_partial(*args, **kwargs)
+                bound.apply_defaults()
+                params = bound.arguments
+            except TypeError:
+                params = kwargs
+
+            job_id = params.get("job_id")
+            with traced_span(
+                span_name or attrs.stage_span_name(stage),
+                kind=SpanKind.CHAIN,
+                session_id=job_id,
+                attributes={
+                    attrs.STAGE: stage,
+                    attrs.JOB_ID: job_id,
+                    attrs.JOB_URL: params.get("url"),
+                    attrs.JOB_LANG: params.get("lang"),
+                    attrs.JOB_MAX_DEPTH: params.get("max_depth"),
+                    attrs.JOB_MAX_PAGES: params.get("max_pages"),
+                },
+            ) as span:
+                result = await fn(*args, **kwargs)
+                # Most stage failures never reach here: _stage_error_and_warn
+                # swallows them and returns an empty result, so it is that
+                # helper — not this except-less block — that marks the span
+                # failed. A raise still propagates and OTel records it.
+                set_span_attributes(span, {attrs.FINDING_COUNT: _finding_count(result)})
+                return result
+
+        return wrapper
+
+    return decorator
+
+
 def _warning_samples(
     warnings: List[Dict[str, Any]],
     *,
@@ -280,6 +355,7 @@ def _ocr_lang_for_page(page_lang: Optional[str], run_lang: str) -> str:
     return run_lang
 
 
+@_traced_stage("image_audit")
 async def _stage_image_audit(
     url: str,
     output_dir: Path,
@@ -652,6 +728,7 @@ async def _load_universal_snapshot(
     return normalized
 
 
+@_traced_stage("media_audit")
 async def _stage_media_audit_universal(
     url: str,
     output_dir: Path,
@@ -699,6 +776,7 @@ async def _stage_media_audit_universal(
 
 # ── Python pipeline orchestrator ──────────────────────────────────────────────
 
+@_traced_stage("python_stages", span_name=attrs.SPAN_PYTHON_STAGES)
 async def _run_python_stages(
     *,
     url: str,

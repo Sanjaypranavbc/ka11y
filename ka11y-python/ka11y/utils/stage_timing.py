@@ -21,6 +21,14 @@ Two files per run, both under ``ka11y-python/logs/timings/``:
 Override the directory with ``$KA11Y_STAGE_TIMING_DIR``. Disable entirely with
 ``KA11Y_STAGE_TIMING_DISABLE=1``.
 
+Both context managers below also open a matching **trace span** — ``rule.<sc>``
+for a step tied to a success criterion, ``stage.<stage>.<sub_stage>`` otherwise
+— so the same steps show up in Arize/Phoenix with no per-call-site change, and
+any timing added later is traced by construction. See
+``ka11y/observability/``. The span is an addition to these files and the
+SQLite table, never a replacement: with tracing unconfigured, everything below
+behaves exactly as before.
+
 JSONL row schema
 ----------------
 ::
@@ -95,6 +103,80 @@ def _lock_for(path: str) -> threading.Lock:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+
+
+# ── tracing bridge ──────────────────────────────────────────────────────────
+# Every fine-grained step already funnels through the two context managers
+# below, which is exactly the granularity a distributed trace wants: one span
+# per (stage, sub_stage, rule). Opening the span here instead of at each call
+# site means the whole existing timing surface — OCR scans, per-rule
+# converters, report writes — shows up in Arize/Phoenix with no per-call-site
+# change, and any timing added later is traced by construction.
+#
+# The import is local and guarded: ka11y.utils must stay importable in an
+# install without the tracing extras, and stage_timing is on the hot path.
+@contextmanager
+def _traced_step(
+    stage: str,
+    sub_stage: Optional[str],
+    rule: Optional[str],
+    page_url: Optional[str],
+    depth: Optional[int],
+    extra: Optional[Dict[str, Any]],
+) -> Iterator[Any]:
+    try:
+        from ka11y.observability import attributes as attrs
+        from ka11y.observability.tracing import SpanKind, traced_span
+    except Exception:  # noqa: BLE001
+        yield None
+        return
+
+    # A step tied to a WCAG success criterion is named for the rule — that is
+    # how the engine is reasoned about ("why is 1.4.3 slow on this page?") —
+    # and everything else is named for its stage.
+    name = attrs.rule_span_name(rule) if rule else attrs.stage_span_name(stage, sub_stage)
+    with traced_span(
+        name,
+        kind=SpanKind.TOOL if rule else SpanKind.CHAIN,
+        attributes={
+            attrs.STAGE: stage,
+            attrs.SUB_STAGE: sub_stage,
+            attrs.RULE: rule,
+            attrs.PAGE_URL: page_url,
+            attrs.PAGE_DEPTH: depth,
+            **{f"{attrs.EXTRA_PREFIX}{k}": v for k, v in (extra or {}).items()},
+        },
+    ) as span:
+        yield span
+
+
+def _finish_traced_step(
+    span: Any, *, status: str, duration_ms: float, error: Optional[str]
+) -> None:
+    """Stamp the outcome a step's timing row already computed onto its span.
+
+    ``duration_ms`` is redundant with the span's own start/end timestamps, but
+    it is what the JSONL rows, the SQLite table and the summary log all report,
+    so having the same number on the span keeps the two views reconcilable."""
+    if span is None:
+        return
+    try:
+        from ka11y.observability import attributes as attrs
+        from ka11y.observability.tracing import set_span_attributes
+
+        set_span_attributes(
+            span,
+            {
+                attrs.STATUS: status,
+                attrs.DURATION_MS: round(duration_ms, 3),
+            },
+        )
+        if status != "ok" and error:
+            from opentelemetry.trace import Status, StatusCode
+
+            span.set_status(Status(StatusCode.ERROR, error))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _jsonl_path(run_id: str) -> Path:
@@ -186,30 +268,35 @@ async def time_stage_async(
     rule: Optional[str] = None,
     extra: Optional[Dict[str, Any]] = None,
 ):
-    """Async context manager: records duration on exit (even on exception)."""
+    """Async context manager: records duration on exit (even on exception),
+    and opens a matching trace span for the same step."""
     start = time.perf_counter()
     status = "ok"
     err: Optional[str] = None
-    try:
-        yield
-    except Exception as exc:
-        status = "error"
-        err = repr(exc)[:200]
-        raise
-    finally:
-        duration_ms = (time.perf_counter() - start) * 1000.0
-        record(
-            run_id,
-            stage=stage,
-            duration_ms=duration_ms,
-            status=status,
-            page_url=page_url,
-            depth=depth,
-            sub_stage=sub_stage,
-            rule=rule,
-            error=err,
-            extra=extra,
-        )
+    with _traced_step(stage, sub_stage, rule, page_url, depth, extra) as span:
+        try:
+            yield
+        except Exception as exc:
+            status = "error"
+            err = repr(exc)[:200]
+            raise
+        finally:
+            duration_ms = (time.perf_counter() - start) * 1000.0
+            _finish_traced_step(
+                span, status=status, duration_ms=duration_ms, error=err
+            )
+            record(
+                run_id,
+                stage=stage,
+                duration_ms=duration_ms,
+                status=status,
+                page_url=page_url,
+                depth=depth,
+                sub_stage=sub_stage,
+                rule=rule,
+                error=err,
+                extra=extra,
+            )
 
 
 @contextmanager
@@ -227,26 +314,30 @@ def time_stage(
     start = time.perf_counter()
     status = "ok"
     err: Optional[str] = None
-    try:
-        yield
-    except Exception as exc:
-        status = "error"
-        err = repr(exc)[:200]
-        raise
-    finally:
-        duration_ms = (time.perf_counter() - start) * 1000.0
-        record(
-            run_id,
-            stage=stage,
-            duration_ms=duration_ms,
-            status=status,
-            page_url=page_url,
-            depth=depth,
-            sub_stage=sub_stage,
-            rule=rule,
-            error=err,
-            extra=extra,
-        )
+    with _traced_step(stage, sub_stage, rule, page_url, depth, extra) as span:
+        try:
+            yield
+        except Exception as exc:
+            status = "error"
+            err = repr(exc)[:200]
+            raise
+        finally:
+            duration_ms = (time.perf_counter() - start) * 1000.0
+            _finish_traced_step(
+                span, status=status, duration_ms=duration_ms, error=err
+            )
+            record(
+                run_id,
+                stage=stage,
+                duration_ms=duration_ms,
+                status=status,
+                page_url=page_url,
+                depth=depth,
+                sub_stage=sub_stage,
+                rule=rule,
+                error=err,
+                extra=extra,
+            )
 
 
 # ── Summary emission ────────────────────────────────────────────────────────

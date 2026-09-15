@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from ka11y.config.logger import setup_logger
+from ka11y.observability.spans import traced_auditor
 
 logger = setup_logger(name="KAC", tag="media_auditor")
 
@@ -565,6 +566,11 @@ class MediaAuditor:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.lang = lang
 
+    @traced_auditor(
+        "media",
+        rules=("1.2.1", "1.2.2", "1.2.3", "1.4.2"),
+        input_arg="items",
+    )
     def generate_audit_report(
         self,
         items: List[Dict[str, Any]],

@@ -276,6 +276,37 @@ def _stage_error_and_warn(job_id: str, name: str, exc: Exception | None) -> None
     logger.warning(f"[combined] {name} stage error: {msg}")
     _stage_error(job_id, name, msg)
     _jobs[job_id].setdefault("warnings", []).append(f"{name}: {msg}")
+    # This is the path a stage failure actually takes: the stage catches its
+    # own exception and returns an empty result so the audit degrades instead
+    # of failing. The span is still open here (this runs inside the stage
+    # coroutine), and marking it is the only way a swallowed stage failure
+    # shows up as an error rather than a suspiciously fast, empty stage.
+    _mark_current_span_failed(msg, exc, stage=name)
+
+
+def _mark_current_span_failed(
+    message: str, exc: Exception | None, *, stage: str
+) -> None:
+    try:
+        from ka11y.observability import (
+            current_span,
+            record_span_error,
+            set_span_attributes,
+        )
+        from ka11y.observability import attributes as attrs
+
+        span = current_span()
+        set_span_attributes(
+            span, {attrs.STATUS: "error", attrs.STAGE: stage, attrs.ERROR: message}
+        )
+        if exc is not None:
+            record_span_error(span, exc)
+        else:
+            from opentelemetry.trace import Status, StatusCode
+
+            span.set_status(Status(StatusCode.ERROR, message))
+    except Exception:  # noqa: BLE001
+        logger.debug("could not mark stage span failed", exc_info=True)
 
 
 def _stage_warn(job_id: str, message: str) -> None:
@@ -286,6 +317,17 @@ def _stage_warn(job_id: str, message: str) -> None:
     """
     logger.warning(f"[combined] {message}")
     _jobs[job_id].setdefault("warnings", []).append(message)
+    # Degradations are events, not failures: the stage still produced results,
+    # so the span stays OK and carries a marker explaining reduced coverage.
+    try:
+        from ka11y.observability import add_span_event, current_span
+        from ka11y.observability import attributes as attrs
+
+        add_span_event(
+            current_span(), attrs.EVENT_DEGRADED, {"message": message}
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("could not add degradation event", exc_info=True)
 
 
 def _record_crawler_time(job_id: str, stage_name: str, duration_s: float) -> None:

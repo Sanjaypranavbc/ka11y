@@ -18,6 +18,7 @@ from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
 from ka11y.crawler.policy import CrawlPolicy
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.utils.step_logger import ExecutionStepLogger
+from ka11y.observability.spans import page_span, stamp_page_outcome
 
 # Pipeline extractors run per-page during the universal crawl so the unified
 # pipeline (1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 2.4.7, 2.4.13, 2.5.3, 2.5.8 …)
@@ -786,6 +787,34 @@ class UniversalPageLoader:
         output: PageSnapshot,
         step_logger: ExecutionStepLogger | None,
     ) -> List[str]:
+        """Open a ``crawler.page`` span and crawl one URL.
+
+        The BFS runs these as concurrent tasks, each of which inherits the
+        crawl's span as its parent, so a snapshot's trace shows the pages
+        genuinely overlapping rather than as one opaque block."""
+        with page_span(url, depth, crawler="universal"):
+            return await cls._crawl_one_url_inner(
+                context=context,
+                root_url=root_url,
+                url=url,
+                depth=depth,
+                policy=policy,
+                output=output,
+                step_logger=step_logger,
+            )
+
+    @classmethod
+    async def _crawl_one_url_inner(
+        cls,
+        *,
+        context: BrowserContext,
+        root_url: str,
+        url: str,
+        depth: int,
+        policy: CrawlPolicy,
+        output: PageSnapshot,
+        step_logger: ExecutionStepLogger | None,
+    ) -> List[str]:
         page = await context.new_page()
         page_warning_count = 0
         links: List[str] = []
@@ -857,6 +886,13 @@ class UniversalPageLoader:
             page_warning_count = len(
                 [w for w in output.warnings if w.get("page_url") == resolved_url]
             )
+            stamp_page_outcome(
+                status="captured",
+                resolved_url=resolved_url,
+                links_found=len(links),
+                media_count=page_media,
+                warnings=page_warning_count,
+            )
 
             if step_logger:
                 step_logger.record(
@@ -880,6 +916,10 @@ class UniversalPageLoader:
             }
             output.warnings.append(warning)
             logger.warning(f"[universal] {exc.code} for {url}: {exc}")
+            # Swallowed so one unreachable child page can't sink the snapshot —
+            # which is exactly why it has to be marked on the span, or the
+            # crawl reads as fully successful with mysteriously few pages.
+            stamp_page_outcome(status="failed", error=f"{exc.code}: {exc}")
         except Exception as exc:
             output.partial = True
             warning = {
@@ -889,6 +929,7 @@ class UniversalPageLoader:
             }
             output.warnings.append(warning)
             logger.warning(f"[universal] failed to extract {url}: {exc}")
+            stamp_page_outcome(status="failed", error=f"page_extract_failed: {exc}")
             if step_logger:
                 step_logger.record(
                     step="universal_page",

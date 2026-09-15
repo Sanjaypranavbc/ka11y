@@ -748,7 +748,7 @@ export function buildFindingsCsv(data: WcagAuditResponse): string {
   const passes = (data.passes ?? []) as WcagRawFinding[];
 
   const violationsSection = csvSection(
-    "Violations",
+    "Fail",
     ["WCAG SC", "Severity", "Level", "Reason", "Suggested Fix", ...(multiPage ? ["Page URL"] : [])],
     violations.map((f) => [
       f.wcag_sc ?? "",

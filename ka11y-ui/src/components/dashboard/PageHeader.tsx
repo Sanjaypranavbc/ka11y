@@ -20,19 +20,19 @@ export function PageHeader({ title, target, actions }: PageHeaderProps) {
           {title}
         </span>
         {target && (
-          <p className="flex items-center gap-1.5 text-[14px] leading-6 text-brand-green-80 sm:text-[16px]">
+          <div className="flex items-center gap-1.5 text-[14px] leading-6 text-brand-green-80 sm:text-[16px]">
             <span>{t.common.target}</span>
             <a
               href={target}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-gray-40 hover:text-brand-green-80"
+              className="inline-flex items-center gap-1 text-[#65605A] hover:text-brand-green-80"
             >
               <span className="hidden sm:inline">{target}</span>
               <span className="sm:hidden">{t.common.link}</span>
               <ExternalLink size={13} aria-hidden="true" />
             </a>
-          </p>
+          </div>
         )}
       </div>
       {actions && (

@@ -125,6 +125,14 @@ _tracer_provider: Any = None
 _enabled: bool = False
 _init_attempted: bool = False
 
+# Hard ceiling on any single string attribute. Span payloads here can be whole
+# page snapshots or a batch of violation dicts; an unbounded input.value would
+# blow past the collector's gRPC message limit and drop the *whole* batch of
+# spans, losing the trace we were trying to keep. Truncating one attribute is
+# always the better failure. Override with KA11Y_TRACING_MAX_ATTR_CHARS.
+_DEFAULT_MAX_ATTR_CHARS = 8192
+_TRUNCATION_SUFFIX = "…[truncated]"
+
 
 # ── env helpers ─────────────────────────────────────────────────────────────
 def _env(name: str) -> str:
@@ -393,23 +401,87 @@ class _NoopSpan:
 _NOOP_SPAN = _NoopSpan()
 
 
+def _max_attr_chars() -> int:
+    raw = _env("KA11Y_TRACING_MAX_ATTR_CHARS")
+    if not raw:
+        return _DEFAULT_MAX_ATTR_CHARS
+    try:
+        return max(64, int(raw))
+    except ValueError:
+        logger.warning("ignoring non-numeric KA11Y_TRACING_MAX_ATTR_CHARS=%r", raw)
+        return _DEFAULT_MAX_ATTR_CHARS
+
+
+def _truncate(text: str) -> str:
+    limit = _max_attr_chars()
+    if len(text) <= limit:
+        return text
+    return text[: limit - len(_TRUNCATION_SUFFIX)] + _TRUNCATION_SUFFIX
+
+
 def _serialize(value: Any) -> tuple[str, str]:
-    """Return (text, mime_type) for an input/output payload."""
+    """Return (text, mime_type) for an input/output payload, truncated to the
+    per-attribute ceiling."""
     if isinstance(value, (dict, list, tuple)):
-        return json.dumps(value, ensure_ascii=False, default=str), "application/json"
-    return str(value), "text/plain"
+        return (
+            _truncate(json.dumps(value, ensure_ascii=False, default=str)),
+            "application/json",
+        )
+    return _truncate(str(value)), "text/plain"
 
 
 def set_span_attributes(span: Any, attributes: Mapping[str, Any]) -> None:
     """Set attributes, skipping Nones and JSON-encoding anything OTel can't
-    carry natively (dicts, lists, model objects)."""
+    carry natively (dicts, lists, model objects).
+
+    Never raises: an instrumentation bug (a value OTel rejects, a span already
+    ended by a racing timeout) must not surface as an audit failure."""
     for key, value in attributes.items():
         if value is None:
             continue
-        if isinstance(value, (str, bool, int, float)):
-            span.set_attribute(key, value)
-        else:
-            span.set_attribute(key, _serialize(value)[0])
+        try:
+            if isinstance(value, str):
+                span.set_attribute(key, _truncate(value))
+            elif isinstance(value, (bool, int, float)):
+                span.set_attribute(key, value)
+            else:
+                span.set_attribute(key, _serialize(value)[0])
+        except Exception:  # noqa: BLE001
+            logger.debug("could not set span attribute %s", key, exc_info=True)
+
+
+def current_span() -> Any:
+    """The span the current context is inside, or a no-op span when tracing is
+    off / OpenTelemetry is missing. Lets a helper deep in the call stack stamp
+    the enclosing stage span without threading it through every signature."""
+    try:
+        from opentelemetry import trace
+    except ImportError:  # pragma: no cover - opentelemetry is a hard dep of arize-otel
+        return _NOOP_SPAN
+    return trace.get_current_span()
+
+
+def add_span_event(
+    span: Any, name: str, attributes: Optional[Mapping[str, Any]] = None
+) -> None:
+    """Timestamped point-in-time marker on a span — used for things that happen
+    *during* a stage rather than bounding it (a crawl budget hit, a retry, a
+    swallowed sub-extractor warning)."""
+    try:
+        payload: dict[str, Any] = {}
+        for key, value in (attributes or {}).items():
+            if value is None:
+                continue
+            payload[key] = (
+                _truncate(value)
+                if isinstance(value, str)
+                else value
+                if isinstance(value, (bool, int, float))
+                else _serialize(value)[0]
+            )
+        span.add_event(name, payload)
+    except Exception:  # noqa: BLE001
+        logger.debug("could not add span event %s", name, exc_info=True)
 
 
 def set_span_input(span: Any, value: Any) -> None:
@@ -454,6 +526,33 @@ def record_span_error(span: Any, exc: BaseException) -> None:
     span.set_status(Status(StatusCode.ERROR, str(exc)))
 
 
+def capture_context() -> Any:
+    """Snapshot the current span so work that runs later — a background audit
+    job, a queued run — can point back at whatever requested it.
+
+    Returns something suitable for ``traced_span(link_to=...)``, or None when
+    there is no recording span to link to."""
+    span = current_span()
+    try:
+        ctx = span.get_span_context()
+    except Exception:  # noqa: BLE001
+        return None
+    if not getattr(ctx, "is_valid", False):
+        return None
+    return ctx
+
+
+def _build_links(link_to: Any) -> Optional[list]:
+    if link_to is None:
+        return None
+    try:
+        from opentelemetry.trace import Link
+
+        return [Link(link_to)]
+    except Exception:  # noqa: BLE001
+        return None
+
+
 @contextmanager
 def traced_span(
     name: str,
@@ -464,6 +563,8 @@ def traced_span(
     session_id: Optional[str] = None,
     metadata: Optional[Mapping[str, Any]] = None,
     tracer_name: str = _TRACER_NAME,
+    root: bool = False,
+    link_to: Any = None,
 ) -> Iterator[Any]:
     """Open a span around a block of work and yield it, so the caller can stamp
     results on the way out (see enrich_audit.py's batch loop).
@@ -476,13 +577,35 @@ def traced_span(
             ...
             set_token_counts(span, total=usage.total_token_count)
 
-    session_id groups every span of one audit job into an Arize session."""
+    session_id groups every span of one audit job into an Arize session.
+
+    root=True starts a *new* trace even when a span is already current. An
+    audit job is submitted by a 50 ms POST and then runs for minutes on a
+    background task that inherited the request's context; nesting the job
+    under the request would produce a trace whose root ends long before its
+    children and whose latency reads as 50 ms. The job is its own trace
+    instead, and link_to=capture_context() records which request started it,
+    which is exactly what OTel links are for."""
     tracer = get_tracer(tracer_name)
     if tracer is None:
         yield _NOOP_SPAN
         return
 
-    with tracer.start_as_current_span(name) as span:
+    span_kwargs: dict[str, Any] = {}
+    links = _build_links(link_to)
+    if links:
+        span_kwargs["links"] = links
+    if root:
+        try:
+            from opentelemetry.context import Context
+
+            # An empty Context carries no parent span, so the SDK treats this
+            # span as the root of a fresh trace.
+            span_kwargs["context"] = Context()
+        except ImportError:  # pragma: no cover - part of opentelemetry-api
+            pass
+
+    with tracer.start_as_current_span(name, **span_kwargs) as span:
         span.set_attribute(SPAN_KIND, kind)
         if session_id:
             span.set_attribute(SESSION_ID, session_id)

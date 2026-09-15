@@ -16,6 +16,10 @@ so it is readable both as plain text and rendered Markdown:
 
 Writes are guarded by a per-path lock because the stage coroutines run
 concurrently (``asyncio.gather``) and several may finish at once.
+
+:func:`time_crawler` also opens a ``crawler.<name>`` trace span around the
+call, which is what the per-page ``crawler.page`` spans emitted inside the
+crawlers hang off — see ``ka11y/observability/spans.py``.
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ from __future__ import annotations
 import os
 import threading
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Callable, Optional
@@ -151,17 +155,75 @@ async def time_crawler(
     timing = CrawlerTimingLogger(output_dir)
     start = time.perf_counter()
     status = "ok"
+    # The same wrapper that produces the timing row opens the crawler's trace
+    # span, so the page spans the crawler emits underneath it nest correctly
+    # and a slow crawl is attributable to the pages that caused it.
+    with _traced_crawl(crawler, scope) as span:
+        try:
+            yield
+        except Exception as exc:
+            status = "error"
+            _fail_span(span, exc)
+            raise
+        finally:
+            duration = time.perf_counter() - start
+            pages: Optional[int] = None
+            if pages_getter is not None:
+                try:
+                    pages = pages_getter()
+                except Exception:
+                    pages = None
+            _finish_span(span, status=status, duration_s=duration, pages=pages)
+            timing.record(crawler, scope, duration, status, pages)
+
+
+@contextmanager
+def _traced_crawl(crawler: str, scope: str):
+    """Open ``crawler.<name>`` around one crawler invocation. Yields None (and
+    costs nothing) when the tracing package isn't importable."""
     try:
-        yield
-    except Exception:
-        status = "error"
-        raise
-    finally:
-        duration = time.perf_counter() - start
-        pages: Optional[int] = None
-        if pages_getter is not None:
-            try:
-                pages = pages_getter()
-            except Exception:
-                pages = None
-        timing.record(crawler, scope, duration, status, pages)
+        from ka11y.observability import attributes as attrs
+        from ka11y.observability.tracing import SpanKind, traced_span
+    except Exception:  # noqa: BLE001
+        yield None
+        return
+
+    with traced_span(
+        f"crawler.{crawler}",
+        kind=SpanKind.CHAIN,
+        attributes={
+            attrs.CRAWLER_NAME: crawler,
+            attrs.PAGE_URL: scope or None,
+        },
+    ) as span:
+        yield span
+
+
+def _finish_span(span, *, status: str, duration_s: float, pages: Optional[int]) -> None:
+    if span is None:
+        return
+    try:
+        from ka11y.observability import attributes as attrs
+        from ka11y.observability.tracing import set_span_attributes
+
+        set_span_attributes(
+            span,
+            {
+                attrs.STATUS: status,
+                attrs.DURATION_MS: round(duration_s * 1000.0, 3),
+                attrs.CRAWLER_PAGES_CRAWLED: pages,
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _fail_span(span, exc: BaseException) -> None:
+    if span is None:
+        return
+    try:
+        from ka11y.observability.tracing import record_span_error
+
+        record_span_error(span, exc)
+    except Exception:  # noqa: BLE001
+        pass

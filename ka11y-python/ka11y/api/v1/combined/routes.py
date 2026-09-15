@@ -30,6 +30,8 @@ from ka11y.utils.run_timing import compute_run_timing
 from pydantic import BaseModel, Field
 from .dispatcher import enqueue
 from .models import CombinedRequest, JobStatusResponse
+from ka11y.observability import attributes as attrs
+from ka11y.observability import current_span, set_span_attributes
 from .report import apply_reviews
 from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
@@ -306,6 +308,19 @@ async def _admit_run(payload: CombinedRequest, *, rerun_of: str | None = None) -
     logger = setup_logger(name="KAC", tag="combined")
 
     logger.info(f"[combined] Job {job_id} submitted for {url}")
+    # Stamp the job id on the HTTP span (the middleware's, still current here).
+    # The audit runs as its own trace, so this attribute is the thread that
+    # leads from "this request was slow / errored" to the audit it started.
+    set_span_attributes(
+        current_span(),
+        {
+            attrs.JOB_ID: job_id,
+            attrs.JOB_URL: url,
+            attrs.JOB_LANG: payload.lang,
+            attrs.JOB_WCAG_LEVEL: payload.wcag_level,
+            attrs.JOB_RERUN_OF: rerun_of,
+        },
+    )
     return _jobs[job_id]
 
 
