@@ -148,7 +148,28 @@ async def execute_rule_test(request: TestRuleRequest):
 
             # ── Image-crawler rules (1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 4.1.2) ──
             elif request.rule_id in ("wcag_1_1_1", "wcag_1_4_5", "wcag_1_4_11", "wcag_4_1_2", "wcag_1_4_3", "wcag_1_4_6"):
-                # _stage_image_audit returns Tuple[List[Dict], Optional[Dict]]
+                # Same single-pass path as the combined audit: the universal
+                # loader navigates the page once with image capture on, and
+                # the image stage only reads the resulting page docs. The
+                # snapshot cache is not used here because the image docs live
+                # in this request's temp dir.
+                step_logger = ExecutionStepLogger(
+                    output_dir=out_path, name="rule_evaluator", job_id=JOB_ID,
+                )
+                image_raw_dir = out_path / "image_raw"
+                await asyncio.wait_for(
+                    _load_universal_snapshot(
+                        url=url_str,
+                        output_dir=out_path,
+                        max_depth=0,
+                        job_id=JOB_ID,
+                        step_logger=step_logger,
+                        image_capture=True,
+                        image_raw_dir=image_raw_dir,
+                    ),
+                    timeout=120.0,
+                )
+                # _stage_image_audit returns Tuple[List[Dict], Optional[Dict], Optional[Dict]]
                 result = await asyncio.wait_for(
                     _stage_image_audit(
                         url=url_str,
@@ -158,6 +179,8 @@ async def execute_rule_test(request: TestRuleRequest):
                         run_image_audit=True,
                         job_id=JOB_ID,
                         lang=request.language,
+                        raw_dir=image_raw_dir,
+                        image_output_dir=out_path / "images",
                     ),
                     timeout=120.0,
                 )

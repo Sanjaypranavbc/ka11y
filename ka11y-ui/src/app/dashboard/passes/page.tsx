@@ -212,7 +212,7 @@ export default function PassesPage() {
 
               <div className="flex-[350] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
                 <p className="font-bold text-gray-100">{item.reasonTitle}</p>
-                <p className="text-gray-80">{item.reasonDescription}</p>
+                <p className="font-bold text-gray-80">{item.reasonDescription}</p>
                 {/* Learn More — hidden per review; restore by uncommenting.
                 {/^https?:\/\//.test(item.helpUrl) ? (
                   <a
@@ -247,7 +247,11 @@ export default function PassesPage() {
                 {item.elementFilename && (
                   <p className="font-medium break-words text-gray-100">{item.elementFilename}</p>
                 )}
-                <ElementImage srcs={item.imageUrls} className="h-[90px] w-[105px]" />
+                {/* Image box only for findings that are about an image; non-image
+                    rules (media, axe-core) render no placeholder. */}
+                {(item.imageUrls.length > 0 || item.elementFilename) && (
+                  <ElementImage srcs={item.imageUrls} className="h-[90px] w-[105px]" />
+                )}
                 {/* Only render the detail lines this finding actually has —
                     contrast colours belong to contrast rules and OCR text to
                     image rules, so showing every label on every row printed a

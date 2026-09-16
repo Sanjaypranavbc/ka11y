@@ -14,14 +14,12 @@ import pytest
 from ka11y.crawler import universal_page
 
 
+# The universal extractor now emits a single category. Every other
+# category it used to carry (forms, interactive, target_sizes, …) was removed
+# together with the auditors that consumed them; ``media`` is what the
+# MediaAuditor (1.2.x / 1.4.2) reads.
 _EXPECTED_TOP_KEYS = (
-    "forms",
-    "interactive",
-    "target_sizes",
-    "moving_content",
     "media",
-    "text_spacing",
-    "sensory",
 )
 
 # The inline JS extractor constants the crawler evaluates in-page.

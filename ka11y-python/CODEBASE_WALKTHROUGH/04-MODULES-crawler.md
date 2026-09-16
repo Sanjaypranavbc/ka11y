@@ -1,5 +1,17 @@
 # 4. Module-by-Module Breakdown — Group 2: Crawler
 
+> **2026-09-15 — crawler consolidation.** The combined audit now navigates
+> each page **once**: `universal_page.py` runs the image extractor + asset
+> capture (moved out of `optimized/engine.py` into
+> `ka11y/crawler/image_extractor.py`) on the page it already loaded, and the
+> image stage only reads the resulting page docs. `optimized/engine.py` and its
+> `BrowserManager` are CLI / legacy-route only; its private SSRF and
+> cookie-reject copies now import the shared modules. `browser_pool.py` gained
+> crash recovery and idle recycling and is the single browser-concurrency knob.
+> The per-function detail below predates that change where it describes
+> `engine.py` internals; see `ka11y-python/crawler-python.md` for the current
+> data pathway.
+
 Everything that drives Playwright/Chromium. Two large files
 (`optimized/engine.py`, `universal_page.py`) each embed a substantial
 in-browser JavaScript extraction script as a Python string constant executed

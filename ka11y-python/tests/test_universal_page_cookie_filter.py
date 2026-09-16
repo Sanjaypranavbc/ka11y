@@ -14,10 +14,12 @@ async def test_dismissed_cookie_ui_is_excluded_from_universal_snapshot():
     <html lang="en">
       <body>
         <button id="real-action" type="button">Continue</button>
+        <video id="real-video" src="/real.mp4" controls></video>
 
         <div id="onetrust-consent-sdk" role="dialog" aria-label="Cookie consent">
           <form id="cookie-form">
             <input id="cookie-pref" name="cookie-pref" placeholder="Cookie preference" />
+            <audio id="cookie-audio" src="/consent-jingle.mp3"></audio>
             <button
               id="onetrust-reject-all-handler"
               type="button"
@@ -38,6 +40,7 @@ async def test_dismissed_cookie_ui_is_excluded_from_universal_snapshot():
             <html lang="en">
               <body>
                 <div id="frame-cookie-banner" class="cookie-banner" role="dialog" aria-label="Cookie banner">
+                  <video id="frame-cookie-video" src="/banner.mp4"></video>
                   <button
                     id="frame-reject"
                     type="button"
@@ -47,6 +50,7 @@ async def test_dismissed_cookie_ui_is_excluded_from_universal_snapshot():
                   </button>
                 </div>
                 <button id="frame-real" type="button">Frame CTA</button>
+                <video id="frame-real-video" src="/frame-real.mp4" controls></video>
               </body>
             </html>
           `);
@@ -81,11 +85,15 @@ async def test_dismissed_cookie_ui_is_excluded_from_universal_snapshot():
                 output=snapshot,
             )
 
-            interactive_ids = {item.get("element_id") for item in snapshot.interactive}
-            form_ids = {item.get("id") for item in snapshot.forms}
+            # The universal extractor only emits ``media`` today; the consent
+            # scope filter must drop media that lives inside a dismissed
+            # cookie dialog (main frame and same-origin iframe alike) while
+            # keeping the page's real media elements.
+            media_ids = {item.get("element_id") for item in snapshot.media}
 
-            assert interactive_ids == {"real-action", "frame-real"}
-            assert "cookie-pref" not in form_ids
+            assert media_ids == {"real-video", "frame-real-video"}
+            assert "cookie-audio" not in media_ids
+            assert "frame-cookie-video" not in media_ids
         finally:
             await context.close()
             await browser.close()

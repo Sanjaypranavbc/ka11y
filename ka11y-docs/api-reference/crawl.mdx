@@ -3,6 +3,16 @@ title: "Crawl"
 description: "POST /api/v1/crawl/ — image and form crawl pipeline"
 ---
 
+<Warning>
+  **Deprecated.** This endpoint is not used by the ka11y UI or SDK, bypasses the
+  combined findings pipeline (different response shape, no SSE, no durable
+  store) and runs the standalone image engine with its own Chromium. It is kept
+  for backwards compatibility only and logs a deprecation warning on every
+  call. Use [`POST /api/v1/combined/combined-audit`](/api-reference/combined)
+  (or `/python-audit`) instead.
+</Warning>
+
+
 A lightweight endpoint that runs only the image and form crawlers (no label-in-name, moving content, or target size stages). Useful for quickly extracting raw element data before auditing.
 
 ## POST /api/v1/crawl/

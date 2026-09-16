@@ -39,10 +39,14 @@ CUSTOM_CHECKS_TIMEOUT_MS=30000
 |----------|---------|----------|-------------|
 | `NODE_BASE_URL` | `http://localhost:3000` | Yes (in Docker) | Base URL used by ka11y-python to reach the ka11y-node service |
 | `PYTHONUNBUFFERED` | — | Recommended | Set to `"1"` for real-time log output in Docker |
-| `KA11Y_MAX_BROWSERS` | `2` | No | Maximum concurrent Playwright context leases from `BrowserPool`. Bounds Chromium memory. See `ka11y-python/ka11y/crawler/browser_pool.py`. |
+| `KA11Y_MAX_BROWSER_CONTEXTS` | `2` | No | **The** browser-concurrency knob: concurrent Playwright context leases from the one pooled Chromium. Every browser-heavy stage reserves exactly one slot. `KA11Y_MAX_BROWSERS` (older name) and `KA11Y_HEAVY_STAGE_CONCURRENCY` (retired) are accepted as aliases. See `ka11y-python/ka11y/crawler/browser_pool.py`. |
+| `KA11Y_BROWSER_MAX_MEMORY_MB` | `0` (off) | No | Recycle the pooled Chromium between leases once its resident memory exceeds this. Never interrupts a running crawl. |
+| `KA11Y_BROWSER_MAX_LIFETIME_S` | `0` (off) | No | Recycle the pooled Chromium between leases once it is older than this many seconds. |
+| `KA11Y_UNIVERSAL_PARALLEL_PAGES` | `4` | No | Pages the universal crawl processes concurrently on one context. |
+| `KA11Y_IMAGE_CRAWL_PER_PAGE_SECONDS` / `KA11Y_IMAGE_CRAWL_TIMEOUT_CEILING` | `20` / `600` | No | Wall-clock budget for the crawl (floor 300 s): `max(300, min(per_page × pages, ceiling))`. When exceeded the crawl stops launching pages, finishes in-flight ones and continues with a `partial` snapshot + `crawl_time_budget_exceeded` warning. |
+| `KA11Y_UNIVERSAL_PIPELINE_CONTEXTS` / `KA11Y_UNIVERSAL_BACKGROUND_IMAGES` | `0` | No | Re-enable the dormant per-page extractors (unified-pipeline contexts, CSS background images). Nothing consumes them in the combined audit today. |
 | `KA11Y_MAX_CONCURRENT_JOBS` | `4` | No | Maximum concurrent `_run_job()` background tasks. Excess jobs sit in `status="queued"` until a slot frees. See `ka11y-python/ka11y/api/v1/combined/runner.py`. |
 | `KA11Y_JOB_TIMEOUT_SECONDS` | `1800` | No | Outer audit budget. Bounds the top-level `asyncio.gather` over axe + Python branches. On timeout both branches are cancelled and a scrubbed error is returned. |
-| `KA11Y_HEAVY_STAGE_CONCURRENCY` | `2` | No | Process-wide cap on concurrent browser-heavy stages (`image_audit`, `rendered_layout_audit`). Excess stages park on a semaphore — the queue wait does **not** count against `_STAGE_TIMEOUT_SECONDS`. See `ka11y-python/ka11y/api/v1/combined/stages.py`. |
 | `KA11Y_STAGE_TIMING_DIR` | `ka11y-python/logs/timings/` | No | Override the directory where per-(page, stage, rule) timing files (`<run_id>.jsonl` + `<run_id>.summary.log`) are written. See [Stage timing](/internals/stage-timing). |
 | `KA11Y_STAGE_TIMING_DISABLE` | — | No | Set to `1` / `true` to skip all stage-timing writes. Existing `crawler_timings.log` and `run_timings.log` are unaffected. |
 
@@ -69,11 +73,13 @@ NODE_BASE_URL=http://node:3000
 PYTHONUNBUFFERED=1
 
 # Concurrency caps — tune for the host's memory budget.
-# Chromium ≈ 300 MB per process; one process per pool, multiple contexts per process.
-KA11Y_MAX_BROWSERS=2
+# ONE Chromium process for the whole API; this bounds contexts (≈ concurrent crawls) on it.
+KA11Y_MAX_BROWSER_CONTEXTS=2
 KA11Y_MAX_CONCURRENT_JOBS=4
 KA11Y_JOB_TIMEOUT_SECONDS=1800
-KA11Y_HEAVY_STAGE_CONCURRENCY=2
+# Optional: recycle Chromium between crawls when it gets big / old.
+# KA11Y_BROWSER_MAX_MEMORY_MB=1500
+# KA11Y_BROWSER_MAX_LIFETIME_S=3600
 
 # Low-level per-(page, stage, rule) timing logs. Comment out the DISABLE line
 # to opt in; override the directory if you want logs outside the repo.

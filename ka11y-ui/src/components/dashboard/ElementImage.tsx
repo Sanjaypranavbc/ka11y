@@ -31,8 +31,10 @@ export function ElementImage({
   const list = (srcs ?? []).filter(Boolean);
   const current = idx < list.length ? list[idx] : null;
 
-  // No image available for this finding (e.g. non-image rule, or the crawler
-  // captured no source). Show an explicit, intentional empty state.
+  // No loadable image for this finding. Callers only mount this component
+  // for image findings (see the dashboard tables), so reaching here means an
+  // image rule whose capture failed or whose sources all 404 — worth showing
+  // explicitly rather than as a blank box.
   if (!current) {
     return (
       <div

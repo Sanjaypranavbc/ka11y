@@ -219,7 +219,12 @@ def extract_contrast_report(ocr_results: list) -> Dict[str, Any]:
 # ── Route ─────────────────────────────────────────────────────────────────────
 
 
-@router.post("/", response_model=PipelineResponse)
+@router.post(
+    "/",
+    response_model=PipelineResponse,
+    deprecated=True,
+    summary="DEPRECATED — use POST /api/v1/combined/combined-audit",
+)
 async def run_full_pipeline(
     payload: PipelineRequest,
     # ── shared output directory (resolved once, reused by all deps) ────────
@@ -229,6 +234,11 @@ async def run_full_pipeline(
     # ── auditors ──────────────────────────────────────────────────────────
     image_auditor: AltTextAccessibilityAuditor = Depends(get_alt_text_auditor),
 ):
+    logger.warning(
+        "DEPRECATED route %s called — it bypasses the combined findings pipeline "
+        "and will be removed; use POST /api/v1/combined/combined-audit.",
+        "/api/v1/crawl/" if "crawl" in __name__ else "/api/v1/pipeline/",
+    )
     url = str(payload.url)
     max_depth = payload.max_depth
 

@@ -4,6 +4,16 @@ description: "POST /api/v1/pipeline/ — sequential 11-step synchronous pipeline
 ---
 
 <Warning>
+  **Deprecated.** This endpoint is not used by the ka11y UI or SDK, bypasses the
+  combined findings pipeline (different response shape, no SSE, no durable
+  store) and runs the standalone image engine with its own Chromium. It is kept
+  for backwards compatibility only and logs a deprecation warning on every
+  call. Use [`POST /api/v1/combined/combined-audit`](/api-reference/combined)
+  (or `/python-audit`) instead.
+</Warning>
+
+
+<Warning>
   The pipeline endpoint is **synchronous and blocking**. For production use, prefer the [Combined endpoint](/api-reference/combined) which is async, non-blocking, and supports SSE streaming.
 </Warning>
 

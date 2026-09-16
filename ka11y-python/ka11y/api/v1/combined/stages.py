@@ -56,11 +56,6 @@ from ka11y.utils.crawler_settings import (
     get_max_warning_samples,
     select_ocr_candidate_paths,
 )
-from ka11y.accessibility.pipeline.pipeline_stage import (
-    _run_pipeline_stage as _real_run_pipeline_stage,
-)
-
-
 from ka11y.utils.step_logger import ExecutionStepLogger
 from ka11y.utils.crawler_timing import time_crawler
 
@@ -87,47 +82,14 @@ from ka11y.observability import attributes as attrs
 from ka11y.observability import SpanKind, set_span_attributes, traced_span
 
 
-async def _run_pipeline_stage(
-    url: str,
-    job_id: str,
-    run_image_audit: bool,
-    run_contrast_audit: bool = True,
-    lang: str = "en",
-    snapshot: Optional[Any] = None,
-) -> List[Dict[str, Any]]:
-    """Wrapper to record stage lifecycle and crawler time for the pipeline."""
-    _stage_start(job_id, "pipeline")
-    start_crawl: Optional[float] = None
-    if snapshot:
-        # Snapshot path: pipeline reuses the universal crawler's pass, so we
-        # report that same duration here rather than re-timing CPU work.
-        crawl_dur = _jobs.get(job_id, {}).get("universal_crawler_duration_s")
-        if crawl_dur:
-            _record_crawler_time(job_id, "pipeline", crawl_dur)
-    else:
-        # Single-URL fallback: ``_real_run_pipeline_stage`` opens its own page
-        # via ``_extract_contexts_for_url``. Time the call so the timing log
-        # shows the real browser work instead of an empty cell.
-        start_crawl = time.perf_counter()
-
-    try:
-        findings = await _real_run_pipeline_stage(
-            url=url,
-            job_id=job_id,
-            run_image_audit=run_image_audit,
-            run_contrast_audit=run_contrast_audit,
-            lang=lang,
-            snapshot=snapshot,
-        )
-        if start_crawl is not None:
-            _record_crawler_time(job_id, "pipeline", time.perf_counter() - start_crawl)
-        _stage_complete(job_id, "pipeline", len(findings))
-        return findings
-    except Exception as e:
-        if start_crawl is not None:
-            _record_crawler_time(job_id, "pipeline", time.perf_counter() - start_crawl)
-        _stage_error_and_warn(job_id, "pipeline", e)
-        return []
+# NOTE: the unified-pipeline stage wrapper (``_run_pipeline_stage``) that used
+# to live here was removed in the crawler consolidation. The
+# ``accessibility/pipeline`` package still exists and can be re-enabled by
+# setting ``KA11Y_UNIVERSAL_PIPELINE_CONTEXTS=1`` (which makes the universal
+# crawl populate ``PageSnapshot.pipeline_pages``) and wiring
+# ``accessibility.pipeline.pipeline_stage._run_pipeline_stage`` back into
+# ``_run_python_stages``. Until then nothing consumes those contexts, so the
+# extraction is off by default.
 
 # Maximum wall-clock seconds for the full image-audit stage (crawl + OCR).
 _STAGE_TIMEOUT_SECONDS = 1200
@@ -151,37 +113,32 @@ _CRAWL_PER_PAGE_SECONDS = float(os.environ.get("KA11Y_IMAGE_CRAWL_PER_PAGE_SECON
 # budget so OCR/contrast always has time to run on the images that were captured.
 _CRAWL_TIMEOUT_CEILING = float(os.environ.get("KA11Y_IMAGE_CRAWL_TIMEOUT_CEILING", "600"))
 
-# Process-wide queue for browser-heavy crawler stages. ``image_audit`` and
-# ``rendered_layout_audit`` each open their own Playwright contexts + image
-# buffers; with _MAX_CONCURRENT_JOBS=4 an unguarded depth>0 audit can spawn
-# 8 simultaneous BFS crawls and OOM-kill the container. The semaphore is
-# global (not per-job) so the surplus parks until a slot frees, regardless
-# of which job they belong to. Queue wait does NOT count against the stage
-# timeout — ``_heavy`` arms ``asyncio.wait_for`` only after acquiring the
-# slot, so a parked stage isn't killed for waiting its turn.
-_HEAVY_STAGE_CONCURRENCY = int(os.environ.get("KA11Y_HEAVY_STAGE_CONCURRENCY", "2"))
-_heavy_stage_sem: asyncio.Semaphore | None = None
-_heavy_stage_sem_loop: Any = None
-
-
-def _get_heavy_stage_sem() -> asyncio.Semaphore:
-    """Lazy per-event-loop semaphore so module import never touches the loop."""
-    global _heavy_stage_sem, _heavy_stage_sem_loop
-    current = asyncio.get_event_loop()
-    if _heavy_stage_sem is None or _heavy_stage_sem_loop is not current:
-        _heavy_stage_sem = asyncio.Semaphore(_HEAVY_STAGE_CONCURRENCY)
-        _heavy_stage_sem_loop = current
-    return _heavy_stage_sem
+def _crawl_budget_seconds(pages: int) -> float:
+    """Wall-clock budget for the browser crawl: a 300 s floor, scaled per
+    discovered page, capped so OCR/contrast still fit in the stage budget."""
+    return max(
+        _CRAWL_TIMEOUT_SECONDS,
+        min(_CRAWL_PER_PAGE_SECONDS * max(1, pages), _CRAWL_TIMEOUT_CEILING),
+    )
 
 
 async def _heavy(coro, *, timeout: float = _STAGE_TIMEOUT_SECONDS):
-    """Run ``coro`` while holding the global heavy-stage slot.
+    """Run a browser-heavy coroutine holding exactly one browser-pool slot.
 
-    Replaces ``_timed`` for browser-heavy stages: the per-stage deadline is
-    armed *after* the semaphore is acquired so a stage queued behind another
-    heavy stage isn't penalised for the wait.
+    There used to be a second, separate semaphore here
+    (``KA11Y_HEAVY_STAGE_CONCURRENCY``) guarding the same resource the pool
+    already bounds. Two semaphores on one resource is how you get either a
+    deadlock or a limit nobody can reason about; the pool's slot is now the
+    single knob (``KA11Y_MAX_BROWSER_CONTEXTS``, with the old env names still
+    honoured — see ``browser_pool.py``).
+
+    Queue wait still does NOT count against the stage timeout: the slot is
+    reserved first and ``asyncio.wait_for`` armed only after, and leases taken
+    inside the coroutine reuse the reservation instead of re-acquiring.
     """
-    async with _get_heavy_stage_sem():
+    from ka11y.crawler.browser_pool import reserve
+
+    async with reserve():
         return await asyncio.wait_for(coro, timeout=timeout)
 
 
@@ -368,8 +325,18 @@ async def _stage_image_audit(
     discovered_urls: List[str] | None = None,
     max_pages: int = 20,
     internal_links: bool = True,
+    raw_dir: Path | None = None,
+    image_output_dir: Path | None = None,
 ) -> Tuple[List[Dict], Optional[Dict[str, Any]]]:
-    """Crawl images → OCR → 1.1.1 alt-text + 1.4.3 contrast."""
+    """Images → OCR → 1.1.1 alt-text + 1.4.3 contrast.
+
+    ``raw_dir`` is the per-page image documents the universal crawl already
+    produced (``_load_universal_snapshot(image_capture=True)``). When given,
+    no browser is opened here — the adapter turns those docs into
+    ``ImageData`` and the rest of the stage is OCR + auditing. Without it the
+    standalone engine crawls ``url`` itself (legacy/direct callers only).
+    ``image_output_dir`` places the adapter's copied pixels + reports under
+    the job directory instead of a sibling timestamped folder."""
     _stage_start(job_id, "image_audit")
     if not run_ocr and not run_image_audit:
         _stage_complete(job_id, "image_audit", 0)
@@ -385,21 +352,33 @@ async def _stage_image_audit(
             TextClassification,
         )
 
-        image_crawler = AsyncImageCrawler(
+        crawler_kwargs: Dict[str, Any] = dict(
             base_url=url,
             max_depth=max_depth,
             max_pages=max_pages,
             internal_links=internal_links,
             job_id=job_id,
         )
+        if image_output_dir is not None:
+            crawler_kwargs["output_dir"] = str(image_output_dir)
+        image_crawler = AsyncImageCrawler(**crawler_kwargs)
 
         async def _crawl_and_save() -> None:
             start_crawl = time.perf_counter()
-            async with time_crawler(
-                output_dir, "image", url,
-                pages_getter=lambda: len(image_crawler.images_data),
+            # Phase 0 instrumentation: the image stage used to be one opaque
+            # duration. ``image_crawl`` / ``ocr_scan`` / ``alt_audit`` sub-stage
+            # rows in stage_timings make the crawl-vs-OCR-vs-audit split visible.
+            async with stage_timing.time_stage_async(
+                job_id, "image_audit", sub_stage="image_crawl",
+                extra={"pages": _crawl_page_count},
             ):
-                await image_crawler.crawl_page(discovered_urls=discovered_urls)
+                async with time_crawler(
+                    output_dir, "image", url,
+                    pages_getter=lambda: len(image_crawler.images_data),
+                ):
+                    await image_crawler.crawl_page(
+                        discovered_urls=discovered_urls, raw_dir=raw_dir
+                    )
             _record_crawler_time(job_id, "image_audit", time.perf_counter() - start_crawl)
             await asyncio.to_thread(image_crawler.save_results)
 
@@ -494,6 +473,25 @@ async def _stage_image_audit(
                         path_to_page[str(_sp)] = _pg
             page_lang_map = getattr(image_crawler, "page_langs", {}) or {}
 
+            # OCR category from the crawler's own classification, so the
+            # text detector no longer infers it from folder-name substrings.
+            category_by_path: Dict[str, str] = {}
+            for _img in image_crawler.images_data:
+                _sp = getattr(_img, "screenshot_path", None)
+                if not _sp:
+                    continue
+                _cls = str(getattr(_img, "classification", "") or "").lower()
+                _sub = str(getattr(_img, "sub_type", "") or "").lower()
+                if _sub == "buttons" or getattr(_img, "is_button", False):
+                    _cat = "button_text"
+                elif _sub == "logos" or getattr(_img, "is_logo", False):
+                    _cat = "logo_text"
+                elif _cls == "informative":
+                    _cat = "informational_text"
+                else:
+                    _cat = "with_text"
+                category_by_path[str(_sp)] = _cat
+
             ocr_groups: Dict[str, List[str]] = {}
             for _p in ocr_paths:
                 try:
@@ -515,6 +513,7 @@ async def _stage_image_audit(
                     source_directory=image_crawler.output_dir,
                     lang=_glang,
                     include_paths=_gpaths,
+                    category_by_path=category_by_path,
                 )
                 async with stage_timing.time_stage_async(
                     job_id,
@@ -581,12 +580,16 @@ async def _stage_image_audit(
                 total=len(image_crawler.images_data),
                 phase="alt_audit",
             )
-            records = await asyncio.to_thread(
-                auditor.generate_audit_report,
-                images_data=image_crawler.images_data,
-                ocr_results=ocr_results,
-                output_dir=image_crawler.output_dir,
-            )
+            async with stage_timing.time_stage_async(
+                job_id, "image_audit", sub_stage="alt_audit",
+                extra={"image_count": len(image_crawler.images_data)},
+            ):
+                records = await asyncio.to_thread(
+                    auditor.generate_audit_report,
+                    images_data=image_crawler.images_data,
+                    ocr_results=ocr_results,
+                    output_dir=image_crawler.output_dir,
+                )
             emit_stage_progress(
                 job_id,
                 "image_audit",
@@ -658,7 +661,13 @@ async def _load_universal_snapshot(
     step_logger: ExecutionStepLogger | None,
     internal_links: bool = True,
     max_pages: int = 20,
+    image_capture: bool = False,
+    image_raw_dir: Path | None = None,
+    time_budget_s: float | None = None,
 ):
+    """One browser pass over the site: media + links (+ images when
+    ``image_capture``). Returns the normalised snapshot; the image docs, when
+    requested, are on disk under ``image_raw_dir`` for ``_stage_image_audit``."""
     from ka11y.crawler.snapshot_normalizer import SnapshotNormalizer
     from ka11y.crawler.policy import CrawlPolicy
 
@@ -680,6 +689,9 @@ async def _load_universal_snapshot(
             record_har=False,
             step_logger=step_logger,
             policy=policy,
+            image_capture=image_capture,
+            image_raw_dir=image_raw_dir,
+            time_budget_s=time_budget_s,
         )
     crawl_dur = time.perf_counter() - start_crawl
     _jobs[job_id]["universal_crawler_duration_s"] = round(crawl_dur, 2)
@@ -809,22 +821,38 @@ async def _run_python_stages(
     def _timed(coro):
         return asyncio.wait_for(coro, timeout=_STAGE_TIMEOUT_SECONDS)
 
-    # A crawl (beyond the single root page) is needed if media/captions are
-    # active, or the caller explicitly asked for depth.
-    needs_crawl = any((run_media_audit, run_captions_audit)) or max_depth > 0
+    # ONE browser pass for everything. The universal loader navigates each
+    # page once and, when the image stage is on, runs the image extractor +
+    # asset capture on that same page. The image stage below then only reads
+    # the resulting page docs — it never opens a browser of its own.
+    wants_images = run_image_audit or run_ocr
+    needs_crawl = (
+        any((run_media_audit, run_captions_audit)) or wants_images or max_depth > 0
+    )
+    image_raw_dir: Optional[Path] = output_dir / "image_raw" if wants_images else None
+    image_output_dir: Optional[Path] = output_dir / "images" if wants_images else None
 
     snapshot = None
     discovered_urls = [url]
     crawled_pages: List[Dict[str, Any]] = []
     if needs_crawl:
-        snapshot = await _load_universal_snapshot(
-            url=url,
-            output_dir=output_dir,
-            max_depth=max_depth,
-            job_id=job_id,
-            step_logger=step_logger,
-            internal_links=internal_links,
-            max_pages=max_pages,
+        # Browser-heavy: hold the heavy-stage slot for the crawl itself (it
+        # used to be held by the image stage's private engine crawl). The
+        # per-page time budget is the same one the engine crawl had.
+        snapshot = await _heavy(
+            _load_universal_snapshot(
+                url=url,
+                output_dir=output_dir,
+                max_depth=max_depth,
+                job_id=job_id,
+                step_logger=step_logger,
+                internal_links=internal_links,
+                max_pages=max_pages,
+                image_capture=wants_images,
+                image_raw_dir=image_raw_dir,
+                time_budget_s=_crawl_budget_seconds(max_pages if max_depth > 0 else 1),
+            ),
+            timeout=_STAGE_TIMEOUT_SECONDS,
         )
         seen_pages: set[str] = set()
         discovered_urls = []
@@ -854,7 +882,9 @@ async def _run_python_stages(
     snapshot_task.set_result(snapshot)
 
     stage_coros = [
-        _heavy(
+        # No browser in here any more (adapter + OCR + auditor), so a plain
+        # timeout is enough — the heavy slot was already used by the crawl.
+        _timed(
             _stage_image_audit(
                 url,
                 output_dir,
@@ -867,6 +897,8 @@ async def _run_python_stages(
                 discovered_urls=discovered_urls,
                 max_pages=max_pages,
                 internal_links=internal_links,
+                raw_dir=image_raw_dir,
+                image_output_dir=image_output_dir,
             )
         ),
         _timed(

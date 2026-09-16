@@ -255,6 +255,15 @@ ka11y now prefers the **Unified Accessibility Pipeline** for any rule that requi
 
 ### Step 2 (Option A): Adding a Pipeline Policy
 
+<Note>
+  **Currently dormant.** `_run_pipeline_stage` is not wired into
+  `_run_python_stages`, and the universal crawl only populates
+  `PageSnapshot.pipeline_pages` when `KA11Y_UNIVERSAL_PIPELINE_CONTEXTS=1`.
+  A new Policy will not produce findings until both are re-enabled. For the
+  rules that ship today (1.1.1, 1.2.x, 1.4.2, 1.4.3, 1.4.5, 1.4.6, 1.4.11,
+  4.1.2) use Option B.
+</Note>
+
 1.  **Create the Policy**: Add a new policy class in `ka11y-python/ka11y/accessibility/pipeline/decisions/policies/policy_X_X_X.py` inheriting from `BasePolicy`.
 2.  **Define the Logic**: Implement the `evaluate()` method using the rich `ElementContext` (which includes `semantics`, `visual`, and `interaction` sub-contexts).
 3.  **Register the Policy**: Wire the new policy into `ka11y-python/ka11y/accessibility/pipeline/pipeline_stage.py`.
@@ -263,8 +272,8 @@ ka11y now prefers the **Unified Accessibility Pipeline** for any rule that requi
 ### Step 2 (Option B): Adding a Static/Rendered Auditor
 
 Before you create a new crawler, check whether the data already exists in:
-*   `ka11y-python/ka11y/crawler/universal_page.py`
-*   `ka11y-python/ka11y/crawler/rendered_layout_crawler.py`
+*   `ka11y-python/ka11y/crawler/universal_page.py` — one navigation per page: media, links, `<html lang>`, and (via
+    `ka11y/crawler/image_extractor.py`) every image element with its captured pixels
 
 1.  **Add/Update Auditor**: Auditors live under `ka11y-python/ka11y/accessibility/rules/`.
 2.  **Convert to Findings**: Edit `ka11y-python/ka11y/api/v1/combined/findings.py` to add a converter function.

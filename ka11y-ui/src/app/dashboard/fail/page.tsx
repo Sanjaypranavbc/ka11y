@@ -253,7 +253,7 @@ export default function ViolationsPage() {
 
               <div className="flex-[227] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
                 {violation.title && <p className="font-bold text-gray-100">{violation.title}</p>}
-                <p className="text-gray-80">{violation.description}</p>
+                <p className="font-bold text-gray-80">{violation.description}</p>
                 {/* Who the issue actually blocks. Only the LLM enrichment step
                     produces this, and only for high/critical findings, so it
                     stays hidden rather than printing a bare label. */}
@@ -295,7 +295,12 @@ export default function ViolationsPage() {
 
               <div className="flex-[227] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-4">
                 <p className="text-[14px] font-medium leading-5 break-words text-gray-100">{violation.elementTitle}</p>
-                <ElementImage srcs={violation.imageUrls} className="h-[61px] w-[105px]" />
+                {/* Image box only for findings that are about an image (a captured
+                    source or at least a captured filename). Non-image rules — media,
+                    axe-core — render no placeholder at all. */}
+                {(violation.imageUrls.length > 0 || violation.elementFile) && (
+                  <ElementImage srcs={violation.imageUrls} className="h-[61px] w-[105px]" />
+                )}
                 {/* Each line appears only when the finding actually carries
                     that value. Most rules are not image rules, so rendering
                     these unconditionally printed a bare "OCR:" on rows that

@@ -9,7 +9,7 @@ import csv
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 from ka11y.preprocessor import extract_color
 from ka11y.accessibility.rules.non_text import contrast_analyser
@@ -102,11 +102,22 @@ class OCRPreprocessing:
         output_directory: Optional[str] = None,
         lang: str = "en",
         include_paths: Optional[List[str]] = None,
+        category_by_path: Optional[Dict[str, str]] = None,
     ):
         self.source_directory = source_directory
         self.include_paths = [
             str(Path(path).resolve()) for path in (include_paths or []) if path
         ]
+        # Explicit OCR category per screenshot (resolved path → category key
+        # from config.ocr.categories). Supplied by the combined audit from the
+        # crawler's own classification so the category no longer depends on
+        # substrings of the storage path ("button", "logo", …) — a folder
+        # rename must not silently re-categorise every image.
+        self.category_by_path: Dict[str, str] = {
+            str(Path(path).resolve()): category
+            for path, category in (category_by_path or {}).items()
+            if path and category
+        }
 
         if output_directory is None:
             self.base_output_dir = source_directory
@@ -148,7 +159,14 @@ class OCRPreprocessing:
         self.skipped_images: List[str] = []
 
     def _determine_category(self, original_path: str) -> str:
-        """Heuristic to determine category based on source path."""
+        """OCR category for an image: the crawler-supplied classification when
+        the caller provided one, else the legacy path-substring heuristic."""
+        try:
+            explicit = self.category_by_path.get(str(Path(original_path).resolve()))
+        except (OSError, ValueError):
+            explicit = None
+        if explicit:
+            return explicit
         path_str = str(original_path).lower()
         if "button" in path_str:
             return "button_text"

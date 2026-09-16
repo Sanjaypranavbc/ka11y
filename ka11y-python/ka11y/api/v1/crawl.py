@@ -34,10 +34,20 @@ logger = setup_logger(name="KAC", tag="crawl")
 # ── Route ─────────────────────────────────────────────────────────────────────
 
 
-@router.post("/", response_model=CrawlResponse)
+@router.post(
+    "/",
+    response_model=CrawlResponse,
+    deprecated=True,
+    summary="DEPRECATED — use POST /api/v1/combined/combined-audit",
+)
 async def run_crawler(
     payload: CrawlRequest,
 ):
+    logger.warning(
+        "DEPRECATED route %s called — it bypasses the combined findings pipeline "
+        "and will be removed; use POST /api/v1/combined/combined-audit.",
+        "/api/v1/crawl/" if "crawl" in __name__ else "/api/v1/pipeline/",
+    )
     url = str(payload.url)
     max_depth = payload.max_depth
     config = get_config()

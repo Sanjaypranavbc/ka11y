@@ -7,7 +7,7 @@ rejection, SSRF guard, classification, overlay-screenshot-vs-download asset
 capture, 1.2.1 transcript context).
 
 It exposes the exact surface the existing pipeline uses — ``crawl_page()``,
-``save_results()``, ``images_data``, ``images_metadata``, ``visited_urls``,
+``save_results()``, ``images_data``, ``visited_urls``,
 ``page_langs``, ``output_dir`` — so the OCR / audit / report stages are used
 unchanged. Internally it runs the engine into a private ``_raw`` sub-directory
 of raw per-page JSON, then the adapter converts those facts into ``ImageData``
@@ -23,7 +23,7 @@ from typing import Dict, List, Set
 from urllib.parse import urlparse
 
 from ka11y.utils.config_loader import load_config
-from ka11y.crawler.models import ImageData, ImageMetadata
+from ka11y.crawler.models import ImageData
 from ka11y.crawler.optimized.engine import Crawler as _Engine
 from ka11y.crawler.optimized.adapter import build_image_data
 
@@ -65,6 +65,7 @@ class OptimizedImageCrawler:
         max_pages: int | None = None,
         internal_links: bool = True,
         job_id: str | None = None,
+        output_dir: str | None = None,
     ) -> None:
         self.base_url = base_url
         self.max_depth = max_depth
@@ -76,14 +77,19 @@ class OptimizedImageCrawler:
         self.job_id = job_id
 
         self.images_data: List[ImageData] = []
-        self.images_metadata: List[ImageMetadata] = []
         self.visited_urls: Set[str] = set()
         self.page_langs: Dict[str, str] = {}
 
-        base_out = CONFIG["input"]["output_dir"]
-        domain = urlparse(base_url).netloc.replace("www.", "").replace(".", "_")
-        timestamp = time.strftime("%m%d_%H%M")
-        self.output_dir = f"{base_out}/{domain}_{timestamp}"
+        if output_dir:
+            # Combined audit: images live under the job directory so every
+            # artefact of one run is in one tree (and the asset-serving
+            # containment check has a single root to reason about).
+            self.output_dir = str(output_dir)
+        else:
+            base_out = CONFIG["input"]["output_dir"]
+            domain = urlparse(base_url).netloc.replace("www.", "").replace(".", "_")
+            timestamp = time.strftime("%m%d_%H%M")
+            self.output_dir = f"{base_out}/{domain}_{timestamp}"
         self._create_directories()
 
     def _create_directories(self) -> None:
@@ -93,9 +99,41 @@ class OptimizedImageCrawler:
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)
 
-    async def crawl_page(self, discovered_urls: List[str] | None = None) -> None:
+    async def crawl_page(
+        self,
+        discovered_urls: List[str] | None = None,
+        raw_dir: Path | str | None = None,
+    ) -> None:
+        """Populate ``images_data`` / ``page_langs`` / ``visited_urls``.
+
+        ``raw_dir`` — the fast path used by the combined audit: the universal
+        page loader has already navigated every page with image capture on and
+        written engine-shaped page docs there, so this only runs the adapter.
+        No browser is opened.
+
+        Without ``raw_dir`` the standalone engine crawls ``base_url`` itself
+        (legacy ``/crawl`` and ``/pipeline`` routes, and the CLI).
+        """
         out = Path(self.output_dir)
         self._create_directories()
+
+        if raw_dir is not None:
+            self.images_data, self.page_langs, self.visited_urls = build_image_data(
+                Path(raw_dir), out
+            )
+            if not self.visited_urls:
+                raise ImageCrawlerNavigationError(
+                    code="zero_pages_crawled",
+                    url=self.base_url,
+                    host=urlparse(self.base_url).hostname,
+                    original_message=(
+                        "The universal crawl produced no successful page documents "
+                        f"under {raw_dir}, so there are no images to audit."
+                    ),
+                    attempts=1,
+                )
+            return
+
         raw = out / "_raw"
 
         crawler_cfg = CONFIG.get("crawler", {})

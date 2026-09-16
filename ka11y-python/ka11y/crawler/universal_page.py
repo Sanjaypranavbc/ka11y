@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import os
+import time
+from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -19,20 +21,36 @@ from ka11y.crawler.policy import CrawlPolicy
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.utils.step_logger import ExecutionStepLogger
 from ka11y.observability.spans import page_span, stamp_page_outcome
-
-# Pipeline extractors run per-page during the universal crawl so the unified
-# pipeline (1.1.1, 1.4.3, 1.4.5, 1.4.6, 1.4.11, 2.4.7, 2.4.13, 2.5.3, 2.5.8 …)
-# covers every BFS-discovered page without re-navigation. Imports are local to
-# the helper that uses them to keep this module importable in test contexts
-# that stub the pipeline.
-from ka11y.accessibility.pipeline.extractors.element_context_extractor import (
-    ElementContextExtractor,
-)
-from ka11y.accessibility.pipeline.extractors.semantic_relationship_engine import (
-    SemanticRelationshipEngine,
+from ka11y.crawler.image_extractor import (
+    DOWNLOAD_CONCURRENCY,
+    extract_image_page,
+    write_page_doc,
 )
 
 logger = setup_logger(name="KAC", tag="universal_page")
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = (os.environ.get(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
+# ── Optional per-page extractors (off by default) ────────────────────────────
+# Both of these used to run unconditionally on every BFS page and neither had a
+# consumer in the combined audit:
+#
+#  * ``pipeline_pages`` feeds ``accessibility/pipeline`` (DecisionEngine +
+#    Policy1xx), which is no longer wired into ``_run_python_stages``.
+#  * ``background_images`` was extracted for a planned image-audit hook that
+#    was never written.
+#
+# They stay available behind env flags so the unified pipeline can be brought
+# back without re-implementing the extraction, but the default crawl no longer
+# pays for them.
+_PIPELINE_CONTEXTS_ENABLED = _env_flag("KA11Y_UNIVERSAL_PIPELINE_CONTEXTS", False)
+_BACKGROUND_IMAGES_ENABLED = _env_flag("KA11Y_UNIVERSAL_BACKGROUND_IMAGES", False)
 
 # Number of pages the universal snapshot crawls in parallel. Each worker leases
 # its own ``new_page()`` off the shared BrowserContext; 4 is the aggressive
@@ -87,6 +105,23 @@ class PageSnapshot(BaseModel):
     har_path: Optional[str] = None
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+@dataclass
+class ImageCaptureOptions:
+    """Turns on the image-extraction + asset-capture step for every page the
+    universal crawl visits (``UniversalPageLoader.load(image_capture=True)``).
+
+    ``raw_dir`` receives one engine-shaped ``<slug>.json`` per page plus the
+    ``screenshots/`` and ``assets/`` trees — exactly what
+    ``optimized/adapter.build_image_data`` consumes. ``download_sem`` is
+    shared by every page in the crawl so N parallel pages cannot open
+    N × DOWNLOAD_CONCURRENCY asset fetches through one browser context.
+    """
+
+    raw_dir: Path
+    download_sem: asyncio.Semaphore
+    screenshots: bool = True
 
 
 _COMBINED_EXTRACT_JS = r"""(frameMeta) => {
@@ -620,10 +655,24 @@ class UniversalPageLoader:
         step_logger: ExecutionStepLogger | None = None,
         policy: CrawlPolicy | None = None,
         seed_url: Optional[List[str]] = None,
+        image_capture: bool = False,
+        image_raw_dir: Optional[Path] = None,
+        time_budget_s: Optional[float] = None,
     ) -> PageSnapshot:
         """
         Main entry point for universal crawling. Uses a single browser session
         and a bounded queue (Optimized v2).
+
+        ``image_capture`` runs the image extractor + asset capture on every
+        page *after* the media/link extraction, writing engine-shaped page
+        docs into ``image_raw_dir`` (default ``output_dir / "image_raw"``).
+        This is what lets the combined audit navigate each page once instead
+        of handing the page list to a second crawler.
+
+        ``time_budget_s`` stops launching new pages once the wall clock
+        budget is spent; pages already in flight finish, the snapshot is
+        marked ``partial`` and a ``crawl_time_budget_exceeded`` warning is
+        recorded. Without it the crawl is bounded only by ``max_pages``.
 
         ``max_pages`` / ``internal_links`` are honoured when no explicit
         ``policy`` is supplied — previously they were ignored here and the page
@@ -664,6 +713,20 @@ class UniversalPageLoader:
 
         visited: set[str] = set()
 
+        image_opts: Optional[ImageCaptureOptions] = None
+        if image_capture:
+            raw_dir = Path(image_raw_dir) if image_raw_dir else output_dir / "image_raw"
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            image_opts = ImageCaptureOptions(
+                raw_dir=raw_dir,
+                download_sem=asyncio.Semaphore(DOWNLOAD_CONCURRENCY),
+            )
+        deadline = (
+            time.monotonic() + time_budget_s
+            if time_budget_s is not None and time_budget_s > 0
+            else None
+        )
+
         from ka11y.crawler.browser_pool import leased_context
 
         context_kwargs: Dict[str, Any] = {
@@ -703,6 +766,26 @@ class UniversalPageLoader:
                     and len(inflight) < _UNIVERSAL_PARALLEL_PAGES
                     and not budget_hit
                 ):
+                    if deadline is not None and time.monotonic() > deadline:
+                        remaining = len(queue)
+                        logger.warning(
+                            f"[universal] crawl time budget ({time_budget_s:.0f}s) "
+                            f"exhausted; {remaining} queued page(s) not visited"
+                        )
+                        snapshot.partial = True
+                        snapshot.warnings.append(
+                            {
+                                "code": "crawl_time_budget_exceeded",
+                                "page_url": url,
+                                "message": (
+                                    f"crawl stopped after {time_budget_s:.0f}s; "
+                                    f"{remaining} discovered page(s) were not visited"
+                                ),
+                            }
+                        )
+                        budget_hit = True
+                        break
+
                     if not _can_launch():
                         logger.warning(
                             f"[universal] crawl budget reached "
@@ -734,6 +817,7 @@ class UniversalPageLoader:
                             policy=policy,
                             output=snapshot,
                             step_logger=step_logger,
+                            image_opts=image_opts,
                         )
                     )
                     inflight[task] = current_depth
@@ -786,6 +870,7 @@ class UniversalPageLoader:
         policy: CrawlPolicy,
         output: PageSnapshot,
         step_logger: ExecutionStepLogger | None,
+        image_opts: Optional[ImageCaptureOptions] = None,
     ) -> List[str]:
         """Open a ``crawler.page`` span and crawl one URL.
 
@@ -801,6 +886,7 @@ class UniversalPageLoader:
                 policy=policy,
                 output=output,
                 step_logger=step_logger,
+                image_opts=image_opts,
             )
 
     @classmethod
@@ -814,6 +900,7 @@ class UniversalPageLoader:
         policy: CrawlPolicy,
         output: PageSnapshot,
         step_logger: ExecutionStepLogger | None,
+        image_opts: Optional[ImageCaptureOptions] = None,
     ) -> List[str]:
         page = await context.new_page()
         page_warning_count = 0
@@ -842,7 +929,12 @@ class UniversalPageLoader:
             # reports nothing usable (e.g. ``about:blank`` after a hard nav fail).
             # NB: Playwright-Python exposes ``page.url`` as a property (the JS
             # binding uses ``page.url()`` — do not add parens here).
-            resolved_url = canonicalize_url(page.url or "") or url
+            raw_page_url = page.url or ""
+            if raw_page_url.startswith("about:"):
+                # ``about:blank`` is what a page reports before/without a real
+                # navigation; it must never become a finding's page_url.
+                raw_page_url = ""
+            resolved_url = canonicalize_url(raw_page_url) or url
 
             # Chunked extraction to combat virtualized DOMs (Infinite scroll)
             await cls._extract_page_chunked(page, page_url=resolved_url, output=output)
@@ -869,6 +961,26 @@ class UniversalPageLoader:
                 )
                 links = links[: policy.max_links_per_page]
 
+            # ``<html lang>`` drives OCR engine selection per page (Japanese →
+            # PaddleOCR). Read it here, before the image step mutates the page.
+            page_lang = await cls._page_lang(page)
+
+            # Image extraction + asset capture on the SAME loaded page. Runs
+            # last on purpose: it scrolls and clicks tab/accordion/carousel
+            # controls to reveal hidden images, so everything that must see
+            # the page in its arrival state (media, links) has already run.
+            images_captured = 0
+            if image_opts is not None:
+                images_captured = await cls._extract_images(
+                    page=page,
+                    page_url=resolved_url,
+                    depth=depth,
+                    opts=image_opts,
+                    output=output,
+                    page_lang=page_lang,
+                    step_logger=step_logger,
+                )
+
             def _count_for_url(collection: list) -> int:
                 return len([r for r in collection if r.get("page_url") == resolved_url])
 
@@ -880,6 +992,8 @@ class UniversalPageLoader:
                     "depth": depth,
                     "media": page_media,
                     "links_found": len(links),
+                    "page_lang": page_lang,
+                    "images": images_captured,
                 }
             )
             output.pages_crawled += 1
@@ -941,6 +1055,71 @@ class UniversalPageLoader:
             await page.close()
 
         return links
+
+    @staticmethod
+    async def _page_lang(page: Page) -> Optional[str]:
+        try:
+            value = await page.evaluate(
+                "() => ((document.documentElement && document.documentElement.lang) || '').trim() || null"
+            )
+        except Exception:  # noqa: BLE001 — advisory only
+            return None
+        return value or None
+
+    @classmethod
+    async def _extract_images(
+        cls,
+        *,
+        page: Page,
+        page_url: str,
+        depth: int,
+        opts: ImageCaptureOptions,
+        output: PageSnapshot,
+        page_lang: Optional[str],
+        step_logger: ExecutionStepLogger | None,
+    ) -> int:
+        """Run the shared image extractor on this page and persist its doc.
+
+        One engine-shaped JSON per page lands in ``opts.raw_dir`` so
+        ``build_image_data`` can turn it into ``ImageData`` records without
+        knowing which crawler produced it. Failures degrade to a warning and
+        ``partial=True`` — the media/link data for the page is already in the
+        snapshot and must not be lost because a screenshot timed out.
+        """
+        try:
+            doc = await extract_image_page(
+                page,
+                page_url,
+                depth,
+                opts.raw_dir,
+                screenshots=opts.screenshots,
+                download_sem=opts.download_sem,
+            )
+            doc.pop("links", None)
+            if page_lang and not doc.get("page_lang"):
+                doc["page_lang"] = page_lang
+            await asyncio.to_thread(write_page_doc, doc, opts.raw_dir)
+            count = len(doc.get("elements") or [])
+        except Exception as exc:  # noqa: BLE001 — never sink the page
+            output.partial = True
+            output.warnings.append(
+                {
+                    "code": "image_extract_failed",
+                    "page_url": page_url,
+                    "message": str(exc),
+                }
+            )
+            logger.warning(f"[universal] image extraction failed for {page_url}: {exc}")
+            return 0
+
+        if step_logger:
+            step_logger.record(
+                step="universal_images",
+                status="completed",
+                message="Image elements extracted and captured",
+                context={"url": page_url, "elements": count},
+            )
+        return count
 
     @classmethod
     async def _prepare_page(
@@ -1066,8 +1245,20 @@ class UniversalPageLoader:
         can still report "no findings here" rather than the page being
         silently dropped from the pipeline output.
         """
+        if not _PIPELINE_CONTEXTS_ENABLED:
+            return
+
         contexts: list = []
         try:
+            # Imported lazily so the (heavy) pipeline package is only loaded
+            # when a deployment actually opts in.
+            from ka11y.accessibility.pipeline.extractors.element_context_extractor import (
+                ElementContextExtractor,
+            )
+            from ka11y.accessibility.pipeline.extractors.semantic_relationship_engine import (
+                SemanticRelationshipEngine,
+            )
+
             contexts = await ElementContextExtractor.extract_contexts(page)
             if contexts:
                 await SemanticRelationshipEngine.enrich_semantics(page, contexts)
@@ -1175,7 +1366,10 @@ class UniversalPageLoader:
 
             # Separate pass: extract CSS background-image URLs. Kept out of
             # the universal extractor to avoid bloating its single page.evaluate
-            # payload (Sprint 3 / step 15).
+            # payload (Sprint 3 / step 15). Off by default — see
+            # ``_BACKGROUND_IMAGES_ENABLED``.
+            if not _BACKGROUND_IMAGES_ENABLED:
+                continue
             try:
                 bg_records = await frame.evaluate(
                     _BACKGROUND_IMAGES_JS,

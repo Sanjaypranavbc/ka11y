@@ -644,14 +644,13 @@ async def get_job_image(job_id: str, path: str):
 
     # Defence-in-depth: even if a (poisoned) auditor record stored a symlink
     # pointing outside the configured output tree, refuse to serve content
-    # that escapes it. Bounding to the *configured* output root (rather than
-    # the per-job dir) is the right granularity here — the image crawler
-    # writes to ``{output_root}/{domain}_{ts}`` which is a SIBLING of the
-    # combined job's ``{output_root}/{domain}_{ts}_{job_id}_combined`` dir,
-    # so a per-job containment check rejects every legitimate image path
-    # ("image unavailable" everywhere in the UI). The original symlink-
-    # attack guard from the security review still holds: paths outside the
-    # configured root are refused.
+    # that escapes it. Combined-audit images now live under the job's own
+    # directory (``<job_dir>/images/…``), but runs produced before the
+    # crawler consolidation wrote them to a SIBLING ``{output_root}/{domain}_{ts}``
+    # folder, so the configured output root (and the job dir's parent) stay
+    # accepted as containment roots. The original symlink-attack guard from
+    # the security review still holds: paths outside the configured root are
+    # refused.
     from ka11y.utils.config_loader import load_config
 
     try:

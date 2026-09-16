@@ -103,3 +103,47 @@ class TestHostIsBlocked:
         # Empty / missing host is rejected by the URL parser separately;
         # this guard should not crash on it.
         assert not guard._host_is_blocked("")
+
+
+# ---------------------------------------------------------------------------
+# Parity with the SSRF copy that used to live inside optimized/engine.py.
+# The engine now imports ``_host_is_blocked`` from here; these lock in every
+# case the private copy handled so retiring it cannot silently widen access.
+# ---------------------------------------------------------------------------
+
+_ENGINE_ERA_BLOCKED_HOSTS = [
+    "127.0.0.1",
+    "10.0.0.1",
+    "172.16.5.5",
+    "192.168.1.1",
+    "169.254.169.254",          # cloud metadata
+    "100.64.0.1",               # CGNAT
+    "0.0.0.0",
+    "localhost",
+    "2130706433",               # decimal 127.0.0.1
+    "0x7f000001",               # hex 127.0.0.1
+    "017700000001",             # octal-ish (leading-0 base prefix form)
+    "[::1]",
+    "::ffff:127.0.0.1",         # IPv4-mapped loopback
+    "[::ffff:10.0.0.1]",        # IPv4-mapped RFC1918
+    "fe80::1",
+    "fc00::1",
+]
+
+
+@pytest.mark.parametrize("host", _ENGINE_ERA_BLOCKED_HOSTS)
+def test_engine_era_private_hosts_are_blocked(host):
+    assert guard._host_is_blocked(host) is True
+
+
+@pytest.mark.parametrize("host", ["8.8.8.8", "1.1.1.1", "[2001:4860:4860::8888]"])
+def test_public_literals_are_allowed(host):
+    assert guard._host_is_blocked(host) is False
+
+
+def test_engine_reuses_shared_guard_and_cookie_handler():
+    from ka11y.crawler import cookie_handler
+    from ka11y.crawler.optimized import engine
+
+    assert engine.ssrf_host_is_blocked is guard._host_is_blocked
+    assert engine.reject_cookies is cookie_handler.handle_cookies
