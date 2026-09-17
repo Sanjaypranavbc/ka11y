@@ -63,6 +63,41 @@ services:
   # Local stand-in for Amazon RDS PostgreSQL. In production point DATABASE_URL
   # at the RDS endpoint (add ?sslmode=require) and remove this service; the
   # schema (Alembic, ka11y-python/alembic/) is identical on both.
+#  postgres:
+#    image: postgres:16-alpine
+#    container_name: ka11y-postgres
+#    restart: unless-stopped
+#
+#    networks:
+#      - ka11y-net
+#
+#    # POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD come from the same
+#    # ka11y-python/.env the python service loads, so one file holds the
+#    # credentials and the DATABASE_URL that uses them.
+#    env_file:
+#      - path: ./ka11y-python/.env
+#        required: true
+#
+#    # Loopback only: nothing outside this host needs the DB.
+#    ports:
+#      - "127.0.0.1:5432:5432"
+#
+#    volumes:
+#      - ka11y_pg:/var/lib/postgresql/data
+#
+#    healthcheck:
+#      test:         ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+#      interval:     10s
+#      timeout:      5s
+#      start_period: 20s
+#      retries:      10
+#
+#    logging:
+#      driver: json-file
+#      options:
+#        max-size: "10m"
+#        max-file: "5"
+  # ── PostgreSQL — users, OIDC identities, sessions, audit history ──────────
   postgres:
     image: postgres:16-alpine
     container_name: ka11y-postgres
@@ -71,14 +106,10 @@ services:
     networks:
       - ka11y-net
 
-    # POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD come from the same
-    # ka11y-python/.env the python service loads, so one file holds the
-    # credentials and the DATABASE_URL that uses them.
+    # PostgreSQL credentials
     env_file:
-      - path: ./ka11y-python/.env
-        required: true
+      - ./ka11y-python/.env
 
-    # Loopback only: nothing outside this host needs the DB.
     ports:
       - "127.0.0.1:5432:5432"
 
@@ -86,11 +117,15 @@ services:
       - ka11y_pg:/var/lib/postgresql/data
 
     healthcheck:
-      test:         ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
-      interval:     10s
-      timeout:      5s
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
+        ]
+      interval: 10s
+      timeout: 5s
       start_period: 20s
-      retries:      10
+      retries: 10
 
     logging:
       driver: json-file
