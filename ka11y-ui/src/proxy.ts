@@ -11,8 +11,24 @@ import type { NextRequest } from "next/server";
  */
 const SESSION_COOKIE = "ka11y_session";
 
+/**
+ * Cookies are scoped per host, so a session created on localhost is invisible
+ * on 127.0.0.1 and vice versa. Fold the loopback IP onto "localhost" so local
+ * use has one origin (and one cookie jar) whichever address was typed.
+ */
+const CANONICAL_LOCAL_HOST = "localhost";
+
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  // Use the raw Host header: behind Docker's port mapping nextUrl reports the
+  // server's own bind address, not what the browser typed.
+  const host = request.headers.get("host") ?? "";
+  if (host === "127.0.0.1" || host.startsWith("127.0.0.1:")) {
+    const port = host.includes(":") ? host.slice(host.indexOf(":")) : "";
+    const proto = request.headers.get("x-forwarded-proto") ?? "http";
+    return NextResponse.redirect(`${proto}://${CANONICAL_LOCAL_HOST}${port}${pathname}${search}`, 308);
+  }
   const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
 
   const gated = pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
@@ -27,5 +43,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/admin/:path*"],
+  // Everything except Next's own assets, so the host redirect covers /login
+  // and /register as well as the gated areas.
+  matcher: ["/((?!_next/|favicon.ico).*)"],
 };

@@ -4,10 +4,11 @@ ka11y/db/models/identity.py
 Who is using the product: organizations, users, their OAuth/OIDC identities,
 organization membership, and browser sessions.
 
-Authentication is OAuth 2.0 / OpenID Connect only — there is deliberately no
-password column anywhere. An external identity is identified by
-``(provider, provider_user_id)``, never by email, so a user can later link a
-second provider (Google + Microsoft) to the same application account.
+Authentication is OAuth 2.0 / OpenID Connect, or e-mail + password for
+users on the allow-list (``users.password_hash``, scrypt, NULL for
+OIDC-only accounts — see ``ka11y/auth/passwords.py``). An external identity
+is identified by ``(provider, provider_user_id)``, never by email, so a user
+can later link a second provider (Google + Microsoft) to the same account.
 
 Users and organizations are soft-deleted (``deleted_at``); nothing cascades
 from them, so audit history survives account removal.
@@ -51,6 +52,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     timezone: Mapped[Optional[str]] = mapped_column(String(100))
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # scrypt hash for e-mail + password sign-in; NULL when the account only
+    # signs in through an identity provider. Never a plaintext "password".
+    password_hash: Mapped[Optional[str]] = mapped_column(Text)
 
     identities: Mapped[List["OAuthIdentity"]] = relationship(back_populates="user")
     memberships: Mapped[List["OrganizationMember"]] = relationship(back_populates="user")

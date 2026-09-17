@@ -67,6 +67,22 @@ def _alt_text(el: dict):
     return name or None                 # alt attribute missing → None
 
 
+_RASTER_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"RIFF", b"BM", b"II*\x00", b"MM\x00*")
+
+
+def _is_raster(path: Path | None) -> bool:
+    """Sniff the first bytes: PNG/JPEG/GIF/WEBP/BMP/TIFF. False for SVG/XML,
+    HTML error pages and empty files, whatever the extension says."""
+    if path is None:
+        return False
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(12)
+    except OSError:
+        return False
+    return any(head.startswith(m) for m in _RASTER_MAGIC)
+
+
 def _ext(el: dict, captured: Path | None) -> str:
     if captured and captured.suffix:
         return captured.suffix.lstrip(".").lower()
@@ -200,12 +216,16 @@ def build_image_data(
                 ext = _ext(el, captured)
 
                 el_type = el.get("element_type", "")
+                # Screenshots are always PNG, but a *downloaded* SVG source is
+                # XML: keep its real extension so the OCR scan (raster
+                # extensions only) leaves it alone instead of failing on it.
+                raster = _is_raster(captured)
                 if "svg" in el_type:
                     prefix = "svg_"
-                    ext = "png"
+                    ext = "png" if raster else ("svg" if ext in ("svg", "bin", "png") else ext)
                 elif sub_type == "buttons" and (flags.get("is_button") or el_type == "button"):
                     prefix = "btn_"
-                    ext = "png"
+                    ext = "png" if raster else ext
                 else:
                     prefix = "img_"
 

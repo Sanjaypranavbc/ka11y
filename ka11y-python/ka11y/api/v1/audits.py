@@ -53,7 +53,7 @@ async def _assert_can_view(job_id: str, user: CurrentUser) -> None:
     """A job is visible to its owner and to members of the owning organization.
     Jobs PostgreSQL does not know (anonymous) are visible to anyone signed in."""
     owner = await audit_repo.get_owner(job_id)
-    if owner is None or user.is_anonymous:
+    if owner is None or user.is_anonymous or user.is_admin:
         return
     if owner["user_id"] == user.user_id:
         return

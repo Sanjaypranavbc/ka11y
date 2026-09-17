@@ -37,7 +37,6 @@ from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
 from ka11y.auth import CurrentUser, require_user
 from ka11y.db import audit_repo
-from ka11y.store.assets import get_asset
 
 
 class FindingReviewRequest(BaseModel):
@@ -312,14 +311,14 @@ async def _admit_run(
         "warnings": [],
     }
 
-
-    await enqueue(job_id, payload)
-
     # Ownership + history record in PostgreSQL (spec: audit_jobs). Best-effort,
     # and a no-op for anonymous callers (KA11Y_AUTH_DISABLED) or without
-    # DATABASE_URL — the SQLite queue above is what actually runs the job.
+    # DATABASE_URL — the SQLite queue below is what actually runs the job.
     # isinstance, not a None check: when a test calls the route function
     # directly the parameter is FastAPI's Depends() sentinel, not a user.
+    # Written BEFORE enqueue: the dispatcher can pick the job up within
+    # milliseconds, and its mark_running() would otherwise find no row and
+    # skip JOB_STARTED / started_at.
     if isinstance(user, CurrentUser) and not user.is_anonymous:
         await audit_repo.create_job(
             job_id,
@@ -330,6 +329,8 @@ async def _admit_run(
             crawl_depth=payload.max_depth,
             requested_pages=payload.max_pages,
         )
+
+    await enqueue(job_id, payload)
     from ka11y.config.logger import setup_logger
     logger = setup_logger(name="KAC", tag="combined")
 

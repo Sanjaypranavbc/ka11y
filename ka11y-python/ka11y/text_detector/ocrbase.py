@@ -30,6 +30,14 @@ torch.set_num_threads(1)
 # ---------------------------------------------------------------------------
 _thread_local = threading.local()
 
+# Reader construction is serialised process-wide. On a fresh container every
+# worker thread reaches easyocr.Reader() at the same moment and each one
+# downloads + unzips the same model into the same temp.zip — one thread's
+# cleanup then breaks the others (FileNotFoundError / BadZipFile). Only the
+# first construction pays for the download; later ones find the files and
+# just load them. readtext() itself stays unlocked and fully parallel.
+_construct_lock = threading.Lock()
+
 
 def get_ocr_reader(lang: str = "en") -> easyocr.Reader:
     """Return this thread's EasyOCR Reader, initialising it on first use."""
@@ -46,7 +54,8 @@ def get_ocr_reader(lang: str = "en") -> easyocr.Reader:
         readers = {}
         _thread_local.readers = readers
     if cache_key not in readers:
-        readers[cache_key] = easyocr.Reader(langs, gpu=False, verbose=False)
+        with _construct_lock:
+            readers[cache_key] = easyocr.Reader(langs, gpu=False, verbose=False)
     return readers[cache_key]
 
 

@@ -93,8 +93,27 @@ async def seed_wcag_rules() -> int:
     return inserted
 
 
+async def seed_bootstrap_users() -> None:
+    """KA11Y_BOOTSTRAP_PASSWORD set → make sure every allow-listed e-mail has
+    an account and a password (see auth.service.bootstrap_allow_listed_users)."""
+    import os
+
+    password = os.getenv("KA11Y_BOOTSTRAP_PASSWORD", "")
+    if not password:
+        return
+    from ka11y.auth.service import AuthError, bootstrap_allow_listed_users
+
+    try:
+        created, assigned = await bootstrap_allow_listed_users(password)
+    except AuthError as exc:
+        logger.error("[db.seed] bootstrap users skipped: %s", exc)
+        return
+    logger.info("[db.seed] bootstrap users: %d created, %d password(s) set", created, assigned)
+
+
 async def seed_all() -> None:
     await seed_wcag_rules()
+    await seed_bootstrap_users()
 
 
 if __name__ == "__main__":

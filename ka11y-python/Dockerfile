@@ -103,6 +103,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 COPY ka11y/ ./ka11y/
 COPY i18n/   ./i18n/
 COPY enrich_audit.py ./
+# Alembic needs its ini + versions inside the image: ka11y/db/migrate.py runs
+# `upgrade head` at start-up (KA11Y_DB_AUTO_MIGRATE=1). Without these the
+# start-up log shows "No 'script_location' key found in configuration".
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
 
 # Pre-create the logs directory so it exists in the image layer.
 # The python_logs Docker volume is mounted over this path at runtime;

@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { AdminOverviewData, AuditJob } from "@/lib/admin/data";
-import { loadAdminOverview } from "@/lib/admin/data";
+import { loadAdminOverview, loadAuditDetail, subscribeAdminEvents } from "@/lib/admin/api";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminMobileNav } from "@/components/admin/AdminMobileNav";
 import { AdminTopBar } from "@/components/admin/AdminTopBar";
@@ -15,10 +15,15 @@ interface AdminConsoleContextValue {
   data: AdminOverviewData | null;
   status: LoadState;
   reload: () => void;
-  /** Opens the Audit Details drawer for `job`. Focus returns to the invoker on close. */
+  /** Opens the Audit Details drawer for `job`; pages/fails/log load lazily. */
   openAudit: (job: AuditJob) => void;
   closeAudit: () => void;
   selectedJob: AuditJob | null;
+  /** True while the Server-Sent Events change feed is connected. */
+  live: boolean;
+  /** Increments on every change notification; pages refetch when it moves. */
+  version: number;
+  updatedAt: string | null;
 }
 
 const AdminConsoleContext = createContext<AdminConsoleContextValue | null>(null);
@@ -29,7 +34,8 @@ export function useAdminConsole() {
   return ctx;
 }
 
-const REFRESH_MS = 30_000;
+const POLL_MS = 30_000; // fallback while the event stream is down
+const MIN_REFRESH_GAP_MS = 1_500; // coalesce bursts of change events
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -38,11 +44,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [selectedJob, setSelectedJob] = useState<AuditJob | null>(null);
   const [data, setData] = useState<AdminOverviewData | null>(null);
   const [status, setStatus] = useState<LoadState>("loading");
-  const [tick, setTick] = useState(0);
+  const [version, setVersion] = useState(0);
+  const [live, setLive] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const lastRefresh = useRef(0);
+  const pending = useRef<number | null>(null);
 
   // Route change closes any overlay so focus is not stranded in a dialog.
-  // State is adjusted during render (the React-sanctioned pattern) rather
-  // than in an effect, which would paint one frame with the stale overlay.
   const [lastPathname, setLastPathname] = useState(pathname);
   if (pathname !== lastPathname) {
     setLastPathname(pathname);
@@ -54,38 +62,72 @@ export function AdminShell({ children }: { children: ReactNode }) {
     setCollapsed((v) => !v);
   }
 
+  // (Re)load the overview whenever `version` moves. The first load shows the
+  // loading state; later ones are silent so the page never flickers.
   useEffect(() => {
     let cancelled = false;
     loadAdminOverview()
       .then((next) => {
         if (cancelled) return;
         setData(next);
+        setUpdatedAt(next.generatedAt);
         setStatus("ready");
       })
       .catch(() => {
-        if (!cancelled) setStatus("error");
+        if (!cancelled) setStatus((s) => (s === "ready" ? s : "error"));
       });
     return () => {
       cancelled = true;
     };
-  }, [tick]);
+  }, [version]);
 
-  // Background refresh keeps the feed and counters current without a reload.
-  useEffect(() => {
-    const id = window.setInterval(() => setTick((n) => n + 1), REFRESH_MS);
-    return () => window.clearInterval(id);
+  const bump = useCallback(() => {
+    const now = Date.now();
+    const wait = Math.max(0, MIN_REFRESH_GAP_MS - (now - lastRefresh.current));
+    if (pending.current !== null) return;
+    pending.current = window.setTimeout(() => {
+      pending.current = null;
+      lastRefresh.current = Date.now();
+      setVersion((n) => n + 1);
+    }, wait);
   }, []);
+
+  // Live feed: the API pushes `refresh` whenever its tables change.
+  useEffect(() => {
+    const unsubscribe = subscribeAdminEvents(bump, setLive);
+    return () => {
+      unsubscribe();
+      if (pending.current !== null) window.clearTimeout(pending.current);
+    };
+  }, [bump]);
+
+  // Fallback polling only while the stream is not connected.
+  useEffect(() => {
+    if (live) return;
+    const id = window.setInterval(bump, POLL_MS);
+    return () => window.clearInterval(id);
+  }, [live, bump]);
 
   const reload = useCallback(() => {
     setStatus("loading");
-    setTick((n) => n + 1);
+    setVersion((n) => n + 1);
   }, []);
-  const openAudit = useCallback((job: AuditJob) => setSelectedJob(job), []);
+
+  const openAudit = useCallback((job: AuditJob) => {
+    setSelectedJob(job);
+    loadAuditDetail(job.id)
+      .then((detail) => {
+        setSelectedJob((current) => (current && current.id === detail.id ? { ...current, ...detail } : current));
+      })
+      .catch(() => {
+        // The drawer still shows the summary row; detail tabs stay empty.
+      });
+  }, []);
   const closeAudit = useCallback(() => setSelectedJob(null), []);
 
   const value = useMemo<AdminConsoleContextValue>(
-    () => ({ data, status, reload, openAudit, closeAudit, selectedJob }),
-    [data, status, reload, openAudit, closeAudit, selectedJob],
+    () => ({ data, status, reload, openAudit, closeAudit, selectedJob, live, version, updatedAt }),
+    [data, status, reload, openAudit, closeAudit, selectedJob, live, version, updatedAt],
   );
 
   const overlayOpen = mobileOpen || selectedJob !== null;

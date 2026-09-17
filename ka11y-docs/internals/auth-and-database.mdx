@@ -17,8 +17,8 @@ and the bridge writes become no-ops.
 
 ## Schema
 
-Fourteen tables, one initial Alembic migration
-(`ka11y-python/alembic/versions/0001_initial_schema.py`). UUID primary keys
+Fourteen tables; Alembic migrations `0001_initial_schema` and
+`0002_user_password_hash` (`ka11y-python/alembic/versions/`). UUID primary keys
 everywhere except the append-only `audit_logs` (BIGINT identity); every
 timestamp is `TIMESTAMPTZ` in UTC; `users` and `organizations` are soft-deleted
 via `deleted_at` and nothing cascades from them.
@@ -38,7 +38,7 @@ users ──< feedback
 
 | Table | Purpose |
 |-------|---------|
-| `users` | Application user. **No password column** — sign-in is OIDC only. |
+| `users` | Application user. `password_hash` (scrypt, nullable) is set only for accounts that use e-mail + password sign-in; OIDC-only accounts keep it NULL. Never a plaintext password. |
 | `oauth_identities` | `(provider, provider_user_id)` → user. Unique on that pair, never on email, so a second provider can be linked later. |
 | `organizations`, `organization_members` | Tenant + membership (`owner`/`admin`/`member`/`viewer`). The org is derived from the email domain on first sign-in (`kao.com` → slug `kao`); the first member becomes `owner`. |
 | `user_sessions` | One browser session. Stores no tokens; the cookie is a signed session id. |
@@ -72,7 +72,33 @@ replicas start together and apply migrations from the release step instead.
 Nothing in the schema is RDS-specific; `?sslmode=require` on the URL is the
 only production difference.
 
-## Sign-in flow
+## Sign-in methods
+
+Two methods share the same `users` row, allow-list, organization logic and
+session cookie:
+
+| Method | Enabled by | How |
+|--------|-----------|-----|
+| **E-mail + password** (default on) | `KA11Y_PASSWORD_LOGIN=1` | Form on `/login` → `POST /api/v1/auth/password/login`. Passwords are hashed with scrypt (`ka11y/auth/passwords.py`, standard library, self-describing hash string so parameters can be raised later). |
+| **Self-service registration** (default on) | `KA11Y_PASSWORD_REGISTRATION=1` | `/register` → `POST /api/v1/auth/password/register`. Only addresses on `KA11Y_ALLOWED_EMAILS` / `_DOMAINS` may register, and an address that already has an account (OIDC or password) is refused with `account_exists`. With registration off, set passwords with `poetry run python scripts/set_password.py someone@kao.com --create` (inside compose: `docker compose exec python python scripts/set_password.py …`). |
+| **Bootstrap accounts** (closed pilot) | `KA11Y_BOOTSTRAP_PASSWORD=…` | At start-up (after migrations) every `KA11Y_ALLOWED_EMAILS` address gets an account, and any without a password gets this one. Idempotent and never overwrites a password that already exists. Combine with `KA11Y_PASSWORD_REGISTRATION=0`. |
+| **OIDC** (Google, Microsoft Entra, …) | the `KA11Y_OIDC_*` variables | Redirect flow below. Offered on `/login` as "Continue with <provider>" when configured. |
+
+`GET /api/v1/auth/config` tells the UI which methods are on (`oidc`,
+`password_login`, `registration`). Password failures are rate-limited per
+(client IP, e-mail): 10 failures in 15 minutes → `429 too_many_attempts`
+(in-process; use one API replica or accept per-replica counters). A login
+attempt for an address that is not on the allow-list is refused even if the
+row and password exist, so removing someone from the list locks them out.
+Password rules: 8–128 characters, no leading/trailing spaces, nothing else
+(NIST-style; length over complexity).
+
+Error codes returned as `{"error": code}` and translated by the UI:
+`invalid_credentials` (401), `no_password` (403, OIDC-only account),
+`not_allowed`, `account_suspended`, `login_disabled`, `register_disabled`
+(403), `weak_password` (400), `account_exists` (409), `too_many_attempts` (429).
+
+## OIDC sign-in flow
 
 ```mermaid
 sequenceDiagram
@@ -119,9 +145,12 @@ sequenceDiagram
 | `GET /api/v1/auth/login?remember=&next=` | public | Start the flow |
 | `GET /api/v1/auth/callback` | public | Finish the flow, set the cookie |
 | `POST /api/v1/auth/logout` · `GET /api/v1/auth/logout` | cookie | End the session (GET also redirects to `/login`; the sidebar uses it) |
-| `GET /api/v1/auth/me` | cookie | Current user, organization, role |
+| `GET /api/v1/auth/me` | cookie | Current user, organization, role, `is_admin` (e-mail on `KA11Y_ADMIN_EMAILS`) |
 | `GET /api/v1/auth/config` | public | `{configured, provider}` for the login page |
 | `GET /api/v1/audits/history?scope=me|org&limit=&offset=` | cookie | `audit_jobs LEFT JOIN audit_summary`, newest first |
+
+| `POST /api/v1/auth/password/login` | public | `{email, password, remember?, next?}` → `{next}` + cookie |
+| `POST /api/v1/auth/password/register` | public | `{email, password, name?, remember?, next?}` → 201 `{next}` + cookie |
 
 Everything under `/api/v1/combined`, `/assets`, `/crawl`, `/pipeline`, `/rules`
 and `/test` now requires a session. `/api/v1/health` stays public for the
@@ -142,6 +171,15 @@ logged, never fails the audit):
 | cancel | status `cancelled`, `JOB_CANCELLED` |
 
 Anonymous submissions (auth disabled) write nothing here.
+
+## Admin console
+
+`/admin` in the UI is for the addresses on `KA11Y_ADMIN_EMAILS` only. The
+admin layout (`ka11y-ui/src/app/admin/layout.tsx`) is a server component
+that calls `/api/v1/auth/me` with the browser's cookie and returns **404**
+for anyone else, so the console's existence is not advertised. API routes
+that must be admin-only use `Depends(require_admin)` from
+`ka11y/auth/dependencies.py` (403 for signed-in non-admins).
 
 ## Configuration
 

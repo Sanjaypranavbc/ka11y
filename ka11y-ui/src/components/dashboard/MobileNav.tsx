@@ -3,13 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, LogOut, Plus } from "lucide-react";
+import { Menu, X, LogOut, Plus, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { DashboardIcon, ViolationsIcon, NeedsReviewIcon, PassesIcon, SettingsNavIcon } from "@/components/ui/NavIcons";
 import { DASHBOARD_NAV_ITEMS, isNavItemActive } from "@/lib/dashboardNav";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
 import { LOGOUT_URL } from "@/lib/auth";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 
 const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   dashboard: DashboardIcon,
@@ -23,6 +24,7 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const { t } = useLanguage();
+  const me = useCurrentUser();
   const NAV_LABEL: Record<string, string> = {
     dashboard: t.nav.dashboard,
     violations: t.nav.violations,
@@ -82,6 +84,20 @@ export function MobileNav() {
                 );
               })}
             </ul>
+            {me?.is_admin && (
+              <ul className="mt-3 border-t border-gray-40 pt-3">
+                <li>
+                  <Link
+                    href="/admin"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center gap-3 rounded-lg px-3 py-3 text-p3 font-medium text-gray-60"
+                  >
+                    <ShieldCheck size={18} aria-hidden="true" />
+                    {t.nav.adminConsole}
+                  </Link>
+                </li>
+              </ul>
+            )}
             </div>
             <a
               href={LOGOUT_URL}

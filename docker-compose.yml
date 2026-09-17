@@ -304,6 +304,9 @@ services:
       # downloaded lazily on first Japanese-language audit). Without this,
       # every container restart re-downloads them on the next Japanese page.
       - paddlex_models:/root/.paddlex/official_models
+      # EasyOCR's detector + recogniser weights (~100MB, downloaded on the
+      # first OCR of a run). Persisted so a restart never re-downloads them.
+      - easyocr_models:/root/.EasyOCR
 
     healthcheck:
       test:         ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
@@ -496,6 +499,7 @@ networks:
 volumes:
   huggingface_cache:
   paddlex_models:
+  easyocr_models:
   # PostgreSQL data directory (local dev / single-box deploys).
   ka11y_pg:
 #  # Phoenix's SQLite trace store, so local traces survive `docker compose down`.

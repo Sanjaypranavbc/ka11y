@@ -1,43 +1,95 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import Image from "next/image";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
-import { Logo } from "@/components/ui/Logo";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { AUTH_PROVIDER_LABEL, loginUrl } from "@/lib/auth";
+import {
+  AuthShell,
+  inputClass,
+  labelClass,
+  linkClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "@/components/auth/AuthShell";
+import { PasswordField } from "@/components/auth/PasswordField";
+import {
+  AUTH_PROVIDER_LABEL,
+  AuthApiError,
+  DEFAULT_AUTH_CONFIG,
+  fetchAuthConfig,
+  loginUrl,
+  passwordLogin,
+  type AuthConfig,
+} from "@/lib/auth";
 
-// Sign-in is OAuth 2.0 / OpenID Connect only (no local passwords). The button
-// sends the browser to the Python API's /auth/login, which redirects to the
-// identity provider and back; the API sets the session cookie on the way in.
+/**
+ * Sign-in page.
+ *
+ * Primary path: e-mail + password, posted to the Python API through the
+ * /api/v1/auth/* rewrite; the API checks the allow-list and the password and
+ * sets the httpOnly session cookie. Secondary path (when the server has an
+ * OIDC provider configured): "Continue with Google", the redirect flow.
+ * Which paths are offered comes from GET /api/v1/auth/config.
+ */
 function LoginForm() {
   const { t } = useLanguage();
+  const router = useRouter();
   const searchParams = useSearchParams();
+
+  const [config, setConfig] = useState<AuthConfig>(DEFAULT_AUTH_CONFIG);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [keepSignedIn, setKeepSignedIn] = useState(false);
-  const [redirecting, setRedirecting] = useState(false);
+  const [busy, setBusy] = useState<"password" | "oidc" | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(searchParams.get("error"));
 
-  const errorCode = searchParams.get("error");
-  const errorMessage = errorCode
-    ? (t.login.errors as Record<string, string>)[errorCode] ?? t.login.errors.generic
-    : null;
   const next = searchParams.get("next") ?? undefined;
+  const errors = t.login.errors as Record<string, string>;
+  const errorMessage = errorCode ? errors[errorCode] ?? t.login.errors.generic : null;
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    let cancelled = false;
+    fetchAuthConfig().then((cfg) => {
+      if (!cancelled) setConfig(cfg);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setRedirecting(true);
+    setErrorCode(null);
+    setBusy("password");
+    try {
+      const { next: target } = await passwordLogin({
+        email: email.trim(),
+        password,
+        remember: keepSignedIn,
+        next,
+      });
+      router.replace(target);
+    } catch (err) {
+      setErrorCode(err instanceof AuthApiError ? err.code : "generic");
+      setBusy(null);
+    }
+  }
+
+  function handleOidc() {
+    setBusy("oidc");
     window.location.assign(loginUrl({ remember: keepSignedIn, next }));
   }
 
+  const registerHref = next ? `/register?next=${encodeURIComponent(next)}` : "/register";
+
   return (
-    <div className="w-full max-w-[460px] rounded-[16px] bg-white p-8 sm:p-12 shadow-[0px_4px_24px_rgba(0,0,0,0.04)]">
+    <>
       <h1 className="text-center text-[28px] font-bold text-gray-900 sm:text-[32px]">
         {t.login.signIn}
       </h1>
-      <p className="mt-2 text-center text-[15px] leading-6 text-gray-500">
-        {t.login.subtitle}
-      </p>
+      <p className="mt-2 text-center text-[15px] leading-6 text-gray-500">{t.login.subtitle}</p>
 
       {errorMessage && (
         <p
@@ -48,71 +100,112 @@ function LoginForm() {
         </p>
       )}
 
-      <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
-        <button
-          type="submit"
-          disabled={redirecting}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-[#005A54] px-6 py-3.5 text-[16px] font-medium text-white hover:bg-[#004843] active:bg-[#003834] disabled:opacity-60 transition-colors shadow-sm"
-        >
-          <ChevronRight size={18} aria-hidden="true" />
-          <span>
-            {redirecting ? t.login.redirecting : t.login.continueWith(AUTH_PROVIDER_LABEL)}
-          </span>
-        </button>
+      {config.password_login && (
+        <form onSubmit={handlePasswordSubmit} className="mt-8 flex flex-col gap-5" noValidate>
+          <div>
+            <label htmlFor="email" className={labelClass}>
+              {t.login.email}
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={busy !== null}
+              className={inputClass}
+            />
+          </div>
 
-        <label className="flex items-center gap-2 text-[14px] text-gray-700 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={keepSignedIn}
-            onChange={(e) => setKeepSignedIn(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-[#005A54] accent-[#005A54] focus:ring-[#005A54]"
+          <PasswordField
+            id="password"
+            label={t.login.password}
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            showLabel={t.login.showPassword}
+            hideLabel={t.login.hidePassword}
+            disabled={busy !== null}
           />
-          <span>{t.login.keepMeSignedIn}</span>
-        </label>
-      </form>
 
-      <p className="mt-6 text-center text-[13px] leading-5 text-gray-500">
-        {t.login.accessNote}
-      </p>
-    </div>
+          <label className="flex items-center gap-2 text-[14px] text-gray-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={keepSignedIn}
+              onChange={(e) => setKeepSignedIn(e.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-[#005A54] accent-[#005A54] focus:ring-[#005A54]"
+            />
+            <span>{t.login.keepMeSignedIn}</span>
+          </label>
+
+          <button
+            type="submit"
+            disabled={busy !== null || !email || !password}
+            className={primaryButtonClass}
+          >
+            <ChevronRight size={18} aria-hidden="true" />
+            <span>{busy === "password" ? t.login.signingIn : t.login.signInButton}</span>
+          </button>
+        </form>
+      )}
+
+      {config.oidc && (
+        <div className={config.password_login ? "mt-6" : "mt-8"}>
+          {config.password_login && (
+            <div className="mb-6 flex items-center gap-3 text-[13px] uppercase tracking-wide text-gray-500">
+              <span className="h-px flex-1 bg-gray-200" aria-hidden="true" />
+              <span>{t.login.or}</span>
+              <span className="h-px flex-1 bg-gray-200" aria-hidden="true" />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleOidc}
+            disabled={busy !== null}
+            className={config.password_login ? secondaryButtonClass : primaryButtonClass}
+          >
+            <span>
+              {busy === "oidc" ? t.login.redirecting : t.login.continueWith(AUTH_PROVIDER_LABEL)}
+            </span>
+          </button>
+          {!config.password_login && (
+            <label className="mt-5 flex items-center gap-2 text-[14px] text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={keepSignedIn}
+                onChange={(e) => setKeepSignedIn(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-[#005A54] accent-[#005A54] focus:ring-[#005A54]"
+              />
+              <span>{t.login.keepMeSignedIn}</span>
+            </label>
+          )}
+        </div>
+      )}
+
+      {config.registration && (
+        <p className="mt-6 text-center text-[14px] leading-5 text-gray-700">
+          {t.login.noAccount}{" "}
+          <Link href={registerHref} className={linkClass}>
+            {t.login.createAccount}
+          </Link>
+        </p>
+      )}
+
+      <p className="mt-6 text-center text-[13px] leading-5 text-gray-500">{t.login.accessNote}</p>
+    </>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div className="relative flex min-h-screen w-full flex-col md:flex-row bg-[#F7F8FA]">
-      {/* Language Toggle in top corner */}
-      <div className="absolute top-4 right-4 z-20 md:top-6 md:right-6">
-        <LanguageToggle />
-      </div>
-
-      {/* Left side: Hero Image Section */}
-      <div className="relative hidden md:block md:w-1/2 min-h-screen overflow-hidden">
-        <Image
-          src="/login-hero.jpg"
-          alt="Accessibility audits"
-          fill
-          priority
-          className="object-cover object-center"
-        />
-        {/* Logo overlay on top-left of image */}
-        <div className="absolute top-8 left-8 z-10 sm:top-10 sm:left-10">
-          <Logo variant="color" />
-        </div>
-      </div>
-
-      {/* Right side: Sign-in card */}
-      <div className="flex min-h-screen w-full md:w-1/2 flex-col items-center justify-center px-4 py-12 sm:px-8 lg:px-16">
-        {/* Mobile Logo */}
-        <div className="mb-8 md:hidden">
-          <Logo variant="color" />
-        </div>
-
-        {/* useSearchParams() needs a Suspense boundary for static rendering */}
-        <Suspense fallback={null}>
-          <LoginForm />
-        </Suspense>
-      </div>
-    </div>
+    <AuthShell>
+      {/* useSearchParams() needs a Suspense boundary for static rendering */}
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
+    </AuthShell>
   );
 }

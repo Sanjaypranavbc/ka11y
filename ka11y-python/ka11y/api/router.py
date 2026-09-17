@@ -1,7 +1,7 @@
 import os
 import httpx
 from fastapi import APIRouter, Depends
-from ka11y.api.v1 import audits, combined, pipeline, crawl, rule_evaluator, assets
+from ka11y.api.v1 import admin, audits, combined, pipeline, crawl, rule_evaluator, assets
 from ka11y.api.v1.rules import router as rules_router
 from ka11y.auth import require_user
 from ka11y.auth.router import router as auth_router
@@ -20,6 +20,7 @@ router.include_router(pipeline.router, dependencies=_protected)
 router.include_router(combined.router, dependencies=_protected)
 router.include_router(assets.router, dependencies=_protected)
 router.include_router(audits.router)  # declares require_user itself (needs the user object)
+router.include_router(admin.router)   # KA11Y_ADMIN_EMAILS only (require_admin on the router)
 router.include_router(rules_router, dependencies=_protected)
 router.include_router(rule_evaluator.router, prefix="/test", dependencies=_protected)
 

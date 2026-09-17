@@ -11,6 +11,10 @@ Turn a verified external identity into an application user (spec §23/§24).
 
 Allow-listing (KA11Y_ALLOWED_EMAILS / _DOMAINS) is checked *before* any row
 is written, so an unwanted sign-in leaves no trace in ``users``.
+
+E-mail + password (``register_local`` / ``login_local`` / ``set_password``)
+goes through the same allow-list and the same ``users`` / organization rows;
+only the credential differs (``users.password_hash``).
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ka11y.auth.config import settings
 from ka11y.auth.oidc import ExternalIdentity, OIDCError
+from ka11y.auth.passwords import hash_password, needs_rehash, password_policy_error, verify_password
 from ka11y.config.logger import setup_logger
 from ka11y.db.engine import session_scope
 from ka11y.db.models import OAuthIdentity, Organization, OrganizationMember, User
@@ -161,3 +166,148 @@ async def primary_membership(user_id) -> Optional[OrganizationMember]:
                 .limit(1)
             )
         ).scalar_one_or_none()
+
+
+# ── e-mail + password ────────────────────────────────────────────────────────
+
+
+class AuthError(Exception):
+    """A password-flow failure; ``code`` is what the UI translates."""
+
+    def __init__(self, code: str, detail: str = "") -> None:
+        super().__init__(detail or code)
+        self.code = code
+
+
+def _norm_email(email: str) -> str:
+    email = (email or "").strip().lower()
+    if not email or "@" not in email or len(email) > 320:
+        raise AuthError("invalid_credentials", "malformed e-mail")
+    return email
+
+
+async def register_local(*, email: str, password: str, name: Optional[str]) -> User:
+    """Create an allow-listed user with a password. Raises AuthError:
+    not_allowed, weak_password, account_exists, register_disabled."""
+    cfg = settings()
+    if not (cfg.password_login and cfg.password_registration):
+        raise AuthError("register_disabled")
+    email = _norm_email(email)
+    if not is_email_allowed(email):
+        raise AuthError("not_allowed", f"{email} is not on the allow-list")
+    policy = password_policy_error(password)
+    if policy:
+        raise AuthError(policy)
+    now = datetime.now(timezone.utc)
+    async with session_scope() as s:
+        existing = (await s.execute(select(User).where(User.email == email))).scalar_one_or_none()
+        if existing is not None:
+            # Never let a second person claim an address that already has an
+            # account (OIDC or password); the owner uses sign-in or an admin
+            # resets the password with scripts/set_password.py.
+            raise AuthError("account_exists", f"{email} already registered")
+        user = User(
+            email=email,
+            name=(name or "").strip()[:255] or None,
+            status="active",
+            password_hash=hash_password(password),
+            last_login_at=now,
+        )
+        s.add(user)
+        await s.flush()
+        org = await _ensure_organization(s, email)
+        await _ensure_membership(s, org, user)
+        await s.flush()
+        logger.info("[auth] registered user %s (%s) with password", user.id, user.email)
+        return user
+
+
+async def login_local(*, email: str, password: str) -> User:
+    """Verify e-mail + password. Raises AuthError: invalid_credentials,
+    not_allowed, no_password, account_suspended, login_disabled."""
+    cfg = settings()
+    if not cfg.password_login:
+        raise AuthError("login_disabled")
+    email = _norm_email(email)
+    # Allow-list first: removing someone from the list locks them out even if
+    # their row and password still exist.
+    if not is_email_allowed(email):
+        raise AuthError("not_allowed", f"{email} is not on the allow-list")
+    async with session_scope() as s:
+        user = (
+            await s.execute(select(User).where(User.email == email, User.deleted_at.is_(None)))
+        ).scalar_one_or_none()
+        if user is None:
+            # Burn the same time as a real check so the response does not
+            # reveal whether the address exists.
+            verify_password(password, hash_password("timing-equalizer"))
+            raise AuthError("invalid_credentials")
+        if not user.password_hash:
+            raise AuthError("no_password", f"{email} has no password (OIDC-only account)")
+        if not verify_password(password, user.password_hash):
+            raise AuthError("invalid_credentials")
+        if user.status != "active":
+            raise AuthError("account_suspended", f"user {email} is {user.status}")
+        if needs_rehash(user.password_hash):
+            user.password_hash = hash_password(password)
+        user.last_login_at = datetime.now(timezone.utc)
+        org = await _ensure_organization(s, email)
+        await _ensure_membership(s, org, user)
+        await s.flush()
+        return user
+
+
+async def set_password(*, email: str, password: str, create: bool = False) -> User:
+    """Admin path (scripts/set_password.py): set or reset a password. With
+    ``create`` an allow-listed address that has no account yet is created."""
+    email = _norm_email(email)
+    policy = password_policy_error(password)
+    if policy:
+        raise AuthError(policy)
+    async with session_scope() as s:
+        user = (
+            await s.execute(select(User).where(User.email == email, User.deleted_at.is_(None)))
+        ).scalar_one_or_none()
+        if user is None:
+            if not create:
+                raise AuthError("no_such_user", f"{email} not found")
+            if not is_email_allowed(email):
+                raise AuthError("not_allowed", f"{email} is not on the allow-list")
+            user = User(email=email, status="active")
+            s.add(user)
+            await s.flush()
+            org = await _ensure_organization(s, email)
+            await _ensure_membership(s, org, user)
+        user.password_hash = hash_password(password)
+        await s.flush()
+        return user
+
+
+async def bootstrap_allow_listed_users(password: str) -> tuple[int, int]:
+    """Start-up seeding (KA11Y_BOOTSTRAP_PASSWORD): every address in
+    KA11Y_ALLOWED_EMAILS gets an account, and any of them without a password
+    gets *password*. Idempotent; never overwrites an existing password, so a
+    password changed later with scripts/set_password.py survives restarts.
+    Returns (users created, passwords set)."""
+    cfg = settings()
+    policy = password_policy_error(password)
+    if policy:
+        raise AuthError(policy, "KA11Y_BOOTSTRAP_PASSWORD does not meet the password rules")
+    created = assigned = 0
+    for email in sorted(cfg.allowed_emails):
+        async with session_scope() as s:
+            user = (
+                await s.execute(select(User).where(User.email == email, User.deleted_at.is_(None)))
+            ).scalar_one_or_none()
+            if user is None:
+                user = User(email=email, status="active")
+                s.add(user)
+                await s.flush()
+                org = await _ensure_organization(s, email)
+                await _ensure_membership(s, org, user)
+                created += 1
+            if not user.password_hash:
+                user.password_hash = hash_password(password)
+                assigned += 1
+            await s.flush()
+    return created, assigned

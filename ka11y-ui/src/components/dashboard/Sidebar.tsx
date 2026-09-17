@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { LogOut, Plus, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
   DashboardIcon,
@@ -16,6 +16,7 @@ import { DASHBOARD_NAV_ITEMS, isNavItemActive } from "@/lib/dashboardNav";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
 import { LOGOUT_URL } from "@/lib/auth";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 
 const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   dashboard: DashboardIcon,
@@ -29,6 +30,7 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const { t } = useLanguage();
+  const me = useCurrentUser();
   const NAV_LABEL: Record<string, string> = {
     dashboard: t.nav.dashboard,
     violations: t.nav.violations,
@@ -103,6 +105,24 @@ export function Sidebar() {
             );
           })}
         </ul>
+        {/* Admin console — only for accounts on KA11Y_ADMIN_EMAILS (the API
+            enforces it; this just makes the console discoverable). */}
+        {me?.is_admin && (
+          <ul className="mt-4 flex flex-col gap-1 border-t border-gray-40 pt-4">
+            <li>
+              <Link
+                href="/admin"
+                className={cn(
+                  "flex items-center gap-2 rounded-[8px] py-2.5 pl-2 pr-14 text-[16px] leading-6 text-gray-80 hover:bg-gray-10",
+                  collapsed && "justify-center pr-0",
+                )}
+              >
+                <ShieldCheck size={24} aria-hidden="true" />
+                {!collapsed && t.nav.adminConsole}
+              </Link>
+            </li>
+          </ul>
+        )}
       </nav>
 
       {/* Logout */}

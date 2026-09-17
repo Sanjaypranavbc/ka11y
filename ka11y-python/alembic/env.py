@@ -19,8 +19,10 @@ from ka11y.db.models import Base  # noqa: F401 — populates Base.metadata
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
+    # disable_existing_loggers=False: the default (True) silences every logger
+    # created before this point — uvicorn's 'Application startup complete' and the
+    # app's own [db]/[db.seed] lines vanished after start-up migrations ran.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 target_metadata = Base.metadata
 
 

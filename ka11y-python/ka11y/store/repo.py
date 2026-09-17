@@ -209,6 +209,7 @@ async def save_findings(run_id: str, report: Dict[str, Any]) -> None:
                         selector,
                         json.dumps(el, default=str)[:4000] if el else None,
                         now,
+                        (f.get("severity") or None),
                     )
                 )
         if not rows:
@@ -216,7 +217,7 @@ async def save_findings(run_id: str, report: Dict[str, Any]) -> None:
         await get_db().executemany(
             "INSERT INTO findings "
             "(run_id, page_url, wcag_sc, level, status, source, reason_code, "
-            " selector, element_json, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            " selector, element_json, created_at, severity) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             rows,
         )
     except Exception:  # noqa: BLE001

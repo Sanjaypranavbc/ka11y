@@ -34,7 +34,6 @@ import base64
 import hashlib
 import ipaddress
 import json
-import logging
 import os
 import re
 import urllib.parse
@@ -289,6 +288,18 @@ CAROUSEL_ADVANCE_JS = """async (args) => {
     }
     return false;
 }"""
+
+
+def _is_svg_asset(element_type: str, url: str) -> bool:
+    """True when downloading *url* would yield SVG markup rather than pixels.
+    OCR/contrast need a raster, so such elements are screenshotted instead
+    (the rendered size is what visitors see anyway)."""
+    if "svg" in (element_type or ""):
+        return True
+    u = (url or "").lower()
+    if u.startswith("data:"):
+        return u[5:].split(",", 1)[0].split(";", 1)[0] == "image/svg+xml"
+    return urllib.parse.urlsplit(u).path.endswith(".svg")
 
 
 def _asset_ext(url: str) -> str:
@@ -1573,8 +1584,9 @@ async def capture_assets(
             # Non-overlay image with a fetchable URL -> queue the download
             # for the concurrent batch below instead of awaiting it here.
             # `target` travels with the job as the fallback screenshot if
-            # the download fails.
-            if not is_overlay and asset_url:
+            # the download fails. SVG sources are excluded: the download
+            # would be XML, which no OCR/contrast step can read.
+            if not is_overlay and asset_url and not _is_svg_asset(el.get("element_type", ""), asset_url):
                 ext = _asset_ext(asset_url)
                 rel = Path("assets") / page_slug / f"{el['id']}{ext}"
                 download_jobs.append((el, asset_url, out_dir / rel, target))

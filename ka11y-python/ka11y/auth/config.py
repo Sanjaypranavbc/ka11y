@@ -25,6 +25,16 @@ Sessions (cookie is a signed session id; no tokens stored anywhere):
 Who may sign in (both empty → anyone the provider authenticates):
   KA11Y_ALLOWED_EMAILS         comma-separated, case-insensitive
   KA11Y_ALLOWED_EMAIL_DOMAINS  comma-separated ("bluecaffeine.com,kao.com")
+  The same lists gate e-mail + password registration and login.
+  KA11Y_ADMIN_EMAILS           comma-separated; only these may open the admin
+                               console (/admin) and admin API routes. Empty →
+                               nobody is an admin.
+
+E-mail + password sign-in (alternative to OIDC; both can be on at once):
+  KA11Y_PASSWORD_LOGIN         "1" (default) / "0" — the login form
+  KA11Y_PASSWORD_REGISTRATION  "1" (default) / "0" — self-service "create
+                               account" for allow-listed e-mails; with "0"
+                               passwords are set by scripts/set_password.py
 
 Redirect targets (relative to the UI origin):
   KA11Y_POST_LOGIN_URL         /dashboard
@@ -73,11 +83,14 @@ class AuthSettings:
 
     allowed_emails: FrozenSet[str] = field(default_factory=frozenset)
     allowed_domains: FrozenSet[str] = field(default_factory=frozenset)
+    admin_emails: FrozenSet[str] = field(default_factory=frozenset)
 
     post_login_url: str = "/dashboard"
     login_page_url: str = "/login"
     disabled: bool = False
     link_by_verified_email: bool = True
+    password_login: bool = True
+    password_registration: bool = True
 
     session_cookie: str = "ka11y_session"
     oidc_cookie: str = "ka11y_oidc"
@@ -88,7 +101,8 @@ class AuthSettings:
 
     @property
     def configured(self) -> bool:
-        return self.oidc_configured and bool(self.session_secret)
+        """At least one sign-in method is usable and sessions can be signed."""
+        return bool(self.session_secret) and (self.oidc_configured or self.password_login)
 
 
 def settings() -> AuthSettings:
@@ -111,8 +125,11 @@ def settings() -> AuthSettings:
         cookie_secure=_bool("KA11Y_COOKIE_SECURE", redirect.lower().startswith("https://")),
         allowed_emails=_csv("KA11Y_ALLOWED_EMAILS"),
         allowed_domains=_csv("KA11Y_ALLOWED_EMAIL_DOMAINS"),
+        admin_emails=_csv("KA11Y_ADMIN_EMAILS"),
         post_login_url=os.getenv("KA11Y_POST_LOGIN_URL", "/dashboard").strip() or "/dashboard",
         login_page_url=os.getenv("KA11Y_LOGIN_PAGE_URL", "/login").strip() or "/login",
         disabled=_bool("KA11Y_AUTH_DISABLED", False),
         link_by_verified_email=_bool("KA11Y_LINK_BY_VERIFIED_EMAIL", True),
+        password_login=_bool("KA11Y_PASSWORD_LOGIN", True),
+        password_registration=_bool("KA11Y_PASSWORD_REGISTRATION", True),
     )

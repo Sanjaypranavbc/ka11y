@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
       { source: "/api/v1/auth/:path*", destination: `${PYTHON_ORIGIN}/api/v1/auth/:path*` },
       // Content-addressed asset store (current scheme)
       { source: "/api/v1/assets/:path*", destination: `${PYTHON_ORIGIN}/api/v1/assets/:path*` },
+      // Admin console data + live event stream, and per-audit artifact/report
+      // downloads. Same-origin so the session cookie travels with them.
+      { source: "/api/v1/admin/:path*", destination: `${PYTHON_ORIGIN}/api/v1/admin/:path*` },
+      { source: "/api/v1/audits/:path*", destination: `${PYTHON_ORIGIN}/api/v1/audits/:path*` },
       // Legacy per-job image serving (fallback for older runs)
       { source: "/api/v1/combined/:jobId/image", destination: `${PYTHON_ORIGIN}/api/v1/combined/:jobId/image` },
     ];

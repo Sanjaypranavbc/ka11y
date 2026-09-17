@@ -95,6 +95,19 @@ def _select_ocr_reader_class(lang: str):
     return EasyOCRReader
 
 
+_RASTER_MAGIC = (b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"RIFF", b"BM")
+
+
+def _looks_like_raster(path) -> bool:
+    """First-bytes check for PNG/JPEG/GIF/WEBP/BMP; the extensions OCR accepts."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(12)
+    except OSError:
+        return False
+    return any(head.startswith(m) for m in _RASTER_MAGIC)
+
+
 class OCRPreprocessing:
     def __init__(
         self,
@@ -307,6 +320,13 @@ class OCRPreprocessing:
 
         if not Path(image_path).exists():
             logger.error(f"[text_detector] image not found, skipping: {image_path}")
+            self.skipped_images.append(image_path)
+            return result
+
+        if not _looks_like_raster(image_path):
+            # e.g. an SVG (XML) or an HTML error page saved under a .png name:
+            # imageio cannot decode it and would dump a traceback per file.
+            logger.warning(f"[text_detector] not a raster image, skipping OCR: {image_path}")
             self.skipped_images.append(image_path)
             return result
 

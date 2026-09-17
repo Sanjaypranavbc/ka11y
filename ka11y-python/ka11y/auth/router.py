@@ -12,7 +12,14 @@ origin).
   POST /auth/logout                            → 204, session ended
   GET  /auth/logout                            → same, then 302 to /login
   GET  /auth/me                                → the signed-in user
-  GET  /auth/config                            → {configured, provider} (public)
+  GET  /auth/config                            → {configured, provider, oidc,
+                                                 password_login, registration}
+  POST /auth/password/login    {email, password, remember?, next?}
+                                               → 200 {next} + session cookie,
+                                                 or 4xx {error: <code>}
+  POST /auth/password/register {email, password, name?, remember?, next?}
+                                               → 201 {next} + session cookie
+                                                 (allow-listed e-mails only)
 
 State, nonce and the PKCE verifier live in a short-lived signed cookie between
 the two redirects, so this works with several API replicas and no Redis.
@@ -27,12 +34,13 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel, Field
 
 from ka11y.auth import oidc, sessions
 from ka11y.auth.config import settings
 from ka11y.auth.dependencies import CurrentUser, require_user
 from ka11y.auth.oidc import OIDCError
-from ka11y.auth.service import login_identity
+from ka11y.auth.service import AuthError, login_identity, login_local, register_local
 from ka11y.auth.signing import sign_json, unsign_json
 from ka11y.config.logger import setup_logger
 from ka11y.db.engine import is_configured as db_configured
@@ -42,6 +50,13 @@ logger = setup_logger(name="KAC", tag="auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _OIDC_COOKIE_TTL = 600  # seconds between /login and /callback
+
+# Password brute-force brake: failures per (client IP, e-mail) inside a
+# sliding window. In-process only, which is enough for a pilot behind one API
+# replica; a shared store is needed once several replicas run.
+_ATTEMPT_WINDOW = 15 * 60
+_ATTEMPT_LIMIT = 10
+_failures: Dict[str, list] = {}
 
 
 def _safe_next(value: Optional[str]) -> str:
@@ -73,19 +88,90 @@ def _client_ip(request: Request) -> Optional[str]:
 
 
 def _require_configured() -> None:
+    """OIDC routes: the provider, the session secret and the DB must all be set."""
     cfg = settings()
-    if not (cfg.configured and db_configured()):
-        raise HTTPException(status_code=503, detail="Authentication is not configured on this server.")
+    if not (cfg.oidc_configured and cfg.session_secret and db_configured()):
+        raise HTTPException(status_code=503, detail="OIDC sign-in is not configured on this server.")
+
+
+def _require_password_login() -> None:
+    cfg = settings()
+    if not (cfg.password_login and cfg.session_secret and db_configured()):
+        raise HTTPException(status_code=503, detail="Password sign-in is not configured on this server.")
+
+
+def _set_session_cookie(resp: Response, session_id, remember: bool) -> None:
+    cfg = settings()
+    resp.set_cookie(
+        cfg.session_cookie,
+        sessions.cookie_value(session_id, remember),
+        max_age=sessions.cookie_max_age(remember),
+        httponly=True,
+        secure=cfg.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
+
+
+def _attempt_key(request: Request, email: str) -> str:
+    return f"{_client_ip(request) or '?'}|{(email or '').strip().lower()}"
+
+
+def _too_many_failures(key: str) -> bool:
+    cutoff = time.time() - _ATTEMPT_WINDOW
+    stamps = [t for t in _failures.get(key, []) if t > cutoff]
+    if stamps:
+        _failures[key] = stamps
+    else:
+        _failures.pop(key, None)
+    return len(stamps) >= _ATTEMPT_LIMIT
+
+
+def _record_failure(key: str) -> None:
+    _failures.setdefault(key, []).append(time.time())
+
+
+_ERROR_STATUS = {
+    "invalid_credentials": 401,
+    "no_password": 403,
+    "not_allowed": 403,
+    "account_suspended": 403,
+    "login_disabled": 403,
+    "register_disabled": 403,
+    "weak_password": 400,
+    "account_exists": 409,
+    "too_many_attempts": 429,
+    "internal_error": 500,
+}
+
+
+def _auth_error(code: str) -> JSONResponse:
+    return JSONResponse({"error": code}, status_code=_ERROR_STATUS.get(code, 400))
+
+
+class PasswordLoginBody(BaseModel):
+    email: str = Field(max_length=320)
+    password: str = Field(max_length=256)
+    remember: bool = False
+    next: Optional[str] = Field(None, max_length=512)
+
+
+class PasswordRegisterBody(PasswordLoginBody):
+    name: Optional[str] = Field(None, max_length=255)
 
 
 @router.get("/config")
 async def auth_config() -> Dict[str, Any]:
     cfg = settings()
+    ready = bool(cfg.session_secret and db_configured())
     return {
         "configured": bool(cfg.configured and db_configured()),
         "disabled": cfg.disabled,
         "provider": cfg.provider_name,
         "login_url": "/api/v1/auth/login",
+        "oidc": bool(ready and cfg.oidc_configured),
+        "password_login": bool(ready and cfg.password_login),
+        "registration": bool(ready and cfg.password_login and cfg.password_registration),
     }
 
 
@@ -167,15 +253,57 @@ async def callback(
 
     resp = RedirectResponse(_safe_next(pending.get("x")), status_code=302)
     resp.delete_cookie(cfg.oidc_cookie, path="/")
-    resp.set_cookie(
-        cfg.session_cookie,
-        sessions.cookie_value(sess.id, remember),
-        max_age=sessions.cookie_max_age(remember),
-        httponly=True,
-        secure=cfg.cookie_secure,
-        samesite="lax",
-        path="/",
+    _set_session_cookie(resp, sess.id, remember)
+    return resp
+
+
+@router.post("/password/login")
+async def password_login(request: Request, body: PasswordLoginBody) -> Response:
+    _require_password_login()
+    key = _attempt_key(request, body.email)
+    if _too_many_failures(key):
+        return _auth_error("too_many_attempts")
+    try:
+        user = await login_local(email=body.email, password=body.password)
+    except AuthError as exc:
+        if exc.code in ("invalid_credentials", "no_password"):
+            _record_failure(key)
+        logger.info("[auth] password sign-in rejected: %s (%s)", exc.code, exc)
+        return _auth_error(exc.code)
+    except Exception:  # noqa: BLE001
+        logger.exception("[auth] password sign-in failed")
+        return _auth_error("internal_error")
+    _failures.pop(key, None)
+    sess = await sessions.create_session(
+        user_id=user.id, ip_address=_client_ip(request), user_agent=request.headers.get("user-agent")
     )
+    logger.info("[auth] %s signed in with password (session %s)", user.email, sess.id)
+    resp = JSONResponse({"next": _safe_next(body.next)})
+    _set_session_cookie(resp, sess.id, body.remember)
+    return resp
+
+
+@router.post("/password/register", status_code=201)
+async def password_register(request: Request, body: PasswordRegisterBody) -> Response:
+    _require_password_login()
+    key = _attempt_key(request, "")  # per-IP: slows down allow-list probing
+    if _too_many_failures(key):
+        return _auth_error("too_many_attempts")
+    try:
+        user = await register_local(email=body.email, password=body.password, name=body.name)
+    except AuthError as exc:
+        _record_failure(key)
+        logger.info("[auth] registration rejected: %s (%s)", exc.code, exc)
+        return _auth_error(exc.code)
+    except Exception:  # noqa: BLE001
+        logger.exception("[auth] registration failed")
+        return _auth_error("internal_error")
+    sess = await sessions.create_session(
+        user_id=user.id, ip_address=_client_ip(request), user_agent=request.headers.get("user-agent")
+    )
+    logger.info("[auth] %s registered and signed in (session %s)", user.email, sess.id)
+    resp = JSONResponse({"next": _safe_next(body.next)}, status_code=201)
+    _set_session_cookie(resp, sess.id, body.remember)
     return resp
 
 
@@ -214,5 +342,6 @@ async def me(user: CurrentUser = Depends(require_user)) -> JSONResponse:
             "organization_id": str(user.organization_id) if user.organization_id else None,
             "role": user.role,
             "anonymous": user.is_anonymous,
+            "is_admin": user.is_admin,
         }
     )
