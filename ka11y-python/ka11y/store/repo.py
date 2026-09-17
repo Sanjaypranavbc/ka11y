@@ -481,6 +481,15 @@ async def get_reviews(run_id: str) -> Dict[str, Dict[str, Any]]:
     return {r["finding_id"]: r for r in rows}
 
 
+async def query_assets_with_keys(run_id: str) -> List[Dict[str, Any]]:
+    """Assets of a run including where their bytes live in object storage."""
+    return await get_db().query(
+        "SELECT id, page_url, kind, rel_path, sha256, mime, width, height, bytes, "
+        "object_key, object_bucket FROM assets WHERE run_id=? ORDER BY id",
+        (run_id,),
+    )
+
+
 async def list_run_assets(run_id: str) -> List[Dict[str, Any]]:
     return await get_db().query(
         "SELECT id, page_url, kind, rel_path, sha256, mime, width, height, bytes "

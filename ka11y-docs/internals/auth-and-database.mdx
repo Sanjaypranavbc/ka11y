@@ -1,0 +1,178 @@
+---
+title: "Sign-in & Production Database"
+description: "OAuth 2.0 / OpenID Connect sign-in, cookie sessions, and the PostgreSQL schema (SQLAlchemy + Alembic) that records users, organizations and audit ownership/history"
+---
+
+## Two stores, two jobs
+
+| Store | Lives in | Holds | Code |
+|-------|----------|-------|------|
+| **Run store** (SQLite, WAL) | `KA11Y_DB_PATH` volume | The job queue, full reports, flattened findings, assets, telemetry — everything the *audit engine* needs | `ka11y/store/` ([Persistence, Queue & Telemetry](/internals/persistence-and-queue)) |
+| **Production DB** (PostgreSQL) | `DATABASE_URL` (local container or Amazon RDS) | Who is signed in, which organization they belong to, which audits they ran and how those audits summarised | `ka11y/db/` + `ka11y/auth/` |
+
+Both are keyed by the same `job_id` (a UUID), so one id correlates a run in
+either store. The PostgreSQL layer is **inert when `DATABASE_URL` is unset**:
+the audit engine keeps working, protected routes answer `503` (fail closed)
+and the bridge writes become no-ops.
+
+## Schema
+
+Fourteen tables, one initial Alembic migration
+(`ka11y-python/alembic/versions/0001_initial_schema.py`). UUID primary keys
+everywhere except the append-only `audit_logs` (BIGINT identity); every
+timestamp is `TIMESTAMPTZ` in UTC; `users` and `organizations` are soft-deleted
+via `deleted_at` and nothing cascades from them.
+
+```text
+organizations ──< organization_members >── users ──< oauth_identities
+                                             │
+                                             ├──< user_sessions
+                                             │
+                                             └──< audit_jobs ──── audit_summary (1:1)
+                                                    ├──< audit_pages ──< audit_fails >── wcag_rules
+                                                    ├──< reports            (S3 key, not bytes)
+                                                    ├──< audit_logs
+                                                    └──< crash_reports
+users ──< feedback
+```
+
+| Table | Purpose |
+|-------|---------|
+| `users` | Application user. **No password column** — sign-in is OIDC only. |
+| `oauth_identities` | `(provider, provider_user_id)` → user. Unique on that pair, never on email, so a second provider can be linked later. |
+| `organizations`, `organization_members` | Tenant + membership (`owner`/`admin`/`member`/`viewer`). The org is derived from the email domain on first sign-in (`kao.com` → slug `kao`); the first member becomes `owner`. |
+| `user_sessions` | One browser session. Stores no tokens; the cookie is a signed session id. |
+| `wcag_rules` | WCAG 2.2 catalogue, one row per success criterion, seeded from `i18n/rules.yml` on every startup (idempotent). `rule_code` = the SC id (`"1.4.3"`); 4.1.1 is present but `is_active=false`. |
+| `audit_jobs` | One execution: `user_id`, `organization_id`, `session_id`, `target_url`, status, depth, page counts, timings. |
+| `audit_summary` | One row of counts per job. This is what History and dashboards read — never recomputed from `audit_fails`. |
+| `audit_pages`, `audit_fails` | Per-page results and individual failures (the term is *fail*, not *violation*). Populated by a later phase; the tables and indexes exist now. |
+| `reports` | Metadata + `s3_bucket`/`s3_key` of generated files. Bytes go to S3, never into PostgreSQL. |
+| `audit_logs` | Permanent per-job event log (`JOB_CREATED`, `JOB_STARTED`, `JOB_COMPLETED`, `JOB_FAILED`, `JOB_CANCELLED`, …). High-frequency progress stays on SSE, not here. |
+| `crash_reports` | Stage, error type/message, stack trace for a failed job. |
+| `feedback` | Created now, wired later. |
+
+`scripts/verify_schema.py` checks the models — and with `--live`, the real
+database — against the specification: every table, foreign key, unique
+constraint, index, UUID/BIGINT key, `TIMESTAMPTZ`, soft-delete column, and the
+absence of the forbidden `wcag_rule_translations` / `audit_history` /
+`violations` tables. It runs as part of `tests/test_auth.py`.
+
+### Migrations
+
+```bash
+cd ka11y-python
+DATABASE_URL=postgresql://ka11y:pw@localhost:5432/ka11y alembic upgrade head
+alembic check                       # models vs live DB → "No new upgrade operations detected."
+alembic revision --autogenerate -m "add thing"
+```
+
+The API also runs `alembic upgrade head` itself at startup (then seeds
+`wcag_rules`) unless `KA11Y_DB_AUTO_MIGRATE=0`. Turn that off when several API
+replicas start together and apply migrations from the release step instead.
+Nothing in the schema is RDS-specific; `?sslmode=require` on the URL is the
+only production difference.
+
+## Sign-in flow
+
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant UI as Next.js (ui)
+    participant API as FastAPI (python)
+    participant IdP as OIDC provider
+    B->>UI: GET /api/v1/auth/login?remember=1
+    UI->>API: rewrite
+    API-->>B: 302 → IdP (PKCE + state + nonce in signed ka11y_oidc cookie)
+    B->>IdP: sign in
+    IdP-->>B: 302 → /api/v1/auth/callback?code&state
+    B->>UI: GET callback
+    UI->>API: rewrite
+    API->>IdP: POST token endpoint (code + verifier)
+    API->>API: verify iss/aud/exp/nonce · allow-list · upsert user, identity, org · user_sessions row
+    API-->>B: 302 → /dashboard + Set-Cookie ka11y_session (httpOnly, SameSite=Lax)
+```
+
+* **All auth endpoints are on the Python API** under `/api/v1/auth/*`; the UI
+  rewrites that path verbatim (`next.config.ts`), so the cookie is first-party
+  on the UI origin and the browser never needs to reach the API directly.
+* **Every browser call to the API goes through Next.js.** Route handlers
+  (`src/app/api/wcag-audit/*`) forward the `cookie` header; rewrites forward it
+  automatically. A `401` from the API is surfaced as `401`, and
+  `redirectToLogin()` (`src/lib/auth.ts`) ends the session and returns to
+  `/login?error=session_expired`.
+* **`proxy.ts`** (Next 16's successor of `middleware.ts`) redirects `/dashboard/*`
+  to `/login` when the cookie is absent. It only checks presence; validity is
+  the API's call on every request.
+* **Cookie** = `<session uuid>.<r|n>.<HMAC-SHA256>` signed with
+  `KA11Y_SESSION_SECRET`. The DB row holds no secret; logout sets `ended_at`.
+  Idle timeout 12 h, or 30 days with *keep me signed in*; absolute cap 30 days.
+* **Allow-list**: `KA11Y_ALLOWED_EMAILS` / `KA11Y_ALLOWED_EMAIL_DOMAINS` are
+  checked *before* any row is written, so a rejected sign-in leaves no user.
+* **Account linking**: an unknown `(provider, sub)` whose *verified* email
+  matches an existing live user is linked to that user
+  (`KA11Y_LINK_BY_VERIFIED_EMAIL=0` disables this and creates a separate user).
+
+### Endpoints
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `GET /api/v1/auth/login?remember=&next=` | public | Start the flow |
+| `GET /api/v1/auth/callback` | public | Finish the flow, set the cookie |
+| `POST /api/v1/auth/logout` · `GET /api/v1/auth/logout` | cookie | End the session (GET also redirects to `/login`; the sidebar uses it) |
+| `GET /api/v1/auth/me` | cookie | Current user, organization, role |
+| `GET /api/v1/auth/config` | public | `{configured, provider}` for the login page |
+| `GET /api/v1/audits/history?scope=me|org&limit=&offset=` | cookie | `audit_jobs LEFT JOIN audit_summary`, newest first |
+
+Everything under `/api/v1/combined`, `/assets`, `/crawl`, `/pipeline`, `/rules`
+and `/test` now requires a session. `/api/v1/health` stays public for the
+Docker healthcheck. `KA11Y_AUTH_DISABLED=1` (tests, local hacking) makes every
+protected dependency resolve to an anonymous caller instead.
+
+### What an audit writes to PostgreSQL
+
+`ka11y/db/audit_repo.py`, best-effort like the SQLite repo (a DB error is
+logged, never fails the audit):
+
+| Moment | Rows |
+|--------|------|
+| submit (`_admit_run`) | `audit_jobs` (queued, owner, session) + `audit_logs JOB_CREATED` |
+| worker starts | status `running`, `started_at`, `JOB_STARTED` |
+| report built | status `completed`, `actual_pages`, `audit_summary` upsert (counts, severity buckets, `duration_ms`), `JOB_COMPLETED` |
+| failure | status `failed`, `JOB_FAILED`, `crash_reports` row with stage/type/message/stack |
+| cancel | status `cancelled`, `JOB_CANCELLED` |
+
+Anonymous submissions (auth disabled) write nothing here.
+
+## Configuration
+
+See `ka11y-python/.env.example` — the compose file loads that file into both
+the `postgres` and `python` services. Minimum for a deployment:
+
+```bash
+POSTGRES_DB=ka11y
+POSTGRES_USER=ka11y
+POSTGRES_PASSWORD=…
+DATABASE_URL=postgresql://ka11y:…@postgres:5432/ka11y
+KA11Y_OIDC_ISSUER=https://accounts.google.com
+KA11Y_OIDC_CLIENT_ID=…
+KA11Y_OIDC_CLIENT_SECRET=…
+KA11Y_OIDC_REDIRECT_URI=https://a11y.bluecaffeine.in/api/v1/auth/callback   # register EXACTLY this with the provider
+KA11Y_SESSION_SECRET=…          # python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+KA11Y_ALLOWED_EMAILS=a@bluecaffeine.com,b@kao.com
+```
+
+Any OIDC issuer works (Microsoft Entra: set `KA11Y_OIDC_ISSUER` to the tenant's
+v2.0 issuer and `KA11Y_OIDC_PROVIDER_NAME=microsoft`). For plain-http local
+development add `KA11Y_COOKIE_SECURE=0`.
+
+## Testing
+
+`tests/test_auth.py` drives the full flow against a real PostgreSQL with the
+identity provider faked, and asserts the schema against the spec. It skips
+unless `DATABASE_URL` is set:
+
+```bash
+docker run -d --name ka11y-pg -e POSTGRES_PASSWORD=ka11y -e POSTGRES_USER=ka11y \
+  -e POSTGRES_DB=ka11y -p 55432:5432 postgres:16-alpine
+DATABASE_URL=postgresql://ka11y:ka11y@127.0.0.1:55432/ka11y poetry run pytest tests/test_auth.py
+```

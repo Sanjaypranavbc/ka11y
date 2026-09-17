@@ -53,6 +53,7 @@ from ka11y.observability import (
     traced_span,
 )
 from ka11y.store import repo
+from ka11y.db import audit_repo
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -430,6 +431,7 @@ async def _run_job_body_inner(
     run_started_at = datetime.now(timezone.utc).isoformat()
     _jobs[job_id]["run_started_at"] = run_started_at
     await repo.mark_running(job_id, run_started_at, _jobs[job_id].get("submitted_at"))
+    await audit_repo.mark_running(job_id, run_started_at)
     repo.insert_event(job_id, "running", {})
 
     try:
@@ -737,6 +739,30 @@ async def _run_job_body_inner(
             output_dir=str(output_dir),
         )
         repo.insert_event(job_id, "job_complete", {"summary": report.get("summary")})
+        await audit_repo.mark_completed(
+            job_id,
+            summary=report.get("summary"),
+            completed_at=completed_at,
+            run_started_at=_jobs[job_id].get("run_started_at"),
+        )
+
+        # Artifacts → object storage (S3 / local): report.json, findings.csv,
+        # report.pdf, HTML snapshots, OCR reports, step logs. Best-effort.
+        from ka11y.storage.uploader import upload_job_artifacts
+
+        artifacts = await upload_job_artifacts(
+            job_id,
+            report=report,
+            output_dir=output_dir,
+            html_snapshots=_jobs[job_id].get("html_snapshots"),
+            step_log_paths=[
+                p for p in (_jobs[job_id].get("step_log_path"), _jobs[job_id].get("step_summary_path")) if p
+            ],
+        )
+        _jobs[job_id]["artifacts"] = {
+            "reports": artifacts.get("reports") or {},
+            "assets": artifacts.get("assets") or 0,
+        }
 
         # Deep crawls (max_depth 1-2) run longer than a browser will wait, so the
         # frontend stops polling and the finished report is delivered here.
@@ -750,7 +776,7 @@ async def _run_job_body_inner(
             # Rendered here rather than inside the mail thread: Chromium is
             # driven by Playwright's async API, which needs this event loop.
             # Returns None on failure, in which case the CSV still goes out.
-            pdf_bytes = await build_report_pdf(report)
+            pdf_bytes = artifacts.get("pdf_bytes") or await build_report_pdf(report)
             await asyncio.to_thread(
                 send_report_email, payload.email, report, job_id, pdf_bytes
             )
@@ -844,6 +870,34 @@ async def _run_job_body_inner(
             error_stage=current_stage,
         )
         repo.insert_event(job_id, "job_failed", {"error_id": error_id, "stage": current_stage})
+        from ka11y.storage.uploader import upload_crash
+
+        crash_ref = await upload_crash(
+            job_id,
+            {
+                "job_id": job_id,
+                "error_id": error_id,
+                "url": url,
+                "stage": current_stage,
+                "error_type": err_type,
+                "error_message": str(exc),
+                "traceback": tb,
+                "failed_at": failed_at,
+                "submitted_at": _jobs[job_id].get("submitted_at"),
+                "run_started_at": _jobs[job_id].get("run_started_at"),
+                "stages": _jobs[job_id].get("stages", []),
+            },
+        )
+        await audit_repo.mark_failed(
+            job_id,
+            stage=current_stage,
+            error_type=err_type,
+            error_message=str(exc),
+            stack_trace=tb,
+            error_id=error_id,
+            completed_at=failed_at,
+            object_key=crash_ref.key if crash_ref else None,
+        )
 
         job_rec = _jobs.get(job_id, {})
         log_run_timing(

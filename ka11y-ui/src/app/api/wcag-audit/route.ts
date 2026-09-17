@@ -77,8 +77,15 @@ export async function POST(request: Request) {
 
     const submitRes = await fetch(submitUrl.toString(), {
       method: "POST",
+      // The Python API authorises by session cookie; this handler runs
+      // server-side so the browser's cookie has to be forwarded by hand.
+      headers: { cookie: request.headers.get("cookie") ?? "" },
       signal: AbortSignal.timeout(10000),
     });
+
+    if (submitRes.status === 401) {
+      return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+    }
 
     const data = await submitRes.json().catch(() => null);
 

@@ -658,6 +658,7 @@ class UniversalPageLoader:
         image_capture: bool = False,
         image_raw_dir: Optional[Path] = None,
         time_budget_s: Optional[float] = None,
+        html_snapshots: Optional[bool] = None,
     ) -> PageSnapshot:
         """
         Main entry point for universal crawling. Uses a single browser session
@@ -721,6 +722,17 @@ class UniversalPageLoader:
                 raw_dir=raw_dir,
                 download_sem=asyncio.Semaphore(DOWNLOAD_CONCURRENCY),
             )
+        # Rendered HTML of every page → output_dir/html/<slug>.html, later
+        # uploaded to object storage as the page's "HTML snapshot"
+        # (KA11Y_HTML_SNAPSHOTS, default on).
+        if html_snapshots is None:
+            from ka11y.storage.config import settings as _storage_settings
+
+            html_snapshots = _storage_settings().html_snapshots
+        html_dir: Optional[Path] = None
+        if html_snapshots:
+            html_dir = Path(output_dir) / "html"
+            html_dir.mkdir(parents=True, exist_ok=True)
         deadline = (
             time.monotonic() + time_budget_s
             if time_budget_s is not None and time_budget_s > 0
@@ -818,6 +830,7 @@ class UniversalPageLoader:
                             output=snapshot,
                             step_logger=step_logger,
                             image_opts=image_opts,
+                            html_dir=html_dir,
                         )
                     )
                     inflight[task] = current_depth
@@ -871,6 +884,7 @@ class UniversalPageLoader:
         output: PageSnapshot,
         step_logger: ExecutionStepLogger | None,
         image_opts: Optional[ImageCaptureOptions] = None,
+        html_dir: Optional[Path] = None,
     ) -> List[str]:
         """Open a ``crawler.page`` span and crawl one URL.
 
@@ -887,7 +901,24 @@ class UniversalPageLoader:
                 output=output,
                 step_logger=step_logger,
                 image_opts=image_opts,
+                html_dir=html_dir,
             )
+
+    @classmethod
+    async def _save_html_snapshot(
+        cls, page: Page, html_dir: Path, page_url: str
+    ) -> Optional[str]:
+        """Write the page's current DOM as HTML. Best-effort; never raises."""
+        try:
+            from ka11y.crawler.image_extractor import url_slug
+
+            html = await asyncio.wait_for(page.content(), timeout=15)
+            dest = Path(html_dir) / f"{url_slug(page_url)}.html"
+            await asyncio.to_thread(dest.write_text, html, "utf-8")
+            return str(dest)
+        except Exception:  # noqa: BLE001
+            logger.debug("[universal] html snapshot failed for %s", page_url, exc_info=True)
+            return None
 
     @classmethod
     async def _crawl_one_url_inner(
@@ -901,6 +932,7 @@ class UniversalPageLoader:
         output: PageSnapshot,
         step_logger: ExecutionStepLogger | None,
         image_opts: Optional[ImageCaptureOptions] = None,
+        html_dir: Optional[Path] = None,
     ) -> List[str]:
         page = await context.new_page()
         page_warning_count = 0
@@ -938,6 +970,12 @@ class UniversalPageLoader:
 
             # Chunked extraction to combat virtualized DOMs (Infinite scroll)
             await cls._extract_page_chunked(page, page_url=resolved_url, output=output)
+
+            # HTML snapshot of the page as it arrived (before the image step
+            # scrolls/clicks it into a different state).
+            html_snapshot_path: Optional[str] = None
+            if html_dir is not None:
+                html_snapshot_path = await cls._save_html_snapshot(page, html_dir, resolved_url)
 
             # Pipeline element contexts for this page. Runs on the same loaded
             # page as the universal extractor — every page reached by the BFS
@@ -994,6 +1032,7 @@ class UniversalPageLoader:
                     "links_found": len(links),
                     "page_lang": page_lang,
                     "images": images_captured,
+                    "html_snapshot": html_snapshot_path,
                 }
             )
             output.pages_crawled += 1

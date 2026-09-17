@@ -10,6 +10,7 @@ import { useLanguage } from "@/components/dashboard/LanguageContext";
 import type { Translations } from "@/lib/i18n/translations";
 import type { WcagAuditResponse } from "@/lib/wcagAudit";
 import { cn } from "@/lib/utils";
+import { redirectToLogin } from "@/lib/auth";
 
 type WcagLevel = "A" | "AA" | "AAA";
 // "queued" is the terminal state for a deep crawl (depth > 0): the job is
@@ -174,6 +175,12 @@ export default function NewAuditPage() {
       });
       const data = await res.json().catch(() => null);
 
+      if (res.status === 401) {
+        // Session gone (expired server-side or cookie cleared): back to login.
+        await redirectToLogin();
+        return;
+      }
+
       if (!res.ok || !data?.jobId) {
         setPhase("form");
         setError(data?.error ?? t.newAudit.errorGeneric);
@@ -218,6 +225,11 @@ export default function NewAuditPage() {
         const res = await fetch(`/api/wcag-audit/${jobId}`);
         const data = await res.json().catch(() => null);
         if (cancelled) return;
+
+        if (res.status === 401) {
+          await redirectToLogin();
+          return;
+        }
 
         if (!res.ok) {
           setPhase("form");

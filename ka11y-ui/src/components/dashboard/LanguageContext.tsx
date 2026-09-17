@@ -27,6 +27,12 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // WCAG 3.1.1: the document language must follow the interface language so
+  // screen readers switch voices. The UI's "jp" is BCP 47 "ja".
+  useEffect(() => {
+    document.documentElement.lang = lang === "jp" ? "ja" : "en";
+  }, [lang]);
+
   function setLang(next: Lang) {
     setLangState(next);
     try {

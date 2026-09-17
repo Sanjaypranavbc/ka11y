@@ -23,7 +23,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from typing import AsyncGenerator
 from ka11y.utils.run_timing import compute_run_timing
@@ -35,6 +35,8 @@ from ka11y.observability import current_span, set_span_attributes
 from .report import apply_reviews
 from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
+from ka11y.auth import CurrentUser, require_user
+from ka11y.db import audit_repo
 from ka11y.store.assets import get_asset
 
 
@@ -213,7 +215,9 @@ async def assert_public_url(url: str) -> None:
 
 
 @router.post("/python-audit", response_model=JobStatusResponse, status_code=202)
-async def submit_python_audit(payload: CombinedRequest):
+async def submit_python_audit(
+    payload: CombinedRequest, user: CurrentUser = Depends(require_user)
+):
     """
     Submit a **Python-only** accessibility audit.
 
@@ -225,7 +229,7 @@ async def submit_python_audit(payload: CombinedRequest):
     for status and the full report, or connect to
     **GET /api/v1/combined/{job_id}/stream** for real-time SSE stage events.
     """
-    return await _admit_run(payload)
+    return await _admit_run(payload, user=user)
 
 
 @router.post("/combined-audit", response_model=JobStatusResponse, status_code=202)
@@ -236,6 +240,7 @@ async def submit_combined_audit(
     wcag_level: str = Query("AAA", pattern=r"^(A|AA|AAA)$"),
     email: str | None = Query(None, max_length=254),
     lang: str = Query("auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$"),
+    user: CurrentUser = Depends(require_user),
 ):
     """
     Submit a **combined Python + Node/axe-core** accessibility audit.
@@ -270,11 +275,16 @@ async def submit_combined_audit(
         run_media_audit=True,
         run_captions_audit=True,
     )
-    return await _admit_run(payload)
+    return await _admit_run(payload, user=user)
 
 
 
-async def _admit_run(payload: CombinedRequest, *, rerun_of: str | None = None) -> dict:
+async def _admit_run(
+    payload: CombinedRequest,
+    *,
+    rerun_of: str | None = None,
+    user: CurrentUser | None = None,
+) -> dict:
     """Create the hot-cache entry and enqueue a run through the durable queue.
 
     Shared by fresh submissions and re-audits so both go through the exact same
@@ -304,6 +314,22 @@ async def _admit_run(payload: CombinedRequest, *, rerun_of: str | None = None) -
 
 
     await enqueue(job_id, payload)
+
+    # Ownership + history record in PostgreSQL (spec: audit_jobs). Best-effort,
+    # and a no-op for anonymous callers (KA11Y_AUTH_DISABLED) or without
+    # DATABASE_URL — the SQLite queue above is what actually runs the job.
+    # isinstance, not a None check: when a test calls the route function
+    # directly the parameter is FastAPI's Depends() sentinel, not a user.
+    if isinstance(user, CurrentUser) and not user.is_anonymous:
+        await audit_repo.create_job(
+            job_id,
+            user_id=user.user_id,
+            organization_id=user.organization_id,
+            session_id=user.session_id,
+            target_url=url,
+            crawl_depth=payload.max_depth,
+            requested_pages=payload.max_pages,
+        )
     from ka11y.config.logger import setup_logger
     logger = setup_logger(name="KAC", tag="combined")
 
@@ -325,7 +351,7 @@ async def _admit_run(payload: CombinedRequest, *, rerun_of: str | None = None) -
 
 
 @router.post("/{job_id}/rerun", status_code=202)
-async def rerun_combined_audit(job_id: str):
+async def rerun_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
     """Re-audit a past run with its exact stored parameters.
 
     Returns a NEW ``job_id`` (the original run is preserved for comparison). Use
@@ -348,7 +374,7 @@ async def rerun_combined_audit(job_id: str):
             status_code=400,
             detail="Stored audit parameters could not be reconstructed for re-run.",
         )
-    new_job = await _admit_run(payload, rerun_of=job_id)
+    new_job = await _admit_run(payload, rerun_of=job_id, user=user)
     return {**new_job, "rerun_of": job_id}
 
 
@@ -465,6 +491,7 @@ async def cancel_combined_audit(job_id: str):
     if in_hot:
         _jobs[job_id]["status"] = "cancelled"
     repo.insert_event(job_id, "cancelled", {})
+    await audit_repo.mark_cancelled(job_id)
     return {"job_id": job_id, "status": "cancelled", "cancelled": True}
 
 

@@ -862,6 +862,12 @@ async def _run_python_stages(
                 seen_pages.add(pu)
                 discovered_urls.append(pu)
                 crawled_pages.append({"page_url": pu, "depth": s.get("depth"), "status": "success"})
+        # page_url → rendered-HTML path; uploaded as html_snapshot assets on completion.
+        _jobs[job_id]["html_snapshots"] = {
+            s["page_url"]: s["html_snapshot"]
+            for s in snapshot.page_summaries
+            if s.get("html_snapshot")
+        }
         if not discovered_urls:
             discovered_urls = [url]
 

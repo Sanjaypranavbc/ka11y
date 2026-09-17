@@ -59,6 +59,46 @@ services:
         max-file: "5"
 
 
+  # ── PostgreSQL — users, OIDC identities, sessions, audit ownership/history ─
+  # Local stand-in for Amazon RDS PostgreSQL. In production point DATABASE_URL
+  # at the RDS endpoint (add ?sslmode=require) and remove this service; the
+  # schema (Alembic, ka11y-python/alembic/) is identical on both.
+  postgres:
+    image: postgres:16-alpine
+    container_name: ka11y-postgres
+    restart: unless-stopped
+
+    networks:
+      - ka11y-net
+
+    # POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD come from the same
+    # ka11y-python/.env the python service loads, so one file holds the
+    # credentials and the DATABASE_URL that uses them.
+    env_file:
+      - path: ./ka11y-python/.env
+        required: true
+
+    # Loopback only: nothing outside this host needs the DB.
+    ports:
+      - "127.0.0.1:5432:5432"
+
+    volumes:
+      - ka11y_pg:/var/lib/postgresql/data
+
+    healthcheck:
+      test:         ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval:     10s
+      timeout:      5s
+      start_period: 20s
+      retries:      10
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+
   # ── Python FastAPI auditors ────────────────────────────────────────────────
   python:
     build:
@@ -89,6 +129,10 @@ services:
 #    depends_on:
 #      node:
 #        condition: service_healthy
+
+    depends_on:
+      postgres:
+        condition: service_healthy
 
     networks:
       - ka11y-net
@@ -181,20 +225,45 @@ services:
       # of a second Puppeteer crawl in Node. Default OFF; flip to "1" to trial.
       KA11Y_UNIFIED_CRAWL:  "0"
 
+      # ── Production DB (PostgreSQL) + OIDC sign-in ────────────────────────
+      # Users, OAuth identities, browser sessions, audit ownership and history
+      # (ka11y-python/ka11y/db). Alembic migrations + the WCAG catalogue seed
+      # run at startup unless this is "0".
+      KA11Y_DB_AUTO_MIGRATE: "1"
+      # Everything secret for this block is read from ka11y-python/.env via
+      # env_file below (see ka11y-python/.env.example), NOT listed here — an
+      # `environment:` entry would override the file with an empty string:
+      #   DATABASE_URL                postgresql://<user>:<pw>@postgres:5432/<db>
+      #   KA11Y_OIDC_ISSUER / _CLIENT_ID / _CLIENT_SECRET / _REDIRECT_URI
+      #   KA11Y_SESSION_SECRET
+      #   KA11Y_ALLOWED_EMAILS / KA11Y_ALLOWED_EMAIL_DOMAINS
+      #   KA11Y_COOKIE_SECURE=0       only for plain-http local dev
+      # The redirect URI is the BROWSER-facing UI origin + /api/v1/auth/callback;
+      # the ui service rewrites /api/v1/auth/* to this container.
+      #
+      # Artifact storage (S3) is configured the same way, from ka11y-python/.env:
+      #   KA11Y_S3_BUCKET / KA11Y_S3_PREFIX / KA11Y_S3_REGION / KA11Y_S3_SSE
+      #   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY  (or an instance/task role)
+      # With no bucket the same artifacts stay on the ka11y_assets-style volume
+      # below under KA11Y_ARTIFACT_DIR.
+      KA11Y_ARTIFACT_DIR:   "/data/artifacts"
+
     # Expose to host for local debugging / direct API calls.
     # In production behind a reverse proxy this can be removed.
     ports:
       - "0.0.0.0:8000:8000"
 
+    # Required now: it carries DATABASE_URL and the OIDC/session settings.
     env_file:
       - path: ./ka11y-python/.env
-        required: false
+        required: true
 
     volumes:
       - ./output/crawled_images:/app/crawled_images
       - ./output/logs:/app/logs
       - ./output/db:/data/db
       - ./output/assets:/data/assets
+      - ./output/artifacts:/data/artifacts
       - huggingface_cache:/root/.cache/huggingface
       # PaddleOCR's detection/recognition/orientation models (~100MB,
       # downloaded lazily on first Japanese-language audit). Without this,
@@ -332,6 +401,8 @@ services:
       # Server-side only (no NEXT_PUBLIC_ prefix) — read at request time, so
       # this can be changed without rebuilding the image.
       WCAG_API_URL: "http://python:8000/api/v1/combined"
+      # Target of the /api/v1/auth/* and /api/v1/assets/* rewrites.
+      PYTHON_ORIGIN: "http://python:8000"
 
     ports:
       - "0.0.0.0:8080:3001"
@@ -390,5 +461,7 @@ networks:
 volumes:
   huggingface_cache:
   paddlex_models:
+  # PostgreSQL data directory (local dev / single-box deploys).
+  ka11y_pg:
 #  # Phoenix's SQLite trace store, so local traces survive `docker compose down`.
 #  phoenix_data:

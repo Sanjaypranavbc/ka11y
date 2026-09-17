@@ -15,6 +15,7 @@ import {
 import { DASHBOARD_NAV_ITEMS, isNavItemActive } from "@/lib/dashboardNav";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
+import { LOGOUT_URL } from "@/lib/auth";
 
 const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   dashboard: DashboardIcon,
@@ -106,8 +107,10 @@ export function Sidebar() {
 
       {/* Logout */}
       <div className="border-t border-gray-40 px-6 py-5">
-        <Link
-          href="/login"
+        {/* Plain anchor, not <Link>: this is a rewrite to the Python API that
+            ends the session, clears the cookie and redirects to /login. */}
+        <a
+          href={LOGOUT_URL}
           className={cn(
             "inline-flex items-center gap-2 text-[16px] leading-6 text-brand-green-80 hover:opacity-80",
             collapsed && "justify-center",
@@ -115,7 +118,7 @@ export function Sidebar() {
         >
           <LogOut size={16} aria-hidden="true" />
           {!collapsed && t.nav.logout}
-        </Link>
+        </a>
       </div>
     </aside>
   );

@@ -10,6 +10,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   async rewrites() {
     return [
+      // OIDC sign-in flow. The browser must hit these directly (redirects to
+      // the identity provider and back) and the session cookie has to be set
+      // on *this* origin, so the whole /auth/* surface is proxied verbatim.
+      { source: "/api/v1/auth/:path*", destination: `${PYTHON_ORIGIN}/api/v1/auth/:path*` },
       // Content-addressed asset store (current scheme)
       { source: "/api/v1/assets/:path*", destination: `${PYTHON_ORIGIN}/api/v1/assets/:path*` },
       // Legacy per-job image serving (fallback for older runs)

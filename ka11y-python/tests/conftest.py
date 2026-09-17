@@ -23,6 +23,17 @@ from bs4 import BeautifulSoup
 _STORE_TMP = tempfile.mkdtemp(prefix="ka11y-test-store-")
 os.environ.setdefault("KA11Y_DB_PATH", os.path.join(_STORE_TMP, "ka11y.db"))
 os.environ.setdefault("KA11Y_ASSET_DIR", os.path.join(_STORE_TMP, "assets"))
+# Protected API routes need a signed-in OIDC user in production. The suite has
+# no identity provider, so every protected dependency resolves to an anonymous
+# caller instead of a 401/503. (test_auth overrides this per test.)
+os.environ.setdefault("KA11Y_AUTH_DISABLED", "1")
+# Artifact storage: keep test uploads inside the throwaway store (never the
+# checkout's logs/artifacts) and skip the PDF render. The PDF is a Chromium
+# job on the caller's event loop; in the suite that loop is a per-test one,
+# and a browser pool left bound to it makes the next TestClient shutdown
+# (browser pool teardown) wait forever. test_storage overrides per test.
+os.environ.setdefault("KA11Y_ARTIFACT_DIR", os.path.join(_STORE_TMP, "artifacts"))
+os.environ.setdefault("KA11Y_ARTIFACT_PDF", "0")
 
 
 @pytest.fixture(scope="session", autouse=True)

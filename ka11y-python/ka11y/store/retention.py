@@ -18,6 +18,8 @@ import os
 from ka11y.config.logger import setup_logger
 from ka11y.store import repo
 from ka11y.store.assets import prune_run_assets
+from ka11y.storage.config import settings as storage_settings
+from ka11y.storage.uploader import delete_job_artifacts
 
 logger = setup_logger(name="KAC", tag="store.retention")
 
@@ -32,6 +34,10 @@ async def run_retention_loop() -> None:
             removed = await repo.retention_sweep(retention_days)
             for run_id in removed:
                 await asyncio.to_thread(prune_run_assets, run_id)
+                # Object-storage copies are kept by default (S3 lifecycle rules
+                # are the right tool); KA11Y_ARTIFACT_DELETE_ON_RETENTION=1 opts in.
+                if storage_settings().delete_on_retention:
+                    await delete_job_artifacts(run_id)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001

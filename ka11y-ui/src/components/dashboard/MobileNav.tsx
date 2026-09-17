@@ -9,6 +9,7 @@ import { DashboardIcon, ViolationsIcon, NeedsReviewIcon, PassesIcon, SettingsNav
 import { DASHBOARD_NAV_ITEMS, isNavItemActive } from "@/lib/dashboardNav";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
+import { LOGOUT_URL } from "@/lib/auth";
 
 const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   dashboard: DashboardIcon,
@@ -82,13 +83,13 @@ export function MobileNav() {
               })}
             </ul>
             </div>
-            <button
-              type="button"
+            <a
+              href={LOGOUT_URL}
               className="inline-flex items-center gap-2 px-3 py-3 text-p3 font-medium text-brand-teal"
             >
               <LogOut size={16} aria-hidden="true" />
               {t.nav.logout}
-            </button>
+            </a>
           </nav>
         </div>
       )}

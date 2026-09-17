@@ -1,27 +1,84 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
+import { AUTH_PROVIDER_LABEL, loginUrl } from "@/lib/auth";
 
-export default function LoginPage() {
-  const router = useRouter();
+// Sign-in is OAuth 2.0 / OpenID Connect only (no local passwords). The button
+// sends the browser to the Python API's /auth/login, which redirects to the
+// identity provider and back; the API sets the session cookie on the way in.
+function LoginForm() {
   const { t } = useLanguage();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const searchParams = useSearchParams();
   const [keepSignedIn, setKeepSignedIn] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+
+  const errorCode = searchParams.get("error");
+  const errorMessage = errorCode
+    ? (t.login.errors as Record<string, string>)[errorCode] ?? t.login.errors.generic
+    : null;
+  const next = searchParams.get("next") ?? undefined;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Navigate to dashboard upon sign in
-    router.push("/dashboard");
+    setRedirecting(true);
+    window.location.assign(loginUrl({ remember: keepSignedIn, next }));
   }
 
+  return (
+    <div className="w-full max-w-[460px] rounded-[16px] bg-white p-8 sm:p-12 shadow-[0px_4px_24px_rgba(0,0,0,0.04)]">
+      <h1 className="text-center text-[28px] font-bold text-gray-900 sm:text-[32px]">
+        {t.login.signIn}
+      </h1>
+      <p className="mt-2 text-center text-[15px] leading-6 text-gray-500">
+        {t.login.subtitle}
+      </p>
+
+      {errorMessage && (
+        <p
+          role="alert"
+          className="mt-6 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[14px] leading-5 text-red-800"
+        >
+          {errorMessage}
+        </p>
+      )}
+
+      <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
+        <button
+          type="submit"
+          disabled={redirecting}
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-[#005A54] px-6 py-3.5 text-[16px] font-medium text-white hover:bg-[#004843] active:bg-[#003834] disabled:opacity-60 transition-colors shadow-sm"
+        >
+          <ChevronRight size={18} aria-hidden="true" />
+          <span>
+            {redirecting ? t.login.redirecting : t.login.continueWith(AUTH_PROVIDER_LABEL)}
+          </span>
+        </button>
+
+        <label className="flex items-center gap-2 text-[14px] text-gray-700 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={keepSignedIn}
+            onChange={(e) => setKeepSignedIn(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-[#005A54] accent-[#005A54] focus:ring-[#005A54]"
+          />
+          <span>{t.login.keepMeSignedIn}</span>
+        </label>
+      </form>
+
+      <p className="mt-6 text-center text-[13px] leading-5 text-gray-500">
+        {t.login.accessNote}
+      </p>
+    </div>
+  );
+}
+
+export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen w-full flex-col md:flex-row bg-[#F7F8FA]">
       {/* Language Toggle in top corner */}
@@ -44,93 +101,17 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right side: Login Form Section */}
+      {/* Right side: Sign-in card */}
       <div className="flex min-h-screen w-full md:w-1/2 flex-col items-center justify-center px-4 py-12 sm:px-8 lg:px-16">
         {/* Mobile Logo */}
         <div className="mb-8 md:hidden">
           <Logo variant="color" />
         </div>
 
-        {/* Sign In Card */}
-        <div className="w-full max-w-[460px] rounded-[16px] bg-white p-8 sm:p-12 shadow-[0px_4px_24px_rgba(0,0,0,0.04)]">
-          <h1 className="text-center text-[28px] font-bold text-gray-900 sm:text-[32px]">
-            {t.login.signIn}
-          </h1>
-          <p className="mt-2 text-center text-[15px] leading-6 text-gray-500">
-            {t.login.subtitle}
-          </p>
-
-          <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
-            {/* Email input */}
-            <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-1.5">
-                {t.login.emailLabel}
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder={t.login.emailPlaceholder}
-                required
-                className="w-full rounded-[10px] border border-gray-300 bg-white px-4 py-3 text-[15px] text-gray-900 placeholder:text-gray-400 focus:border-[#005A54] focus:outline-none focus:ring-1 focus:ring-[#005A54] transition-all"
-              />
-            </div>
-
-            {/* Password input */}
-            <div>
-              <label className="block text-[14px] font-medium text-gray-700 mb-1.5">
-                {t.login.passwordLabel}
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={t.login.passwordPlaceholder}
-                required
-                className="w-full rounded-[10px] border border-gray-300 bg-white px-4 py-3 text-[15px] text-gray-900 placeholder:text-gray-400 focus:border-[#005A54] focus:outline-none focus:ring-1 focus:ring-[#005A54] transition-all"
-              />
-            </div>
-
-            {/* Keep me signed in & Forgot password */}
-            <div className="flex items-center justify-between text-[14px] pt-1">
-              <label className="flex items-center gap-2 text-gray-700 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={keepSignedIn}
-                  onChange={(e) => setKeepSignedIn(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-[#005A54] accent-[#005A54] focus:ring-[#005A54]"
-                />
-                <span>{t.login.keepMeSignedIn}</span>
-              </label>
-              <Link
-                href="#"
-                className="font-medium text-[#005A54] hover:underline"
-              >
-                {t.login.forgotPassword}
-              </Link>
-            </div>
-
-            {/* Sign in button */}
-            <button
-              type="submit"
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-[#005A54] px-6 py-3.5 text-[16px] font-medium text-white hover:bg-[#004843] active:bg-[#003834] transition-colors shadow-sm"
-            >
-              <ChevronRight size={18} aria-hidden="true" />
-              <span>{t.login.signIn}</span>
-            </button>
-          </form>
-        </div>
-
-        {/* Footer sign up prompt */}
-        <div className="mt-8 text-center text-[15px] text-gray-600">
-          <span>{t.login.signUpText} </span>
-          <Link
-            href="#"
-            className="font-semibold text-[#005A54] hover:underline ml-1"
-          >
-            {t.login.signUpLink}
-          </Link>
-        </div>
+        {/* useSearchParams() needs a Suspense boundary for static rendering */}
+        <Suspense fallback={null}>
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   );

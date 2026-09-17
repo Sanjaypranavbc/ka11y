@@ -1,0 +1,85 @@
+---
+title: "Artifact Storage (S3)"
+description: "Where screenshots, HTML snapshots, OCR artifacts and the JSON/CSV/PDF reports of every audit are stored, how they are keyed, and how they are served"
+---
+
+## What is stored
+
+| Artifact | Produced by | Object key (under the job prefix) | Registered in |
+|----------|-------------|-----------------------------------|---------------|
+| Full report JSON | runner, on completion | `reports/report.json` | PostgreSQL `reports` (type `detailed`, format `json`) |
+| Findings CSV | `utils/report_csv.build_findings_csv` | `reports/findings.csv` | `reports` (`tabular` / `csv`) |
+| PDF report | `utils/report_pdf.build_report_pdf` (Chromium) | `reports/report.pdf` | `reports` (`summary` / `pdf`) — off with `KA11Y_ARTIFACT_PDF=0` |
+| HTML snapshot of every crawled page | `UniversalPageLoader` (`page.content()` before the image step mutates the page) | `assets/html/{page-slug}/{sha256}.html` | SQLite `assets` (kind `html_snapshot`) |
+| Screenshots, element / OCR / contrast crops | `image_extractor`, registered by `store/assets.register_report_assets` | `assets/screenshots/…`, `assets/images/{page-slug}/{sha256}.png` | `assets` (kinds `finding_image`, `ocr_crop`, `contrast_region`) |
+| OCR artifacts | `text_detector.save_reports` | `raw/ocr/{sha8}-text_detection_report.json`, `raw/ocr/{sha8}-contrast_report.{json,csv,md}` | `assets` (kind `ocr_report`) |
+| Execution step log | `ExecutionStepLogger` | `raw/steps/{sha8}-combined_execution_steps.jsonl` (+ summary) | `assets` (kind `step_log`) |
+| Subtitle files | media auditor | `assets/media/…` | `assets` (kind `subtitles`) |
+| Crash dump | runner, on failure | `crash/crash.json` | `crash_reports.metadata.s3_key` |
+
+Only images a finding or the OCR report references are uploaded, not every
+image the crawler downloaded. The report JSON is also kept zlib-compressed in
+SQLite for the API's own reads; S3 is the durable, shareable copy.
+
+## Key layout
+
+Spec §18, UUIDs only:
+
+```text
+{KA11Y_S3_PREFIX}/organizations/{organization_id}/users/{user_id}/sessions/{session_id}/jobs/{job_id}/
+    reports/  report.json · findings.csv · report.pdf
+    assets/   screenshots/ · html/ · images/ · media/
+    raw/      ocr/ · steps/
+    crash/    crash.json
+```
+
+Ownership comes from `audit_jobs` (see [Sign-in & Production Database](/internals/auth-and-database)).
+A job PostgreSQL does not know — auth disabled, `DATABASE_URL` unset — lands
+under `anonymous/jobs/{job_id}/` so uploads never wait on ownership data.
+
+## Backends
+
+`ka11y/storage/backends.py` exposes one async interface with two
+implementations, chosen by `KA11Y_STORAGE_BACKEND` (`auto` = S3 when
+`KA11Y_S3_BUCKET` is set, else local):
+
+| Backend | Bytes live in | Download links |
+|---------|---------------|----------------|
+| `s3` | the bucket, via boto3 (calls run in a worker thread; credentials from the standard AWS chain; `KA11Y_S3_ENDPOINT_URL` for MinIO/LocalStack) | presigned URLs, `KA11Y_S3_PRESIGN_SECONDS` |
+| `local` | `KA11Y_ARTIFACT_DIR` (compose: `./output/artifacts`) with the same keys | served through the API |
+
+Every upload is best-effort: a storage failure is logged and the audit still
+completes with its local copies. Nothing large is ever written to PostgreSQL.
+
+## Serving
+
+* `GET /api/v1/assets/{id}` serves the local file when present, otherwise
+  redirects to a presigned S3 URL (or streams the local-backend copy). That is
+  what makes thumbnails keep working after the retention sweep prunes
+  `KA11Y_ASSET_DIR`.
+* `GET /api/v1/audits/{job_id}/artifacts` lists a job's report files (with
+  download links) and all registered assets. Visible to the job's owner and
+  members of the owning organization.
+* `GET /api/v1/audits/{job_id}/reports/{report_id}/download` redirects to a
+  presigned URL, or streams the file on the local backend.
+
+## Retention
+
+Local copies follow `KA11Y_RUN_RETENTION_DAYS`. Objects are **kept** by
+default; put an S3 lifecycle rule on the prefix (for example transition to
+Infrequent Access after 30 days, expire after a year). Set
+`KA11Y_ARTIFACT_DELETE_ON_RETENTION=1` to delete a job's whole prefix when the
+sweep removes the run instead.
+
+## Bucket checklist
+
+1. Private bucket, Block Public Access on, default encryption (SSE-S3 or KMS; set `KA11Y_S3_SSE` to send the header explicitly).
+2. IAM policy for the API's role/key: `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` on `arn:aws:s3:::bucket/{prefix}/*` and `s3:ListBucket` on the bucket with a prefix condition.
+3. Lifecycle rule on `{prefix}/` (see Retention).
+4. Fill `KA11Y_S3_BUCKET`, `KA11Y_S3_REGION` (and credentials unless using a role) in `ka11y-python/.env`, restart the python service, run one audit, and check `GET /api/v1/audits/{job_id}/artifacts`.
+
+## Testing
+
+`tests/test_storage.py` covers both backends (S3 through `moto`, in-process),
+the key layout, the asset-registry upload, completion and crash uploads and
+the serving fallback. No network or credentials needed.

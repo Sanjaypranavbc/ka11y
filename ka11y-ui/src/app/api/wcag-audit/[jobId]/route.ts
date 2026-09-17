@@ -7,15 +7,20 @@ const WCAG_API_URL =
 // Single, short-lived status check — the client calls this repeatedly
 // instead of one request blocking for the whole audit.
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ jobId: string }> },
 ) {
   const { jobId } = await params;
 
   try {
     const pollRes = await fetch(`${WCAG_API_URL}/${jobId}`, {
+      headers: { cookie: request.headers.get("cookie") ?? "" },
       signal: AbortSignal.timeout(10000),
     });
+
+    if (pollRes.status === 401) {
+      return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+    }
 
     const data = await pollRes.json().catch(() => null);
 

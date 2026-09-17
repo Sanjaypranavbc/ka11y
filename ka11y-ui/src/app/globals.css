@@ -55,6 +55,30 @@
   --color-surface: #f6f6f4;
   --color-sidebar: #f6f6f4;
 
+  /* Admin console status palette. Every text/bg pair is >= 4.5:1 and every
+     graphic colour is >= 3:1 against white (checked with the WCAG formula). */
+  --color-adm-completed: #0a6b58;
+  --color-adm-completed-bg: #e3f5ef;
+  --color-adm-running: #1a4fc4;
+  --color-adm-running-bg: #e6effd;
+  --color-adm-failed: #b3261e;
+  --color-adm-failed-bg: #fde8e6;
+  --color-adm-review: #8a4b00;
+  --color-adm-review-bg: #fdf1dc;
+  --color-adm-cancelled: #4e4d4e;
+  --color-adm-cancelled-bg: #ececea;
+
+  --color-adm-chart-completed: #00806d;
+  --color-adm-chart-running: #2563eb;
+  --color-adm-chart-failed: #d92d20;
+  --color-adm-chart-cancelled: #7a7a76;
+  --color-adm-sev-critical: #d92d20;
+  --color-adm-sev-serious: #c2410c;
+  --color-adm-sev-moderate: #b45309;
+  --color-adm-sev-minor: #2f8f2f;
+
+  --color-adm-border: #e6e6e1;
+
   /* Helvetica Neue is licensed and can't be bundled; Inter is the self-hosted fallback. */
   --font-sans: "Helvetica Neue", var(--font-inter), Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
 
@@ -132,6 +156,26 @@
   --color-surface: var(--color-surface);
   --color-sidebar: var(--color-sidebar);
 
+  --color-adm-completed: var(--color-adm-completed);
+  --color-adm-completed-bg: var(--color-adm-completed-bg);
+  --color-adm-running: var(--color-adm-running);
+  --color-adm-running-bg: var(--color-adm-running-bg);
+  --color-adm-failed: var(--color-adm-failed);
+  --color-adm-failed-bg: var(--color-adm-failed-bg);
+  --color-adm-review: var(--color-adm-review);
+  --color-adm-review-bg: var(--color-adm-review-bg);
+  --color-adm-cancelled: var(--color-adm-cancelled);
+  --color-adm-cancelled-bg: var(--color-adm-cancelled-bg);
+  --color-adm-chart-completed: var(--color-adm-chart-completed);
+  --color-adm-chart-running: var(--color-adm-chart-running);
+  --color-adm-chart-failed: var(--color-adm-chart-failed);
+  --color-adm-chart-cancelled: var(--color-adm-chart-cancelled);
+  --color-adm-sev-critical: var(--color-adm-sev-critical);
+  --color-adm-sev-serious: var(--color-adm-sev-serious);
+  --color-adm-sev-moderate: var(--color-adm-sev-moderate);
+  --color-adm-sev-minor: var(--color-adm-sev-minor);
+  --color-adm-border: var(--color-adm-border);
+
   --font-sans: var(--font-sans);
 
   --text-h1: var(--text-h1);
@@ -203,5 +247,36 @@ body {
   }
   100% {
     transform: translateX(300%);
+  }
+}
+
+/* Admin console: the brand teal is only 2.9:1 on white, below the 3:1 that a
+   focus indicator needs (WCAG 2.4.11 / 1.4.11), so the console uses the
+   darker green for its ring. Scoped so the marketing/dashboard look is untouched. */
+.admin-root :focus-visible {
+  outline: 3px solid var(--color-brand-green-80);
+  outline-offset: 2px;
+}
+
+/* Recharts wrapper: the visual is decorative for AT; the table next to it is
+   the accessible equivalent. Keep the SVG out of the tab order in all browsers. */
+.admin-chart svg:focus {
+  outline: none;
+}
+
+/* Drawer slide-in, only when the user has not asked for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .admin-drawer-enter {
+    animation: admin-drawer-in 200ms ease-out;
+  }
+  @keyframes admin-drawer-in {
+    from {
+      transform: translateX(24px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
   }
 }

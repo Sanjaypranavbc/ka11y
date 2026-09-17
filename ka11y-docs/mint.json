@@ -141,6 +141,8 @@
       "pages": [
         "internals/combined-package",
         "internals/persistence-and-queue",
+        "internals/auth-and-database",
+        "internals/artifact-storage",
         "internals/scoring-and-manual-review",
         "internals/python-rules-flow-analysis",
         "internals/node-rules-flow-analysis",

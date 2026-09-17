@@ -124,16 +124,65 @@ async def put_asset(
                 run_id, kind,
             )
             return None
+        # Object-storage name: content hash for images/HTML (deduped, stable);
+        # hash-prefixed original name for report-like files so raw/ocr/ keeps
+        # "text_detection_report.json" and "contrast_report.csv" readable.
+        object_name = (
+            f"{sha[:8]}-{src_name}"
+            if kind in ("ocr_report", "step_log", "crawler_json") and src_name
+            else f"{sha}.{ext}"
+        )
+        await _upload_if_needed(
+            int(asset_id), run_id=run_id, kind=kind, dest=dest,
+            filename=object_name, page_url=page_url, mime=mime,
+        )
         return AssetRef(asset_id=int(asset_id), rel_path=rel_path, sha256=sha, bytes=len(raw))
     except Exception:  # noqa: BLE001
         logger.warning("[store] put_asset(run=%s kind=%s) failed", run_id, kind, exc_info=True)
         return None
 
 
-async def get_asset(asset_id: int) -> Optional[Dict[str, Any]]:
-    """Resolve an asset row + absolute path for serving. Validates containment."""
+async def _upload_if_needed(
+    asset_id: int,
+    *,
+    run_id: str,
+    kind: str,
+    dest: Path,
+    filename: str,
+    page_url: Optional[str],
+    mime: Optional[str],
+) -> None:
+    """Mirror the bytes to object storage (S3 / local artifact dir) once per
+    row and remember the key. Storage off, or already uploaded → no-op.
+    Never raises: the local copy is the fallback."""
+    try:
+        from ka11y.storage.backends import get_store
+
+        if get_store() is None:
+            return
+        row = await get_db().query_one("SELECT object_key FROM assets WHERE id=?", (asset_id,))
+        if row and row.get("object_key"):
+            return
+        from ka11y.storage.uploader import upload_asset_file
+
+        ref = await upload_asset_file(
+            run_id, kind=kind, path=dest, filename=filename, page_url=page_url, content_type=mime
+        )
+        if ref:
+            await get_db().execute(
+                "UPDATE assets SET object_key=?, object_bucket=? WHERE id=?",
+                (ref.key, ref.bucket if ref.backend == "s3" else None, asset_id),
+            )
+    except Exception:  # noqa: BLE001
+        logger.debug("[store] asset %s upload skipped", asset_id, exc_info=True)
+
+
+async def get_asset_record(asset_id: int) -> Optional[Dict[str, Any]]:
+    """The asset row plus ``abs_path`` (None when the local file is gone, e.g.
+    pruned by retention — the object store copy may still exist)."""
     row = await get_db().query_one(
-        "SELECT id, run_id, kind, rel_path, mime, bytes FROM assets WHERE id=?",
+        "SELECT id, run_id, kind, rel_path, mime, bytes, object_key, object_bucket "
+        "FROM assets WHERE id=?",
         (asset_id,),
     )
     if not row:
@@ -145,9 +194,17 @@ async def get_asset(asset_id: int) -> Optional[Dict[str, Any]]:
     except ValueError:
         logger.warning("[store] asset %s escapes asset_dir", asset_id)
         return None
-    if not abs_path.is_file():
+    row["abs_path"] = str(abs_path) if abs_path.is_file() else None
+    return row
+
+
+async def get_asset(asset_id: int) -> Optional[Dict[str, Any]]:
+    """Resolve an asset row + absolute local path for serving, or None when
+    the file is not on local disk (callers that need the bytes regardless
+    use :func:`get_asset_record` and the object store)."""
+    row = await get_asset_record(asset_id)
+    if not row or not row.get("abs_path"):
         return None
-    row["abs_path"] = str(abs_path)
     return row
 
 

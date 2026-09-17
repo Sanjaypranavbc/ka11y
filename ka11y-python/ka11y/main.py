@@ -99,6 +99,16 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("SQLite store failed to initialise; running memory-only")
 
+    # Production PostgreSQL (users, OIDC identities, sessions, audit ownership
+    # and history). Inert when DATABASE_URL is unset; runs Alembic migrations
+    # and seeds the WCAG catalogue otherwise. Never blocks startup.
+    try:
+        from ka11y.db import init_postgres
+
+        await init_postgres()
+    except Exception:  # noqa: BLE001
+        logger.exception("PostgreSQL layer failed to initialise")
+
     eviction_task = asyncio.create_task(_evict_old_jobs())
 
     # Crash recovery + durable queue dispatcher (P4). On boot any run left
@@ -129,6 +139,12 @@ async def lifespan(app: FastAPI):
             await shutdown_pool()
         except Exception:  # noqa: BLE001
             logger.exception("browser pool shutdown failed during lifespan teardown")
+        try:
+            from ka11y.db import shutdown_postgres
+
+            await shutdown_postgres()
+        except Exception:  # noqa: BLE001
+            logger.exception("PostgreSQL dispose failed during lifespan teardown")
         try:
             from ka11y.store.cpu_pool import shutdown_pool as shutdown_cpu_pool
 
