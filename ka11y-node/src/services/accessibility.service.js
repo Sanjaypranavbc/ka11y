@@ -16,6 +16,7 @@ const {
   runStaticChecks,
   mergeWithAxe,
 } = require("../custom-checks/index");
+const { installRuntimeHooks } = require("../custom-checks/runtimeHooks");
 const { boundedBfs } = require("../utils/crawl");
 const { canonicalizeUrl } = require("../utils/canonicalUrl");
 
@@ -578,6 +579,7 @@ class AccessibilityService {
       const page = await browser.newPage();
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
+      await installRuntimeHooks(page);
       await page.setBypassCSP(true);
       await page.setViewport({ width: 1280, height: 800 });
 
@@ -680,6 +682,7 @@ class AccessibilityService {
       const page = await browser.newPage();
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
+      await installRuntimeHooks(page);
 
       page.on("console", (msg) => {
         if (msg.type() === "error") {
@@ -816,6 +819,7 @@ class AccessibilityService {
     try {
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
+      await installRuntimeHooks(page);
       await page.setBypassCSP(true);
 
       page.on("console", (msg) => {
@@ -1228,6 +1232,7 @@ class AccessibilityService {
     try {
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
+      await installRuntimeHooks(page);
       await page.setBypassCSP(true);
 
       page.on("console", (msg) => {

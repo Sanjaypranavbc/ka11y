@@ -71,6 +71,7 @@ export const translations = {
         no_email: "Your identity provider did not share an email address.",
         internal_error: "Something went wrong on our side. Please try again.",
         session_expired: "Your session has expired. Please sign in again.",
+        signed_out: "You have been signed out. Please sign in again.",
         generic: "Sign-in failed. Please try again.",
         invalid_credentials: "The email address or password is incorrect.",
         no_password: "This account signs in with an identity provider and has no password yet. Use the provider button, or ask an administrator to set a password.",
@@ -380,9 +381,6 @@ export const translations = {
       increaseDepth: "Increase depth",
       decreaseDepth: "Decrease depth",
       wcagLevelLabel: "WCAG 2.2 Level",
-      warning: "Scans deeper than Level 0 take longer to process.",
-      warningLine2:
-        "We will run this in the background and notify you via email.",
       notificationEmailLabel: "Notification Email",
       notificationEmailPlaceholder: "Enter your email",
       submit: "Run Audit",
@@ -390,12 +388,12 @@ export const translations = {
       submitArrow: ">",
       crawlDepthLevels: [
         {
-          label: "Level 0 - This page only",
+          label: "Level 0 - Target page",
           body: "Scans just the URL you entered. No linked pages are crawled. Fastest option.",
         },
         {
           label: "Level 1 & 2 - This page and its links",
-          body: "The number sets how many link-hops deep the crawl goes — 1 follows direct links, 2 follows the links on those pages, and so on. Takes longer as the number goes up, so we'll run it in the background and email you when it's done.",
+          body: "The number sets how many link-hops deep the crawl goes. 1 follows direct links, 2 follows the links on those pages, and so on. Takes longer as the number goes up, so we'll run it in the background and email you when it's done.",
         },
       ],
       crawlDepthDescription: "Scans just the URL you entered. No linked pages are crawled. Fastest option.",
@@ -603,6 +601,7 @@ export const translations = {
         no_email: "IDプロバイダーからメールアドレスが提供されませんでした。",
         internal_error: "サーバー側で問題が発生しました。もう一度お試しください。",
         session_expired: "セッションの有効期限が切れました。再度サインインしてください。",
+        signed_out: "サインアウトしました。再度サインインしてください。",
         generic: "サインインに失敗しました。もう一度お試しください。",
         invalid_credentials: "メールアドレスまたはパスワードが正しくありません。",
         no_password: "このアカウントはIDプロバイダーでサインインする設定で、パスワードが未設定です。プロバイダーのボタンを使うか、管理者にパスワードの設定を依頼してください。",
@@ -913,9 +912,6 @@ export const translations = {
       increaseDepth: "深度を増やす",
       decreaseDepth: "深度を減らす",
       wcagLevelLabel: "WCAG 2.2 レベル",
-      warning: "深度0より深いスキャンは処理に時間がかかります。",
-      warningLine2:
-        "このスキャンはバックグラウンドで実行され、完了時にメールでお知らせします。",
       notificationEmailLabel: "通知先メールアドレス",
       notificationEmailPlaceholder: "メールアドレスを入力",
       submit: "監査を実行",
@@ -923,7 +919,7 @@ export const translations = {
       submitArrow: ">",
       crawlDepthLevels: [
         {
-          label: "レベル0 - このページのみ",
+          label: "レベル0 - 対象ページ",
           body: "入力したURLのみをスキャンします。リンク先のページはクロールされません。最も高速なオプションです。",
         },
         {

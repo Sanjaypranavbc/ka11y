@@ -60,7 +60,19 @@ async function run(page, context = {}) {
       }
     }
 
-    return { hasReducedMotionQuery, animatedCount: animated.length, animated };
+    // ── Check 3 (SCR40): scripts that consult prefers-reduced-motion ─────────
+    // Runtime hook records every window.matchMedia() call made by page scripts;
+    // fall back to scanning inline <script> text when the hook is not installed.
+    const R = window.__ka11yRuntime;
+    let hasScriptReducedMotion = !!(R && Array.isArray(R.matchMedia) &&
+      R.matchMedia.some(m => /prefers-reduced-motion/i.test(m.query)));
+    if (!hasScriptReducedMotion) {
+      for (const script of document.querySelectorAll('script:not([src])')) {
+        if (/prefers-reduced-motion/i.test(script.textContent || '')) { hasScriptReducedMotion = true; break; }
+      }
+    }
+
+    return { hasReducedMotionQuery, hasScriptReducedMotion, animatedCount: animated.length, animated };
   });
 
   // If reduced motion query exists, the page respects user preferences
@@ -68,6 +80,11 @@ async function run(page, context = {}) {
     return _pass(ctx, _t(ctx,
       'CSS @media (prefers-reduced-motion) query detected — the page respects motion preferences.',
       'CSS の @media (prefers-reduced-motion) クエリが検出されました。ページはモーション設定を尊重しています。'));
+  }
+  if (data.hasScriptReducedMotion) {
+    return _pass(ctx, _t(ctx,
+      'Page scripts query prefers-reduced-motion via matchMedia (SCR40) — motion preferences are respected in JavaScript.',
+      'ページのスクリプトが matchMedia で prefers-reduced-motion を参照しています（SCR40）。JavaScript でモーション設定が尊重されています。'));
   }
 
   if (!data.animatedCount) {

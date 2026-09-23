@@ -87,11 +87,49 @@ async function run(page, context = {}) {
       });
     });
 
+    // 5. Runtime timers (installed hook): long setTimeout/setInterval that look like session limits
+    const R = window.__ka11yRuntime;
+    const SESSION_RE = /logout|log_out|log-out|signout|sign_out|sign-out|expire|expir|session|timeout|time_out|idle|inactiv|redirect|location\.(?:href|replace|assign)|reload/i;
+    const runtimeTimers = (R && Array.isArray(R.timers)) ? R.timers.filter(t =>
+      (t.delay >= 60000 && SESSION_RE.test(t.snippet || '')) || t.delay >= 300000) : [];
+
+    // 6. Controls that let the user extend / disable the limit (G198, SCR1, G180, G133)
+    const EXTEND_RE = /extend|stay\s+(?:signed|logged)\s+in|keep\s+me\s+(?:signed|logged)\s+in|more\s+time|need\s+more\s+time|continue\s+session|remain\s+logged|延長|ログイン状態を保持|ログインしたままにする|セッションを継続|時間を延長/i;
+    const controlText = (el) => ((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')).trim();
+    const hasExtendControl = Array.from(document.querySelectorAll('button, a[href], [role="button"], input[type="button"], input[type="submit"]'))
+      .some(el => EXTEND_RE.test(controlText(el)) || EXTEND_RE.test(el.getAttribute('value') || ''));
+    const hasTimeExtensionCheckbox = Array.from(document.querySelectorAll('input[type="checkbox"]')).some(cb => {
+      const lbl = (cb.id && document.querySelector(`label[for="${CSS.escape(cb.id)}"]`)) || cb.closest('label');
+      return EXTEND_RE.test(((lbl && lbl.textContent) || '') + ' ' + (cb.getAttribute('aria-label') || ''));
+    });
+
+    for (const t of runtimeTimers.slice(0, 5)) {
+      issues.push({
+        type: 'js-timer-limit',
+        html: `${t.kind}(fn, ${t.delay})`,
+        element_id: null,
+        target: [`${t.kind}(${t.delay}ms)`],
+        tag: 'SCRIPT',
+        delayMs: t.delay,
+        snippet: (t.snippet || '').slice(0, 160),
+        hasExtendControl,
+        hasTimeExtensionCheckbox,
+      });
+    }
+
     return {
       issues,
       hasLongTermPersistence,
+      runtimeTimerCount: runtimeTimers.length,
+      hasExtendControl,
+      hasTimeExtensionCheckbox,
     };
   });
+
+  // Runtime timers with an extend/keep-alive control present satisfy G198/SCR1 — drop them from the issue list.
+  if (data.hasExtendControl || data.hasTimeExtensionCheckbox) {
+    data.issues = data.issues.filter(i => i.type !== 'js-timer-limit');
+  }
 
   if (data.issues.length === 0) {
     return {
@@ -112,9 +150,30 @@ async function run(page, context = {}) {
   }
 
   // Separate issues into different categories
-  const timeoutWarnings = data.issues.filter(i => i.type !== 'auth-form-at-risk' && i.type !== 'session-expired');
+  const timeoutWarnings = data.issues.filter(i => i.type !== 'auth-form-at-risk' && i.type !== 'session-expired' && i.type !== 'js-timer-limit');
   const authAtRisk = data.issues.filter(i => i.type === 'auth-form-at-risk');
   const expired = data.issues.filter(i => i.type === 'session-expired');
+  const jsTimers = data.issues.filter(i => i.type === 'js-timer-limit');
+
+  if (jsTimers.length > 0 && timeoutWarnings.length === 0 && authAtRisk.length === 0 && expired.length === 0) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: FALLBACK_DESCRIPTION,
+        impact: 'moderate',
+        status: 'needs_review',
+        reason: _t(
+          sharedContext,
+          '{count} long-running script timer(s) that look like session/inactivity limits were detected at runtime (≥ {minutes} min), and no control to extend, disable or lengthen the limit was found on the page. Warn users before the limit and offer a way to extend it (G198, SCR1, SCR16).',
+          'セッションや非アクティブの制限と思われる長時間のスクリプトタイマーが {count} 件実行時に検出されました（{minutes} 分以上）。制限を延長・無効化・延長する操作がページに見つかりません。制限前に警告し、延長手段を提供してください（G198、SCR1、SCR16）。',
+          { count: jsTimers.length, minutes: Math.round(Math.min(...jsTimers.map(t => t.delayMs)) / 60000) },
+        ),
+        elements: jsTimers,
+        helpUrl: HELP_URL,
+      }],
+    };
+  }
 
   if (timeoutWarnings.length > 0 && authAtRisk.length === 0 && expired.length === 0) {
     return {

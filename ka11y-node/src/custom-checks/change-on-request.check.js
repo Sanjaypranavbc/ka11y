@@ -106,13 +106,66 @@ async function run(page, context = {}) {
       }
     }
 
-    return { issues };
+    // ── Check 6: links/buttons that open a new window without telling the user ──
+    // WCAG H83 / G201 / SCR24: opening a new window on user request is allowed only
+    // when the link text (or its accessible name) indicates it.
+    const NEW_WINDOW_RE = /new\s+(?:window|tab)|opens?\s+(?:in\s+)?(?:a\s+)?new|external\s+(?:site|link|window)|別(?:ウィンドウ|タブ|窓)|新しい(?:ウィンドウ|タブ)|新規(?:ウィンドウ|タブ)|外部サイト/i;
+    const nameOf = (el) => {
+      const bits = [
+        el.textContent || '',
+        el.getAttribute('aria-label') || '',
+        el.getAttribute('title') || '',
+      ];
+      const labelledBy = (el.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean);
+      for (const id of labelledBy) {
+        const ref = document.getElementById(id);
+        if (ref) bits.push(ref.textContent || '');
+      }
+      for (const img of el.querySelectorAll('img[alt], svg title, [aria-label]')) {
+        bits.push(img.getAttribute ? (img.getAttribute('alt') || img.getAttribute('aria-label') || img.textContent || '') : '');
+      }
+      return bits.join(' ');
+    };
+    let newWindowCount = 0;
+    const seenHref = new Set();
+    for (const el of document.querySelectorAll('a[target="_blank"], area[target="_blank"], [onclick*="window.open"], form[target="_blank"]')) {
+      const cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+      const key = (el.getAttribute('href') || el.getAttribute('onclick') || el.getAttribute('action') || '') + '|' + (el.textContent || '').trim();
+      if (seenHref.has(key)) continue;
+      seenHref.add(key);
+      newWindowCount++;
+      if (NEW_WINDOW_RE.test(nameOf(el))) continue;
+      issues.push({
+        type: 'new-window-no-warning',
+        target: el.tagName.toLowerCase() + (el.id ? `#${CSS.escape(el.id)}` : '') + (el.getAttribute('href') ? `[href="${(el.getAttribute('href') || '').slice(0, 80)}"]` : ''),
+        snippet: el.outerHTML.slice(0, 150),
+        detail: 'Opens a new window/tab (target="_blank" or window.open) without indicating this in the link text or accessible name (WCAG H83/G201)',
+      });
+      if (issues.filter(i => i.type === 'new-window-no-warning').length >= 20) break;
+    }
+
+    // ── Check 7: window.open() fired by script at load, without user activation ──
+    const R = window.__ka11yRuntime;
+    if (R && Array.isArray(R.windowOpen)) {
+      for (const call of R.windowOpen.filter(c => !c.userActivated).slice(0, 5)) {
+        issues.push({
+          type: 'script-window-open-on-load',
+          target: 'window.open()',
+          snippet: `window.open(${JSON.stringify(call.url)}, ${JSON.stringify(call.target)}) at +${call.at}ms`,
+          detail: 'Script opened a new window/tab without a user action — a change of context not initiated by the user',
+        });
+      }
+    }
+
+    return { issues, newWindowCount };
   });
 
   if (!data.issues.length) {
     return _pass(ctx, _t(ctx,
-      'No automatic context-change patterns detected (no meta-refresh, auto-navigating selects, timed redirects, or unpaused carousels).',
-      '自動コンテキスト変更パターンは検出されませんでした（meta-refresh、自動ナビゲーション select、時間指定リダイレクト、一時停止なしカルーセルなし）。'));
+      'No automatic context-change patterns detected (no meta-refresh, auto-navigating selects, timed redirects, unpaused carousels, or unannounced new-window links{nw}).',
+      '自動コンテキスト変更パターンは検出されませんでした（meta-refresh、自動ナビゲーション select、時間指定リダイレクト、一時停止なしカルーセル、告知のない別ウィンドウリンクなし{nw}）。',
+      { nw: data.newWindowCount ? `; ${data.newWindowCount} new-window link(s) all announce it` : '' }));
   }
 
   const byType = {};

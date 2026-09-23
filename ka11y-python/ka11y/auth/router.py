@@ -316,11 +316,20 @@ async def _do_logout(request: Request) -> None:
             logger.warning("[auth] end_session failed", exc_info=True)
 
 
+def _clear_session_cookies(resp: Response) -> None:
+    """Delete with the same attributes the cookies were set with, so every
+    browser matches the existing cookie; and never let the response be cached."""
+    cfg = settings()
+    for name in (cfg.session_cookie, cfg.oidc_cookie):
+        resp.delete_cookie(name, path="/", httponly=True, secure=cfg.cookie_secure, samesite="lax")
+    resp.headers["Cache-Control"] = "no-store"
+
+
 @router.post("/logout", status_code=204)
 async def logout(request: Request) -> Response:
     await _do_logout(request)
     resp = Response(status_code=204)
-    resp.delete_cookie(settings().session_cookie, path="/")
+    _clear_session_cookies(resp)
     return resp
 
 
@@ -328,7 +337,7 @@ async def logout(request: Request) -> Response:
 async def logout_redirect(request: Request) -> Response:
     await _do_logout(request)
     resp = RedirectResponse(settings().login_page_url, status_code=302)
-    resp.delete_cookie(settings().session_cookie, path="/")
+    _clear_session_cookies(resp)
     return resp
 
 

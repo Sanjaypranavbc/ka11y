@@ -37,6 +37,25 @@ async function run(page, context = {}) {
       });
     }
 
+    // 1b. Runtime timers recorded by the installed page hook: long delays that navigate,
+    //     reload or expire something are time limits on the activity (G5).
+    const R = window.__ka11yRuntime;
+    if (R && Array.isArray(R.timers)) {
+      const LIMIT_RE = /logout|signout|expire|expir|session|timeout|time_out|idle|inactiv|redirect|location\.(?:href|replace|assign)|reload|submit\(/i;
+      const limitTimers = R.timers.filter(t => (t.delay >= 30000 && LIMIT_RE.test(t.snippet || '')) || t.delay >= 300000);
+      for (const t of limitTimers.slice(0, 5)) {
+        issues.push({
+          type: 'js-timer',
+          html: `${t.kind}(fn, ${t.delay})`,
+          element_id: null,
+          target: [`${t.kind}(${t.delay}ms)`],
+          tag: 'SCRIPT',
+          delaySeconds: Math.round(t.delay / 1000),
+          snippet: (t.snippet || '').slice(0, 160),
+        });
+      }
+    }
+
     // 2. Check for JavaScript-based timeouts (setTimeout, setInterval)
     // We can't see the JS code directly, but we can check for common patterns in attributes
     const elementsWithTimeouts = document.querySelectorAll('[data-timeout], [data-countdown], [data-session-timeout], [data-auto-logout]');

@@ -8,6 +8,7 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminMobileNav } from "@/components/admin/AdminMobileNav";
 import { AdminTopBar } from "@/components/admin/AdminTopBar";
 import { AuditDetailsDrawer } from "@/components/admin/AuditDetailsDrawer";
+import { SessionGuard } from "@/components/SessionGuard";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -135,6 +136,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <AdminConsoleContext.Provider value={value}>
       <div className="admin-root min-h-screen bg-gray-10 text-gray-100">
+        <SessionGuard />
         {/* `inert` hides the page from pointer, keyboard and assistive tech while a dialog is open (WCAG 2.4.3). */}
         <div inert={overlayOpen || undefined} className="flex min-h-screen">
           <AdminSidebar collapsed={collapsed} onToggle={toggleSidebar} />

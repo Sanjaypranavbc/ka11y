@@ -226,6 +226,20 @@ async function run(page, context = {}) {
       });
     });
 
+    // Check 1b — runtime lock calls recorded by the installed page hook (covers
+    // external scripts and bundles that the inline-script scan cannot see).
+    const R = window.__ka11yRuntime;
+    if (R && Array.isArray(R.orientationLock) && R.orientationLock.length) {
+      const orientations = [...new Set(R.orientationLock.map(l => l.orientation))];
+      findings.push({
+        type    : 'script-lock',
+        target  : 'runtime screen.orientation.lock()',
+        selector: null,
+        snippet : `screen.orientation.lock(${JSON.stringify(orientations[0])})`,
+        detail  : `called ${R.orientationLock.length}× at runtime with ${orientations.join(', ')}`,
+      });
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Check 2 — CSS forced rotation on layout containers
     //   One finding per rotated element.

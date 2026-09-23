@@ -39,7 +39,12 @@ export function proxy(request: NextRequest) {
     url.searchParams.set("next", pathname + search);
     return NextResponse.redirect(url);
   }
-  return NextResponse.next();
+  const res = NextResponse.next();
+  if (gated) {
+    // Never let a browser or proxy replay a signed-in page after logout.
+    res.headers.set("Cache-Control", "no-store, must-revalidate");
+  }
+  return res;
 }
 
 export const config = {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, ChevronRight, ExternalLink } from "lucide-react";
+import { CheckCircle2, ChevronRight, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
@@ -534,30 +534,19 @@ export default function NewAuditPage() {
               </div>
             </div>
 
-            {/* Warning / notification box */}
-            <div className="flex flex-col gap-6 rounded-[8px] bg-[#f6f1df] px-4 py-6">
-              <div className="flex items-start gap-6">
-                <AlertTriangle size={24} className="mt-0.5 shrink-0 text-[#f8c33d]" aria-hidden="true" />
-                <p className="text-[16px] leading-6 text-gray-100">
-                  {t.newAudit.warning}<br />
-                  {t.newAudit.warningLine2}
-                </p>
-              </div>
-
-              {/* Notification email */}
-              <div className="flex flex-col gap-2">
-                <label htmlFor="notify-email" className="text-[16px] leading-6 text-gray-100">
-                  {t.newAudit.notificationEmailLabel}
-                </label>
-                <input
-                  id="notify-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder={t.newAudit.notificationEmailPlaceholder}
-                  className="h-12 w-full rounded-[8px] border border-gray-40 bg-white px-4 text-[16px] leading-6 text-gray-100 placeholder:text-gray-60 focus:border-brand-teal focus:outline-none"
-                />
-              </div>
+            {/* Notification email */}
+            <div className="flex flex-col gap-2">
+              <label htmlFor="notify-email" className="text-[16px] leading-6 text-gray-100">
+                {t.newAudit.notificationEmailLabel}
+              </label>
+              <input
+                id="notify-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t.newAudit.notificationEmailPlaceholder}
+                className="h-12 w-full rounded-[8px] border border-gray-40 bg-white px-4 text-[16px] leading-6 text-gray-100 placeholder:text-gray-60 focus:border-brand-teal focus:outline-none"
+              />
             </div>
 
             {/* Submit */}

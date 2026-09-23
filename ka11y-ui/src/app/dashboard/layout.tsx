@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   description: "Accessibility audit dashboard.",
 };
 
+// Gated area: render per request so the HTML is never served from a cache
+// after the session has been ended.
+export const dynamic = "force-dynamic";
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuditDataProvider>
