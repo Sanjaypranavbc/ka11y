@@ -7193,4 +7193,4 @@ japanese = ["sudachidict-core", "sudachipy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<3.15"
-content-hash = "de784b8cf7055715851af198db52732dc2b6235b915d1f3e8a1d106da165df6c"
+content-hash = "be20cd9ae96700e71b2fb4b486ff95f8c7b57e17474a7167bb0dbc5bfb55202f"

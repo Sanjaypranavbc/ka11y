@@ -1,0 +1,84 @@
+# ka11y — TLS termination + edge rate limiting (Caddy)
+#
+# Used by docker-compose.tls.yml. Caddy obtains and renews a Let's Encrypt
+# certificate for {$KA11Y_PUBLIC_HOST} automatically (ports 80 + 443 must be
+# reachable from the internet), redirects http → https, and proxies to the
+# Next.js UI, which in turn proxies /api/v1/* to the Python API on the
+# private compose network. The API and Node ports are never published.
+#
+# Behind an AWS ALB instead? Terminate TLS on the ALB (ACM certificate,
+# TLS 1.2+ policy), enable HTTP→HTTPS redirect there, put AWS WAF in front
+# with the rate-based rule, and skip this file.
+
+{
+	email {$KA11Y_ACME_EMAIL}
+	# Modern TLS only: TLS 1.2 minimum, Caddy's default cipher suites (all AEAD).
+	servers {
+		protocols h1 h2
+		timeouts {
+			read_body 30s
+			read_header 10s
+			idle 60s
+		}
+		max_header_size 16KB
+	}
+}
+
+{$KA11Y_PUBLIC_HOST} {
+	tls {
+		protocols tls1.2 tls1.3
+	}
+	encode zstd gzip
+
+	# Body cap at the edge (the API has its own 2 MiB cap behind this).
+	request_body {
+		max_size 8MB
+	}
+
+	# Per-client-IP request budgets. Needs the caddy-ratelimit module
+	# (built by deploy/tls/Dockerfile). Over budget → 429 + Retry-After.
+	rate_limit {
+		zone auth {
+			match {
+				path /api/v1/auth/*
+			}
+			key {remote_host}
+			events 30
+			window 1m
+		}
+		zone audits {
+			match {
+				method POST
+			}
+			key {remote_host}
+			events 60
+			window 1m
+		}
+		zone all {
+			key {remote_host}
+			events 600
+			window 1m
+		}
+	}
+
+	# Caddy already sets X-Forwarded-Proto/For/Host for the upstream.
+	reverse_proxy ui:3001 {
+		header_up X-Real-IP {remote_host}
+		# SSE from the admin console must not be buffered.
+		flush_interval -1
+		transport http {
+			read_timeout 300s
+		}
+	}
+
+	header {
+		# Belt and braces with the app's own headers (Next/FastAPI set the same).
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

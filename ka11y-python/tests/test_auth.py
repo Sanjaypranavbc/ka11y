@@ -27,7 +27,7 @@ _ENV = {
     "KA11Y_OIDC_REDIRECT_URI": "http://testserver/api/v1/auth/callback",
     "KA11Y_OIDC_AUTHORIZATION_ENDPOINT": "https://fake-idp.test/authorize",
     "KA11Y_OIDC_TOKEN_ENDPOINT": "https://fake-idp.test/token",
-    "KA11Y_SESSION_SECRET": "unit-test-secret-do-not-use",
+    "KA11Y_SESSION_SECRET": "unit-test-secret-do-not-use-anywhere-else-0123456789",
     "KA11Y_ALLOWED_EMAILS": "meghana@bluecaffeine.com,watanabe.kanae2@kao.com",
     "KA11Y_ALLOWED_EMAIL_DOMAINS": "",
     "KA11Y_DB_AUTO_MIGRATE": "1",
@@ -50,10 +50,13 @@ def client():
     # The global 30-POSTs-per-minute brake (ka11y.main) would trip inside this
     # module's ~40 sign-in POSTs; the auth-specific brake is tested on its own.
     saved_limit = _RateLimitMiddleware._MAX_REQUESTS
+    saved_auth_limit = _RateLimitMiddleware._MAX_AUTH_REQUESTS
     _RateLimitMiddleware._MAX_REQUESTS = 10_000
+    _RateLimitMiddleware._MAX_AUTH_REQUESTS = 10_000
     with TestClient(app) as c:
         yield c
     _RateLimitMiddleware._MAX_REQUESTS = saved_limit
+    _RateLimitMiddleware._MAX_AUTH_REQUESTS = saved_auth_limit
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)

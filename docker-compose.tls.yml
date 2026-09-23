@@ -1,0 +1,61 @@
+# =============================================================================
+# ka11y — TLS overlay (self-hosted edge; EC2 / any VM with a public IP)
+#
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build
+#
+# Adds a Caddy "edge" service that owns ports 80/443, gets a Let's Encrypt
+# certificate for KA11Y_PUBLIC_HOST, redirects http → https, rate-limits per
+# client IP and proxies to the UI. The UI, API and Node ports are withdrawn
+# from the host so the only way in is through TLS.
+#
+# Required in the shell or a root .env:
+#   KA11Y_PUBLIC_HOST=a11y.bluecaffeine.in
+#   KA11Y_ACME_EMAIL=ops@bluecaffeine.com
+# And in ka11y-python/.env:
+#   KA11Y_OIDC_REDIRECT_URI=https://a11y.bluecaffeine.in/api/v1/auth/callback
+#   (KA11Y_COOKIE_SECURE, __Host- cookies, HSTS and the https redirect all
+#   switch on from that https URI; nothing else to set.)
+# =============================================================================
+
+services:
+  edge:
+    build:
+      context: ./deploy/tls
+    image: ka11y-edge:latest
+    container_name: ka11y-edge
+    restart: unless-stopped
+    depends_on:
+      ui:
+        condition: service_healthy
+    networks:
+      - ka11y-net
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:443:443/udp"
+    environment:
+      KA11Y_PUBLIC_HOST: ${KA11Y_PUBLIC_HOST:?set KA11Y_PUBLIC_HOST}
+      KA11Y_ACME_EMAIL: ${KA11Y_ACME_EMAIL:?set KA11Y_ACME_EMAIL}
+    volumes:
+      - ./deploy/tls/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Withdraw every host port: only the edge is reachable from outside.
+  ui:
+    ports: !reset []
+  python:
+    ports: !reset []
+  node:
+    ports: !reset []
+  postgres:
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:

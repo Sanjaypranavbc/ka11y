@@ -68,6 +68,9 @@ openinference-instrumentation-google-genai = "^1.4.5"
 # async engine and Alembic's sync migrations), Alembic for migrations.
 # DATABASE_URL unset → the PG layer is inert and the SQLite run store still works.
 sqlalchemy = ">=2.0.40,<3.0.0"
+# AES-256-GCM sealing of the auth cookies (ka11y/auth/signing.py). Already a
+# transitive dependency; declared so a resolver change cannot drop it.
+cryptography = ">=42.0.0,<47.0.0"
 alembic = ">=1.13.0,<2.0.0"
 psycopg = { version = ">=3.1.0,<4.0.0", extras = ["binary"] }
 # Object storage for audit artifacts (screenshots, HTML snapshots, OCR

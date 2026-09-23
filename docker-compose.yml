@@ -273,6 +273,9 @@ services:
       #   KA11Y_SESSION_SECRET
       #   KA11Y_ALLOWED_EMAILS / KA11Y_ALLOWED_EMAIL_DOMAINS
       #   KA11Y_COOKIE_SECURE=0       only for plain-http local dev
+      # TLS: use docker-compose.tls.yml (Caddy edge, Let's Encrypt, rate limits)
+      # or an ALB; an https redirect URI switches on Secure/__Host- cookies,
+      # HSTS and the http→https redirect. See SECURITY_HARDENING.md.
       # The redirect URI is the BROWSER-facing UI origin + /api/v1/auth/callback;
       # the ui service rewrites /api/v1/auth/* to this container.
       #
@@ -284,7 +287,7 @@ services:
       KA11Y_ARTIFACT_DIR:   "/data/artifacts"
 
     # Expose to host for local debugging / direct API calls.
-    # In production behind a reverse proxy this can be removed.
+    # docker-compose.tls.yml withdraws this (only the edge is reachable).
     ports:
       - "0.0.0.0:8000:8000"
 
