@@ -491,6 +491,65 @@ EXTRACT_JS = r"""
     };
     // Best-effort accessible-name computation (accname precedence subset),
     // recorded as a cross-check against the raw attribute reads.
+    // Context around an image that WCAG 1.1.1 techniques depend on:
+    //   G73  adjacent long-description link      G74  alt refers to nearby prose
+    //   G82  image is the sole content of a link G196 image group with one alt
+    //   ARIA10 aria-labelledby that resolves to nothing  G94/G92 nearby heading/text (LLM context)
+    const imageNearbyContext = (el, altValue, srcAbs) => {
+        const out = {
+            description_link_text: null, nearby_text_length: 0, alt_refers_nearby: false,
+            group_size: 0, group_alt_sibling: false, labelledby_unresolved: false,
+            nearby_heading_text: null, nearby_text_sample: null, link_sole_content: false, link_href: null,
+        };
+        try {
+            const DESC_RE = /descri|long\s*desc|details|full\s*text|text\s*version|data\s*table|transcript|説明|詳細|テキスト版|データ|解説/i;
+            const REF_RE = /\b(below|above|following|see\s|described|as\s+shown|refer)\b|下記|上記|以下|次の|参照|後述|前述/i;
+            const link = el.closest("a[href]");
+            if (link) {
+                out.link_href = absUrl(link.getAttribute("href"));
+                const textOnly = (link.textContent || "").trim();
+                out.link_sole_content = textOnly.length === 0 && link.querySelectorAll("img, svg, picture").length === 1;
+            }
+            const ids = (el.getAttribute("aria-labelledby") || "").split(/\s+/).filter(Boolean);
+            if (ids.length) {
+                const resolved = ids.map(id => { const t = document.getElementById(id); return t ? (t.textContent || "").trim() : ""; }).join(" ").trim();
+                out.labelledby_unresolved = resolved.length === 0;
+            }
+            let container = el.parentElement, hops = 0, longest = "";
+            while (container && hops < 3 && container !== document.body) {
+                if (!out.description_link_text) {
+                    for (const a of container.querySelectorAll("a[href], button")) {
+                        if (a === link || a.contains(el)) continue;
+                        const t = ((a.textContent || "") + " " + (a.getAttribute("aria-label") || "")).trim();
+                        const href = a.getAttribute("href") || "";
+                        if (t && (DESC_RE.test(t) || (href.startsWith("#") && /desc|data|table|text/i.test(href)))) { out.description_link_text = t.slice(0, 120); break; }
+                    }
+                }
+                for (const b of container.querySelectorAll("p, div, dd, li, td, blockquote")) {
+                    if (b.contains(el) || b.querySelector("img, svg")) continue;
+                    const t = (b.innerText || b.textContent || "").trim();
+                    if (t.length > longest.length) longest = t;
+                }
+                if (!out.nearby_heading_text) {
+                    const h = container.querySelector("h1, h2, h3, h4, h5, h6, [role=heading]");
+                    if (h) out.nearby_heading_text = (h.textContent || "").trim().slice(0, 160);
+                }
+                container = container.parentElement; hops++;
+            }
+            out.nearby_text_length = longest.length;
+            out.nearby_text_sample = longest ? longest.slice(0, 300) : null;
+            out.alt_refers_nearby = !!(altValue && REF_RE.test(altValue));
+            const parent = el.parentElement;
+            if (parent) {
+                const siblings = Array.from(parent.querySelectorAll(":scope > img, :scope > a > img, :scope > picture > img, :scope > figure > img"));
+                out.group_size = siblings.length;
+                if (siblings.length >= 3) {
+                    out.group_alt_sibling = siblings.some(s => s !== el && ((s.getAttribute("alt") || "").trim().length >= 10 || (s.getAttribute("aria-label") || "").trim().length >= 10));
+                }
+            }
+        } catch (_) { /* context is best-effort */ }
+        return out;
+    };
     const accName = (el) => {
         const lb = resolveLabelledby(el);
         if (lb !== null) return lb;
@@ -1022,6 +1081,7 @@ EXTRACT_JS = r"""
                 srcset: attr(el, "srcset"),
                 svg_delivery: isSvg ? "svg_via_img" : null,
                 image_of_text: imageOfTextSignals(el, attr(el, "alt"), srcAbs),
+                context_signals: imageNearbyContext(el, attr(el, "alt"), srcAbs),
                 ...classifyBlock(el, srcAbs, el.hasAttribute("alt"), attr(el, "alt")),
             };
             criteria.push("1.1.1");
@@ -1050,6 +1110,7 @@ EXTRACT_JS = r"""
                 figcaption_text: figcaptionText(el),
                 accessibility_snapshot_name: accName(el),
                 image_of_text: imageOfTextSignals(el, null, null),
+                context_signals: imageNearbyContext(el, attr(el, "aria-label"), null),
                 ...classifyBlock(el, null, false, null),
             };
             criteria.push("1.1.1");

@@ -127,7 +127,51 @@ async function run(page, context = {}) {
       }
     }
 
-    return { violations, needsReview, bgTextViolations, svgTextViolations, checkedCount };
+    // C30: CSS image-replacement of real text (text-indent:-9999px, clip, transparent
+    // colour over a background image). This is an image of text; C30 allows it only when
+    // a control lets the user switch to the real text.
+    const cssReplacementViolations = [];
+    const cssReplacementWithToggle = [];
+    try {
+      const TOGGLE_RE = /text\s*(?:version|only|view|mode)|show\s+text|display\s+text|hide\s+images?|テキスト(?:表示|版|のみ)|画像を(?:非表示|隠す)/i;
+      const hasToggle = Array.from(document.querySelectorAll('button, a[href], [role="button"], input[type="checkbox"], [role="switch"]')).some(el => TOGGLE_RE.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')));
+      let scanned = 0;
+      for (const el of document.querySelectorAll('h1, h2, h3, h4, h5, h6, a, span, div, p, li')) {
+        if (scanned++ > 3000 || cssReplacementViolations.length + cssReplacementWithToggle.length >= 15) break;
+        const text = (el.textContent || '').trim();
+        if (text.length < 2 || text.length > 80 || el.children.length > 1) continue;
+        const cs = window.getComputedStyle(el);
+        const indent = parseFloat(cs.textIndent);
+        const clipped = cs.clip && cs.clip !== 'auto' && /rect\(0(?:px)?,?\s*0(?:px)?,?\s*0(?:px)?,?\s*0(?:px)?\)/.test(cs.clip);
+        const hasBg = cs.backgroundImage !== 'none' || !!el.querySelector('img, svg') || (el.parentElement && window.getComputedStyle(el.parentElement).backgroundImage !== 'none');
+        const replaced = (indent <= -999 && hasBg) || (clipped && hasBg) || (cs.fontSize === '0px' && hasBg) || (cs.color === 'rgba(0, 0, 0, 0)' && hasBg);
+        if (!replaced) continue;
+        if (logoRe.test(text) || logoRe.test(el.className || '') || logoRe.test(el.id || '')) continue;
+        const entry = { type: 'css-image-replacement', text: text.slice(0, 60), html: el.outerHTML.slice(0, 150), element_id: el.id || null, target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()], tag: el.tagName.toUpperCase(), hasToggle };
+        (hasToggle ? cssReplacementWithToggle : cssReplacementViolations).push(entry);
+      }
+    } catch (_) { /* ignore */ }
+
+    // C22: text drawn onto <canvas> (recorded by the runtime fillText/strokeText hook)
+    // without an accessible text equivalent (aria-label or fallback content).
+    const canvasTextViolations = [];
+    try {
+      const R = window.__ka11yRuntime;
+      if (R && typeof R.canvasTextOf === 'function') {
+        for (const c of document.querySelectorAll('canvas')) {
+          const drawn = R.canvasTextOf(c);
+          if (!drawn || drawn.replace(/\s+/g, '').length < 4) continue;
+          const r = c.getBoundingClientRect();
+          if (r.width < 40 || r.height < 20) continue;
+          const name = ((c.getAttribute('aria-label') || '') + ' ' + (c.textContent || '')).trim();
+          if (name.length >= Math.min(drawn.length, 20) * 0.5) continue;
+          canvasTextViolations.push({ type: 'canvas-text', text: drawn.slice(0, 60), html: c.outerHTML.slice(0, 150), element_id: c.id || null, target: c.id ? [`canvas#${CSS.escape(c.id)}`] : ['canvas'], tag: 'CANVAS' });
+          if (canvasTextViolations.length >= 10) break;
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    return { violations, needsReview, bgTextViolations, svgTextViolations, cssReplacementViolations, cssReplacementWithToggle, canvasTextViolations, checkedCount };
   }, {
     logoPattern,
     textKeywordPattern,
@@ -138,8 +182,11 @@ async function run(page, context = {}) {
     ...(data.violations      || []),
     ...(data.bgTextViolations|| []),
     ...(data.svgTextViolations|| []),
+    ...(data.cssReplacementViolations || []),
+    ...(data.canvasTextViolations || []),
   ];
-  const reviews = data.needsReview || [];
+  // C30: image replacement with a text/image toggle control is the permitted pattern — review only.
+  const reviews = [...(data.needsReview || []), ...(data.cssReplacementWithToggle || [])];
 
   if (allViolations.length === 0 && reviews.length === 0) {
     return {
@@ -161,7 +208,11 @@ async function run(page, context = {}) {
     const sample = allViolations.slice(0, 3)
       .map(v => v.type === 'svg-text-image'
         ? `<svg with text> ${v.html.slice(0, 60)}`
-        : `<img src="…${v.src}" alt="${v.alt}">`)
+        : v.type === 'css-image-replacement'
+          ? `CSS image replacement of "${v.text}" (C30 — no text/image toggle)`
+          : v.type === 'canvas-text'
+            ? `<canvas> draws text "${v.text}" with no text equivalent (C22)`
+            : `<img src="…${v.src}" alt="${v.alt}">`)
       .join('; ');
     return {
       successCriteriaId: SC,
@@ -179,7 +230,7 @@ async function run(page, context = {}) {
 
   // Only needs_review items
   const sample = reviews.slice(0, 3)
-    .map(v => `<img src="…${v.src}" alt="${v.alt}">`)
+    .map(v => v.type === 'css-image-replacement' ? `CSS image replacement of "${v.text}" — a text-version toggle exists (C30)` : `<img src="…${v.src}" alt="${v.alt}">`)
     .join('; ');
   return {
     successCriteriaId: SC,

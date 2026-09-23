@@ -100,8 +100,7 @@ describe('on-focus.check (WCAG 3.2.1)', () => {
     const page = {
       evaluate: jest.fn().mockImplementation((fn) => {
         const src = String(fn);
-        if (src.includes('spaNavChanged')) return Promise.resolve({ spaNavChanged: true });
-        if (src.includes('count > 0')) return Promise.resolve(true);
+        if (src.includes('pathnameChanged') && src.includes('return !!')) return Promise.resolve(true);
         return Promise.resolve(undefined);
       }),
       url: jest.fn().mockReturnValue('https://example.com/same'),

@@ -598,6 +598,19 @@ async def _stage_image_audit(
                 phase="alt_audit",
             )
             image_audit_report = _build_image_audit_report(records)
+
+            # G152 (2.2.2): animated GIF/WebP/APNG inspection — frame count, loop flag and
+            # duration read from the image bytes (bounded fetch, public hosts only).
+            try:
+                from ka11y.accessibility.rules.media.animated_images import animated_images_to_findings
+
+                with stage_timing.time_stage(job_id, "image_audit", sub_stage="animated_images", rule="2.2.2"):
+                    findings.extend(
+                        await asyncio.to_thread(animated_images_to_findings, image_crawler.images_data, url)
+                    )
+            except Exception as _anim_exc:  # best-effort
+                logger.warning(f"[combined] image_audit: animated image scan skipped: {_anim_exc}")
+
             for status_key, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
                 _rule = (
                     status_key.replace("wcag_", "")

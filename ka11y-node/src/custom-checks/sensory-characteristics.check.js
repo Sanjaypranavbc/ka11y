@@ -32,6 +32,10 @@ const SENSORY_PATTERNS = [
   /\bthe\s+(?:red|blue|green|yellow|orange|purple|gray|grey|black|white|pink|cyan|magenta)\s+(?:button|link|icon|image|control|area|section|region)\b/i,
   // Sound-only identification
   /\bwhen\s+you\s+hear\s+the\s+(?:beep|chime|tone|sound|bell|alert)\b/i,
+  // G117: information carried only by text styling (bold, italics, underline, highlight, colour)
+  /\b(?:items?|fields?|entries|words?|links?|options?|text|questions?|rows?|dates?|names?)\s+(?:shown\s+|marked\s+|displayed\s+|highlighted\s+|printed\s+|written\s+)?in\s+(?:bold|italics?|underline|red|green|blue|yellow|orange|grey|gray|colou?r)\s+(?:are|is|indicate|denote|mean|must|require|need|show)\b/i,
+  /\b(?:bold|italic|italicized|underlined|highlighted|colou?red|larger|smaller)\s+(?:text|items?|fields?|words?|entries|labels?|options?|questions?)\s+(?:are|is|indicate|denote|mean|must|require|need|show)\b/i,
+  /(?:太字|斜体|下線(?:付き)?|赤字|赤い文字|色付き|ハイライト)(?:の|で表示された|で示された)(?:項目|部分|文字|欄|テキスト|質問|フィールド)(?:は|が)/,
 ];
 
 async function run(page, context = {}) {
@@ -63,8 +67,8 @@ async function run(page, context = {}) {
 
   if (!data.issues.length) {
     return _pass(ctx, _t(ctx,
-      'No sensory-only instruction patterns detected.',
-      '感覚的特性のみに依存した指示のパターンは検出されませんでした。'));
+      'No sensory-only instruction patterns detected (shape, colour, position, sound or text styling references).',
+      '感覚的特性のみに依存した指示のパターン（形状、色、位置、音、文字装飾への言及）は検出されませんでした。'));
   }
 
   return {
@@ -75,8 +79,8 @@ async function run(page, context = {}) {
       impact: 'moderate',
       status: 'incomplete',
       reason: _t(ctx,
-        '{n} instruction(s) may rely solely on sensory characteristics (shape, color, or position). Manual review required.',
-        '{n} 件の指示が感覚的特性（形状・色・位置）のみに依存している可能性があります。手動確認が必要です。',
+        '{n} instruction(s) may rely solely on sensory characteristics (shape, color, position, sound or text styling such as bold/italics — G117). Manual review required.',
+        '{n} 件の指示が感覚的特性（形状・色・位置・音、または太字/斜体などの文字装飾 — G117）のみに依存している可能性があります。手動確認が必要です。',
         { n: data.issues.length }),
       elements: data.issues,
       helpUrl: HELP_URL,

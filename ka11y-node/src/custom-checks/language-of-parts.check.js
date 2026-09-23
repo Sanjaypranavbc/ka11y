@@ -123,12 +123,52 @@ async function run(page, context = {}) {
         }
       }
 
-      return { htmlLang, pageLang, emptyLangEls, invalidLangEls, unannotatedCJK };
+      // ── 4. H58: same-script language changes (English inside a German/Japanese page …)
+      // Stop-word profiling on text runs of ≥ 8 Latin words with no lang attribute of
+      // their own. A run is reported when one language's stop words clearly dominate
+      // and it is not the page language.
+      const STOP = {
+        en: ['the', 'and', 'of', 'to', 'in', 'is', 'that', 'for', 'with', 'you', 'this', 'are', 'on', 'be', 'it', 'as', 'was', 'not', 'have', 'from'],
+        de: ['der', 'die', 'und', 'das', 'ist', 'nicht', 'mit', 'sie', 'ein', 'eine', 'den', 'von', 'für', 'auf', 'dem', 'des', 'wird', 'sind', 'zu', 'im'],
+        fr: ['le', 'la', 'les', 'des', 'et', 'est', 'une', 'un', 'pour', 'dans', 'que', 'qui', 'pas', 'sur', 'avec', 'vous', 'nous', 'ce', 'du', 'au'],
+        es: ['el', 'la', 'los', 'las', 'de', 'que', 'y', 'en', 'un', 'una', 'es', 'por', 'con', 'para', 'del', 'se', 'no', 'su', 'al', 'como'],
+        it: ['il', 'la', 'di', 'che', 'e', 'un', 'una', 'per', 'con', 'non', 'del', 'della', 'sono', 'gli', 'le', 'si', 'al', 'da', 'nel', 'più'],
+        pt: ['o', 'a', 'os', 'as', 'de', 'que', 'e', 'um', 'uma', 'para', 'com', 'não', 'do', 'da', 'em', 'se', 'por', 'na', 'no', 'mais'],
+        nl: ['de', 'het', 'een', 'en', 'van', 'is', 'dat', 'niet', 'op', 'voor', 'met', 'zijn', 'je', 'dit', 'er', 'ook', 'aan', 'bij', 'als', 'maar'],
+      };
+      const sameScriptRuns = [];
+      if (document.body && (STOP[pageLang] || isCJKPage)) {
+        let n = 0;
+        for (const el of document.querySelectorAll('p, li, blockquote, td, dd, h1, h2, h3, h4, figcaption')) {
+          if (n++ > 1500 || sameScriptRuns.length >= 10) break;
+          const owner = el.closest('[lang]');
+          if (owner && owner !== htmlEl) continue;
+          const cs = window.getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+          const words = (el.textContent || '').toLowerCase().match(/[a-zà-ÿ']+/g) || [];
+          if (words.length < 8) continue;
+          const ranked = Object.entries(STOP).map(([l, list]) => { const set = new Set(list); return [l, words.filter(w => set.has(w)).length]; }).sort((a, b) => b[1] - a[1]);
+          const [best, bScore] = ranked[0];
+          const second = ranked[1][1];
+          if (best === pageLang) continue;
+          if (bScore < 3 || bScore < second * 2 || bScore / words.length < 0.15) continue;
+          sameScriptRuns.push({
+            tag: el.tagName.toLowerCase(),
+            detected: best,
+            text_sample: (el.textContent || '').trim().slice(0, 60),
+            html: el.outerHTML.slice(0, 150),
+            target: el.id ? [`${el.tagName.toLowerCase()}#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+          });
+        }
+      }
+
+      return { htmlLang, pageLang, emptyLangEls, invalidLangEls, unannotatedCJK, sameScriptRuns };
     },
     { cjkReSrc: CJK_RE_SRC, cjkLangs: [...CJK_LANGS] }
   );
 
   const { htmlLang, pageLang, emptyLangEls, invalidLangEls, unannotatedCJK } = data;
+  const sameScriptRuns = Array.isArray(data.sameScriptRuns) ? data.sameScriptRuns : [];
 
   // ── No page language declared ─────────────────────────────────────────────
   if (!htmlLang) {
@@ -185,6 +225,20 @@ async function run(page, context = {}) {
       status: 'needs_review',
       reason: `${unannotatedCJK.length} element(s) contain CJK characters on a page declared lang="${pageLang}". Add lang="ja", lang="zh", or lang="ko" to the element or its nearest ancestor to enable correct pronunciation by screen readers.`,
       elements: unannotatedCJK,
+      helpUrl: HELP_URL,
+    });
+  }
+
+  // ── H58: passages in another Latin-script language without a lang attribute ──
+  if (sameScriptRuns.length > 0) {
+    const langs = [...new Set(sameScriptRuns.map(r => r.detected))].join(', ');
+    rules.push({
+      ruleId: `${RULE_ID}-same-script`,
+      description: 'Passages in another language must carry a lang attribute',
+      impact: 'moderate',
+      status: 'needs_review',
+      reason: `${sameScriptRuns.length} text passage(s) appear to be written in another language (${langs}) than the page language "${pageLang}" but have no lang attribute — screen readers will read them with the wrong pronunciation rules (H58).`,
+      elements: sameScriptRuns,
       helpUrl: HELP_URL,
     });
   }

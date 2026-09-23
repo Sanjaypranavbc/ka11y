@@ -17,6 +17,31 @@ const {
   mergeWithAxe,
 } = require("../custom-checks/index");
 const { installRuntimeHooks } = require("../custom-checks/runtimeHooks");
+
+/**
+ * Record the top-level navigation response on the page object so custom checks
+ * that need HTTP-level facts (SVR5 Content-Language header, SVR1 redirect chain)
+ * can read them without a second request. Best-effort; never throws.
+ */
+function _stashNavigation(page, response) {
+  try {
+    const req = response && typeof response.request === 'function' ? response.request() : null;
+    const chain = req && typeof req.redirectChain === 'function'
+      ? req.redirectChain().map((r) => {
+          const res = typeof r.response === 'function' ? r.response() : null;
+          return { url: r.url(), status: res ? res.status() : null };
+        })
+      : [];
+    page.__ka11yNav = {
+      url: response ? response.url() : page.url(),
+      status: response ? response.status() : null,
+      headers: response ? response.headers() : {},
+      redirectChain: chain,
+    };
+  } catch (_) {
+    page.__ka11yNav = null;
+  }
+}
 const { boundedBfs } = require("../utils/crawl");
 const { canonicalizeUrl } = require("../utils/canonicalUrl");
 
@@ -595,7 +620,7 @@ class AccessibilityService {
       const POST_NAV_SETTLE_MS =
         parseInt(process.env.POST_NAV_SETTLE_MS) || 1000;
       this._logger.info(`[report] Navigating to ${url}...`);
-      await page.goto(url, { waitUntil: "load", timeout: timeoutMs });
+      _stashNavigation(page, await page.goto(url, { waitUntil: "load", timeout: timeoutMs }));
       await new Promise((r) => setTimeout(r, POST_NAV_SETTLE_MS));
 
       const pageWidth = await page
@@ -840,7 +865,7 @@ class AccessibilityService {
       // frameworks time to finish their first render without the open-ended wait.
       const POST_NAV_SETTLE_MS =
         parseInt(process.env.POST_NAV_SETTLE_MS) || 500;
-      await page.goto(url, { waitUntil: "load", timeout: timeoutMs });
+      _stashNavigation(page, await page.goto(url, { waitUntil: "load", timeout: timeoutMs }));
       // Wait for DOM to stop mutating (SPA hydration), capped at POST_NAV_SETTLE_MS
       await page
         .waitForFunction(
@@ -1251,7 +1276,7 @@ class AccessibilityService {
       await timings.time(
         { stage: "axe_core", sub_stage: "page_navigate", page_url: url, depth },
         async () => {
-          await page.goto(url, { waitUntil: "load", timeout: timeoutMs });
+          _stashNavigation(page, await page.goto(url, { waitUntil: "load", timeout: timeoutMs }));
           await new Promise((r) => setTimeout(r, POST_NAV_SETTLE_MS));
         },
       );

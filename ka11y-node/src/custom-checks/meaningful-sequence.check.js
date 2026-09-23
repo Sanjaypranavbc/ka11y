@@ -63,6 +63,18 @@ function _formatViolationDetail(violation, context) {
         'CSS の order プロパティにより子要素が DOM 順序から並び替えられています（order: [{orders}]）。',
         { orders },
       );
+    case 'positioned-reorders':
+      return _t(
+        context,
+        'Absolutely/fixed positioned children are displayed in a different order (top-to-bottom, left-to-right) than their DOM order — the reading sequence exposed to assistive technology differs from the visual one (G57/C6/C27)',
+        'absolute/fixed 配置の子要素が DOM 順序と異なる順（上から下、左から右）で表示されています。支援技術に伝わる読み順が視覚的な順序と異なります（G57/C6/C27）。',
+      );
+    case 'letter-spaced-words':
+      return _t(
+        context,
+        'Heading spells a word with spaces between letters ("W O R D") — screen readers announce single letters; use CSS letter-spacing instead (C8)',
+        '見出しで単語の文字間にスペースが入っています（「W O R D」）。スクリーンリーダーは一文字ずつ読み上げます。代わりに CSS の letter-spacing を使ってください（C8）。',
+      );
     case 'mixed-direction-no-dir':
       return _t(
         context,
@@ -262,6 +274,52 @@ async function run(page, context = {}) {
         html: el.outerHTML.slice(0, 150),
       });
       if (results.length >= 60) break;
+    }
+
+    // ── G57 / C6 / SCR27: positioned siblings whose visual order differs from DOM order ──
+    let posChecked = 0;
+    for (const el of document.querySelectorAll('div, section, article, main, ul, ol, form, header, footer, li, figure')) {
+      if (posChecked++ > 2000 || results.length >= 80) break;
+      const kids = Array.from(el.children).filter(ch => {
+        const cs = window.getComputedStyle(ch);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        const r = ch.getBoundingClientRect();
+        return r.width > 20 && r.height > 12 && (ch.textContent || '').trim().length > 0;
+      });
+      if (kids.length < 2 || kids.length > 40) continue;
+      const positioned = kids.filter(ch => /^(absolute|fixed)$/.test(window.getComputedStyle(ch).position));
+      if (!positioned.length) continue;
+      if (positioned.every(p => window.getComputedStyle(p).position === 'fixed') && el.closest('nav, header, footer, [role="navigation"], [role="banner"]')) continue;
+      const rects = kids.map(ch => ({ ch, r: ch.getBoundingClientRect() }));
+      const visual = [...rects].sort((a, b) => (Math.abs(a.r.top - b.r.top) > 8 ? a.r.top - b.r.top : a.r.left - b.r.left));
+      let inversions = 0;
+      for (let i = 0; i < visual.length; i++) if (visual[i].ch !== rects[i].ch) inversions++;
+      if (inversions < 2) continue;
+      results.push({
+        tagName: el.tagName.toLowerCase(),
+        element_id: el.id || null,
+        target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
+        display: null, flexDir: null, orders: null,
+        reasonCode: 'positioned-reorders',
+        html: el.outerHTML.slice(0, 150),
+      });
+    }
+
+    // ── C8: words spelled out with spaces between letters in headings ────────
+    for (const h of document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]')) {
+      if (results.length >= 90) break;
+      const t = (h.textContent || '').trim();
+      if (!/(?:^|\s)(?:[A-Za-z]\s){3,}[A-Za-z](?:\s|$)/.test(t)) continue;
+      results.push({
+        tagName: h.tagName.toLowerCase(),
+        element_id: h.id || null,
+        target: h.id ? [`#${CSS.escape(h.id)}`] : [h.tagName.toLowerCase()],
+        tag: h.tagName.toUpperCase(),
+        display: null, flexDir: null, orders: null,
+        reasonCode: 'letter-spaced-words',
+        html: h.outerHTML.slice(0, 150),
+      });
     }
 
     return results;

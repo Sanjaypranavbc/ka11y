@@ -84,6 +84,14 @@ async function run(page, context = {}) {
       }, SELECTOR, MAX_ELEMENTS);
     }
 
+    // G107 / F55: opening a dialog or a large overlay on focus is a change of context too.
+    const popupCount = () => Promise.resolve(page.evaluate(() => {
+      const dialogs = Array.from(document.querySelectorAll('dialog[open], [role="dialog"], [role="alertdialog"], [aria-modal="true"]')).filter(d => { const cs = window.getComputedStyle(d); return cs.display !== 'none' && cs.visibility !== 'hidden' && d.getBoundingClientRect().width > 0; }).length;
+      const overlays = Array.from(document.querySelectorAll('body > *')).filter(el => { const cs = window.getComputedStyle(el); if (cs.position !== 'fixed' || cs.display === 'none') return false; const r = el.getBoundingClientRect(); return r.width > window.innerWidth * 0.6 && r.height > window.innerHeight * 0.6; }).length;
+      return dialogs + overlays;
+    })).then(v => (typeof v === 'number' ? v : null)).catch(() => null);
+    const popupBaseline = await popupCount();
+
     for (let i = 0; i < (focusable || []).length; i++) {
       navigationDetected = false;
       const urlBefore = page.url();
@@ -110,6 +118,15 @@ async function run(page, context = {}) {
       if (navigationDetected || spaPathnameChanged || urlPathAndSearch(currentUrl) !== urlPathAndSearch(urlBefore)) {
         violations.push(focusable[i]);
         break; // page may have navigated; unsafe to continue testing other elements
+      }
+
+      if (popupBaseline !== null) {
+        const now = await popupCount();
+        if (now !== null && now > popupBaseline) {
+          violations.push({ ...focusable[i], popup: true });
+          try { if (page.keyboard && page.keyboard.press) await page.keyboard.press('Escape'); } catch (_) { /* ignore */ }
+          break;
+        }
       }
       
       // Reset SPA pathname flag
@@ -150,7 +167,9 @@ async function run(page, context = {}) {
       description: 'Focusing an element must not trigger a context change',
       impact: 'serious',
       status: 'fail',
-      reason: _t(sharedContext, 'Focusing {element} triggered an unexpected navigation or context change. Testing stopped at the first violation — additional elements may be affected. Review all focusable elements for focus-triggered navigation.', '{element} にフォーカスした際、予期しないナビゲーションまたはコンテキスト変更が発生しました。最初の違反でテストを停止しているため、他の要素にも影響がある可能性があります。フォーカスで遷移が起きないか、すべてのフォーカス可能要素を確認してください。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` }),
+      reason: violations[0].popup
+        ? _t(sharedContext, 'Focusing {element} opened a dialog or overlay (F55/G107). Receiving focus must not change context — open dialogs on activation (click/Enter), not on focus. Testing stopped at the first violation.', '{element} にフォーカスした際にダイアログまたはオーバーレイが開きました（F55/G107）。フォーカスを受け取っただけでコンテキストを変更してはいけません。ダイアログはフォーカスではなく操作（クリック/Enter）で開いてください。最初の違反でテストを停止しています。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` })
+        : _t(sharedContext, 'Focusing {element} triggered an unexpected navigation or context change. Testing stopped at the first violation — additional elements may be affected. Review all focusable elements for focus-triggered navigation.', '{element} にフォーカスした際、予期しないナビゲーションまたはコンテキスト変更が発生しました。最初の違反でテストを停止しているため、他の要素にも影響がある可能性があります。フォーカスで遷移が起きないか、すべてのフォーカス可能要素を確認してください。', { element: `<${violations[0].tagName}${violations[0].id ? ` id="${violations[0].id}"` : ''}>` }),
       elements: [
         {
           html: violations[0].html,

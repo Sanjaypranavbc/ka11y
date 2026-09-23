@@ -15,12 +15,29 @@ OIDC provider (Google by default; any OpenID Connect issuer works):
   KA11Y_OIDC_AUTHORIZATION_ENDPOINT / _TOKEN_ENDPOINT / _USERINFO_ENDPOINT
                                optional overrides that skip discovery (tests, dev)
 
-Sessions (cookie is a signed session id; no tokens stored anywhere):
-  KA11Y_SESSION_SECRET         long random string; REQUIRED
+Sessions (cookie is an AES-256-GCM sealed session id; no tokens stored):
+  KA11Y_SESSION_SECRET         long random string (>= 32 chars); REQUIRED.
+                               The AES key is derived from it (HKDF-SHA256),
+                               so rotating it signs everyone out.
   KA11Y_SESSION_IDLE_HOURS     12   — idle timeout for a normal login
   KA11Y_SESSION_REMEMBER_DAYS  30   — idle timeout when "keep me signed in"
   KA11Y_SESSION_MAX_DAYS       30   — absolute lifetime, always enforced
   KA11Y_COOKIE_SECURE          "1"/"0"; default: 1 when the redirect URI is https
+  KA11Y_COOKIE_HOST_PREFIX     "1"/"0"; default: same as KA11Y_COOKIE_SECURE.
+                               Names the cookies "__Host-ka11y_session" /
+                               "__Host-ka11y_oidc": the browser then refuses
+                               them unless Secure + Path=/ + no Domain, which
+                               stops sub-domain cookie injection.
+
+Transport (TLS is terminated in front of this service — ALB, Caddy, nginx):
+  KA11Y_FORCE_HTTPS            "1"/"0"; default: same as KA11Y_COOKIE_SECURE.
+                               Plain-http requests (X-Forwarded-Proto: http)
+                               are answered with a 308 to the https URL.
+  KA11Y_HSTS_MAX_AGE           seconds, default 31536000 (1 year); "0"
+                               disables the Strict-Transport-Security header.
+                               Only sent on https responses.
+  KA11Y_HSTS_PRELOAD           "1" adds includeSubDomains; preload (submit
+                               the domain to hstspreload.org yourself).
 
 Who may sign in (both empty → anyone the provider authenticates):
   KA11Y_ALLOWED_EMAILS         comma-separated, case-insensitive
@@ -80,6 +97,10 @@ class AuthSettings:
     session_remember_days: int
     session_max_days: int
     cookie_secure: bool
+    cookie_host_prefix: bool = False
+    force_https: bool = False
+    hsts_max_age: int = 31536000
+    hsts_preload: bool = False
 
     allowed_emails: FrozenSet[str] = field(default_factory=frozenset)
     allowed_domains: FrozenSet[str] = field(default_factory=frozenset)
@@ -96,6 +117,11 @@ class AuthSettings:
     oidc_cookie: str = "ka11y_oidc"
 
     @property
+    def session_secret_ok(self) -> bool:
+        """Long enough to derive a 256-bit key from without embarrassment."""
+        return len(self.session_secret) >= 32
+
+    @property
     def oidc_configured(self) -> bool:
         return bool(self.client_id and self.client_secret and self.redirect_uri and self.issuer)
 
@@ -108,6 +134,9 @@ class AuthSettings:
 def settings() -> AuthSettings:
     """Read the environment every call — cheap, and tests mutate os.environ."""
     redirect = os.getenv("KA11Y_OIDC_REDIRECT_URI", "").strip()
+    cookie_secure = _bool("KA11Y_COOKIE_SECURE", redirect.lower().startswith("https://"))
+    host_prefix = cookie_secure and _bool("KA11Y_COOKIE_HOST_PREFIX", True)
+    prefix = "__Host-" if host_prefix else ""
     return AuthSettings(
         issuer=os.getenv("KA11Y_OIDC_ISSUER", "https://accounts.google.com").strip().rstrip("/"),
         client_id=os.getenv("KA11Y_OIDC_CLIENT_ID", "").strip(),
@@ -122,7 +151,13 @@ def settings() -> AuthSettings:
         session_idle_hours=int(os.getenv("KA11Y_SESSION_IDLE_HOURS", "12")),
         session_remember_days=int(os.getenv("KA11Y_SESSION_REMEMBER_DAYS", "30")),
         session_max_days=int(os.getenv("KA11Y_SESSION_MAX_DAYS", "30")),
-        cookie_secure=_bool("KA11Y_COOKIE_SECURE", redirect.lower().startswith("https://")),
+        cookie_secure=cookie_secure,
+        cookie_host_prefix=host_prefix,
+        force_https=_bool("KA11Y_FORCE_HTTPS", cookie_secure),
+        hsts_max_age=max(0, int(os.getenv("KA11Y_HSTS_MAX_AGE", "31536000") or 0)),
+        hsts_preload=_bool("KA11Y_HSTS_PRELOAD", False),
+        session_cookie=f"{prefix}ka11y_session",
+        oidc_cookie=f"{prefix}ka11y_oidc",
         allowed_emails=_csv("KA11Y_ALLOWED_EMAILS"),
         allowed_domains=_csv("KA11Y_ALLOWED_EMAIL_DOMAINS"),
         admin_emails=_csv("KA11Y_ADMIN_EMAILS"),

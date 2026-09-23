@@ -215,6 +215,9 @@ def trim_finding(finding: dict) -> dict:
             "html": element.get("html"),
             "tag": element.get("tag"),
             "image_text": element.get("image_text"),
+            # Nearby heading / caption / description link / prose so the model can judge
+            # whether the alt text fits the image's purpose in context (G94/G92).
+            "image_context": element.get("image_context"),
             "page_url": element.get("page_url"),
         }.items()
         if v is not None

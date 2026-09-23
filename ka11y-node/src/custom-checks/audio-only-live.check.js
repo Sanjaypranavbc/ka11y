@@ -60,12 +60,19 @@ async function run(page, context = {}) {
       const container = audio.closest('figure,article,section,[role="region"],[role="main"]') || audio.parentElement;
 
       // Check for adjacent live text alternative
+      // G150: a live text feed (aria-live region or role="log") with real content counts even
+      // without transcript keywords; the player's aria-describedby is searched too (G151).
       const hasLiveRegion = container && Array.from(container.querySelectorAll('[aria-live],[role="log"],[role="status"]')).some(el =>
-        transcriptRe.test((el.getAttribute('aria-label') || '') + ' ' + (el.textContent || '')));
+        transcriptRe.test((el.getAttribute('aria-label') || '') + ' ' + (el.textContent || ''))
+        || el.getAttribute('role') === 'log'
+        || (el.getAttribute('aria-live') && (el.textContent || '').trim().length > 40));
+      const describedBy = (audio.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean)
+        .map(id => { const n = document.getElementById(id); return n ? (n.textContent || '') : ''; }).join(' ');
+      const hasDescribedTranscript = transcriptRe.test(describedBy) || describedBy.trim().length > 200;
       const hasTranscriptLink = container && Array.from(container.querySelectorAll('a[href]')).some(a =>
         transcriptRe.test((a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '')));
 
-      if (!hasLiveRegion && !hasTranscriptLink && !hasCaptionService(container) && !hasCaptionService(document)) {
+      if (!hasLiveRegion && !hasTranscriptLink && !hasDescribedTranscript && !hasCaptionService(container) && !hasCaptionService(document)) {
         issues.push({
           target: audio.id ? `audio#${CSS.escape(audio.id)}` : 'audio',
           snippet: audio.outerHTML.slice(0, 200),
@@ -82,7 +89,9 @@ async function run(page, context = {}) {
       liveCount++;
       const container = iframe.closest('figure,article,section,[role="region"],[role="main"]') || iframe.parentElement;
       const hasLiveRegion = container && Array.from(container.querySelectorAll('[aria-live],[role="log"]')).some(el =>
-        transcriptRe.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '')));
+        transcriptRe.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || ''))
+        || el.getAttribute('role') === 'log'
+        || (el.textContent || '').trim().length > 40);
 
       if (!hasLiveRegion && !hasCaptionService(container) && !hasCaptionService(document)) {
         issues.push({

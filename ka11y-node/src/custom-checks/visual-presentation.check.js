@@ -99,17 +99,41 @@ async function run(page, context = {}) {
       }
     }
 
-    return { blockCount: textBlocks.length, issues, presentationControls };
+    // C23 / G175: can the user change foreground/background colours? Author colours
+    // declared with !important defeat user style sheets; an on-page colour picker is a
+    // conforming alternative.
+    let importantColors = 0;
+    try {
+      const walk = (rules, depth) => { if (!rules || depth > 3) return; for (const r of rules) { try { if (r.style) { for (const prop of ['color', 'background-color', 'background']) { if (r.style.getPropertyPriority(prop) === 'important' && r.style.getPropertyValue(prop)) importantColors++; } } if (r.cssRules) walk(r.cssRules, depth + 1); } catch (_) { /* ignore */ } } };
+      for (const s of document.styleSheets) { try { walk(s.cssRules, 0); } catch (_) { /* cross-origin */ } }
+    } catch (_) { /* ignore */ }
+    const colorPickers = Array.from(document.querySelectorAll('input[type="color"]')).filter(p => /background|foreground|text|colou?r|背景|文字|色/i.test(((p.labels && p.labels[0]) ? p.labels[0].textContent : '') + ' ' + (p.getAttribute('aria-label') || '') + ' ' + (p.name || '') + ' ' + (p.id || ''))).length;
+
+    return { blockCount: textBlocks.length, issues, presentationControls, importantColors, colorPickers };
   });
 
   if (!data.blockCount) {
     return _na(ctx, _t(ctx, 'No substantial text blocks found — criterion not applicable.', '十分なテキストブロックが見つかりませんでした。'));
   }
+  const colorOverrideRule = (data.importantColors >= 3 && !data.colorPickers) ? {
+    ruleId: `${RULE_ID}-color-override`,
+    description: FALLBACK_DESCRIPTION,
+    impact: 'minor',
+    status: 'incomplete',
+    reason: _t(ctx,
+      '{n} colour/background declarations use !important, which prevents users from overriding text and background colours with their own style sheet; no on-page colour selection tool was found (C23/G175).',
+      '{n} 件の color/background 宣言が !important を使用しており、ユーザーが独自のスタイルシートで文字色や背景色を変更できません。ページ内に色選択ツールもありません（C23/G175）。',
+      { n: data.importantColors }),
+    helpUrl: HELP_URL,
+  } : null;
+
   if (!data.issues.length) {
-    return _pass(ctx, _t(ctx,
-      '{n} text block(s) checked — no text-align: justify, tight line-height, or excessive column width detected.',
-      '{n} 件のテキストブロックを確認しました。text-align: justify、行間の詰め、過広なカラム幅は検出されませんでした。',
-      { n: data.blockCount }));
+    const pass = _pass(ctx, _t(ctx,
+      '{n} text block(s) checked — no text-align: justify, tight line-height, or excessive column width detected{pk}.',
+      '{n} 件のテキストブロックを確認しました。text-align: justify、行間の詰め、過広なカラム幅は検出されませんでした{pk}。',
+      { n: data.blockCount, pk: data.colorPickers ? _t(ctx, `; ${data.colorPickers} colour selection control(s) available (G175)`, `。色選択コントロール ${data.colorPickers} 件あり（G175）`) : '' }));
+    if (colorOverrideRule) pass.rules.push(colorOverrideRule);
+    return pass;
   }
 
   const byType = {};
@@ -135,7 +159,7 @@ async function run(page, context = {}) {
           { n: data.issues.length, summary }),
       elements: data.issues,
       helpUrl: HELP_URL,
-    }],
+    }].concat(colorOverrideRule ? [colorOverrideRule] : []),
   };
 }
 

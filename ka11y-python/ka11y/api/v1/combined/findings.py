@@ -112,6 +112,7 @@ def _make_finding(
     image_text: Optional[str] = None,
     page_url: str = "",
     quality_report: Optional[Dict[str, Any]] = None,
+    image_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     # R-2: canonicalise the page_url at the central choke point so dedup keys
     # in _merge_findings and the per-page UI grouping see identical strings
@@ -168,6 +169,8 @@ def _make_finding(
         )
         if element and quality_report:
             element["quality_report"] = quality_report
+        if element and image_context:
+            element["image_context"] = image_context
     else:
         element = {
             "html": element_html[:600] if element_html else "",
@@ -184,6 +187,8 @@ def _make_finding(
         }
         if quality_report:
             element["quality_report"] = quality_report
+        if image_context:
+            element["image_context"] = image_context
 
     return {
         "source": source,
@@ -633,6 +638,7 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     image_reference=filename,
                     image_text=detected_text,
                     page_url=r.get("url") or page_url,
+                    image_context=r.get("image_context") or None,
                 )
             )
         elif status_raw == "FAILED":
@@ -654,6 +660,7 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     image_reference=filename,
                     image_text=detected_text,
                     page_url=r.get("url") or page_url,
+                    image_context=r.get("image_context") or None,
                 )
             )
         else:
@@ -673,6 +680,7 @@ def _alt_text_to_findings(records: List[Dict], page_url: str) -> List[Dict]:
                     image_reference=filename,
                     image_text=detected_text,
                     page_url=r.get("url") or page_url,
+                    image_context=r.get("image_context") or None,
                 )
             )
     return findings

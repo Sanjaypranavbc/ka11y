@@ -10,7 +10,15 @@
  *   - OIDC (Google by default): GET /auth/login → provider → /auth/callback
  */
 
-export const SESSION_COOKIE = "ka11y_session";
+/**
+ * The API names the session cookie "__Host-ka11y_session" on https (the
+ * prefix makes the browser enforce Secure + Path=/ + no Domain) and plain
+ * "ka11y_session" on http localhost. Both names are checked everywhere the UI
+ * looks for a session; the first match wins.
+ */
+export const SESSION_COOKIE_NAMES = ["__Host-ka11y_session", "ka11y_session"] as const;
+/** @deprecated use SESSION_COOKIE_NAMES — kept for older imports. */
+export const SESSION_COOKIE = SESSION_COOKIE_NAMES[1];
 export const LOGIN_URL = "/api/v1/auth/login";
 export const LOGOUT_URL = "/api/v1/auth/logout";
 export const CONFIG_URL = "/api/v1/auth/config";

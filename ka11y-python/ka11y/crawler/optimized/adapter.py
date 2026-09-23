@@ -286,6 +286,7 @@ def build_image_data(
             dec = el.get("decorative_signals") or {}
             ctx = el.get("functional_context") or {}
             cplx = el.get("complex_signals") or {}
+            csig = el.get("context_signals") or {}
             images.append(ImageData(
                 url=page_url,
                 src=src,
@@ -321,6 +322,17 @@ def build_image_data(
                 aria_describedby_text=cplx.get("aria_describedby_text"),
                 has_longdesc=bool(cplx.get("has_longdesc")),
                 in_figure=bool(cplx.get("in_figure")),
+                # Nearby-context signals (G73/G74/G82/G196/ARIA10; LLM context)
+                link_sole_content=bool(csig.get("link_sole_content") or ctx.get("is_sole_content")),
+                link_href=csig.get("link_href") or ctx.get("link_href"),
+                description_link_text=csig.get("description_link_text"),
+                nearby_text_length=int(csig.get("nearby_text_length") or 0),
+                alt_refers_nearby=bool(csig.get("alt_refers_nearby")),
+                group_size=int(csig.get("group_size") or 0),
+                group_alt_sibling=bool(csig.get("group_alt_sibling")),
+                labelledby_unresolved=bool(csig.get("labelledby_unresolved")),
+                nearby_heading_text=csig.get("nearby_heading_text"),
+                nearby_text_sample=csig.get("nearby_text_sample"),
             ))
 
     return images, page_langs, visited

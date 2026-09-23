@@ -18,17 +18,42 @@ function _t(context, en, ja, params = {}) {
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
 
-  const data = await page.evaluate(() => {
+  const data = await page.evaluate(async () => {
     const ALT_KEYWORDS = /transcript|text\s+version|full[- ]?text\s+alternative|audio[- ]?description|descriptive\s+transcript|書き起こし|文字起こし|音声解説|音声ガイド|代替テキスト/i;
 
     const videos = Array.from(document.querySelectorAll('video'));
     if (videos.length === 0) return { videoCount: 0, issues: [] };
 
     const issues = [];
+    let videoOnly = 0;
+
+    // G159: a video with no audio track is video-only (1.2.1), not synchronized media —
+    // probe with a brief muted play and restore the element afterwards.
+    const probeHasAudio = async (v) => {
+      try {
+        if (typeof v.mozHasAudio === 'boolean') return v.mozHasAudio;
+        if (v.audioTracks && typeof v.audioTracks.length === 'number' && v.readyState >= 1) return v.audioTracks.length > 0;
+        if (typeof v.webkitAudioDecodedByteCount !== 'number') return null;
+        if (!v.paused) return v.webkitAudioDecodedByteCount > 0 ? true : null;
+        const wasMuted = v.muted, t0 = v.currentTime;
+        v.muted = true;
+        const p = v.play();
+        if (p && p.catch) await p.catch(() => {});
+        await new Promise(r => setTimeout(r, 700));
+        const bytes = v.webkitAudioDecodedByteCount;
+        v.pause();
+        try { v.currentTime = t0; } catch (_) { /* ignore */ }
+        v.muted = wasMuted;
+        if (v.readyState < 2) return null;
+        return bytes > 0;
+      } catch (_) { return null; }
+    };
+    const silent = new Set();
+    for (const v of videos.slice(0, 6)) { if ((await probeHasAudio(v)) === false) { silent.add(v); videoOnly += 1; } }
 
     for (const video of videos) {
       const muted = video.muted === true;
-      if (muted) continue;
+      if (muted || silent.has(video)) continue;
 
       // Signal 1: <track kind="descriptions">
       const descTracks = Array.from(video.querySelectorAll('track[kind="descriptions"]'));
@@ -80,7 +105,7 @@ async function run(page, context = {}) {
       }
     }
 
-    return { videoCount: videos.length, issues };
+    return { videoCount: videos.length, issues, videoOnly };
   });
 
   if (data.videoCount === 0) {
@@ -107,9 +132,9 @@ async function run(page, context = {}) {
         status: 'pass',
         reason: _t(
           sharedContext,
-          '{count} <video> element(s) checked — all have an audio description or text alternative.',
-          '{count} 件の <video> を確認しました — すべてに音声解説または代替テキストがあります。',
-          { count: data.videoCount },
+          '{count} <video> element(s) checked — all have an audio description or text alternative{vo}.',
+          '{count} 件の <video> を確認しました — すべてに音声解説または代替テキストがあります{vo}。',
+          { count: data.videoCount, vo: data.videoOnly ? _t(sharedContext, ` (${data.videoOnly} silent video-only element(s) excluded — G159)`, `（無音の動画のみ ${data.videoOnly} 件は除外 — G159）`) : '' },
         ),
         helpUrl: HELP_URL,
       }],

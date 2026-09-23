@@ -11,7 +11,12 @@ Any of ``postgresql://``, ``postgres://`` or ``postgresql+psycopg://`` is
 accepted; the URL is normalised to the psycopg 3 driver, which serves both the
 app (async) and Alembic (sync) — see ``alembic/env.py``. Nothing here assumes
 RDS: the same URL shape works for a local ``postgres:16`` container and for an
-RDS endpoint (add ``?sslmode=require`` there).
+RDS endpoint. TLS: when the URL carries no ``sslmode`` one is added —
+``require`` for any non-local host (RDS, a managed Postgres), nothing for
+``localhost`` / ``127.0.0.1`` / the compose ``postgres`` service, whose
+traffic never leaves the private network. ``KA11Y_DB_SSLMODE`` overrides both
+(``verify-full`` + ``KA11Y_DB_SSLROOTCERT`` pins the CA, the strongest
+setting; ``disable`` turns it off).
 
 ``DATABASE_URL`` unset → :func:`is_configured` is False, no engine is created,
 and every caller degrades: auth reports "not configured", the audit bridge
@@ -45,9 +50,39 @@ _sessionmaker: Optional[async_sessionmaker[AsyncSession]] = None
 _engine_loop_id: Optional[int] = None
 
 
+_LOCAL_DB_HOSTS = {"localhost", "127.0.0.1", "::1", "postgres", "db"}
+
+
 def database_url() -> Optional[str]:
     raw = os.getenv("DATABASE_URL", "").strip()
-    return normalize_url(raw) if raw else None
+    return apply_tls_default(normalize_url(raw)) if raw else None
+
+
+def apply_tls_default(url: str) -> str:
+    """Add ``sslmode`` (and ``sslrootcert``) to a PostgreSQL URL that has none.
+
+    Explicit query parameters in the URL always win. ``KA11Y_DB_SSLMODE``
+    comes next. Otherwise any host that is not on the local list gets
+    ``sslmode=require`` so credentials and audit data never cross a network
+    in clear text by accident.
+    """
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return url
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    override = os.getenv("KA11Y_DB_SSLMODE", "").strip()
+    rootcert = os.getenv("KA11Y_DB_SSLROOTCERT", "").strip()
+    if "sslmode" not in query:
+        if override:
+            query["sslmode"] = override
+        elif (parts.hostname or "").lower() not in _LOCAL_DB_HOSTS:
+            query["sslmode"] = "require"
+    if rootcert and "sslrootcert" not in query and query.get("sslmode") not in (None, "disable"):
+        query["sslrootcert"] = rootcert
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
 
 def normalize_url(url: str) -> str:

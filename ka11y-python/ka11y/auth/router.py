@@ -67,10 +67,19 @@ def _safe_next(value: Optional[str]) -> str:
     return value
 
 
+def _delete_cookie(resp: Response, name: str) -> None:
+    """Expire a cookie with the same attributes it was set with. A ``__Host-``
+    cookie is only honoured (even for deletion) when Secure + Path=/ are
+    present, so the attributes are not optional."""
+    cfg = settings()
+    resp.delete_cookie(name, path="/", httponly=True, secure=cfg.cookie_secure, samesite="lax")
+
+
 def _login_error(code: str) -> RedirectResponse:
     cfg = settings()
     resp = RedirectResponse(f"{cfg.login_page_url}?{urlencode({'error': code})}", status_code=302)
-    resp.delete_cookie(cfg.oidc_cookie, path="/")
+    _delete_cookie(resp, cfg.oidc_cookie)
+    resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
@@ -100,17 +109,18 @@ def _require_password_login() -> None:
         raise HTTPException(status_code=503, detail="Password sign-in is not configured on this server.")
 
 
-def _set_session_cookie(resp: Response, session_id, remember: bool) -> None:
+def _set_session_cookie(resp: Response, session_id, token: str, remember: bool) -> None:
     cfg = settings()
     resp.set_cookie(
         cfg.session_cookie,
-        sessions.cookie_value(session_id, remember),
+        sessions.cookie_value(session_id, token, remember),
         max_age=sessions.cookie_max_age(remember),
         httponly=True,
         secure=cfg.cookie_secure,
         samesite="lax",
         path="/",
     )
+    resp.headers["Cache-Control"] = "no-store"
 
 
 def _attempt_key(request: Request, email: str) -> str:
@@ -244,7 +254,7 @@ async def callback(
         return _login_error("internal_error")
 
     remember = bool(pending.get("r"))
-    sess = await sessions.create_session(
+    sess, token = await sessions.create_session(
         user_id=user.id,
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
@@ -252,8 +262,9 @@ async def callback(
     logger.info("[auth] %s signed in (session %s)", user.email, sess.id)
 
     resp = RedirectResponse(_safe_next(pending.get("x")), status_code=302)
-    resp.delete_cookie(cfg.oidc_cookie, path="/")
-    _set_session_cookie(resp, sess.id, remember)
+    _delete_cookie(resp, cfg.oidc_cookie)
+    _set_session_cookie(resp, sess.id, token, remember)
+    resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
@@ -274,12 +285,12 @@ async def password_login(request: Request, body: PasswordLoginBody) -> Response:
         logger.exception("[auth] password sign-in failed")
         return _auth_error("internal_error")
     _failures.pop(key, None)
-    sess = await sessions.create_session(
+    sess, token = await sessions.create_session(
         user_id=user.id, ip_address=_client_ip(request), user_agent=request.headers.get("user-agent")
     )
     logger.info("[auth] %s signed in with password (session %s)", user.email, sess.id)
     resp = JSONResponse({"next": _safe_next(body.next)})
-    _set_session_cookie(resp, sess.id, body.remember)
+    _set_session_cookie(resp, sess.id, token, body.remember)
     return resp
 
 
@@ -298,12 +309,12 @@ async def password_register(request: Request, body: PasswordRegisterBody) -> Res
     except Exception:  # noqa: BLE001
         logger.exception("[auth] registration failed")
         return _auth_error("internal_error")
-    sess = await sessions.create_session(
+    sess, token = await sessions.create_session(
         user_id=user.id, ip_address=_client_ip(request), user_agent=request.headers.get("user-agent")
     )
     logger.info("[auth] %s registered and signed in (session %s)", user.email, sess.id)
     resp = JSONResponse({"next": _safe_next(body.next)}, status_code=201)
-    _set_session_cookie(resp, sess.id, body.remember)
+    _set_session_cookie(resp, sess.id, token, body.remember)
     return resp
 
 
@@ -321,7 +332,7 @@ def _clear_session_cookies(resp: Response) -> None:
     browser matches the existing cookie; and never let the response be cached."""
     cfg = settings()
     for name in (cfg.session_cookie, cfg.oidc_cookie):
-        resp.delete_cookie(name, path="/", httponly=True, secure=cfg.cookie_secure, samesite="lax")
+        _delete_cookie(resp, name)
     resp.headers["Cache-Control"] = "no-store"
 
 

@@ -691,6 +691,10 @@ async def admin_settings() -> Dict[str, Any]:
             {"label": "Admin e-mails", "value": ", ".join(sorted(cfg.admin_emails)) or "—"},
             {"label": "Session idle / remember / max", "value": f"{cfg.session_idle_hours} h / {cfg.session_remember_days} d / {cfg.session_max_days} d"},
             {"label": "Secure cookie", "value": flag(cfg.cookie_secure)},
+            {"label": "Cookie sealing", "value": "AES-256-GCM (HKDF-SHA256 key)"},
+            {"label": "__Host- cookie prefix", "value": flag(cfg.cookie_host_prefix)},
+            {"label": "Force HTTPS (308)", "value": flag(cfg.force_https)},
+            {"label": "HSTS max-age", "value": f"{cfg.hsts_max_age} s" + (" + preload" if cfg.hsts_preload else "") if cfg.hsts_max_age else "off"},
         ]},
         {"key": "engine", "items": [
             {"label": "Concurrent audits", "value": env("KA11Y_MAX_CONCURRENT_JOBS", "4")},

@@ -22,6 +22,11 @@ function _pass(ctx, reason) {
 async function run(page, context = {}) {
   const ctx = getSharedRuleContext(context);
 
+  // SVR1: redirects performed by the server (3xx) are recorded by the service on
+  // page.__ka11yNav; they are the recommended alternative to client-side timed redirects.
+  const nav = page && page.__ka11yNav && typeof page.__ka11yNav === 'object' ? page.__ka11yNav : null;
+  const serverRedirects = nav && Array.isArray(nav.redirectChain) ? nav.redirectChain.length : 0;
+
   const data = await page.evaluate(() => {
     const issues = [];
 
@@ -165,7 +170,7 @@ async function run(page, context = {}) {
     return _pass(ctx, _t(ctx,
       'No automatic context-change patterns detected (no meta-refresh, auto-navigating selects, timed redirects, unpaused carousels, or unannounced new-window links{nw}).',
       '自動コンテキスト変更パターンは検出されませんでした（meta-refresh、自動ナビゲーション select、時間指定リダイレクト、一時停止なしカルーセル、告知のない別ウィンドウリンクなし{nw}）。',
-      { nw: data.newWindowCount ? `; ${data.newWindowCount} new-window link(s) all announce it` : '' }));
+      { nw: (data.newWindowCount ? `; ${data.newWindowCount} new-window link(s) all announce it` : '') + (serverRedirects ? `; ${serverRedirects} server-side redirect(s) before this page (SVR1 — allowed, no client-side timed redirect)` : '') }));
   }
 
   const byType = {};

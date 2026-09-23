@@ -11,6 +11,13 @@
  *   ariaNotify      — ARIA27 ariaNotify() status announcements
  *   mediaPlay       — G171  media.play() triggered by script without user activation
  *   windowOpen      — G201 / SCR24  window.open() at load / without user activation
+ *   listenersOf(el) — G90 / SCR2 / SCR20 / SCR35 / G202  event types registered on an element
+ *                     through addEventListener (mouse-only vs keyboard handlers)
+ *   docListeners    — G217 (keydown on document/window), G213 (devicemotion/orientation),
+ *                     G215 (touch/pointer gesture handlers), G142 (non-passive touch handlers
+ *                     that call preventDefault and can block pinch-zoom)
+ *   audioContexts   — G171  Web Audio API contexts created without user activation
+ *   canvasTextOf(c) — C22   text drawn on a <canvas> via fillText/strokeText (images of text)
  *
  * Everything is best-effort and wrapped in try/catch so a hook can never break
  * the page under test. Checks read `window.__ka11yRuntime` inside page.evaluate
@@ -24,6 +31,7 @@ function runtimeHookScript() {
     if (window.__ka11yRuntime) return;
     const R = {
       matchMedia: [], timers: [], orientationLock: [], ariaNotify: [], mediaPlay: [], windowOpen: [],
+      docListeners: [], audioContexts: [],
       loadedAt: null,
     };
     Object.defineProperty(window, '__ka11yRuntime', { value: R, writable: false, configurable: true, enumerable: false });
@@ -119,6 +127,82 @@ function runtimeHookScript() {
           try { push(R.windowOpen, { url: String(url || '').slice(0, 200), target: String(target || ''), at: rel(), userActivated: active() }, 100); } catch (_) { /* ignore */ }
           return origOpen.apply(this, arguments);
         };
+      }
+    } catch (_) { /* ignore */ }
+
+    // addEventListener registry — the only way to see handlers that are not inline on* attributes.
+    try {
+      const LISTENERS = new WeakMap();
+      const ELEMENT_TYPES = /^(click|dblclick|mousedown|mouseup|mouseover|mouseout|mouseenter|mouseleave|pointerdown|pointerup|pointermove|touchstart|touchend|touchmove|keydown|keyup|keypress|focus|blur|focusin|focusout|change|input|drag|dragstart|dragend|drop|wheel|contextmenu)$/;
+      const DOC_TYPES = /^(keydown|keyup|keypress|touchstart|touchmove|touchend|gesturestart|gesturechange|wheel|devicemotion|deviceorientation|deviceorientationabsolute|pointerdown|pointermove|mousemove|scroll|beforeunload|unload)$/;
+      R.listenersOf = function (el) {
+        const s = LISTENERS.get(el);
+        return s ? Array.from(s) : [];
+      };
+      R.hasListener = function (el, re) {
+        const s = LISTENERS.get(el);
+        if (!s) return false;
+        for (const t of s) if (re.test(t)) return true;
+        return false;
+      };
+      const proto = window.EventTarget && window.EventTarget.prototype;
+      if (proto && typeof proto.addEventListener === 'function') {
+        const origAdd = proto.addEventListener;
+        proto.addEventListener = function (type, fn, opts) {
+          try {
+            const t = String(type);
+            if (this && window.Element && this instanceof window.Element) {
+              if (ELEMENT_TYPES.test(t)) {
+                let s = LISTENERS.get(this);
+                if (!s) { s = new Set(); LISTENERS.set(this, s); }
+                s.add(t);
+              }
+            } else if (this === window || this === document || (document.body && this === document.body) || (document.documentElement && this === document.documentElement)) {
+              if (DOC_TYPES.test(t)) {
+                const passive = !!(opts && typeof opts === 'object' && opts.passive);
+                let snippet = '';
+                try { snippet = typeof fn === 'function' ? Function.prototype.toString.call(fn).slice(0, 240) : ''; } catch (_) { /* ignore */ }
+                push(R.docListeners, {
+                  target: this === window ? 'window' : this === document ? 'document' : this === document.body ? 'body' : 'html',
+                  type: t, passive, preventsDefault: /preventDefault/.test(snippet), snippet, at: rel(),
+                }, 400);
+              }
+            }
+          } catch (_) { /* ignore */ }
+          return origAdd.apply(this, arguments);
+        };
+      }
+    } catch (_) { /* ignore */ }
+
+    // Canvas text — fillText/strokeText calls per canvas (C22 images of text on canvas).
+    try {
+      const CANVAS_TEXT = new WeakMap();
+      R.canvasTextOf = function (canvas) { return CANVAS_TEXT.get(canvas) || ''; };
+      const cp = window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype;
+      for (const name of ['fillText', 'strokeText']) {
+        if (!cp || typeof cp[name] !== 'function') continue;
+        const orig = cp[name];
+        cp[name] = function (text) {
+          try {
+            const c = this.canvas;
+            if (c) { const prev = CANVAS_TEXT.get(c) || ''; if (prev.length < 400) CANVAS_TEXT.set(c, (prev + ' ' + String(text)).trim()); }
+          } catch (_) { /* ignore */ }
+          return orig.apply(this, arguments);
+        };
+      }
+    } catch (_) { /* ignore */ }
+
+    // Web Audio API — sounds started by script without user activation (G171).
+    try {
+      for (const name of ['AudioContext', 'webkitAudioContext']) {
+        const Orig = window[name];
+        if (typeof Orig !== 'function') continue;
+        const Wrapped = function () {
+          try { push(R.audioContexts, { at: rel(), userActivated: active() }, 20); } catch (_) { /* ignore */ }
+          return new Orig(...arguments);
+        };
+        Wrapped.prototype = Orig.prototype;
+        window[name] = Wrapped;
       }
     } catch (_) { /* ignore */ }
 

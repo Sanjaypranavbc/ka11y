@@ -259,6 +259,76 @@ async function run(page, context = {}) {
       });
     }
 
+    // G138 / G14: status text whose meaning is carried by colour, with no icon, semantic
+    // element (strong/em/role=alert/status) or status word in the text itself.
+    try {
+      const STATUS_CLASS_RE = /error|invalid|danger|warning|success|valid|required|alert|negative|positive|critical|fail/i;
+      const STATUS_TEXT_RE = /error|invalid|required|success|warning|fail|passed?|complete|incomplete|overdue|due|approved|rejected|pending|active|inactive|エラー|無効|必須|成功|警告|失敗|完了|未完了|承認|却下|保留/i;
+      let scanned = 0, flagged = 0;
+      for (const el of document.querySelectorAll('p, span, td, li, div, dd, small, label')) {
+        if (scanned++ > 2500 || flagged >= 10) break;
+        if (el.children.length > 2 || el.closest('a[href], button, nav, [role="alert"], [role="status"], strong, em, b, i, [role="img"], svg')) continue;
+        const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text.length < 2 || text.length > 60) continue;
+        const cs = window.getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const parent = el.parentElement; if (!parent) continue;
+        const pcs = window.getComputedStyle(parent);
+        if (!colorsDiffer(cs.color, pcs.color)) continue;
+        const rgb = parseRgb(cs.color);
+        const greenish = rgb && rgb[1] >= 120 && rgb[0] <= 120 && rgb[2] <= 120;
+        if (!looksColorSignal(cs.color) && !greenish) continue; // red-ish or green-ish only
+        const marker = STATUS_CLASS_RE.exec((el.className || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('data-status') || ''));
+        if (!marker) continue;
+        if (STATUS_TEXT_RE.test(text)) continue; // the text itself carries the meaning
+        const hasIcon = !!(el.querySelector('svg, img, i[class*="icon"], [class*="icon"]') || (el.previousElementSibling && el.previousElementSibling.matches('svg, img, i[class*="icon"], [class*="icon"]')) || cs.backgroundImage !== 'none' || window.getComputedStyle(el, '::before').content.replace(/["']/g, '').trim());
+        if (hasIcon) continue;
+        flagged++;
+        nonLinkViolations.push({
+          type: 'status-text-color-only',
+          html: el.outerHTML.slice(0, 150),
+          element_id: el.id || null,
+          target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+          tag: el.tagName.toUpperCase(),
+          detail: `"${text.slice(0, 40)}" is styled as a "${marker[0]}" state by colour only — add an icon, a status word, or semantic markup (G138/G14)`,
+        });
+      }
+    } catch (_) { /* ignore */ }
+
+    // G111 / G14: inline SVG charts whose data series differ by fill colour alone (no pattern,
+    // dash style, or text labels) — advisory, the DOM cannot prove a chart is colour-only.
+    try {
+      let charts = 0;
+      for (const svg of document.querySelectorAll('svg')) {
+        if (charts >= 5) break;
+        const r = svg.getBoundingClientRect();
+        if (r.width < 120 || r.height < 80) continue;
+        const shapes = Array.from(svg.querySelectorAll('rect, path, circle, polygon, ellipse, polyline'));
+        if (shapes.length < 3 || shapes.length > 4000) continue;
+        const looksChart = /chart|graph|plot|series|axis|legend|highcharts|recharts|nivo|d3|vega|apexcharts|echarts/i.test((svg.getAttribute('class') || '') + ' ' + (svg.id || '') + ' ' + (svg.parentElement ? svg.parentElement.className : '') + ' ' + (svg.getAttribute('aria-label') || '')) || svg.querySelector('[class*="axis" i], [class*="series" i], [class*="legend" i]');
+        if (!looksChart) continue;
+        charts++;
+        const fills = new Set(), dashes = new Set();
+        const hasPattern = !!svg.querySelector('pattern, [fill^="url("]');
+        for (const s of shapes.slice(0, 600)) {
+          const scs = window.getComputedStyle(s);
+          if (scs.fill && scs.fill !== 'none') fills.add(scs.fill);
+          if (scs.strokeDasharray && scs.strokeDasharray !== 'none' && scs.strokeDasharray !== '0px') dashes.add(scs.strokeDasharray);
+        }
+        const textLabels = svg.querySelectorAll('text').length;
+        if (fills.size >= 3 && dashes.size === 0 && !hasPattern && textLabels < fills.size) {
+          nonLinkViolations.push({
+            type: 'svg-chart-color-only',
+            html: svg.outerHTML.slice(0, 150),
+            element_id: svg.id || null,
+            target: svg.id ? [`svg#${CSS.escape(svg.id)}`] : ['svg'],
+            tag: 'SVG',
+            detail: `Chart with ${fills.size} series colours has no patterns, dash styles or per-series text labels — series may be distinguishable by colour alone (G111/G14)`,
+          });
+        }
+      }
+    } catch (_) { /* ignore */ }
+
     return {
       violations,
       checkedCount: checked.length,

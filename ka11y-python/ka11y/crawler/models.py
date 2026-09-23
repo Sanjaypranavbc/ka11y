@@ -70,6 +70,20 @@ class ImageData(BaseModel):
     has_longdesc: bool = False
     in_figure: bool = False
 
+    # ── Nearby-context signals (WCAG 1.1.1 techniques G73 / G74 / G82 / G196 / ARIA10) ──
+    # Populated by image_extractor.js ``imageNearbyContext``; absent (defaults) for
+    # records produced by older crawls or unit-test factories.
+    link_sole_content: bool = False        # image is the only content of its <a href>
+    link_href: Optional[str] = None
+    description_link_text: Optional[str] = None  # adjacent "description/details" link (G73)
+    nearby_text_length: int = 0            # longest sibling text block, in characters (G74)
+    alt_refers_nearby: bool = False        # alt says "described below/above …" (G74)
+    group_size: int = 0                    # sibling images under the same parent (G196)
+    group_alt_sibling: bool = False        # a sibling image carries a descriptive alt (G196)
+    labelledby_unresolved: bool = False    # aria-labelledby resolves to no text (ARIA10)
+    nearby_heading_text: Optional[str] = None    # context for LLM enrichment (G94/G92)
+    nearby_text_sample: Optional[str] = None
+
     def has_long_description(self) -> bool:
         """True when a programmatically associated long description exists."""
         return bool(

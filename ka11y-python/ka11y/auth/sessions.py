@@ -3,10 +3,18 @@ ka11y/auth/sessions.py
 ======================
 Browser sessions backed by ``user_sessions``.
 
-The cookie value is ``<session uuid>.<r|n>.<hmac>`` — the session id plus a
-"remember me" flag, signed with KA11Y_SESSION_SECRET. Nothing secret is stored
-in the row, so the DB holds no token that could be replayed if it leaked; a
-forged cookie fails the HMAC, a stolen one dies with ``ended_at`` on logout.
+The cookie value is AES-256-GCM sealed (``ka11y.auth.signing``) around
+``<session uuid>.<token>.<r|n>``: the row id, a random 256-bit bearer token
+and the "remember me" flag. The row stores only ``sha256(token)``, so
+
+  * a copy of the table cannot be replayed as a cookie, even by someone who
+    also holds KA11Y_SESSION_SECRET (they lack the token pre-image);
+  * a forged or tampered cookie fails the AEAD tag before any DB work;
+  * a stolen cookie dies with ``ended_at`` on logout / password change.
+
+Per-user cap: KA11Y_SESSION_MAX_PER_USER (default 5) live sessions; opening
+one more ends the least recently active, so a leaked account cannot fan out
+into an unbounded number of long-lived browsers.
 
 Lifetime rules (all enforced server-side, the cookie max-age is a hint):
   * absolute: ``started_at + KA11Y_SESSION_MAX_DAYS``
@@ -18,6 +26,10 @@ Lifetime rules (all enforced server-side, the cookie max-age is a hint):
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import os
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
@@ -30,14 +42,30 @@ from ka11y.db.engine import session_scope
 from ka11y.db.models import User, UserSession
 
 _ACTIVITY_BUMP = timedelta(minutes=5)
+_TOKEN_BYTES = 32
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def cookie_value(session_id: uuid.UUID, remember: bool) -> str:
-    return sign(f"{session_id.hex}.{'r' if remember else 'n'}")
+def _max_per_user() -> int:
+    try:
+        return max(1, int(os.getenv("KA11Y_SESSION_MAX_PER_USER", "5")))
+    except ValueError:
+        return 5
+
+
+def new_token() -> str:
+    return secrets.token_urlsafe(_TOKEN_BYTES)
+
+
+def token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def cookie_value(session_id: uuid.UUID, token: str, remember: bool) -> str:
+    return sign(f"{session_id.hex}.{token}.{'r' if remember else 'n'}")
 
 
 def cookie_max_age(remember: bool) -> int:
@@ -46,32 +74,50 @@ def cookie_max_age(remember: bool) -> int:
     return days * 86400 if remember else cfg.session_idle_hours * 3600
 
 
-def parse_cookie(value: Optional[str]) -> Optional[Tuple[uuid.UUID, bool]]:
+def parse_cookie(value: Optional[str]) -> Optional[Tuple[uuid.UUID, str, bool]]:
+    """Cookie → (session id, bearer token, remember) or None if unreadable."""
     payload = unsign(value)
-    if not payload or "." not in payload:
+    if not payload:
         return None
-    sid_hex, _, flag = payload.partition(".")
+    parts = payload.split(".")
+    if len(parts) != 3 or not parts[1]:
+        return None
+    sid_hex, token, flag = parts
     try:
-        return uuid.UUID(hex=sid_hex), flag == "r"
+        return uuid.UUID(hex=sid_hex), token, flag == "r"
     except ValueError:
         return None
 
 
 async def create_session(
     *, user_id: uuid.UUID, ip_address: Optional[str], user_agent: Optional[str]
-) -> UserSession:
+) -> Tuple[UserSession, str]:
+    """Open a session; returns the row and the one-time plaintext token that
+    goes into the cookie (never stored, never logged)."""
     now = _now()
+    token = new_token()
     row = UserSession(
         user_id=user_id,
+        token_hash=token_hash(token),
         started_at=now,
         last_activity_at=now,
         ip_address=ip_address or None,
         user_agent=(user_agent or "")[:1000] or None,
     )
     async with session_scope() as s:
+        # Cap live sessions per user: end the least recently active extras.
+        live = (
+            await s.execute(
+                select(UserSession)
+                .where(UserSession.user_id == user_id, UserSession.ended_at.is_(None))
+                .order_by(UserSession.last_activity_at.desc().nullslast(), UserSession.started_at.desc())
+            )
+        ).scalars().all()
+        for stale in live[_max_per_user() - 1:]:
+            stale.ended_at = now
         s.add(row)
         await s.flush()
-    return row
+    return row, token
 
 
 async def resolve(cookie: Optional[str]) -> Optional[Tuple[UserSession, User]]:
@@ -79,7 +125,7 @@ async def resolve(cookie: Optional[str]) -> Optional[Tuple[UserSession, User]]:
     parsed = parse_cookie(cookie)
     if parsed is None:
         return None
-    sid, remember = parsed
+    sid, token, remember = parsed
     cfg = settings()
     now = _now()
     idle = timedelta(days=cfg.session_remember_days) if remember else timedelta(hours=cfg.session_idle_hours)
@@ -88,6 +134,8 @@ async def resolve(cookie: Optional[str]) -> Optional[Tuple[UserSession, User]]:
     async with session_scope() as s:
         row = await s.get(UserSession, sid)
         if row is None or row.ended_at is not None:
+            return None
+        if not row.token_hash or not hmac.compare_digest(row.token_hash, token_hash(token)):
             return None
         if row.started_at + absolute < now:
             return None

@@ -99,11 +99,17 @@ class OrganizationMember(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 
 class UserSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """A browser session. Holds no OAuth tokens — the cookie carries a signed
-    session id and this row is the authority on whether it is still live."""
+    """A browser session. Holds no OAuth tokens. The cookie carries the row id
+    plus a random 256-bit bearer token, sealed with AES-GCM; only the SHA-256
+    of that token is stored here, so a copy of this table (backup, dump, SQL
+    injection) cannot be turned into a valid cookie even together with the
+    session secret. This row is the authority on whether a session is live."""
 
     __tablename__ = "user_sessions"
     __table_args__ = (Index("ix_user_sessions_user_id", "user_id"),)
+
+    # NULL only for rows created before 0003; those sessions are dead.
+    token_hash: Mapped[Optional[str]] = mapped_column(String(64))
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False

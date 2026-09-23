@@ -531,6 +531,115 @@ def _context_exemption(img, alt_text) -> tuple[bool | None, str, str] | None:
     return None
 
 
+_CHART_HINT_RE = re.compile(
+    r"chart|graph|diagram|plot|infographic|figure\s*\d|統計|図表|グラフ", re.IGNORECASE
+)
+_FILENAME_ALT_RE = re.compile(r"\.(png|jpe?g|gif|svg|webp|bmp|avif|tiff?)\s*$", re.IGNORECASE)
+
+
+def _src_stem(src: str | None) -> str:
+    """Lower-cased file stem of an image URL ("/img/Hero_Banner-2.png" -> "hero banner 2")."""
+    try:
+        name = str(src or "").split("?")[0].rstrip("/").rsplit("/", 1)[-1]
+        stem = name.rsplit(".", 1)[0] if "." in name else name
+        return _norm(re.sub(r"[-_]+", " ", stem))
+    except Exception:
+        return ""
+
+
+def _context_techniques(
+    img, alt_text: str, detected_texts: list[str], has_ocr_text: bool
+) -> tuple[bool | None, str, str] | None:
+    """WCAG 1.1.1 situations decided by the image's surroundings (extractor
+    ``context_signals``). Returns ``(pass, reason, code)`` when one applies,
+    else ``None`` so the ordinary classification checks run.
+
+    ARIA10 / ARIA13  aria-labelledby that resolves to nothing -> empty name
+    G82              image is the sole content of a link: alt must describe the
+                     destination, never be a file name or a generic word
+    G196             one image in a group carries the alternative for the group
+    C9               a CSS background image that contains text and sits on an
+                     element with no text of its own
+    """
+    alt = (alt_text or "").strip()
+    element_type = (getattr(img, "element_type", None) or "").strip().lower()
+
+    if getattr(img, "labelledby_unresolved", False):
+        return (
+            False,
+            "FAIL [1.1.1] aria-labelledby points to a missing, empty or hidden element, "
+            "so the accessible name resolves to nothing (ARIA10). Reference an element "
+            "with text, or use alt/aria-label.",
+            "labelledby_unresolved",
+        )
+
+    if getattr(img, "link_sole_content", False) and getattr(img, "in_link", False):
+        stem = _src_stem(getattr(img, "src", ""))
+        if alt and (_FILENAME_ALT_RE.search(alt) or (stem and _norm(alt) == stem)):
+            return (
+                False,
+                f"FAIL [1.1.1] Image is the only content of a link and its alt text "
+                f"'{alt}' is a file name — the alt must describe where the link goes "
+                "(G82/G94).",
+                "filename_alt",
+            )
+        if alt and _norm(alt) in _EMPTY_OR_GENERIC:
+            return (
+                False,
+                f"FAIL [1.1.1] Image is the only content of a link and its alt text "
+                f"'{alt}' is generic — screen reader users hear a link with no purpose; "
+                "describe the destination (G82/G91).",
+                "generic_alt",
+            )
+
+    if (
+        getattr(img, "group_alt_sibling", False)
+        and getattr(img, "group_size", 0) >= 3
+        and (alt == "" or not getattr(img, "alt_present", True))
+        and not getattr(img, "in_link", False)
+    ):
+        return (
+            True,
+            "PASS [1.1.1] Image belongs to a group whose text alternative is carried "
+            "by a sibling image (G196); an empty alt on the other images is the "
+            "correct pattern."
+            + ("" if getattr(img, "alt_present", True) else ' Add alt="" so the file name is not announced.'),
+            "group_alt",
+        )
+
+    if (
+        element_type in _CSS_BACKGROUND_TYPES
+        and has_ocr_text
+        and detected_texts
+        and not getattr(img, "has_own_text_content", False)
+        and not alt
+    ):
+        snippet = " ".join(detected_texts)[:60]
+        return (
+            None,
+            f'INCOMPLETE [1.1.1] CSS background image contains text ("{snippet}") and '
+            "the element has no text of its own — the words are invisible to assistive "
+            "technology. Provide them as real text or an accessible name (C9).",
+            "background_image_text",
+        )
+
+    return None
+
+
+def _image_context(img) -> dict:
+    """Compact surroundings of the image, forwarded on the finding for reviewers
+    and for the LLM enrichment prompt (G94/G92 context-aware evaluation)."""
+    ctx = {
+        "heading": getattr(img, "nearby_heading_text", None),
+        "caption": getattr(img, "figcaption_text", None),
+        "described_by": getattr(img, "aria_describedby_text", None),
+        "description_link": getattr(img, "description_link_text", None),
+        "nearby_text": getattr(img, "nearby_text_sample", None),
+        "link_href": getattr(img, "link_href", None) if getattr(img, "in_link", False) else None,
+    }
+    return {k: v for k, v in ctx.items() if v}
+
+
 def _check_1_1_1_informative(
     alt: str, detected_texts: list[str]
 ) -> tuple[bool | None, str]:
@@ -1101,9 +1210,30 @@ class AltTextAccessibilityAuditor:
             # checks: an alternative supplied by the containing control, or a
             # purely presentational background, satisfies 1.1.1 no matter what
             # this element's own alt attribute looks like.
-            _exemption = _context_exemption(img, alt_text)
+            # G95: an "informative" image dense with OCR text or named like a chart is a
+            # complex image — it needs a long description, not just a short alt.
+            if (
+                classification == "informative"
+                and not is_logo
+                and not is_icon
+                and (len(detected_texts) >= 8 or _CHART_HINT_RE.search(f"{alt_text} {src}"))
+            ):
+                classification = "complex"
+                sub_type = "charts"
 
-            if _exemption is not None:
+            _exemption = _context_exemption(img, alt_text)
+            _ctxt = _context_techniques(img, alt_text, detected_texts, has_ocr_text)
+
+            if _ctxt is not None:
+                wcag_1_1_1_pass, wcag_1_1_1_reason, wcag_1_1_1_code = _ctxt
+                if classification == "functional":
+                    wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(
+                        alt_text,
+                        sub_type,
+                        control_named=bool(getattr(img, "in_labeled_control", False)),
+                    )
+
+            elif _exemption is not None:
                 wcag_1_1_1_pass, wcag_1_1_1_reason, wcag_1_1_1_code = _exemption
                 if classification == "functional":
                     wcag_4_1_2_pass, wcag_4_1_2_reason = _check_4_1_2(
@@ -1184,10 +1314,19 @@ class AltTextAccessibilityAuditor:
                 # prose already does — so that case is raised for review rather
                 # than reported as a certain failure.
                 _has_name = bool(alt_text) and _norm(alt_text) not in _EMPTY_OR_GENERIC
-                _has_long_desc = (
+                # Long description sources: longdesc / aria-describedby / figcaption
+                # (programmatic), an adjacent "description" link (G73), or nearby
+                # prose that the alt explicitly refers to ("chart described below", G74).
+                _programmatic_desc = (
                     img.has_long_description()
                     if hasattr(img, "has_long_description")
                     else False
+                )
+                _has_long_desc = _programmatic_desc or bool(
+                    getattr(img, "description_link_text", None)
+                ) or (
+                    bool(getattr(img, "alt_refers_nearby", False))
+                    and int(getattr(img, "nearby_text_length", 0) or 0) >= 200
                 )
                 if not _has_name:
                     wcag_1_1_1_pass = False
@@ -1198,10 +1337,16 @@ class AltTextAccessibilityAuditor:
                     wcag_1_1_1_code = "missing_alt"
                 elif _has_long_desc:
                     wcag_1_1_1_pass = True
+                    if _programmatic_desc:
+                        _how = "a programmatically associated long description"
+                    elif getattr(img, "description_link_text", None):
+                        _how = f'an adjacent description link ("{str(getattr(img, "description_link_text", ""))[:40]}", G73)'
+                    else:
+                        _how = "nearby prose that the alt text refers to (G74)"
                     wcag_1_1_1_reason = (
-                        f"PASS [1.1.1] Complex image has alt '{alt_text}' and an "
-                        "associated long description."
+                        f"PASS [1.1.1] Complex image has alt '{alt_text}' and {_how}."
                     )
+                    wcag_1_1_1_code = "complex_long_description"
                 else:
                     wcag_1_1_1_pass = None
                     wcag_1_1_1_reason = (
@@ -1436,6 +1581,7 @@ class AltTextAccessibilityAuditor:
                     "contrast_violations_count": contrast_count,
                     "wcag_1_1_1_status": wcag_1_1_1_status,
                     "wcag_1_1_1_code": wcag_1_1_1_code,
+                    "image_context": _image_context(img),
                     "wcag_4_1_2_status": wcag_4_1_2_status,
                     "wcag_1_4_3_status": wcag_1_4_3_status,
                     "wcag_1_4_5_status": wcag_1_4_5_status,
@@ -1457,7 +1603,7 @@ class AltTextAccessibilityAuditor:
         # ── Save CSV ─────────────────────────────────────────────────────
         report_path = str(Path(output_dir) / "audit_report.csv")
         with open(report_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=_REPORT_COLUMNS)
+            writer = csv.DictWriter(f, fieldnames=_REPORT_COLUMNS, extrasaction="ignore")
             writer.writeheader()
             writer.writerows(records)
 

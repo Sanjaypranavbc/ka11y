@@ -116,4 +116,14 @@ RUN mkdir -p /app/logs
 
 EXPOSE 8000
 
-CMD ["uvicorn", "ka11y.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers: trust X-Forwarded-Proto/For from the TLS terminator so
+# request.url.scheme is "https", Secure cookies, HSTS and the rate limiter all
+# see the real client. --forwarded-allow-ips is "*" because the only hop that
+# can reach this port is the compose network / ALB target group; narrow it to
+# the proxy's CIDR when the port is ever published.
+# --limit-concurrency: past this many open connections/tasks uvicorn answers
+# 503 instead of queueing without bound (slowloris / connection floods).
+# --timeout-keep-alive: idle keep-alive sockets are dropped after 5 s.
+CMD ["uvicorn", "ka11y.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--proxy-headers", "--forwarded-allow-ips", "*", \
+     "--limit-concurrency", "512", "--timeout-keep-alive", "5"]

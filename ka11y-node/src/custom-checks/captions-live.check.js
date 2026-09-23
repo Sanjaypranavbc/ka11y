@@ -41,6 +41,12 @@ async function run(page, context = {}) {
         return true;
       }
 
+      // 1c. A captions/CC toggle in the player (G9 / G87 custom players) — the mechanism exists
+      //     even when no caption text is rendered at audit time.
+      if (rootElement.querySelector('button[aria-label*="caption" i], button[aria-label*="subtitle" i], [role="button"][aria-label*="caption" i], button[title*="caption" i], [class*="vjs-subs-caps"], [class*="captions-button" i], [class*="cc-button" i], [aria-label*="字幕"], [title*="字幕"], button[aria-label="CC"], [class*="ytp-subtitles-button"]')) {
+        return true;
+      }
+
       // 2. Player-rendered caption elements scoped to the container
       const captionSelectors = [
         '[class*="caption"]',

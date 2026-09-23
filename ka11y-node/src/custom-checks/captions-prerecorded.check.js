@@ -18,7 +18,7 @@ function _t(context, en, ja, params = {}) {
 async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
 
-  const data = await page.evaluate(() => {
+  const data = await page.evaluate(async () => {
     const videos = Array.from(document.querySelectorAll('video'));
     if (videos.length === 0) {
       return { videoCount: 0, issues: [], liveHints: 0 };
@@ -26,8 +26,35 @@ async function run(page, context = {}) {
 
     const issues = [];
     let liveHints = 0;
+    let videoOnly = 0;
+
+    // G159: probe whether the video actually has an audio track (silent, click-to-play
+    // videos are video-only and belong under 1.2.1, not captions). Muted playback for a
+    // moment is allowed by autoplay policy; everything is restored afterwards.
+    const probeHasAudio = async (v) => {
+      try {
+        if (typeof v.mozHasAudio === 'boolean') return v.mozHasAudio;
+        if (v.audioTracks && typeof v.audioTracks.length === 'number' && v.readyState >= 1) return v.audioTracks.length > 0;
+        if (typeof v.webkitAudioDecodedByteCount !== 'number') return null;
+        if (!v.paused) return v.webkitAudioDecodedByteCount > 0 ? true : null;
+        const wasMuted = v.muted, t0 = v.currentTime;
+        v.muted = true;
+        const p = v.play();
+        if (p && p.catch) await p.catch(() => {});
+        await new Promise(r => setTimeout(r, 700));
+        const bytes = v.webkitAudioDecodedByteCount;
+        v.pause();
+        try { v.currentTime = t0; } catch (_) { /* ignore */ }
+        v.muted = wasMuted;
+        if (v.readyState < 2) return null; // never decoded — unknown
+        return bytes > 0;
+      } catch (_) { return null; }
+    };
+    const silent = new Set();
+    for (const v of videos.slice(0, 6)) { if ((await probeHasAudio(v)) === false) { silent.add(v); videoOnly += 1; } }
 
     for (const video of videos) {
+      if (silent.has(video)) continue;
       // Heuristic: skip content that looks live (attribute or nearby keyword).
       const liveAttr = video.getAttribute('data-live') === 'true'
         || video.getAttribute('is-live') === 'true';
@@ -55,11 +82,25 @@ async function run(page, context = {}) {
         return !!src && !!label;
       });
 
+      // 1b. textTracks populated by a JS player, or a CC/captions button in a custom
+      //     player wrapper (G87 — JW Player, Video.js, Plyr, custom controls).
+      let hasPlayerCaptions = false;
+      try {
+        for (let i = 0; i < (video.textTracks ? video.textTracks.length : 0); i++) {
+          const tt = video.textTracks[i];
+          if (tt && (tt.kind === 'captions' || tt.kind === 'subtitles')) { hasPlayerCaptions = true; break; }
+        }
+      } catch (_) { /* ignore */ }
+      if (!hasPlayerCaptions) {
+        const wrapper = video.closest('[class*="player" i], [class*="video" i], figure, [data-plyr], .jwplayer, .video-js') || video.parentElement;
+        if (wrapper && wrapper.querySelector('button[aria-label*="caption" i], button[aria-label*="subtitle" i], [role="button"][aria-label*="caption" i], button[title*="caption" i], [class*="vjs-subs-caps"], [class*="captions-button" i], [class*="cc-button" i], [aria-label*="字幕"], [title*="字幕"], button[aria-label="CC"], .jw-icon-cc, [data-plyr="captions"]')) hasPlayerCaptions = true;
+      }
+
       // 2. Embedded player hint: YouTube/Vimeo iframes use their own CC menu;
       // we cannot inspect cross-origin iframes, so flag as incomplete.
       const parentIframe = video.closest('iframe');
 
-      if (!hasCaptionTrack && !parentIframe) {
+      if (!hasCaptionTrack && !hasPlayerCaptions && !parentIframe) {
         issues.push({
           html: video.outerHTML.slice(0, 200),
           element_id: video.id || null,
@@ -102,7 +143,7 @@ async function run(page, context = {}) {
       });
     }
 
-    return { videoCount: videos.length, issues, liveHints, iframeCount: iframes.length };
+    return { videoCount: videos.length, issues, liveHints, iframeCount: iframes.length, videoOnly };
   });
 
   if (data.videoCount === 0 && data.iframeCount === 0) {
@@ -129,9 +170,9 @@ async function run(page, context = {}) {
         status: 'pass',
         reason: _t(
           sharedContext,
-          '{count} <video> element(s) checked — all have caption tracks.',
-          '{count} 件の <video> 要素を確認しました — すべてにキャプショントラックがあります。',
-          { count: data.videoCount },
+          '{count} <video> element(s) checked — all have caption tracks or a player captions control{vo}.',
+          '{count} 件の <video> 要素を確認しました — すべてにキャプショントラックまたはプレイヤーの字幕機能があります{vo}。',
+          { count: data.videoCount, vo: data.videoOnly ? _t(sharedContext, ` (${data.videoOnly} silent video-only element(s) skipped — judged under 1.2.1)`, `（無音の動画のみ ${data.videoOnly} 件は 1.2.1 で判定するためスキップ）`) : '' },
         ),
         helpUrl: HELP_URL,
       }],

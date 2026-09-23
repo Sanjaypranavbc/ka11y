@@ -103,7 +103,52 @@ async function run(page, context = {}) {
       }
     }
 
-    return { violations, checkedCount: checked.length };
+    // G207: graphical objects — inline SVG icons and icon-font glyphs must reach 3:1
+    // against their background (the fill/stroke or ::before colour is the object).
+    const iconViolations = [];
+    let iconsChecked = 0;
+    try {
+      const ICON_CLASS = /(^|\s)(fa|fas|far|fab|fal|material-icons|material-symbols[\w-]*|glyphicon|icon-[\w-]+|bi-[\w-]+|mdi-[\w-]+|ion-[\w-]+)(\s|$)/;
+      const iconEls = [...Array.from(document.querySelectorAll('svg')), ...Array.from(document.querySelectorAll('i, span')).filter(e => ICON_CLASS.test(e.getAttribute('class') || ''))].slice(0, 300);
+      for (const el of iconEls) {
+        const cs = window.getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const decorative = el.closest('[aria-hidden="true"]') && !el.closest('a, button, [role="button"], [role="link"]');
+        if (decorative) continue; // purely decorative icons are exempt
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 8 || rect.height < 8 || rect.width > 96) continue;
+        let color = null;
+        if (el.tagName.toLowerCase() === 'svg') {
+          const shape = el.querySelector('path, circle, rect, polygon, line, polyline, ellipse, use');
+          const scs = shape ? window.getComputedStyle(shape) : cs;
+          const fill = scs.fill, stroke = scs.stroke;
+          color = (fill && fill !== 'none' && !isTransparent(fill)) ? fill : ((stroke && stroke !== 'none' && !isTransparent(stroke)) ? stroke : null);
+          if (!color || /url\(/.test(color)) continue;
+        } else {
+          const pcs = window.getComputedStyle(el, '::before');
+          color = (pcs && pcs.content && pcs.content !== 'none' && pcs.content !== 'normal') ? pcs.color : cs.color;
+        }
+        const bg = isTransparent(cs.backgroundColor) ? effectiveBackground(el) : cs.backgroundColor;
+        const li = getLuminance(color), lb = getLuminance(bg);
+        if (li === null || lb === null) continue;
+        iconsChecked++;
+        const cr = contrastRatio(li, lb);
+        if (cr < opts.minContrast) {
+          iconViolations.push({
+            target: el.tagName.toLowerCase() + (el.id ? `#${CSS.escape(el.id)}` : '') + (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/)[0] : ''),
+            snippet: el.outerHTML.slice(0, 120),
+            contrast: Math.round(cr * 100) / 100,
+            indicatorLabel: 'icon',
+            indicatorColor: color,
+            adjacentBg: bg,
+            detail: `Icon colour ${color} against ${bg} is ${Math.round(cr * 100) / 100}:1 — graphical objects need 3:1 (G207)`,
+          });
+          if (iconViolations.length >= 15) break;
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    return { violations: [...violations, ...iconViolations], checkedCount: checked.length + iconsChecked, iconsChecked };
   }, { minContrast: MIN_CONTRAST, max: MAX_VIOLATIONS });
 
   if (data.checkedCount === 0) {
@@ -115,9 +160,9 @@ async function run(page, context = {}) {
 
   if (!data.violations.length) {
     return _pass(ctx, _t(ctx,
-      '{n} UI component(s) checked — all have a border/background contrast ratio ≥ {min}:1.',
-      '{n} 件の UI コンポーネントを確認しました。すべて {min}:1 以上のコントラスト比を持っています。',
-      { n: data.checkedCount, min: MIN_CONTRAST }));
+      '{n} UI component(s) and icon(s) checked ({i} icons — G207) — all have a border/background/icon contrast ratio ≥ {min}:1.',
+      '{n} 件の UI コンポーネントとアイコンを確認しました（アイコン {i} 件 — G207）。すべて {min}:1 以上のコントラスト比を持っています。',
+      { n: data.checkedCount, i: data.iconsChecked || 0, min: MIN_CONTRAST }));
   }
 
   return {
@@ -133,7 +178,7 @@ async function run(page, context = {}) {
         {
           n: data.violations.length,
           min: MIN_CONTRAST,
-          label: 'border/background',
+          label: data.violations.some(v => v.indicatorLabel === 'icon') ? 'border/background/icon' : 'border/background',
           sample: data.violations.slice(0, 3).map(v => `<${v.target}> ${v.contrast}:1`).join('; '),
         }),
       elements: data.violations,

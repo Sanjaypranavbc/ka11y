@@ -286,9 +286,16 @@ async function run(page, context = {}) {
     // outline → outlineColor; box-shadow → the shadow's own colour; otherwise the
     // (changed) border colour. Using the box-shadow colour fixes false low-contrast
     // failures where a coloured shadow sat over an unchanged (e.g. black) border.
-    const focusColor = hasVisibleOutline
+    // C40: two-colour indicators (e.g. a light inner ring plus a dark outer ring) are
+    // conforming when at least one of the colours has 3:1 against the adjacent area.
+    // Sample every colour the indicator uses and take the best-contrasting one.
+    const indicatorColors = [];
+    if (hasVisibleOutline) indicatorColors.push(focused.outlineColor);
+    if (boxShadowAdded) for (const m of splitBoxShadowLayers(focused.boxShadow).map(extractBoxShadowMetrics)) if (m.color) indicatorColors.push(m.color);
+    if (borderChanged) indicatorColors.push(focused.borderColor);
+    const focusColor = indicatorColors[0] || (hasVisibleOutline
       ? focused.outlineColor
-      : (boxShadowAdded && boxShadowColor ? boxShadowColor : focused.borderColor);
+      : (boxShadowAdded && boxShadowColor ? boxShadowColor : focused.borderColor));
     const isTransparent = (c) => !c || c === 'transparent' || c === 'rgba(0, 0, 0, 0)';
     const bgColor = !isTransparent(focused.backgroundColor)
       ? focused.backgroundColor
@@ -296,11 +303,13 @@ async function run(page, context = {}) {
         ? unfocused.backgroundColor
         : (!isTransparent(focused.bodyBg) ? focused.bodyBg : 'rgb(255, 255, 255)');
 
-    const lumFocus = relativeLuminance(focusColor);
     const lumBg    = relativeLuminance(bgColor);
-    if (lumFocus !== null && lumBg !== null) {
-      const cr = contrastRatio(lumFocus, lumBg);
-      meetsContrast = cr >= MIN_CONTRAST;
+    if (lumBg !== null) {
+      const ratios = (indicatorColors.length ? indicatorColors : [focusColor])
+        .map(relativeLuminance)
+        .filter((l) => l !== null)
+        .map((l) => contrastRatio(l, lumBg));
+      if (ratios.length) meetsContrast = Math.max(...ratios) >= MIN_CONTRAST;
     }
 
     if (!meetsAreaReq || !meetsContrast) {

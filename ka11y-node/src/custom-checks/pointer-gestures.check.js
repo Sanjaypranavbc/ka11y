@@ -17,6 +17,40 @@ async function run(page, context = {}) {
   const sharedContext = getSharedRuleContext(context);
   const result = await auditPointerGestures(page, { pageUrl: page.url() });
 
+  // G215: for each detected gesture region look for single-pointer alternatives
+  // (next/previous, zoom in/out, +/−, rotate, arrow buttons) in or next to it.
+  let alternatives = {};
+  try {
+    const selectors = [...result.violations, ...result.warnings].map(v => v.selector).filter(Boolean).slice(0, 20);
+    if (selectors.length) {
+      alternatives = await page.evaluate((sels) => {
+        const ALT_RE = /next|prev|previous|forward|back|zoom\s*(in|out)?|\+|−|plus|minus|rotate|left|right|up|down|arrow|slide|page|scroll|次|前|拡大|縮小|回転|左|右|上|下/i;
+        const nameOf = (el) => [(el.textContent || ''), el.getAttribute('aria-label') || '', el.getAttribute('title') || '', el.className || ''].join(' ');
+        const out = {};
+        for (const sel of sels) {
+          let el = null;
+          try { el = document.querySelector(sel); } catch (_) { el = null; }
+          if (!el) { out[sel] = null; continue; }
+          const scope = [el, el.parentElement, el.parentElement && el.parentElement.parentElement, el.closest('section, figure, article, [class*="carousel" i], [class*="slider" i], [class*="map" i], [class*="gallery" i]')].filter(Boolean);
+          let found = 0;
+          for (const root of scope) {
+            found += Array.from(root.querySelectorAll('button, a[href], [role="button"], input[type="range"]')).filter(c => ALT_RE.test(nameOf(c))).length;
+            if (found >= 2) break;
+          }
+          out[sel] = found;
+        }
+        return out;
+      }, selectors);
+    }
+  } catch (_) { alternatives = {}; }
+  if (alternatives && typeof alternatives === 'object' && !Array.isArray(alternatives)) {
+    const withAlt = (v) => v.selector && alternatives[v.selector] >= 2;
+    const keepV = result.violations.filter(v => !withAlt(v));
+    const movedToWarn = result.violations.filter(withAlt).map(v => ({ ...v, severity: 'warning', message: `${v.message} — single-pointer controls found nearby (G215); verify they cover the whole gesture` }));
+    result.violations = keepV;
+    result.warnings = [...result.warnings.map(w => withAlt(w) ? { ...w, message: `${w.message} — single-pointer controls found nearby (G215)` } : w), ...movedToWarn];
+  }
+
   const rules = [];
 
   if (result.summary.total === 0) {

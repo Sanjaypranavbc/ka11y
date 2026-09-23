@@ -9,7 +9,10 @@ import type { NextRequest } from "next/server";
  * *valid* is decided by the Python API on every request; a stale cookie gets
  * a 401 there and `redirectToLogin()` in src/lib/auth.ts handles it.
  */
-const SESSION_COOKIE = "ka11y_session";
+// "__Host-ka11y_session" on https, "ka11y_session" on http localhost (see
+// src/lib/auth.ts). proxy.ts runs on the edge runtime, so the list is
+// repeated here rather than imported.
+const SESSION_COOKIE_NAMES = ["__Host-ka11y_session", "ka11y_session"];
 
 /**
  * Cookies are scoped per host, so a session created on localhost is invisible
@@ -29,7 +32,7 @@ export function proxy(request: NextRequest) {
     const proto = request.headers.get("x-forwarded-proto") ?? "http";
     return NextResponse.redirect(`${proto}://${CANONICAL_LOCAL_HOST}${port}${pathname}${search}`, 308);
   }
-  const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+  const hasSession = SESSION_COOKIE_NAMES.some((name) => Boolean(request.cookies.get(name)?.value));
 
   const gated = pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
   if (gated && !hasSession) {

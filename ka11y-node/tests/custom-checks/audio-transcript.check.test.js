@@ -12,7 +12,7 @@ describe('audio-transcript.check (WCAG 1.2.1)', () => {
     const page = makePage({ audioCount: 0, issues: [] });
     const result = await run(page);
     expect(result.successCriteriaId).toBe('1.2.1');
-    expect(result.rules[0].status).toBe('pass');
+    expect(result.rules[0].status).toBe('not_applicable');
     expect(result.rules[0].ruleId).toBe('custom-audio-transcript');
     expect(result.rules[0].reason).toContain('No <audio>');
   });

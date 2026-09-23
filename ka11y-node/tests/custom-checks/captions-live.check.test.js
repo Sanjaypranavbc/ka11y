@@ -10,7 +10,7 @@ describe('captions-live.check (WCAG 1.2.4)', () => {
   test('passes when no live streams exist', async () => {
     const page = makePage({ liveCount: 0, unverifiedLiveCount: 0, issues: [] });
     const result = await run(page);
-    expect(result.rules[0].status).toBe('pass');
+    expect(result.rules[0].status).toBe('not_applicable');
     expect(result.rules[0].reason).toContain('No live audio/video streams');
   });
 

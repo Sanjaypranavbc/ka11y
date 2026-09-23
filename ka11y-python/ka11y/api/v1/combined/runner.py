@@ -552,6 +552,26 @@ async def _run_job_body_inner(
                 "Check warnings for details."
             )
 
+        # ── Site-level (cross-page) checks ──────────────────────────────
+        # G61 consistent navigation, G197 consistent identification, G127 site
+        # name in titles, G185/G125/G126 multiple ways, H30/G91 link text vs
+        # destination title — computed from the rendered HTML snapshots the
+        # crawl saved for each page. Only meaningful for two or more pages.
+        try:
+            _snaps = _jobs[job_id].get("html_snapshots") or {}
+            if len(_snaps) >= 2:
+                from .site_analysis import analyze_site
+
+                _site_findings = await asyncio.to_thread(analyze_site, dict(_snaps), url)
+                if _site_findings:
+                    python_findings = list(python_findings) + list(_site_findings)
+                    logger.info(
+                        "[combined] job %s: site analysis added %d finding(s) across %d page(s)",
+                        job_id, len(_site_findings), len(_snaps),
+                    )
+        except Exception as _site_exc:  # best-effort: never fail the job
+            logger.warning("[combined] job %s: site analysis skipped: %s", job_id, _site_exc)
+
         # ── Resolve Node result ──────────────────────────────────────────
         node_findings: List[Dict] = []
         node_scanned_pages: List[Dict] = []

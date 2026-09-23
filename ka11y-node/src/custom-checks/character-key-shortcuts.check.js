@@ -92,10 +92,65 @@ async function run(page, context = {}) {
       }
     }
 
+    // 4. Runtime listener registry (G217): keydown/keyup/keypress handlers registered on
+    //    document/window/body through addEventListener — the common case that no static
+    //    scan can see — whose source compares a single printable key without a modifier.
+    let runtimeListeners = 0;
+    try {
+      const R = window.__ka11yRuntime;
+      if (R && Array.isArray(R.docListeners)) {
+        const keyListeners = R.docListeners.filter(l => /^key(down|up|press)$/.test(l.type));
+        runtimeListeners = keyListeners.length;
+        for (const l of keyListeners) {
+          const src = l.snippet || '';
+          const keyIdx = src.search(KEY_RE_SRC);
+          if (keyIdx < 0) continue;
+          const modIdx = src.search(/ctrlKey|altKey|metaKey|shiftKey/);
+          if (modIdx >= 0 && Math.abs(keyIdx - modIdx) <= 200) continue;
+          violations.push({ type: 'runtime-listener', html: `${l.target}.addEventListener('${l.type}', …) ${src.slice(Math.max(0, keyIdx - 40), keyIdx + 80).trim()}`.slice(0, 150) });
+          break;
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    // 5. Keyboard-shortcut libraries loaded on the page (Mousetrap, hotkeys-js, keymaster, tinykeys)
+    let shortcutLibrary = null;
+    try {
+      if (window.Mousetrap) shortcutLibrary = 'Mousetrap';
+      else if (window.hotkeys) shortcutLibrary = 'hotkeys-js';
+      else if (window.keymaster || (window.key && window.key.getScope)) shortcutLibrary = 'keymaster';
+      else if (window.tinykeys) shortcutLibrary = 'tinykeys';
+    } catch (_) { /* ignore */ }
+    if (shortcutLibrary) violations.push({ type: 'shortcut-library', html: `${shortcutLibrary} shortcut library detected` });
+
+    // 6. A UI that lets users turn shortcuts off or remap them satisfies 2.1.4 (G217).
+    const REMAP_RE = /keyboard\s+shortcuts?|shortcut\s+(settings|keys|preferences)|remap|disable\s+shortcuts|turn\s+off\s+shortcuts|ショートカット(キー)?(の)?(設定|無効|変更)|キーボードショートカット/i;
+    const hasRemapUI = Array.from(document.querySelectorAll('button, a[href], [role="button"], [role="menuitem"], summary, label, h2, h3, legend'))
+      .some(el => REMAP_RE.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')));
+
     const totalAccesskeys = document.querySelectorAll('[accesskey]').length;
     const totalHandlers = document.querySelectorAll('[onkeydown], [onkeypress], [onkeyup]').length;
-    return { violations, totalAccesskeys, totalHandlers };
+    return { violations, totalAccesskeys, totalHandlers, runtimeListeners, hasRemapUI, shortcutLibrary };
   }, PRINTABLE_CHAR_RE.source);
+
+  if (data.violations.length > 0 && data.hasRemapUI) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'Single character key shortcuts must be remappable or disableable',
+        impact: null,
+        status: 'pass',
+        reason: _t(
+          sharedContext,
+          '{n} single-character shortcut signal(s) detected, and the page offers a keyboard-shortcut settings/remap control — the turn-off/remap mechanism required by G217 is present. Verify it covers every shortcut.',
+          '{n} 件の単一文字ショートカットの兆候が検出されましたが、ページにキーボードショートカットの設定/再割り当て機能があります。G217 が求める無効化/再割り当て手段は存在します。すべてのショートカットが対象か確認してください。',
+          { n: data.violations.length },
+        ),
+        helpUrl: HELP_URL,
+      }],
+    };
+  }
 
   if (data.violations.length === 0) {
     return {
@@ -107,11 +162,12 @@ async function run(page, context = {}) {
         status: 'pass',
         reason: _t(
           sharedContext,
-          '{accesskey_count} accesskey attribute(s), {handler_count} inline key handler(s), and inline script addEventListener calls checked — none use unguarded single character shortcuts (letters/symbols without Ctrl/Alt/Meta modifier).',
-          'accesskey 属性 {accesskey_count} 件、インラインのキーイベントハンドラー {handler_count} 件、およびインライン script の addEventListener 呼び出しを確認しましたが、修飾キーなしで発火する単一文字ショートカットは検出されませんでした。',
+          '{accesskey_count} accesskey attribute(s), {handler_count} inline key handler(s), {runtime_count} runtime document/window key listener(s) and inline scripts checked — none use unguarded single character shortcuts (letters/symbols without Ctrl/Alt/Meta modifier).',
+          'accesskey 属性 {accesskey_count} 件、インラインのキーイベントハンドラー {handler_count} 件、実行時の document/window キーリスナー {runtime_count} 件、およびインライン script を確認しましたが、修飾キーなしで発火する単一文字ショートカットは検出されませんでした。',
           {
             accesskey_count: data.totalAccesskeys,
             handler_count: data.totalHandlers,
+            runtime_count: data.runtimeListeners || 0,
           },
         ),
         helpUrl: HELP_URL,
@@ -122,7 +178,7 @@ async function run(page, context = {}) {
   const violations = data.violations;
   const accesskeyCount    = violations.filter(d => d.type === 'accesskey').length;
   const handlerCount      = violations.filter(d => d.type === 'inline-handler').length;
-  const scriptListenCount = violations.filter(d => d.type === 'script-listener').length;
+  const scriptListenCount = violations.filter(d => d.type === 'script-listener' || d.type === 'runtime-listener' || d.type === 'shortcut-library').length;
   const sample = violations.slice(0, 3).map(d => d.html.slice(0, 80)).join('; ');
 
   return {

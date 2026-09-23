@@ -120,8 +120,8 @@ async function run(page, context = {}) {
       data.hasBreadcrumb && 'breadcrumb navigation',
       data.hasAriaCurrent && 'aria-current="page"',
       data.hasActiveNavItem && 'active navigation item',
-
       data.hasAriaCurrentStep && 'aria-current="step"',
+      data.hasTableOfContents && 'table of contents',
     ].filter(Boolean).join(', ');
 
     return {

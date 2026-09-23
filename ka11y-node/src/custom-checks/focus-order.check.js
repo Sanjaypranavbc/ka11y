@@ -87,10 +87,76 @@ async function run(page, context = {}) {
     }
   }
 
+  // ── Check 3 (SCR26): content revealed by an expander must follow the trigger ────
+  const expanderIssues = [];
+  try {
+    const expanders = await page.evaluate(() => Array.from(document.querySelectorAll('[aria-expanded="false"][aria-controls]'))
+      .filter(el => el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || el.tagName === 'SUMMARY')
+      .slice(0, 5)
+      .map((el, i) => { el.setAttribute('data-ka11y-exp', String(i)); return { i, tag: el.tagName.toLowerCase(), id: el.id || null, snippet: el.outerHTML.slice(0, 80) }; }));
+    for (const ex of (Array.isArray(expanders) ? expanders : [])) {
+      const res = await page.evaluate((i) => {
+        const el = document.querySelector(`[data-ka11y-exp="${i}"]`);
+        if (!el) return null;
+        const target = document.getElementById((el.getAttribute('aria-controls') || '').split(/\s+/)[0]);
+        if (!target) return null;
+        el.click();
+        return new Promise(r => setTimeout(() => {
+          const cs = window.getComputedStyle(target);
+          const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && !target.hidden;
+          const follows = !!(el.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING);
+          if (el.getAttribute('aria-expanded') === 'true') el.click(); // restore
+          r({ visible, follows });
+        }, 200));
+      }, ex.i);
+      if (res && res.visible && !res.follows) {
+        expanderIssues.push({ target: ex.tag + (ex.id ? `#${ex.id}` : ''), snippet: ex.snippet, detail: 'Content revealed by this expander is placed before the trigger in DOM order — keyboard users must move backwards to reach it (SCR26)' });
+      }
+    }
+    await page.evaluate(() => { for (const el of document.querySelectorAll('[data-ka11y-exp]')) el.removeAttribute('data-ka11y-exp'); });
+  } catch (_) { /* best effort */ }
+
+  // ── Check 4 (G59 / H102): dialog focus management — focus moves in, Escape returns it ──
+  const dialogIssues = [];
+  try {
+    const openers = await page.evaluate(() => Array.from(document.querySelectorAll('button[aria-haspopup="dialog"], [role="button"][aria-haspopup="dialog"], button[data-toggle="modal"], button[data-bs-toggle="modal"], button[data-modal-target], button[data-micromodal-trigger], button[data-a11y-dialog-show]'))
+      .slice(0, 2)
+      .map((el, i) => { el.setAttribute('data-ka11y-dlg', String(i)); return { i, tag: el.tagName.toLowerCase(), id: el.id || null, snippet: el.outerHTML.slice(0, 80) }; }));
+    for (const op of (Array.isArray(openers) ? openers : [])) {
+      const res = await page.evaluate((i) => {
+        const el = document.querySelector(`[data-ka11y-dlg="${i}"]`);
+        if (!el) return null;
+        el.focus({ preventScroll: true });
+        el.click();
+        return new Promise(r => setTimeout(() => {
+          const dlg = Array.from(document.querySelectorAll('dialog[open], [role="dialog"], [role="alertdialog"], [aria-modal="true"]')).find(d => { const cs = window.getComputedStyle(d); return cs.display !== 'none' && cs.visibility !== 'hidden' && d.getBoundingClientRect().width > 0; });
+          if (!dlg) return r({ opened: false });
+          r({ opened: true, focusInside: dlg.contains(document.activeElement) });
+        }, 350));
+      }, op.i);
+      if (!res || !res.opened) continue;
+      const target = op.tag + (op.id ? `#${op.id}` : '');
+      if (!res.focusInside) dialogIssues.push({ target, snippet: op.snippet, detail: 'Opening the dialog did not move keyboard focus into it — focus stays behind the dialog (G59/H102)' });
+      if (page.keyboard && page.keyboard.press) { await page.keyboard.press('Escape'); await new Promise(r => setTimeout(r, 300)); }
+      const after = await page.evaluate((i) => {
+        const el = document.querySelector(`[data-ka11y-dlg="${i}"]`);
+        const dlg = Array.from(document.querySelectorAll('dialog[open], [role="dialog"], [role="alertdialog"], [aria-modal="true"]')).find(d => { const cs = window.getComputedStyle(d); return cs.display !== 'none' && cs.visibility !== 'hidden' && d.getBoundingClientRect().width > 0; });
+        return { stillOpen: !!dlg, focusRestored: document.activeElement === el };
+      }, op.i);
+      if (after && !after.stillOpen && !after.focusRestored) dialogIssues.push({ target, snippet: op.snippet, detail: 'After closing the dialog with Escape, focus was not returned to the element that opened it (G59/H102)' });
+      if (after && after.stillOpen) {
+        await page.evaluate(() => { const b = document.querySelector('dialog[open] button[aria-label*="close" i], [role="dialog"] button[aria-label*="close" i], [role="dialog"] .close, [role="dialog"] [class*="close" i], dialog[open] button'); if (b) b.click(); }).catch(() => {});
+      }
+    }
+    await page.evaluate(() => { for (const el of document.querySelectorAll('[data-ka11y-dlg]')) el.removeAttribute('data-ka11y-dlg'); });
+  } catch (_) { /* best effort */ }
+
   // Combine findings
   const allViolations = [
     ...positiveTabindex.map(v => ({ ...v, type: 'positive-tabindex' })),
     ...orderViolations.map(v => ({ ...v, type: 'order-inversion' })),
+    ...expanderIssues.map(v => ({ ...v, type: 'expander-order' })),
+    ...dialogIssues.map(v => ({ ...v, type: 'dialog-focus' })),
   ];
 
   if (!allViolations.length) {
@@ -100,7 +166,7 @@ async function run(page, context = {}) {
       { n: tabSequence.length }));
   }
 
-  const hasPositive = positiveTabindex.length > 0;
+  const hasPositive = positiveTabindex.length > 0 || dialogIssues.length > 0;
   const status = hasPositive ? 'fail' : 'incomplete';
 
   return {
@@ -111,9 +177,9 @@ async function run(page, context = {}) {
       impact: hasPositive ? 'serious' : 'moderate',
       status,
       reason: _t(ctx,
-        '{pos} element(s) use positive tabindex (disrupts natural order); {inv} focus order inversion(s) detected.',
-        '{pos} 件の要素がポジティブ tabindex を使用しています（自然な順序を乱す）; {inv} 件のフォーカス順の逆転が検出されました。',
-        { pos: positiveTabindex.length, inv: orderViolations.length }),
+        '{pos} element(s) use positive tabindex (disrupts natural order); {inv} focus order inversion(s); {exp} expander(s) reveal content before the trigger (SCR26); {dlg} dialog focus-management problem(s) (G59/H102).',
+        '{pos} 件の要素がポジティブ tabindex を使用しています（自然な順序を乱す）; {inv} 件のフォーカス順の逆転; {exp} 件の展開コントロールがトリガーより前にコンテンツを表示（SCR26）; {dlg} 件のダイアログのフォーカス管理の問題（G59/H102）。',
+        { pos: positiveTabindex.length, inv: orderViolations.length, exp: expanderIssues.length, dlg: dialogIssues.length }),
       elements: allViolations,
       helpUrl: HELP_URL,
     }],
