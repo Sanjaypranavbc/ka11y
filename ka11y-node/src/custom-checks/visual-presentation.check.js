@@ -35,6 +35,15 @@ async function run(page, context = {}) {
     const textBlocks = Array.from(document.querySelectorAll('p,article,main,.content,.article-body,.post-body,[role="article"],[role="main"]'));
     if (!textBlocks.length) return { blockCount: 0, issues: [] };
 
+    // G172 / G178 / G188 / G206: on-page controls that let the user change the presentation
+    const CONTROL_RE = /justif|align|text\s*size|font\s*size|larger\s+text|smaller\s+text|line\s*(?:height|spacing)|paragraph\s+spacing|reader\s+(?:mode|view)|single\s+column|文字サイズ|文字を大きく|文字を小さく|行間|配置|リーダー/i;
+    const controlLabel = (el) => [el.textContent || '', el.getAttribute('aria-label') || '', el.getAttribute('title') || ''].join(' ');
+    const presentationControls = Array.from(document.querySelectorAll('button, [role="button"], a[href], input[type="checkbox"], input[type="range"], select'))
+      .filter(el => CONTROL_RE.test(controlLabel(el)) || CONTROL_RE.test(el.id || '') || CONTROL_RE.test(typeof el.className === 'string' ? el.className : ''))
+      .slice(0, 5)
+      .map(el => el.outerHTML.slice(0, 100));
+
+    const measureCanvas = document.createElement('canvas').getContext('2d');
     const checked = new Set();
     for (const el of textBlocks) {
       if (checked.has(el)) continue;
@@ -63,6 +72,21 @@ async function run(page, context = {}) {
         issues.push({ type: 'tight-line-height', target, snippet: el.outerHTML.slice(0, 100), detail: `line-height: ${lineHeight} (ratio ${lhRatio.toFixed(2)})` });
       }
 
+      // Check 2b (C20): estimated characters per line — measure the block's own font
+      if (text.length >= 200 && el.clientWidth > 0 && measureCanvas) {
+        try {
+          measureCanvas.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+          const sample = text.slice(0, 200);
+          const avg = measureCanvas.measureText(sample).width / sample.length;
+          const cjk = /[\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/.test(sample);
+          const limit = cjk ? 40 : 80;
+          const cpl = avg > 0 ? el.clientWidth / avg : 0;
+          if (cpl > limit * 1.1) {
+            issues.push({ type: 'long-lines', target, snippet: el.outerHTML.slice(0, 100), detail: `≈${Math.round(cpl)} characters per line exceeds ${limit} (C20)` });
+          }
+        } catch (_) { /* canvas unavailable */ }
+      }
+
       // Check 3: excessively wide columns (> 80 characters) — approximate via element width / char width
       // CSS column-count or column-width restrictions can be inspected
       const columnWidth = cs.columnWidth;
@@ -75,7 +99,7 @@ async function run(page, context = {}) {
       }
     }
 
-    return { blockCount: textBlocks.length, issues };
+    return { blockCount: textBlocks.length, issues, presentationControls };
   });
 
   if (!data.blockCount) {
@@ -92,6 +116,7 @@ async function run(page, context = {}) {
   for (const iss of data.issues) byType[iss.type] = (byType[iss.type] || 0) + 1;
   const summary = Object.entries(byType).map(([k, v]) => `${k}(${v})`).join(', ');
 
+  const controls = Array.isArray(data.presentationControls) ? data.presentationControls : [];
   return {
     successCriteriaId: SC,
     rules: [{
@@ -99,10 +124,15 @@ async function run(page, context = {}) {
       description: FALLBACK_DESCRIPTION,
       impact: 'moderate',
       status: 'incomplete',
-      reason: _t(ctx,
-        '{n} visual presentation issue(s) detected in text blocks ({summary}).',
-        'テキストブロックで {n} 件の視覚的表示の問題が検出されました（{summary}）。',
-        { n: data.issues.length, summary }),
+      reason: controls.length
+        ? _t(ctx,
+          '{n} visual presentation issue(s) detected in text blocks ({summary}); {c} on-page presentation control(s) (text size / spacing / alignment) were found — verify they let users correct these (G172/G178/G188).',
+          'テキストブロックで {n} 件の視覚的表示の問題が検出されました（{summary}）。ページ上に {c} 件の表示調整コントロール（文字サイズ／行間／配置）があります。ユーザーがこれらを修正できるか確認してください（G172/G178/G188）。',
+          { n: data.issues.length, summary, c: controls.length })
+        : _t(ctx,
+          '{n} visual presentation issue(s) detected in text blocks ({summary}).',
+          'テキストブロックで {n} 件の視覚的表示の問題が検出されました（{summary}）。',
+          { n: data.issues.length, summary }),
       elements: data.issues,
       helpUrl: HELP_URL,
     }],

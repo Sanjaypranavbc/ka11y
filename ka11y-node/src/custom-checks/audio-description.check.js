@@ -47,19 +47,28 @@ async function run(page, context = {}) {
       // Signal 3: nearby full-text alternative (transcript link or details)
       const container = video.closest('figure, article, section, main, [role="region"], [role="main"]')
         || video.parentElement;
+      // G58: the link/control may sit immediately before or after the media container.
+      const scope = [container, container && container.nextElementSibling, container && container.previousElementSibling].filter(Boolean);
       let hasTextAlternative = false;
-      if (container) {
-        const links = Array.from(container.querySelectorAll('a[href]'));
-        hasTextAlternative = links.some(a => {
-          const text = ((a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '')).toLowerCase();
-          return ALT_KEYWORDS.test(text);
-        });
-        if (!hasTextAlternative) {
-          hasTextAlternative = Array.from(container.querySelectorAll('details')).some(det => {
-            return ALT_KEYWORDS.test(det.textContent || '');
-          });
-        }
+      let hasDescribedVersionControl = false;
+      for (const root of scope) {
+        const labelOf = (el) => ((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('value') || '')).toLowerCase();
+        if (Array.from(root.querySelectorAll('a[href]')).some(a => ALT_KEYWORDS.test(labelOf(a)))) hasTextAlternative = true;
+        if (Array.from(root.querySelectorAll('details')).some(det => ALT_KEYWORDS.test(det.textContent || ''))) hasTextAlternative = true;
+        // G173 / G78: a button, menu item or <select> option that switches to the described version
+        if (Array.from(root.querySelectorAll('button, [role="button"], [role="menuitem"], option, summary, [role="menuitemradio"]')).some(el => /audio[- ]?desc|described|音声解説|音声ガイド/i.test(labelOf(el)))) hasDescribedVersionControl = true;
+        if (hasTextAlternative || hasDescribedVersionControl) break;
       }
+      // audioTracks API (G78): a second, user-selectable audio track labelled as description
+      try {
+        const tracks = video.audioTracks;
+        if (tracks && tracks.length > 1) {
+          for (let i = 0; i < tracks.length; i++) {
+            if (/desc/i.test((tracks[i].kind || '') + ' ' + (tracks[i].label || ''))) hasDescribedVersionControl = true;
+          }
+        }
+      } catch (_) { /* not supported */ }
+      hasTextAlternative = hasTextAlternative || hasDescribedVersionControl;
 
       if (!hasDescTrack && !altAudio && !hasTextAlternative) {
         issues.push({

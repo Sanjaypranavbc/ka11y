@@ -25,10 +25,27 @@ async function run(page, context = {}) {
 
     const issues = [];
 
+    // G171: script-initiated play() without user activation, recorded by the runtime hook.
+    const R = window.__ka11yRuntime;
+    const scriptPlays = (R && Array.isArray(R.mediaPlay)) ? R.mediaPlay.filter(p => !p.userActivated && !p.muted) : [];
+    const playedSrcs = new Set(scriptPlays.map(p => p.src));
+
+    const CONTROL_RE = /pause|stop|mute|volume|sound\s*(?:on|off)?|audio\s*(?:on|off)|一時停止|停止|音量|消音|ミュート/i;
+    const labelOf = (btn) => [
+      btn.textContent || '',
+      btn.getAttribute('aria-label') || '',
+      btn.getAttribute('title') || '',
+      ...Array.from(btn.querySelectorAll('svg title, img[alt]')).map(x => x.getAttribute('alt') || x.textContent || ''),
+    ].join(' ');
+    const CONTROL_SEL = 'button, [role="button"], a[role="button"], input[type="button"], [aria-pressed]';
+
     for (const media of mediaEls) {
+      const mediaSrc = media.currentSrc || media.getAttribute('src') || '';
       const autoplay = media.hasAttribute('autoplay')
         || media.getAttribute('data-autoplay') === 'true'
-        || media.autoplay === true;
+        || media.autoplay === true
+        || playedSrcs.has(mediaSrc)
+        || (mediaEls.length === 1 && scriptPlays.length > 0);
       if (!autoplay) continue;
 
       const muted = media.muted === true || media.hasAttribute('muted');
@@ -39,7 +56,10 @@ async function run(page, context = {}) {
 
       // Duration: MediaElement.duration may be NaN until metadata loads.
       // Use attribute hints: data-duration, or assume > 3 s if not explicitly short.
-      const durAttr = parseFloat(media.getAttribute('data-duration') || media.duration || '0');
+      // Prefer the real media duration when metadata has loaded (G60: ≤ 3 s is exempt).
+      const durAttr = (Number.isFinite(media.duration) && media.duration > 0)
+        ? media.duration
+        : parseFloat(media.getAttribute('data-duration') || '0');
       const durationKnown = Number.isFinite(durAttr) && durAttr > 0;
       const shortDuration = durationKnown && durAttr <= 3;
       if (shortDuration) continue;
@@ -49,16 +69,12 @@ async function run(page, context = {}) {
         || media.parentElement;
       let hasExternalControl = false;
       if (container) {
-        const controlText = /pause|stop|mute|volume|一時停止|停止|音量|消音/i;
-        hasExternalControl = Array.from(
-          container.querySelectorAll('button, [role="button"], a[role="button"]')
-        ).some(btn => {
-          const lbl = (btn.textContent || '')
-            + ' ' + (btn.getAttribute('aria-label') || '')
-            + ' ' + (btn.getAttribute('title') || '');
-          return controlText.test(lbl);
-        });
+        hasExternalControl = Array.from(container.querySelectorAll(CONTROL_SEL)).some(btn => CONTROL_RE.test(labelOf(btn)));
       }
+      // G170: a control near the beginning of the page (site-wide sound toggle) counts,
+      // but we cannot prove it controls THIS element → report for review instead of fail.
+      const hasPageLevelControl = !hasControls && !hasExternalControl
+        && Array.from(document.querySelectorAll(CONTROL_SEL)).some(btn => CONTROL_RE.test(labelOf(btn)));
 
       if (!hasControls && !hasExternalControl) {
         issues.push({
@@ -68,6 +84,8 @@ async function run(page, context = {}) {
             ? [`${media.tagName.toLowerCase()}#${CSS.escape(media.id)}`]
             : [media.tagName.toLowerCase()],
           tag: media.tagName,
+          scriptAutoplay: !media.hasAttribute('autoplay') && media.autoplay !== true,
+          pageLevelControl: hasPageLevelControl,
         });
       }
     }
@@ -107,19 +125,27 @@ async function run(page, context = {}) {
     };
   }
 
+  const allHavePageControl = data.issues.every(i => i.pageLevelControl);
   return {
     successCriteriaId: SC,
     rules: [{
       ruleId: RULE_ID,
       description: FALLBACK_DESCRIPTION,
-      impact: 'serious',
-      status: 'fail',
-      reason: _t(
-        sharedContext,
-        '{issueCount} auto-playing unmuted media element(s) have no pause/stop/volume control.',
-        '{issueCount} 件の自動再生・ミュート解除メディアに一時停止／停止／音量コントロールがありません。',
-        { issueCount: data.issues.length },
-      ),
+      impact: allHavePageControl ? 'moderate' : 'serious',
+      status: allHavePageControl ? 'incomplete' : 'fail',
+      reason: allHavePageControl
+        ? _t(
+          sharedContext,
+          '{issueCount} auto-playing unmuted media element(s) have no control of their own, but a page-level sound/pause control exists (G170). Verify it stops this audio.',
+          '{issueCount} 件の自動再生・ミュート解除メディアに固有のコントロールはありませんが、ページ全体の音声／一時停止コントロールがあります（G170）。この音声を停止できるか確認してください。',
+          { issueCount: data.issues.length },
+        )
+        : _t(
+          sharedContext,
+          '{issueCount} auto-playing unmuted media element(s) have no pause/stop/volume control.',
+          '{issueCount} 件の自動再生・ミュート解除メディアに一時停止／停止／音量コントロールがありません。',
+          { issueCount: data.issues.length },
+        ),
       elements: data.issues,
       helpUrl: HELP_URL,
     }],

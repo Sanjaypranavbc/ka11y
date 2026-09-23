@@ -40,7 +40,12 @@ async function run(page, context = {}) {
     // aria-describedby on technical terms
     const hasAriaDescribedBy = Array.from(document.querySelectorAll('[aria-describedby]')).length > 0;
 
-    const hasDefinitionMechanism = hasDfn || hasGlossaryLink || hasDefinitionList || hasDetailsDef;
+    // G70: a function to search an online dictionary
+    const DICTIONARY_RE = /dictionary|thesaurus|wiktionary|merriam-webster|dictionary\.com|lexico|look\s*up\s+(?:a\s+)?(?:word|term)|辞書|辞典|用語検索/i;
+    const hasDictionarySearch = Array.from(document.querySelectorAll('a[href], form, [role="search"]')).some(el =>
+      DICTIONARY_RE.test(el.textContent || '') || DICTIONARY_RE.test(el.getAttribute('href') || el.getAttribute('action') || '') || DICTIONARY_RE.test(el.getAttribute('aria-label') || ''));
+
+    const hasDefinitionMechanism = hasDfn || hasGlossaryLink || hasDefinitionList || hasDetailsDef || hasDictionarySearch;
 
     // Count jargon candidates: words longer than 10 characters in paragraph text
     // as a rough signal that the page has complex language
@@ -53,7 +58,7 @@ async function run(page, context = {}) {
     }
     const hasComplexContent = jargonCount > 10;
 
-    return { hasDfn, hasGlossaryLink, hasDefinitionList, hasDetailsDef, hasAriaDescribedBy, hasDefinitionMechanism, hasComplexContent, jargonCount };
+    return { hasDfn, hasGlossaryLink, hasDefinitionList, hasDetailsDef, hasDictionarySearch, hasAriaDescribedBy, hasDefinitionMechanism, hasComplexContent, jargonCount };
   });
 
   if (data.hasDefinitionMechanism) {
@@ -62,6 +67,7 @@ async function run(page, context = {}) {
       data.hasGlossaryLink && 'glossary link',
       data.hasDefinitionList && '<dl> definition list',
       data.hasDetailsDef && '<details> definition',
+      data.hasDictionarySearch && 'dictionary search (G70)',
     ].filter(Boolean).join(', ');
 
     return _pass(ctx, _t(ctx,

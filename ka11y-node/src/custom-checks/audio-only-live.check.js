@@ -30,14 +30,18 @@ const LIVE_SRC_RE = /\.m3u8|\.mpd|\/live\/|\/stream\/|shoutcast|icecast|radio/i;
 // Known audio streaming embed domains
 const LIVE_EMBED_DOMAINS = ['tunein.com', 'soundcloud.com', 'mixcloud.com', 'live.', 'radio.', 'stream.'];
 // Text caption / transcript signals
-const TRANSCRIPT_RE = /transcript|live\s+text|captions?|subtitles?|text\s+alternative|書き起こし|字幕|テキスト代替/i;
+const TRANSCRIPT_RE = /transcript|live\s+text|captions?|subtitles?|text\s+alternative|script|prepared\s+remarks|statement|as\s+delivered|書き起こし|字幕|テキスト代替|原稿|逐語/i;
+// G157: third-party live captioning (CART) services embedded as iframes
+const CAPTION_SERVICE_RE = /streamtext\.net|1capapp|ai-live\.com|verbit\.ai|captionaccess|webcaptioner|speechtext\.ai|otter\.ai|streamtext/i;
 
 async function run(page, context = {}) {
   const ctx = getSharedRuleContext(context);
 
-  const data = await page.evaluate((liveSrcPat, embedDomains, transcriptPat) => {
+  const data = await page.evaluate((liveSrcPat, embedDomains, transcriptPat, captionServicePat) => {
     const liveRe = new RegExp(liveSrcPat, 'i');
     const transcriptRe = new RegExp(transcriptPat, 'i');
+    const captionServiceRe = new RegExp(captionServicePat, 'i');
+    const hasCaptionService = (root) => !!root && Array.from(root.querySelectorAll('iframe[src]')).some(f => captionServiceRe.test(f.getAttribute('src') || ''));
 
     const issues = [];
     let liveCount = 0;
@@ -61,7 +65,7 @@ async function run(page, context = {}) {
       const hasTranscriptLink = container && Array.from(container.querySelectorAll('a[href]')).some(a =>
         transcriptRe.test((a.textContent || '') + ' ' + (a.getAttribute('aria-label') || '')));
 
-      if (!hasLiveRegion && !hasTranscriptLink) {
+      if (!hasLiveRegion && !hasTranscriptLink && !hasCaptionService(container) && !hasCaptionService(document)) {
         issues.push({
           target: audio.id ? `audio#${CSS.escape(audio.id)}` : 'audio',
           snippet: audio.outerHTML.slice(0, 200),
@@ -80,7 +84,7 @@ async function run(page, context = {}) {
       const hasLiveRegion = container && Array.from(container.querySelectorAll('[aria-live],[role="log"]')).some(el =>
         transcriptRe.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '')));
 
-      if (!hasLiveRegion) {
+      if (!hasLiveRegion && !hasCaptionService(container) && !hasCaptionService(document)) {
         issues.push({
           target: iframe.id ? `iframe#${CSS.escape(iframe.id)}` : 'iframe',
           snippet: iframe.outerHTML.slice(0, 200),
@@ -90,7 +94,7 @@ async function run(page, context = {}) {
     }
 
     return { liveCount, issues };
-  }, LIVE_SRC_RE.source, LIVE_EMBED_DOMAINS, TRANSCRIPT_RE.source);
+  }, LIVE_SRC_RE.source, LIVE_EMBED_DOMAINS, TRANSCRIPT_RE.source, CAPTION_SERVICE_RE.source);
 
   if (!data.liveCount) {
     return _na(ctx, _t(ctx, 'No live audio-only streams detected on this page — criterion not applicable.', 'このページにライブ音声のみのストリームは検出されませんでした。'));

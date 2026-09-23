@@ -115,7 +115,13 @@ async function run(page, context = {}) {
       Array.from(document.querySelectorAll('a[href]')).some(a => pageIndexRe.test((a.textContent || '') + ' ' + (a.getAttribute('href') || '')))
     );
 
-    return { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents, hasRelatedLinks, hasPageIndexList };
+    // H99: a page-selection mechanism (pagination, next/previous links)
+    const hasPagination = !!(
+      document.querySelector('nav[aria-label*="pagination" i], nav[aria-label*="pager" i], nav[aria-label*="ページ"], [role="navigation"][aria-label*="pagination" i]') ||
+      document.querySelector('.pagination, .pager, [class*="pagination" i], [class*="paginator" i], a[rel="next"], a[rel="prev"], link[rel="next"], link[rel="prev"]')
+    );
+
+    return { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents, hasRelatedLinks, hasPageIndexList, hasPagination };
   }, {
     searchPattern,
     sitemapPattern,
@@ -125,14 +131,15 @@ async function run(page, context = {}) {
     pageIndexPattern,
   });
 
-  const { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents, hasRelatedLinks, hasPageIndexList } = data;
+  const { hasSearch, hasSitemap, navCount, hasBreadcrumb, hasTableOfContents, hasRelatedLinks, hasPageIndexList, hasPagination } = data;
   const ways = (hasSearch ? 1 : 0) +
                (hasSitemap ? 1 : 0) +
                (navCount >= 1 ? 1 : 0) +
                (hasBreadcrumb ? 1 : 0) +
                (hasTableOfContents ? 1 : 0) +
                (hasRelatedLinks ? 1 : 0) +
-               (hasPageIndexList ? 1 : 0);
+               (hasPageIndexList ? 1 : 0) +
+               (hasPagination ? 1 : 0);
 
   if (ways >= 2) {
     const list = [
@@ -143,6 +150,7 @@ async function run(page, context = {}) {
       hasTableOfContents && 'table of contents',
       hasRelatedLinks && 'related links section',
       hasPageIndexList && 'page index list',
+      hasPagination && 'pagination (H99)',
     ].filter(Boolean);
     return {
       successCriteriaId: SC,

@@ -63,6 +63,12 @@ function _formatViolationDetail(violation, context) {
         'CSS の order プロパティにより子要素が DOM 順序から並び替えられています（order: [{orders}]）。',
         { orders },
       );
+    case 'mixed-direction-no-dir':
+      return _t(
+        context,
+        'Text mixes right-to-left and left-to-right scripts without a dir attribute, <bdi>/<bdo>, or Unicode RLM/LRM marks — inline reading order may render incorrectly (H34/H56)',
+        '右横書きと左横書きの文字が混在していますが、dir 属性・<bdi>/<bdo>・Unicode の RLM/LRM が使われていません。インラインの読み順が正しく表示されない可能性があります（H34/H56）。',
+      );
     default:
       return '';
   }
@@ -230,6 +236,32 @@ async function run(page, context = {}) {
         reasonCode: isReversed ? 'flex-direction-reverse' : 'css-order-reorders',
         html: el.outerHTML.slice(0, 150),
       });
+    }
+
+    // ── H34 / H56: bidirectional text without explicit direction handling ────
+    const RTL_RE = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+    const LTR_RE = /[A-Za-z\u00C0-\u024F]{2,}/;
+    const BIDI_CTRL_RE = /[\u200E\u200F\u202A-\u202E\u2066-\u2069]/;
+    let bidiChecked = 0;
+    for (const el of document.querySelectorAll('p, li, td, th, h1, h2, h3, h4, h5, h6, dd, blockquote, figcaption, label, span, a')) {
+      if (bidiChecked++ > 1500) break;
+      const text = (el.textContent || '').trim();
+      if (text.length < 4 || text.length > 2000) continue;
+      if (!RTL_RE.test(text) || !LTR_RE.test(text)) continue;
+      if (BIDI_CTRL_RE.test(text)) continue;
+      if (el.closest('[dir]') || el.querySelector('[dir], bdi, bdo')) continue;
+      results.push({
+        tagName: el.tagName.toLowerCase(),
+        element_id: el.id || null,
+        target: el.id ? [`#${CSS.escape(el.id)}`] : [el.tagName.toLowerCase()],
+        tag: el.tagName.toUpperCase(),
+        display: null,
+        flexDir: null,
+        orders: null,
+        reasonCode: 'mixed-direction-no-dir',
+        html: el.outerHTML.slice(0, 150),
+      });
+      if (results.length >= 60) break;
     }
 
     return results;

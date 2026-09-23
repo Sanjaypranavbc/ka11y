@@ -9,6 +9,7 @@ const MODE = 'static';
 const FALLBACK_DESCRIPTION = 'Headings and labels must describe topic or purpose — empty or non-descriptive labels fail this criterion';
 
 const GENERIC_HEADING_RE = /^(untitled|heading|section|content|page|title|click here|read more|more|here|link)$/i;
+const GENERIC_LABEL_RE = /^(field|input|text|value|label|enter|type here|select|option|choose|untitled|\*)$/i;
 const MAX_VIOLATIONS = 40;
 
 function _t(ctx, en, ja, params = {}) {
@@ -27,6 +28,7 @@ async function run(page, context = {}) {
 
   const data = await page.evaluate((opts) => {
     const generic = new RegExp(opts.genericPattern, 'i');
+    const genericLabel = new RegExp(opts.genericLabelPattern, 'i');
     const violations = [];
 
     // ── 1. Headings: empty text or purely generic ───────────────────────
@@ -74,6 +76,14 @@ async function run(page, context = {}) {
           detail: 'Label element has no visible text — the associated control will have no accessible name.',
         });
         if (violations.length >= opts.max) return { violations, headingCount: 0, labelCount: allLabels.length, done: true };
+      } else if (genericLabel.test(effective)) {
+        violations.push({
+          type: 'label',
+          target: 'label' + (label.htmlFor ? `[for="${label.htmlFor}"]` : ''),
+          snippet: label.outerHTML.slice(0, 120),
+          detail: `Label text "${effective}" is too generic — it does not describe the purpose of the control (G131).`,
+        });
+        if (violations.length >= opts.max) return { violations, headingCount: 0, labelCount: allLabels.length, done: true };
       }
     }
 
@@ -108,7 +118,7 @@ async function run(page, context = {}) {
     const headingCount = document.querySelectorAll('h1,h2,h3,h4,h5,h6,[role="heading"]').length;
     const labelCount   = allLabels.length;
     return { violations, headingCount, labelCount };
-  }, { genericPattern: GENERIC_HEADING_RE.source, max: MAX_VIOLATIONS });
+  }, { genericPattern: GENERIC_HEADING_RE.source, genericLabelPattern: GENERIC_LABEL_RE.source, max: MAX_VIOLATIONS });
 
   const totalElements = data.headingCount + data.labelCount;
 

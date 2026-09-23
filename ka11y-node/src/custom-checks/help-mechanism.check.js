@@ -45,6 +45,15 @@ async function run(page, context = {}) {
     const pageHelpRegion = document.querySelector('[role="complementary"][aria-label]') !== null &&
       ariaRe.test(document.querySelector('[role="complementary"][aria-label]')?.getAttribute('aria-label') || '');
 
+    // G193: help by an assistant in the page — chat / support widgets (often third-party iframes)
+    const pageHelpChat = !!document.querySelector([
+      'iframe[src*="intercom"]', 'iframe[src*="zendesk"]', 'iframe[src*="zopim"]', 'iframe[src*="drift"]', 'iframe[src*="tawk"]',
+      'iframe[src*="crisp"]', 'iframe[src*="hubspot"]', 'iframe[src*="freshchat"]', 'iframe[src*="livechat"]', 'iframe[src*="tidio"]',
+      'iframe[src*="olark"]', 'iframe[src*="salesforce"][src*="chat"]', 'iframe[title*="chat" i]', 'iframe[title*="チャット"]',
+      '[id*="intercom" i]', '[class*="intercom" i]', '[id*="crisp-chatbox" i]', '[class*="tawk" i]', '[id*="hubspot-messages" i]',
+      '[class*="chat-widget" i]', '[id*="chat-widget" i]', '[aria-label*="chat" i]', '[aria-label*="チャット"]',
+    ].join(', '));
+
     // Per-form help signals
     const issues = [];
     for (const form of forms) {
@@ -62,7 +71,10 @@ async function run(page, context = {}) {
       const inputsWithHints = Array.from(form.querySelectorAll('input,textarea,select')).filter(inp =>
         inp.getAttribute('aria-describedby') || inp.getAttribute('aria-details'));
 
-      const hasHelpMechanism = pageHelpLink || pageHelpRegion || formHelpLink || formHelpText || inputsWithHints.length > 0;
+      // G194: spell checking and suggestions for free-text input
+      const hasSpellcheck = !!form.querySelector('textarea[spellcheck="true"], input[spellcheck="true"], [contenteditable][spellcheck="true"]');
+
+      const hasHelpMechanism = pageHelpLink || pageHelpRegion || pageHelpChat || formHelpLink || formHelpText || inputsWithHints.length > 0 || hasSpellcheck;
       if (!hasHelpMechanism) {
         issues.push({
           target: `form${form.id ? '#' + CSS.escape(form.id) : ''}`,
@@ -72,7 +84,7 @@ async function run(page, context = {}) {
       }
     }
 
-    return { formCount: forms.length, pageHelpLink, issues };
+    return { formCount: forms.length, pageHelpLink, pageHelpChat, issues };
   }, HELP_KEYWORDS_RE.source, HELP_ARIA_RE.source);
 
   if (!data.formCount) {

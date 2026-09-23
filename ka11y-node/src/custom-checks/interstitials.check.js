@@ -20,11 +20,24 @@ async function run(page, context = {}) {
 
   const data = await page.evaluate(() => {
     const issues = [];
+    // G75 / SCR14: can the user postpone, dismiss or suppress the interruption?
+    const DISMISS_RE = /close|dismiss|later|remind\s+me|not\s+now|no\s+thanks|skip|maybe\s+later|got\s+it|ok(?:ay)?|accept|reject|decline|continue|閉じる|後で|あとで|今はしない|スキップ|同意|拒否|了解|×|✕/i;
+    const SUPPRESS_RE = /don'?t\s+show|do\s+not\s+show|never\s+show|stop\s+showing|hide\s+these|今後表示しない|表示しない/i;
+    const controlLabel = (el) => [el.textContent || '', el.getAttribute('aria-label') || '', el.getAttribute('title') || '',
+      ...Array.from(el.querySelectorAll('svg title, img[alt]')).map(x => x.getAttribute('alt') || x.textContent || '')].join(' ');
+    const dismissInfo = (el) => {
+      const controls = Array.from(el.querySelectorAll('button, [role="button"], a[href], input[type="button"], input[type="submit"], summary'));
+      const hasDismissControl = controls.some(c => DISMISS_RE.test(controlLabel(c)) || c.hasAttribute('data-dismiss') || c.hasAttribute('data-bs-dismiss') || /close|dismiss/i.test(c.className || ''))
+        || el.hasAttribute('data-escape-close') || (el.tagName.toLowerCase() === 'dialog');
+      const hasSuppressOption = Array.from(el.querySelectorAll('input[type="checkbox"], label, button')).some(c => SUPPRESS_RE.test(controlLabel(c)));
+      return { hasDismissControl, hasSuppressOption };
+    };
 
     // 1. Check for modal dialogs/popups that auto-open
     const autoOpenModals = document.querySelectorAll('[role="dialog"]:not([aria-modal="false"]):not([open="false"]):not([data-manual-open])');
     autoOpenModals.forEach(el => {
       issues.push({
+        ...dismissInfo(el),
         type: 'auto-open-modal',
         html: el.outerHTML.slice(0, 200),
         element_id: el.id || null,
@@ -38,6 +51,7 @@ async function run(page, context = {}) {
     const cookieBanners = document.querySelectorAll('[role="dialog"][aria-label*="cookie"], [role="alertdialog"][aria-label*="cookie"], .cookie-banner, #cookie-consent, #onetrust-banner-sdk');
     cookieBanners.forEach(el => {
       issues.push({
+        ...dismissInfo(el),
         type: 'cookie-banner',
         html: el.outerHTML.slice(0, 200),
         element_id: el.id || null,
@@ -51,6 +65,7 @@ async function run(page, context = {}) {
     const interstitials = document.querySelectorAll('.interstitial, .ad-overlay, .page-overlay, #interstitial, .between-pages');
     interstitials.forEach(el => {
       issues.push({
+        ...dismissInfo(el),
         type: 'interstitial-ad',
         html: el.outerHTML.slice(0, 200),
         element_id: el.id || null,
@@ -91,6 +106,7 @@ async function run(page, context = {}) {
     focusTrapped.forEach(el => {
       const hasEscapeHandler = el.hasAttribute('data-escape-close');
       issues.push({
+        ...dismissInfo(el),
         type: 'focus-trapped-modal',
         html: el.outerHTML.slice(0, 200),
         element_id: el.id || null,
@@ -115,6 +131,33 @@ async function run(page, context = {}) {
         helpUrl: HELP_URL,
       }],
     };
+  }
+
+  // G75 / SCR14: interruptions that expose a dismiss/postpone control (or a "don't show again"
+  // option) can be postponed or suppressed by the user → they satisfy the criterion.
+  const interruptions = data.issues.filter(i => i.type !== 'loading-overlay' && i.type !== 'notification-toast');
+  const lackingDismiss = interruptions.filter(i => !(i.hasDismissControl || i.hasSuppressOption));
+  if (interruptions.length > 0 && lackingDismiss.length === 0) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: FALLBACK_DESCRIPTION,
+        impact: null,
+        status: 'pass',
+        reason: _t(
+          sharedContext,
+          '{count} interruption(s) detected and every one offers a dismiss, postpone or "don\'t show again" control (G75/SCR14).',
+          '{count} 件の中断が検出されましたが、すべてに閉じる・後で・今後表示しないの操作があります（G75/SCR14）。',
+          { count: interruptions.length },
+        ),
+        helpUrl: HELP_URL,
+      }],
+    };
+  }
+  if (lackingDismiss.length > 0) {
+    // Only report the ones the user cannot dismiss.
+    data.issues = data.issues.filter(i => lackingDismiss.includes(i) || i.type === 'loading-overlay' || i.type === 'notification-toast');
   }
 
   // Categorize the issues

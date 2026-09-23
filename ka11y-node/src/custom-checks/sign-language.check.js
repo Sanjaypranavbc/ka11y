@@ -35,11 +35,15 @@ async function run(page, context = {}) {
         return !!src && (t.getAttribute('srclang') || '').length > 0;
       });
 
-      // Signal 2: second <video> or <source> labeled as sign-language
-      const altVideo = video.parentElement
-        && Array.from(video.parentElement.querySelectorAll('video, source')).some(el => {
-          const lbl = ((el.getAttribute('data-kind') || '') + ' ' + (el.getAttribute('title') || '')).toLowerCase();
-          return /sign|signing|signer/i.test(lbl);
+      // Signal 2 (G81): a second <video>/<iframe>/<source> in the same container labelled as sign language
+      const signScope = video.closest('figure, article, section, [role="region"], [role="main"]') || video.parentElement;
+      const SIGN_LABEL_RE = /\bsign(?:ing|er|ed)?\b|\basl\b|\bbsl\b|\bdgs\b|\bjsl\b|手話|手語/i;
+      const altVideo = !!signScope
+        && Array.from(signScope.querySelectorAll('video, source, iframe')).some(el => {
+          if (el === video) return false;
+          const lbl = [el.getAttribute('data-kind'), el.getAttribute('title'), el.getAttribute('aria-label'), el.id, typeof el.className === 'string' ? el.className : '']
+            .filter(Boolean).join(' ');
+          return SIGN_LABEL_RE.test(lbl);
         });
 
       // Signal 3: nearby full-text alternative (transcript link or details)

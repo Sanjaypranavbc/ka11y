@@ -53,11 +53,40 @@ async function run(page, context = {}) {
         const text = (el.textContent || '').trim();
         if (!text) continue;
         issues.push({
+          type: 'clipped',
           target: el.tagName.toLowerCase() + (el.id ? `#${CSS.escape(el.id)}` : ''),
           snippet: el.outerHTML.slice(0, 120),
           detail: `overflow:${clipsX ? ovX : ''} ${clipsY ? ovY : ''} clips content — scrollHeight ${el.scrollHeight}px vs clientHeight ${el.clientHeight}px`,
         });
         if (issues.length >= 20) break;
+      }
+
+      // ── C35: block-level text that overlaps its next sibling after the override ──
+      const BLOCKY = new Set(['block', 'list-item', 'flex', 'grid', 'inline-block', 'table-cell']);
+      const TEXTY = 'p,h1,h2,h3,h4,h5,h6,li,a,button,label,span,td,th,dt,dd,div';
+      let pairs = 0;
+      for (const el of document.querySelectorAll(TEXTY)) {
+        if (pairs++ > 4000) break;
+        const sib = el.nextElementSibling;
+        if (!sib || !sib.matches(TEXTY)) continue;
+        const t1 = (el.textContent || '').trim(), t2 = (sib.textContent || '').trim();
+        if (!t1 || !t2) continue;
+        const c1 = window.getComputedStyle(el), c2 = window.getComputedStyle(sib);
+        if (!BLOCKY.has(c1.display) || !BLOCKY.has(c2.display)) continue;
+        if (c1.position === 'absolute' || c2.position === 'absolute' || c1.position === 'fixed' || c2.position === 'fixed') continue;
+        const a = el.getBoundingClientRect(), b = sib.getBoundingClientRect();
+        if (!a.width || !b.width || !a.height || !b.height) continue;
+        const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (ox > 4 && oy > 4) {
+          issues.push({
+            type: 'overlap',
+            target: el.tagName.toLowerCase() + (el.id ? `#${CSS.escape(el.id)}` : ''),
+            snippet: el.outerHTML.slice(0, 120),
+            detail: `overlaps the following <${sib.tagName.toLowerCase()}> by ${Math.round(ox)}×${Math.round(oy)}px after the spacing override (C35)`,
+          });
+          if (issues.length >= 40) break;
+        }
       }
       return { issues };
     });
@@ -76,9 +105,9 @@ async function run(page, context = {}) {
         impact: 'serious',
         status: 'fail',
         reason: _t(ctx,
-          '{n} element(s) clip content when WCAG 1.4.12 spacing overrides are applied (overflow:hidden/clip with scroll overflow). Users who override spacing via user stylesheets will lose content.',
-          '{n} 件の要素で WCAG 1.4.12 スペーシング上書き適用時にコンテンツがクリップされます。',
-          { n: data.issues.length }),
+          '{n} element(s) clip or overlap content when WCAG 1.4.12 spacing overrides are applied ({clipped} clipped, {overlap} overlapping). Users who override spacing via user stylesheets will lose content.',
+          '{n} 件の要素で WCAG 1.4.12 スペーシング上書き適用時にコンテンツがクリップまたは重なります（クリップ {clipped} 件、重なり {overlap} 件）。',
+          { n: data.issues.length, clipped: data.issues.filter(i => i.type !== 'overlap').length, overlap: data.issues.filter(i => i.type === 'overlap').length }),
         elements: data.issues,
         helpUrl: HELP_URL,
       }],

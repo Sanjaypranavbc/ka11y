@@ -33,8 +33,17 @@ async function run(page, context = {}) {
     // Allow layout to settle
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 
-    const data = await page.evaluate((vw) => {
+    const data = await page.evaluate((vw, vh) => {
       const issues = [];
+      const inScrollContainer = (el) => {
+        let n = el.parentElement;
+        while (n && n !== document.body) {
+          const c = window.getComputedStyle(n);
+          if (c.overflowX === 'auto' || c.overflowX === 'scroll') return true;
+          n = n.parentElement;
+        }
+        return false;
+      };
       const scrollWidth = document.documentElement.scrollWidth;
 
       // ── Primary signal: page-level horizontal scroll ──────────────────────
@@ -54,9 +63,11 @@ async function run(page, context = {}) {
         if (r.right <= vw + 1) continue;
 
         const cs = window.getComputedStyle(el);
-        // Skip elements inside horizontally scrollable containers (intentional)
+        // Skip elements that are, or sit inside, horizontally scrollable containers —
+        // WCAG 1.4.10 allows two-dimensional content (tables, code, maps) in a
+        // scrolling panel that itself fits the 320 px viewport (G225).
         const isScrollable = cs.overflowX === 'auto' || cs.overflowX === 'scroll';
-        if (isScrollable) continue;
+        if (isScrollable || inScrollContainer(el)) continue;
 
         issues.push({
           type: 'overflow-element',
@@ -67,8 +78,37 @@ async function run(page, context = {}) {
         if (issues.length >= 15) break;
       }
 
+      // ── C34: fixed / sticky bars consuming the 256 px-high viewport ──────────
+      const all = document.querySelectorAll('body *');
+      if (all.length <= 6000) {
+        const bars = [];
+        for (const el of all) {
+          const cs = window.getComputedStyle(el);
+          if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+          const r = el.getBoundingClientRect();
+          if (r.width < vw * 0.6 || r.height < 24) continue;
+          if (r.bottom <= 0 || r.top >= vh) continue;
+          bars.push([Math.max(0, r.top), Math.min(vh, r.bottom), el]);
+        }
+        bars.sort((a, b) => a[0] - b[0]);
+        let covered = 0, curS = null, curE = null;
+        for (const [s, e] of bars) {
+          if (curS === null) { curS = s; curE = e; continue; }
+          if (s <= curE) curE = Math.max(curE, e); else { covered += curE - curS; curS = s; curE = e; }
+        }
+        if (curS !== null) covered += curE - curS;
+        if (covered > vh * 0.5) {
+          issues.push({
+            type: 'sticky-consumes-viewport',
+            target: bars.map(b => b[2].tagName.toLowerCase() + (b[2].id ? `#${CSS.escape(b[2].id)}` : '')).slice(0, 4).join(', '),
+            snippet: bars[0][2].outerHTML.slice(0, 150),
+            detail: `position:fixed/sticky bars cover ${Math.round(covered)}px of the ${vh}px viewport at 320×256 — un-fix them in a narrow-viewport media query (C34)`,
+          });
+        }
+      }
+
       return { scrollWidth, issues };
-    }, REFLOW_WIDTH);
+    }, REFLOW_WIDTH, REFLOW_HEIGHT);
 
     if (!data.issues.length) {
       return _pass(ctx, _t(ctx,

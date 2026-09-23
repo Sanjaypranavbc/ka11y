@@ -44,6 +44,17 @@ async function run(page, context = {}) {
       document.querySelector('nav [aria-current="page"]') // current page in nav = location indicator
     );
 
+    // 1b (G65): a breadcrumb trail built from plain links separated by › > » / →
+    const hasBreadcrumbPattern = Array.from(document.querySelectorAll('nav, ol, ul, div, p')).some(el => {
+      const r = el.getBoundingClientRect();
+      if (r.top > 600 || r.height > 90 || r.height === 0) return false;
+      const links = el.querySelectorAll(':scope > a[href], :scope > li > a[href], :scope > span > a[href]');
+      if (links.length < 2 || links.length > 8 || el.querySelectorAll('a[href]').length !== links.length) return false;
+      const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (t.length > 200) return false;
+      return /[›»>→\/]|\u203A|\u3009|＞/.test(t);
+    });
+
     // 2. aria-current="page" anywhere in a navigational context
     const hasAriaCurrent = !!document.querySelector(
       'nav [aria-current="page"], [role="navigation"] [aria-current="page"]'
@@ -51,8 +62,8 @@ async function run(page, context = {}) {
 
     // 3. Active/selected nav item (common visual pattern)
     const hasActiveNavItem = !!(
-      document.querySelector('nav .active, nav [aria-selected="true"]') ||
-      document.querySelector('[role="navigation"] .active, [role="navigation"] [aria-selected="true"]')
+      document.querySelector('nav .active, nav [aria-selected="true"], nav [class*="current" i], nav [class*="selected" i]') ||
+      document.querySelector('[role="navigation"] .active, [role="navigation"] [aria-selected="true"], [role="navigation"] [class*="current" i]')
     );
 
     // 4. Sitemap or location landmark (rare but valid)
@@ -88,11 +99,11 @@ async function run(page, context = {}) {
       }
     }
 
-    const hasVisibleLocationIndicator = hasBreadcrumb || hasAriaCurrent || hasActiveNavItem || hasAriaCurrentStep;
+    const hasVisibleLocationIndicator = hasBreadcrumb || hasBreadcrumbPattern || hasAriaCurrent || hasActiveNavItem || hasAriaCurrentStep;
     const hasWeakLocationIndicator = hasSiteMap || hasJsonLdBreadcrumb || hasTableOfContents;
 
     return {
-      hasBreadcrumb,
+      hasBreadcrumb: hasBreadcrumb || hasBreadcrumbPattern,
       hasAriaCurrent,
       hasActiveNavItem,
       hasSiteMap,

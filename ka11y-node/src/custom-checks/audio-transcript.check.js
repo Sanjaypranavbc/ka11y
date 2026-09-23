@@ -110,6 +110,18 @@ async function run(page, context = {}) {
           })
         : false;
 
+      // 3c. Inline transcript block: a substantial text block in the container whose own
+      //     label/heading/class mentions the transcript (G158) — no link needed.
+      const hasInlineTranscript = container
+        ? Array.from(container.querySelectorAll('div, section, p, [role="region"], [role="tabpanel"]')).some(el => {
+            const t = (el.textContent || '').trim();
+            if (t.length < 300) return false;
+            const head = el.querySelector('h1,h2,h3,h4,h5,h6,summary,strong,b') || el.previousElementSibling;
+            const label = [el.getAttribute('aria-label') || '', typeof el.className === 'string' ? el.className : '', el.id || '', head ? (head.textContent || '') : ''].join(' ');
+            return transcriptRe.test(label);
+          })
+        : false;
+
       // 4. aria-describedby pointing to an existing element with text
       const describedByIds = (audio.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
       const hasAriaDescription = describedByIds.some(id => {
@@ -117,7 +129,7 @@ async function run(page, context = {}) {
         return !!target && (target.textContent || '').trim().length > 0;
       });
 
-      if (!hasValidTrack && transcriptLinksWithReadableLabel.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription) {
+      if (!hasValidTrack && transcriptLinksWithReadableLabel.length === 0 && !hasFigCaption && !hasDetailsTranscript && !hasAriaDescription && !hasInlineTranscript) {
         issues.push({
           html: audio.outerHTML.slice(0, 150),
           element_id: audio.id || null,

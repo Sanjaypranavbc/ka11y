@@ -36,6 +36,11 @@ async function run(page, context = {}) {
         }
       }
 
+      // 1b. Embedded live-captioning (CART) service iframe within the container (G157)
+      if (rootElement.querySelector('iframe[src*="streamtext"], iframe[src*="1capapp"], iframe[src*="ai-live"], iframe[src*="verbit"], iframe[src*="webcaptioner"], iframe[src*="captionaccess"]')) {
+        return true;
+      }
+
       // 2. Player-rendered caption elements scoped to the container
       const captionSelectors = [
         '[class*="caption"]',
