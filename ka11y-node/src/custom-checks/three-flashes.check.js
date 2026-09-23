@@ -1,6 +1,7 @@
 'use strict';
 
 const { getSharedRuleContext, renderLocalizedText } = require('./sharedAssets');
+const { captureFlashProfile, GENERAL_AREA_THRESHOLD } = require('./flashAnalysis');
 
 const SC = '2.3.1';
 const RULE_ID = 'custom-three-flashes';
@@ -125,10 +126,30 @@ async function run(page, context = {}) {
     return { issues };
   }, FLASH_PERIOD_MS);
 
+  // ── G19 / G15 / G176: measured screen flashing (JS, canvas, GIF, video) via screencast ──
+  try {
+    const prof = await captureFlashProfile(page);
+    if (prof && prof.maxFlashesPerSecond > 3) {
+      const overArea = prof.flashingArea > GENERAL_AREA_THRESHOLD;
+      data.issues.unshift({
+        type: overArea ? 'measured-flash' : 'measured-flash-small-area',
+        target: 'screen',
+        snippet: `${prof.frames} frames @ ${prof.fps} fps; cells: ${prof.cells.slice(0, 5).map(c => `(${c.x},${c.y})×${c.flashes}`).join(' ')}`,
+        detail: `Screen content flashes up to ${prof.maxFlashesPerSecond}×/s over ${Math.round(prof.flashingArea * 10000) / 100}% of the viewport (measured over ${prof.frames} screencast frames) — ${overArea ? 'exceeds the general flash threshold (G19/G15)' : 'small area; below the general flash threshold area (G176) but verify red flashes and combined regions'}`,
+        measured: true,
+        overArea,
+      });
+      data.measuredFail = overArea;
+    } else if (prof) {
+      data.measuredClean = `${prof.frames} screencast frames analysed (${prof.fps} fps${prof.coverage < 0.95 ? `, ${Math.round(prof.coverage * 100)}% of the viewport captured` : ''}): no region flashes more than 3×/s (G19)`;
+    }
+  } catch (_) { /* measurement is best-effort */ }
+
   if (!data.issues.length) {
     return _pass(ctx, _t(ctx,
-      'No rapid CSS animations or animated GIFs with potential flash risk detected.',
-      '点滅リスクのある高速 CSS アニメーションやアニメーション GIF は検出されませんでした。'));
+      'No rapid CSS animations or animated GIFs with potential flash risk detected{m}.',
+      '点滅リスクのある高速 CSS アニメーションやアニメーション GIF は検出されませんでした{m}。',
+      { m: data.measuredClean ? `; ${data.measuredClean}` : '' }));
   }
 
   return {
@@ -137,11 +158,16 @@ async function run(page, context = {}) {
       ruleId: RULE_ID,
       description: FALLBACK_DESCRIPTION,
       impact: 'critical',
-      status: 'incomplete',
-      reason: _t(ctx,
-        '{n} potential flash source(s) detected (rapid CSS animation or animated GIF). Verify flash rate and area are within threshold, or remove the animation.',
-        '{n} 件の潜在的な点滅ソースが検出されました（高速 CSS アニメーションまたはアニメーション GIF）。点滅レートと面積が閾値内かどうか確認するか、アニメーションを削除してください。',
-        { n: data.issues.length }),
+      status: data.measuredFail ? 'fail' : 'incomplete',
+      reason: data.measuredFail
+        ? _t(ctx,
+          'Measured flashing: {d} Remove or slow the flashing content, or reduce it below the general flash threshold (G19/G15).',
+          '点滅を計測しました: {d} 点滅するコンテンツを削除・減速するか、一般閃光閾値未満に抑えてください（G19/G15）。',
+          { d: data.issues[0].detail })
+        : _t(ctx,
+          '{n} potential flash source(s) detected (rapid CSS animation or animated GIF). Verify flash rate and area are within threshold, or remove the animation.',
+          '{n} 件の潜在的な点滅ソースが検出されました（高速 CSS アニメーションまたはアニメーション GIF）。点滅レートと面積が閾値内かどうか確認するか、アニメーションを削除してください。',
+          { n: data.issues.length }),
       elements: data.issues,
       helpUrl: HELP_URL,
     }],

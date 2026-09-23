@@ -47,19 +47,48 @@ async function run(page, context = {}) {
 
     const hasDefinitionMechanism = hasDfn || hasGlossaryLink || hasDefinitionList || hasDetailsDef || hasDictionarySearch;
 
-    // Count jargon candidates: words longer than 10 characters in paragraph text
-    // as a rough signal that the page has complex language
+    // G101 / G112: rare-word candidates and whether each is defined nearby. Without a
+    // frequency corpus, rarity is approximated by word shape: long Latin/Greek-derived
+    // words (≥12 letters or technical suffixes), CamelCase/technical tokens, and
+    // kanji compounds of four or more characters. A candidate counts as defined when
+    // it is followed by a parenthetical or an "is/means/refers to" clause (G112), is
+    // wrapped in <dfn>/<abbr>/aria-describedby, or is linked (glossary link).
     const JARGON_RE = /\b[A-Za-z][a-z]{9,}\b/g;
+    const RARE_RE = /\b(?:[A-Za-z][a-z]{11,}|[a-z]+(?:ization|isation|ological|ometric|omorphic|ectomy|itis|osis|aceous|ivorous|genesis|phoresis|plasty|tropic|philic|phobic)|[A-Z][a-z]+[A-Z][A-Za-z]+)\b/g;
+    const KANJI_COMPOUND_RE = /[\u4e00-\u9fff]{4,}/g;
+    const COMMON = new Set(['information', 'organization', 'organisation', 'international', 'communication', 'applications', 'accessibility', 'responsibility', 'administration', 'professional', 'requirements', 'environment', 'development', 'representative', 'understanding', 'relationship', 'opportunities', 'particularly', 'automatically', 'significantly', 'approximately', 'individuals', 'infrastructure', 'configuration', 'implementation', 'documentation', 'notification', 'notifications', 'subscription', 'authentication', 'authorization', 'transportation', 'manufacturing', 'entertainment', 'recommendation', 'recommendations', 'specifications', 'characteristics', 'unfortunately', 'availability', 'compatibility', 'functionality', 'establishment', 'considerations', 'participation']);
     let jargonCount = 0;
-    for (const el of document.querySelectorAll('p,li')) {
-      const text = el.textContent || '';
+    const rare = new Map(); // word → { count, defined }
+    const DEF_AFTER_RE = (w) => new RegExp(w + '\\s*(?:\\(|（|\\[|[-–—:]\\s|\\s(?:is|are|means|refers to|i\\.e\\.|that is|とは|、すなわち|（))', 'i');
+    for (const el of document.querySelectorAll('p,li,td,dd')) {
+      const text = (el.textContent || '').replace(/\s+/g, ' ');
       const matches = text.match(JARGON_RE);
       if (matches) jargonCount += matches.length;
+      for (const m of [...(text.match(RARE_RE) || []), ...(text.match(KANJI_COMPOUND_RE) || [])]) {
+        const w = m; const key = w.toLowerCase();
+        if (COMMON.has(key) || key.length > 40) continue;
+        const entry = rare.get(key) || { word: w, count: 0, defined: false };
+        entry.count++;
+        if (!entry.defined) {
+          try {
+            const inSemantic = Array.from(el.querySelectorAll('dfn, abbr[title], [aria-describedby], a[href], [title]')).some(x => (x.textContent || '').includes(w));
+            entry.defined = inSemantic || DEF_AFTER_RE(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(text);
+          } catch (_) { /* ignore */ }
+        }
+        rare.set(key, entry);
+      }
     }
-    const hasComplexContent = jargonCount > 10;
+    const rareWords = Array.from(rare.values()).filter(r => r.count >= 1).sort((a, b) => b.count - a.count).slice(0, 40);
+    const rareUndefined = rareWords.filter(r => !r.defined).slice(0, 12).map(r => ({ word: r.word, count: r.count }));
+    const rareDefined = rareWords.filter(r => r.defined).length;
+    const hasComplexContent = jargonCount > 10 || rareWords.length >= 5;
 
-    return { hasDfn, hasGlossaryLink, hasDefinitionList, hasDetailsDef, hasDictionarySearch, hasAriaDescribedBy, hasDefinitionMechanism, hasComplexContent, jargonCount };
+    return { hasDfn, hasGlossaryLink, hasDefinitionList, hasDetailsDef, hasDictionarySearch, hasAriaDescribedBy, hasDefinitionMechanism, hasComplexContent, jargonCount, rareUndefined, rareDefined, rareTotal: rareWords.length };
   });
+
+  const rareNote = (data.rareTotal || 0)
+    ? _t(ctx, ' {t} unusual/technical word(s) detected; {d} are defined in place (G112){u}.', ' 専門的・珍しい語を {t} 件検出。うち {d} 件は文中で定義されています（G112）{u}。', { t: data.rareTotal, d: data.rareDefined || 0, u: (data.rareUndefined || []).length ? _t(ctx, `; undefined: ${data.rareUndefined.slice(0, 5).map(r => r.word).join(', ')}`, `。未定義: ${data.rareUndefined.slice(0, 5).map(r => r.word).join(', ')}`) : '' })
+    : '';
 
   if (data.hasDefinitionMechanism) {
     const mechanisms = [
@@ -73,13 +102,19 @@ async function run(page, context = {}) {
     return _pass(ctx, _t(ctx,
       'Definition mechanisms detected ({mechanisms}). Manual check recommended to verify coverage of all unusual words.',
       '定義メカニズムが検出されました（{mechanisms}）。すべての専門用語をカバーしているか手動確認を推奨します。',
-      { mechanisms }));
+      { mechanisms }) + rareNote);
   }
 
   if (!data.hasComplexContent) {
     return _pass(ctx, _t(ctx,
       'No definition mechanism found, but page content appears simple (no unusual word density detected).',
-      '定義メカニズムは見つかりませんでしたが、ページコンテンツはシンプルです（専門用語の密度は低い）。'));
+      '定義メカニズムは見つかりませんでしたが、ページコンテンツはシンプルです（専門用語の密度は低い）。') + rareNote);
+  }
+
+  if ((data.rareTotal || 0) >= 3 && !(data.rareUndefined || []).length) {
+    return _pass(ctx, _t(ctx,
+      'No global definition mechanism, but every detected unusual word is defined in place (parenthetical/“means” clause, <dfn>, <abbr> or link) — G112.',
+      '全体的な定義メカニズムはありませんが、検出された珍しい語はすべて文中で定義されています（括弧書き/「とは」、<dfn>、<abbr>、リンク）— G112。') + rareNote);
   }
 
   return {
@@ -91,7 +126,8 @@ async function run(page, context = {}) {
       status: 'incomplete',
       reason: _t(ctx,
         'No definition mechanism found (<dfn>, glossary link, or definition list) and the page contains potentially complex vocabulary. Manual review required.',
-        '<dfn>、用語集リンク、定義リストが見つからず、ページに複雑な語彙が含まれる可能性があります。手動確認が必要です。'),
+        '<dfn>、用語集リンク、定義リストが見つからず、ページに複雑な語彙が含まれる可能性があります。手動確認が必要です。') + rareNote,
+      elements: (data.rareUndefined || []).map(r => ({ target: 'text', snippet: r.word, detail: `"${r.word}" (${r.count}×) is not defined in place — add a definition, <dfn> or glossary link (G101/G112)` })),
       helpUrl: HELP_URL,
     }],
   };

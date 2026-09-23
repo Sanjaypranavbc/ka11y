@@ -67,6 +67,11 @@ async function run(page, context = {}) {
     // G86: a summary / abstract section; G79: a spoken (audio) version of the text.
     const SUMMARY_RE = /^(summary|abstract|overview|key\s+points|in\s+brief|at\s+a\s+glance|tl;?dr|要約|概要|まとめ|要点|ポイント|サマリー)/i;
     const hasSummary = Array.from(document.querySelectorAll('h1, h2, h3, h4, summary, [role="heading"], [class*="summary" i], [class*="abstract" i], [id*="summary" i]')).some(el => SUMMARY_RE.test((el.textContent || '').trim()));
+    // G103: illustrations/diagrams inside the main text; G160: a sign-language video near the text.
+    const mainEl = document.querySelector('main, article, [role="main"]') || document.body;
+    const illustrations = mainEl ? Array.from(mainEl.querySelectorAll('figure img, figure svg, p img, article img, main img')).filter(i => { const r = i.getBoundingClientRect(); return r.width >= 120 && r.height >= 80 && !i.closest('a[href], nav, header, footer'); }).length : 0;
+    const SIGN_RE = /sign\s*language|\bASL\b|\bBSL\b|\bJSL\b|手話|signed\s+version/i;
+    const hasSignVideo = Array.from(document.querySelectorAll('video, iframe, a[href]')).some(el => SIGN_RE.test((el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.textContent || '') + ' ' + (el.closest('figure') ? (el.closest('figure').textContent || '') : '')));
     const SPOKEN_RE = /listen|read\s+aloud|play\s+audio|audio\s+version|text[-\s]to[-\s]speech|読み上げ|音声で(?:聞く|読む)|音声版|聞く/i;
     const hasSpoken = !!document.querySelector('main audio, article audio, [role="main"] audio') || Array.from(document.querySelectorAll('button, a[href], [role="button"]')).some(el => SPOKEN_RE.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')));
 
@@ -80,13 +85,13 @@ async function run(page, context = {}) {
       const jaSentences = text.split(/[。！？!?]+/).map(s => s.trim()).filter(s => s.length > 3);
       const avgLen = jaSentences.length ? jaSentences.reduce((a, s) => a + s.length, 0) / jaSentences.length : 0;
       const kanjiRatio = cjkTotal ? kanji / cjkTotal : 0;
-      return { mode: 'ja', charCount: cjkTotal, sentenceCount: jaSentences.length, avgSentenceLength: Math.round(avgLen), kanjiRatio: Math.round(kanjiRatio * 100) / 100, hasSummary, hasSpoken, tooShort: false, wordCount: latinWords.length };
+      return { mode: 'ja', charCount: cjkTotal, sentenceCount: jaSentences.length, avgSentenceLength: Math.round(avgLen), kanjiRatio: Math.round(kanjiRatio * 100) / 100, hasSummary, hasSpoken, illustrations, hasSignVideo, tooShort: false, wordCount: latinWords.length };
     }
 
     const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 5);
     const words = latinWords;
 
-    if (words.length < minWords) return { wordCount: words.length, tooShort: true, hasSummary, hasSpoken };
+    if (words.length < minWords) return { wordCount: words.length, tooShort: true, hasSummary, hasSpoken, illustrations, hasSignVideo };
 
     const syllables = words.reduce((sum, w) => sum + countSyllables(w), 0);
     const sentenceCount = Math.max(1, sentences.length);
@@ -96,12 +101,14 @@ async function run(page, context = {}) {
     const grade = 0.39 * (wordCount / sentenceCount) + 11.8 * (syllables / wordCount) - 15.59;
     const gradeRounded = Math.round(grade * 10) / 10;
 
-    return { wordCount, syllableCount: syllables, sentenceCount, grade: gradeRounded, tooShort: false, hasSummary, hasSpoken };
+    return { wordCount, syllableCount: syllables, sentenceCount, grade: gradeRounded, tooShort: false, hasSummary, hasSpoken, illustrations, hasSignVideo };
   }, MIN_WORDS);
 
   const supplements = [];
   if (data && data.hasSummary) supplements.push(_t(ctx, 'a summary/overview section is present (G86)', '要約/概要セクションがあります（G86）'));
   if (data && data.hasSpoken) supplements.push(_t(ctx, 'a spoken/audio version is offered (G79)', '音声版/読み上げが提供されています（G79）'));
+  if (data && data.illustrations >= 2) supplements.push(_t(ctx, `${data.illustrations} illustration(s) support the text (G103)`, `テキストを補助する図版が ${data.illustrations} 件あります（G103）`));
+  if (data && data.hasSignVideo) supplements.push(_t(ctx, 'a sign-language version is offered (G160)', '手話版が提供されています（G160）'));
   const suppNote = supplements.length ? ' ' + supplements.join('; ') + '.' : '';
 
   if (data && data.mode === 'ja') {

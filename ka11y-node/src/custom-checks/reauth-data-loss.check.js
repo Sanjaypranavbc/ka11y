@@ -1,6 +1,7 @@
 'use strict';
 
 const {
+  getCheckConfig,
   getSharedRuleContext,
   renderLocalizedText,
 } = require('./sharedAssets');
@@ -103,6 +104,67 @@ async function run(page, context = {}) {
       issues,
     };
   });
+
+  // ── G105 / G181 (opt-in): simulate session expiry and re-authentication ──────────
+  // config/universal.yml → checks.reauth_data_loss: { simulate: true, username, password,
+  //   username_selector?, password_selector?, submit_selector? }
+  // Fills a marker into a text field, deletes the session cookies, reloads, logs back in
+  // with the supplied test credentials and checks that the marker survived (or that the
+  // page stored it in localStorage/sessionStorage). Never runs unless configured.
+  let simulation = null;
+  try {
+    const cfg = getCheckConfig('reauth_data_loss', sharedContext) || {};
+    if (cfg.simulate === true && cfg.username && cfg.password && typeof page.cookies === 'function' && typeof page.reload === 'function') {
+      const MARK = 'ka11y-reauth-' + Date.now();
+      const filled = await page.evaluate((mark) => {
+        const f = Array.from(document.querySelectorAll('form')).find(x => !x.querySelector('input[type="password"]') && x.querySelector('input[type="text"], textarea'));
+        if (!f) return null;
+        const field = f.querySelector('input[type="text"], textarea');
+        field.value = mark; field.dispatchEvent(new Event('input', { bubbles: true })); field.dispatchEvent(new Event('change', { bubbles: true }));
+        return { name: field.name || field.id || null };
+      }, MARK);
+      if (filled) {
+        const cookies = await page.cookies();
+        const session = cookies.filter(c => /sess|sid|auth|token|jwt|login/i.test(c.name)) ;
+        for (const c of (session.length ? session : cookies)) { try { await page.deleteCookie({ name: c.name, domain: c.domain, path: c.path }); } catch (_) { /* ignore */ } }
+        await page.reload({ waitUntil: 'load', timeout: 20000 }).catch(() => {});
+        const loggedIn = await page.evaluate(async (cfg2) => {
+          const u = document.querySelector(cfg2.username_selector || 'input[type="email"], input[autocomplete="username"], input[name*="user" i], input[name*="email" i]');
+          const p = document.querySelector(cfg2.password_selector || 'input[type="password"]');
+          if (!u || !p) return { loginShown: false };
+          u.value = cfg2.username; u.dispatchEvent(new Event('input', { bubbles: true }));
+          p.value = cfg2.password; p.dispatchEvent(new Event('input', { bubbles: true }));
+          const btn = document.querySelector(cfg2.submit_selector || 'form button[type="submit"], form input[type="submit"], form button');
+          if (btn) btn.click(); else p.form && p.form.requestSubmit && p.form.requestSubmit();
+          return { loginShown: true };
+        }, cfg);
+        await new Promise(r => setTimeout(r, 2500));
+        const restored = await page.evaluate((mark, name) => {
+          const inField = Array.from(document.querySelectorAll('input, textarea')).some(el => el.value === mark);
+          let inStorage = false;
+          try { inStorage = JSON.stringify(localStorage).includes(mark) || JSON.stringify(sessionStorage).includes(mark); } catch (_) { /* ignore */ }
+          return { inField, inStorage, name };
+        }, MARK, filled.name);
+        simulation = { loginShown: loggedIn.loginShown, preserved: restored.inField || restored.inStorage, how: restored.inField ? 'field value restored' : restored.inStorage ? 'value kept in web storage (G181-style client state)' : 'value lost', field: filled.name };
+      }
+    }
+  } catch (_) { simulation = null; }
+
+  if (simulation && simulation.loginShown) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: FALLBACK_DESCRIPTION,
+        impact: simulation.preserved ? null : 'serious',
+        status: simulation.preserved ? 'pass' : 'fail',
+        reason: simulation.preserved
+          ? _t(sharedContext, 'Re-authentication simulated (session cookies cleared, reload, login with test credentials): the entered data was preserved — {how} (G105/G181).', '再認証をシミュレート（セッション Cookie 削除、再読み込み、テスト資格情報でログイン）: 入力データは保持されました — {how}（G105/G181）。', { how: simulation.how })
+          : _t(sharedContext, 'Re-authentication simulated: after logging back in, the data entered in "{field}" was lost (G105/G181). Preserve form data across re-authentication (server-side state or client storage) and restore it.', '再認証をシミュレート: 再ログイン後、「{field}」に入力したデータは失われました（G105/G181）。再認証をまたいでフォームデータを保持・復元してください。', { field: simulation.field || 'text field' }),
+        helpUrl: HELP_URL,
+      }],
+    };
+  }
 
   if (data.loginFormCount === 0) {
     return {

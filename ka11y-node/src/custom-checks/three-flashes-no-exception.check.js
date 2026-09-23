@@ -1,6 +1,7 @@
 'use strict';
 
 const { getSharedRuleContext, renderLocalizedText } = require('./sharedAssets');
+const { captureFlashProfile, GENERAL_AREA_THRESHOLD } = require('./flashAnalysis');
 
 // SC 2.3.2 is the AAA stricter sibling of 2.3.1: no area-based exception —
 // even a single pixel flashing > 3 Hz is a failure.
@@ -103,6 +104,17 @@ async function run(page, context = {}) {
     return { issues };
   }, FLASH_PERIOD_MS);
 
+  // ── G19: measured screen flashing — under 2.3.2 there is no area exception ──
+  try {
+    const prof = await captureFlashProfile(page);
+    if (prof && prof.maxFlashesPerSecond > 3) {
+      data.issues.unshift({ type: 'measured-flash', target: 'screen', snippet: `${prof.frames} frames @ ${prof.fps} fps`, detail: `Screen content flashes up to ${prof.maxFlashesPerSecond}×/s over ${Math.round(prof.flashingArea * 10000) / 100}% of the viewport — any flashing above 3 Hz fails 2.3.2 (G19)`, measured: true });
+      data.measuredFail = true;
+    } else if (prof) {
+      data.measuredClean = `${prof.frames} screencast frames analysed: no flashing above 3×/s (G19)`;
+    }
+  } catch (_) { /* best-effort */ }
+
   if (!data.issues.length) {
     return _pass(ctx, _t(ctx,
       'No rapid animations or animated GIFs detected that could violate the 3-flash-per-second threshold.',
@@ -115,8 +127,10 @@ async function run(page, context = {}) {
       ruleId: RULE_ID,
       description: FALLBACK_DESCRIPTION,
       impact: 'critical',
-      status: 'incomplete',
-      reason: _t(ctx,
+      status: data.measuredFail ? 'fail' : 'incomplete',
+      reason: data.measuredFail
+        ? _t(ctx, 'Measured flashing: {d} Under 2.3.2 any flashing above 3 Hz must be removed (G19).', '点滅を計測しました: {d} 2.3.2 では 3 Hz を超える点滅はすべて除去する必要があります（G19）。', { d: data.issues[0].detail })
+        : _t(ctx,
         '{n} potential flash source(s) detected. Under SC 2.3.2 no area exception applies — all flashing > 3 Hz must be eliminated.',
         '{n} 件の潜在的な点滅ソースが検出されました。SC 2.3.2 では面積の例外が適用されません — 3 Hz を超えるすべての点滅を排除する必要があります。',
         { n: data.issues.length }),

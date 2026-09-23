@@ -572,6 +572,19 @@ async def _run_job_body_inner(
         except Exception as _site_exc:  # best-effort: never fail the job
             logger.warning("[combined] job %s: site analysis skipped: %s", job_id, _site_exc)
 
+        # ── Linked PDF documents (WCAG PDF techniques, Phase 3 WP-10) ────
+        try:
+            _snaps = _jobs[job_id].get("html_snapshots") or {}
+            if _snaps:
+                from ka11y.accessibility.rules.documents.pdf_audit import audit_linked_pdfs
+
+                _pdf_findings = await asyncio.to_thread(audit_linked_pdfs, dict(_snaps), url)
+                if _pdf_findings:
+                    python_findings = list(python_findings) + list(_pdf_findings)
+                    logger.info("[combined] job %s: PDF audit added %d finding(s)", job_id, len(_pdf_findings))
+        except Exception as _pdf_exc:  # best-effort
+            logger.warning("[combined] job %s: PDF audit skipped: %s", job_id, _pdf_exc)
+
         # ── Resolve Node result ──────────────────────────────────────────
         node_findings: List[Dict] = []
         node_scanned_pages: List[Dict] = []

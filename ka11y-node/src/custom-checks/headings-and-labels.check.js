@@ -47,6 +47,25 @@ async function run(page, context = {}) {
         reason = `Heading text "${effective}" is too generic — it does not describe the topic of the section.`;
       }
 
+      // G130: a heading should describe its section — compare heading words with the
+      // first ~300 characters of content that follows it (advisory when nothing overlaps).
+      if (!reason && effective.length >= 4 && effective.length <= 120) {
+        try {
+          const toks = (s) => { const t = s.toLowerCase(); const latin = (t.match(/[a-z0-9\u00c0-\u024f]{3,}/g) || []).filter(x => !/^(the|and|for|with|from|your|you|our|are|this|that|about|into)$/.test(x)); const cjk = []; for (const run of (t.match(/[\u3040-\u30ff\u3400-\u9fff]{2,}/g) || [])) for (let i = 0; i + 2 <= run.length; i++) cjk.push(run.slice(i, i + 2)); return new Set([...latin, ...cjk]); };
+          let body = '', n = el.nextElementSibling, hops = 0;
+          while (n && hops++ < 4 && body.length < 300) { if (/^H[1-6]$/.test(n.tagName)) break; body += ' ' + (n.textContent || ''); n = n.nextElementSibling; }
+          if (!body.trim() && el.parentElement && /^(HEADER|HGROUP|DIV|SECTION)$/.test(el.parentElement.tagName)) { let m = el.parentElement.nextElementSibling; while (m && hops++ < 6 && body.length < 300) { body += ' ' + (m.textContent || ''); m = m.nextElementSibling; } }
+          body = body.replace(/\s+/g, ' ').trim().slice(0, 400);
+          if (body.length >= 120) {
+            const h = toks(effective), b = toks(body);
+            let overlap = 0; for (const t of h) if (b.has(t)) overlap++;
+            if (h.size >= 2 && overlap === 0) {
+              violations.push({ type: 'heading-unrelated', target: el.tagName.toLowerCase() + (el.id ? `#${CSS.escape(el.id)}` : ''), snippet: el.outerHTML.slice(0, 120), detail: `Heading "${effective.slice(0, 50)}" shares no words with the content that follows it — verify it describes the section (G130).` });
+            }
+          }
+        } catch (_) { /* ignore */ }
+      }
+
       if (reason) {
         violations.push({
           type: 'heading',
@@ -136,6 +155,17 @@ async function run(page, context = {}) {
       { h: data.headingCount, l: data.labelCount }));
   }
 
+  const unrelated = data.violations.filter(v => v.type === 'heading-unrelated');
+  const hard = data.violations.filter(v => v.type !== 'heading-unrelated');
+  if (!hard.length) {
+    return {
+      successCriteriaId: SC,
+      rules: [{ ruleId: `${RULE_ID}-relevance`, description: FALLBACK_DESCRIPTION, impact: 'minor', status: 'incomplete',
+        reason: _t(ctx, '{n} heading(s) share no words with the content that follows them — verify each heading describes its section (G130).', '{n} 件の見出しが直後のコンテンツと共通する語を持ちません。各見出しがセクションを説明しているか確認してください（G130）。', { n: unrelated.length }),
+        elements: unrelated, helpUrl: HELP_URL }],
+    };
+  }
+  data.violations = hard;
   const emptyCount   = data.violations.filter(v => v.detail.includes('no visible text')).length;
   const genericCount = data.violations.filter(v => v.detail.includes('generic')).length;
   const missingCount = data.violations.filter(v => v.type === 'input-no-label').length;
@@ -153,7 +183,9 @@ async function run(page, context = {}) {
         { n: data.violations.length, e: emptyCount, g: genericCount, m: missingCount }),
       elements: data.violations,
       helpUrl: HELP_URL,
-    }],
+    }].concat(unrelated.length ? [{ ruleId: `${RULE_ID}-relevance`, description: FALLBACK_DESCRIPTION, impact: 'minor', status: 'incomplete',
+      reason: _t(ctx, '{n} heading(s) share no words with the content that follows them — verify each heading describes its section (G130).', '{n} 件の見出しが直後のコンテンツと共通する語を持ちません。各見出しがセクションを説明しているか確認してください（G130）。', { n: unrelated.length }),
+      elements: unrelated, helpUrl: HELP_URL }] : []),
   };
 }
 

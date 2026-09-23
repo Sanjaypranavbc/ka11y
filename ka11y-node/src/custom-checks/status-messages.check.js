@@ -51,10 +51,17 @@ async function run(page, context = {}) {
       el.getAttribute('role') === 'alert' ||
       el.getAttribute('aria-live') === 'assertive'
     );
-    const hasPolite = liveRegions.some(el =>
+    let hasPolite = liveRegions.some(el =>
       el.getAttribute('role') === 'status' ||
       el.getAttribute('aria-live') === 'polite'
     );
+    // ARIA27: ariaNotify() announcements (Chromium) recorded by the runtime hook are a
+    // valid status-message mechanism even without a live region in the DOM.
+    let ariaNotifyCalls = 0;
+    try {
+      const R = window.__ka11yRuntime;
+      if (R && Array.isArray(R.ariaNotify) && R.ariaNotify.length) { ariaNotifyCalls = R.ariaNotify.length; hasPolite = true; }
+    } catch (_) { /* ignore */ }
 
     // Bug fix: detect other dynamic-content contexts beyond forms
     // that would need status messages (search results, cart, notifications)
@@ -185,7 +192,8 @@ async function run(page, context = {}) {
     }));
 
     return {
-      liveRegionCount: liveRegions.length,
+      liveRegionCount: liveRegions.length + (ariaNotifyCalls ? 1 : 0),
+      ariaNotifyCalls,
       formCount,
       hasAlerts,
       hasPolite,

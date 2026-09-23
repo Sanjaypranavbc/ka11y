@@ -49,6 +49,17 @@ async function run(page, context = {}) {
     const htmlLang = (document.documentElement.getAttribute('lang') || '').toLowerCase();
     const isCjkPage = langPrefixes.some(prefix => htmlLang.startsWith(String(prefix).toLowerCase()));
 
+    // Pronunciation mechanisms beyond ruby (G120 inline phonetic guides, G121 pronunciation
+    // links / audio, G163 diacritics toggles) — credited on every page.
+    const bodyAll = (document.body && document.body.innerText) || '';
+    const ipaCount = (bodyAll.match(/[\(\[\/][^)\]\/]{0,40}[ˈˌəɪʊɛɔæŋθðʃʒ][^)\]\/]{0,40}[\)\]\/]/g) || []).length
+      + (bodyAll.match(/\(pronounced\s+[^)]{2,40}\)|\(読み[:：]?\s*[^)]{1,20}\)|（読み[:：]?\s*[^）]{1,20}）/gi) || []).length;
+    const PRON_RE = /pronunciation|pronounce|how\s+to\s+say|発音|読み方|よみかた/i;
+    const pronunciationLinks = Array.from(document.querySelectorAll('a[href], button, audio, [role="button"]')).filter(el => PRON_RE.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '') + ' ' + (el.getAttribute('href') || ''))).length;
+    const DIACRITIC_RE = /diacritic|vowel\s*(?:marks|points)|harakat|tashkeel|niqqud|nikud|تشكيل|حركات|ניקוד/i;
+    const diacriticsToggle = Array.from(document.querySelectorAll('button, [role="switch"], input[type="checkbox"], a[href], label')).some(el => DIACRITIC_RE.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')));
+    const extraMechanisms = { ipaCount, pronunciationLinks, diacriticsToggle };
+
     const bodyText = (document.body && document.body.innerText) || '';
     const totalChars = bodyText.replace(/\s/g, '').length;
     const cjkChars = (bodyText.match(/[\u3400-\u9FFF\uF900-\uFAFF]/g) || []).length;
@@ -65,6 +76,7 @@ async function run(page, context = {}) {
         htmlLang,
         cjkDensityPct: Math.round(cjkDensity * 100),
         cjkSectionIssues: [],
+        extraMechanisms,
       };
     }
 
@@ -151,6 +163,7 @@ async function run(page, context = {}) {
       htmlLang,
       cjkDensityPct: Math.round(cjkDensity * 100),
       cjkSectionIssues,
+      extraMechanisms,
     };
   }, {
     cjkRatioThreshold,
@@ -158,6 +171,14 @@ async function run(page, context = {}) {
     cjkLangPrefixes,
     kanjiSource: KANJI_RE.source,
   });
+
+  const em = (data && data.extraMechanisms) || {};
+  const extraNotes = [];
+  if (em.ipaCount) extraNotes.push(`${em.ipaCount} inline phonetic guide(s) (G120)`);
+  if (em.pronunciationLinks) extraNotes.push(`${em.pronunciationLinks} pronunciation link(s)/audio (G121)`);
+  if (em.diacriticsToggle) extraNotes.push('a diacritics/vowel-marks toggle (G163)');
+  const extraNote = extraNotes.length ? ` Other pronunciation mechanisms: ${extraNotes.join(', ')}.` : '';
+  const withNote = (result) => { try { result.rules[0].reason = String(result.rules[0].reason || '') + extraNote; } catch (_) { /* ignore */ } return result; };
 
   if (!data.applicable) {
     if (data.cjkSectionIssues && data.cjkSectionIssues.length > 0) {
@@ -188,7 +209,7 @@ async function run(page, context = {}) {
       };
     }
 
-    return {
+    return withNote({
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
@@ -206,13 +227,13 @@ async function run(page, context = {}) {
         ),
         helpUrl: HELP_URL,
       }],
-    };
+    });
   }
 
   const { rubyCount, kanjiCount, kanjiWithRuby, sampleKanji, htmlLang, cjkDensityPct } = data;
 
   if (kanjiCount === 0) {
-    return {
+    return withNote({
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
@@ -230,13 +251,13 @@ async function run(page, context = {}) {
         ),
         helpUrl: HELP_URL,
       }],
-    };
+    });
   }
 
   const rubyPct = kanjiCount > 0 ? Math.round((kanjiWithRuby / kanjiCount) * 100) : 0;
 
   if (rubyCount > 0 && rubyPct >= rubyMinCoveragePct) {
-    return {
+    return withNote({
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
@@ -255,11 +276,11 @@ async function run(page, context = {}) {
         ),
         helpUrl: HELP_URL,
       }],
-    };
+    });
   }
 
   if (rubyCount > 0) {
-    return {
+    return withNote({
       successCriteriaId: SC,
       rules: [{
         ruleId: RULE_ID,
@@ -279,17 +300,20 @@ async function run(page, context = {}) {
         ),
         helpUrl: HELP_URL,
       }],
-    };
+    });
   }
 
   const sampleText = sampleKanji.slice(0, 3).map(sample => `"${sample}"`).join(', ');
-  return {
+  // G120/G121: a page that offers inline phonetic guides or pronunciation links for its
+  // terms has a mechanism even without ruby — downgrade to review.
+  const altMechanism = (em.ipaCount >= 3) || (em.pronunciationLinks >= 1);
+  return withNote({
     successCriteriaId: SC,
     rules: [{
       ruleId: RULE_ID,
       description: DESCRIPTION,
       impact: 'moderate',
-      status: 'fail',
+      status: altMechanism ? 'incomplete' : 'fail',
       reason: _reason(
         'missing_ruby',
         {
@@ -303,7 +327,7 @@ async function run(page, context = {}) {
       ),
       helpUrl: HELP_URL,
     }],
-  };
+  });
 }
 
 module.exports = {

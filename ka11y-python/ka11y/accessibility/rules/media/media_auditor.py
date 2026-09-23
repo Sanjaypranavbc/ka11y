@@ -415,9 +415,10 @@ def _check_1_2_3_audio_description(
     for track in tracks:
         kind = _normalize(track.get("kind") or "")
         if kind == "descriptions":
+            note = _description_track_timing_note(track.get("src"))
             return (
                 "PASSED",
-                f"Video has an audio-description track ({track.get('src') or 'inline'}).",
+                f"Video has an audio-description track ({track.get('src') or 'inline'}).{note}",
             )
 
     gate3 = _gate_3_is_labeled_alternative(item)
@@ -484,6 +485,42 @@ def _check_1_4_2_audio_control(item: Dict[str, Any]) -> Tuple[str, str]:
         "`controls` attribute), verify it before treating this as a "
         "confirmed violation.",
     )
+
+
+def _description_track_timing_note(track_url: Optional[str]) -> str:
+    """G8: read a descriptions VTT and compare cue lengths with the gaps they sit in.
+
+    Cues that run back-to-back (little or no gap between consecutive cues) suggest the
+    descriptions cannot fit into natural pauses and the video needs *extended* audio
+    description (1.2.7) — reported as a note on the 1.2.3 verdict."""
+    if not track_url or not str(track_url).startswith(("http://", "https://")):
+        return ""
+    try:
+        resp = requests.get(track_url, timeout=10)
+        resp.raise_for_status()
+        cues = []
+        for line in resp.text.splitlines():
+            m = re.match(r"\s*(\d+):(\d+)(?::(\d+))?[.,](\d+)\s*-->\s*(\d+):(\d+)(?::(\d+))?[.,](\d+)", line)
+            if not m:
+                continue
+            def _t(h, mi, s, ms):
+                if s is None:
+                    h, mi, s = 0, h, mi
+                return int(h) * 3600 + int(mi) * 60 + int(s) + int(ms.ljust(3, "0")[:3]) / 1000.0
+            cues.append((_t(m.group(1), m.group(2), m.group(3), m.group(4)), _t(m.group(5), m.group(6), m.group(7), m.group(8))))
+        if len(cues) < 2:
+            return ""
+        cues.sort()
+        total = sum(max(0.0, e - s) for s, e in cues)
+        gaps = [max(0.0, cues[i + 1][0] - cues[i][1]) for i in range(len(cues) - 1)]
+        tight = sum(1 for g in gaps if g < 0.5)
+        span = cues[-1][1] - cues[0][0]
+        if span > 0 and (total / span > 0.6 or tight / max(1, len(gaps)) > 0.5):
+            return (f" Description cues cover {int(total / span * 100)}% of their span and {tight}/{len(gaps)} follow each other with under 0.5 s gap — "
+                    "descriptions this dense usually need extended audio description that pauses the video (G8, 1.2.7).")
+        return f" Description cues occupy {int(total / span * 100)}% of their span with natural gaps (G8)."
+    except Exception:
+        return ""
 
 
 def _download_and_parse_vtt(track_url: str) -> Optional[str]:

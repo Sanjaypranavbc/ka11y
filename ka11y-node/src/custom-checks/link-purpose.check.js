@@ -97,8 +97,28 @@ async function run(page, context = {}) {
       }
     }
 
-    return { violations, checkedCount };
+    // G189: a control that lets the user change link text to descriptive text (e.g.
+    // "Expand links" / "Show descriptive link text") is a conforming mechanism.
+    const SWITCH_RE = /(expand|descriptive|full|verbose|show)\s+(link\s*text|links?)|link\s*text\s*(mode|setting)|リンクテキストを(展開|表示)|リンクを詳細/i;
+    const hasLinkTextSwitch = Array.from(document.querySelectorAll('button, [role="switch"], input[type="checkbox"], a[href], select, label')).some(el => SWITCH_RE.test((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')));
+
+    return { violations, checkedCount, hasLinkTextSwitch };
   }, MAX_LINKS, genericLinkPattern);
+
+  if (data.violations.length && data.hasLinkTextSwitch) {
+    return {
+      successCriteriaId: SC,
+      rules: [{
+        ruleId: RULE_ID,
+        description: 'Link purpose must be determinable from link text alone',
+        impact: 'minor',
+        status: 'incomplete',
+        reason: _t(sharedContext, '{count} generic link text(s) found, but the page offers a control to switch to descriptive link text (G189) — verify it expands every generic link.', '汎用的なリンクテキストが {count} 件ありますが、ページには説明的なリンクテキストに切り替える機能があります（G189）。すべての汎用リンクが対象か確認してください。', { count: data.violations.length }),
+        elements: data.violations,
+        helpUrl: HELP_URL,
+      }],
+    };
+  }
 
   if (data.violations.length === 0) {
     return {

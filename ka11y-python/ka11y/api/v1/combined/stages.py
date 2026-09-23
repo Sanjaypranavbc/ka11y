@@ -784,7 +784,19 @@ async def _stage_media_audit_universal(
             run_1_2_1=run_media_audit,
             run_1_2_2=run_captions_audit,
         )
-        findings = _media_to_findings(records, url)
+        # Phase 3 WP-11: frame analysis of directly linked video files (flash G19/G15,
+        # open captions G93, talking-head G203, corner interpreter G54). Bounded and
+        # best-effort; disable with KA11Y_VIDEO_ANALYSIS=0.
+        extra_findings: List[Dict] = []
+        if os.environ.get("KA11Y_VIDEO_ANALYSIS", "1") != "0":
+            try:
+                from ka11y.accessibility.rules.media.video_analysis import analyze_media_records
+
+                async with stage_timing.time_stage_async(job_id, "media_audit", sub_stage="video_analysis"):
+                    extra_findings = await asyncio.to_thread(analyze_media_records, records, url, lang=lang)
+            except Exception as _va_exc:
+                logger.warning(f"[combined] media_audit: video analysis skipped: {_va_exc}")
+        findings = _media_to_findings(records, url) + extra_findings
         _record_stage_metrics(
             step_logger,
             stage="media_audit",

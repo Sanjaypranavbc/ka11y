@@ -63,6 +63,9 @@ const config = {
       Boolean(getSharedConfigValue(['browser', 'ignore_https_errors'], true)),
     ),
     args: [
+      // Screencast-based flash measurement (2.3.1/2.3.2) captures the real window, not the
+      // emulated viewport — size the window to the audit viewport (1280×800 + chrome).
+      '--window-size=1280,900',
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',

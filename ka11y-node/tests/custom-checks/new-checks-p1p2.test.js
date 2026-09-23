@@ -253,3 +253,34 @@ describe('runtime hooks', () => {
     for (const key of ['listenersOf', 'docListeners', 'canvasTextOf', 'audioContexts', 'mediaPlay', 'windowOpen']) expect(src).toContain(key);
   });
 });
+
+describe('phase 3 helpers', () => {
+  test('captureFlashProfile returns null without a CDP session (mock page)', async () => {
+    const { captureFlashProfile, GENERAL_AREA_THRESHOLD } = require('../../src/custom-checks/flashAnalysis');
+    expect(await captureFlashProfile({ evaluate: jest.fn() })).toBeNull();
+    expect(GENERAL_AREA_THRESHOLD).toBeGreaterThan(0);
+  });
+  test('three-flashes still runs on a mock page (screencast skipped)', async () => {
+    const tf = require('../../src/custom-checks/three-flashes.check');
+    const r = await tf.run({ evaluate: jest.fn().mockResolvedValue({ issues: [] }) });
+    expect(r.rules[0].status).toBe('pass');
+  });
+  test('headings relevance rule is advisory only (G130)', async () => {
+    const h = require('../../src/custom-checks/headings-and-labels.check');
+    const r = await h.run({ evaluate: jest.fn().mockResolvedValue({ violations: [{ type: 'heading-unrelated', target: 'h2', snippet: '', detail: 'x' }], headingCount: 3, labelCount: 0 }) });
+    expect(r.rules[0].ruleId).toBe('custom-headings-and-labels-relevance');
+    expect(r.rules[0].status).toBe('incomplete');
+  });
+  test('unusual-words passes when all rare words are defined in place (G112)', async () => {
+    const u = require('../../src/custom-checks/unusual-words.check');
+    const r = await u.run({ evaluate: jest.fn().mockResolvedValue({ hasDefinitionMechanism: false, hasComplexContent: true, jargonCount: 12, rareUndefined: [], rareDefined: 4, rareTotal: 4 }) });
+    expect(r.rules[0].status).toBe('pass');
+    expect(r.rules[0].reason).toContain('G112');
+  });
+  test('link-purpose credits a descriptive-link-text switch (G189)', async () => {
+    const lp = require('../../src/custom-checks/link-purpose.check');
+    const r = await lp.run({ evaluate: jest.fn().mockResolvedValue({ violations: [{ text: 'more', html: '<a>', element_id: null, target: ['a'], tag: 'A' }], checkedCount: 3, hasLinkTextSwitch: true }) });
+    expect(r.rules[0].status).toBe('incomplete');
+    expect(r.rules[0].reason).toContain('G189');
+  });
+});
