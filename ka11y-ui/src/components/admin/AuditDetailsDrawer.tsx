@@ -94,7 +94,7 @@ function JobHeader({ job }: { job: AuditJob }) {
   return (
     <div className="rounded-xl border border-adm-border bg-gray-10 p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-[22px] font-semibold leading-7 text-gray-100">{job.id}</h3>
+        <h3 className="break-all text-[22px] font-semibold leading-7 text-gray-100">{job.targetHost}</h3>
         <StatusPill status={job.status} />
       </div>
       {/* Each dt/dd group sits in exactly one <div> directly under the <dl>,
@@ -300,7 +300,7 @@ function PagesTab({ job }: { job: AuditJob }) {
   if (job.pageList.length === 0) return <p className="text-[14px] leading-5 text-gray-80">{c.empty}</p>;
   return (
     <table className="w-full text-[14px] leading-5">
-      <caption className="sr-only">{c.caption(job.id)}</caption>
+      <caption className="sr-only">{c.caption(job.targetUrl)}</caption>
       <thead>
         <tr className="border-b border-adm-border text-left text-[13px] text-gray-80">
           <th scope="col" className="py-2 pr-2 font-medium">{c.url}</th>
@@ -329,7 +329,7 @@ function FailsTab({ job }: { job: AuditJob }) {
   if (job.failList.length === 0) return <p className="text-[14px] leading-5 text-gray-80">{c.empty}</p>;
   return (
     <table className="w-full text-[14px] leading-5">
-      <caption className="sr-only">{c.caption(job.id)}</caption>
+      <caption className="sr-only">{c.caption(job.targetUrl)}</caption>
       <thead>
         <tr className="border-b border-adm-border text-left text-[13px] text-gray-80">
           <th scope="col" className="py-2 pr-2 font-medium">{c.criterion}</th>

@@ -7,10 +7,14 @@ records in PostgreSQL (users, organizations, audit_jobs, audit_summary,
 reports, audit_logs, crash_reports, user_sessions) and in the SQLite run
 store (run_pages, findings, run_events) into the shapes the console renders.
 
-  GET /admin/overview             counters, status/severity charts, recent
-                                  audits, live activity, notifications
+  GET /admin/overview             counters, status chart, pages audited per
+                                  day (30 d), recent audits, activity,
+                                  notifications
   GET /admin/audits               paged job list (?limit&offset&status&q)
   GET /admin/audits/{job_id}      one job with pages, fails, reports, log
+  GET /admin/audits/{job_id}/export?format=csv|pdf|html
+                                  the audit's report as a download, built
+                                  from the stored report JSON on demand
   GET /admin/users                accounts with org, role, last login, audits
   GET /admin/fails                failing criteria across all runs (?days)
   GET /admin/reports              generated report files with download links
@@ -33,7 +37,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from sqlalchemy import func, select
 
 from ka11y.auth.config import settings as auth_settings
@@ -338,7 +342,7 @@ async def _attach_detail(job: Dict[str, Any]) -> Dict[str, Any]:
 # ── overview pieces ──────────────────────────────────────────────────────────
 
 
-async def _stats() -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[Dict[str, Any]]]:
+async def _stats() -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     now = _now()
     d30, d60 = now - timedelta(days=30), now - timedelta(days=60)
     async with session_scope() as s:
@@ -361,16 +365,6 @@ async def _stats() -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[Dict[str,
         fails_prev = await count(joined.where(AuditJob.created_at >= d60, AuditJob.created_at < d30))
 
         status_rows = (await s.execute(select(AuditJob.status, func.count()).group_by(AuditJob.status))).all()
-        sev_row = (
-            await s.execute(
-                select(
-                    func.coalesce(func.sum(AuditSummary.critical_count), 0),
-                    func.coalesce(func.sum(AuditSummary.serious_count), 0),
-                    func.coalesce(func.sum(AuditSummary.moderate_count), 0),
-                    func.coalesce(func.sum(AuditSummary.minor_count), 0),
-                )
-            )
-        ).one()
 
     status_counts = {"completed": 0, "running": 0, "failed": 0, "cancelled": 0}
     for raw, n in status_rows:
@@ -385,8 +379,36 @@ async def _stats() -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[Dict[str,
         "totalFailsTrend": _trend(fails_30, fails_prev),
     }
     slices = [{"status": k, "count": v} for k, v in status_counts.items()]
-    severity = [{"severity": k, "count": int(v)} for k, v in zip(_SEVERITIES, sev_row)]
-    return stats, slices, severity
+    return stats, slices
+
+
+_PAGES_PER_DAY_DAYS = 30
+
+
+async def _pages_per_day(days: int = _PAGES_PER_DAY_DAYS) -> List[Dict[str, Any]]:
+    """One point per calendar day (UTC) for the last *days* days, oldest
+    first, with the number of pages audited by jobs created that day. Days
+    with no audits are present with 0 so the line has no gaps."""
+    today = _now().date()
+    start = today - timedelta(days=days - 1)
+    buckets = {start + timedelta(days=i): 0 for i in range(days)}
+    async with session_scope() as s:
+        rows = (
+            await s.execute(
+                select(AuditJob.created_at, AuditSummary.total_pages, AuditJob.actual_pages)
+                .outerjoin(AuditSummary, AuditSummary.job_id == AuditJob.id)
+                .where(AuditJob.created_at >= datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc))
+            )
+        ).all()
+    for created, total_pages, actual_pages in rows:
+        if created is None:
+            continue
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        day = created.astimezone(timezone.utc).date()
+        if day in buckets:
+            buckets[day] += int(total_pages or actual_pages or 0)
+    return [{"date": d.isoformat(), "pages": n} for d, n in sorted(buckets.items())]
 
 
 async def _activity(limit: int = 30) -> List[Dict[str, Any]]:
@@ -464,7 +486,7 @@ async def _notifications(limit: int = 10) -> List[Dict[str, Any]]:
         ).scalars()
         for c in crashes:
             out.append({"id": f"crash-{c.id}", "title": f"Crash in {c.stage or c.service or 'engine'}: {(c.error_type or 'error')}",
-                        "at": _iso(c.created_at), "read": False, "href": "/admin/system-events"})
+                        "at": _iso(c.created_at), "read": False, "href": "/admin/audits"})
     out.sort(key=lambda n: n["at"] or "", reverse=True)
     return out[:limit]
 
@@ -475,17 +497,17 @@ async def _notifications(limit: int = 10) -> List[Dict[str, Any]]:
 @router.get("/overview")
 async def overview(user: CurrentUser = Depends(require_admin)) -> Dict[str, Any]:
     _require_pg()
-    stats, slices, severity = await _stats()
+    stats, slices = await _stats()
     node_ok, pg_ok = await asyncio.gather(_node_healthy(), pg_ping())
     stats["systemHealth"] = "healthy" if (node_ok and pg_ok) else "degraded"
-    jobs, activity, notifications = await asyncio.gather(
-        _list_jobs(limit=25, offset=0), _activity(), _notifications()
+    jobs, activity, notifications, pages_per_day = await asyncio.gather(
+        _list_jobs(limit=25, offset=0), _activity(), _notifications(), _pages_per_day()
     )
     return {
         "generatedAt": _iso(_now()),
         "stats": stats,
         "auditStatus": slices,
-        "severity": severity,
+        "pagesPerDay": pages_per_day,
         "recentAudits": jobs,
         "activity": activity,
         "notifications": notifications,
@@ -516,6 +538,76 @@ async def audit_detail(job_id: str) -> Dict[str, Any]:
     if not jobs:
         raise HTTPException(status_code=404, detail="Unknown job")
     return await _attach_detail(jobs[0])
+
+
+_EXPORT_MEDIA = {"csv": "text/csv; charset=utf-8", "pdf": "application/pdf", "html": "text/html; charset=utf-8"}
+
+
+@router.get("/audits/{job_id}/export")
+async def audit_export(job_id: str, format: str = Query(..., pattern=r"^(csv|pdf|html)$")):
+    """Download one audit's report in the requested format. A file the
+    engine already stored for the job (CSV/PDF from the completion upload)
+    is served as-is; otherwise the document is built from the report JSON
+    in the run store. The filename uses the audited host, not the job id."""
+    _require_pg()
+    try:
+        jid = uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Unknown job")
+    async with session_scope() as s:
+        job = await s.get(AuditJob, jid)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Unknown job")
+        target_url = job.target_url
+        stored = (
+            await s.execute(
+                select(Report).where(Report.job_id == jid, func.lower(Report.format) == format)
+                .order_by(Report.created_at.desc()).limit(1)
+            )
+        ).scalars().first()
+    host = _host(target_url).replace(":", "_") or "audit"
+    filename = f"{host}-accessibility-audit.{format}"
+
+    if stored is not None:
+        from ka11y.storage.backends import get_store
+
+        store = get_store()
+        if store is not None:
+            url = await store.download_url(stored.s3_key, filename=filename)
+            if url:
+                return RedirectResponse(url, status_code=302)
+            data = await store.get_bytes(stored.s3_key)
+            if data is not None:
+                return Response(content=data, media_type=_EXPORT_MEDIA[format],
+                                headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+    try:
+        report = await run_repo.get_report(job_id)
+    except Exception:  # noqa: BLE001
+        report = None
+    if not report:
+        raise HTTPException(status_code=404, detail="No report is stored for this audit yet.")
+
+    if format == "csv":
+        from ka11y.utils.report_csv import build_findings_csv
+
+        body: Any = build_findings_csv(report)
+    elif format == "html":
+        from ka11y.utils.report_pdf import _MAX_ROWS_PER_SECTION, _collect_images, build_report_html
+
+        try:
+            images = await _collect_images(report, _MAX_ROWS_PER_SECTION)
+        except Exception:  # noqa: BLE001
+            images = {}
+        body = build_report_html(report, images)
+    else:
+        from ka11y.utils.report_pdf import build_report_pdf
+
+        body = await build_report_pdf(report)
+        if body is None:
+            raise HTTPException(status_code=503, detail="PDF rendering is unavailable right now.")
+    return Response(content=body, media_type=_EXPORT_MEDIA[format],
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.get("/users")

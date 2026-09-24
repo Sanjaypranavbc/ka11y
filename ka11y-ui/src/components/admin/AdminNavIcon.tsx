@@ -1,13 +1,11 @@
-import { Activity, AlertTriangle, ClipboardList, FileText, LayoutGrid, Settings, Users } from "lucide-react";
+import { ClipboardList, FileText, LayoutGrid, Route, Settings } from "lucide-react";
 import type { AdminNavKey } from "@/lib/admin/nav";
 
 const ICON: Record<AdminNavKey, React.ComponentType<{ size?: number; "aria-hidden"?: boolean | "true" }>> = {
   overview: LayoutGrid,
   audits: FileText,
-  users: Users,
-  fails: AlertTriangle,
   reports: ClipboardList,
-  systemEvents: Activity,
+  tracing: Route,
   settings: Settings,
 };
 

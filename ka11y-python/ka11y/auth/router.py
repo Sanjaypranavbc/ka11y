@@ -5,7 +5,7 @@ Browser-facing auth endpoints (mounted at /api/v1/auth; the Next.js app
 rewrites /api/v1/auth/* straight to this service so cookies land on the UI
 origin).
 
-  GET  /auth/login?remember=1&next=/dashboard  → 302 to the OIDC provider
+  GET  /auth/login?remember=1&next=/dashboard/new-audit  → 302 to the OIDC provider
   GET  /auth/callback?code=&state=             → 302 to `next` with the
                                                  session cookie set, or to
                                                  /login?error=<code>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, Plus, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { POST_LOGIN_PATH } from "@/lib/auth";
 import {
   DashboardIcon,
   ViolationsIcon,
@@ -48,7 +49,7 @@ export function Sidebar() {
     >
       {/* Logo row */}
       <div className="flex items-center justify-between px-6 py-6">
-        {!collapsed && <Logo variant="color" />}
+        {!collapsed && <Logo variant="color" href={POST_LOGIN_PATH} label={t.nav.homeLink} />}
         <button
           type="button"
           onClick={() => setCollapsed((v) => !v)}

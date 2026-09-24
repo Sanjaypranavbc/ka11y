@@ -476,7 +476,15 @@ export default function NewAuditPage() {
                     {t.newAudit.crawlDepthLevels.map((lvl, idx) => (
                       <div key={idx} className={cn(idx > 0 && "mt-4 border-t border-gray-100 pt-4")}>
                         <h4 className="text-[14px] font-bold text-gray-900">{lvl.label}</h4>
-                        <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">{lvl.body}</p>
+                        {lvl.bullets ? (
+                          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-relaxed text-gray-600">
+                            {lvl.bullets.map((line) => (
+                              <li key={line}>{line}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">{lvl.body}</p>
+                        )}
                       </div>
                     ))}
                   </div>

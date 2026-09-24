@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, Plus, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
+import { POST_LOGIN_PATH } from "@/lib/auth";
 import { DashboardIcon, ViolationsIcon, NeedsReviewIcon, PassesIcon, SettingsNavIcon } from "@/components/ui/NavIcons";
 import { DASHBOARD_NAV_ITEMS, isNavItemActive } from "@/lib/dashboardNav";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
@@ -35,7 +36,7 @@ export function MobileNav() {
 
   return (
     <div className="flex items-center justify-between border-b border-gray-10 px-4 py-3 md:hidden">
-      <Logo variant="color" />
+      <Logo variant="color" href={POST_LOGIN_PATH} label={t.nav.homeLink} />
       <button
         type="button"
         aria-expanded={open}

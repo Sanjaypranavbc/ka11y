@@ -39,10 +39,14 @@ export interface AuditStatusSlice {
   count: number;
 }
 
-export interface SeverityCount {
-  severity: Severity;
-  count: number;
+/** One calendar day (UTC, "YYYY-MM-DD") and the pages audited by jobs created that day. */
+export interface PagesPerDayPoint {
+  date: string;
+  pages: number;
 }
+
+export type ExportFormat = "csv" | "pdf" | "html";
+export const EXPORT_FORMATS: ExportFormat[] = ["csv", "pdf", "html"];
 
 export interface AuditPage {
   url: string;
@@ -137,77 +141,13 @@ export interface AdminOverviewData {
   generatedAt: string;
   stats: OverviewStats;
   auditStatus: AuditStatusSlice[];
-  severity: SeverityCount[];
+  /** Last 30 days, oldest first, no gaps. */
+  pagesPerDay: PagesPerDayPoint[];
   recentAudits: AuditJob[];
   activity: ActivityItem[];
   notifications: AdminNotification[];
   currentUser: AdminUser;
   services?: { node: boolean; postgres: boolean };
-}
-
-export interface AdminAccount {
-  id: string;
-  name: string;
-  email: string;
-  organization: string;
-  role: string;
-  isAdmin: boolean;
-  status: string;
-  signInMethods: string[];
-  audits: number;
-  createdAt: string;
-  lastLoginAt: string | null;
-}
-
-export interface AdminUsersData {
-  users: AdminAccount[];
-  allowListed: string[];
-  adminEmails: string[];
-}
-
-export interface FailingCriterion {
-  criterion: string;
-  title: string;
-  level: string;
-  severity: Severity | "unknown";
-  occurrences: number;
-  needsReview: number;
-  runs: number;
-  pages: number;
-}
-
-export interface AdminReportRow extends AuditReport {
-  jobId: string;
-  targetUrl: string;
-  targetHost: string;
-  user: string;
-  type: string;
-  status: string;
-  bucket: string;
-  key: string;
-}
-
-export interface SystemEvent {
-  id: string;
-  at: string;
-  source: "job" | "crash";
-  level: "info" | "warn" | "error";
-  code: string;
-  message: string;
-  jobId: string;
-  targetHost: string;
-  user: string;
-  metadata: Record<string, unknown>;
-}
-
-export interface SettingsSection {
-  key: "services" | "auth" | "engine" | "storage" | "email" | "ai";
-  items: { label: string; value: string }[];
-}
-
-export interface AdminSettingsData {
-  generatedAt: string;
-  sections: SettingsSection[];
 }
 
 export const SEVERITY_ORDER: Severity[] = ["critical", "serious", "moderate", "minor"];

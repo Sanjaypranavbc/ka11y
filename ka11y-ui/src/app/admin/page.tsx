@@ -1,21 +1,18 @@
 "use client";
 
-import { useState } from "react";
 import { AlertTriangle, Play, ShieldCheck, Users } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { useAdminConsole } from "@/components/admin/AdminShell";
 import { StatCard } from "@/components/admin/StatCard";
 import { AuditStatusDonut } from "@/components/admin/charts/AuditStatusDonut";
-import { FailsBySeverityChart } from "@/components/admin/charts/FailsBySeverityChart";
+import { PagesAuditedChart } from "@/components/admin/charts/PagesAuditedChart";
 import { RecentAuditsTable } from "@/components/admin/RecentAuditsTable";
-import { LiveActivityFeed } from "@/components/admin/LiveActivityFeed";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { formatCompact, formatNumber } from "@/lib/admin/format";
 
 export default function AdminOverviewPage() {
   const { t, lang } = useLanguage();
   const { data, status, reload } = useAdminConsole();
-  const [feedPaused, setFeedPaused] = useState(false);
   const s = t.admin.overview.stats;
 
   return (
@@ -82,7 +79,7 @@ export default function AdminOverviewPage() {
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <AuditStatusDonut slices={data.auditStatus} />
-            <FailsBySeverityChart counts={data.severity} />
+            <PagesAuditedChart points={data.pagesPerDay} />
           </div>
 
           <RecentAuditsTable
@@ -91,8 +88,6 @@ export default function AdminOverviewPage() {
             subtitle={t.admin.overview.recentAudits.subtitle}
             viewAllHref="/admin/audits"
           />
-
-          <LiveActivityFeed items={data.activity} paused={feedPaused} onTogglePaused={() => setFeedPaused((v) => !v)} />
         </div>
       )}
     </>

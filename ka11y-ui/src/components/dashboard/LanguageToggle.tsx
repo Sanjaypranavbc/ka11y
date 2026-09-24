@@ -4,7 +4,7 @@ import { LANGUAGES, type Lang } from "@/lib/i18n/translations";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
 
-const LABELS: Record<Lang, string> = { en: "EN", jp: "JP" };
+const LABELS: Record<Lang, string> = { en: "EN", jp: "JA" };
 
 export function LanguageToggle() {
   const { lang, setLang } = useLanguage();

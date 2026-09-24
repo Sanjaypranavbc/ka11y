@@ -66,6 +66,9 @@ export function loginUrl(opts: { remember?: boolean; next?: string } = {}): stri
   return `${LOGIN_URL}?${params.toString()}`;
 }
 
+/** Where a sign-in lands when no safe `next` was requested (mirrors KA11Y_POST_LOGIN_URL). */
+export const POST_LOGIN_PATH = "/dashboard/new-audit";
+
 function isSafeNext(next?: string): boolean {
   return Boolean(next && next.startsWith("/") && !next.startsWith("//"));
 }
@@ -105,7 +108,7 @@ async function postAuth(url: string, body: Record<string, unknown>): Promise<{ n
     throw new AuthApiError(code, res.status);
   }
   const data = (await res.json()) as { next?: string };
-  return { next: isSafeNext(data.next) ? (data.next as string) : "/dashboard" };
+  return { next: isSafeNext(data.next) ? (data.next as string) : POST_LOGIN_PATH };
 }
 
 export function passwordLogin(opts: {

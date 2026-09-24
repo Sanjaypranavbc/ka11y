@@ -25,7 +25,7 @@ import {
  * Self-service account creation for allow-listed e-mail addresses. The API
  * rejects anything not on KA11Y_ALLOWED_EMAILS / _DOMAINS and any address
  * that already has an account; on success the session cookie is set and the
- * user lands on the dashboard.
+ * user lands on the New Audit page.
  */
 function RegisterForm() {
   const { t } = useLanguage();

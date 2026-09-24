@@ -6,15 +6,7 @@
  */
 
 import { redirectToLogin } from "@/lib/auth";
-import type {
-  AdminOverviewData,
-  AdminReportRow,
-  AdminSettingsData,
-  AdminUsersData,
-  AuditJob,
-  FailingCriterion,
-  SystemEvent,
-} from "@/lib/admin/data";
+import type { AdminOverviewData, AuditJob, ExportFormat } from "@/lib/admin/data";
 
 const BASE = "/api/v1/admin";
 
@@ -47,11 +39,10 @@ export const loadAudits = (opts: { limit?: number; offset?: number; status?: str
   const qs = params.toString();
   return adminFetch<{ jobs: AuditJob[] }>(`/audits${qs ? `?${qs}` : ""}`);
 };
-export const loadUsers = () => adminFetch<AdminUsersData>("/users");
-export const loadFails = (days = 30) => adminFetch<{ days: number; fails: FailingCriterion[] }>(`/fails?days=${days}`);
-export const loadReports = () => adminFetch<{ reports: AdminReportRow[] }>("/reports");
-export const loadSystemEvents = () => adminFetch<{ events: SystemEvent[] }>("/system-events");
-export const loadSettings = () => adminFetch<AdminSettingsData>("/settings");
+
+/** Download link for one audit's report; the server builds the file on demand. */
+export const exportAuditHref = (jobId: string, format: ExportFormat) =>
+  `${BASE}/audits/${encodeURIComponent(jobId)}/export?format=${format}`;
 
 /**
  * Live change feed. The API emits `refresh` whenever a job, log line,

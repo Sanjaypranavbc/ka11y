@@ -361,7 +361,7 @@ class TestPasswordSignIn:
             json={"email": email, "password": "kanae's first password", "remember": True},
         )
         assert r.status_code == 200, r.text
-        assert r.json()["next"] == "/dashboard"
+        assert r.json()["next"] == "/dashboard/new-audit"  # default landing page
         assert client.get("/api/v1/auth/me").json()["email"] == email
 
     def test_oidc_only_account_has_no_password(self, client, monkeypatch):
@@ -529,7 +529,10 @@ class TestAdminApi:
         assert data["stats"]["totalAudits"] >= 1 and data["stats"]["totalUsers"] >= 1
         assert data["currentUser"]["email"] == email and data["currentUser"]["role"] == "Admin"
         assert {s["status"] for s in data["auditStatus"]} == {"completed", "running", "failed", "cancelled"}
-        assert [s["severity"] for s in data["severity"]] == ["critical", "serious", "moderate", "minor"]
+        per_day = data["pagesPerDay"]
+        assert len(per_day) == 30 and per_day[-1]["pages"] >= 3  # today's job, 3 pages
+        assert all(set(pt) == {"date", "pages"} for pt in per_day)
+        assert per_day == sorted(per_day, key=lambda pt: pt["date"])
         job = next(j for j in data["recentAudits"] if j["id"] == job_id)
         assert job["status"] == "completed" and job["pages"] == 3 and job["fails"] == 7
         assert job["severity"] == {"critical": 2, "serious": 3, "moderate": 1, "minor": 1}
@@ -543,6 +546,13 @@ class TestAdminApi:
         d = detail.json()
         assert d["id"] == job_id and isinstance(d["pageList"], list) and isinstance(d["failList"], list)
         assert client.get(f"/api/v1/admin/audits/{uuid.uuid4()}").status_code == 404
+
+        # Export: format is validated, unknown jobs 404, and a job with no
+        # stored report JSON has nothing to build from (404, not a crash).
+        assert client.get(f"/api/v1/admin/audits/{job_id}/export", params={"format": "docx"}).status_code == 422
+        assert client.get(f"/api/v1/admin/audits/{uuid.uuid4()}/export", params={"format": "csv"}).status_code == 404
+        assert client.get(f"/api/v1/admin/audits/{job_id}/export", params={"format": "csv"}).status_code == 404
+        assert any(n["href"] != "/admin/system-events" for n in data["notifications"]) or not data["notifications"]
 
         listing = client.get("/api/v1/admin/audits", params={"q": "kao.com", "limit": 5}).json()
         assert any(j["id"] == job_id for j in listing["jobs"])

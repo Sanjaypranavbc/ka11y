@@ -54,7 +54,7 @@ E-mail + password sign-in (alternative to OIDC; both can be on at once):
                                passwords are set by scripts/set_password.py
 
 Redirect targets (relative to the UI origin):
-  KA11Y_POST_LOGIN_URL         /dashboard
+  KA11Y_POST_LOGIN_URL         /dashboard/new-audit
   KA11Y_LOGIN_PAGE_URL         /login
 
   KA11Y_AUTH_DISABLED=1        dev/tests only: every protected route runs as
@@ -106,7 +106,7 @@ class AuthSettings:
     allowed_domains: FrozenSet[str] = field(default_factory=frozenset)
     admin_emails: FrozenSet[str] = field(default_factory=frozenset)
 
-    post_login_url: str = "/dashboard"
+    post_login_url: str = "/dashboard/new-audit"
     login_page_url: str = "/login"
     disabled: bool = False
     link_by_verified_email: bool = True
@@ -161,7 +161,7 @@ def settings() -> AuthSettings:
         allowed_emails=_csv("KA11Y_ALLOWED_EMAILS"),
         allowed_domains=_csv("KA11Y_ALLOWED_EMAIL_DOMAINS"),
         admin_emails=_csv("KA11Y_ADMIN_EMAILS"),
-        post_login_url=os.getenv("KA11Y_POST_LOGIN_URL", "/dashboard").strip() or "/dashboard",
+        post_login_url=os.getenv("KA11Y_POST_LOGIN_URL", "/dashboard/new-audit").strip() or "/dashboard/new-audit",
         login_page_url=os.getenv("KA11Y_LOGIN_PAGE_URL", "/login").strip() or "/login",
         disabled=_bool("KA11Y_AUTH_DISABLED", False),
         link_by_verified_email=_bool("KA11Y_LINK_BY_VERIFIED_EMAIL", True),

@@ -49,8 +49,7 @@ export function RecentAuditsTable({ jobs, title, subtitle, viewAllHref }: Recent
           <caption className="sr-only">{t.admin.overview.recentAudits.tableCaption}</caption>
           <thead>
             <tr className="border-y border-adm-border bg-gray-10 text-[13px] text-gray-80">
-              <th scope="col" className="px-5 py-3 font-medium">{columns.jobId}</th>
-              <th scope="col" className="px-3 py-3 font-medium">{columns.targetUrl}</th>
+              <th scope="col" className="px-5 py-3 font-medium">{columns.targetUrl}</th>
               <th scope="col" className="px-3 py-3 text-right font-medium">{columns.pages}</th>
               <th scope="col" className="px-3 py-3 text-right font-medium">{columns.fails}</th>
               <th scope="col" className="px-3 py-3 font-medium">{columns.status}</th>
@@ -60,17 +59,16 @@ export function RecentAuditsTable({ jobs, title, subtitle, viewAllHref }: Recent
           <tbody>
             {jobs.map((job) => (
               <tr key={job.id} className="border-b border-adm-border last:border-0">
-                <th scope="row" className="px-5 py-2 font-normal">
+                <th scope="row" className="max-w-[360px] px-5 py-2 font-normal">
                   <button
                     type="button"
                     onClick={() => openAudit(job)}
-                    aria-label={t.admin.overview.recentAudits.openDetails(job.id)}
-                    className="-mx-2 inline-flex min-h-11 items-center rounded-md px-2 font-medium text-brand-green-80 underline decoration-brand-green-80/40 underline-offset-4 hover:decoration-brand-green-80"
+                    aria-label={t.admin.overview.recentAudits.openDetails(job.targetUrl)}
+                    className="-mx-2 inline-flex min-h-11 items-center rounded-md px-2 text-left font-medium text-brand-green-80 underline decoration-brand-green-80/40 underline-offset-4 hover:decoration-brand-green-80"
                   >
-                    {job.id}
+                    <span className="break-all">{job.targetUrl}</span>
                   </button>
                 </th>
-                <td className="px-3 py-2 text-gray-100">{job.targetHost}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-100">{formatNumber(job.pages, lang)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-100">{formatNumber(job.fails, lang)}</td>
                 <td className="px-3 py-2">
