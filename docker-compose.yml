@@ -12,8 +12,16 @@
 #   docker compose up                      # start all services
 #   docker compose up --build              # build + start
 #   docker compose logs -f                 # follow logs
-#   docker compose down                    # stop services
-#   rm -rf output/crawled_images output/logs  # optional: clear bind-mounted audit output
+#   docker compose down                    # stop services (all data is kept)
+#
+# Persistence: every stateful path is a bind mount under ./output/ — PostgreSQL
+# (output/pg: users, sessions, audit history), the SQLite run store (output/db:
+# runs, reports, findings, manual verdicts), assets, artifacts, logs and crawled
+# images — so `docker compose down` / `up`, `down -v`, `docker volume prune` and
+# image rebuilds never lose history. Only the model caches are named volumes.
+#   sudo rm -rf output/pg output/db output/assets output/artifacts   # wipe history
+#   rm -rf output/crawled_images output/logs                         # clear scratch output
+# (`./run.sh --wipe` does both after a confirmation prompt.)
 # =============================================================================
 
 services:
@@ -113,8 +121,13 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
 
+    # Bind mount, like every other stateful path in this stack (./output/*):
+    # a named volume is deleted by `docker compose down -v` / `docker volume
+    # prune`, which is exactly how the audit history kept disappearing. The
+    # directory must be empty (or absent) on first start — initdb refuses a
+    # non-empty data dir — so never put a .gitkeep in it.
     volumes:
-      - ka11y_pg:/var/lib/postgresql/data
+      - ./output/pg:/var/lib/postgresql/data
 
     healthcheck:
       test:
@@ -499,11 +512,11 @@ networks:
   ka11y-net:
     driver: bridge
 
+# Named volumes hold only re-downloadable model caches. Everything that is
+# history lives under ./output/ (see the header) and survives `down -v`.
 volumes:
   huggingface_cache:
   paddlex_models:
   easyocr_models:
-  # PostgreSQL data directory (local dev / single-box deploys).
-  ka11y_pg:
 #  # Phoenix's SQLite trace store, so local traces survive `docker compose down`.
 #  phoenix_data:

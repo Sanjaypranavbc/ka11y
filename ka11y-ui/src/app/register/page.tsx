@@ -56,9 +56,20 @@ function RegisterForm() {
     };
   }, []);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (password !== confirm) {
+    // Same as the sign-in page: the form's own values are the source of
+    // truth, so autofilled fields (which do not update React state) work.
+    const form = new FormData(e.currentTarget);
+    const emailValue = String(form.get("email") ?? email).trim();
+    const nameValue = String(form.get("name") ?? name).trim();
+    const passwordValue = String(form.get("new-password") ?? password);
+    const confirmValue = String(form.get("confirm-password") ?? confirm);
+    if (!emailValue || !passwordValue || !confirmValue) {
+      setErrorCode("missing_fields");
+      return;
+    }
+    if (passwordValue !== confirmValue) {
       setErrorCode("password_mismatch");
       return;
     }
@@ -66,9 +77,9 @@ function RegisterForm() {
     setBusy(true);
     try {
       const { next: target } = await registerAccount({
-        email: email.trim(),
-        password,
-        name: name.trim(),
+        email: emailValue,
+        password: passwordValue,
+        name: nameValue,
         remember: keepSignedIn,
         next,
       });
@@ -170,7 +181,7 @@ function RegisterForm() {
 
         <button
           type="submit"
-          disabled={busy || !config.registration || !email || !password || !confirm || mismatch}
+          disabled={busy || !config.registration}
           className={primaryButtonClass}
         >
           <ChevronRight size={18} aria-hidden="true" />

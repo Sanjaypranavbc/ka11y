@@ -21,6 +21,18 @@ const SESSION_COOKIE_NAMES = ["__Host-ka11y_session", "ka11y_session"];
  */
 const CANONICAL_LOCAL_HOST = "localhost";
 
+// Mirrors the static CSP in next.config.ts, plus upgrade-insecure-requests,
+// which is only safe once the document itself came over https (see the
+// comment there). The TLS edge / ALB sets x-forwarded-proto.
+const CSP_HTTPS =
+  "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests";
+
+function servedOverHttps(request: NextRequest): boolean {
+  const forwarded = request.headers.get("x-forwarded-proto");
+  if (forwarded) return forwarded.split(",")[0].trim() === "https";
+  return request.nextUrl.protocol === "https:";
+}
+
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
@@ -47,6 +59,7 @@ export function proxy(request: NextRequest) {
     // Never let a browser or proxy replay a signed-in page after logout.
     res.headers.set("Cache-Control", "no-store, must-revalidate");
   }
+  if (servedOverHttps(request)) res.headers.set("Content-Security-Policy", CSP_HTTPS);
   return res;
 }
 

@@ -59,14 +59,28 @@ function LoginForm() {
     };
   }, []);
 
-  async function handlePasswordSubmit(e: React.FormEvent) {
+  async function handlePasswordSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Read the fields from the form itself, not from React state. Browser
+    // autofill writes into the inputs without firing `input` events, so the
+    // controlled state stayed empty until some other click on the page
+    // (typically the "Keep me signed in" checkbox) made the browser commit
+    // the values — which is why sign-in appeared to depend on that checkbox.
+    const form = new FormData(e.currentTarget);
+    const emailValue = String(form.get("email") ?? email).trim();
+    const passwordValue = String(form.get("password") ?? password);
+    if (!emailValue || !passwordValue) {
+      setErrorCode("missing_fields");
+      return;
+    }
     setErrorCode(null);
     setBusy("password");
     try {
       const { next: target } = await passwordLogin({
-        email: email.trim(),
-        password,
+        email: emailValue,
+        password: passwordValue,
+        // Only affects how long the session cookie lives (30 days vs the
+        // 12-hour idle timeout); never whether sign-in succeeds.
         remember: keepSignedIn,
         next,
       });
@@ -141,9 +155,11 @@ function LoginForm() {
             <span>{t.login.keepMeSignedIn}</span>
           </label>
 
+          {/* Enabled whenever the form is idle: gating on React state hid the
+              button from autofilled credentials (see handlePasswordSubmit). */}
           <button
             type="submit"
-            disabled={busy !== null || !email || !password}
+            disabled={busy !== null}
             className={primaryButtonClass}
           >
             <ChevronRight size={18} aria-hidden="true" />

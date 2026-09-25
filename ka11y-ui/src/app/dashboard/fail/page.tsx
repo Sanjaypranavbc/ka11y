@@ -3,7 +3,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, X, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
+import { DownloadReportMenu } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ElementImage } from "@/components/dashboard/ElementImage";
 import { PageFilterDropdown } from "@/components/dashboard/PageFilterDropdown";
@@ -120,7 +120,7 @@ export default function ViolationsPage() {
   const headerActions = (
     <>
       <LanguageToggle />
-      <DownloadCsvButton />
+      <DownloadReportMenu />
     </>
   );
 
@@ -261,6 +261,14 @@ export default function ViolationsPage() {
                   <p className="text-[12px] leading-5 text-gray-80">
                     <span className="font-bold">{t.violations.userImpact}</span>{" "}
                     {violation.userImpact}
+                  </p>
+                )}
+                {/* Manual verdict: a person moved this needs_review item here.
+                    The sentence comes from the backend, already localized. */}
+                {violation.reviewed && (
+                  <p className="text-[12px] leading-5 text-brand-teal-dark">
+                    <span className="font-bold">{t.needsReview.reviewedLabel}</span>{" "}
+                    {violation.reviewNote}
                   </p>
                 )}
                 {/* Learn More — hidden per review; restore by uncommenting.

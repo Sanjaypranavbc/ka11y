@@ -3,7 +3,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, X, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
+import { DownloadReportMenu } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { ElementImage } from "@/components/dashboard/ElementImage";
 import { PageFilterDropdown } from "@/components/dashboard/PageFilterDropdown";
@@ -80,7 +80,7 @@ export default function PassesPage() {
   const headerActions = (
     <>
       <LanguageToggle />
-      <DownloadCsvButton />
+      <DownloadReportMenu />
     </>
   );
 
@@ -213,6 +213,12 @@ export default function PassesPage() {
               <div className="flex-[350] min-w-0 border-b border-gray-10 px-4 py-6 flex flex-col gap-2">
                 <p className="font-bold text-gray-100">{item.reasonTitle}</p>
                 <p className="font-bold text-gray-80">{item.reasonDescription}</p>
+                {item.reviewed && (
+                  <p className="text-[12px] leading-5 text-brand-teal-dark">
+                    <span className="font-bold">{t.needsReview.reviewedLabel}</span>{" "}
+                    {item.reviewNote}
+                  </p>
+                )}
                 {/* Learn More — hidden per review; restore by uncommenting.
                 {/^https?:\/\//.test(item.helpUrl) ? (
                   <a

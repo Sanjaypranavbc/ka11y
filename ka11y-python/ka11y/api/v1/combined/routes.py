@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from typing import AsyncGenerator
 from ka11y.utils.run_timing import compute_run_timing
 from pydantic import BaseModel, Field
@@ -32,7 +32,8 @@ from .dispatcher import enqueue
 from .models import CombinedRequest, JobStatusResponse
 from ka11y.observability import attributes as attrs
 from ka11y.observability import current_span, set_span_attributes
-from .report import apply_reviews
+from .report import apply_reviews, review_message
+from ka11y.accessibility.technique_map import annotate_findings, strip_failure_techniques
 from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
 from ka11y.auth import CurrentUser, require_user
@@ -415,7 +416,12 @@ async def _apply_reviews_to_job(job: dict, job_id: str) -> None:
     """Overlay any stored manual-review decisions onto the job's report so the
     effective score (violations / needs_review / passes counts) reflects them."""
     result = job.get("result")
-    if not result or not result.get("needs_review"):
+    if not result or not isinstance(result, dict):
+        return
+    # Not gated on a non-empty needs_review list: on the hot-cache object the
+    # overlay has already moved reviewed items into violations/passes, and a
+    # verdict that was since cleared must still be re-partitioned back.
+    if not any(result.get(k) for k in ("violations", "needs_review", "passes")):
         return
     try:
         reviews = await repo.get_reviews(job_id)
@@ -424,9 +430,35 @@ async def _apply_reviews_to_job(job: dict, job_id: str) -> None:
     apply_reviews(result, reviews)
 
 
+def _refresh_techniques(result: dict | None) -> None:
+    """Re-tag every finding with the *current* technique map. Reports store the
+    tags they were built with; re-annotating on read means a mapping fix (or a
+    regenerated map) applies to existing audits too. Idempotent and cheap —
+    a few dict lookups per finding — and the per-page arrays share the same
+    finding objects, so the flat lists are enough."""
+    if not isinstance(result, dict):
+        return
+    findings = []
+    for key in ("violations", "needs_review", "passes"):
+        findings.extend(f for f in (result.get(key) or []) if isinstance(f, dict))
+    if findings:
+        annotate_findings(findings)
+
+
 async def _finalize_job_view(job: dict, job_id: str) -> None:
+    """Shape a job record for the frontend.
+
+    This is the *only* place the UI reads findings from, so it is also the
+    boundary where failing / needs_review findings lose their WCAG
+    situation/technique tags (passing findings keep them). The strip works on
+    a copy: the hot-cache entry, the run store, the exports and the email all
+    keep the full report. Runs after the review overlay so a reviewed item is
+    judged on its final status."""
     _inject_image_urls(job, job_id)
     await _apply_reviews_to_job(job, job_id)
+    if job.get("result"):
+        _refresh_techniques(job["result"])
+        job["result"] = strip_failure_techniques(job["result"])
 
 
 @router.get("/history")
@@ -473,6 +505,93 @@ async def _job_from_db(job_id: str) -> dict | None:
         "warnings": (result or {}).get("warnings", []) if result else [],
     }
     return job
+
+
+_EXPORT_MEDIA = {
+    "json": "application/json; charset=utf-8",
+    "csv": "text/csv; charset=utf-8",
+    "html": "text/html; charset=utf-8",
+    "pdf": "application/pdf",
+}
+
+
+async def _full_report(job_id: str) -> dict | None:
+    """The complete report for a finished job — every finding, pass and fail,
+    with its technique/situation tags — with manual-review decisions applied.
+    Deep-copied so rendering never touches the cached object. ``None`` when
+    the job is unknown or has no stored report."""
+    result = None
+    if job_id in _jobs:
+        async with _get_job_lock(job_id):
+            snapshot = _jobs.get(job_id) or {}
+            if snapshot.get("status") == "completed":
+                result = snapshot.get("result")
+    if result is None:
+        run = await repo.get_run(job_id)
+        if not run:
+            return None
+        if run.get("status") == "completed":
+            result = await repo.get_report(job_id)
+    if not result:
+        return None
+    report = json.loads(json.dumps(result, ensure_ascii=False, default=str))
+    holder = {"result": report}
+    await _apply_reviews_to_job(holder, job_id)
+    _refresh_techniques(holder["result"])
+    return holder["result"]
+
+
+@router.get("/{job_id}/export")
+async def export_combined_audit(
+    job_id: str,
+    format: str = Query(..., pattern=r"^(json|csv|html|pdf)$"),
+    user: CurrentUser = Depends(require_user),
+):
+    """Download the full audit report as JSON, CSV, HTML or PDF.
+
+    Unlike ``GET /{job_id}`` (the dashboard's view), every finding here —
+    pass, fail and needs_review — carries its WCAG ``situations`` and
+    ``techniques``. The CSV is flat, one row per (finding, technique). Files
+    are built on demand from the stored report; the filename uses the audited
+    host, never the job id.
+    """
+    from ka11y.api.v1.audits import _assert_can_view
+
+    await _assert_can_view(job_id, user)
+    report = await _full_report(job_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="No report is stored for this audit yet.")
+
+    host = (urlparse(str(report.get("url") or "")).hostname or "audit").replace(":", "_")
+    filename = f"{host}-accessibility-audit.{format}"
+
+    body: bytes | str
+    if format == "json":
+        body = json.dumps(report, indent=2, ensure_ascii=False, default=str)
+    elif format == "csv":
+        from ka11y.utils.report_csv import build_export_csv
+
+        body = build_export_csv(report)
+    elif format == "html":
+        from ka11y.utils.report_pdf import _MAX_ROWS_PER_SECTION, _collect_images, build_report_html
+
+        try:
+            images = await _collect_images(report, _MAX_ROWS_PER_SECTION)
+        except Exception:  # noqa: BLE001
+            images = {}
+        body = build_report_html(report, images, max_rows=None)
+    else:
+        from ka11y.utils.report_pdf import build_report_pdf
+
+        pdf = await build_report_pdf(report)
+        if pdf is None:
+            raise HTTPException(status_code=503, detail="PDF rendering is unavailable right now.")
+        body = pdf
+    return Response(
+        content=body,
+        media_type=_EXPORT_MEDIA[format],
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/{job_id}/cancel")
@@ -533,50 +652,95 @@ async def get_finding_reviews(job_id: str):
     return {"job_id": job_id, "reviews": reviews, "count": len(reviews)}
 
 
-@router.post("/{job_id}/findings/{finding_id}/review")
-async def review_finding(job_id: str, finding_id: str, body: FindingReviewRequest):
-    """Record/clear a reviewer's adjudication of a 'Manual Review Required' item.
+def _find_reviewable(result: dict, finding_id: str) -> dict | None:
+    """The finding with *finding_id* whose automated status is needs_review.
 
-    The next GET /combined/{job_id} returns the report with the effective score
-    (violations / needs_review / passes) updated to reflect this decision.
+    Searched across every bucket (and the per-page arrays reference the same
+    objects): after a verdict the overlay moves the item into violations or
+    passes, and a second verdict / re-open must still find it."""
+    for bucket in ("needs_review", "violations", "passes"):
+        for f in result.get(bucket) or []:
+            if f.get("finding_id") == finding_id:
+                return f if f.get("status") == "needs_review" else None
+    return None
+
+
+@router.post("/{job_id}/findings/{finding_id}/review")
+async def review_finding(
+    job_id: str,
+    finding_id: str,
+    body: FindingReviewRequest,
+    user: CurrentUser = Depends(require_user),
+):
+    """Record or clear a manual verdict on a 'Manual Review Required' item.
+
+    Only findings the engine marked ``needs_review`` can be adjudicated; an
+    engine pass/fail is authoritative and returns 409. ``status`` is ``pass``
+    or ``violation`` (a fail), or ``needs_review`` to re-open. The verdict is a
+    stored overlay: the next GET /combined/{job_id} (and every export) shows
+    the item under its new bucket with ``review_status``, ``reviewed_by``,
+    ``reviewed_at``, ``verdict_source: "manual"`` and the audit-trail
+    ``review_message`` ("Reviewed by user and manually changed to Pass.").
     """
+    from ka11y.api.v1.audits import _assert_can_view
+    from ka11y.auth.dependencies import ANONYMOUS
+
+    if not isinstance(user, CurrentUser):  # called directly (tests), not via FastAPI
+        user = ANONYMOUS
+    await _assert_can_view(job_id, user)
     run = await repo.get_run(job_id)
     in_hot = job_id in _jobs
     if not run and not in_hot:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
-    # Locate the finding in the report to capture its SC/page for the audit row
-    # and to reject ids that don't correspond to a needs_review item.
     result = (_jobs.get(job_id, {}).get("result")) or (await repo.get_report(job_id)) or {}
-    target = next(
-        (f for f in result.get("needs_review", []) if f.get("finding_id") == finding_id),
-        None,
-    )
+    target = _find_reviewable(result, finding_id)
     if target is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Finding {finding_id!r} is not a reviewable (needs_review) item of this run.",
+        known = any(
+            f.get("finding_id") == finding_id
+            for b in ("violations", "needs_review", "passes")
+            for f in result.get(b) or []
         )
+        if known:
+            raise HTTPException(
+                status_code=409,
+                detail="Only findings the engine marked needs_review can be given a manual verdict.",
+            )
+        raise HTTPException(status_code=404, detail=f"Finding {finding_id!r} is not part of this run.")
 
+    # The reviewer is the signed-in user; the request body can only name one
+    # when there is no identity (auth disabled / anonymous).
+    reviewer = user.email or user.name or body.reviewer or "user"
     await repo.set_finding_review(
         run_id=job_id,
         finding_id=finding_id,
         status=body.status,
         note=body.note,
-        reviewer=body.reviewer,
+        reviewer=reviewer,
         wcag_sc=target.get("wcag_sc"),
         page_url=(target.get("element") or {}).get("page_url"),
     )
     repo.insert_event(
         job_id,
         "finding_reviewed",
-        {"finding_id": finding_id, "status": body.status, "wcag_sc": target.get("wcag_sc")},
+        {"finding_id": finding_id, "status": body.status, "wcag_sc": target.get("wcag_sc"),
+         "reviewer": reviewer},
     )
+    reviews = await repo.get_reviews(job_id)
+    rev = reviews.get(finding_id)
+    lang = result.get("lang") or (run or {}).get("lang_resolved") or "en"
     return {
         "job_id": job_id,
         "finding_id": finding_id,
         "status": body.status,
         "wcag_sc": target.get("wcag_sc"),
+        "reviewed": rev is not None,
+        "verdict_source": "manual" if rev else "engine",
+        "review_status": rev["status"] if rev else None,
+        "review_note": rev.get("note") if rev else None,
+        "reviewed_by": rev.get("reviewer") if rev else None,
+        "reviewed_at": rev.get("updated_at") if rev else None,
+        "review_message": review_message(rev["status"], lang) if rev else None,
     }
 
 

@@ -142,3 +142,42 @@ A combined endpoint is available to run Node and Python checks simultaneously on
 3. **Request Combined Results:**
    Send a `GET` request to `http://localhost:3000/api/ka11y/combined?url=https://example.com`.
 
+### Running with Docker
+
+```bash
+docker compose up --build      # first start: creates ./output/* and initialises PostgreSQL
+docker compose down            # stop; history is kept
+./run.sh                       # stop + rebuild + start (non-destructive)
+./run.sh --wipe                # clean slate: deletes ./output/* after confirmation
+```
+
+**History persists across restarts.** Everything stateful is a bind mount under
+`./output/` (git-ignored), so `docker compose down` / `up`, `down -v`,
+`docker volume prune` and image rebuilds never lose data:
+
+| Path | Container | Holds |
+|------|-----------|-------|
+| `output/pg` | postgres `/var/lib/postgresql/data` | users, sessions, audit history (admin console) |
+| `output/db` | python `/data/db` | SQLite run store: runs, report JSON, findings, manual verdicts, asset index |
+| `output/assets`, `output/artifacts` | python `/data/assets`, `/data/artifacts` | screenshots/crops; stored JSON/CSV/PDF reports |
+| `output/logs`, `output/crawled_images` | python `/app/logs`, `/app/crawled_images` | scratch output, safe to delete |
+
+Only the ML model caches (`huggingface_cache`, `paddlex_models`, `easyocr_models`)
+are named volumes; losing them just means a re-download. `output/pg` must be empty
+on the very first start (PostgreSQL's initdb refuses a non-empty directory), so it
+is created by Docker, never checked in. To wipe history by hand:
+
+```bash
+docker compose down
+sudo rm -rf output/pg output/db output/assets output/artifacts
+```
+
+Migrating from the old named volume (`ka11y_ka11y_pg`) to `output/pg`, one time:
+
+```bash
+docker compose down
+docker run --rm -v ka11y_ka11y_pg:/from -v "$PWD/output/pg":/to alpine sh -c 'cp -a /from/. /to/'
+docker compose up -d
+docker volume rm ka11y_ka11y_pg   # once you have confirmed the history is back
+```
+

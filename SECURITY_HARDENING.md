@@ -14,7 +14,7 @@ security sheets in `~/Downloads/security_audit_build`.
 | Cookie names | `ka11y_session`, `ka11y_oidc` | `__Host-ka11y_session`, `__Host-ka11y_oidc` on https (browser enforces Secure + Path=/ + no Domain); plain names stay for http localhost |
 | Sessions per user | Unlimited | `KA11Y_SESSION_MAX_PER_USER` (default 5); the least recently active is ended |
 | HSTS | None | 1 year on every https response from the API and the UI; `KA11Y_HSTS_PRELOAD=1` adds `includeSubDomains; preload` |
-| CSP | None | API: `default-src 'none'; frame-ancestors 'none'; …`. UI: `frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests` |
+| CSP | None | API: `default-src 'none'; frame-ancestors 'none'; …`. UI: `frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests (https-only: added per request by ka11y-ui/src/proxy.ts when x-forwarded-proto is https, never on plain-http responses, which browsers do enforce it on)` |
 | Other headers | nosniff, DENY, Referrer-Policy | plus Permissions-Policy, COOP, CORP, X-Permitted-Cross-Domain-Policies, `X-Powered-By` removed |
 | http → https | None | 308 redirect when `KA11Y_FORCE_HTTPS` (defaults on with an https redirect URI); loopback and `/api/v1/health` exempt |
 | Proxy awareness | Uvicorn ignored `X-Forwarded-*` | `--proxy-headers --forwarded-allow-ips *` so scheme, Secure cookies, HSTS and the rate limiter see the real client |

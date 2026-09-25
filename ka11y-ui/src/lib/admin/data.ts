@@ -45,7 +45,8 @@ export interface PagesPerDayPoint {
   pages: number;
 }
 
-export type ExportFormat = "csv" | "pdf" | "html";
+export type ExportFormat = "json" | "csv" | "pdf" | "html";
+/** Formats the admin console's per-audit export offers. */
 export const EXPORT_FORMATS: ExportFormat[] = ["csv", "pdf", "html"];
 
 export interface AuditPage {

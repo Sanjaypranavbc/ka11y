@@ -44,12 +44,20 @@ export function PagesAuditedChart({ points }: { points: PagesPerDayPoint[] }) {
   const data = points.map((p) => ({ ...p, label: shortDay(p.date, lang) }));
 
   return (
-    <section aria-labelledby={headingId} className="flex flex-col rounded-2xl border border-adm-border bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <h2 id={headingId} className="text-[17px] font-semibold leading-6 text-gray-100">
-        {c.title}
-      </h2>
-      <p className="mt-0.5 text-[13px] leading-5 text-gray-80">{c.description}</p>
-      <div aria-hidden="true" className="admin-chart mt-4 h-44 w-full">
+    // `relative` contains the visually hidden table (position: absolute) and
+    // the recharts tooltip wrapper inside this card. The title/subtitle sit in
+    // their own block so they stack in normal flow no matter how the flex
+    // column or the chart's ResizeObserver measure — they were reported as
+    // rendering on top of each other in some environments.
+    <section aria-labelledby={headingId} className="relative flex flex-col rounded-2xl border border-adm-border bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="block shrink-0">
+        <h2 id={headingId} className="block text-[17px] font-semibold leading-6 text-gray-100">
+          {c.title}
+        </h2>
+        <p className="mt-0.5 block text-[13px] leading-5 text-gray-80">{c.description}</p>
+      </div>
+      {/* Fixed-height, clipped box: the SVG can never spill over the header. */}
+      <div aria-hidden="true" className="admin-chart relative mt-4 h-44 w-full shrink-0 overflow-hidden">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} accessibilityLayer={false} tabIndex={-1} margin={{ top: 8, right: 28, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--color-adm-border)" />
@@ -106,7 +114,7 @@ export function PagesAuditedChart({ points }: { points: PagesPerDayPoint[] }) {
           </>
         )}
       </p>
-      <table className="sr-only">
+      <table className="sr-only bottom-0 left-0">
         <caption>{c.tableCaption}</caption>
         <thead>
           <tr>

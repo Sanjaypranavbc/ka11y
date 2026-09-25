@@ -126,6 +126,11 @@ export interface ViolationRow {
   userImpact: string;
   helpUrl: string;
   pageUrl: string;
+  /** True when a person set this verdict on a needs_review item
+   * (`verdict_source: "manual"`); `reviewNote` then holds the audit-trail
+   * message plus the reviewer's own note. */
+  reviewed: boolean;
+  reviewNote: string;
 }
 
 export type ReviewStatus = "pass" | "violation" | "pending";
@@ -165,9 +170,16 @@ export interface PassRow {
   ocrText: string;
   helpUrl: string;
   pageUrl: string;
+  reviewed: boolean;
+  reviewNote: string;
 }
 
 /* ─── Helpers ─── */
+
+/** "Reviewed by user and manually changed to Pass." + the reviewer's note. */
+function pickReviewNote(finding: { review_message?: string | null; review_note?: string | null }): string {
+  return [finding.review_message, finding.review_note].filter(Boolean).join(" ");
+}
 
 function capitalize(value: string): string {
   // Only upper-case a first word that is plain letters. `dynamic_reason` often
@@ -397,6 +409,8 @@ export function toViolationRows(data: any): ViolationRow[] {
         userImpact: finding.user_impact || "",
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
+        reviewed: Boolean(finding.reviewed),
+        reviewNote: pickReviewNote(finding),
       });
     }
   } else if (data.criteria) {
@@ -427,6 +441,8 @@ export function toViolationRows(data: any): ViolationRow[] {
             userImpact: finding.user_impact || "",
             helpUrl: finding.helpUrl,
             pageUrl: el?.page_url || data.url || "",
+            reviewed: false,
+            reviewNote: "",
           });
         });
       }
@@ -463,6 +479,8 @@ export function toPassesRows(data: any): PassRow[] {
         ocrText: pickOcrText(el),
         helpUrl: finding.help_url || "",
         pageUrl: el.page_url || data.url || "",
+        reviewed: Boolean(finding.reviewed),
+        reviewNote: pickReviewNote(finding),
       });
     }
   } else if (data.criteria) {
@@ -493,6 +511,8 @@ export function toPassesRows(data: any): PassRow[] {
             ocrText: pickOcrText(el),
             helpUrl: finding.helpUrl,
             pageUrl: el?.page_url || data.url || "",
+            reviewed: false,
+            reviewNote: "",
           });
         });
       }

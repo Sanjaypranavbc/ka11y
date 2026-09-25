@@ -1,0 +1,758 @@
+{
+ "schema_version": 1,
+ "description": "Hand-maintained rule → WCAG technique mapping consulted by ka11y.accessibility.technique_map before the workbook's Code Evidence correlation. `techniques` is the check-level set (what a PASS covers); `by_reason_code` / `by_issue_type` narrow a specific FAIL / needs_review to the technique(s) it implicates. Entries with `review: true` were authored from the WCAG technique definitions, not from the workbook, and are open for confirmation. Rule ids with a `-suffix` (sub-rules) fall back to their base entry when absent here.",
+ "rules": {
+  "aria-braille-equivalent": {
+   "techniques": [],
+   "note": "aria-braillelabel/-brailleroledescription: no WCAG technique covers these attributes.",
+   "review": true
+  },
+  "aria-command-name": {
+   "techniques": [
+    "ARIA14",
+    "ARIA16"
+   ],
+   "note": "button/link/menuitem needs an accessible name via aria-label / aria-labelledby."
+  },
+  "aria-conditional-attr": {
+   "techniques": [
+    "ARIA5"
+   ],
+   "note": "State/property attributes must match the role."
+  },
+  "aria-deprecated-role": {
+   "techniques": [
+    "ARIA4"
+   ],
+   "note": "Use a current role value."
+  },
+  "aria-hidden-body": {
+   "techniques": [],
+   "note": "aria-hidden on <body> hides everything; no technique, only the failure.",
+   "review": true
+  },
+  "aria-hidden-focus": {
+   "techniques": [],
+   "note": "Focusable content inside aria-hidden; no matching technique.",
+   "review": true
+  },
+  "aria-meter-name": {
+   "techniques": [
+    "ARIA6",
+    "ARIA10"
+   ]
+  },
+  "aria-progressbar-name": {
+   "techniques": [
+    "ARIA6",
+    "ARIA10"
+   ]
+  },
+  "aria-prohibited-attr": {
+   "techniques": [
+    "ARIA5"
+   ]
+  },
+  "aria-required-children": {
+   "techniques": [
+    "ARIA4"
+   ],
+   "note": "Composite roles need their owned roles (ARIA role usage).",
+   "review": true
+  },
+  "aria-required-parent": {
+   "techniques": [
+    "ARIA4"
+   ],
+   "note": "Same as aria-required-children.",
+   "review": true
+  },
+  "aria-toggle-field-name": {
+   "techniques": [
+    "H44",
+    "ARIA16",
+    "ARIA14"
+   ]
+  },
+  "aria-tooltip-name": {
+   "techniques": [
+    "ARIA14",
+    "ARIA16"
+   ]
+  },
+  "aria-valid-attr": {
+   "techniques": [
+    "ARIA5"
+   ]
+  },
+  "blink": {
+   "techniques": [
+    "G11",
+    "SCR22"
+   ],
+   "note": "<blink>: content that blinks must stop within five seconds or be controllable."
+  },
+  "marquee": {
+   "techniques": [
+    "SCR33",
+    "G4"
+   ],
+   "note": "<marquee>: scrolling content needs a pause mechanism."
+  },
+  "definition-list": {
+   "techniques": [
+    "H40"
+   ]
+  },
+  "dlitem": {
+   "techniques": [
+    "H40"
+   ]
+  },
+  "duplicate-id-aria": {
+   "techniques": [
+    "ARIA16"
+   ],
+   "note": "Duplicate ids break aria-labelledby/-describedby references.",
+   "review": true
+  },
+  "form-field-multiple-labels": {
+   "techniques": [
+    "H44"
+   ]
+  },
+  "frame-focusable-content": {
+   "techniques": [
+    "G202"
+   ],
+   "note": "Frame with tabindex=-1 hides focusable content from keyboard users.",
+   "review": true
+  },
+  "frame-title-unique": {
+   "techniques": [
+    "H64"
+   ]
+  },
+  "html-xml-lang-mismatch": {
+   "techniques": [
+    "H57"
+   ]
+  },
+  "input-button-name": {
+   "techniques": [
+    "H91",
+    "ARIA14"
+   ]
+  },
+  "list": {
+   "techniques": [
+    "H48"
+   ]
+  },
+  "listitem": {
+   "techniques": [
+    "H48"
+   ]
+  },
+  "meta-refresh": {
+   "techniques": [
+    "SCR16",
+    "G198"
+   ],
+   "note": "Timed meta refresh: give the user control of the time limit.",
+   "review": true
+  },
+  "meta-viewport": {
+   "techniques": [
+    "G142"
+   ],
+   "note": "user-scalable=no / maximum-scale blocks zoom; G142 (technology with zoom support)."
+  },
+  "no-autoplay-audio": {
+   "techniques": [
+    "G170",
+    "G60"
+   ]
+  },
+  "object-alt": {
+   "techniques": [
+    "H53"
+   ]
+  },
+  "p-as-heading": {
+   "techniques": [
+    "H42"
+   ]
+  },
+  "role-img-alt": {
+   "techniques": [
+    "ARIA6",
+    "ARIA10"
+   ]
+  },
+  "svg-img-alt": {
+   "techniques": [
+    "ARIA6",
+    "ARIA10"
+   ]
+  },
+  "scrollable-region-focusable": {
+   "techniques": [
+    "G202"
+   ]
+  },
+  "select-name": {
+   "techniques": [
+    "H44",
+    "ARIA16"
+   ]
+  },
+  "server-side-image-map": {
+   "techniques": [],
+   "note": "Server-side image map without client-side alternative; no technique.",
+   "review": true
+  },
+  "summary-name": {
+   "techniques": [
+    "ARIA14",
+    "ARIA16"
+   ]
+  },
+  "valid-lang": {
+   "techniques": [
+    "H58"
+   ]
+  },
+  "custom-error-identification": {
+   "techniques": [
+    "G83",
+    "G84",
+    "G85",
+    "ARIA21",
+    "SCR18",
+    "SCR32"
+   ],
+   "by_issue_type": {
+    "error-text-not-associated": [
+     "ARIA21",
+     "ARIA19"
+    ],
+    "format-error-not-descriptive": [
+     "G85",
+     "G84"
+    ],
+    "no-client-error-for-invalid-format": [
+     "SCR18",
+     "SCR32"
+    ]
+   }
+  },
+  "custom-visual-presentation": {
+   "techniques": [
+    "C19",
+    "C20",
+    "C21",
+    "G169"
+   ],
+   "by_issue_type": {
+    "justified-text": [
+     "C19",
+     "G169"
+    ],
+    "long-lines": [
+     "C20"
+    ],
+    "wide-columns": [
+     "C20"
+    ],
+    "tight-line-height": [
+     "C21"
+    ]
+   }
+  },
+  "custom-visual-presentation-color-override": {
+   "techniques": [
+    "C23"
+   ],
+   "note": "Author colours must not block user overrides."
+  },
+  "custom-change-on-request": {
+   "techniques": [
+    "G76",
+    "G110",
+    "H76",
+    "H83",
+    "SCR19",
+    "SCR24",
+    "G201"
+   ],
+   "by_issue_type": {
+    "auto-advancing-carousel": [
+     "G76"
+    ],
+    "meta-refresh": [
+     "H76",
+     "G110"
+    ],
+    "timed-auto-navigation": [
+     "G110",
+     "G76"
+    ],
+    "new-window-no-warning": [
+     "G201",
+     "H83"
+    ],
+    "script-window-open-on-load": [
+     "G201",
+     "SCR24"
+    ],
+    "select-onchange-navigate": [
+     "SCR19"
+    ]
+   }
+  },
+  "custom-reflow": {
+   "techniques": [
+    "C32",
+    "C31",
+    "C38",
+    "C34"
+   ],
+   "by_issue_type": {
+    "horizontal-scroll": [
+     "C32",
+     "C31",
+     "C38"
+    ],
+    "sticky-consumes-viewport": [
+     "C34"
+    ]
+   }
+  },
+  "custom-reflow-intermediate-widths": {
+   "techniques": [
+    "C38",
+    "C32"
+   ]
+  },
+  "custom-focus-visible": {
+   "techniques": [
+    "C15",
+    "G165",
+    "G149"
+   ],
+   "by_issue_type": {
+    "focus-outline-reset": [
+     "C15",
+     "G165"
+    ]
+   }
+  },
+  "custom-link-purpose-in-context": {
+   "techniques": [
+    "G53",
+    "H77",
+    "H78",
+    "H79",
+    "H80",
+    "H81",
+    "G91"
+   ],
+   "by_issue_type": {
+    "generic-link-no-context": [
+     "G91"
+    ],
+    "generic-links-same-context-different-targets": [
+     "G91"
+    ]
+   },
+   "note": "A generic link with no usable context is fixed by descriptive link text (G91); the pass covers the context techniques the check examined."
+  },
+  "custom-pause-stop-hide": {
+   "techniques": [
+    "G4",
+    "G186",
+    "G11",
+    "SCR22",
+    "SCR33"
+   ],
+   "by_issue_type": {
+    "marquee": [
+     "SCR33",
+     "G4"
+    ],
+    "blink": [
+     "G11",
+     "SCR22"
+    ],
+    "css-blink": [
+     "G11",
+     "SCR22"
+    ],
+    "css-animation": [
+     "G4",
+     "G186"
+    ],
+    "aria-live": [
+     "G186"
+    ]
+   }
+  },
+  "custom-resize-text": {
+   "techniques": [
+    "C28",
+    "G179",
+    "SCR34",
+    "C17"
+   ],
+   "note": "Clipped / cut-off text after 200% zoom."
+  },
+  "custom-resize-text-units": {
+   "techniques": [
+    "C12",
+    "C13",
+    "C14"
+   ]
+  },
+  "custom-resize-text-touch-zoom": {
+   "techniques": [
+    "G142"
+   ]
+  },
+  "custom-meaningful-sequence": {
+   "techniques": [
+    "G57",
+    "C27"
+   ],
+   "note": "DOM order vs visual order; the check does not distinguish sub-cases.",
+   "review": true
+  },
+  "custom-unusual-words": {
+   "techniques": [
+    "G101",
+    "G112",
+    "H54"
+   ],
+   "note": "Unusual words without an in-page definition.",
+   "review": true
+  },
+  "custom-abbreviations-prose": {
+   "techniques": [
+    "G102",
+    "H28"
+   ]
+  },
+  "custom-audio-description": {
+   "techniques": [
+    "G78",
+    "G69",
+    "H96"
+   ],
+   "note": "Video without an audio-description track or media alternative.",
+   "review": true
+  },
+  "custom-audio-description-prerecorded": {
+   "techniques": [
+    "G78",
+    "H96"
+   ],
+   "review": true
+  },
+  "custom-media-alternative": {
+   "techniques": [
+    "G69"
+   ]
+  },
+  "custom-background-image-content": {
+   "techniques": [
+    "H37",
+    "C9"
+   ],
+   "note": "Informative image delivered as CSS background: move it to <img> with alt (H37); decorative ones belong in CSS (C9).",
+   "review": true
+  },
+  "custom-background-image-content-text-image": {
+   "techniques": [
+    "C30"
+   ],
+   "note": "Text rendered inside a CSS background image.",
+   "review": true
+  },
+  "custom-images-of-text-no-exception": {
+   "techniques": [
+    "C30",
+    "C22"
+   ],
+   "by_issue_type": {
+    "css-background-text": [
+     "C30"
+    ]
+   }
+  },
+  "custom-status-messages-atomic": {
+   "techniques": [
+    "ARIA22"
+   ]
+  },
+  "custom-status-messages-inline-validation": {
+   "techniques": [
+    "ARIA19",
+    "ARIA22"
+   ]
+  },
+  "custom-status-messages-toast": {
+   "techniques": [
+    "ARIA22",
+    "ARIA23"
+   ]
+  },
+  "custom-language-of-parts-empty": {
+   "techniques": [
+    "H58"
+   ]
+  },
+  "custom-language-of-parts-invalid": {
+   "techniques": [
+    "H58"
+   ]
+  },
+  "custom-language-of-parts-unannotated-cjk": {
+   "techniques": [
+    "H58"
+   ]
+  },
+  "custom-language-of-parts-same-script": {
+   "techniques": [
+    "H58"
+   ]
+  },
+  "custom-headings-and-labels-relevance": {
+   "techniques": [
+    "G130"
+   ]
+  },
+  "custom-identify-purpose": {
+   "techniques": [
+    "ARIA11"
+   ]
+  },
+  "custom-consistent-navigation": {
+   "techniques": [
+    "G61"
+   ]
+  },
+  "custom-consistent-identification": {
+   "techniques": [
+    "G197"
+   ]
+  },
+  "custom-keyboard-trap": {
+   "techniques": [
+    "G21"
+   ]
+  },
+  "custom-keyboard-no-exception": {
+   "techniques": [
+    "G202"
+   ],
+   "note": "2.1.3 has no techniques of its own; WCAG points at 2.1.1."
+  },
+  "custom-html-parsing": {
+   "techniques": [],
+   "note": "4.1.1 lists no sufficient techniques (obsolete in WCAG 2.2).",
+   "review": true
+  },
+  "custom-concurrent-input-mechanisms": {
+   "techniques": [],
+   "note": "2.5.6 lists only the failure F98; no sufficient technique.",
+   "review": true
+  },
+  "custom-session-timeouts": {
+   "techniques": [],
+   "note": "2.2.6 workbook rows have no technique ids.",
+   "review": true
+  },
+  "custom-focus-not-obscured": {
+   "techniques": [
+    "C43"
+   ]
+  },
+  "custom-focus-not-obscured-enhanced": {
+   "techniques": [
+    "C43"
+   ]
+  },
+  "custom-focus-appearance": {
+   "techniques": [
+    "C40",
+    "C41",
+    "G195"
+   ]
+  },
+  "custom-dragging-movements": {
+   "techniques": [
+    "G219"
+   ]
+  },
+  "custom-consistent-help": {
+   "techniques": [
+    "G220"
+   ]
+  },
+  "custom-redundant-entry": {
+   "techniques": [
+    "G221"
+   ]
+  },
+  "custom-accessible-auth": {
+   "techniques": [
+    "G218",
+    "H100"
+   ]
+  },
+  "custom-accessible-auth-enhanced": {
+   "techniques": [
+    "G218",
+    "H100"
+   ]
+  },
+  "python_1_1_1_alt": {
+   "techniques": [
+    "H37",
+    "G94"
+   ],
+   "by_reason_code": {
+    "missing_alt": [
+     "H37"
+    ],
+    "decorative_invalid": [
+     "H67",
+     "C9"
+    ],
+    "decorative_valid": [
+     "H67",
+     "C9"
+    ],
+    "generic_alt": [
+     "G94"
+    ],
+    "needs_review_generic_alt": [
+     "G94"
+    ],
+    "filename_alt": [
+     "G94"
+    ],
+    "logo_review": [
+     "G94"
+    ],
+    "icon_terse": [
+     "G94"
+    ],
+    "alt_text_mismatch": [
+     "G94"
+    ],
+    "labelledby_unresolved": [
+     "ARIA10"
+    ],
+    "group_alt": [
+     "G196"
+    ],
+    "alt_present": [
+     "H37",
+     "G94"
+    ],
+    "alt_refers_nearby": [
+     "G74"
+    ]
+   },
+   "note": "Keyed by the 1.1.1 reason code the alt-text auditor stamps."
+  },
+  "python_1_4_3_contrast": {
+   "techniques": [
+    "G145"
+   ]
+  },
+  "python_1_4_6_contrast_enhanced": {
+   "techniques": [
+    "G17"
+   ]
+  },
+  "python_1_4_11_non_text_contrast": {
+   "techniques": [
+    "G207"
+   ]
+  },
+  "python_1_4_5_images_of_text": {
+   "techniques": [
+    "C30"
+   ]
+  },
+  "python_1_2_1_media": {
+   "techniques": [
+    "G158",
+    "H96"
+   ],
+   "review": true
+  },
+  "python_1_2_2_media": {
+   "techniques": [
+    "G87",
+    "H95"
+   ]
+  },
+  "python_1_2_3_media": {
+   "techniques": [
+    "G78",
+    "G69",
+    "H96"
+   ],
+   "review": true
+  },
+  "python_1_4_2_media": {
+   "techniques": [
+    "G170",
+    "G60"
+   ]
+  },
+  "python_2_2_2_animated_image": {
+   "techniques": [
+    "G152"
+   ]
+  },
+  "python_2_3_1_video_flash": {
+   "techniques": [
+    "G19"
+   ]
+  },
+  "python_2_3_2_video_flash": {
+   "techniques": [
+    "G19"
+   ]
+  },
+  "python_4_1_2_name_role_value": {
+   "techniques": [
+    "ARIA14",
+    "ARIA16"
+   ]
+  },
+  "empty-heading": {
+   "techniques": [
+    "H42",
+    "G130"
+   ],
+   "note": "Heading element with no accessible text."
+  },
+  "page-has-heading-one": {
+   "techniques": [
+    "H42"
+   ],
+   "note": "Best-practice: page should have one h1."
+  },
+  "target-size": {
+   "techniques": [
+    "C42"
+   ],
+   "note": "WCAG 2.2 2.5.8 target size (supplement)."
+  }
+ }
+}

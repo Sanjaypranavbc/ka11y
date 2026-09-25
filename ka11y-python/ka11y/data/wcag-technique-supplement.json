@@ -1,0 +1,189 @@
+{
+ "schema_version": 1,
+ "description": "WCAG 2.2 success criteria that WCAG_Testing_Report_CodeCoverage.xlsx does not cover. Merged into wcag-technique-map.json by scripts/build_technique_map.py; names follow the W3C Techniques for WCAG 2.2.",
+ "by_sc": {
+  "2.4.11": [
+   {
+    "id": "C43",
+    "name": "Using CSS scroll-padding to un-obscure content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-not-obscured"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   }
+  ],
+  "2.4.12": [
+   {
+    "id": "C43",
+    "name": "Using CSS scroll-padding to un-obscure content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-not-obscured-enhanced"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   }
+  ],
+  "2.4.13": [
+   {
+    "id": "C40",
+    "name": "Creating a two-color focus indicator to ensure sufficient contrast with all components",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   },
+   {
+    "id": "C41",
+    "name": "Creating a strong focus indicator within the component",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   },
+   {
+    "id": "G195",
+    "name": "Using an author-supplied, visible focus indicator",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   }
+  ],
+  "2.5.7": [
+   {
+    "id": "G219",
+    "name": "Ensuring that an alternative is available for dragging movements that operate on content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-dragging-movements"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   }
+  ],
+  "2.5.8": [
+   {
+    "id": "C42",
+    "name": "Using min-height and min-width to ensure sufficient target spacing",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "3.2.6": [
+   {
+    "id": "G220",
+    "name": "Provide a contact-us link in a consistent location",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-consistent-help"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   }
+  ],
+  "3.3.7": [
+   {
+    "id": "G221",
+    "name": "Provide data from a previous step in a process",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-redundant-entry"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   }
+  ],
+  "3.3.8": [
+   {
+    "id": "G218",
+    "name": "Email link authentication",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-accessible-auth"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   },
+   {
+    "id": "H100",
+    "name": "Providing properly marked up email and password inputs",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-accessible-auth"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   }
+  ],
+  "3.3.9": [
+   {
+    "id": "G218",
+    "name": "Email link authentication",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-accessible-auth-enhanced"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   },
+   {
+    "id": "H100",
+    "name": "Providing properly marked up email and password inputs",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-accessible-auth-enhanced"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": []
+   }
+  ]
+ }
+}

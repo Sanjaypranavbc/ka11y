@@ -1,50 +1,18 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, ChevronRight, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
-import { useAuditData } from "@/components/dashboard/AuditDataContext";
+import { DownloadReportMenu } from "@/components/dashboard/DownloadActions";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
+import { useRunningAudit } from "@/components/dashboard/RunningAuditContext";
+import { computeRealProgress, isActive } from "@/lib/runningAudit";
 import type { Translations } from "@/lib/i18n/translations";
-import type { WcagAuditResponse } from "@/lib/wcagAudit";
 import { cn } from "@/lib/utils";
 import { redirectToLogin } from "@/lib/auth";
 
 type WcagLevel = "A" | "AA" | "AAA";
-// "queued" is the terminal state for a deep crawl (depth > 0): the job is
-// accepted and the report is emailed when it finishes, so the browser never
-// polls and never lands on the dashboard.
-type ScanPhase = "form" | "scanning" | "queued";
-
-interface JobStage {
-  name: string;
-  status: string;
-  findings_count?: number;
-}
-
-// Mirrors ka11y-python/ka11y/api/v1/combined/constants.py STAGE_WEIGHTS —
-// the only two stages the backend actually tracks lifecycle for.
-const STAGE_WEIGHTS: Record<string, number> = { image_audit: 62, media_audit: 38 };
-const STAGE_WEIGHT_TOTAL = Object.values(STAGE_WEIGHTS).reduce((a, b) => a + b, 0);
-
-// Real progress from the backend's own stage lifecycle (poll response),
-// not a local timer. A stage only counts once the API reports it
-// completed/errored; the final jump to 100 is gated on job status
-// "completed" so post-stage report building/merging isn't shown as done
-// early.
-function computeRealProgress(stages: JobStage[], jobStatus: string | null): number {
-  if (jobStatus === "completed") return 100;
-  const done = stages.reduce((sum, s) => {
-    if (s.status === "completed" || s.status === "error") {
-      return sum + (STAGE_WEIGHTS[s.name] ?? 0);
-    }
-    return sum;
-  }, 0);
-  return Math.min(95, Math.round((done / STAGE_WEIGHT_TOTAL) * 100));
-}
-
 function buildScanSteps(t: Translations) {
   return [
     { id: "axe-header",      type: "header" as const, label: t.newAudit.steps.axeHeader },
@@ -95,10 +63,11 @@ function RingIcon({ spin }: { spin: boolean }) {
   );
 }
 
-export default function NewAuditPage() {
+function NewAuditPage() {
   const router = useRouter();
-  const { setAuditData } = useAuditData();
+  const searchParams = useSearchParams();
   const { t, lang } = useLanguage();
+  const { running, start, cancel, dismiss } = useRunningAudit();
   const SCAN_STEPS = useMemo(() => buildScanSteps(t), [t]);
   const ACTUAL_STEPS = useMemo(() => SCAN_STEPS.filter((s) => s.type === "step"), [SCAN_STEPS]);
   const [url, setUrl] = useState("");
@@ -106,31 +75,79 @@ export default function NewAuditPage() {
   const [showCrawlTooltip, setShowCrawlTooltip] = useState(false);
   const [wcagLevel, setWcagLevel] = useState<WcagLevel>("AA");
   const [email, setEmail] = useState("");
-  const [phase, setPhase] = useState<ScanPhase>("form");
-  const [completedCount, setCompletedCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scanResult, setScanResult] = useState<WcagAuditResponse | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [jobStages, setJobStages] = useState<JobStage[]>([]);
-  const [jobStatus, setJobStatus] = useState<string | null>(null);
+  // Arrived here because another screen is locked (AuditLockGuard).
+  const lockedNotice = searchParams.get("locked") === "1";
 
   const totalSteps = ACTUAL_STEPS.length;
-  const isDone = completedCount >= totalSteps;
-  // The percentage shown is driven entirely by the real backend stage data
-  // polled below — it is not a function of the cosmetic step animation.
-  const progress = computeRealProgress(jobStages, jobStatus);
+  // The run itself lives in RunningAuditContext (root layout): it keeps
+  // polling while the user is elsewhere and is restored from localStorage
+  // after a refresh, so this page only renders whatever state it is in.
+  const scanning = running !== null && isActive(running.status);
+  const completed = running?.status === "completed";
+  const progress = running ? computeRealProgress(running.stages, running.status) : 0;
 
   // Cosmetic step animation only — advances the visible step list while the
-  // real audit runs in the background. Capped one step short of totalSteps
-  // so it can never reach 100% on its own; only the real poll result
-  // (data.status === "completed") is allowed to call setCompletedCount(totalSteps).
+  // real audit runs. Derived from elapsed time (not a counter) so it resumes
+  // at the right step when the page is remounted mid-run. Capped one step
+  // short of totalSteps; only a real "completed" shows every step done.
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (phase !== "scanning" || isDone) return;
-    if (completedCount >= totalSteps - 1) return;
-    const timer = setTimeout(() => setCompletedCount((c) => c + 1), 1200);
-    return () => clearTimeout(timer);
-  }, [phase, completedCount, isDone, totalSteps]);
+    if (!scanning) return;
+    const timer = setInterval(() => setNow(Date.now()), 1200);
+    return () => clearInterval(timer);
+  }, [scanning]);
+  const completedCount = completed
+    ? totalSteps
+    : running
+      ? Math.min(totalSteps - 1, Math.floor((now - running.startedAt) / 1200))
+      : 0;
+  const isDone = completedCount >= totalSteps;
+
+  // A run that finished while this page was mounted lands on the dashboard
+  // after a brief pause (the result is already in AuditDataContext). A run
+  // found already finished on arrival shows the "Audit complete" screen
+  // with a button instead, so the outcome is visible.
+  const wasScanning = useRef(false);
+  const confirmed = running?.confirmed ?? false;
+  useEffect(() => {
+    // Only a confirmed in-progress poll counts, not the placeholder rebuilt
+    // from localStorage: a run that finished while this tab was closed must
+    // show "Audit complete" rather than bounce to the dashboard.
+    if (scanning && confirmed) wasScanning.current = true;
+    if (completed && wasScanning.current) {
+      const timer = setTimeout(() => {
+        dismiss();
+        router.push("/dashboard");
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [scanning, confirmed, completed, dismiss, router]);
+
+  // Failed / cancelled / unknown: the reason shows on the form (derived, not
+  // stored) until the next run replaces it.
+  const outcomeError =
+    running?.status === "failed"
+      ? (running.error ?? t.newAudit.errorGeneric)
+      : running?.status === "cancelled"
+        ? t.newAudit.cancelledMessage
+        : running?.status === "unknown"
+          ? running.error === "still_running"
+            ? t.newAudit.errorStillRunning
+            : running.error === "unreachable"
+              ? t.newAudit.errorUnreachable
+              : t.newAudit.unknownMessage
+          : null;
+  const shownError = error ?? outcomeError;
+
+  async function handleCancel() {
+    setCancelling(true);
+    const ok = await cancel();
+    setCancelling(false);
+    if (!ok) setError(t.newAudit.cancelFailed);
+  }
 
   async function handleRun() {
     const trimmedUrl = url.trim();
@@ -149,12 +166,6 @@ export default function NewAuditPage() {
 
     setError(null);
     setSubmitting(true);
-    setCompletedCount(0);
-    setScanResult(null);
-    setJobId(null);
-    setJobStages([]);
-    setJobStatus(null);
-    setPhase("scanning");
 
     try {
       const res = await fetch("/api/wcag-audit", {
@@ -182,112 +193,24 @@ export default function NewAuditPage() {
       }
 
       if (!res.ok || !data?.jobId) {
-        setPhase("form");
         setError(data?.error ?? t.newAudit.errorGeneric);
         setSubmitting(false);
         return;
       }
 
-      // Deep crawl: the job is running and will be emailed. Stop here rather
-      // than polling for minutes and timing the browser out.
-      if (depth > 0) {
-        setPhase("queued");
-        setSubmitting(false);
-        return;
-      }
-
-      setJobId(data.jobId);
+      // Hand the job to the shared run loop; deep crawls are tracked the
+      // same way (the report is additionally emailed when they finish).
+      start({ jobId: data.jobId, url: trimmedUrl, depth, email: trimmedEmail, startedAt: Date.now() });
+      setSubmitting(false);
     } catch {
-      setPhase("form");
       setError(t.newAudit.errorUnreachable);
       setSubmitting(false);
     }
   }
 
-  // Polls the job status from the browser in short-lived requests instead of
-  // holding one connection open for the whole audit — a reverse proxy in
-  // front of the app (Apache/nginx/ALB) will kill a single long-lived
-  // request well before a real audit (routinely 100s+) finishes.
-  useEffect(() => {
-    if (phase !== "scanning" || !jobId || scanResult) return;
 
-    let cancelled = false;
-    const startTime = Date.now();
-    // The server (KA11Y_JOB_TIMEOUT_SECONDS, 30 min) decides when a job is
-    // actually dead, so wait just past that rather than guessing per depth —
-    // a shorter client budget abandons healthy multi-page crawls mid-run.
-    // A genuine failure still stops early via the status === "failed" branch.
-    const TIMEOUT_MS = 1_860_000;
-    let timer: ReturnType<typeof setTimeout>;
-
-    async function poll() {
-      try {
-        const res = await fetch(`/api/wcag-audit/${jobId}`);
-        const data = await res.json().catch(() => null);
-        if (cancelled) return;
-
-        if (res.status === 401) {
-          await redirectToLogin();
-          return;
-        }
-
-        if (!res.ok) {
-          setPhase("form");
-          setError(data?.error ?? t.newAudit.errorGeneric);
-          setSubmitting(false);
-          return;
-        }
-
-        // Real stage lifecycle from the backend — drives the progress bar
-        // (see computeRealProgress) independently of the cosmetic step list.
-        setJobStages((data.stages as JobStage[]) ?? []);
-        setJobStatus(data.status ?? null);
-
-        if (data.status === "completed") {
-          setScanResult(data.result as WcagAuditResponse);
-          setAuditData(data.result as WcagAuditResponse);
-          setCompletedCount(totalSteps);
-          setSubmitting(false);
-          // Brief pause so the user sees every step marked done before the
-          // redirect, then land on the dashboard with the real result already
-          // in AuditDataContext (no modal — straight to the real data).
-          setTimeout(() => router.push("/dashboard"), 600);
-          return;
-        }
-
-        if (data.status === "failed" || data.status === "cancelled") {
-          setPhase("form");
-          setError(data.error ?? t.newAudit.errorGeneric);
-          setSubmitting(false);
-          return;
-        }
-
-        if (Date.now() - startTime > TIMEOUT_MS) {
-          setPhase("form");
-          setError(t.newAudit.errorStillRunning);
-          setSubmitting(false);
-          return;
-        }
-
-        timer = setTimeout(poll, 3000);
-      } catch {
-        if (!cancelled) {
-          setPhase("form");
-          setError(t.newAudit.errorUnreachable);
-          setSubmitting(false);
-        }
-      }
-    }
-
-    poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [phase, jobId, scanResult, totalSteps, t, setAuditData, router]);
-
-  /* ─── Queued screen (deep crawl — result arrives by email) ─── */
-  if (phase === "queued") {
+  /* ─── Completed screen (run finished while the user was elsewhere) ─── */
+  if (completed && running) {
     return (
       <>
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-10 px-4 py-4 sm:h-20 sm:px-8 sm:py-0 lg:px-16">
@@ -301,20 +224,20 @@ export default function NewAuditPage() {
           <div className="flex w-full max-w-[560px] flex-col items-center gap-4 rounded-[16px] bg-gray-10 px-6 py-10 text-center sm:px-10">
             <CheckCircle2 size={48} className="text-brand-teal-dark" aria-hidden="true" />
             <h2 className="text-[20px] font-medium leading-7 text-gray-100 sm:text-[24px]">
-              {t.newAudit.queuedTitle}
+              {t.newAudit.completedTitle}
             </h2>
             <p className="text-[14px] leading-6 text-gray-80 sm:text-[16px]">
-              {t.newAudit.queuedMessage(email.trim())}
+              {t.newAudit.completedMessage(running.url)}
             </p>
             <button
               type="button"
               onClick={() => {
-                setPhase("form");
-                setCompletedCount(0);
+                dismiss();
+                router.push("/dashboard");
               }}
               className="mt-2 h-12 rounded-[8px] bg-brand-teal-dark px-6 text-[16px] leading-6 text-white"
             >
-              {t.newAudit.queuedNewScan}
+              {t.newAudit.viewResults}
             </button>
           </div>
         </main>
@@ -323,7 +246,7 @@ export default function NewAuditPage() {
   }
 
   /* ─── Scanning screen ─── */
-  if (phase === "scanning") {
+  if (scanning && running) {
     let actualIdx = 0;
 
     return (
@@ -334,18 +257,34 @@ export default function NewAuditPage() {
             <span className="text-[24px] font-medium leading-tight text-brand-teal sm:text-[32px] sm:leading-[42px]">A11Y</span>
             <div className="flex items-center gap-1.5 text-[14px] leading-6 sm:text-[16px]">
               <span className="text-brand-green-80">Target :</span>
-              <span className="hidden text-[#65605A] sm:inline">{url || "https://samplesite.com/"}</span>
+              <span className="hidden text-[#65605A] sm:inline">{running.url || url || "https://samplesite.com/"}</span>
               <ExternalLink size={14} className="shrink-0 text-brand-green-80" />
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-6">
             <LanguageToggle />
-            <DownloadCsvButton />
+            <DownloadReportMenu />
           </div>
         </header>
 
         <main className="flex flex-1 px-4 py-6 sm:px-8 sm:py-8 lg:px-16 lg:py-10">
           <div className="w-full rounded-[16px] bg-gray-10 px-4 py-6 flex flex-col gap-6 sm:px-10 sm:py-10">
+
+            {(lockedNotice || running.depth > 0 || error) && (
+              <div className="flex flex-col gap-2">
+                {lockedNotice && (
+                  <p role="status" className="rounded-[8px] border border-brand-green-80 bg-white px-4 py-3 text-[14px] leading-6 text-gray-100">
+                    {t.newAudit.lockedNotice}
+                  </p>
+                )}
+                {running.depth > 0 && running.email && (
+                  <p className="text-[14px] leading-6 text-gray-80">{t.newAudit.deepCrawlNote(running.email)}</p>
+                )}
+                {error && (
+                  <p role="alert" className="text-[14px] leading-6 text-red-600">{error}</p>
+                )}
+              </div>
+            )}
 
             {/* Progress bar */}
             <div className="flex flex-col gap-2">
@@ -395,6 +334,18 @@ export default function NewAuditPage() {
               })}
             </div>
 
+            {/* Never a dead end: the audit can be cancelled from here. */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="h-11 rounded-[8px] border border-brand-green-80 px-5 text-[14px] font-medium text-brand-green-80 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {cancelling ? t.newAudit.cancelling : t.newAudit.cancel}
+              </button>
+            </div>
+
           </div>
         </main>
       </>
@@ -409,7 +360,7 @@ export default function NewAuditPage() {
         <span className="text-[24px] font-medium leading-tight text-brand-teal sm:text-[32px] sm:leading-[42px]">A11Y</span>
         <div className="flex items-center gap-2 sm:gap-6">
           <LanguageToggle />
-          <DownloadCsvButton />
+          <DownloadReportMenu />
         </div>
       </header>
 
@@ -558,9 +509,9 @@ export default function NewAuditPage() {
             </div>
 
             {/* Submit */}
-            {error && (
+            {shownError && (
               <p role="alert" className="text-[14px] leading-6 text-red-600">
-                {error}
+                {shownError}
               </p>
             )}
             <button
@@ -577,5 +528,13 @@ export default function NewAuditPage() {
         </div>
       </main>
     </>
+  );
+}
+
+export default function NewAuditPageWithParams() {
+  return (
+    <Suspense fallback={null}>
+      <NewAuditPage />
+    </Suspense>
   );
 }

@@ -28,13 +28,13 @@ export function AuthShell({ children }: { children: ReactNode }) {
           className="object-cover object-center"
         />
         <div className="absolute top-8 left-8 z-10 sm:top-10 sm:left-10">
-          <Logo variant="color" href={POST_LOGIN_PATH} label={t.nav.homeLink} />
+          <Logo variant="color" href={POST_LOGIN_PATH} prefetch={false} label={t.nav.homeLink} />
         </div>
       </div>
 
       <main className="flex min-h-screen w-full md:w-1/2 flex-col items-center justify-center px-4 py-12 sm:px-8 lg:px-16">
         <div className="mb-8 md:hidden">
-          <Logo variant="color" href={POST_LOGIN_PATH} label={t.nav.homeLink} />
+          <Logo variant="color" href={POST_LOGIN_PATH} prefetch={false} label={t.nav.homeLink} />
         </div>
         <div className="w-full max-w-[460px] rounded-[16px] bg-white p-8 sm:p-12 shadow-[0px_4px_24px_rgba(0,0,0,0.04)]">
           {children}
