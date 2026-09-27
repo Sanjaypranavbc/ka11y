@@ -326,6 +326,9 @@ async def _run_job(
     Concurrency:
     • Bounded by the module-level semaphore so the worker cannot launch more
       Chromium processes than _MAX_CONCURRENT_JOBS at once.
+    • Only used when the durable dispatcher is not running (SQLite failed to
+      initialise) — see ``dispatcher.enqueue``. Normally the dispatcher's own
+      in-flight cap is the single limit; the two never apply at the same time.
     """
     sem = _get_job_semaphore()
     if sem.locked() and sem._value <= 0:

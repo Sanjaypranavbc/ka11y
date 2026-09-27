@@ -57,10 +57,11 @@ class TestAppStartup:
         assert "openapi" in data
         assert data["info"]["title"] == "ka11y"
 
-    def test_pipeline_post_requires_url(self, client):
-        resp = client.post("/api/v1/pipeline/", json={})
-        # Missing required field → 422 Unprocessable Entity
-        assert resp.status_code == 422
+    def test_legacy_routes_are_gone(self, client):
+        # Removed 2026-09-27 (deprecated since combined-audit was wired).
+        assert client.post("/api/v1/pipeline/", json={}).status_code == 404
+        assert client.post("/api/v1/crawl/", json={}).status_code == 404
+        assert client.post("/api/v1/rules/1.1.1/run", json={}).status_code == 404
 
     def test_combined_get_unknown_job_returns_404(self, client):
         resp = client.get("/api/v1/combined/nonexistent-job-id")
