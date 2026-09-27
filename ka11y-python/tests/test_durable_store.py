@@ -485,7 +485,8 @@ async def test_rerun_creates_new_run_from_stored_params(isolated_db, monkeypatch
     # The reconstructed payload preserved the original depth/pages/level.
     assert len(enqueued) == 1
     _, payload = enqueued[0]
-    assert payload.max_depth == 2 and payload.max_pages == 25 and payload.wcag_level == "AA"
+    # max_pages is clamped to the 20-page policy ceiling (CombinedRequest._cap_max_pages)
+    assert payload.max_depth == 2 and payload.max_pages == 20 and payload.wcag_level == "AA"
 
     # Unknown run → 404.
     import fastapi

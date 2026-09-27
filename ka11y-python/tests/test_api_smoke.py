@@ -23,7 +23,25 @@ from ka11y.api.v1.combined.findings import _lang_ctx
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    """App under test with job *execution* stubbed out.
+
+    The submit routes are real (validation, hot-cache entry, 202), but the
+    durable enqueue is replaced so the dispatcher never picks the job up and
+    no Chromium / OCR / Node call runs inside the test process. The SSRF
+    check is stubbed too so the tests need no DNS."""
+    from unittest.mock import patch
+
+    from ka11y.api.v1.combined import routes
+
+    async def _no_enqueue(job_id, payload, filter_rule=None):
+        return None
+
+    async def _no_ssrf(url):
+        return None
+
+    with patch.object(routes, "enqueue", _no_enqueue), patch.object(
+        routes, "assert_public_url", _no_ssrf
+    ), TestClient(app) as c:
         yield c
 
 
@@ -49,13 +67,13 @@ class TestAppStartup:
         assert resp.status_code == 404
 
     def test_combined_post_requires_url(self, client):
-        resp = client.post("/api/v1/combined/", json={})
+        resp = client.post("/api/v1/combined/python-audit", json={})
         assert resp.status_code == 422
 
     def test_combined_post_accepts_valid_url(self, client):
         """POST returns 202 immediately and a job_id — does NOT run the full pipeline."""
         resp = client.post(
-            "/api/v1/combined/",
+            "/api/v1/combined/python-audit",
             json={"url": "https://example.com"},
         )
         assert resp.status_code == 202
@@ -68,7 +86,7 @@ class TestAppStartup:
 
     def test_combined_get_known_job_returns_200(self, client):
         # Submit a job, then immediately poll it
-        post = client.post("/api/v1/combined/", json={"url": "https://example.com"})
+        post = client.post("/api/v1/combined/python-audit", json={"url": "https://example.com"})
         job_id = post.json()["job_id"]
         get = client.get(f"/api/v1/combined/{job_id}")
         assert get.status_code == 200
@@ -82,7 +100,7 @@ class TestAppStartup:
         # Submit a job, then immediately fetch its timing breakdown. The job is
         # still pending/running so totals may be null, but the structure must be
         # present and match the job_id — same data that lands in run_timings.log.
-        post = client.post("/api/v1/combined/", json={"url": "https://example.com"})
+        post = client.post("/api/v1/combined/python-audit", json={"url": "https://example.com"})
         job_id = post.json()["job_id"]
         resp = client.get(f"/api/v1/combined/{job_id}/timings")
         assert resp.status_code == 200
@@ -96,7 +114,7 @@ class TestAppStartup:
 
     def test_combined_post_rejects_invalid_success_criteria_id(self, client):
         resp = client.post(
-            "/api/v1/combined/",
+            "/api/v1/combined/python-audit",
             json={"url": "https://example.com", "success_criteria_id": "bad-id"},
         )
         assert resp.status_code == 422

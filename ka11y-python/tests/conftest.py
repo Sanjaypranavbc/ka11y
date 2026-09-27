@@ -27,6 +27,11 @@ os.environ.setdefault("KA11Y_ASSET_DIR", os.path.join(_STORE_TMP, "assets"))
 # no identity provider, so every protected dependency resolves to an anonymous
 # caller instead of a 401/503. (test_auth overrides this per test.)
 os.environ.setdefault("KA11Y_AUTH_DISABLED", "1")
+# Never read the developer's ka11y-python/.env: it commonly holds a compose-only
+# DATABASE_URL (host "postgres"), an https OIDC redirect URI (which turns on the
+# http→https 308) and Arize credentials. Any of those changes which tests run
+# or what they assert. Export DATABASE_URL in the shell to run test_auth.py.
+os.environ.setdefault("KA11Y_LOAD_DOTENV", "0")
 # Artifact storage: keep test uploads inside the throwaway store (never the
 # checkout's logs/artifacts) and skip the PDF render. The PDF is a Chromium
 # job on the caller's event loop; in the suite that loop is a per-test one,

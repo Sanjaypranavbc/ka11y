@@ -382,7 +382,12 @@ def get_tracer(name: str = _TRACER_NAME) -> Any:
 
     if _tracer_provider is not None:
         return _tracer_provider.get_tracer(name)
-    return trace.get_tracer(name)
+    # Tracing is off. Do NOT fall back to trace.get_tracer(): that returns the
+    # process-global provider, which a previous init_tracing() (or any other
+    # library) may have set to a real SDK provider — set_tracer_provider() is
+    # one-shot per process and survives shutdown_tracing(). "Off" must mean
+    # non-recording spans, not "record into whatever provider is lying around".
+    return trace.NoOpTracerProvider().get_tracer(name)
 
 
 class _NoopSpan:
