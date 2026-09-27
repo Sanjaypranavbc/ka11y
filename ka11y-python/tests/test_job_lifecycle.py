@@ -176,3 +176,73 @@ def test_admin_metrics_is_mounted_under_admin_router():
     assert "/api/v1/admin/metrics" in paths
     admin_router_paths = {"/api/v1" + r.path for r in __import__("ka11y.api.v1.admin", fromlist=["router"]).router.routes}
     assert "/api/v1/admin/metrics" in admin_router_paths
+
+
+# ── B6 — cancellation ────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cancel_queued_job_settles_hot_cache_and_closes_sse(isolated_db):  # noqa: F811
+    """A queued job has no runner to notice the flag: the route itself must
+    move it to 'cancelled' and send subscribers a terminal event."""
+    import asyncio
+
+    run_id = "lifecycle-cancel-queued"
+    await repo.create_run(
+        run_id=run_id, url="https://example.com", status="queued", lang_requested="en",
+        wcag_level="AA", params={}, max_depth=0, max_pages=1, submitted_at="2026-01-01T00:00:00+00:00",
+    )
+    store._jobs[run_id] = _hot_entry(run_id, status="queued")
+    q: asyncio.Queue = asyncio.Queue()
+    store._subscribers.setdefault(run_id, []).append(q)
+    try:
+        res = await routes.cancel_combined_audit(run_id)
+        assert res["cancelled"] is True
+        assert store._jobs[run_id]["status"] == "cancelled"
+        events = []
+        while not q.empty():
+            events.append(q.get_nowait())
+        assert events[0]["event"] == "job_cancelled"
+        assert events[-1] is None, "subscriber queue must be closed with the sentinel"
+        assert run_id not in store._subscribers
+    finally:
+        store._jobs.pop(run_id, None)
+        store._subscribers.pop(run_id, None)
+
+
+@pytest.mark.asyncio
+async def test_runner_honours_cancel_before_start(isolated_db, tmp_path):  # noqa: F811
+    """A job cancelled while queued but picked up anyway ends as 'cancelled'
+    with a job_cancelled event — not as a silent return leaving SSE open."""
+    import asyncio
+
+    run_id = "lifecycle-cancel-before-start"
+    await repo.create_run(
+        run_id=run_id, url="https://example.com", status="cancelled", lang_requested="en",
+        wcag_level="AA", params={}, max_depth=0, max_pages=1, submitted_at="2026-01-01T00:00:00+00:00",
+    )
+    store._jobs[run_id] = _hot_entry(run_id, status="queued")
+    q: asyncio.Queue = asyncio.Queue()
+    store._subscribers.setdefault(run_id, []).append(q)
+    detect = AsyncMock(return_value="en")
+    try:
+        with patch.object(runner, "detect_page_language", detect), patch.object(
+            runner, "load_config", return_value={"input": {"output_dir": str(tmp_path)}}
+        ):
+            await runner._run_job_body(run_id, CombinedRequest(url="https://example.com", lang="auto"))
+        assert store._jobs[run_id]["status"] == "cancelled"
+        assert store._jobs[run_id]["completed_at"]
+        detect.assert_not_called()
+        events = [q.get_nowait() for _ in range(q.qsize())]
+        assert any(e and e["event"] == "job_cancelled" for e in events)
+    finally:
+        store._jobs.pop(run_id, None)
+        store._subscribers.pop(run_id, None)
+
+
+def test_cancelled_jobs_are_evicted_like_finished_ones():
+    """Eviction used to keep 'cancelled' entries in memory forever."""
+    import inspect
+
+    src = inspect.getsource(store._evict_old_jobs)
+    assert '"cancelled"' in src

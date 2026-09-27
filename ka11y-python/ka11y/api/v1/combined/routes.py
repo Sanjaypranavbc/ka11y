@@ -34,7 +34,7 @@ from ka11y.observability import attributes as attrs
 from ka11y.observability import current_span, set_span_attributes
 from .report import apply_reviews, review_message
 from ka11y.accessibility.technique_map import annotate_findings, strip_failure_techniques
-from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
+from .store import _broadcast, _close_subscribers, _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
 from ka11y.auth import ANONYMOUS, CurrentUser, require_user
 from ka11y.api.v1.audits import _assert_can_view
@@ -623,8 +623,12 @@ async def export_combined_audit(
 
 @router.post("/{job_id}/cancel")
 async def cancel_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
-    """Cooperatively cancel a queued/running audit. The worker checks the DB
-    status between stages and aborts if it sees ``cancelled``."""
+    """Cooperatively cancel a queued/running audit.
+
+    Queued: settled immediately (hot cache + ``job_cancelled`` SSE event).
+    Running: the runner re-reads the stored status before it starts and again
+    once the crawl/OCR/Node engines finish, and stops there — an in-flight
+    browser pass is not interrupted."""
     await _assert_can_view(job_id, _caller(user))
     run = await repo.get_run(job_id)
     in_hot = job_id in _jobs
@@ -633,13 +637,22 @@ async def cancel_combined_audit(job_id: str, user: CurrentUser = Depends(require
     current = (run or {}).get("status") or _jobs.get(job_id, {}).get("status")
     if current in ("completed", "failed", "cancelled"):
         return {"job_id": job_id, "status": current, "cancelled": False}
-    await repo.update_run(
-        job_id, status="cancelled", completed_at=datetime.now(timezone.utc).isoformat()
-    )
-    if in_hot:
-        _jobs[job_id]["status"] = "cancelled"
+    completed_at = datetime.now(timezone.utc).isoformat()
+    await repo.update_run(job_id, status="cancelled", completed_at=completed_at)
     repo.insert_event(job_id, "cancelled", {})
     await audit_repo.mark_cancelled(job_id)
+    if in_hot:
+        # A queued job has no runner to notice the flag: settle it here. A
+        # running one is left 'running' for the runner, which checks the flag
+        # at its next checkpoint and emits job_cancelled itself.
+        if current == "running":
+            async with _get_job_lock(job_id):
+                _jobs[job_id]["cancel_requested"] = True
+        else:
+            async with _get_job_lock(job_id):
+                _jobs[job_id].update(status="cancelled", completed_at=completed_at, current_stage=None)
+            await _broadcast(job_id, "job_cancelled", {"job_id": job_id, "when": "while queued"})
+            await _close_subscribers(job_id)
     return {"job_id": job_id, "status": "cancelled", "cancelled": True}
 
 
@@ -919,7 +932,7 @@ async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require
 
     Connect immediately after submitting to receive real-time stage progress.
     Events: stage_start | stage_complete | stage_error | job_state |
-            job_complete | job_failed
+            job_complete | job_failed | job_cancelled
     Heartbeat: ': keepalive' comment lines every 25 s.
     """
     await _assert_can_view(job_id, _caller(user))
@@ -945,6 +958,8 @@ async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require
                     f"event: job_failed\n"
                     f"data: {json.dumps({'job_id': job_id, 'error': 'Audit failed due to an internal error.'})}\n\n"
                 )
+            elif status == "cancelled":
+                yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
             else:
                 yield f"event: job_state\ndata: {json.dumps({'status': status})}\n\n"
 
@@ -975,6 +990,9 @@ async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require
                     f"data: {json.dumps({'job_id': job_id, 'error': current.get('error', '')})}\n\n"
                 )
                 return
+            if current.get("status") == "cancelled":
+                yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
+                return
 
             if current.get("current_stage") or current.get("stages"):
                 yield (
@@ -988,7 +1006,7 @@ async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require
                     if msg is None:
                         break
                     yield f"event: {msg['event']}\ndata: {json.dumps(msg['data'])}\n\n"
-                    if msg["event"] in ("job_complete", "job_failed"):
+                    if msg["event"] in ("job_complete", "job_failed", "job_cancelled"):
                         break
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"

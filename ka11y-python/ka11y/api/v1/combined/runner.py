@@ -431,6 +431,21 @@ async def _is_cancelled(job_id: str) -> bool:
         return False
 
 
+async def _finish_cancelled(job_id: str, *, when: str) -> None:
+    """Terminal state for a cancelled job. The route already wrote 'cancelled'
+    to SQLite and PostgreSQL; this settles the hot cache and tells SSE clients,
+    who otherwise sit on keepalives until the connection drops."""
+    async with _get_job_lock(job_id):
+        _jobs[job_id].update(
+            status="cancelled",
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            current_stage=None,
+        )
+    logger.info("[combined] job %s cancelled %s", job_id, when)
+    repo.insert_event(job_id, "job_cancelled", {"when": when})
+    await _broadcast(job_id, "job_cancelled", {"job_id": job_id, "when": when})
+
+
 async def _run_job_body_inner(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
@@ -440,6 +455,13 @@ async def _run_job_body_inner(
     # Created inside the try below; the except block must cope with it still
     # being None when the failure happened before the output directory existed.
     step_logger: ExecutionStepLogger | None = None
+
+    # Cancelled while queued? Check BEFORE mark_running: that write sets
+    # status='running' and used to overwrite the 'cancelled' flag, so the
+    # check that followed it could never fire and a cancelled job ran anyway.
+    if await _is_cancelled(job_id):
+        await _finish_cancelled(job_id, when="before start")
+        return
 
     _jobs[job_id]["status"] = "running"
     run_started_at = datetime.now(timezone.utc).isoformat()
@@ -453,11 +475,6 @@ async def _run_job_body_inner(
     # hot cache, SQLite and PostgreSQL. Anything that raised *before* the try
     # used to leave the job 'running' forever (and re-run after a restart).
     try:
-        if await _is_cancelled(job_id):
-            _jobs[job_id]["status"] = "cancelled"
-            logger.info("[combined] job %s cancelled before start", job_id)
-            return
-
         if payload.lang == "auto":
             resolved_lang = await detect_page_language(url)
             logger.info(f"[combined] job {job_id}: detected page language: {resolved_lang}")
@@ -546,6 +563,13 @@ async def _run_job_body_inner(
             raise TimeoutError(
                 f"audit exceeded {_JOB_TIMEOUT_SECONDS}s overall budget"
             )
+
+        # The stages run as one gather, so "between stages" is here: a cancel
+        # that arrived during the crawl skips merge, persistence, upload and
+        # e-mail instead of publishing a report nobody asked for.
+        if await _is_cancelled(job_id):
+            await _finish_cancelled(job_id, when="after the audit engines finished")
+            return
 
         # ── Resolve Python result ────────────────────────────────────────
         python_findings: List[Dict] = []

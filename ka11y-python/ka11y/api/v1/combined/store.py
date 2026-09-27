@@ -159,14 +159,15 @@ def _safe_remove_job_dir(output_dir: str | None) -> None:
 
 
 async def _evict_old_jobs() -> None:
-    """Background task: remove completed/failed jobs older than _JOB_TTL_SECONDS."""
+    """Background task: remove finished (completed/failed/cancelled) jobs older
+    than _JOB_TTL_SECONDS."""
     while True:
         await asyncio.sleep(300)  # run every 5 minutes
         cutoff = time.time() - _JOB_TTL_SECONDS
         expired = [
             jid
             for jid, job in list(_jobs.items())
-            if job.get("status") in ("completed", "failed")
+            if job.get("status") in ("completed", "failed", "cancelled")
             and job.get("_created_at", 0) < cutoff
         ]
         for jid in expired:
