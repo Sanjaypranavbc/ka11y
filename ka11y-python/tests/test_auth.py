@@ -129,7 +129,9 @@ class TestSignIn:
         uuid.UUID(body["user_id"])
         uuid.UUID(body["organization_id"])
 
-        assert client.get("/api/v1/combined/history").status_code == 200
+        # /combined/history is the operator view over the raw run store
+        # (no owner column) → admins only; a plain member gets 403.
+        assert client.get("/api/v1/combined/history").status_code == 403
         hist = client.get("/api/v1/audits/history")
         assert hist.status_code == 200
         assert hist.json()["items"] == [] or isinstance(hist.json()["items"], list)

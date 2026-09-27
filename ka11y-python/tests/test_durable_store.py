@@ -212,7 +212,7 @@ async def test_cancel_endpoint(isolated_db):
 
 @pytest.mark.asyncio
 async def test_admin_metrics(isolated_db):
-    from ka11y.api.v1.assets import admin_metrics
+    from ka11y.api.v1.admin import admin_metrics
 
     await _seed_completed("run-m")
     m = await admin_metrics()
@@ -503,8 +503,10 @@ def test_new_routes_registered(isolated_db):
     with TestClient(app) as client:
         h = client.get("/api/v1/combined/history")
         assert h.status_code == 200 and "runs" in h.json()
+        # Admin-only since 2026-09-27: with auth disabled the caller is
+        # anonymous, which is not an admin → 403 (route exists, gated).
         m = client.get("/api/v1/admin/metrics")
-        assert m.status_code == 200 and "status_counts" in m.json()
+        assert m.status_code == 403
         # Unknown asset → 404 (route exists, not a 404-because-no-route).
         a = client.get("/api/v1/assets/999999")
         assert a.status_code == 404

@@ -33,6 +33,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 
+from ka11y.config.env import dotenv_enabled
 from ka11y.observability import (
     SpanKind,
     add_span_event,
@@ -546,7 +547,8 @@ def run_enrichment(
         every span from this run into one Arize session, so a job's Gemini
         calls are viewable together. Ignored when tracing is off - see
         ka11y/observability/tracing.py."""
-    load_dotenv()
+    if dotenv_enabled():
+        load_dotenv()
     # Idempotent: the API server already did this at startup, the CLI and any
     # ad-hoc script get it here. A no-op when Arize isn't configured.
     init_tracing()
@@ -747,7 +749,8 @@ def main() -> int:
 
     if not os.environ.get("GEMINI_API_KEY") and not os.getenv("GEMINI_API_KEY"):
         # run_enrichment() also checks this, but fail fast with a clear CLI message.
-        load_dotenv()
+        if dotenv_enabled():
+            load_dotenv()
         if not os.getenv("GEMINI_API_KEY"):
             print("Error: GEMINI_API_KEY environment variable is not set.", file=sys.stderr)
             print("Please add GEMINI_API_KEY to your .env file.", file=sys.stderr)

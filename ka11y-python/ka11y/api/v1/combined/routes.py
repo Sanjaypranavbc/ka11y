@@ -25,7 +25,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 from ka11y.utils.run_timing import compute_run_timing
 from pydantic import BaseModel, Field
 from .dispatcher import enqueue
@@ -36,7 +36,8 @@ from .report import apply_reviews, review_message
 from ka11y.accessibility.technique_map import annotate_findings, strip_failure_techniques
 from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
-from ka11y.auth import CurrentUser, require_user
+from ka11y.auth import ANONYMOUS, CurrentUser, require_user
+from ka11y.api.v1.audits import _assert_can_view
 from ka11y.db import audit_repo
 from ka11y.config.logger import setup_logger
 
@@ -84,6 +85,12 @@ def _ip_is_blocked(ip_str: str) -> bool:
 
 
 router = APIRouter(prefix="/combined", tags=["combined audit"])
+
+
+def _caller(user: Any) -> CurrentUser:
+    """The signed-in user, or ANONYMOUS when a handler is called directly
+    (tests) and the parameter is FastAPI's ``Depends`` sentinel, not a user."""
+    return user if isinstance(user, CurrentUser) else ANONYMOUS
 
 
 def _is_non_public_ip(ip: str) -> bool:
@@ -375,6 +382,7 @@ async def rerun_combined_audit(job_id: str, user: CurrentUser = Depends(require_
     re-entering the URL and toggles. The new run flows through the normal durable
     queue + dispatcher.
     """
+    await _assert_can_view(job_id, _caller(user))
     run = await repo.get_run(job_id)
     if not run:
         raise HTTPException(
@@ -476,13 +484,21 @@ async def _finalize_job_view(job: dict, job_id: str) -> None:
 
 @router.get("/history")
 async def list_combined_history(
-    limit: int = 50, offset: int = 0, url: str | None = None, status: str | None = None
+    limit: int = 50,
+    offset: int = 0,
+    url: str | None = None,
+    status: str | None = None,
+    user: CurrentUser = Depends(require_user),
 ):
-    """Paginated history of past audit runs (durable; survives restart/TTL).
+    """Paginated history of *every* audit run in the durable store.
 
-    Reads straight from the ``runs`` table so the list is available even after
-    a run has been evicted from the in-memory hot cache.
+    The ``runs`` table has no owner column, so this is an operator view:
+    admins only (``KA11Y_ADMIN_EMAILS``), or anyone when auth is disabled.
+    Signed-in users get their own history from ``GET /audits/history``.
     """
+    caller = _caller(user)
+    if not caller.is_anonymous and not caller.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     try:
@@ -568,9 +584,7 @@ async def export_combined_audit(
     are built on demand from the stored report; the filename uses the audited
     host, never the job id.
     """
-    from ka11y.api.v1.audits import _assert_can_view
-
-    await _assert_can_view(job_id, user)
+    await _assert_can_view(job_id, _caller(user))
     report = await _full_report(job_id)
     if report is None:
         raise HTTPException(status_code=404, detail="No report is stored for this audit yet.")
@@ -608,9 +622,10 @@ async def export_combined_audit(
 
 
 @router.post("/{job_id}/cancel")
-async def cancel_combined_audit(job_id: str):
+async def cancel_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
     """Cooperatively cancel a queued/running audit. The worker checks the DB
     status between stages and aborts if it sees ``cancelled``."""
+    await _assert_can_view(job_id, _caller(user))
     run = await repo.get_run(job_id)
     in_hot = job_id in _jobs
     if not run and not in_hot:
@@ -629,8 +644,9 @@ async def cancel_combined_audit(job_id: str):
 
 
 @router.get("/{job_id}", response_model=JobStatusResponse)
-async def get_combined_audit(job_id: str):
+async def get_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
     """Poll the status or retrieve the result of a combined audit job."""
+    await _assert_can_view(job_id, _caller(user))
     if job_id not in _jobs:
         # Durable fallback: the run may have been evicted from the hot cache or
         # the process may have restarted — reconstruct it from SQLite.
@@ -656,8 +672,9 @@ async def get_combined_audit(job_id: str):
 
 
 @router.get("/{job_id}/reviews")
-async def get_finding_reviews(job_id: str):
+async def get_finding_reviews(job_id: str, user: CurrentUser = Depends(require_user)):
     """List the manual-review decisions recorded for a run's needs_review items."""
+    await _assert_can_view(job_id, _caller(user))
     run = await repo.get_run(job_id)
     if not run and job_id not in _jobs:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
@@ -695,11 +712,7 @@ async def review_finding(
     ``reviewed_at``, ``verdict_source: "manual"`` and the audit-trail
     ``review_message`` ("Reviewed by user and manually changed to Pass.").
     """
-    from ka11y.api.v1.audits import _assert_can_view
-    from ka11y.auth.dependencies import ANONYMOUS
-
-    if not isinstance(user, CurrentUser):  # called directly (tests), not via FastAPI
-        user = ANONYMOUS
+    user = _caller(user)
     await _assert_can_view(job_id, user)
     run = await repo.get_run(job_id)
     in_hot = job_id in _jobs
@@ -758,7 +771,7 @@ async def review_finding(
 
 
 @router.get("/{job_id}/timings")
-async def get_combined_audit_timings(job_id: str):
+async def get_combined_audit_timings(job_id: str, user: CurrentUser = Depends(require_user)):
     """
     Return the per-stage timing breakdown for a combined audit job as JSON.
 
@@ -768,6 +781,7 @@ async def get_combined_audit_timings(job_id: str):
     the log file never drift. Safe to poll mid-run: unfinished stages report
     ``duration_s: null`` and the run/wall totals fill in once the job completes.
     """
+    await _assert_can_view(job_id, _caller(user))
     async with _get_job_lock(job_id):
         snapshot = _jobs.get(job_id)
         if snapshot:
@@ -809,7 +823,7 @@ async def get_combined_audit_timings(job_id: str):
 
 
 @router.get("/{job_id}/image")
-async def get_job_image(job_id: str, path: str):
+async def get_job_image(job_id: str, path: str, user: CurrentUser = Depends(require_user)):
     """
     DEPRECATED legacy image serving (``?path=``). Superseded by the
     content-addressed ``GET /api/v1/assets/{id}`` route: as of P2 the runner
@@ -821,6 +835,7 @@ async def get_job_image(job_id: str, path: str):
     The ``path`` query parameter must exactly match one of the image paths
     recorded in ``result.contrast_report.images`` for the given job.
     """
+    await _assert_can_view(job_id, _caller(user))
     job = _jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
@@ -898,7 +913,7 @@ async def get_job_image(job_id: str, path: str):
 
 
 @router.get("/{job_id}/stream")
-async def stream_combined_audit(job_id: str):
+async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
     """
     Server-Sent Events stream for a combined audit job.
 
@@ -907,6 +922,7 @@ async def stream_combined_audit(job_id: str):
             job_complete | job_failed
     Heartbeat: ': keepalive' comment lines every 25 s.
     """
+    await _assert_can_view(job_id, _caller(user))
     job = _jobs.get(job_id)
     if not job:
         # Durable fallback: the run may have completed before this client

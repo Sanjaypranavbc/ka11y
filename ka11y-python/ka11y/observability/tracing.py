@@ -60,6 +60,8 @@ from typing import Any, Iterator, Mapping, Optional
 
 from dotenv import load_dotenv
 
+from ka11y.config.env import dotenv_enabled
+
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="tracing")
@@ -320,7 +322,8 @@ def init_tracing(project_name: Optional[str] = None, *, force: bool = False) -> 
         # CLI callers (enrich_audit.py) get their keys from ka11y-python/.env
         # the same way the Gemini key is loaded; the API already called this
         # at import time, and load_dotenv() never overrides a real env var.
-        load_dotenv()
+        if dotenv_enabled():
+            load_dotenv()
 
         space_id = _env("ARIZE_SPACE_ID")
         api_key = _env("ARIZE_API_KEY")

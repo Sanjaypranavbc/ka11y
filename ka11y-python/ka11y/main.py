@@ -16,15 +16,11 @@ from starlette.responses import JSONResponse, RedirectResponse
 
 from ka11y.api.router import router
 from ka11y.api.v1.combined import _evict_old_jobs
+from ka11y.config.env import dotenv_enabled
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
 
-# ``.env`` is a convenience for running ``uvicorn ka11y.main:app`` on a laptop;
-# Docker passes the same variables through compose. The test suite sets
-# KA11Y_LOAD_DOTENV=0 (tests/conftest.py) so a developer's real DATABASE_URL,
-# OIDC redirect URI or Arize keys cannot leak into the test process and change
-# which tests run or what they assert.
-if os.getenv("KA11Y_LOAD_DOTENV", "1") != "0":
+if dotenv_enabled():  # see ka11y/config/env.py
     load_dotenv()
 
 

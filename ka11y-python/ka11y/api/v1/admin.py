@@ -20,6 +20,8 @@ store (run_pages, findings, run_events) into the shapes the console renders.
   GET /admin/reports              generated report files with download links
   GET /admin/system-events        job lifecycle events + crash reports
   GET /admin/settings             effective runtime configuration (read-only)
+  GET /admin/metrics              SQLite run-store rollups: status counts,
+                                  wall time by depth, slowest stages, failures
   GET /admin/events               Server-Sent Events: `refresh` whenever any
                                   of the tables above changes (2 s poll)
 """
@@ -756,6 +758,57 @@ async def system_events(limit: int = Query(100, ge=1, le=500)) -> Dict[str, Any]
             })
     out.sort(key=lambda e: e["at"] or "", reverse=True)
     return {"events": out[:limit]}
+
+
+@router.get("/metrics")
+async def admin_metrics():
+    """Aggregate telemetry rollups for ops dashboards. All from the SQLite run store.
+
+    Lived on the assets router (user auth) until 2026-09-27; it exposes every
+    failed run's URL, so it belongs behind require_admin like the rest of /admin.
+
+    These answer the questions the old per-run timing logs could not without
+    grepping: throughput, failure rate, slowest stages, wall-time by depth.
+    """
+    db = get_db()
+    try:
+        status_counts = await db.query(
+            "SELECT status, COUNT(*) AS n FROM runs GROUP BY status"
+        )
+        wall_by_depth = await db.query(
+            "SELECT max_depth AS depth, COUNT(*) AS runs, "
+            "       CAST(AVG(wall_ms) AS INTEGER) AS avg_wall_ms, "
+            "       MAX(wall_ms) AS max_wall_ms "
+            "FROM runs WHERE wall_ms IS NOT NULL GROUP BY max_depth ORDER BY max_depth"
+        )
+        slowest_stages = await db.query(
+            "SELECT stage, COUNT(*) AS steps, "
+            "       CAST(AVG(duration_ms) AS INTEGER) AS avg_ms, "
+            "       CAST(MAX(duration_ms) AS INTEGER) AS max_ms, "
+            "       SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors "
+            "FROM stage_timings GROUP BY stage ORDER BY avg_ms DESC LIMIT 25"
+        )
+        recent_failures = await db.query(
+            "SELECT run_id, url, error_stage, completed_at FROM runs "
+            "WHERE status='failed' ORDER BY completed_at DESC LIMIT 20"
+        )
+        totals = await db.query_one(
+            "SELECT COUNT(*) AS total_runs, "
+            "       SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed, "
+            "       SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed, "
+            "       CAST(AVG(wall_ms) AS INTEGER) AS avg_wall_ms, "
+            "       CAST(AVG(queue_wait_ms) AS INTEGER) AS avg_queue_wait_ms FROM runs"
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="Telemetry store unavailable.")
+
+    return {
+        "totals": totals,
+        "status_counts": {r["status"]: r["n"] for r in status_counts},
+        "wall_ms_by_depth": wall_by_depth,
+        "slowest_stages": slowest_stages,
+        "recent_failures": recent_failures,
+    }
 
 
 @router.get("/settings")

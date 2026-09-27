@@ -9,12 +9,14 @@ B5  a failed queue INSERT was swallowed and the caller got a job id for a
 
 from __future__ import annotations
 
+import uuid as _uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from ka11y.api.v1.combined import dispatcher, routes, runner, store
+from ka11y.auth.dependencies import CurrentUser
 from ka11y.api.v1.combined.models import CombinedRequest
 from ka11y.store import repo
 from tests.test_durable_store import isolated_db  # noqa: F401 — fixture
@@ -113,3 +115,64 @@ async def test_create_run_raises_when_store_write_fails(monkeypatch):
             run_id="x", url="https://e.com", status="queued", lang_requested="en",
             wcag_level="AA", params={}, max_depth=0, max_pages=1, submitted_at="2026-01-01T00:00:00+00:00",
         )
+
+
+# ── B3 / B4 — authorization ──────────────────────────────────────────────────
+
+
+def _user(is_admin: bool = False, org: _uuid.UUID | None = None) -> CurrentUser:
+    return CurrentUser(
+        user_id=_uuid.uuid4(), email="someone@example.com", name="Someone",
+        session_id=_uuid.uuid4(), organization_id=org, is_admin=is_admin,
+    )
+
+
+@pytest.mark.asyncio
+async def test_job_routes_hide_other_users_jobs(monkeypatch):
+    """Every {job_id} route must apply the same owner/org check as export."""
+    from ka11y.db import audit_repo
+
+    owner_id, owner_org = _uuid.uuid4(), _uuid.uuid4()
+
+    async def owned_by_someone_else(job_id):
+        return {"user_id": owner_id, "organization_id": owner_org, "session_id": None}
+
+    monkeypatch.setattr(audit_repo, "get_owner", owned_by_someone_else)
+    job_id = "lifecycle-foreign-job"
+    store._jobs[job_id] = _hot_entry(job_id, status="completed")
+    stranger = _user()
+    try:
+        for call in (
+            lambda: routes.get_combined_audit(job_id, user=stranger),
+            lambda: routes.get_combined_audit_timings(job_id, user=stranger),
+            lambda: routes.get_finding_reviews(job_id, user=stranger),
+            lambda: routes.cancel_combined_audit(job_id, user=stranger),
+            lambda: routes.rerun_combined_audit(job_id, user=stranger),
+            lambda: routes.get_job_image(job_id, path="/x.png", user=stranger),
+            lambda: routes.stream_combined_audit(job_id, user=stranger),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await call()
+            assert exc.value.status_code == 404, "foreign job must look non-existent"
+        # Same org → visible.
+        colleague = _user(org=owner_org)
+        job = await routes.get_combined_audit(job_id, user=colleague)
+        assert job["job_id"] == job_id
+    finally:
+        store._jobs.pop(job_id, None)
+
+
+@pytest.mark.asyncio
+async def test_combined_history_is_admin_only():
+    with pytest.raises(HTTPException) as exc:
+        await routes.list_combined_history(user=_user(is_admin=False))
+    assert exc.value.status_code == 403
+
+
+def test_admin_metrics_is_mounted_under_admin_router():
+    from ka11y.main import app
+
+    paths = {r.path for r in app.routes}
+    assert "/api/v1/admin/metrics" in paths
+    admin_router_paths = {"/api/v1" + r.path for r in __import__("ka11y.api.v1.admin", fromlist=["router"]).router.routes}
+    assert "/api/v1/admin/metrics" in admin_router_paths
