@@ -142,7 +142,36 @@ async def _run_tracked(run_id: str, payload: CombinedRequest, filter_rule: Optio
     try:
         await _run_job_body(run_id, payload, filter_rule)
     except Exception:  # noqa: BLE001
-        logger.exception("[dispatcher] job %s crashed", run_id)
+        # The runner records its own failures; reaching here means it raised
+        # outside its handler. Without this the row stays 'running', crash
+        # recovery re-queues it on the next boot, and pollers wait forever.
+        logger.exception("[dispatcher] job %s crashed outside the runner", run_id)
+        await _mark_crashed(run_id)
+
+
+async def _mark_crashed(run_id: str) -> None:
+    from .store import _broadcast, _close_subscribers, _get_job_lock
+
+    failed_at = _now()
+    hot = _jobs.get(run_id)
+    if hot is not None and hot.get("status") not in ("completed", "failed", "cancelled"):
+        async with _get_job_lock(run_id):
+            hot.update(
+                status="failed",
+                completed_at=failed_at,
+                error="Audit failed due to an internal error.",
+                error_stage="dispatch",
+                current_stage=None,
+            )
+    await repo.mark_failed(
+        run_id,
+        completed_at=failed_at,
+        run_started_at=(hot or {}).get("run_started_at"),
+        error_id=None,
+        error_stage="dispatch",
+    )
+    await _broadcast(run_id, "job_failed", {"job_id": run_id, "error": "Audit failed due to an internal error.", "stage": "dispatch"})
+    await _close_subscribers(run_id)
 
 
 async def _drain() -> None:

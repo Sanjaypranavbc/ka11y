@@ -5,9 +5,13 @@ High-level persistence operations for the combined audit.
 
 Two flavours of call:
 
-* **Hot-path writes** (``create_run``, ``mark_*``, ``save_report``,
-  ``save_findings``, ``insert_event``) are wrapped: a DB error is logged and
-  swallowed so an audit never fails because persistence hiccuped.
+* **Hot-path writes** (``mark_*``, ``save_report``, ``save_findings``,
+  ``insert_event``) are wrapped: a DB error is logged and swallowed so an
+  audit never fails because persistence hiccuped.
+* **``create_run`` is the one write that raises.** The ``runs`` row *is* the
+  queue: if it is not written the dispatcher never sees the job, so the
+  caller (``dispatcher.enqueue`` → ``routes._admit_run``) must know and
+  answer 503 instead of returning a job id that will sit 'queued' forever.
 * **Reads** (``get_run``, ``list_runs``, ``get_report`` …) propagate errors to
   the API layer, which turns them into a normal HTTP error.
 
@@ -62,27 +66,25 @@ async def create_run(
     max_pages: Optional[int],
     submitted_at: str,
 ) -> None:
-    try:
-        await get_db().execute(
-            "INSERT OR REPLACE INTO runs "
-            "(run_id, url, status, lang_requested, wcag_level, params_json, "
-            " max_depth, max_pages, submitted_at, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (
-                run_id,
-                url,
-                status,
-                lang_requested,
-                wcag_level,
-                json.dumps(params, default=str),
-                max_depth,
-                max_pages,
-                submitted_at,
-                _now(),
-            ),
-        )
-    except Exception:  # noqa: BLE001
-        logger.warning("[store] create_run(%s) failed", run_id, exc_info=True)
+    """Insert the queue row. Raises on failure — see the module docstring."""
+    await get_db().execute(
+        "INSERT OR REPLACE INTO runs "
+        "(run_id, url, status, lang_requested, wcag_level, params_json, "
+        " max_depth, max_pages, submitted_at, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (
+            run_id,
+            url,
+            status,
+            lang_requested,
+            wcag_level,
+            json.dumps(params, default=str),
+            max_depth,
+            max_pages,
+            submitted_at,
+            _now(),
+        ),
+    )
 
 
 async def update_run(run_id: str, **fields: Any) -> None:

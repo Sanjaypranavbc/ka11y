@@ -421,11 +421,26 @@ def _stamp_job_outcome(job_span: Any, job_id: str) -> None:
         )
 
 
+async def _is_cancelled(job_id: str) -> bool:
+    """``repo.is_cancelled`` with a read error treated as "not cancelled": a
+    momentary SQLite problem must not abort an audit that was never cancelled."""
+    try:
+        return await repo.is_cancelled(job_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("[combined] job %s: cancellation check failed; continuing", job_id, exc_info=True)
+        return False
+
+
 async def _run_job_body_inner(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
     """Orchestrates one combined audit job: image audit and media/captions
     audit — no axe-core, no pipeline."""
+    url = str(payload.url)
+    # Created inside the try below; the except block must cope with it still
+    # being None when the failure happened before the output directory existed.
+    step_logger: ExecutionStepLogger | None = None
+
     _jobs[job_id]["status"] = "running"
     run_started_at = datetime.now(timezone.utc).isoformat()
     _jobs[job_id]["run_started_at"] = run_started_at
@@ -433,46 +448,45 @@ async def _run_job_body_inner(
     await audit_repo.mark_running(job_id, run_started_at)
     repo.insert_event(job_id, "running", {})
 
+    # From here on every failure must land in the except block below, which is
+    # the only code that turns a crash into a terminal 'failed' status in the
+    # hot cache, SQLite and PostgreSQL. Anything that raised *before* the try
+    # used to leave the job 'running' forever (and re-run after a restart).
     try:
-        if await repo.is_cancelled(job_id):
+        if await _is_cancelled(job_id):
             _jobs[job_id]["status"] = "cancelled"
             logger.info("[combined] job %s cancelled before start", job_id)
             return
-    except Exception:
-        pass
 
-    url = str(payload.url)
+        if payload.lang == "auto":
+            resolved_lang = await detect_page_language(url)
+            logger.info(f"[combined] job {job_id}: detected page language: {resolved_lang}")
+        else:
+            resolved_lang = payload.lang
 
-    if payload.lang == "auto":
-        resolved_lang = await detect_page_language(url)
-        logger.info(f"[combined] job {job_id}: detected page language: {resolved_lang}")
-    else:
-        resolved_lang = payload.lang
+        _lang_ctx.set(resolved_lang)
+        try:
+            from ka11y.utils import crawler_timing
+            crawler_timing.set_run_id(job_id)
+        except Exception:  # noqa: BLE001 — timing is telemetry, never fatal
+            logger.debug("crawler_timing.set_run_id failed", exc_info=True)
 
-    _lang_ctx.set(resolved_lang)
-    try:
-        from ka11y.utils import crawler_timing
-        crawler_timing.set_run_id(job_id)
-    except Exception:
-        pass
+        config = load_config()
+        domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
+        ts = time.strftime("%m%d_%H%M")
+        output_dir = Path(
+            f"{config['input']['output_dir']}/{domain}_{ts}_{job_id[:8]}_combined"
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _jobs[job_id]["output_dir"] = str(output_dir)
+        step_logger = ExecutionStepLogger(
+            output_dir=output_dir,
+            name="combined_execution_steps",
+            job_id=job_id,
+        )
+        _jobs[job_id]["step_log_path"] = str(step_logger.jsonl_path)
+        _jobs[job_id]["step_summary_path"] = str(step_logger.summary_path)
 
-    config = load_config()
-    domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
-    ts = time.strftime("%m%d_%H%M")
-    output_dir = Path(
-        f"{config['input']['output_dir']}/{domain}_{ts}_{job_id[:8]}_combined"
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    _jobs[job_id]["output_dir"] = str(output_dir)
-    step_logger = ExecutionStepLogger(
-        output_dir=output_dir,
-        name="combined_execution_steps",
-        job_id=job_id,
-    )
-    _jobs[job_id]["step_log_path"] = str(step_logger.jsonl_path)
-    _jobs[job_id]["step_summary_path"] = str(step_logger.summary_path)
-
-    try:
         step_logger.record(
             step="combined_job",
             status="running",
@@ -944,16 +958,17 @@ async def _run_job_body_inner(
             error_stage=current_stage,
         )
         emit_stage_timing_summary(job_id)
-        step_logger.finalize(
-            status="error",
-            message="Combined audit job failed",
-            context={
-                "error_type": err_type,
-                "error": str(exc),
-                "stage": current_stage,
-                "location": where,
-            },
-        )
+        if step_logger is not None:
+            step_logger.finalize(
+                status="error",
+                message="Combined audit job failed",
+                context={
+                    "error_type": err_type,
+                    "error": str(exc),
+                    "stage": current_stage,
+                    "location": where,
+                },
+            )
 
         await _broadcast(
             job_id,

@@ -38,6 +38,9 @@ from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
 from ka11y.auth import CurrentUser, require_user
 from ka11y.db import audit_repo
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="combined")
 
 
 class FindingReviewRequest(BaseModel):
@@ -331,11 +334,21 @@ async def _admit_run(
             requested_pages=payload.max_pages,
         )
 
-    await enqueue(job_id, payload)
-    from ka11y.config.logger import setup_logger
-    logger = setup_logger(name="KAC", tag="combined")
+    try:
+        await enqueue(job_id, payload)
+    except Exception:  # noqa: BLE001
+        # The queue row is the job. Without it nothing will ever run, so the
+        # caller must not receive a job id: drop the hot entry, record the
+        # failure against the PG ownership row, and answer 503.
+        logger.exception("[combined] job %s could not be queued", job_id)
+        _jobs.pop(job_id, None)
+        await audit_repo.mark_failed(
+            job_id, stage="enqueue", error_type="QueueUnavailable",
+            error_message="run row could not be written", completed_at=now,
+        )
+        raise HTTPException(status_code=503, detail="Audit queue is unavailable. Please try again.")
 
-    logger.info(f"[combined] Job {job_id} submitted for {url}")
+    logger.info("[combined] job %s submitted for %s", job_id, url)
     # Stamp the job id on the HTTP span (the middleware's, still current here).
     # The audit runs as its own trace, so this attribute is the thread that
     # leads from "this request was slow / errored" to the audit it started.
