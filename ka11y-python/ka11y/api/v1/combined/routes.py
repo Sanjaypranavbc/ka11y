@@ -14,10 +14,8 @@ FastAPI route handlers for accessibility audit endpoints.
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 import mimetypes
-import socket
 import time
 import uuid
 from datetime import datetime, timezone
@@ -40,6 +38,12 @@ from ka11y.auth import ANONYMOUS, CurrentUser, require_user
 from ka11y.api.v1.audits import _assert_can_view
 from ka11y.db import audit_repo
 from ka11y.config.logger import setup_logger
+from ka11y.crawler._ssrf_guard import (
+    _classify_blocked,
+    _ip_is_blocked,
+    _parse_literal_ip,
+    _resolve_hostname,
+)
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -53,37 +57,6 @@ class FindingReviewRequest(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
     reviewer: str | None = Field(default=None, max_length=200)
 
-# Private/reserved IP ranges that must never be fetched (SSRF guard for redirects).
-# These CIDR networks cover: loopback, RFC-1918 private, link-local, unique-local
-# (IPv6), documentation ranges, and the IPv4-mapped IPv6 loopback.
-_BLOCKED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),  # IPv4 loopback
-    ipaddress.ip_network("10.0.0.0/8"),  # RFC-1918 class A private
-    ipaddress.ip_network("172.16.0.0/12"),  # RFC-1918 class B private
-    ipaddress.ip_network("192.168.0.0/16"),  # RFC-1918 class C private
-    ipaddress.ip_network("169.254.0.0/16"),  # IPv4 link-local
-    ipaddress.ip_network("100.64.0.0/10"),  # Shared address space (RFC 6598)
-    ipaddress.ip_network("192.0.0.0/24"),  # IETF protocol assignments
-    ipaddress.ip_network("192.0.2.0/24"),  # TEST-NET-1
-    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2
-    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3
-    ipaddress.ip_network("0.0.0.0/8"),  # "This" network
-    ipaddress.ip_network("::1/128"),  # IPv6 loopback
-    ipaddress.ip_network("fc00::/7"),  # IPv6 unique-local (fc00 + fd00)
-    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
-    ipaddress.ip_network("::ffff:127.0.0.1/128"),  # IPv4-mapped IPv6 loopback
-]
-
-
-def _ip_is_blocked(ip_str: str) -> bool:
-    """Return True if *ip_str* falls within any blocked private/reserved network."""
-    try:
-        addr = ipaddress.ip_address(ip_str)
-    except ValueError:
-        return False
-    return any(addr in net for net in _BLOCKED_NETWORKS)
-
-
 router = APIRouter(prefix="/combined", tags=["combined audit"])
 
 
@@ -93,82 +66,11 @@ def _caller(user: Any) -> CurrentUser:
     return user if isinstance(user, CurrentUser) else ANONYMOUS
 
 
-def _is_non_public_ip(ip: str) -> bool:
-    """
-    Return True for IP addresses that should never be fetched by audit workers:
-    private, loopback, link-local, multicast, reserved, or unspecified.
-    """
-    try:
-        parsed = ipaddress.ip_address(ip)
-    except ValueError:
-        return False
-
-    return any(
-        (
-            parsed.is_private,
-            parsed.is_loopback,
-            parsed.is_link_local,
-            parsed.is_multicast,
-            parsed.is_reserved,
-            parsed.is_unspecified,
-            _ip_is_blocked(ip),
-        )
-    )
-
-
-def build_ssrf_route_handler(page):
-    """
-    Return a Playwright ``page.route()`` handler that blocks requests to
-    private/reserved IP addresses during a crawl.
-
-    This prevents SSRF via HTTP redirects: even if attacker.com responds with
-    a 301 to http://192.168.1.1, Playwright will call this handler before
-    following the redirect and the request will be aborted.
-
-    Usage::
-
-        handler = build_ssrf_route_handler(page)
-        await page.route("**/*", handler)
-    """
-    import re
-
-    # Regex to quickly detect literal IP hostnames in URLs (avoids DNS lookup
-    # inside the hot-path handler).
-    _IP_HOST_RE = re.compile(r"https?://(\[?[0-9a-fA-F:.]+\]?)(?:[:/]|$)")
-
-    async def _handler(route, request):
-        url = request.url
-        m = _IP_HOST_RE.match(url)
-        if m:
-            host = m.group(1).strip("[]")
-            if _ip_is_blocked(host):
-                await route.abort("addressunreachable")
-                return
-        await route.continue_()
-
-    return _handler
-
-
-async def _resolve_all_ips(hostname: str) -> list[str]:
-    infos = await asyncio.to_thread(
-        socket.getaddrinfo,
-        hostname,
-        None,
-        0,
-        socket.SOCK_STREAM,
-    )
-    addrs: list[str] = []
-    for info in infos:
-        sockaddr = info[4]
-        if not sockaddr:
-            continue
-        ip = sockaddr[0]
-        if ip not in addrs:
-            addrs.append(ip)
-    return addrs
-
-
 async def assert_public_url(url: str) -> None:
+    """Reject a submission whose host is private, loopback, link-local or
+    otherwise non-public (SSRF). Uses the same classifier as the browser-context
+    guard in crawler/_ssrf_guard.py, which stays in force during the crawl
+    for redirects and sub-resources; this check just fails fast with a 400."""
     parsed = urlparse(url)
     host = parsed.hostname or ""
 
@@ -177,50 +79,35 @@ async def assert_public_url(url: str) -> None:
             status_code=400,
             detail=f"URL scheme '{parsed.scheme}' is not supported; use http or https.",
         )
-
     if not host:
         raise HTTPException(status_code=400, detail="URL hostname is missing.")
-
-    if host.lower() == "localhost":
+    if host.lower() in ("localhost", "ip6-localhost", "ip6-loopback"):
         raise HTTPException(
             status_code=400,
-            detail="URL hostname 'localhost' is not allowed (private/loopback address).",
+            detail=f"URL hostname '{host}' is not allowed (private/loopback address).",
         )
 
-    # Literal IP host
-    try:
-        if _is_non_public_ip(host):
+    literal = _parse_literal_ip(host)
+    if literal is not None:
+        if _classify_blocked(literal):
             raise HTTPException(
                 status_code=400,
                 detail=f"URL hostname '{host}' is not allowed (private/loopback address).",
             )
         return
-    except ValueError:
-        # Not a literal IP, continue with DNS resolution.
-        pass
 
-    try:
-        resolved = await _resolve_all_ips(host)
-    except socket.gaierror:
+    resolved = await asyncio.to_thread(_resolve_hostname, host)
+    if not resolved:
         raise HTTPException(
             status_code=400,
             detail=f"URL hostname '{host}' could not be resolved.",
         )
-
-    if not resolved:
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL hostname '{host}' resolved to no addresses.",
-        )
-
-    blocked = [ip for ip in resolved if _is_non_public_ip(ip)]
+    blocked = [ip for ip in resolved if _ip_is_blocked(ip)]
     if blocked:
         sample = ", ".join(blocked[:3])
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"URL hostname '{host}' resolves to private/loopback address(es): {sample}."
-            ),
+            detail=f"URL hostname '{host}' resolves to private/loopback address(es): {sample}.",
         )
 
 

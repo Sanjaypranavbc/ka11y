@@ -289,3 +289,40 @@ def test_stage_complete_clears_every_progress_throttle_key():
         assert not any(k[0] == job_id for k in se._progress_last_emit)
     finally:
         store._jobs.pop(job_id, None)
+
+
+# ── submit-time SSRF check (now built on crawler/_ssrf_guard) ─────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ftp://example.com/",            # scheme
+        "http:///path",                  # no host
+        "http://localhost:8000/",        # loopback name
+        "http://127.0.0.1/",             # loopback literal
+        "http://10.0.0.5/",              # RFC-1918
+        "http://[::1]/",                 # IPv6 loopback
+        "http://169.254.169.254/latest", # cloud metadata
+        "http://2130706433/",            # decimal-encoded 127.0.0.1
+    ],
+)
+async def test_assert_public_url_rejects_non_public_targets(url):
+    with pytest.raises(HTTPException) as exc:
+        await routes.assert_public_url(url)
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_assert_public_url_blocks_hostnames_resolving_privately(monkeypatch):
+    monkeypatch.setattr(routes, "_resolve_hostname", lambda host: ("93.184.216.34", "10.1.2.3"))
+    with pytest.raises(HTTPException) as exc:
+        await routes.assert_public_url("https://rebinder.example/")
+    assert "private/loopback" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_assert_public_url_accepts_public_hostname(monkeypatch):
+    monkeypatch.setattr(routes, "_resolve_hostname", lambda host: ("93.184.216.34",))
+    await routes.assert_public_url("https://example.com/page")  # no exception
