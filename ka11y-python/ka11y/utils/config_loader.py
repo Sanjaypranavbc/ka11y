@@ -14,18 +14,15 @@ def _load_config_cached(config_path: str) -> dict:
         return yaml.safe_load(file)
 
 
-def load_config(config_path: str | None = None):
-    if config_path is None:
-        repo_root = Path(__file__).resolve().parents[3]
-        shared_config_path = repo_root / "config" / "universal.yml"
-        local_config_path = (
-            Path(__file__).resolve().parents[1] / "config" / "config.yml"
-        )
-        config_path = (
-            shared_config_path if shared_config_path.exists() else local_config_path
-        )
-    else:
-        config_path = Path(config_path)
+# The one runtime configuration file. It used to be shadowed by a
+# <repo>/config/universal.yml that only existed on developer machines (the
+# Docker image copies ka11y/ alone), so local runs and production read
+# different files; that second file was removed on 2026-09-27.
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "config.yml"
+
+
+def load_config(config_path: str | None = None) -> dict:
+    config_path = Path(config_path) if config_path else DEFAULT_CONFIG_PATH
 
     # Return a defensive copy so callers can tweak nested values in-memory
     # without mutating the cached shared config instance.

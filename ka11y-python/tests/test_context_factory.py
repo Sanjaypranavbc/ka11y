@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 
 from ka11y.crawler import context_factory
 from ka11y.i18n.loader import load_rules
-from ka11y.utils.crawler_settings import get_localized_check_terms
 from ka11y.utils.config_loader import load_config
 
 
@@ -70,7 +68,6 @@ def test_shared_config_is_loaded_by_default():
     config = load_config()
 
     assert config["browser"]["ignore_https_errors"] is True
-    assert "ja" in config["crawler"]["language"]["cjk_langs"]
 
 
 def test_shared_i18n_rules_are_loaded_by_default():
@@ -78,10 +75,3 @@ def test_shared_i18n_rules_are_loaded_by_default():
 
     assert rules["1.1.1"].name == "非テキストコンテンツ"
     assert "alt" in rules["1.1.1"].suggested_fix
-
-
-def test_shared_check_terms_are_loaded_from_universal_config():
-    help_terms = get_localized_check_terms("consistent_help", "help_keywords")
-
-    assert "help" in help_terms
-    assert "お問い合わせ" in help_terms
