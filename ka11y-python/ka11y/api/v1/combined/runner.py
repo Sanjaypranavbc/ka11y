@@ -410,7 +410,7 @@ def _stamp_job_outcome(job_span: Any, job_id: str) -> None:
             attrs.JOB_ERROR_STAGE: state.get("error_stage"),
         },
     )
-    if status in ("failed", "timeout"):
+    if status == "failed":  # a TimeoutError also ends as 'failed'
         from opentelemetry.trace import Status, StatusCode
 
         # The user-facing error message is deliberately generic; error_id is
@@ -1006,6 +1006,10 @@ async def _run_job_body_inner(
         )
 
     finally:
+        # Stage helpers schedule their SSE broadcasts with create_task(); two
+        # loop turns let those already-queued tasks deliver before the queues
+        # are closed, so the last stage_complete is not lost behind the
+        # terminal job_* event.
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await _close_subscribers(job_id)

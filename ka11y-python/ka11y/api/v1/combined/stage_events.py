@@ -222,10 +222,11 @@ def _stage_complete(job_id: str, name: str, findings_count: int = 0) -> None:
     if idx is not None:
         payload.update(index=idx, total=total, weight=weight)
     _fire_broadcast(job_id, "stage_complete", payload)
-    # drop per-(job,stage,phase) throttle entries for this stage to cap memory
-    _progress_last_emit.pop((job_id, name, ""), None)
-    for phase in ("crawl", "ocr", "transcribe"):
-        _progress_last_emit.pop((job_id, name, phase), None)
+    # Drop every throttle entry for this (job, stage), whatever phase labels
+    # the stage used (a fixed list here once missed "alt_audit" and leaked one
+    # key per job).
+    for key in [k for k in _progress_last_emit if k[0] == job_id and k[1] == name]:
+        _progress_last_emit.pop(key, None)
 
 
 def _stage_error(job_id: str, name: str, error: str) -> None:

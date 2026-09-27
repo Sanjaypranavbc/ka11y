@@ -3,7 +3,7 @@ ka11y/api/v1/combined/routes.py
 =================================
 FastAPI route handlers for accessibility audit endpoints.
 
-  POST /python-audit/              202  Submit Python-only audit job (OCR, image, media, contrast, form, label-in-name)
+  POST /python-audit/              202  Submit Python-only audit job (image, OCR contrast, media/captions)
   POST /combined-audit/            202  Submit combined audit job (Python + Node/axe-core — Node wired via runner)
   GET  /combined/{job_id}          200  Poll status / retrieve result
   GET  /combined/{job_id}/timings  200  Per-stage timing breakdown (JSON)
@@ -231,9 +231,9 @@ async def submit_python_audit(
     """
     Submit a **Python-only** accessibility audit.
 
-    Runs: OCR contrast (1.4.3), image audit (1.1.1 / 1.4.5 / 1.4.11), media/captions
-    audit (1.2.x), form audit (3.3.x), and label-in-name audit (2.5.3).
-    Node/axe-core is **not** invoked by this endpoint.
+    Runs the Python stages only: image audit (1.1.1 / 1.4.5 / 1.4.11 / 4.1.2),
+    OCR contrast (1.4.3 / 1.4.6) and the media/captions audit (1.2.1 / 1.2.2),
+    plus the cross-page and linked-PDF checks on multi-page crawls.
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report, or connect to

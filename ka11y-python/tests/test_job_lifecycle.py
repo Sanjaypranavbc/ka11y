@@ -246,3 +246,46 @@ def test_cancelled_jobs_are_evicted_like_finished_ones():
 
     src = inspect.getsource(store._evict_old_jobs)
     assert '"cancelled"' in src
+
+
+# ── B7 — rule tester isolation ───────────────────────────────────────────────
+
+
+def test_rule_evaluator_registers_one_job_per_request():
+    from ka11y.api.v1 import rule_evaluator as re_
+
+    a = re_._register_job("https://a.example")
+    b = re_._register_job("https://b.example")
+    try:
+        assert a != b and a in store._jobs and b in store._jobs
+        assert store._jobs[a]["stages"] is not store._jobs[b]["stages"]
+    finally:
+        store._jobs.pop(a, None)
+        store._jobs.pop(b, None)
+
+
+def test_rule_evaluator_snapshot_cache_is_bounded():
+    from ka11y.api.v1 import rule_evaluator as re_
+
+    re_._SNAPSHOT_CACHE.clear()
+    for i in range(re_._SNAPSHOT_CACHE_MAX + 5):
+        re_._cache_put(f"https://site{i}.example", object())
+    assert len(re_._SNAPSHOT_CACHE) == re_._SNAPSHOT_CACHE_MAX
+    assert re_._cache_get("https://site0.example") is None  # oldest evicted
+    re_._SNAPSHOT_CACHE.clear()
+
+
+def test_stage_complete_clears_every_progress_throttle_key():
+    from ka11y.api.v1.combined import stage_events as se
+
+    job_id = "lifecycle-throttle"
+    store._jobs[job_id] = _hot_entry(job_id, status="running")
+    try:
+        se._stage_start(job_id, "image_audit")
+        for phase in ("crawl", "ocr", "alt_audit"):
+            se.emit_stage_progress(job_id, "image_audit", 1, 2, phase=phase)
+        assert any(k[0] == job_id for k in se._progress_last_emit)
+        se._stage_complete(job_id, "image_audit", 0)
+        assert not any(k[0] == job_id for k in se._progress_last_emit)
+    finally:
+        store._jobs.pop(job_id, None)
