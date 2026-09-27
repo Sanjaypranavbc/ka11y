@@ -1,4 +1,3 @@
-import json
 from typing import List, Dict, Any, Optional
 from playwright.async_api import Page
 from ..models import (
@@ -9,7 +8,6 @@ from ..models import (
     BoundingBox,
     AccessibleName,
     AccessibleNameSource,
-    SectionType,
 )
 from ..analyzers.section_analyzer import SectionAnalyzer
 

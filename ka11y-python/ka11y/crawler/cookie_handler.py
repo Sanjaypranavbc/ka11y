@@ -1,10 +1,11 @@
-import logging
 import re
 from typing import Union
 
 from playwright.async_api import Frame, Page
 
-logger = logging.getLogger(__name__)
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="cookies")
 
 CookieContext = Union[Page, Frame]
 

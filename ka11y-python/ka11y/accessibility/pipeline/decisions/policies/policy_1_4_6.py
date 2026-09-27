@@ -1,6 +1,5 @@
 from .policy_1_4_3 import Policy143
 from ...models import ElementContext, RuleVerdict, VerdictStatus
-from ...runners.contrast_engine import ContrastEngine
 from ...config.thresholds import CONTRAST_NORMAL_AAA, CONTRAST_LARGE_AAA
 
 

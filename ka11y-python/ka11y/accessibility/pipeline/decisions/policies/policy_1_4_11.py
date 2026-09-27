@@ -1,6 +1,5 @@
 from .base_policy import WCAGPolicy
-from ...models import ElementContext, RuleVerdict, VerdictStatus
-from ...runners.contrast_engine import ContrastEngine
+from ...models import ElementContext, RuleVerdict
 
 
 class Policy1411(WCAGPolicy):

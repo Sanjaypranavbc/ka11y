@@ -18,7 +18,6 @@ import mimetypes
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse, Response
 
-from ka11y.store import repo
 from ka11y.store.assets import get_asset_record
 from ka11y.store.db import get_db
 from ka11y.storage.backends import LocalObjectStore, get_store

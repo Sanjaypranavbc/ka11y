@@ -33,7 +33,7 @@ import io
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlsplit
 
 from ka11y.config.logger import setup_logger
@@ -388,7 +388,7 @@ def _detect_lang(text: str) -> Optional[str]:
         "fr": {"le", "la", "les", "des", "et", "est", "une", "pour", "dans", "que"},
         "es": {"el", "la", "los", "las", "que", "en", "un", "una", "por", "con"},
     }
-    scores = {l: sum(1 for w in words if w in s) for l, s in stop.items()}
+    scores = {lang: sum(1 for w in words if w in s) for lang, s in stop.items()}
     best = max(scores, key=scores.get)
     return best if scores[best] >= 5 and scores[best] >= 2 * sorted(scores.values())[-2] else None
 
@@ -396,7 +396,10 @@ def _detect_lang(text: str) -> Optional[str]:
 def evaluate_pdf(facts: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Map facts to per-technique verdicts: ``{technique, status, reason}``."""
     v: List[Dict[str, Any]] = []
-    add = lambda t, status, reason: v.append({"technique": t, "status": status, "reason": reason})
+
+    def add(t: str, status: str, reason: str) -> None:
+        v.append({"technique": t, "status": status, "reason": reason})
+
     n = facts["pages"]
     st = facts["struct"]
     tagged = facts["marked"] and facts["has_struct_tree"] and st["nodes"] > 0

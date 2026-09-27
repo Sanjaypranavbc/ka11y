@@ -137,30 +137,3 @@ def setup_logger(name: str = "KAC", tag: str | None = None) -> KaLogger:
             )
 
     return KaLogger(base, {"tag": tag or "GENERAL"})
-
-
-# ── Convenience wrappers (kept for back-compat) ───────────────────────────────
-
-
-def log_info(logger: KaLogger, message: str) -> None:
-    logger.info(message)
-
-
-def log_warning(logger: KaLogger, message: str) -> None:
-    logger.warning(message)
-
-
-def log_error(logger: KaLogger, message: str) -> None:
-    logger.error(message)
-
-
-def log_debug(logger: KaLogger, message: str) -> None:
-    logger.debug(message)
-
-
-def log_success(logger: KaLogger, message: str) -> None:
-    logger.success(message)
-
-
-def log_processing(logger: KaLogger, message: str) -> None:
-    logger.processing(message)

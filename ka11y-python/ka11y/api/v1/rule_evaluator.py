@@ -12,7 +12,6 @@ Architecture notes:
 """
 
 import asyncio
-import logging
 import os
 import tempfile
 from pathlib import Path
@@ -28,8 +27,9 @@ from ka11y.api.v1.combined.stages import (
 )
 from ka11y.api.v1.combined.store import _jobs
 from ka11y.utils.step_logger import ExecutionStepLogger
+from ka11y.config.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(name="KAC", tag="rule_evaluator")
 
 router = APIRouter(tags=["testing"])
 

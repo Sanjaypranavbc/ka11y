@@ -385,7 +385,6 @@ try:
 except Exception:  # noqa: BLE001
     logger.exception("HTTP tracing middleware not installed; requests run untraced")
 
-from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,

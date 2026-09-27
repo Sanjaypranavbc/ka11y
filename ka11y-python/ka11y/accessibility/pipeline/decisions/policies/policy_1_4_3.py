@@ -1,6 +1,6 @@
 import re
 from .base_policy import WCAGPolicy
-from ...models import ElementContext, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict
 from ...runners.contrast_engine import ContrastEngine
 
 

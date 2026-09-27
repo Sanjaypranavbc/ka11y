@@ -38,7 +38,6 @@ from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import emit_job_plan
 from .stages import (
-    PythonStagesResult,
     _allowed_levels,
     _run_python_stages,
 )

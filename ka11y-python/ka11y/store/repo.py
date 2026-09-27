@@ -17,7 +17,6 @@ All SQL lives here so a future Postgres swap is mechanical.
 from __future__ import annotations
 
 import json
-import time
 import zlib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional

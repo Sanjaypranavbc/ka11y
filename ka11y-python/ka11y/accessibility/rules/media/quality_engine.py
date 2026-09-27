@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -638,9 +637,6 @@ def _check_sequence(
         whisper_quarter_words = [wq.split() for wq in whisper_quarters]
 
     quarter_size = max(len(dev_words) // 4, 1)
-    dev_quarters = [
-        " ".join(dev_words[i * quarter_size : (i + 1) * quarter_size]) for i in range(4)
-    ]
 
     # Compare each quarter pair
     quarter_scores = []
@@ -1021,7 +1017,7 @@ def evaluate_captions_quality(
     ground_truth = transcription["text"]
     
     try:
-        from jiwer import wer, Compose, ToLowerCase, RemovePunctuation, RemoveWhiteSpace
+        from jiwer import wer
         import string
         
         # Build simple cleaner if jiwer doesn't provide these specific transforms out of box

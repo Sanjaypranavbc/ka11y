@@ -189,105 +189,6 @@ class OCRPreprocessing:
             return "informational_text"
         return "with_text"
 
-    # def detect_text_in_image(self, image_path: str) -> TextDetectionResult:
-    #     """Use EasyOCR to detect text and run contrast analysis"""
-    #     logger.info(f"Processing: {image_path}")
-    #
-    #     filename = Path(image_path).name
-    #     category = self._determine_category(image_path)
-    #
-    #     result = TextDetectionResult(
-    #         filename=filename,
-    #         original_path=image_path,
-    #         category=category
-    #     )
-    #
-    #     try:
-    #         detections = self.reader.readtext(image_path)
-    #
-    #         if len(detections) > 0:
-    #             result.has_text = True
-    #             img = cv2.imread(image_path)
-    #
-    #             for bbox, text, conf in detections:
-    #                 clean_bbox = [(int(p[0]), int(p[1])) for p in bbox]
-    #
-    #                 try:
-    #                     contrast_info = contrast_analyser.analyze_text_region(img, clean_bbox)
-    #                 except Exception as e:
-    #                     logger.warning(f"Contrast analysis failed: {e}")
-    #                     contrast_info = None
-    #
-    #                 violations = []
-    #
-    #                 color_info = None
-    #                 if 'utils.color_picker' in sys.modules:
-    #                     try:
-    #                         fg_color = extract_color.extract_text_color(img, clean_bbox)
-    #                         bg_pixels = extract_color.extract_adjacent_text_pixels(img, clean_bbox)
-    #                         bg_colors = extract_color.cluster_colors(bg_pixels, k=3)
-    #
-    #                         color_info = {
-    #                             "foreground": fg_color,
-    #                             "background_palette": bg_colors,
-    #                             "contrast_checks": []
-    #                         }
-    #
-    #                         fg_lum = fg_color['luminance']
-    #                         for bg in bg_colors:
-    #                             bg_lum = bg['luminance']
-    #                             l1 = max(fg_lum, bg_lum)
-    #                             l2 = min(fg_lum, bg_lum)
-    #                             ratio = (l1 + 0.05) / (l2 + 0.05)
-    #                             compliance = contrast_analyser.check_wcag_compliance(ratio)
-    #                             color_info["contrast_checks"].append({
-    #                                 "bg_color": bg,
-    #                                 "ratio": round(ratio, 2),
-    #                                 "compliance": compliance
-    #                             })
-    #                             if not compliance['AA_normal']:
-    #                                 violations.append(f"Fails AA Normal vs BG {bg['hex']}")
-    #
-    #                     except Exception as cp_err:
-    #                         logger.warning(f"Color picker failed for region: {cp_err}")
-    #
-    #                 if contrast_info and not contrast_info.get('error'):
-    #                     if 'compliance' in contrast_info:
-    #                         compliance = contrast_info['compliance']
-    #                         if not compliance.get('AA_normal', False):
-    #                             violations.append("Fails AA Normal")
-    #
-    #                 if violations:
-    #                     result.contrast_violations_count += 1
-    #
-    #                 result.detections.append(DetailedDetection(
-    #                     text=text,
-    #                     confidence=float(conf),
-    #                     bbox=clean_bbox,
-    #                     contrast_info=contrast_info,
-    #                     color_info=color_info,
-    #                     wcag_violations=violations
-    #                 ))
-    #
-    #             # Copy image to appropriate text category folder
-    #             dest_folder = self.categories.get(category, self.categories["with_text"])
-    #             dest_path = os.path.join(dest_folder, filename)
-    #             shutil.copy2(image_path, dest_path)
-    #
-    #             result.new_path = dest_path
-    #
-    #             logger.info(
-    #                 f"✓ Detected {len(detections)} text regions. Category: {category}. Violations: {result.contrast_violations_count}")
-    #         else:
-    #             logger.debug(f"No text detected in {filename}")
-    #
-    #     except Exception as e:
-    #         logger.error(f"Error processing {filename}: {str(e)}")
-    #         import traceback
-    #         traceback.print_exc()
-    #
-    #     return result
-
     def is_valid_text(self, bbox, text, conf):
         if conf < 0.6:
             return False
@@ -581,15 +482,13 @@ class OCRPreprocessing:
             self.results.append(result)
 
             if result.has_text:
-                print(
-                    f"  ✓ Found {len(result.detections)} text regions ({result.category})"
+                logger.debug(
+                    "%s: %d text regions (%s), %d contrast violation(s)",
+                    result.filename, len(result.detections), result.category,
+                    result.contrast_violations_count,
                 )
-                if result.contrast_violations_count > 0:
-                    print(
-                        f"  ⚠ {result.contrast_violations_count} contrast violations detected!"
-                    )
             else:
-                print("  . No text")
+                logger.debug("%s: no text", result.filename)
 
         # One GC pass for the whole batch instead of one per image — the old
         # per-image gc.collect() was a blanket OOM guard that cost real time
@@ -696,18 +595,12 @@ class TextClassification:
         md_file = os.path.join(self.contrast_dir, "contrast_report.md")
         self._generate_contrast_markdown(md_file, images_with_violations)
 
-        print(f"\n{'=' * 60}")
-        print("SCAN COMPLETE")
-        print(f"Total images: {len(self.results)}")
-        print(f"With text: {images_with_text}")
-        print(f"Contrast violations: {images_with_violations}")
-        print(f"Contrast needs review (could not be determined): {images_with_needs_review}")
-        print("Reports saved to:")
-        print(f"  - {json_file}")
-        print(f"  - {csv_file}")
-        print(f"  - {contrast_json}")
-        print(f"  - {md_file}")
-        print(f"{'=' * 60}")
+        logger.info(
+            "OCR scan complete: %d images, %d with text, %d contrast violations, "
+            "%d needs review; reports in %s",
+            len(self.results), images_with_text, images_with_violations,
+            images_with_needs_review, self.contrast_dir,
+        )
 
     def _generate_contrast_markdown(self, output_path: str, violation_count: int):
         """Generate a user-friendly Markdown report for contrast analysis"""
