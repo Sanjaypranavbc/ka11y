@@ -100,6 +100,12 @@ async def seed_bootstrap_users() -> None:
 
     password = os.getenv("KA11Y_BOOTSTRAP_PASSWORD", "")
     if not password:
+        # Say so: a fresh database with no bootstrap password has no accounts
+        # at all, and every password sign-in then fails as "incorrect".
+        logger.info(
+            "[db.seed] KA11Y_BOOTSTRAP_PASSWORD not set: no accounts created; use "
+            "scripts/set_password.py --create or self-registration for allow-listed e-mails"
+        )
         return
     from ka11y.auth.service import AuthError, bootstrap_allow_listed_users
 

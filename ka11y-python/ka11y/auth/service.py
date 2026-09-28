@@ -237,15 +237,19 @@ async def login_local(*, email: str, password: str) -> User:
         user = (
             await s.execute(select(User).where(User.email == email, User.deleted_at.is_(None)))
         ).scalar_one_or_none()
+        # The client only ever sees "invalid_credentials"; the detail below
+        # goes to the server log so an operator can tell "no such account"
+        # (nothing was bootstrapped / registered on this database) from a
+        # wrong password without asking the user to guess.
         if user is None:
             # Burn the same time as a real check so the response does not
             # reveal whether the address exists.
             verify_password(password, hash_password("timing-equalizer"))
-            raise AuthError("invalid_credentials")
+            raise AuthError("invalid_credentials", f"no account for {email} in this database")
         if not user.password_hash:
             raise AuthError("no_password", f"{email} has no password (OIDC-only account)")
         if not verify_password(password, user.password_hash):
-            raise AuthError("invalid_credentials")
+            raise AuthError("invalid_credentials", f"wrong password for {email}")
         if user.status != "active":
             raise AuthError("account_suspended", f"user {email} is {user.status}")
         if needs_rehash(user.password_hash):

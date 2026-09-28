@@ -444,6 +444,12 @@ services:
     depends_on:
       node:
         condition: service_healthy
+      # The UI proxies /api/v1/* to python and its admin page opens an SSE
+      # stream on load. Started together, the first requests raced uvicorn's
+      # bind and logged "Failed to proxy http://python:8000 … ECONNREFUSED".
+      # Wait for python's /health instead (its healthcheck below).
+      python:
+        condition: service_healthy
 
     networks:
       - ka11y-net
