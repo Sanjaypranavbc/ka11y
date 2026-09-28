@@ -52,7 +52,13 @@ function LoginForm() {
   useEffect(() => {
     let cancelled = false;
     fetchAuthConfig().then((cfg) => {
-      if (!cancelled) setConfig(cfg);
+      if (cancelled) return;
+      setConfig(cfg);
+      // The API hides every sign-in method when the server has no session
+      // secret / database (KA11Y_SESSION_SECRET, DATABASE_URL). Without this
+      // the page rendered only the heading and the access note, with nothing
+      // to click and no hint why.
+      if (!cfg.configured && !cfg.oidc && !cfg.password_login) setErrorCode("not_configured");
     });
     return () => {
       cancelled = true;

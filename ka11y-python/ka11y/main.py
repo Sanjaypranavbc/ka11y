@@ -344,6 +344,28 @@ async def lifespan(app: FastAPI):
     # first login: the cookie sealer refuses a short secret.
     try:
         cfg = _auth_settings()
+        if not cfg.disabled:
+            from ka11y.db.engine import is_configured as _db_configured
+
+            missing = [name for name, ok in (
+                ("KA11Y_SESSION_SECRET", bool(cfg.session_secret)),
+                ("DATABASE_URL", _db_configured()),
+            ) if not ok]
+            if missing:
+                # /api/v1/auth/config then reports configured=false and the
+                # login page offers no sign-in method at all — say so here,
+                # where a deploy log is read, not only on the blank page.
+                logger.error(
+                    "Sign-in is NOT configured: %s missing or empty in the python service's "
+                    "environment (ka11y-python/.env via compose env_file). Both the OIDC and "
+                    "the password sign-in are disabled until set.",
+                    " and ".join(missing),
+                )
+            elif not cfg.oidc_configured and not cfg.password_login:
+                logger.error(
+                    "Sign-in is NOT configured: neither OIDC (KA11Y_OIDC_CLIENT_ID / "
+                    "_CLIENT_SECRET / _REDIRECT_URI) nor password login (KA11Y_PASSWORD_LOGIN=1) is set."
+                )
         if cfg.session_secret and not cfg.session_secret_ok:
             logger.error(
                 "KA11Y_SESSION_SECRET is shorter than 32 characters; sign-in will fail. "
