@@ -1,31 +1,35 @@
 """
-Integration tests for the durable persistence layer (P0–P6 wiring):
-SQLite store, asset store, durable queue dispatcher, and the DB-backed API
-fallbacks (history, cancel, get-after-eviction, metrics).
+Integration tests for the run store (PostgreSQL): run lifecycle, report and
+findings, asset index, durable queue dispatcher, telemetry mirroring, and the
+DB-backed API fallbacks (history, cancel, get-after-eviction, metrics).
+
+Needs a reachable PostgreSQL (``docker compose up -d postgres``); skipped
+otherwise — see ``pg_db`` in conftest.
 """
 
 from __future__ import annotations
 
 import asyncio
+import uuid
 
 import pytest
+from sqlalchemy import select
 
-from ka11y.store import db as dbm
-from ka11y.store import repo
+from ka11y.db.engine import session_scope
+from ka11y.db.models import AuditAsset, AuditFail, StageTiming
+from ka11y.store import repo, writer
 
 
 @pytest.fixture()
-def isolated_db(tmp_path, monkeypatch):
-    """Point the global store at a throwaway SQLite file for this test."""
-    db_path = tmp_path / "t.db"
-    asset_path = tmp_path / "assets"
-    monkeypatch.setenv("KA11Y_DB_PATH", str(db_path))
-    monkeypatch.setenv("KA11Y_ASSET_DIR", str(asset_path))
+def isolated_db(pg_db, tmp_path, monkeypatch):
+    """A clean run store plus a throwaway asset directory for this test."""
+    monkeypatch.setenv("KA11Y_ASSET_DIR", str(tmp_path / "assets"))
     monkeypatch.setenv("KA11Y_TELEMETRY_FILES", "0")
-    dbm.shutdown_db()
-    dbm.init_db(str(db_path))
     yield
-    dbm.shutdown_db()
+
+
+def _id() -> str:
+    return str(uuid.uuid4())
 
 
 async def _seed_completed(run_id: str) -> dict:
@@ -62,40 +66,46 @@ async def _seed_completed(run_id: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_run_report_roundtrip(isolated_db):
-    await _seed_completed("run-rt")
-    run = await repo.get_run("run-rt")
+    RID = _id()
+    await _seed_completed(RID)
+    run = await repo.get_run(RID)
     assert run["status"] == "completed"
     assert run["wall_ms"] == 4000 and run["queue_wait_ms"] == 1000
-    rep = await repo.get_report("run-rt")
+    rep = await repo.get_report(RID)
     assert rep["summary"]["violations"] == 1
     runs = await repo.list_runs(limit=10)
-    assert any(r["run_id"] == "run-rt" for r in runs)
+    assert any(r["run_id"] == RID for r in runs)
     assert runs[0]["summary"]["violations"] == 1
 
 
 @pytest.mark.asyncio
 async def test_findings_flattened(isolated_db):
-    await _seed_completed("run-f")
-    rows = await dbm.get_db().query(
-        "SELECT wcag_sc, status, source FROM findings WHERE run_id=?", ("run-f",)
-    )
-    assert {"wcag_sc": "1.1.1", "status": "fail", "source": "python"} in rows
+    RID = _id()
+    await _seed_completed(RID)
+    async with session_scope() as s:
+        rows = (
+            await s.execute(
+                select(AuditFail.wcag_sc, AuditFail.status, AuditFail.source).where(AuditFail.job_id == uuid.UUID(RID))
+            )
+        ).all()
+    assert ("1.1.1", "fail", "python") in [tuple(r) for r in rows]
 
 
 @pytest.mark.asyncio
 async def test_asset_put_get_roundtrip(isolated_db):
+    RID = _id()
     from ka11y.store.assets import get_asset, put_asset
 
     # Assets FK-reference a run, so create it first (mirrors production order).
     await repo.create_run(
-        run_id="run-a", url="https://e.com", status="running",
+        run_id=RID, url="https://e.com", status="running",
         lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
         max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
     )
-    ref = await put_asset(run_id="run-a", kind="screenshot", data=b"\x89PNG_fake", mime="image/png")
+    ref = await put_asset(run_id=RID, kind="screenshot", data=b"\x89PNG_fake", mime="image/png")
     assert ref is not None and ref.asset_id > 0
     # Same bytes again → content-addressed dedup (same row id).
-    ref2 = await put_asset(run_id="run-a", kind="screenshot", data=b"\x89PNG_fake", mime="image/png")
+    ref2 = await put_asset(run_id=RID, kind="screenshot", data=b"\x89PNG_fake", mime="image/png")
     assert ref2.asset_id == ref.asset_id
     row = await get_asset(ref.asset_id)
     assert row and row["abs_path"].endswith(".png")
@@ -103,29 +113,32 @@ async def test_asset_put_get_roundtrip(isolated_db):
 
 @pytest.mark.asyncio
 async def test_crash_recovery_requeues_running(isolated_db):
+    RID = _id()
     await repo.create_run(
-        run_id="run-crash", url="https://e.com", status="running",
+        run_id=RID, url="https://e.com", status="running",
         lang_requested="auto", wcag_level="AA", params={"url": "https://e.com"},
         max_depth=0, max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
     )
     requeued = await repo.requeue_running()
-    assert any(o["run_id"] == "run-crash" for o in requeued)
-    run = await repo.get_run("run-crash")
+    assert any(o["run_id"] == RID for o in requeued)
+    run = await repo.get_run(RID)
     assert run["status"] == "queued" and run["attempt"] == 1
 
 
 @pytest.mark.asyncio
 async def test_retention_sweep_removes_old(isolated_db):
-    await _seed_completed("run-old")
+    RID = _id()
+    await _seed_completed(RID)
     # submitted_at is 2026 in the seed; sweep with 0-day retention removes it.
     removed = await repo.retention_sweep(retention_days=0)
-    assert "run-old" in removed
-    assert await repo.get_run("run-old") is None
+    assert RID in removed
+    assert await repo.get_run(RID) is None
 
 
 @pytest.mark.asyncio
 async def test_dispatcher_executes_queued_run(isolated_db, monkeypatch):
     """The dispatcher should pick a queued row and drive it through the runner."""
+    RID = _id()
     from ka11y.api.v1.combined import dispatcher
     from ka11y.api.v1.combined import runner as runner_mod
     from ka11y.api.v1.combined.store import _jobs
@@ -144,7 +157,7 @@ async def test_dispatcher_executes_queued_run(isolated_db, monkeypatch):
     monkeypatch.setattr(runner_mod, "_run_job_body", fake_body)
 
     await repo.create_run(
-        run_id="run-disp", url="https://example.com", status="queued",
+        run_id=RID, url="https://example.com", status="queued",
         lang_requested="auto", wcag_level="AA",
         params={"url": "https://example.com", "max_depth": 0},
         max_depth=0, max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
@@ -153,9 +166,11 @@ async def test_dispatcher_executes_queued_run(isolated_db, monkeypatch):
     task = asyncio.create_task(dispatcher.run_dispatcher())
     try:
         dispatcher.notify()
-        for _ in range(50):
+        for _ in range(100):
             await asyncio.sleep(0.05)
-            if "run-disp" in ran:
+            # ``ran`` is appended before the fake body persists 'completed';
+            # wait for the row, not just the call.
+            if RID in ran and (await repo.get_run(RID))["status"] == "completed":
                 break
     finally:
         task.cancel()
@@ -164,19 +179,20 @@ async def test_dispatcher_executes_queued_run(isolated_db, monkeypatch):
         except asyncio.CancelledError:
             pass
 
-    assert "run-disp" in ran
-    assert (await repo.get_run("run-disp"))["status"] == "completed"
+    assert RID in ran
+    assert (await repo.get_run(RID))["status"] == "completed"
 
 
 @pytest.mark.asyncio
 async def test_get_after_eviction_reads_from_db(isolated_db):
-    """A run absent from the hot _jobs cache must still resolve from SQLite."""
+    """A run absent from the hot _jobs cache must still resolve from the store."""
+    RID = _id()
     from ka11y.api.v1.combined.routes import get_combined_audit
     from ka11y.api.v1.combined.store import _jobs
 
-    await _seed_completed("run-evicted")
-    _jobs.pop("run-evicted", None)  # simulate TTL eviction / restart
-    job = await get_combined_audit("run-evicted")
+    await _seed_completed(RID)
+    _jobs.pop(RID, None)  # simulate TTL eviction / restart
+    job = await get_combined_audit(RID)
     assert job["status"] == "completed"
     assert job["result"]["summary"]["violations"] == 1
     # Image src rewritten to a job-scoped serving URL by the shared injector.
@@ -186,35 +202,38 @@ async def test_get_after_eviction_reads_from_db(isolated_db):
 
 @pytest.mark.asyncio
 async def test_history_endpoint(isolated_db):
+    RID = _id()
     from ka11y.api.v1.combined.routes import list_combined_history
 
-    await _seed_completed("run-h1")
+    await _seed_completed(RID)
     out = await list_combined_history(limit=10, offset=0, url=None, status="completed")
     assert out["count"] == 1
-    assert out["runs"][0]["run_id"] == "run-h1"
+    assert out["runs"][0]["run_id"] == RID
 
 
 @pytest.mark.asyncio
 async def test_cancel_endpoint(isolated_db):
+    RID = _id()
     from ka11y.api.v1.combined.routes import cancel_combined_audit
     from ka11y.api.v1.combined.store import _jobs
 
     await repo.create_run(
-        run_id="run-c", url="https://e.com", status="queued",
+        run_id=RID, url="https://e.com", status="queued",
         lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
         max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
     )
-    _jobs.pop("run-c", None)
-    res = await cancel_combined_audit("run-c")
+    _jobs.pop(RID, None)
+    res = await cancel_combined_audit(RID)
     assert res["cancelled"] is True
-    assert (await repo.get_run("run-c"))["status"] == "cancelled"
+    assert (await repo.get_run(RID))["status"] == "cancelled"
 
 
 @pytest.mark.asyncio
 async def test_admin_metrics(isolated_db):
+    RID = _id()
     from ka11y.api.v1.admin import admin_metrics
 
-    await _seed_completed("run-m")
+    await _seed_completed(RID)
     m = await admin_metrics()
     assert m["status_counts"].get("completed", 0) >= 1
     assert m["totals"]["total_runs"] >= 1
@@ -226,10 +245,11 @@ async def test_admin_metrics(isolated_db):
 @pytest.mark.asyncio
 async def test_register_report_assets_rewrites_urls(isolated_db, tmp_path):
     """P2: report images + finding image_src local paths become /assets/{id}."""
+    RID = _id()
     from ka11y.store.assets import register_report_assets
 
     await repo.create_run(
-        run_id="run-p2", url="https://e.com", status="running",
+        run_id=RID, url="https://e.com", status="running",
         lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
         max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
     )
@@ -246,12 +266,15 @@ async def test_register_report_assets_rewrites_urls(isolated_db, tmp_path):
         ],
         "needs_review": [], "passes": [],
     }
-    n = await register_report_assets("run-p2", report)
+    n = await register_report_assets(RID, report)
     assert n == 2
     assert report["contrast_report"]["images"][0]["image_url"].startswith("/api/v1/assets/")
     assert report["violations"][0]["element"]["image_src"].startswith("/api/v1/assets/")
-    rows = await repo.list_run_assets("run-p2")
+    rows = await repo.list_run_assets(RID)
     assert len(rows) == 2
+    async with session_scope() as s:
+        n = len((await s.execute(select(AuditAsset.id).where(AuditAsset.job_id == uuid.UUID(RID)))).all())
+    assert n == 2
     assert {r["kind"] for r in rows} == {"contrast_region", "finding_image"}
 
 
@@ -260,16 +283,19 @@ async def test_each_finding_keeps_its_own_image(isolated_db, tmp_path):
     """Re-registering an already-stored image must not hand back a different
     image's asset id.
 
-    Regression: one crop is registered once per rule that fired on it (1.1.1,
-    then 4.1.2, 1.4.5, …). The second INSERT OR IGNORE is a no-op, and reading
-    ``lastrowid`` after it returned the PREVIOUS insert's row — so the later
-    findings rendered whichever image happened to be registered before them
-    (the client saw a Kao logo next to every social-icon finding).
+    Regression (SQLite era): one crop is registered once per rule that fired
+    on it (1.1.1, then 4.1.2, 1.4.5, …). The second INSERT OR IGNORE was a
+    no-op, and reading ``lastrowid`` after it returned the PREVIOUS insert's
+    row — so the later findings rendered whichever image happened to be
+    registered before them (the client saw a Kao logo next to every
+    social-icon finding). The PostgreSQL index resolves the id from RETURNING
+    or a SELECT in the same transaction.
     """
+    RID = _id()
     from ka11y.store.assets import register_report_assets
 
     await repo.create_run(
-        run_id="run-dup", url="https://e.com", status="running",
+        run_id=RID, url="https://e.com", status="running",
         lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
         max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
     )
@@ -292,7 +318,7 @@ async def test_each_finding_keeps_its_own_image(isolated_db, tmp_path):
         ],
         "needs_review": [], "passes": [],
     }
-    await register_report_assets("run-dup", report)
+    await register_report_assets(RID, report)
 
     urls = [f["element"]["image_src"] for f in report["violations"]]
     assert all(u.startswith("/api/v1/assets/") for u in urls)
@@ -305,36 +331,49 @@ async def test_each_finding_keeps_its_own_image(isolated_db, tmp_path):
 @pytest.mark.asyncio
 async def test_crawler_timing_mirrors_to_db(isolated_db, tmp_path, monkeypatch):
     """P3: crawler rows mirror into stage_timings when a run_id is in context."""
+    RID = _id()
     from ka11y.utils import crawler_timing
 
     monkeypatch.setenv("KA11Y_TELEMETRY_FILES", "0")
-    crawler_timing.set_run_id("run-ct")
+    await repo.create_run(
+        run_id=RID, url="https://e.com", status="running", lang_requested="auto", wcag_level="AA",
+        params={}, max_depth=0, max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
+    )
+    crawler_timing.set_run_id(RID)
     crawler_timing.CrawlerTimingLogger(tmp_path).record(
         "image", scope="https://e.com", duration_s=1.5, status="ok", pages=4
     )
-    await asyncio.sleep(0.1)  # let the fire-and-forget writer drain
-    rows = await dbm.get_db().query(
-        "SELECT stage, sub_stage, duration_ms, item_count FROM stage_timings WHERE run_id=?",
-        ("run-ct",),
-    )
+    await asyncio.to_thread(writer.flush, 5)  # let the fire-and-forget writer drain
+    async with session_scope() as s:
+        rows = (
+            await s.execute(
+                select(StageTiming.stage, StageTiming.sub_stage, StageTiming.duration_ms, StageTiming.item_count)
+                .where(StageTiming.job_id == uuid.UUID(RID))
+            )
+        ).all()
     crawler_timing.set_run_id(None)
-    assert any(r["stage"] == "image" and r["sub_stage"] == "crawl" for r in rows)
+    assert any(stage == "image" and sub == "crawl" for stage, sub, _ms, _n in rows)
 
 
 @pytest.mark.asyncio
 async def test_run_timing_mirrors_to_run_events(isolated_db):
     """P3: the aggregate run-timing block lands in run_events as well."""
+    RID = _id()
     from ka11y.utils.run_timing import log_run_timing
 
+    await repo.create_run(
+        run_id=RID, url="https://e.com", status="completed", lang_requested="en", wcag_level="AA",
+        params={}, max_depth=0, max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
+    )
     log_run_timing(
-        job_id="run-rt2", url="https://e.com", status="completed", stages=[],
+        job_id=RID, url="https://e.com", status="completed", stages=[],
         submitted_at="2026-06-02T00:00:00+00:00",
         run_started_at="2026-06-02T00:00:01+00:00",
         completed_at="2026-06-02T00:00:05+00:00", lang="en",
         summary={"violations": 0},
     )
-    await asyncio.sleep(0.1)
-    events = await repo.get_events("run-rt2")
+    await asyncio.to_thread(writer.flush, 5)
+    events = await repo.get_events(RID)
     assert any(e["event"] == "run_timing" for e in events)
 
 
@@ -417,6 +456,7 @@ def test_apply_reviews_idempotent_and_arrays_match_counts():
 
 @pytest.mark.asyncio
 async def test_review_endpoint_updates_effective_score(isolated_db):
+    RID = _id()
     from ka11y.api.v1.combined.report import _build_report
     from ka11y.api.v1.combined.routes import (
         FindingReviewRequest,
@@ -427,18 +467,18 @@ async def test_review_endpoint_updates_effective_score(isolated_db):
 
     rep = _build_report("https://e.com", _sample_findings())
     await repo.create_run(
-        run_id="run-rev", url="https://e.com", status="completed",
+        run_id=RID, url="https://e.com", status="completed",
         lang_requested="auto", wcag_level="AA", params={}, max_depth=0,
         max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
     )
-    await repo.save_report("run-rev", rep)
-    _jobs.pop("run-rev", None)
+    await repo.save_report(RID, rep)
+    _jobs.pop(RID, None)
 
     fid = rep["needs_review"][0]["finding_id"]
-    out = await review_finding("run-rev", fid, FindingReviewRequest(status="violation", note="confirmed"))
+    out = await review_finding(RID, fid, FindingReviewRequest(status="violation", note="confirmed"))
     assert out["status"] == "violation" and out["wcag_sc"] == "1.4.3"
 
-    job = await get_combined_audit("run-rev")
+    job = await get_combined_audit(RID)
     result = job["result"]
     s = result["summary"]
     assert s["violations"] == 2 and s["needs_review"] == 0 and s["score"] == 33.3
@@ -452,18 +492,19 @@ async def test_review_endpoint_updates_effective_score(isolated_db):
     # Reviewing a non-existent / non-needs_review finding id → 404.
     import fastapi
     with pytest.raises(fastapi.HTTPException):
-        await review_finding("run-rev", "deadbeefdeadbeef", FindingReviewRequest(status="pass"))
+        await review_finding(RID, "deadbeefdeadbeef", FindingReviewRequest(status="pass"))
 
 
 @pytest.mark.asyncio
 async def test_rerun_creates_new_run_from_stored_params(isolated_db, monkeypatch):
     """Re-audit reconstructs the original parameters and enqueues a NEW run,
     preserving the original — closes the 'must re-submit manually' gap."""
+    RID = _id()
     from ka11y.api.v1.combined import routes
 
     enqueued: list = []
 
-    async def fake_enqueue(job_id, payload, filter_rule=None):
+    async def fake_enqueue(job_id, payload, filter_rule=None, **kwargs):
         enqueued.append((job_id, payload))
 
     async def fake_ssrf(url):
@@ -473,15 +514,15 @@ async def test_rerun_creates_new_run_from_stored_params(isolated_db, monkeypatch
     monkeypatch.setattr(routes, "assert_public_url", fake_ssrf)
 
     await repo.create_run(
-        run_id="run-orig", url="https://example.com", status="completed",
+        run_id=RID, url="https://example.com", status="completed",
         lang_requested="auto", wcag_level="AA",
         params={"url": "https://example.com", "max_depth": 2, "max_pages": 25, "wcag_level": "AA"},
         max_depth=2, max_pages=25, submitted_at="2026-06-02T00:00:00+00:00",
     )
 
-    out = await routes.rerun_combined_audit("run-orig")
-    assert out["rerun_of"] == "run-orig"
-    assert out["job_id"] != "run-orig" and out["status"] == "queued"
+    out = await routes.rerun_combined_audit(RID)
+    assert out["rerun_of"] == RID
+    assert out["job_id"] != RID and out["status"] == "queued"
     # The reconstructed payload preserved the original depth/pages/level.
     assert len(enqueued) == 1
     _, payload = enqueued[0]

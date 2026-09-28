@@ -1,12 +1,12 @@
 """
 ka11y/store/assets.py
 =====================
-Content-addressed asset store (Decision #2: bytes on disk, metadata in DB).
+Content-addressed asset store (bytes on disk, index in PostgreSQL).
 
 ``put_asset`` hashes the bytes, writes them under ``KA11Y_ASSET_DIR`` at a
 path derived from the sha256 (so the same logo across 50 pages is stored once),
-and records a row in ``assets``. ``get_asset`` resolves a row → absolute path
-for the serving endpoint.
+and records a row in ``audit_assets``. ``get_asset`` resolves a row → absolute
+path for the serving endpoint.
 
 Nothing here may fail an audit: ``put_asset`` returns ``None`` on any error and
 logs it. The caller keeps its existing on-disk path as a fallback.
@@ -18,12 +18,17 @@ import hashlib
 import mimetypes
 import os
 import shutil
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
+from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from ka11y.config.logger import setup_logger
-from ka11y.store.db import get_db
+from ka11y.db.engine import is_configured, session_scope
+from ka11y.db.models import AuditAsset
 
 logger = setup_logger(name="KAC", tag="store.assets")
 
@@ -94,30 +99,35 @@ async def put_asset(
             tmp.write_bytes(raw)
             os.replace(tmp, dest)  # atomic publish
 
-        # The id MUST be read back with a SELECT rather than taken from
-        # ``lastrowid``. ``INSERT OR IGNORE`` that hits the UNIQUE(run_id,
-        # rel_path) constraint leaves ``sqlite3_last_insert_rowid()`` pointing at
-        # the PREVIOUS successful insert, so trusting lastrowid handed the caller
-        # a *different image's* asset id. That is exactly what happened for every
-        # image referenced by more than one finding (the same crop is registered
-        # once per rule: 1.1.1, then 4.1.2, 1.4.5, 1.4.11 …) — the first finding
-        # got the right thumbnail and every later one rendered whichever image
-        # was inserted before it. Insert + select run in one writer callback so
-        # they are atomic against concurrent registrations.
-        def _insert_and_resolve(conn) -> int:
-            conn.execute(
-                "INSERT OR IGNORE INTO assets "
-                "(run_id, page_url, kind, rel_path, sha256, mime, width, height, bytes) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
-                (run_id, page_url, kind, rel_path, sha, mime, width, height, len(raw)),
+        # The id is taken from the INSERT's RETURNING, or — when the UNIQUE
+        # (job_id, rel_path) row already exists — from a SELECT in the same
+        # transaction. Never from a "last insert id": with the old SQLite
+        # INSERT OR IGNORE that pointed at the PREVIOUS successful insert, so
+        # every image referenced by more than one finding (the same crop is
+        # registered once per rule: 1.1.1, then 4.1.2, 1.4.5 …) rendered as
+        # whichever image had been inserted before it.
+        try:
+            jid = uuid.UUID(str(run_id))
+        except (ValueError, TypeError):
+            logger.warning("[store] put_asset(run=%s): job id is not a UUID", run_id)
+            return None
+        if not is_configured():
+            return None
+        async with session_scope() as s:
+            stmt = (
+                pg_insert(AuditAsset)
+                .values(job_id=jid, page_url=page_url, kind=kind, rel_path=rel_path, sha256=sha,
+                        mime=mime, width=width, height=height, bytes=len(raw))
+                .on_conflict_do_nothing(constraint="uq_audit_assets_job_rel_path")
+                .returning(AuditAsset.id)
             )
-            row = conn.execute(
-                "SELECT id FROM assets WHERE run_id=? AND rel_path=?",
-                (run_id, rel_path),
-            ).fetchone()
-            return int(row["id"]) if row else 0
-
-        asset_id = await get_db().run_write(_insert_and_resolve)
+            asset_id = (await s.execute(stmt)).scalar()
+            if asset_id is None:
+                asset_id = (
+                    await s.execute(
+                        select(AuditAsset.id).where(AuditAsset.job_id == jid, AuditAsset.rel_path == rel_path)
+                    )
+                ).scalar()
         if not asset_id:
             logger.warning(
                 "[store] put_asset(run=%s kind=%s) could not resolve an asset id",
@@ -160,8 +170,9 @@ async def _upload_if_needed(
 
         if get_store() is None:
             return
-        row = await get_db().query_one("SELECT object_key FROM assets WHERE id=?", (asset_id,))
-        if row and row.get("object_key"):
+        async with session_scope() as s:
+            existing = (await s.execute(select(AuditAsset.object_key).where(AuditAsset.id == asset_id))).scalar()
+        if existing:
             return
         from ka11y.storage.uploader import upload_asset_file
 
@@ -169,10 +180,12 @@ async def _upload_if_needed(
             run_id, kind=kind, path=dest, filename=filename, page_url=page_url, content_type=mime
         )
         if ref:
-            await get_db().execute(
-                "UPDATE assets SET object_key=?, object_bucket=? WHERE id=?",
-                (ref.key, ref.bucket if ref.backend == "s3" else None, asset_id),
-            )
+            async with session_scope() as s:
+                await s.execute(
+                    update(AuditAsset)
+                    .where(AuditAsset.id == asset_id)
+                    .values(object_key=ref.key, object_bucket=ref.bucket if ref.backend == "s3" else None)
+                )
     except Exception:  # noqa: BLE001
         logger.debug("[store] asset %s upload skipped", asset_id, exc_info=True)
 
@@ -180,13 +193,17 @@ async def _upload_if_needed(
 async def get_asset_record(asset_id: int) -> Optional[Dict[str, Any]]:
     """The asset row plus ``abs_path`` (None when the local file is gone, e.g.
     pruned by retention — the object store copy may still exist)."""
-    row = await get_db().query_one(
-        "SELECT id, run_id, kind, rel_path, mime, bytes, object_key, object_bucket "
-        "FROM assets WHERE id=?",
-        (asset_id,),
-    )
-    if not row:
+    if not is_configured():
         return None
+    async with session_scope() as s:
+        a = await s.get(AuditAsset, int(asset_id))
+        if a is None:
+            return None
+        row: Dict[str, Any] = {
+            "id": a.id, "run_id": str(a.job_id), "job_id": str(a.job_id), "kind": a.kind,
+            "rel_path": a.rel_path, "mime": a.mime, "bytes": a.bytes,
+            "object_key": a.object_key, "object_bucket": a.object_bucket,
+        }
     base = asset_dir().resolve()
     abs_path = (base / row["rel_path"]).resolve()
     try:

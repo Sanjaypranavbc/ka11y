@@ -1,7 +1,9 @@
 """
 Object storage for audit artifacts: local + S3 (moto) backends, key layout,
 asset-registry upload, completion/crash uploads, and serving fallbacks.
-No PostgreSQL needed (jobs land under anonymous/…); no network.
+The asset registry and the completion upload persist rows, so those tests
+take the ``pg_db`` fixture (skipped without a reachable PostgreSQL); jobs
+land under anonymous/… since the suite runs with auth disabled. No network.
 """
 
 from __future__ import annotations
@@ -58,7 +60,7 @@ def s3_env(monkeypatch):
 
 
 async def _ensure_run(run_id: str) -> None:
-    """assets.run_id → runs.run_id (FK on); a real audit persists the run first."""
+    """audit_assets.job_id → audit_jobs.id (FK); a real audit persists the run first."""
     from ka11y.store import repo
 
     await repo.create_run(
@@ -110,7 +112,7 @@ class TestKeys:
         assert await keys.job_prefix(jid) == f"anonymous/jobs/{jid}"
 
     async def test_owned_prefix_uses_uuids_only(self, monkeypatch):
-        from ka11y.db import audit_repo
+        from ka11y.store import repo as audit_repo
 
         org, usr, sess, jid = (uuid.uuid4() for _ in range(4))
 
@@ -192,9 +194,12 @@ class TestS3Store:
 
 
 class TestAssetUpload:
-    async def test_put_asset_mirrors_to_store_once(self, local_env, tmp_path):
+    async def test_put_asset_mirrors_to_store_once(self, local_env, tmp_path, pg_db):
+        from sqlalchemy import func, select
+
+        from ka11y.db.engine import session_scope
+        from ka11y.db.models import AuditAsset
         from ka11y.store.assets import put_asset, get_asset_record
-        from ka11y.store.db import get_db
 
         run_id = str(uuid.uuid4())
         await _ensure_run(run_id)
@@ -209,10 +214,11 @@ class TestAssetUpload:
         # same bytes registered again (second rule) → same row, no second upload
         ref2 = await put_asset(run_id=run_id, kind="finding_image", data=img, page_url="https://example.com/a", mime="image/png")
         assert ref2.asset_id == ref.asset_id
-        n = (await get_db().query_one("SELECT COUNT(*) AS n FROM assets WHERE run_id=?", (run_id,)))["n"]
+        async with session_scope() as s:
+            n = (await s.execute(select(func.count()).select_from(AuditAsset).where(AuditAsset.job_id == uuid.UUID(run_id)))).scalar()
         assert n == 1
 
-    async def test_ocr_report_keeps_readable_name(self, local_env, tmp_path):
+    async def test_ocr_report_keeps_readable_name(self, local_env, tmp_path, pg_db):
         from ka11y.store.assets import put_asset, get_asset_record
 
         run_id = str(uuid.uuid4())
@@ -228,7 +234,7 @@ class TestAssetUpload:
 
 
 class TestUploader:
-    async def test_upload_job_artifacts_local(self, local_env, tmp_path):
+    async def test_upload_job_artifacts_local(self, local_env, tmp_path, pg_db):
         from ka11y.storage.uploader import upload_job_artifacts
 
         run_id = str(uuid.uuid4())
@@ -294,7 +300,7 @@ class TestUploader:
 
 
 class TestServeAsset:
-    def test_serves_from_store_after_local_prune(self, local_env, tmp_path):
+    def test_serves_from_store_after_local_prune(self, local_env, tmp_path, pg_db):
         import asyncio
 
         from fastapi.testclient import TestClient

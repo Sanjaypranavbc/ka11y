@@ -52,7 +52,6 @@ from ka11y.observability import (
     traced_span,
 )
 from ka11y.store import repo
-from ka11y.db import audit_repo
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -326,7 +325,7 @@ async def _run_job(
     Concurrency:
     • Bounded by the module-level semaphore so the worker cannot launch more
       Chromium processes than _MAX_CONCURRENT_JOBS at once.
-    • Only used when the durable dispatcher is not running (SQLite failed to
+    • Only used when the durable dispatcher is not running (the store failed to
       initialise) — see ``dispatcher.enqueue``. Normally the dispatcher's own
       in-flight cap is the single limit; the two never apply at the same time.
     """
@@ -426,7 +425,7 @@ def _stamp_job_outcome(job_span: Any, job_id: str) -> None:
 
 async def _is_cancelled(job_id: str) -> bool:
     """``repo.is_cancelled`` with a read error treated as "not cancelled": a
-    momentary SQLite problem must not abort an audit that was never cancelled."""
+    momentary database problem must not abort an audit that was never cancelled."""
     try:
         return await repo.is_cancelled(job_id)
     except Exception:  # noqa: BLE001
@@ -436,8 +435,8 @@ async def _is_cancelled(job_id: str) -> bool:
 
 async def _finish_cancelled(job_id: str, *, when: str) -> None:
     """Terminal state for a cancelled job. The route already wrote 'cancelled'
-    to SQLite and PostgreSQL; this settles the hot cache and tells SSE clients,
-    who otherwise sit on keepalives until the connection drops."""
+    to the run row; this settles the hot cache and tells SSE clients, who
+    otherwise sit on keepalives until the connection drops."""
     async with _get_job_lock(job_id):
         _jobs[job_id].update(
             status="cancelled",
@@ -445,7 +444,7 @@ async def _finish_cancelled(job_id: str, *, when: str) -> None:
             current_stage=None,
         )
     logger.info("[combined] job %s cancelled %s", job_id, when)
-    repo.insert_event(job_id, "job_cancelled", {"when": when})
+    repo.insert_event(job_id, repo.JOB_CANCELLED, {"when": when, "settled": True})
     await _broadcast(job_id, "job_cancelled", {"job_id": job_id, "when": when})
 
 
@@ -470,12 +469,10 @@ async def _run_job_body_inner(
     run_started_at = datetime.now(timezone.utc).isoformat()
     _jobs[job_id]["run_started_at"] = run_started_at
     await repo.mark_running(job_id, run_started_at, _jobs[job_id].get("submitted_at"))
-    await audit_repo.mark_running(job_id, run_started_at)
-    repo.insert_event(job_id, "running", {})
 
     # From here on every failure must land in the except block below, which is
     # the only code that turns a crash into a terminal 'failed' status in the
-    # hot cache, SQLite and PostgreSQL. Anything that raised *before* the try
+    # hot cache and the run row. Anything that raised *before* the try
     # used to leave the job 'running' forever (and re-run after a restart).
     try:
         if payload.lang == "auto":
@@ -811,13 +808,6 @@ async def _run_job_body_inner(
             summary=report.get("summary"),
             output_dir=str(output_dir),
         )
-        repo.insert_event(job_id, "job_complete", {"summary": report.get("summary")})
-        await audit_repo.mark_completed(
-            job_id,
-            summary=report.get("summary"),
-            completed_at=completed_at,
-            run_started_at=_jobs[job_id].get("run_started_at"),
-        )
 
         # Artifacts → object storage (S3 / local): report.json, findings.csv,
         # report.pdf, HTML snapshots, OCR reports, step logs. Best-effort.
@@ -935,14 +925,6 @@ async def _run_job_body_inner(
                     "current_stage": None,
                 }
             )
-        await repo.mark_failed(
-            job_id,
-            completed_at=failed_at,
-            run_started_at=_jobs[job_id].get("run_started_at"),
-            error_id=error_id,
-            error_stage=current_stage,
-        )
-        repo.insert_event(job_id, "job_failed", {"error_id": error_id, "stage": current_stage})
         from ka11y.storage.uploader import upload_crash
 
         crash_ref = await upload_crash(
@@ -961,14 +943,15 @@ async def _run_job_body_inner(
                 "stages": _jobs[job_id].get("stages", []),
             },
         )
-        await audit_repo.mark_failed(
+        await repo.mark_failed(
             job_id,
-            stage=current_stage,
+            completed_at=failed_at,
+            run_started_at=_jobs[job_id].get("run_started_at"),
+            error_id=error_id,
+            error_stage=current_stage,
             error_type=err_type,
             error_message=str(exc),
             stack_trace=tb,
-            error_id=error_id,
-            completed_at=failed_at,
             object_key=crash_ref.key if crash_ref else None,
         )
 

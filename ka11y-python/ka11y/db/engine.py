@@ -19,8 +19,12 @@ traffic never leaves the private network. ``KA11Y_DB_SSLMODE`` overrides both
 setting; ``disable`` turns it off).
 
 ``DATABASE_URL`` unset → :func:`is_configured` is False, no engine is created,
-and every caller degrades: auth reports "not configured", the audit bridge
-skips its writes. The SQLite run store (``ka11y/store``) is unaffected.
+and every caller degrades: auth reports "not configured", the run store
+(``ka11y/store``) reads nothing and refuses to queue audits.
+
+``KA11Y_DB_POOL_SIZE=0`` selects ``NullPool`` (one connection per session,
+nothing kept) — what the test-suite uses, since every test runs on its own
+event loop and a pooled connection cannot be handed across loops.
 """
 
 from __future__ import annotations
@@ -117,13 +121,19 @@ def get_engine() -> AsyncEngine:
         url = database_url()
         if not url:
             raise RuntimeError("DATABASE_URL is not set")
-        _engine = create_async_engine(
-            url,
-            pool_pre_ping=True,
-            pool_size=int(os.getenv("KA11Y_DB_POOL_SIZE", "5")),
-            max_overflow=int(os.getenv("KA11Y_DB_MAX_OVERFLOW", "5")),
-            echo=os.getenv("KA11Y_DB_ECHO", "0") == "1",
-        )
+        pool_size = int(os.getenv("KA11Y_DB_POOL_SIZE", "5"))
+        if pool_size <= 0:
+            from sqlalchemy.pool import NullPool
+
+            _engine = create_async_engine(url, poolclass=NullPool, echo=os.getenv("KA11Y_DB_ECHO", "0") == "1")
+        else:
+            _engine = create_async_engine(
+                url,
+                pool_pre_ping=True,
+                pool_size=pool_size,
+                max_overflow=int(os.getenv("KA11Y_DB_MAX_OVERFLOW", "5")),
+                echo=os.getenv("KA11Y_DB_ECHO", "0") == "1",
+            )
         _sessionmaker = async_sessionmaker(_engine, expire_on_commit=False)
         _engine_loop_id = loop_id
     return _engine

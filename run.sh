@@ -6,8 +6,8 @@
 #                       manual verdicts, assets and reports are all kept: every
 #                       stateful path is a bind mount under ./output/ (see
 #                       docker-compose.yml).
-#   ./run.sh --wipe     DESTRUCTIVE. Also deletes ./output/* (PostgreSQL data,
-#                       the SQLite run store, assets, artifacts, logs, crawled
+#   ./run.sh --wipe     DESTRUCTIVE. Also deletes ./output/* (PostgreSQL data —
+#                       users and every audit run — assets, artifacts, logs, crawled
 #                       images) and the model-cache volumes, for a clean slate.
 #                       Asks for confirmation first.
 #   ./run.sh -d         pass extra flags to `docker compose up` (e.g. detach).
@@ -37,7 +37,7 @@ if [[ "$WIPE" == "1" ]]; then
   [[ "$answer" == "wipe" ]] || { echo "aborted"; exit 1; }
   docker compose down -v --remove-orphans
   # PostgreSQL's data dir is root/postgres-owned inside the bind mount.
-  sudo rm -rf output/pg output/db output/assets output/artifacts
+  sudo rm -rf output/pg output/db output/assets output/artifacts  # output/db: retired SQLite store
   rm -rf output/crawled_images output/logs
 else
   docker compose down --remove-orphans

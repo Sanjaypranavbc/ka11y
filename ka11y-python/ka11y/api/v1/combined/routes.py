@@ -36,7 +36,6 @@ from .store import _broadcast, _close_subscribers, _get_job_lock, _get_subscribe
 from ka11y.store import repo
 from ka11y.auth import ANONYMOUS, CurrentUser, require_user
 from ka11y.api.v1.audits import _assert_can_view
-from ka11y.db import audit_repo
 from ka11y.config.logger import setup_logger
 from ka11y.crawler._ssrf_guard import (
     _classify_blocked,
@@ -209,37 +208,18 @@ async def _admit_run(
         "warnings": [],
     }
 
-    # Ownership + history record in PostgreSQL (spec: audit_jobs). Best-effort,
-    # and a no-op for anonymous callers (KA11Y_AUTH_DISABLED) or without
-    # DATABASE_URL — the SQLite queue below is what actually runs the job.
-    # isinstance, not a None check: when a test calls the route function
-    # directly the parameter is FastAPI's Depends() sentinel, not a user.
-    # Written BEFORE enqueue: the dispatcher can pick the job up within
-    # milliseconds, and its mark_running() would otherwise find no row and
-    # skip JOB_STARTED / started_at.
-    if isinstance(user, CurrentUser) and not user.is_anonymous:
-        await audit_repo.create_job(
-            job_id,
-            user_id=user.user_id,
-            organization_id=user.organization_id,
-            session_id=user.session_id,
-            target_url=url,
-            crawl_depth=payload.max_depth,
-            requested_pages=payload.max_pages,
-        )
-
+    # One row: the audit_jobs record carries the owner (when the caller is
+    # signed in) and is the queue entry the dispatcher drains. isinstance,
+    # not a None check: when a test calls the route function directly the
+    # parameter is FastAPI's Depends() sentinel, not a user.
+    owner = user if isinstance(user, CurrentUser) else None
     try:
-        await enqueue(job_id, payload)
+        await enqueue(job_id, payload, user=owner)
     except Exception:  # noqa: BLE001
         # The queue row is the job. Without it nothing will ever run, so the
-        # caller must not receive a job id: drop the hot entry, record the
-        # failure against the PG ownership row, and answer 503.
+        # caller must not receive a job id: drop the hot entry and answer 503.
         logger.exception("[combined] job %s could not be queued", job_id)
         _jobs.pop(job_id, None)
-        await audit_repo.mark_failed(
-            job_id, stage="enqueue", error_type="QueueUnavailable",
-            error_message="run row could not be written", completed_at=now,
-        )
         raise HTTPException(status_code=503, detail="Audit queue is unavailable. Please try again.")
 
     logger.info("[combined] job %s submitted for %s", job_id, url)
@@ -277,7 +257,9 @@ async def rerun_combined_audit(job_id: str, user: CurrentUser = Depends(require_
             detail=f"Job {job_id!r} not found in the durable store; cannot re-run.",
         )
     try:
-        params = json.loads(run.get("params_json") or "{}")
+        params = run.get("params") or {}
+        if isinstance(params, str):
+            params = json.loads(params or "{}")
         payload = CombinedRequest(**params)
     except Exception:
         raise HTTPException(
@@ -525,9 +507,7 @@ async def cancel_combined_audit(job_id: str, user: CurrentUser = Depends(require
     if current in ("completed", "failed", "cancelled"):
         return {"job_id": job_id, "status": current, "cancelled": False}
     completed_at = datetime.now(timezone.utc).isoformat()
-    await repo.update_run(job_id, status="cancelled", completed_at=completed_at)
-    repo.insert_event(job_id, "cancelled", {})
-    await audit_repo.mark_cancelled(job_id)
+    await repo.mark_cancelled(job_id, completed_at)
     if in_hot:
         # A queued job has no runner to notice the flag: settle it here. A
         # running one is left 'running' for the runner, which checks the flag
@@ -549,7 +529,7 @@ async def get_combined_audit(job_id: str, user: CurrentUser = Depends(require_us
     await _assert_can_view(job_id, _caller(user))
     if job_id not in _jobs:
         # Durable fallback: the run may have been evicted from the hot cache or
-        # the process may have restarted — reconstruct it from SQLite.
+        # the process may have restarted — reconstruct it from the run store.
         db_job = await _job_from_db(job_id)
         if db_job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
@@ -645,12 +625,6 @@ async def review_finding(
         reviewer=reviewer,
         wcag_sc=target.get("wcag_sc"),
         page_url=(target.get("element") or {}).get("page_url"),
-    )
-    repo.insert_event(
-        job_id,
-        "finding_reviewed",
-        {"finding_id": finding_id, "status": body.status, "wcag_sc": target.get("wcag_sc"),
-         "reviewer": reviewer},
     )
     reviews = await repo.get_reviews(job_id)
     rev = reviews.get(finding_id)

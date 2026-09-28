@@ -1,4 +1,6 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+
+import { forwardedHeaders } from "@/lib/forwardedHeaders";
 
 /**
  * Server-side view of the signed-in user, for layouts and server components.
@@ -24,13 +26,15 @@ export type ServerUser = {
 };
 
 export async function getServerUser(): Promise<ServerUser | null> {
-  const jar = await cookies();
+  const [jar, incoming] = await Promise.all([cookies(), headers()]);
   const name = SESSION_COOKIE_NAMES.find((n) => jar.get(n)?.value);
   const session = name ? jar.get(name)?.value : undefined;
   if (!name || !session) return null;
   try {
     const res = await fetch(`${PYTHON_ORIGIN}/api/v1/auth/me`, {
-      headers: { cookie: `${name}=${session}` },
+      // The forwarding headers tell the API this is the browser's https
+      // request one hop on, not a plain-http call to redirect (308).
+      headers: { ...forwardedHeaders(incoming), cookie: `${name}=${session}` },
       cache: "no-store",
     });
     if (!res.ok) return null;

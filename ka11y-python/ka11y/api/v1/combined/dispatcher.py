@@ -3,9 +3,10 @@ ka11y/api/v1/combined/dispatcher.py
 ==================================
 Durable, crash-safe job dispatcher (P4).
 
-The POST handler no longer runs jobs directly. Instead it INSERTs a ``runs`` row
-with ``status='queued'`` and a hot ``_jobs`` cache entry, then wakes this
-dispatcher. The dispatcher is the single execution authority:
+The POST handler no longer runs jobs directly. Instead it INSERTs an
+``audit_jobs`` row with ``status='queued'`` (PostgreSQL, ``ka11y/store/repo``)
+and a hot ``_jobs`` cache entry, then wakes this dispatcher. The dispatcher is
+the single execution authority:
 
 * On boot it requeues any run left ``running`` by a crash (``repo.requeue_running``)
   and rebuilds their hot cache entries, so an interrupted audit resumes.
@@ -13,8 +14,10 @@ dispatcher. The dispatcher is the single execution authority:
 * Each launched job runs through :func:`runner._run_job_body` (the dispatcher,
   not the per-job semaphore, enforces the concurrency cap here).
 
-If the store never initialised (DB down), :func:`enqueue` falls back to the
-legacy in-process ``create_task(_run_job(...))`` path so audits still run.
+If the dispatcher is not running (start-up failed), :func:`enqueue` falls
+back to the legacy in-process ``create_task(_run_job(...))`` path so audits
+still run — but only after the queue row was written; without a row there is
+no job (``repo.create_run`` raises and the route answers 503).
 """
 
 from __future__ import annotations
@@ -24,10 +27,13 @@ import json
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ka11y.config.logger import setup_logger
 from ka11y.store import repo
+
+if TYPE_CHECKING:
+    from ka11y.auth.dependencies import CurrentUser
 
 from .models import CombinedRequest
 from .store import _jobs
@@ -69,8 +75,10 @@ def _now() -> str:
 
 def _payload_from_row(row: Dict[str, Any]) -> Optional[CombinedRequest]:
     try:
-        params = json.loads(row.get("params_json") or "{}")
-        return CombinedRequest(**params)
+        params = row.get("params")
+        if isinstance(params, str):
+            params = json.loads(params or "{}")
+        return CombinedRequest(**(params or {}))
     except Exception:  # noqa: BLE001
         logger.warning("[dispatcher] bad params for run %s", row.get("run_id"), exc_info=True)
         return None
@@ -97,14 +105,22 @@ def _ensure_hot_entry(run_id: str, row: Dict[str, Any], payload: CombinedRequest
     }
 
 
-async def enqueue(run_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None) -> None:
-    """Persist a queued run and wake the dispatcher.
+async def enqueue(
+    run_id: str,
+    payload: CombinedRequest,
+    filter_rule: Optional[str] = None,
+    *,
+    user: "Optional[CurrentUser]" = None,
+) -> None:
+    """Persist a queued run (with its owner, when there is one) and wake the
+    dispatcher.
 
-    Fallback: if the dispatcher isn't running (store failed to init), launch the
+    Fallback: if the dispatcher isn't running (start-up failed), launch the
     job directly so audits never silently stall.
     """
     logger.info("[QUEUE] Enqueuing audit %s for URL: %s",run_id,payload.url,)
 
+    owned = user is not None and not getattr(user, "is_anonymous", True)
     try:
         await repo.create_run(
             run_id=run_id,
@@ -116,8 +132,10 @@ async def enqueue(run_id: str, payload: CombinedRequest, filter_rule: Optional[s
             max_depth=payload.max_depth,
             max_pages=payload.max_pages,
             submitted_at=_jobs.get(run_id, {}).get("submitted_at") or _now(),
+            user_id=user.user_id if owned else None,
+            organization_id=user.organization_id if owned else None,
+            session_id=user.session_id if owned else None,
         )
-        repo.insert_event(run_id, "queued", {"url": str(payload.url)})
         logger.info("[QUEUE] Audit %s successfully persisted to the queue.", run_id, )
 
     except Exception:

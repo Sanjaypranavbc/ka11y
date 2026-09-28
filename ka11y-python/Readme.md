@@ -181,7 +181,7 @@ POST /api/v1/combined/{job_id}/findings/{finding_id}/review
 ```
 
 ``violation`` is a fail; ``needs_review`` re-opens the item. The verdict is stored
-in the SQLite run store (``finding_reviews``, one row per finding, upserted) and
+in PostgreSQL (``finding_reviews``, one row per finding, upserted) and
 applied as an **overlay** every time the report is read — the automated
 ``status`` is never rewritten, so ``summary.automated`` always shows the engine's
 own counts. On the finding:

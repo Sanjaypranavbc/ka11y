@@ -4,8 +4,8 @@ ka11y/api/v1/admin.py
 Admin console API — every route requires an e-mail on KA11Y_ADMIN_EMAILS
 (``require_admin``). Read-only: it aggregates what the audit engine already
 records in PostgreSQL (users, organizations, audit_jobs, audit_summary,
-reports, audit_logs, crash_reports, user_sessions) and in the SQLite run
-store (run_pages, findings, run_events) into the shapes the console renders.
+audit_pages, audit_fails, reports, audit_logs, crash_reports, stage_timings,
+user_sessions) into the shapes the console renders.
 
   GET /admin/overview             counters, status chart, pages audited per
                                   day (30 d), recent audits, activity,
@@ -20,8 +20,8 @@ store (run_pages, findings, run_events) into the shapes the console renders.
   GET /admin/reports              generated report files with download links
   GET /admin/system-events        job lifecycle events + crash reports
   GET /admin/settings             effective runtime configuration (read-only)
-  GET /admin/metrics              SQLite run-store rollups: status counts,
-                                  wall time by depth, slowest stages, failures
+  GET /admin/metrics              run-store rollups: status counts, wall
+                                  time by depth, slowest stages, failures
   GET /admin/events               Server-Sent Events: `refresh` whenever any
                                   of the tables above changes (2 s poll)
 """
@@ -34,13 +34,13 @@ import os
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from ka11y.auth.config import settings as auth_settings
 from ka11y.auth.dependencies import CurrentUser, require_admin
@@ -49,20 +49,22 @@ from ka11y.db.engine import is_configured as pg_configured
 from ka11y.db.engine import ping as pg_ping
 from ka11y.db.engine import session_scope
 from ka11y.db.models import (
+    AuditFail,
     AuditJob,
     AuditLog,
+    AuditPage,
     AuditSummary,
     CrashReport,
     OAuthIdentity,
     Organization,
     OrganizationMember,
     Report,
+    StageTiming,
     User,
     UserSession,
     WcagRule,
 )
 from ka11y.store import repo as run_repo
-from ka11y.store.db import get_db
 
 logger = setup_logger(name="KAC", tag="admin")
 
@@ -123,6 +125,18 @@ def _require_pg() -> None:
         raise HTTPException(status_code=503, detail="PostgreSQL is not configured.")
 
 
+def _db_host() -> str:
+    """host[:port]/db of DATABASE_URL, never the credentials."""
+    try:
+        parts = urlsplit(os.getenv("DATABASE_URL", ""))
+        host = parts.hostname or "?"
+        if parts.port:
+            host += f":{parts.port}"
+        return f"{host}{parts.path or ''}"
+    except ValueError:
+        return "?"
+
+
 async def _node_healthy() -> bool:
     base = os.getenv("NODE_BASE_URL", "http://localhost:3000").rstrip("/")
     try:
@@ -133,11 +147,12 @@ async def _node_healthy() -> bool:
         return False
 
 
-async def _store_query(sql: str, params: Iterable[Any] = ()) -> List[Dict[str, Any]]:
-    """SQLite read that degrades to an empty list (the console must render
-    even when the run store is unavailable)."""
+async def _rows(stmt) -> List[Any]:
+    """A read that degrades to an empty list (the console must render even
+    when the run store is unavailable)."""
     try:
-        return await get_db().query(sql, list(params))
+        async with session_scope() as s:
+            return list((await s.execute(stmt)).all())
     except Exception:  # noqa: BLE001
         logger.debug("[admin] store query failed", exc_info=True)
         return []
@@ -258,24 +273,26 @@ async def _list_jobs(
 
 
 async def _attach_detail(job: Dict[str, Any]) -> Dict[str, Any]:
-    """Pages, per-criterion fails and the job log come from the SQLite run
-    store (same job_id); the report JSON supplies severities and rule names."""
-    jid = job["id"]
+    """Pages, per-criterion fails and the job log come from the run tables
+    (same job_id); the report JSON supplies severities and rule names."""
+    jid = uuid.UUID(job["id"])
 
     fails_by_page: Dict[str, int] = {}
     review_by_page: Dict[str, int] = {}
-    for r in await _store_query(
-        "SELECT page_url, status, COUNT(*) AS n FROM findings WHERE run_id=? "
-        "AND status IN ('fail','needs_review') GROUP BY page_url, status", (jid,)
+    for page_url, status, n in await _rows(
+        select(AuditFail.page_url, AuditFail.status, func.count())
+        .where(AuditFail.job_id == jid, AuditFail.status.in_(("fail", "needs_review")))
+        .group_by(AuditFail.page_url, AuditFail.status)
     ):
-        (fails_by_page if r["status"] == "fail" else review_by_page)[r["page_url"] or ""] = r["n"]
-    pages = await _store_query(
-        "SELECT page_url, depth, http_status FROM run_pages WHERE run_id=? ORDER BY id", (jid,)
+        (fails_by_page if status == "fail" else review_by_page)[page_url or ""] = int(n)
+    pages = await _rows(
+        select(AuditPage.url, AuditPage.depth, AuditPage.status_code)
+        .where(AuditPage.job_id == jid)
+        .order_by(AuditPage.created_at, AuditPage.url)
     )
     page_list = []
     seen = set()
-    for p in pages:
-        url = p["page_url"]
+    for url, _depth, _status_code in pages:
         if url in seen:
             continue
         seen.add(url)
@@ -293,7 +310,7 @@ async def _attach_detail(job: Dict[str, Any]) -> Dict[str, Any]:
     fail_list: Dict[str, Dict[str, Any]] = {}
     report = None
     try:
-        report = await run_repo.get_report(jid)
+        report = await run_repo.get_report(str(jid))
     except Exception:  # noqa: BLE001
         report = None
     if report:
@@ -305,12 +322,14 @@ async def _attach_detail(job: Dict[str, Any]) -> Dict[str, Any]:
             })
             entry["occurrences"] += 1
     else:
-        for r in await _store_query(
-            "SELECT wcag_sc, COUNT(*) AS n FROM findings WHERE run_id=? AND status='fail' "
-            "GROUP BY wcag_sc ORDER BY n DESC", (jid,)
+        for wcag_sc, n in await _rows(
+            select(AuditFail.wcag_sc, func.count())
+            .where(AuditFail.job_id == jid, AuditFail.status == "fail")
+            .group_by(AuditFail.wcag_sc)
+            .order_by(func.count().desc())
         ):
-            sc = str(r["wcag_sc"] or "?")
-            fail_list[sc] = {"id": sc, "criterion": sc, "title": sc, "severity": "moderate", "occurrences": r["n"]}
+            sc = str(wcag_sc or "?")
+            fail_list[sc] = {"id": sc, "criterion": sc, "title": sc, "severity": "moderate", "occurrences": int(n)}
     if fail_list and pg_configured():
         async with session_scope() as s:
             rules = (await s.execute(select(WcagRule.rule_code, WcagRule.name))).all()
@@ -321,22 +340,20 @@ async def _attach_detail(job: Dict[str, Any]) -> Dict[str, Any]:
     job["failList"] = sorted(fail_list.values(), key=lambda e: -e["occurrences"])
 
     logs = []
-    for r in await _store_query(
-        "SELECT event, data_json, ts FROM run_events WHERE run_id=? ORDER BY id", (jid,)
-    ):
-        ev = r["event"] or ""
-        level = "error" if ("fail" in ev or "error" in ev) else ("warn" if ("timeout" in ev or "cancel" in ev) else "info")
+    for (log,) in await _rows(select(AuditLog).where(AuditLog.job_id == jid).order_by(AuditLog.id)):
+        ev = log.event_type or ""
+        up = ev.upper()
+        level = "error" if ("FAIL" in up or "ERROR" in up) else ("warn" if ("TIMEOUT" in up or "CANCEL" in up) else "info")
         detail = ""
-        if r["data_json"]:
-            try:
-                data = json.loads(r["data_json"])
-                stage = data.get("stage") or data.get("name")
-                detail = f" · {stage}" if stage else ""
-                if data.get("error"):
-                    detail += f" · {str(data['error'])[:160]}"
-            except Exception:  # noqa: BLE001
-                detail = ""
-        logs.append({"at": r["ts"], "level": level, "message": f"{ev}{detail}"})
+        data = log.metadata_ or {}
+        stage = data.get("stage") or data.get("name")
+        if stage:
+            detail = f" · {stage}"
+        if data.get("error"):
+            detail += f" · {str(data['error'])[:160]}"
+        if log.message:
+            detail += f" · {log.message[:160]}"
+        logs.append({"at": _iso(log.created_at), "level": level, "message": f"{ev}{detail}"})
     job["logs"] = logs
     return job
 
@@ -660,44 +677,52 @@ async def users() -> Dict[str, Any]:
 
 @router.get("/fails")
 async def fails(days: int = Query(30, ge=1, le=365)) -> Dict[str, Any]:
-    since = (_now() - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S")
-    rows = await _store_query(
-        "SELECT wcag_sc, level, "
-        "  SUM(CASE WHEN status='fail' THEN 1 ELSE 0 END) AS occurrences, "
-        "  SUM(CASE WHEN status='needs_review' THEN 1 ELSE 0 END) AS needs_review, "
-        "  COUNT(DISTINCT run_id) AS runs, COUNT(DISTINCT page_url) AS pages "
-        "FROM findings WHERE status IN ('fail','needs_review') AND created_at >= ? "
-        "GROUP BY wcag_sc HAVING occurrences > 0 ORDER BY occurrences DESC LIMIT 150",
-        (since,),
+    since = _now() - timedelta(days=days)
+    occurrences = func.sum(case((AuditFail.status == "fail", 1), else_=0)).label("occurrences")
+    needs_review = func.sum(case((AuditFail.status == "needs_review", 1), else_=0)).label("needs_review")
+    rows = await _rows(
+        select(
+            AuditFail.wcag_sc,
+            func.max(AuditFail.level).label("level"),
+            occurrences,
+            needs_review,
+            func.count(func.distinct(AuditFail.job_id)).label("runs"),
+            func.count(func.distinct(AuditFail.page_url)).label("pages"),
+        )
+        .where(AuditFail.status.in_(("fail", "needs_review")), AuditFail.created_at >= since)
+        .group_by(AuditFail.wcag_sc)
+        .having(occurrences > 0)
+        .order_by(occurrences.desc())
+        .limit(150)
     )
-    sev_rows = await _store_query(
-        "SELECT wcag_sc, severity, COUNT(*) AS n FROM findings "
-        "WHERE status='fail' AND severity IS NOT NULL AND created_at >= ? GROUP BY wcag_sc, severity",
-        (since,),
+    sev_rows = await _rows(
+        select(AuditFail.wcag_sc, AuditFail.severity, func.count())
+        .where(AuditFail.status == "fail", AuditFail.severity.is_not(None), AuditFail.created_at >= since)
+        .group_by(AuditFail.wcag_sc, AuditFail.severity)
     )
     top_sev: Dict[str, Tuple[int, str]] = {}
-    for r in sev_rows:
-        sc, sev, n = r["wcag_sc"], _severity(r["severity"]), r["n"]
+    for sc, raw_sev, n in sev_rows:
+        sev = _severity(raw_sev)
         if sev and (sc not in top_sev or n > top_sev[sc][0]):
-            top_sev[sc] = (n, sev)
+            top_sev[sc] = (int(n), sev)
     names: Dict[str, Tuple[str, str]] = {}
     if pg_configured():
         async with session_scope() as s:
             for code, name, level in (await s.execute(select(WcagRule.rule_code, WcagRule.name, WcagRule.level))).all():
                 names[code] = (name, level)
     out = []
-    for r in rows:
-        sc = r["wcag_sc"] or "?"
-        name, level = names.get(sc, (sc, r["level"] or ""))
+    for wcag_sc, row_level, occ, review, runs, pages in rows:
+        sc = wcag_sc or "?"
+        name, level = names.get(sc, (sc, row_level or ""))
         out.append({
             "criterion": sc,
             "title": name,
-            "level": r["level"] or level or "",
+            "level": row_level or level or "",
             "severity": top_sev.get(sc, (0, "unknown"))[1],
-            "occurrences": int(r["occurrences"] or 0),
-            "needsReview": int(r["needs_review"] or 0),
-            "runs": int(r["runs"] or 0),
-            "pages": int(r["pages"] or 0),
+            "occurrences": int(occ or 0),
+            "needsReview": int(review or 0),
+            "runs": int(runs or 0),
+            "pages": int(pages or 0),
         })
     return {"days": days, "fails": out}
 
@@ -762,7 +787,7 @@ async def system_events(limit: int = Query(100, ge=1, le=500)) -> Dict[str, Any]
 
 @router.get("/metrics")
 async def admin_metrics():
-    """Aggregate telemetry rollups for ops dashboards. All from the SQLite run store.
+    """Aggregate telemetry rollups for ops dashboards (audit_jobs + stage_timings).
 
     Lived on the assets router (user auth) until 2026-09-27; it exposes every
     failed run's URL, so it belongs behind require_admin like the rest of /admin.
@@ -770,44 +795,80 @@ async def admin_metrics():
     These answer the questions the old per-run timing logs could not without
     grepping: throughput, failure rate, slowest stages, wall-time by depth.
     """
-    db = get_db()
+    _require_pg()
+
+    def _int(v: Any) -> Optional[int]:
+        return int(v) if v is not None else None
+
     try:
-        status_counts = await db.query(
-            "SELECT status, COUNT(*) AS n FROM runs GROUP BY status"
-        )
-        wall_by_depth = await db.query(
-            "SELECT max_depth AS depth, COUNT(*) AS runs, "
-            "       CAST(AVG(wall_ms) AS INTEGER) AS avg_wall_ms, "
-            "       MAX(wall_ms) AS max_wall_ms "
-            "FROM runs WHERE wall_ms IS NOT NULL GROUP BY max_depth ORDER BY max_depth"
-        )
-        slowest_stages = await db.query(
-            "SELECT stage, COUNT(*) AS steps, "
-            "       CAST(AVG(duration_ms) AS INTEGER) AS avg_ms, "
-            "       CAST(MAX(duration_ms) AS INTEGER) AS max_ms, "
-            "       SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors "
-            "FROM stage_timings GROUP BY stage ORDER BY avg_ms DESC LIMIT 25"
-        )
-        recent_failures = await db.query(
-            "SELECT run_id, url, error_stage, completed_at FROM runs "
-            "WHERE status='failed' ORDER BY completed_at DESC LIMIT 20"
-        )
-        totals = await db.query_one(
-            "SELECT COUNT(*) AS total_runs, "
-            "       SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed, "
-            "       SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed, "
-            "       CAST(AVG(wall_ms) AS INTEGER) AS avg_wall_ms, "
-            "       CAST(AVG(queue_wait_ms) AS INTEGER) AS avg_queue_wait_ms FROM runs"
-        )
+        async with session_scope() as s:
+            status_counts = (await s.execute(select(AuditJob.status, func.count()).group_by(AuditJob.status))).all()
+            wall_by_depth = (
+                await s.execute(
+                    select(AuditJob.crawl_depth, func.count(), func.avg(AuditJob.wall_ms), func.max(AuditJob.wall_ms))
+                    .where(AuditJob.wall_ms.is_not(None))
+                    .group_by(AuditJob.crawl_depth)
+                    .order_by(AuditJob.crawl_depth)
+                )
+            ).all()
+            avg_ms = func.avg(StageTiming.duration_ms).label("avg_ms")
+            slowest_stages = (
+                await s.execute(
+                    select(
+                        StageTiming.stage,
+                        func.count(),
+                        avg_ms,
+                        func.max(StageTiming.duration_ms),
+                        func.sum(case((StageTiming.status == "error", 1), else_=0)),
+                    )
+                    .group_by(StageTiming.stage)
+                    .order_by(avg_ms.desc())
+                    .limit(25)
+                )
+            ).all()
+            recent_failures = (
+                await s.execute(
+                    select(AuditJob.id, AuditJob.target_url, AuditJob.error_stage, AuditJob.completed_at)
+                    .where(AuditJob.status == "failed")
+                    .order_by(AuditJob.completed_at.desc().nulls_last())
+                    .limit(20)
+                )
+            ).all()
+            totals = (
+                await s.execute(
+                    select(
+                        func.count(),
+                        func.sum(case((AuditJob.status == "completed", 1), else_=0)),
+                        func.sum(case((AuditJob.status == "failed", 1), else_=0)),
+                        func.avg(AuditJob.wall_ms),
+                        func.avg(AuditJob.queue_wait_ms),
+                    )
+                )
+            ).one()
     except Exception:
         raise HTTPException(status_code=503, detail="Telemetry store unavailable.")
 
     return {
-        "totals": totals,
-        "status_counts": {r["status"]: r["n"] for r in status_counts},
-        "wall_ms_by_depth": wall_by_depth,
-        "slowest_stages": slowest_stages,
-        "recent_failures": recent_failures,
+        "totals": {
+            "total_runs": int(totals[0] or 0),
+            "completed": int(totals[1] or 0),
+            "failed": int(totals[2] or 0),
+            "avg_wall_ms": _int(totals[3]),
+            "avg_queue_wait_ms": _int(totals[4]),
+        },
+        "status_counts": {status: int(n) for status, n in status_counts},
+        "wall_ms_by_depth": [
+            {"depth": depth, "runs": int(n), "avg_wall_ms": _int(avg), "max_wall_ms": _int(mx)}
+            for depth, n, avg, mx in wall_by_depth
+        ],
+        "slowest_stages": [
+            {"stage": stage, "steps": int(n), "avg_ms": _int(avg), "max_ms": _int(mx), "errors": int(err or 0)}
+            for stage, n, avg, mx, err in slowest_stages
+        ],
+        "recent_failures": [
+            {"run_id": str(jid), "url": url, "error_stage": stage, "completed_at": _iso(done)}
+            for jid, url, stage, done in recent_failures
+        ],
     }
 
 
@@ -825,7 +886,7 @@ async def admin_settings() -> Dict[str, Any]:
             {"label": "PostgreSQL", "value": "connected" if pg_ok else "unavailable"},
             {"label": "axe-core engine (node)", "value": "healthy" if node_ok else "unreachable"},
             {"label": "NODE_BASE_URL", "value": env("NODE_BASE_URL", "http://localhost:3000")},
-            {"label": "Run store (SQLite)", "value": env("KA11Y_DB_PATH", "ka11y-python/logs/ka11y.db")},
+            {"label": "Run store", "value": f"PostgreSQL ({_db_host()})" if pg_configured() else "not configured"},
         ]},
         {"key": "auth", "items": [
             {"label": "Password sign-in", "value": flag(cfg.password_login)},
@@ -881,9 +942,7 @@ async def _change_cursor() -> Tuple[Any, ...]:
             rep_max = (await s.execute(select(func.max(Report.created_at)))).scalar()
             crash_max = (await s.execute(select(func.max(CrashReport.created_at)))).scalar()
             job_max = (await s.execute(select(func.max(AuditJob.updated_at)))).scalar()
-    ev = await _store_query("SELECT MAX(id) AS m FROM run_events")
-    ev_max = ev[0]["m"] if ev else None
-    return (log_max, str(sess_max), str(rep_max), str(crash_max), str(job_max), ev_max)
+    return (log_max, str(sess_max), str(rep_max), str(crash_max), str(job_max))
 
 
 @router.get("/events")

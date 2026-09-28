@@ -64,8 +64,8 @@ async def test_failure_before_output_dir_marks_job_failed(tmp_path):
 @pytest.mark.asyncio
 async def test_dispatcher_marks_run_failed_when_runner_escapes(isolated_db):  # noqa: F811
     """If the runner body raises past its own handler the dispatcher must still
-    close the run out: SQLite row 'failed', hot entry 'failed', SSE closed."""
-    run_id = "lifecycle-dispatcher-crash"
+    close the run out: run row 'failed', hot entry 'failed', SSE closed."""
+    run_id = str(_uuid.uuid4())
     await repo.create_run(
         run_id=run_id, url="https://example.com", status="running", lang_requested="en",
         wcag_level="AA", params={"url": "https://example.com"}, max_depth=0, max_pages=1,
@@ -105,15 +105,28 @@ async def test_admit_run_answers_503_when_queue_insert_fails():
 @pytest.mark.asyncio
 async def test_create_run_raises_when_store_write_fails(monkeypatch):
     """create_run is the one store write that must not swallow its error."""
-    class _Boom:
-        async def execute(self, *a, **k):
-            raise RuntimeError("database is locked")
+    from contextlib import asynccontextmanager
 
-    monkeypatch.setattr(repo, "get_db", lambda: _Boom())
+    @asynccontextmanager
+    async def boom():
+        raise RuntimeError("connection refused")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(repo, "session_scope", boom)
     with pytest.raises(RuntimeError):
         await repo.create_run(
-            run_id="x", url="https://e.com", status="queued", lang_requested="en",
+            run_id=str(_uuid.uuid4()), url="https://e.com", status="queued", lang_requested="en",
             wcag_level="AA", params={}, max_depth=0, max_pages=1, submitted_at="2026-01-01T00:00:00+00:00",
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_run_rejects_non_uuid_ids():
+    """The job id is the audit_jobs primary key (UUID); anything else is refused up front."""
+    with pytest.raises(ValueError):
+        await repo.create_run(
+            run_id="not-a-uuid", url="https://e.com", status="queued", lang_requested="en",
+            wcag_level="AA", params={}, max_depth=0, max_pages=1, submitted_at=None,
         )
 
 
@@ -130,14 +143,12 @@ def _user(is_admin: bool = False, org: _uuid.UUID | None = None) -> CurrentUser:
 @pytest.mark.asyncio
 async def test_job_routes_hide_other_users_jobs(monkeypatch):
     """Every {job_id} route must apply the same owner/org check as export."""
-    from ka11y.db import audit_repo
-
     owner_id, owner_org = _uuid.uuid4(), _uuid.uuid4()
 
     async def owned_by_someone_else(job_id):
         return {"user_id": owner_id, "organization_id": owner_org, "session_id": None}
 
-    monkeypatch.setattr(audit_repo, "get_owner", owned_by_someone_else)
+    monkeypatch.setattr(repo, "get_owner", owned_by_someone_else)
     job_id = "lifecycle-foreign-job"
     store._jobs[job_id] = _hot_entry(job_id, status="completed")
     stranger = _user()
@@ -187,7 +198,7 @@ async def test_cancel_queued_job_settles_hot_cache_and_closes_sse(isolated_db): 
     move it to 'cancelled' and send subscribers a terminal event."""
     import asyncio
 
-    run_id = "lifecycle-cancel-queued"
+    run_id = str(_uuid.uuid4())
     await repo.create_run(
         run_id=run_id, url="https://example.com", status="queued", lang_requested="en",
         wcag_level="AA", params={}, max_depth=0, max_pages=1, submitted_at="2026-01-01T00:00:00+00:00",
@@ -216,7 +227,7 @@ async def test_runner_honours_cancel_before_start(isolated_db, tmp_path):  # noq
     with a job_cancelled event — not as a silent return leaving SSE open."""
     import asyncio
 
-    run_id = "lifecycle-cancel-before-start"
+    run_id = str(_uuid.uuid4())
     await repo.create_run(
         run_id=run_id, url="https://example.com", status="cancelled", lang_requested="en",
         wcag_level="AA", params={}, max_depth=0, max_pages=1, submitted_at="2026-01-01T00:00:00+00:00",

@@ -33,7 +33,7 @@ def client():
 
     from ka11y.api.v1.combined import routes
 
-    async def _no_enqueue(job_id, payload, filter_rule=None):
+    async def _no_enqueue(job_id, payload, filter_rule=None, **kwargs):
         return None
 
     async def _no_ssrf(url):

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { forwardedHeaders } from "@/lib/forwardedHeaders";
+
 const WCAG_API_URL =
   process.env.WCAG_API_URL ??
   "https://a11y-api.bluecaffeine.in/api/v1/combined";
@@ -78,8 +80,10 @@ export async function POST(request: Request) {
     const submitRes = await fetch(submitUrl.toString(), {
       method: "POST",
       // The Python API authorises by session cookie; this handler runs
-      // server-side so the browser's cookie has to be forwarded by hand.
-      headers: { cookie: request.headers.get("cookie") ?? "" },
+      // server-side so the browser's cookie has to be forwarded by hand, and
+      // so are the x-forwarded-* headers that tell the API this is an https
+      // request (without them its https redirect answers 308).
+      headers: { ...forwardedHeaders(request.headers), cookie: request.headers.get("cookie") ?? "" },
       signal: AbortSignal.timeout(10000),
     });
 

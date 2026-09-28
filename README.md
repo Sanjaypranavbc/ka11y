@@ -158,7 +158,6 @@ docker compose down            # stop; history is kept
 | Path | Container | Holds |
 |------|-----------|-------|
 | `output/pg` | postgres `/var/lib/postgresql/data` | users, sessions, audit history (admin console) |
-| `output/db` | python `/data/db` | SQLite run store: runs, report JSON, findings, manual verdicts, asset index |
 | `output/assets`, `output/artifacts` | python `/data/assets`, `/data/artifacts` | screenshots/crops; stored JSON/CSV/PDF reports |
 | `output/logs`, `output/crawled_images` | python `/app/logs`, `/app/crawled_images` | scratch output, safe to delete |
 
@@ -169,7 +168,7 @@ is created by Docker, never checked in. To wipe history by hand:
 
 ```bash
 docker compose down
-sudo rm -rf output/pg output/db output/assets output/artifacts
+sudo rm -rf output/pg output/assets output/artifacts
 ```
 
 Migrating from the old named volume (`ka11y_ka11y_pg`) to `output/pg`, one time:

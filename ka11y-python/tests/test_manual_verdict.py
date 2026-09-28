@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -75,9 +76,9 @@ def client():
 
 
 @pytest.fixture
-def hot_job(client):
-    job_id = "verdict-test-job"
-    # finding_reviews has a FK to runs, so the run row must exist.
+def hot_job(client, pg_db):
+    job_id = str(uuid.uuid4())
+    # finding_reviews has a FK to audit_jobs, so the run row must exist.
     client.portal.call(
         lambda: repo.create_run(
             run_id=job_id, url="https://example.com", status="completed", lang_requested="en",

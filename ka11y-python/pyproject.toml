@@ -64,10 +64,11 @@ paddlepaddle = "==3.2.2"
 # into an LLM span. Both are inert unless ARIZE_SPACE_ID/ARIZE_API_KEY are set.
 arize-otel = "^0.13.0"
 openinference-instrumentation-google-genai = "^1.4.5"
-# Production database (users, sessions, audit jobs, history). PostgreSQL only:
+# The database (users, sessions, and the whole audit run store: queue,
+# reports, findings, assets index, verdicts, telemetry). PostgreSQL only:
 # SQLAlchemy 2.0 async ORM over psycopg 3 (one driver serves both the app's
 # async engine and Alembic's sync migrations), Alembic for migrations.
-# DATABASE_URL unset → the PG layer is inert and the SQLite run store still works.
+# DATABASE_URL is required to run audits (there is no SQLite fallback).
 sqlalchemy = ">=2.0.40,<3.0.0"
 # AES-256-GCM sealing of the auth cookies (ka11y/auth/signing.py). Already a
 # transitive dependency; declared so a resolver change cannot drop it.

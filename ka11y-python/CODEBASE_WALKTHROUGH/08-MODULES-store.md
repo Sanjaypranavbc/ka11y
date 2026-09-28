@@ -1,5 +1,18 @@
 # 4. Module-by-Module Breakdown — Group 6: Durable Store (`store/`)
 
+> **Superseded on 2026-09-28.** The SQLite layer this chapter describes
+> (`store/db.py`, `store/migrations/`, the single-writer thread) was removed:
+> every run was being stored twice, once here and once as an `audit_jobs`
+> row in PostgreSQL. `store/repo.py` is now the single run repository on
+> PostgreSQL (SQLAlchemy async, tables in `ka11y/db/models/audit.py`,
+> migration `alembic/versions/0004_single_store.py`), `store/writer.py`
+> is the fire-and-forget row writer for events/timings, and
+> `ka11y/db/audit_repo.py` was folded into `store/repo.py`. The design
+> invariants below still hold except "one writer" (PostgreSQL handles
+> concurrency) and "SQLite-swappable" (done). Old history can be imported
+> with `scripts/import_sqlite_store.py`.
+
+
 Persistence, deliberately separated from `api/`: SQLite (WAL, single
 writer), a content-addressed asset store, a shared CPU process pool, and a
 retention sweep. Reused by background tasks (dispatcher, retention) that

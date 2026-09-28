@@ -26,7 +26,7 @@ for a step tied to a success criterion, ``stage.<stage>.<sub_stage>`` otherwise
 — so the same steps show up in Arize/Phoenix with no per-call-site change, and
 any timing added later is traced by construction. See
 ``ka11y/observability/``. The span is an addition to these files and the
-SQLite table, never a replacement: with tracing unconfigured, everything below
+stage_timings table, never a replacement: with tracing unconfigured, everything below
 behaves exactly as before.
 
 JSONL row schema
@@ -156,7 +156,7 @@ def _finish_traced_step(
     """Stamp the outcome a step's timing row already computed onto its span.
 
     ``duration_ms`` is redundant with the span's own start/end timestamps, but
-    it is what the JSONL rows, the SQLite table and the summary log all report,
+    it is what the JSONL rows, the stage_timings table and the summary log all report,
     so having the same number on the span keeps the two views reconcilable."""
     if span is None:
         return
@@ -195,7 +195,7 @@ def _safe_run_id(run_id: str) -> str:
 
 def _files_enabled() -> bool:
     """JSONL/summary files are opt-out (P3). Set KA11Y_TELEMETRY_FILES=0 in prod
-    to keep telemetry in SQLite only and avoid unbounded log-file growth."""
+    to keep telemetry in the database only and avoid unbounded log-file growth."""
     return os.environ.get("KA11Y_TELEMETRY_FILES", "1") != "0"
 
 

@@ -16,7 +16,7 @@ security sheets in `~/Downloads/security_audit_build`.
 | HSTS | None | 1 year on every https response from the API and the UI; `KA11Y_HSTS_PRELOAD=1` adds `includeSubDomains; preload` |
 | CSP | None | API: `default-src 'none'; frame-ancestors 'none'; …`. UI: `frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests (https-only: added per request by ka11y-ui/src/proxy.ts when x-forwarded-proto is https, never on plain-http responses, which browsers do enforce it on)` |
 | Other headers | nosniff, DENY, Referrer-Policy | plus Permissions-Policy, COOP, CORP, X-Permitted-Cross-Domain-Policies, `X-Powered-By` removed |
-| http → https | None | 308 redirect when `KA11Y_FORCE_HTTPS` (defaults on with an https redirect URI); loopback and `/api/v1/health` exempt |
+| http → https | None | 308 redirect when `KA11Y_FORCE_HTTPS` (defaults on with an https redirect URI) and the edge says the browser used http (`X-Forwarded-Proto: http`, or a direct plain-http hit from a public peer). Exempt: loopback, `/api/v1/health`, private-network peers with no forwarding headers (the UI's server-side calls). A proxy that forwards without stating the scheme is assumed https, never bounced (that was a redirect loop) |
 | Proxy awareness | Uvicorn ignored `X-Forwarded-*` | `--proxy-headers --forwarded-allow-ips *` so scheme, Secure cookies, HSTS and the rate limiter see the real client |
 | PostgreSQL TLS | Only if the operator remembered `?sslmode=require` | Any non-local host gets `sslmode=require` automatically; `KA11Y_DB_SSLMODE=verify-full` + `KA11Y_DB_SSLROOTCERT` pins the CA |
 | Request flood | 30 POST/min/IP, table grew without bound | POST bucket + auth bucket (`KA11Y_RATE_LIMIT_POST` / `KA11Y_RATE_LIMIT_AUTH`), idle IPs swept, per (IP, e-mail) brute-force brake kept |
@@ -33,7 +33,7 @@ turns on Secure and `__Host-` cookies, HSTS and the https redirect. Rotating
 Ordered by how likely each is to bite, with what to do.
 
 ### Transport
-1. **TLS terminated at an ALB but the target group speaks http to the container.** Fine, provided the ALB forwards `X-Forwarded-Proto: https`; Uvicorn now trusts it. If the flag is dropped from the Dockerfile CMD, every response loses HSTS and the Secure cookie logic thinks it is on http.
+1. **TLS terminated at an ALB / Apache / nginx but the target speaks http to the container.** Fine when the proxy forwards `X-Forwarded-Proto: https` (also read: chained `https,http`, `X-Forwarded-Scheme`, `CloudFront-Forwarded-Proto`, RFC 7239 `Forwarded: proto=`, `X-Forwarded-Ssl: on`, `Front-End-Https: on`). A proxy that forwards `X-Forwarded-For`/`-Host` but no scheme at all (Apache `ProxyPass` by default) is treated as https because `KA11Y_FORCE_HTTPS` declares the deployment https; the API logs one warning asking for the header. Before 2026-09-28 that case was a 308 loop: every https request looked like http and was redirected to itself. The UI's own server-side fetches (route handlers, `getServerUser`) now copy the browser's `x-forwarded-*` headers onto the hop to Python. If `--proxy-headers` is dropped from the Dockerfile CMD the header path still works; only the rate limiter loses the real client IP.
 2. **`--forwarded-allow-ips *` with port 8000 published to the internet.** Anyone can then spoof their IP to the rate limiter and their scheme to the https redirect. The TLS overlay withdraws the port; on ECS keep the task in a private subnet. Narrow the flag to the proxy CIDR when in doubt.
 3. **HSTS preload is one-way.** Do not set `KA11Y_HSTS_PRELOAD=1` until every sub-domain of the apex is https forever.
 4. **CORS origins are hard-coded in `ka11y/main.py`** and still include the plain-http EC2 hostname. Remove it once the edge is live; anything served over http will be redirected anyway.
@@ -49,7 +49,7 @@ Ordered by how likely each is to bite, with what to do.
 
 ### Data at rest
 12. **PostgreSQL disk encryption is a platform setting** (RDS: KMS on; compose: the host's LUKS/EBS encryption). The app cannot encrypt the volume itself. Password hashes are scrypt; OAuth rows hold no tokens; session rows hold only token hashes.
-13. **SQLite run store and artifacts** live on volumes; S3 uploads are SSE when `KA11Y_S3_SSE` is set. Keep the bucket policy `aws:SecureTransport` only.
+13. **Run store is PostgreSQL** (report JSON, findings, verdicts, asset index — since 2026-09-28, no SQLite); asset bytes and artifacts live on volumes; S3 uploads are SSE when `KA11Y_S3_SSE` is set. Keep the bucket policy `aws:SecureTransport` only.
 14. **Backups** of the DB are as sensitive as the DB. Encrypt snapshots and restrict who can restore.
 
 ### Abuse / availability
