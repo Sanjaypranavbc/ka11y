@@ -1,8 +1,7 @@
 """
 ka11y/db/migrate.py
 ===================
-Run Alembic migrations programmatically at application startup, the same way
-the SQLite store applies its own migrations in ``store/db.py``.
+Run Alembic migrations programmatically at application startup.
 
 Controlled by ``KA11Y_DB_AUTO_MIGRATE`` (default "1"). Turn it off in any
 deployment where migrations are applied by a release step instead

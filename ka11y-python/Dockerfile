@@ -108,6 +108,10 @@ COPY enrich_audit.py ./
 # start-up log shows "No 'script_location' key found in configuration".
 COPY alembic.ini ./
 COPY alembic/ ./alembic/
+# Operator scripts the docs tell you to run inside the container:
+#   docker compose exec python python scripts/set_password.py <email> --create
+# (set/reset a sign-in password) and the one-off SQLite history import.
+COPY scripts/set_password.py scripts/import_sqlite_store.py ./scripts/
 
 # Pre-create the logs directory so it exists in the image layer.
 # The python_logs Docker volume is mounted over this path at runtime;

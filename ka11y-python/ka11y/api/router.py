@@ -1,7 +1,7 @@
 import os
 import httpx
 from fastapi import APIRouter, Depends
-from ka11y.api.v1 import admin, audits, combined, pipeline, crawl, rule_evaluator, assets
+from ka11y.api.v1 import admin, assets, audits, combined, rule_evaluator
 from ka11y.api.v1.rules import router as rules_router
 from ka11y.auth import require_user
 from ka11y.auth.router import router as auth_router
@@ -15,8 +15,6 @@ router.include_router(auth_router)
 # signed-in user. With KA11Y_AUTH_DISABLED=1 (tests, local dev) the dependency
 # resolves to an anonymous caller instead of a 401.
 _protected = [Depends(require_user)]
-router.include_router(crawl.router, dependencies=_protected)
-router.include_router(pipeline.router, dependencies=_protected)
 router.include_router(combined.router, dependencies=_protected)
 router.include_router(assets.router, dependencies=_protected)
 router.include_router(audits.router)  # declares require_user itself (needs the user object)

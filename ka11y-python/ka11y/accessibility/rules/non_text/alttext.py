@@ -1620,23 +1620,24 @@ class AltTextAccessibilityAuditor:
         failed = sum(1 for r in records if r["overall_status"] == "FAILED")
 
         sep = "=" * 70
-        print(f"\n{sep}")
-        print("  KA11Y — UNIFIED WCAG ACCESSIBILITY AUDIT REPORT")
-        print(f"  Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"  Report    : {report_path}")
-        print(sep)
-        print(f"  Total images audited : {total}")
-        print(
+        lines: list[str] = []
+        lines.append(f"\n{sep}")
+        lines.append("  KA11Y — UNIFIED WCAG ACCESSIBILITY AUDIT REPORT")
+        lines.append(f"  Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"  Report    : {report_path}")
+        lines.append(sep)
+        lines.append(f"  Total images audited : {total}")
+        lines.append(
             f"  PASSED               : {passed}  ({passed/total*100:.1f}%)"
             if total
             else "  No images."
         )
-        print(
+        lines.append(
             f"  FAILED               : {failed}  ({failed/total*100:.1f}%)"
             if total
             else ""
         )
-        print()
+        lines.append("")
 
         # Per-criterion
         wcag_111 = [r for r in records if r["wcag_1_1_1_status"] != "N/A"]
@@ -1658,19 +1659,19 @@ class AltTextAccessibilityAuditor:
         p1411 = sum(1 for r in wcag_1411 if r.get("wcag_1_4_11_status") == "PASSED")
         f1411 = sum(1 for r in wcag_1411 if r.get("wcag_1_4_11_status") == "FAILED")
 
-        print(
+        lines.append(
             f"  WCAG 1.1.1 (Non-text Content) : {p111} PASSED / {f111} FAILED ({len(wcag_111)} applicable)"
         )
-        print(
+        lines.append(
             f"  WCAG 4.1.2 (Name/Role/Value)  : {p412} PASSED / {f412} FAILED ({len(wcag_412)} applicable)"
         )
-        print(
+        lines.append(
             f"  WCAG 1.4.5 (Images of Text)   : {p145} PASSED / {f145} FAILED ({len(wcag_145)} applicable)"
         )
-        print(
+        lines.append(
             f"  WCAG 1.4.11 (Non-text Contr.) : {p1411} PASSED / {f1411} FAILED ({len(wcag_1411)} with data)"
         )
-        print()
+        lines.append("")
 
         # By classification
         from collections import Counter
@@ -1682,33 +1683,33 @@ class AltTextAccessibilityAuditor:
             r["classification"] for r in records if r["overall_status"] == "FAILED"
         )
         all_cls = sorted(set(list(cls_pass.keys()) + list(cls_fail.keys())))
-        print("  By classification:")
-        print(f"  {'Classification':<20} {'PASSED':>8} {'FAILED':>8} {'TOTAL':>8}")
-        print(f"  {'-'*46}")
+        lines.append("  By classification:")
+        lines.append(f"  {'Classification':<20} {'PASSED':>8} {'FAILED':>8} {'TOTAL':>8}")
+        lines.append(f"  {'-'*46}")
         for cls in all_cls:
             p = cls_pass.get(cls, 0)
             f = cls_fail.get(cls, 0)
-            print(f"  {cls:<20} {p:>8} {f:>8} {p+f:>8}")
-        print()
+            lines.append(f"  {cls:<20} {p:>8} {f:>8} {p+f:>8}")
+        lines.append("")
 
         # OCR / contrast summary
         with_ocr = sum(1 for r in records if r["has_ocr_text"])
         with_contrast = sum(1 for r in records if r["contrast_violations_count"] > 0)
-        print(f"  Images with OCR text detected  : {with_ocr}")
-        print(f"  Images with contrast violations: {with_contrast}")
-        print()
+        lines.append(f"  Images with OCR text detected  : {with_ocr}")
+        lines.append(f"  Images with contrast violations: {with_contrast}")
+        lines.append("")
 
         # Failed images list
         failed_rows = [r for r in records if r["overall_status"] == "FAILED"]
         if failed_rows:
-            print("  Failed images:")
-            print(
+            lines.append("  Failed images:")
+            lines.append(
                 f"  {'Filename':<35} {'Classification':<15} {'Sub-type':<12} {'Alt text':<25} {'1.1.1':>6} {'4.1.2':>6}"
             )
-            print(f"  {'-'*105}")
+            lines.append(f"  {'-'*105}")
             for r in failed_rows:
                 alt_preview = (r["alt_text"] or "")[:24]
-                print(
+                lines.append(
                     f"  {r['filename']:<35} "
                     f"{r['classification']:<15} "
                     f"{r['sub_type']:<12} "
@@ -1717,9 +1718,10 @@ class AltTextAccessibilityAuditor:
                     f"{r['wcag_4_1_2_status']:>6}"
                 )
         else:
-            print("  All images passed!")
+            lines.append("  All images passed!")
 
-        print(sep)
+        lines.append(sep)
+        logger.debug("\n" + "\n".join(lines))
         logger.info(
             f"Audit complete — {total} images, {passed} passed, {failed} failed. "
             f"Report: {report_path}"

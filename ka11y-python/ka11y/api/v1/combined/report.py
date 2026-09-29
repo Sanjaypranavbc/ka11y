@@ -16,6 +16,7 @@ from ka11y.i18n.loader import (
     get_severity_labels,
     get_status_labels,
 )
+from ka11y.accessibility.technique_map import annotate_findings
 from ka11y.utils.url_canonical import canonicalize_url as _canonicalize_url
 
 # Single shared policy used purely for URL canonicalization in the report.
@@ -60,16 +61,51 @@ def _stamp_finding_ids(findings: List[Dict]) -> None:
         f["manual_review"] = f.get("status") == "needs_review"
 
 
+#: Finding keys written by :func:`apply_reviews` for a manual verdict (and
+#: removed again when the verdict is cleared).
+REVIEW_FIELDS = (
+    "review_status", "review_note", "reviewed", "reviewed_by", "reviewed_at", "review_message",
+)
+
+_REVIEW_MESSAGES = {
+    "en": "Reviewed by user and manually changed to {verdict}.",
+    "ja": "ユーザーがレビューし、手動で{verdict}に変更しました。",
+}
+
+
+def review_message(review_status: str, lang: Optional[str] = "en") -> str:
+    """Audit-trail sentence for a manual verdict, in the report's language.
+
+    ``review_status`` is the stored value (``pass`` | ``violation``); the
+    verdict word is the same localized status label the report uses
+    elsewhere ("Pass" / "Fail", 「合格」/「不合格」)."""
+    lang = (lang or "en").lower()
+    key = "ja" if lang.startswith("ja") or lang == "jp" else "en"
+    labels = get_status_labels("ja" if key == "ja" else "en")
+    verdict = labels.get("fail" if review_status == "violation" else "pass") or (
+        "Fail" if review_status == "violation" else "Pass"
+    )
+    return _REVIEW_MESSAGES[key].format(verdict=verdict)
+
+
 def apply_reviews(report: Dict[str, Any], reviews: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
     """Overlay manual-review decisions onto a built report and recompute the
     *effective* score so it reflects human adjudication.
 
-    ``reviews`` maps ``finding_id`` → ``{"status": "pass"|"violation", "note": ...}``.
-    A reviewed needs_review item counts toward passes/violations for the headline
-    counts and the pass-rate; the original automated counts are preserved under
-    ``summary.automated``. Mutates and returns *report*. Safe with empty reviews
-    (then effective == automated, so nothing visibly changes)."""
+    ``reviews`` maps ``finding_id`` → ``{"status": "pass"|"violation", "note",
+    "reviewer", "updated_at"}``. A reviewed needs_review item counts toward
+    passes/violations for the headline counts and the pass-rate; the original
+    automated counts are preserved under ``summary.automated``. Mutates and
+    returns *report*. Safe with empty reviews (then effective == automated, so
+    nothing visibly changes).
+
+    The automated ``status`` is never rewritten. A manual verdict is an overlay:
+    ``review_status`` (the verdict), ``reviewed`` / ``verdict_source: "manual"``
+    (the flag), ``reviewed_by`` / ``reviewed_at`` (who, when), ``review_message``
+    (the localized audit-trail sentence) and ``review_note`` (the reviewer's own
+    words). Every other finding carries ``verdict_source: "engine"``."""
     summary = report.get("summary") or {}
+    lang = report.get("lang") or "en"
     # Idempotent: source the automated baseline from a prior overlay if present,
     # so applying reviews twice to the same (hot-cache) report object doesn't
     # compound the counts.
@@ -101,10 +137,16 @@ def apply_reviews(report: Dict[str, Any], reviews: Dict[str, Dict[str, Any]]) ->
                     f["review_status"] = rev["status"]
                     f["review_note"] = rev.get("note")
                     f["reviewed"] = True
+                    f["reviewed_by"] = rev.get("reviewer")
+                    f["reviewed_at"] = rev.get("updated_at")
+                    f["review_message"] = review_message(rev["status"], lang)
+                    f["verdict_source"] = "manual"
                 else:
-                    f.pop("review_status", None)
-                    f.pop("review_note", None)
-                    f.pop("reviewed", None)
+                    for key in REVIEW_FIELDS:
+                        f.pop(key, None)
+                    f["verdict_source"] = "engine"
+            else:
+                f["verdict_source"] = "engine"
             rs = f.get("review_status")
             if status == "fail" or rs == "violation":
                 n_viol.append(f)
@@ -198,6 +240,10 @@ def _build_report(
     # Stamp stable ids + manual_review flags before bucketing so every copy of a
     # finding (flat lists + per-page arrays) carries the same id.
     _stamp_finding_ids(all_findings)
+    # WCAG Situation/Technique tags on every finding, pass and fail alike. The
+    # frontend-facing GET strips them from non-pass findings (routes.py); the
+    # stored report, exports and email keep them.
+    annotate_findings(all_findings)
 
     violations = [f for f in all_findings if f["status"] == "fail"]
     needs_review = [f for f in all_findings if f["status"] == "needs_review"]

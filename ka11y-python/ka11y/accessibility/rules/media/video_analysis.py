@@ -90,7 +90,6 @@ def _flash_stats(frames_gray: List[Any], fps: float) -> Dict[str, Any]:
     diff = np.diff(lum, axis=0)  # (T-1, gh, gw)
     darker = np.minimum(lum[1:], lum[:-1])
     sig = np.where((np.abs(diff) >= 0.10) & (darker < 0.80), np.sign(diff), 0)  # significant transitions
-    T = sig.shape[0]
     win = max(2, int(round(fps)))
     max_fps = 0.0
     flashing = np.zeros(sig.shape[1:], dtype=bool)

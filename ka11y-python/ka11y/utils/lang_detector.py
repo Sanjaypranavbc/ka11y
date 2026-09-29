@@ -27,7 +27,6 @@ Falls back to ``"en"`` when:
 from __future__ import annotations
 
 import asyncio
-import logging
 import threading
 import time
 from typing import Optional, Set
@@ -37,8 +36,9 @@ import httpx
 from bs4 import BeautifulSoup
 
 from ka11y.crawler._ssrf_guard import _host_is_blocked
+from ka11y.config.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(name="KAC", tag="lang_detector")
 
 # Languages for which we have full i18n bundles (reason_templates, UI labels).
 # Extend this set when new locale files are added to i18n/locales/.

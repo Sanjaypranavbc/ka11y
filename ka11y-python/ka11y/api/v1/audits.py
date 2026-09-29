@@ -4,8 +4,8 @@ ka11y/api/v1/audits.py
 Ownership-aware audit history (spec §27): ``audit_jobs LEFT JOIN audit_summary``
 for the signed-in user, or for their whole organization with ``?scope=org``.
 
-The older ``GET /combined/history`` reads the SQLite run store and has no
-notion of who ran what; this endpoint is the one the History page should use.
+The older ``GET /combined/history`` (admin only) lists every run regardless
+of owner; this endpoint is the one the History page should use.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse, Response
 
 from ka11y.auth import CurrentUser, require_user
-from ka11y.db import audit_repo
 from ka11y.storage.backends import get_store
 from ka11y.storage.uploader import download_url_for
 from ka11y.store import repo as run_repo
@@ -37,7 +36,7 @@ async def audit_history(
         return {"items": [], "limit": limit, "offset": offset, "scope": scope}
     if scope == "org" and user.organization_id is None:
         raise HTTPException(status_code=400, detail="You are not a member of an organization.")
-    items: List[Dict[str, Any]] = await audit_repo.list_history(
+    items: List[Dict[str, Any]] = await run_repo.list_history(
         user_id=user.user_id,
         organization_id=user.organization_id,
         scope=scope,
@@ -51,8 +50,11 @@ async def audit_history(
 
 async def _assert_can_view(job_id: str, user: CurrentUser) -> None:
     """A job is visible to its owner and to members of the owning organization.
-    Jobs PostgreSQL does not know (anonymous) are visible to anyone signed in."""
-    owner = await audit_repo.get_owner(job_id)
+    Unknown or anonymous jobs are visible to anyone signed in."""
+    try:
+        owner = await run_repo.get_owner(job_id)
+    except Exception:  # noqa: BLE001 — PG down: fail closed, but as a clean 503
+        raise HTTPException(status_code=503, detail="Ownership store unavailable.")
     if owner is None or user.is_anonymous or user.is_admin:
         return
     if owner["user_id"] == user.user_id:
@@ -68,7 +70,7 @@ async def audit_artifacts(job_id: str, user: CurrentUser = Depends(require_user)
     download links, and every registered asset (screenshots, crops, HTML
     snapshots, OCR reports, step logs) with its serving URL."""
     await _assert_can_view(job_id, user)
-    reports = await audit_repo.list_reports(job_id)
+    reports = await run_repo.list_reports(job_id)
     for r in reports:
         r["download_url"] = (
             await download_url_for(r["key"], filename=f"{job_id}-{r['type']}.{r['format']}")
@@ -92,7 +94,7 @@ async def audit_artifacts(job_id: str, user: CurrentUser = Depends(require_user)
 @router.get("/{job_id}/reports/{report_id}/download")
 async def download_report(job_id: str, report_id: str, user: CurrentUser = Depends(require_user)):
     await _assert_can_view(job_id, user)
-    rep = await audit_repo.get_report(report_id)
+    rep = await run_repo.get_report_file(report_id)
     if rep is None or rep["job_id"] != job_id:
         raise HTTPException(status_code=404, detail="Report not found")
     store = get_store()

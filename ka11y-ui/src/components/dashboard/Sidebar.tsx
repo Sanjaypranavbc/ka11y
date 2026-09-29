@@ -18,6 +18,8 @@ import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
 import { LOGOUT_URL } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { useRunningAudit } from "@/components/dashboard/RunningAuditContext";
+import { RUNNING_AUDIT_PATH } from "@/lib/runningAudit";
 
 const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   dashboard: DashboardIcon,
@@ -32,6 +34,19 @@ export function Sidebar() {
   const pathname = usePathname();
   const { t } = useLanguage();
   const me = useCurrentUser();
+  // While an audit started in this browser runs, every destination except
+  // the running audit's own screen is locked (AuditLockGuard also redirects
+  // direct URL navigation). Logout stays available.
+  const { isLocked } = useRunningAudit();
+  const lockedProps = (href: string) =>
+    isLocked && href !== RUNNING_AUDIT_PATH
+      ? {
+          "aria-disabled": true as const,
+          tabIndex: -1,
+          title: t.nav.lockedHint,
+          onClick: (e: React.MouseEvent) => e.preventDefault(),
+        }
+      : {};
   const NAV_LABEL: Record<string, string> = {
     dashboard: t.nav.dashboard,
     violations: t.nav.violations,
@@ -93,10 +108,12 @@ export function Sidebar() {
                 <Link
                   href={item.href}
                   aria-current={active ? "page" : undefined}
+                  {...lockedProps(item.href)}
                   className={cn(
                     "flex items-center gap-2 rounded-[8px] py-2.5 pl-2 pr-14 text-[16px] leading-6 text-gray-80 hover:bg-gray-10",
                     active && "bg-brand-green-20 text-brand-teal-dark hover:bg-brand-green-20",
                     collapsed && "justify-center pr-0",
+                    isLocked && "cursor-not-allowed opacity-40 hover:bg-transparent",
                   )}
                 >
                   <Icon size={24} />
@@ -108,14 +125,21 @@ export function Sidebar() {
         </ul>
         {/* Admin console — only for accounts on KA11Y_ADMIN_EMAILS (the API
             enforces it; this just makes the console discoverable). */}
+        {isLocked && !collapsed && (
+          <p role="status" className="mt-3 px-2 text-[13px] leading-5 text-gray-80">
+            {t.nav.lockedHint}
+          </p>
+        )}
         {me?.is_admin && (
           <ul className="mt-4 flex flex-col gap-1 border-t border-gray-40 pt-4">
             <li>
               <Link
                 href="/admin"
+                {...lockedProps("/admin")}
                 className={cn(
                   "flex items-center gap-2 rounded-[8px] py-2.5 pl-2 pr-14 text-[16px] leading-6 text-gray-80 hover:bg-gray-10",
                   collapsed && "justify-center pr-0",
+                  isLocked && "cursor-not-allowed opacity-40 hover:bg-transparent",
                 )}
               >
                 <ShieldCheck size={24} aria-hidden="true" />

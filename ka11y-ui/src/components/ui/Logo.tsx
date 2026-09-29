@@ -11,9 +11,12 @@ interface LogoProps {
   label?: string;
   /** When set, the logo is a link (used to send every logo click to New Audit). */
   href?: string;
+  /** Pass false where the target is a gated route the visitor cannot load yet
+   * (the sign-in pages): prefetching it only produces a redirect back here. */
+  prefetch?: boolean;
 }
 
-export function Logo({ variant = "color", className, label = "kao", href }: LogoProps) {
+export function Logo({ variant = "color", className, label = "kao", href, prefetch }: LogoProps) {
   const image = (
     <Image
       src="/logo.png"
@@ -31,7 +34,7 @@ export function Logo({ variant = "color", className, label = "kao", href }: Logo
 
   if (href) {
     return (
-      <Link href={href} aria-label={label} className={cn("inline-flex shrink-0 rounded-md", className)}>
+      <Link href={href} prefetch={prefetch} aria-label={label} className={cn("inline-flex shrink-0 rounded-md", className)}>
         {image}
       </Link>
     );

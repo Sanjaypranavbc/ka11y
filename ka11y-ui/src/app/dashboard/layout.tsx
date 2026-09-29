@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
-import { AuditDataProvider } from "@/components/dashboard/AuditDataContext";
 
 export const metadata: Metadata = {
   title: "A11Y | kao",
@@ -12,9 +11,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <AuditDataProvider>
-      <DashboardShell>{children}</DashboardShell>
-    </AuditDataProvider>
-  );
+  // AuditDataProvider / RunningAuditProvider are mounted in the root layout.
+  return <DashboardShell>{children}</DashboardShell>;
 }

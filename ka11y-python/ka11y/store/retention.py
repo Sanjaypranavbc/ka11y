@@ -1,11 +1,11 @@
 """
 ka11y/store/retention.py
 =======================
-Durable-store retention sweep (P1). Replaces the in-memory TTL eviction's role
-for the DB: periodically delete runs older than ``KA11Y_RUN_RETENTION_DAYS``
-(default 30) and prune their on-disk assets. ON DELETE CASCADE removes child
-rows (findings, reports, pages, assets metadata); we delete the asset *files*
-ourselves.
+Retention sweep for the run store. Periodically delete runs older than
+``KA11Y_RUN_RETENTION_DAYS`` (default 30) and prune their on-disk assets.
+ON DELETE CASCADE in PostgreSQL removes the child rows (summary, report JSON,
+findings, pages, asset index, verdicts, timings, logs, report pointers); we
+delete the asset *files* ourselves.
 
 Runs as a background task started from the FastAPI lifespan. Never raises.
 """

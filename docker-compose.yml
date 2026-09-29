@@ -12,8 +12,18 @@
 #   docker compose up                      # start all services
 #   docker compose up --build              # build + start
 #   docker compose logs -f                 # follow logs
-#   docker compose down                    # stop services
-#   rm -rf output/crawled_images output/logs  # optional: clear bind-mounted audit output
+#   docker compose down                    # stop services (all data is kept)
+#
+# Persistence: every stateful path is a bind mount under ./output/ — PostgreSQL
+# (output/pg: users, sessions, and the whole run store: queue, reports,
+# findings, manual verdicts, asset index, telemetry), asset bytes, artifacts,
+# logs and crawled images — so `docker compose down` / `up`, `down -v`,
+# `docker volume prune` and image rebuilds never lose history. Only the model
+# caches are named volumes. (The SQLite run store under output/db is retired;
+# see ka11y-python/scripts/import_sqlite_store.py to bring its history over.)
+#   sudo rm -rf output/pg output/assets output/artifacts   # wipe history
+#   rm -rf output/crawled_images output/logs                         # clear scratch output
+# (`./run.sh --wipe` does both after a confirmation prompt.)
 # =============================================================================
 
 services:
@@ -113,8 +123,13 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
 
+    # Bind mount, like every other stateful path in this stack (./output/*):
+    # a named volume is deleted by `docker compose down -v` / `docker volume
+    # prune`, which is exactly how the audit history kept disappearing. The
+    # directory must be empty (or absent) on first start — initdb refuses a
+    # non-empty data dir — so never put a .gitkeep in it.
     volumes:
-      - ka11y_pg:/var/lib/postgresql/data
+      - ./output/pg:/var/lib/postgresql/data
 
     healthcheck:
       test:
@@ -238,17 +253,15 @@ services:
       SENDER_EMAIL:     "${SENDER_EMAIL:-}"
       SENDER_PASSWORD:  "${SENDER_PASSWORD:-}"
 
-      # ── Durable store (SQLite WAL) + assets + telemetry ──────────────────
-      # Source of truth for run state, reports, findings, assets metadata and
-      # per-(page,stage,rule) telemetry. Lives on the ka11y_db named volume so
-      # it survives restarts/redeploys. Back up ka11y.db + -wal + -shm together
-      # (or use `VACUUM INTO`).
-      KA11Y_DB_PATH:        "/data/db/ka11y.db"
+      # ── Run store + assets + telemetry ───────────────────────────────────
+      # Run state, reports, findings, the asset index and per-(page,stage,rule)
+      # telemetry all live in PostgreSQL (DATABASE_URL from the env_file
+      # below). There is no SQLite any more: one row per fact, one database.
       # Content-addressed asset bytes (screenshots, OCR crops, contrast regions).
       KA11Y_ASSET_DIR:      "/data/assets"
       # Delete runs (+ their findings/reports/assets) older than this many days.
       KA11Y_RUN_RETENTION_DAYS: "30"
-      # Keep telemetry in SQLite only in prod (0) — avoids unbounded JSONL files.
+      # Keep telemetry in the database only in prod (0) — avoids unbounded JSONL files.
       KA11Y_TELEMETRY_FILES: "0"
       # Durable queue: bounded concurrent jobs; crash-requeue attempt cap.
       KA11Y_MAX_CONCURRENT_JOBS: "3"
@@ -260,10 +273,10 @@ services:
       # of a second Puppeteer crawl in Node. Default OFF; flip to "1" to trial.
       KA11Y_UNIFIED_CRAWL:  "0"
 
-      # ── Production DB (PostgreSQL) + OIDC sign-in ────────────────────────
-      # Users, OAuth identities, browser sessions, audit ownership and history
-      # (ka11y-python/ka11y/db). Alembic migrations + the WCAG catalogue seed
-      # run at startup unless this is "0".
+      # ── PostgreSQL + OIDC sign-in ─────────────────────────────────────────
+      # Users, OAuth identities, browser sessions and every audit run
+      # (ka11y-python/ka11y/db, ka11y-python/ka11y/store). Alembic migrations
+      # + the WCAG catalogue seed run at startup unless this is "0".
       KA11Y_DB_AUTO_MIGRATE: "1"
       # Everything secret for this block is read from ka11y-python/.env via
       # env_file below (see ka11y-python/.env.example), NOT listed here — an
@@ -299,7 +312,6 @@ services:
     volumes:
       - ./output/crawled_images:/app/crawled_images
       - ./output/logs:/app/logs
-      - ./output/db:/data/db
       - ./output/assets:/data/assets
       - ./output/artifacts:/data/artifacts
       - huggingface_cache:/root/.cache/huggingface
@@ -432,6 +444,12 @@ services:
     depends_on:
       node:
         condition: service_healthy
+      # The UI proxies /api/v1/* to python and its admin page opens an SSE
+      # stream on load. Started together, the first requests raced uvicorn's
+      # bind and logged "Failed to proxy http://python:8000 … ECONNREFUSED".
+      # Wait for python's /health instead (its healthcheck below).
+      python:
+        condition: service_healthy
 
     networks:
       - ka11y-net
@@ -499,11 +517,11 @@ networks:
   ka11y-net:
     driver: bridge
 
+# Named volumes hold only re-downloadable model caches. Everything that is
+# history lives under ./output/ (see the header) and survives `down -v`.
 volumes:
   huggingface_cache:
   paddlex_models:
   easyocr_models:
-  # PostgreSQL data directory (local dev / single-box deploys).
-  ka11y_pg:
 #  # Phoenix's SQLite trace store, so local traces survive `docker compose down`.
 #  phoenix_data:

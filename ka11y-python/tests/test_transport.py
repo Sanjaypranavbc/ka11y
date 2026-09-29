@@ -58,6 +58,86 @@ def test_loopback_and_health_are_not_redirected(client):
     assert client.get("http://localhost/api/v1/auth/config", follow_redirects=False).status_code == 200
 
 
+# ── The edge tells us the scheme ─────────────────────────────────────────────
+# Every request below reaches the app over plain http (the container port);
+# only the proxy headers say what the browser did.
+
+_HTTP_URL = "http://a11y.example/api/v1/auth/config"
+
+
+def test_proxy_reports_https_is_served(client):
+    r = client.get(_HTTP_URL, follow_redirects=False, headers={"X-Forwarded-Proto": "https"})
+    assert r.status_code == 200
+    assert r.headers["Strict-Transport-Security"].startswith("max-age=")
+
+
+def test_proxy_reports_http_is_redirected(client):
+    r = client.get(
+        _HTTP_URL,
+        follow_redirects=False,
+        headers={"X-Forwarded-Proto": "http", "X-Forwarded-For": "203.0.113.9", "X-Forwarded-Host": "a11y.example"},
+    )
+    assert r.status_code == 308
+    assert r.headers["location"] == "https://a11y.example/api/v1/auth/config"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        # Next's proxy appends its own plain-http hop after the edge's https.
+        {"X-Forwarded-Proto": "https,http"},
+        {"X-Forwarded-Proto": "https, http"},
+        {"X-Forwarded-Scheme": "https"},
+        {"CloudFront-Forwarded-Proto": "https"},
+        {"Forwarded": 'for=203.0.113.9;proto=https;host="a11y.example"'},
+        {"Forwarded": "for=203.0.113.9;proto=https, for=10.0.0.4;proto=http"},
+        {"X-Forwarded-Ssl": "on"},
+        {"Front-End-Https": "on"},
+    ],
+)
+def test_other_scheme_spellings_mean_https(client, headers):
+    r = client.get(_HTTP_URL, follow_redirects=False, headers=headers)
+    assert r.status_code == 200, headers
+    assert "Strict-Transport-Security" in r.headers
+
+
+def test_proxy_that_omits_the_scheme_is_not_bounced(client):
+    """The production 308 loop: Apache ProxyPass / an ALB rule that forwards
+    X-Forwarded-For but not -Proto. The operator declared https (force_https),
+    so the request is served as https instead of redirected to itself."""
+    r = client.get(_HTTP_URL, follow_redirects=False, headers={"X-Forwarded-For": "203.0.113.9"})
+    assert r.status_code == 200
+    assert "Strict-Transport-Security" in r.headers
+    r = client.get(_HTTP_URL, follow_redirects=False, headers={"Via": "1.1 edge"})
+    assert r.status_code == 200
+
+
+def test_internal_service_call_is_not_redirected(client):  # client: the module's https env
+    """The UI container's server-side fetch to http://python:8000 carries no
+    forwarding headers at all; its peer is the compose bridge. There is no
+    browser to redirect and no TLS listener on the port, so it is served."""
+    from ka11y.main import app
+
+    with TestClient(app, base_url="http://python:8000", client=("172.18.0.5", 41234)) as internal:
+        r = internal.get("/api/v1/auth/config", follow_redirects=False)
+        assert r.status_code == 200
+        assert "Strict-Transport-Security" not in r.headers  # honest: this hop is plain http
+        # ...but a proxy in front of the same private peer that says "http" is still a browser on http.
+        r = internal.get("/api/v1/auth/config", follow_redirects=False, headers={"X-Forwarded-Proto": "http", "X-Forwarded-Host": "a11y.example"})
+        assert r.status_code == 308
+        assert r.headers["location"] == "https://a11y.example/api/v1/auth/config"
+
+
+def test_public_peer_without_proxy_is_redirected(client):
+    """Port published to the internet and hit directly over http. (8.8.8.8, not
+    a 203.0.113.x documentation address: ipaddress counts those as non-global.)"""
+    from ka11y.main import app
+
+    with TestClient(app, base_url="http://a11y.example", client=("8.8.8.8", 41234)) as direct:
+        r = direct.get("/api/v1/auth/config", follow_redirects=False)
+        assert r.status_code == 308
+
+
 def test_body_cap(client):
     from ka11y.main import _BodyLimitMiddleware
 

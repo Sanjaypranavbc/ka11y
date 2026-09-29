@@ -3,7 +3,7 @@ ka11y/api/v1/combined/routes.py
 =================================
 FastAPI route handlers for accessibility audit endpoints.
 
-  POST /python-audit/              202  Submit Python-only audit job (OCR, image, media, contrast, form, label-in-name)
+  POST /python-audit/              202  Submit Python-only audit job (image, OCR contrast, media/captions)
   POST /combined-audit/            202  Submit combined audit job (Python + Node/axe-core — Node wired via runner)
   GET  /combined/{job_id}          200  Poll status / retrieve result
   GET  /combined/{job_id}/timings  200  Per-stage timing breakdown (JSON)
@@ -14,30 +14,43 @@ FastAPI route handlers for accessibility audit endpoints.
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 import mimetypes
-import socket
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query
+<<<<<<< HEAD
 from fastapi.responses import FileResponse, StreamingResponse
 from typing import AsyncGenerator
 from ka11y.config.logger import setup_logger
+=======
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from typing import Any, AsyncGenerator
+>>>>>>> 0549e899754bab590546175537618660581ab70f
 from ka11y.utils.run_timing import compute_run_timing
 from pydantic import BaseModel, Field, HttpUrl
 from .dispatcher import enqueue
 from .models import CombinedRequest, JobStatusResponse
 from ka11y.observability import attributes as attrs
 from ka11y.observability import current_span, set_span_attributes
-from .report import apply_reviews
-from .store import _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
+from .report import apply_reviews, review_message
+from ka11y.accessibility.technique_map import annotate_findings, strip_failure_techniques
+from .store import _broadcast, _close_subscribers, _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
 from ka11y.store import repo
-from ka11y.auth import CurrentUser, require_user
-from ka11y.db import audit_repo
+from ka11y.auth import ANONYMOUS, CurrentUser, require_user
+from ka11y.api.v1.audits import _assert_can_view
+from ka11y.config.logger import setup_logger
+from ka11y.crawler._ssrf_guard import (
+    _classify_blocked,
+    _ip_is_blocked,
+    _parse_literal_ip,
+    _resolve_hostname,
+)
+
+logger = setup_logger(name="KAC", tag="combined")
 
 
 class FindingReviewRequest(BaseModel):
@@ -49,6 +62,7 @@ class FindingReviewRequest(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
     reviewer: str | None = Field(default=None, max_length=200)
 
+<<<<<<< HEAD
 # Private/reserved IP ranges that must never be fetched (SSRF guard for redirects).
 # These CIDR networks cover: loopback, RFC-1918 private, link-local, unique-local
 # (IPv6), documentation ranges, and the IPv4-mapped IPv6 loopback.
@@ -90,85 +104,22 @@ _NOT_PUBLIC_DETAIL = (
     "Only publicly routable hosts may be audited."
 )
 
+=======
+>>>>>>> 0549e899754bab590546175537618660581ab70f
 router = APIRouter(prefix="/combined", tags=["combined audit"])
 
 
-def _is_non_public_ip(ip: str) -> bool:
-    """
-    Return True for IP addresses that should never be fetched by audit workers:
-    private, loopback, link-local, multicast, reserved, or unspecified.
-    """
-    try:
-        parsed = ipaddress.ip_address(ip)
-    except ValueError:
-        return False
-
-    return any(
-        (
-            parsed.is_private,
-            parsed.is_loopback,
-            parsed.is_link_local,
-            parsed.is_multicast,
-            parsed.is_reserved,
-            parsed.is_unspecified,
-            _ip_is_blocked(ip),
-        )
-    )
-
-
-def build_ssrf_route_handler(page):
-    """
-    Return a Playwright ``page.route()`` handler that blocks requests to
-    private/reserved IP addresses during a crawl.
-
-    This prevents SSRF via HTTP redirects: even if attacker.com responds with
-    a 301 to http://192.168.1.1, Playwright will call this handler before
-    following the redirect and the request will be aborted.
-
-    Usage::
-
-        handler = build_ssrf_route_handler(page)
-        await page.route("**/*", handler)
-    """
-    import re
-
-    # Regex to quickly detect literal IP hostnames in URLs (avoids DNS lookup
-    # inside the hot-path handler).
-    _IP_HOST_RE = re.compile(r"https?://(\[?[0-9a-fA-F:.]+\]?)(?:[:/]|$)")
-
-    async def _handler(route, request):
-        url = request.url
-        m = _IP_HOST_RE.match(url)
-        if m:
-            host = m.group(1).strip("[]")
-            if _ip_is_blocked(host):
-                await route.abort("addressunreachable")
-                return
-        await route.continue_()
-
-    return _handler
-
-
-async def _resolve_all_ips(hostname: str) -> list[str]:
-    infos = await asyncio.to_thread(
-        socket.getaddrinfo,
-        hostname,
-        None,
-        0,
-        socket.SOCK_STREAM,
-    )
-    addrs: list[str] = []
-    for info in infos:
-        sockaddr = info[4]
-        if not sockaddr:
-            continue
-        ip = sockaddr[0]
-        if ip not in addrs:
-            addrs.append(ip)
-    return addrs
+def _caller(user: Any) -> CurrentUser:
+    """The signed-in user, or ANONYMOUS when a handler is called directly
+    (tests) and the parameter is FastAPI's ``Depends`` sentinel, not a user."""
+    return user if isinstance(user, CurrentUser) else ANONYMOUS
 
 
 async def assert_public_url(url: str) -> None:
+    """Reject a submission whose host is private, loopback, link-local or
+    otherwise non-public (SSRF). Uses the same classifier as the browser-context
+    guard in crawler/_ssrf_guard.py, which stays in force during the crawl
+    for redirects and sub-resources; this check just fails fast with a 400."""
     parsed = urlparse(url)
     host = parsed.hostname or ""
 
@@ -177,16 +128,15 @@ async def assert_public_url(url: str) -> None:
             status_code=400,
             detail=f"URL scheme '{parsed.scheme}' is not supported; use http or https.",
         )
-
     if not host:
         raise HTTPException(status_code=400, detail="URL hostname is missing.")
-
-    if host.lower() == "localhost":
+    if host.lower() in ("localhost", "ip6-localhost", "ip6-loopback"):
         raise HTTPException(
             status_code=400,
-            detail="URL hostname 'localhost' is not allowed (private/loopback address).",
+            detail=f"URL hostname '{host}' is not allowed (private/loopback address).",
         )
 
+<<<<<<< HEAD
     # Literal IP host. The check has to be made here, not inferred from
     # _is_non_public_ip raising: that helper swallows the ValueError and
     # returns False, so the old `except ValueError` never ran and the `return`
@@ -197,12 +147,18 @@ async def assert_public_url(url: str) -> None:
         pass  # a name, not an address: resolve it below
     else:
         if _is_non_public_ip(host):
+=======
+    literal = _parse_literal_ip(host)
+    if literal is not None:
+        if _classify_blocked(literal):
+>>>>>>> 0549e899754bab590546175537618660581ab70f
             raise HTTPException(
                 status_code=400,
                 detail=f"URL hostname '{host}' is not allowed (private/loopback address).",
             )
         return
 
+<<<<<<< HEAD
     # Every rejection below answers with the same sentence and never names a
     # resolved address. Reporting the address, or distinguishing "does not
     # resolve" from "resolves internally", would let anyone who can submit an
@@ -224,6 +180,20 @@ async def assert_public_url(url: str) -> None:
             "[ssrf] refused %s: resolves to non-public address(es) %s",
             host,
             ", ".join(blocked[:3]),
+=======
+    resolved = await asyncio.to_thread(_resolve_hostname, host)
+    if not resolved:
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL hostname '{host}' could not be resolved.",
+        )
+    blocked = [ip for ip in resolved if _ip_is_blocked(ip)]
+    if blocked:
+        sample = ", ".join(blocked[:3])
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL hostname '{host}' resolves to private/loopback address(es): {sample}.",
+>>>>>>> 0549e899754bab590546175537618660581ab70f
         )
         raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
 
@@ -235,9 +205,9 @@ async def submit_python_audit(
     """
     Submit a **Python-only** accessibility audit.
 
-    Runs: OCR contrast (1.4.3), image audit (1.1.1 / 1.4.5 / 1.4.11), media/captions
-    audit (1.2.x), form audit (3.3.x), and label-in-name audit (2.5.3).
-    Node/axe-core is **not** invoked by this endpoint.
+    Runs the Python stages only: image audit (1.1.1 / 1.4.5 / 1.4.11 / 4.1.2),
+    OCR contrast (1.4.3 / 1.4.6) and the media/captions audit (1.2.1 / 1.2.2),
+    plus the cross-page and linked-PDF checks on multi-page crawls.
 
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report, or connect to
@@ -329,27 +299,26 @@ async def _admit_run(
         "warnings": [],
     }
 
-    # Ownership + history record in PostgreSQL (spec: audit_jobs). Best-effort,
-    # and a no-op for anonymous callers (KA11Y_AUTH_DISABLED) or without
-    # DATABASE_URL — the SQLite queue below is what actually runs the job.
-    # isinstance, not a None check: when a test calls the route function
-    # directly the parameter is FastAPI's Depends() sentinel, not a user.
-    # Written BEFORE enqueue: the dispatcher can pick the job up within
-    # milliseconds, and its mark_running() would otherwise find no row and
-    # skip JOB_STARTED / started_at.
-    if isinstance(user, CurrentUser) and not user.is_anonymous:
-        await audit_repo.create_job(
-            job_id,
-            user_id=user.user_id,
-            organization_id=user.organization_id,
-            session_id=user.session_id,
-            target_url=url,
-            crawl_depth=payload.max_depth,
-            requested_pages=payload.max_pages,
-        )
+    # One row: the audit_jobs record carries the owner (when the caller is
+    # signed in) and is the queue entry the dispatcher drains. isinstance,
+    # not a None check: when a test calls the route function directly the
+    # parameter is FastAPI's Depends() sentinel, not a user.
+    owner = user if isinstance(user, CurrentUser) else None
+    try:
+        await enqueue(job_id, payload, user=owner)
+    except Exception:  # noqa: BLE001
+        # The queue row is the job. Without it nothing will ever run, so the
+        # caller must not receive a job id: drop the hot entry and answer 503.
+        logger.exception("[combined] job %s could not be queued", job_id)
+        _jobs.pop(job_id, None)
+        raise HTTPException(status_code=503, detail="Audit queue is unavailable. Please try again.")
 
+<<<<<<< HEAD
     await enqueue(job_id, payload)
     logger.info(f"[combined] Job {job_id} submitted for {url}")
+=======
+    logger.info("[combined] job %s submitted for %s", job_id, url)
+>>>>>>> 0549e899754bab590546175537618660581ab70f
     # Stamp the job id on the HTTP span (the middleware's, still current here).
     # The audit runs as its own trace, so this attribute is the thread that
     # leads from "this request was slow / errored" to the audit it started.
@@ -376,6 +345,7 @@ async def rerun_combined_audit(job_id: str, user: CurrentUser = Depends(require_
     re-entering the URL and toggles. The new run flows through the normal durable
     queue + dispatcher.
     """
+    await _assert_can_view(job_id, _caller(user))
     run = await repo.get_run(job_id)
     if not run:
         raise HTTPException(
@@ -383,7 +353,9 @@ async def rerun_combined_audit(job_id: str, user: CurrentUser = Depends(require_
             detail=f"Job {job_id!r} not found in the durable store; cannot re-run.",
         )
     try:
-        params = json.loads(run.get("params_json") or "{}")
+        params = run.get("params") or {}
+        if isinstance(params, str):
+            params = json.loads(params or "{}")
         payload = CombinedRequest(**params)
     except Exception:
         raise HTTPException(
@@ -430,7 +402,12 @@ async def _apply_reviews_to_job(job: dict, job_id: str) -> None:
     """Overlay any stored manual-review decisions onto the job's report so the
     effective score (violations / needs_review / passes counts) reflects them."""
     result = job.get("result")
-    if not result or not result.get("needs_review"):
+    if not result or not isinstance(result, dict):
+        return
+    # Not gated on a non-empty needs_review list: on the hot-cache object the
+    # overlay has already moved reviewed items into violations/passes, and a
+    # verdict that was since cleared must still be re-partitioned back.
+    if not any(result.get(k) for k in ("violations", "needs_review", "passes")):
         return
     try:
         reviews = await repo.get_reviews(job_id)
@@ -439,20 +416,54 @@ async def _apply_reviews_to_job(job: dict, job_id: str) -> None:
     apply_reviews(result, reviews)
 
 
+def _refresh_techniques(result: dict | None) -> None:
+    """Re-tag every finding with the *current* technique map. Reports store the
+    tags they were built with; re-annotating on read means a mapping fix (or a
+    regenerated map) applies to existing audits too. Idempotent and cheap —
+    a few dict lookups per finding — and the per-page arrays share the same
+    finding objects, so the flat lists are enough."""
+    if not isinstance(result, dict):
+        return
+    findings = []
+    for key in ("violations", "needs_review", "passes"):
+        findings.extend(f for f in (result.get(key) or []) if isinstance(f, dict))
+    if findings:
+        annotate_findings(findings)
+
+
 async def _finalize_job_view(job: dict, job_id: str) -> None:
+    """Shape a job record for the frontend.
+
+    This is the *only* place the UI reads findings from, so it is also the
+    boundary where failing / needs_review findings lose their WCAG
+    situation/technique tags (passing findings keep them). The strip works on
+    a copy: the hot-cache entry, the run store, the exports and the email all
+    keep the full report. Runs after the review overlay so a reviewed item is
+    judged on its final status."""
     _inject_image_urls(job, job_id)
     await _apply_reviews_to_job(job, job_id)
+    if job.get("result"):
+        _refresh_techniques(job["result"])
+        job["result"] = strip_failure_techniques(job["result"])
 
 
 @router.get("/history")
 async def list_combined_history(
-    limit: int = 50, offset: int = 0, url: str | None = None, status: str | None = None
+    limit: int = 50,
+    offset: int = 0,
+    url: str | None = None,
+    status: str | None = None,
+    user: CurrentUser = Depends(require_user),
 ):
-    """Paginated history of past audit runs (durable; survives restart/TTL).
+    """Paginated history of *every* audit run in the durable store.
 
-    Reads straight from the ``runs`` table so the list is available even after
-    a run has been evicted from the in-memory hot cache.
+    The ``runs`` table has no owner column, so this is an operator view:
+    admins only (``KA11Y_ADMIN_EMAILS``), or anyone when auth is disabled.
+    Signed-in users get their own history from ``GET /audits/history``.
     """
+    caller = _caller(user)
+    if not caller.is_anonymous and not caller.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required.")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     try:
@@ -493,10 +504,100 @@ async def _job_from_db(job_id: str) -> dict | None:
     return job
 
 
+_EXPORT_MEDIA = {
+    "json": "application/json; charset=utf-8",
+    "csv": "text/csv; charset=utf-8",
+    "html": "text/html; charset=utf-8",
+    "pdf": "application/pdf",
+}
+
+
+async def _full_report(job_id: str) -> dict | None:
+    """The complete report for a finished job — every finding, pass and fail,
+    with its technique/situation tags — with manual-review decisions applied.
+    Deep-copied so rendering never touches the cached object. ``None`` when
+    the job is unknown or has no stored report."""
+    result = None
+    if job_id in _jobs:
+        async with _get_job_lock(job_id):
+            snapshot = _jobs.get(job_id) or {}
+            if snapshot.get("status") == "completed":
+                result = snapshot.get("result")
+    if result is None:
+        run = await repo.get_run(job_id)
+        if not run:
+            return None
+        if run.get("status") == "completed":
+            result = await repo.get_report(job_id)
+    if not result:
+        return None
+    report = json.loads(json.dumps(result, ensure_ascii=False, default=str))
+    holder = {"result": report}
+    await _apply_reviews_to_job(holder, job_id)
+    _refresh_techniques(holder["result"])
+    return holder["result"]
+
+
+@router.get("/{job_id}/export")
+async def export_combined_audit(
+    job_id: str,
+    format: str = Query(..., pattern=r"^(json|csv|html|pdf)$"),
+    user: CurrentUser = Depends(require_user),
+):
+    """Download the full audit report as JSON, CSV, HTML or PDF.
+
+    Unlike ``GET /{job_id}`` (the dashboard's view), every finding here —
+    pass, fail and needs_review — carries its WCAG ``situations`` and
+    ``techniques``. The CSV is flat, one row per (finding, technique). Files
+    are built on demand from the stored report; the filename uses the audited
+    host, never the job id.
+    """
+    await _assert_can_view(job_id, _caller(user))
+    report = await _full_report(job_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="No report is stored for this audit yet.")
+
+    host = (urlparse(str(report.get("url") or "")).hostname or "audit").replace(":", "_")
+    filename = f"{host}-accessibility-audit.{format}"
+
+    body: bytes | str
+    if format == "json":
+        body = json.dumps(report, indent=2, ensure_ascii=False, default=str)
+    elif format == "csv":
+        from ka11y.utils.report_csv import build_export_csv
+
+        body = build_export_csv(report)
+    elif format == "html":
+        from ka11y.utils.report_pdf import _MAX_ROWS_PER_SECTION, _collect_images, build_report_html
+
+        try:
+            images = await _collect_images(report, _MAX_ROWS_PER_SECTION)
+        except Exception:  # noqa: BLE001
+            images = {}
+        body = build_report_html(report, images, max_rows=None)
+    else:
+        from ka11y.utils.report_pdf import build_report_pdf
+
+        pdf = await build_report_pdf(report)
+        if pdf is None:
+            raise HTTPException(status_code=503, detail="PDF rendering is unavailable right now.")
+        body = pdf
+    return Response(
+        content=body,
+        media_type=_EXPORT_MEDIA[format],
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/{job_id}/cancel")
-async def cancel_combined_audit(job_id: str):
-    """Cooperatively cancel a queued/running audit. The worker checks the DB
-    status between stages and aborts if it sees ``cancelled``."""
+async def cancel_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
+    """Cooperatively cancel a queued/running audit.
+
+    Queued: settled immediately (hot cache + ``job_cancelled`` SSE event).
+    Running: the runner re-reads the stored status before it starts and again
+    once the crawl/OCR/Node engines finish, and stops there — an in-flight
+    browser pass is not interrupted."""
+    await _assert_can_view(job_id, _caller(user))
     run = await repo.get_run(job_id)
     in_hot = job_id in _jobs
     if not run and not in_hot:
@@ -504,22 +605,30 @@ async def cancel_combined_audit(job_id: str):
     current = (run or {}).get("status") or _jobs.get(job_id, {}).get("status")
     if current in ("completed", "failed", "cancelled"):
         return {"job_id": job_id, "status": current, "cancelled": False}
-    await repo.update_run(
-        job_id, status="cancelled", completed_at=datetime.now(timezone.utc).isoformat()
-    )
+    completed_at = datetime.now(timezone.utc).isoformat()
+    await repo.mark_cancelled(job_id, completed_at)
     if in_hot:
-        _jobs[job_id]["status"] = "cancelled"
-    repo.insert_event(job_id, "cancelled", {})
-    await audit_repo.mark_cancelled(job_id)
+        # A queued job has no runner to notice the flag: settle it here. A
+        # running one is left 'running' for the runner, which checks the flag
+        # at its next checkpoint and emits job_cancelled itself.
+        if current == "running":
+            async with _get_job_lock(job_id):
+                _jobs[job_id]["cancel_requested"] = True
+        else:
+            async with _get_job_lock(job_id):
+                _jobs[job_id].update(status="cancelled", completed_at=completed_at, current_stage=None)
+            await _broadcast(job_id, "job_cancelled", {"job_id": job_id, "when": "while queued"})
+            await _close_subscribers(job_id)
     return {"job_id": job_id, "status": "cancelled", "cancelled": True}
 
 
 @router.get("/{job_id}", response_model=JobStatusResponse)
-async def get_combined_audit(job_id: str):
+async def get_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
     """Poll the status or retrieve the result of a combined audit job."""
+    await _assert_can_view(job_id, _caller(user))
     if job_id not in _jobs:
         # Durable fallback: the run may have been evicted from the hot cache or
-        # the process may have restarted — reconstruct it from SQLite.
+        # the process may have restarted — reconstruct it from the run store.
         db_job = await _job_from_db(job_id)
         if db_job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
@@ -542,8 +651,9 @@ async def get_combined_audit(job_id: str):
 
 
 @router.get("/{job_id}/reviews")
-async def get_finding_reviews(job_id: str):
+async def get_finding_reviews(job_id: str, user: CurrentUser = Depends(require_user)):
     """List the manual-review decisions recorded for a run's needs_review items."""
+    await _assert_can_view(job_id, _caller(user))
     run = await repo.get_run(job_id)
     if not run and job_id not in _jobs:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
@@ -551,55 +661,90 @@ async def get_finding_reviews(job_id: str):
     return {"job_id": job_id, "reviews": reviews, "count": len(reviews)}
 
 
-@router.post("/{job_id}/findings/{finding_id}/review")
-async def review_finding(job_id: str, finding_id: str, body: FindingReviewRequest):
-    """Record/clear a reviewer's adjudication of a 'Manual Review Required' item.
+def _find_reviewable(result: dict, finding_id: str) -> dict | None:
+    """The finding with *finding_id* whose automated status is needs_review.
 
-    The next GET /combined/{job_id} returns the report with the effective score
-    (violations / needs_review / passes) updated to reflect this decision.
+    Searched across every bucket (and the per-page arrays reference the same
+    objects): after a verdict the overlay moves the item into violations or
+    passes, and a second verdict / re-open must still find it."""
+    for bucket in ("needs_review", "violations", "passes"):
+        for f in result.get(bucket) or []:
+            if f.get("finding_id") == finding_id:
+                return f if f.get("status") == "needs_review" else None
+    return None
+
+
+@router.post("/{job_id}/findings/{finding_id}/review")
+async def review_finding(
+    job_id: str,
+    finding_id: str,
+    body: FindingReviewRequest,
+    user: CurrentUser = Depends(require_user),
+):
+    """Record or clear a manual verdict on a 'Manual Review Required' item.
+
+    Only findings the engine marked ``needs_review`` can be adjudicated; an
+    engine pass/fail is authoritative and returns 409. ``status`` is ``pass``
+    or ``violation`` (a fail), or ``needs_review`` to re-open. The verdict is a
+    stored overlay: the next GET /combined/{job_id} (and every export) shows
+    the item under its new bucket with ``review_status``, ``reviewed_by``,
+    ``reviewed_at``, ``verdict_source: "manual"`` and the audit-trail
+    ``review_message`` ("Reviewed by user and manually changed to Pass.").
     """
+    user = _caller(user)
+    await _assert_can_view(job_id, user)
     run = await repo.get_run(job_id)
     in_hot = job_id in _jobs
     if not run and not in_hot:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
-    # Locate the finding in the report to capture its SC/page for the audit row
-    # and to reject ids that don't correspond to a needs_review item.
     result = (_jobs.get(job_id, {}).get("result")) or (await repo.get_report(job_id)) or {}
-    target = next(
-        (f for f in result.get("needs_review", []) if f.get("finding_id") == finding_id),
-        None,
-    )
+    target = _find_reviewable(result, finding_id)
     if target is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Finding {finding_id!r} is not a reviewable (needs_review) item of this run.",
+        known = any(
+            f.get("finding_id") == finding_id
+            for b in ("violations", "needs_review", "passes")
+            for f in result.get(b) or []
         )
+        if known:
+            raise HTTPException(
+                status_code=409,
+                detail="Only findings the engine marked needs_review can be given a manual verdict.",
+            )
+        raise HTTPException(status_code=404, detail=f"Finding {finding_id!r} is not part of this run.")
 
+    # The reviewer is the signed-in user; the request body can only name one
+    # when there is no identity (auth disabled / anonymous).
+    reviewer = user.email or user.name or body.reviewer or "user"
     await repo.set_finding_review(
         run_id=job_id,
         finding_id=finding_id,
         status=body.status,
         note=body.note,
-        reviewer=body.reviewer,
+        reviewer=reviewer,
         wcag_sc=target.get("wcag_sc"),
         page_url=(target.get("element") or {}).get("page_url"),
     )
-    repo.insert_event(
-        job_id,
-        "finding_reviewed",
-        {"finding_id": finding_id, "status": body.status, "wcag_sc": target.get("wcag_sc")},
-    )
+    reviews = await repo.get_reviews(job_id)
+    rev = reviews.get(finding_id)
+    lang = result.get("lang") or (run or {}).get("lang_resolved") or "en"
     return {
         "job_id": job_id,
         "finding_id": finding_id,
         "status": body.status,
         "wcag_sc": target.get("wcag_sc"),
+        "reviewed": rev is not None,
+        "verdict_source": "manual" if rev else "engine",
+        "review_status": rev["status"] if rev else None,
+        "review_note": rev.get("note") if rev else None,
+        "reviewed_by": rev.get("reviewer") if rev else None,
+        "reviewed_at": rev.get("updated_at") if rev else None,
+        "review_message": review_message(rev["status"], lang) if rev else None,
     }
 
 
 @router.get("/{job_id}/timings")
-async def get_combined_audit_timings(job_id: str):
+async def get_combined_audit_timings(job_id: str, user: CurrentUser = Depends(require_user)):
     """
     Return the per-stage timing breakdown for a combined audit job as JSON.
 
@@ -609,6 +754,7 @@ async def get_combined_audit_timings(job_id: str):
     the log file never drift. Safe to poll mid-run: unfinished stages report
     ``duration_s: null`` and the run/wall totals fill in once the job completes.
     """
+    await _assert_can_view(job_id, _caller(user))
     async with _get_job_lock(job_id):
         snapshot = _jobs.get(job_id)
         if snapshot:
@@ -650,7 +796,7 @@ async def get_combined_audit_timings(job_id: str):
 
 
 @router.get("/{job_id}/image")
-async def get_job_image(job_id: str, path: str):
+async def get_job_image(job_id: str, path: str, user: CurrentUser = Depends(require_user)):
     """
     DEPRECATED legacy image serving (``?path=``). Superseded by the
     content-addressed ``GET /api/v1/assets/{id}`` route: as of P2 the runner
@@ -662,6 +808,7 @@ async def get_job_image(job_id: str, path: str):
     The ``path`` query parameter must exactly match one of the image paths
     recorded in ``result.contrast_report.images`` for the given job.
     """
+    await _assert_can_view(job_id, _caller(user))
     job = _jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
@@ -739,15 +886,16 @@ async def get_job_image(job_id: str, path: str):
 
 
 @router.get("/{job_id}/stream")
-async def stream_combined_audit(job_id: str):
+async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
     """
     Server-Sent Events stream for a combined audit job.
 
     Connect immediately after submitting to receive real-time stage progress.
     Events: stage_start | stage_complete | stage_error | job_state |
-            job_complete | job_failed
+            job_complete | job_failed | job_cancelled
     Heartbeat: ': keepalive' comment lines every 25 s.
     """
+    await _assert_can_view(job_id, _caller(user))
     job = _jobs.get(job_id)
     if not job:
         # Durable fallback: the run may have completed before this client
@@ -766,12 +914,21 @@ async def stream_combined_audit(job_id: str):
                     f"data: {json.dumps({'job_id': job_id, 'summary': rep.get('summary', {})})}\n\n"
                 )
             elif status == "failed":
+<<<<<<< HEAD
                 failure = {
                     "job_id": job_id,
                     "error": "Audit failed due to an internal error.",
                     "error_code": _jobs.get(job_id, {}).get("error_code"),
                 }
                 yield f"event: job_failed\ndata: {json.dumps(failure)}\n\n"
+=======
+                yield (
+                    f"event: job_failed\n"
+                    f"data: {json.dumps({'job_id': job_id, 'error': 'Audit failed due to an internal error.'})}\n\n"
+                )
+            elif status == "cancelled":
+                yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
+>>>>>>> 0549e899754bab590546175537618660581ab70f
             else:
                 yield f"event: job_state\ndata: {json.dumps({'status': status})}\n\n"
 
@@ -802,6 +959,9 @@ async def stream_combined_audit(job_id: str):
                     f"data: {json.dumps({'job_id': job_id, 'error': current.get('error', '')})}\n\n"
                 )
                 return
+            if current.get("status") == "cancelled":
+                yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
+                return
 
             if current.get("current_stage") or current.get("stages"):
                 yield (
@@ -815,7 +975,7 @@ async def stream_combined_audit(job_id: str):
                     if msg is None:
                         break
                     yield f"event: {msg['event']}\ndata: {json.dumps(msg['data'])}\n\n"
-                    if msg["event"] in ("job_complete", "job_failed"):
+                    if msg["event"] in ("job_complete", "job_failed", "job_cancelled"):
                         break
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"

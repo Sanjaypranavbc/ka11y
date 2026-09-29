@@ -1,10 +1,11 @@
-import logging
 from typing import List, Dict
 from ..models import ElementContext, RuleVerdict, VerdictStatus
 from ..router.rule_target_router import RuleTargetRouter
 from .policies.base_policy import WCAGPolicy
 
-logger = logging.getLogger(__name__)
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="decision_engine")
 
 
 class PolicyError(Exception):

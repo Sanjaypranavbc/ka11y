@@ -23,7 +23,25 @@ from ka11y.api.v1.combined.findings import _lang_ctx
 
 @pytest.fixture(scope="module")
 def client():
-    with TestClient(app) as c:
+    """App under test with job *execution* stubbed out.
+
+    The submit routes are real (validation, hot-cache entry, 202), but the
+    durable enqueue is replaced so the dispatcher never picks the job up and
+    no Chromium / OCR / Node call runs inside the test process. The SSRF
+    check is stubbed too so the tests need no DNS."""
+    from unittest.mock import patch
+
+    from ka11y.api.v1.combined import routes
+
+    async def _no_enqueue(job_id, payload, filter_rule=None, **kwargs):
+        return None
+
+    async def _no_ssrf(url):
+        return None
+
+    with patch.object(routes, "enqueue", _no_enqueue), patch.object(
+        routes, "assert_public_url", _no_ssrf
+    ), TestClient(app) as c:
         yield c
 
 
@@ -39,10 +57,11 @@ class TestAppStartup:
         assert "openapi" in data
         assert data["info"]["title"] == "ka11y"
 
-    def test_pipeline_post_requires_url(self, client):
-        resp = client.post("/api/v1/pipeline/", json={})
-        # Missing required field → 422 Unprocessable Entity
-        assert resp.status_code == 422
+    def test_legacy_routes_are_gone(self, client):
+        # Removed 2026-09-27 (deprecated since combined-audit was wired).
+        assert client.post("/api/v1/pipeline/", json={}).status_code == 404
+        assert client.post("/api/v1/crawl/", json={}).status_code == 404
+        assert client.post("/api/v1/rules/1.1.1/run", json={}).status_code == 404
 
     def test_combined_get_unknown_job_returns_404(self, client):
         resp = client.get("/api/v1/combined/nonexistent-job-id")

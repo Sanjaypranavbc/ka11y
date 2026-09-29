@@ -39,7 +39,6 @@ from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import emit_job_plan
 from .stages import (
-    PythonStagesResult,
     _allowed_levels,
     _run_python_stages,
 )
@@ -54,7 +53,6 @@ from ka11y.observability import (
     traced_span,
 )
 from ka11y.store import repo
-from ka11y.db import audit_repo
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -328,6 +326,9 @@ async def _run_job(
     Concurrency:
     • Bounded by the module-level semaphore so the worker cannot launch more
       Chromium processes than _MAX_CONCURRENT_JOBS at once.
+    • Only used when the durable dispatcher is not running (the store failed to
+      initialise) — see ``dispatcher.enqueue``. Normally the dispatcher's own
+      in-flight cap is the single limit; the two never apply at the same time.
     """
     sem = _get_job_semaphore()
     if sem.locked() and sem._value <= 0:
@@ -412,7 +413,7 @@ def _stamp_job_outcome(job_span: Any, job_id: str) -> None:
             attrs.JOB_ERROR_STAGE: state.get("error_stage"),
         },
     )
-    if status in ("failed", "timeout"):
+    if status == "failed":  # a TimeoutError also ends as 'failed'
         from opentelemetry.trace import Status, StatusCode
 
         # The user-facing error message is deliberately generic; error_id is
@@ -423,58 +424,87 @@ def _stamp_job_outcome(job_span: Any, job_id: str) -> None:
         )
 
 
+async def _is_cancelled(job_id: str) -> bool:
+    """``repo.is_cancelled`` with a read error treated as "not cancelled": a
+    momentary database problem must not abort an audit that was never cancelled."""
+    try:
+        return await repo.is_cancelled(job_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("[combined] job %s: cancellation check failed; continuing", job_id, exc_info=True)
+        return False
+
+
+async def _finish_cancelled(job_id: str, *, when: str) -> None:
+    """Terminal state for a cancelled job. The route already wrote 'cancelled'
+    to the run row; this settles the hot cache and tells SSE clients, who
+    otherwise sit on keepalives until the connection drops."""
+    async with _get_job_lock(job_id):
+        _jobs[job_id].update(
+            status="cancelled",
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            current_stage=None,
+        )
+    logger.info("[combined] job %s cancelled %s", job_id, when)
+    repo.insert_event(job_id, repo.JOB_CANCELLED, {"when": when, "settled": True})
+    await _broadcast(job_id, "job_cancelled", {"job_id": job_id, "when": when})
+
+
 async def _run_job_body_inner(
     job_id: str, payload: CombinedRequest, filter_rule: Optional[str] = None
 ) -> None:
     """Orchestrates one combined audit job: image audit and media/captions
     audit — no axe-core, no pipeline."""
+    url = str(payload.url)
+    # Created inside the try below; the except block must cope with it still
+    # being None when the failure happened before the output directory existed.
+    step_logger: ExecutionStepLogger | None = None
+
+    # Cancelled while queued? Check BEFORE mark_running: that write sets
+    # status='running' and used to overwrite the 'cancelled' flag, so the
+    # check that followed it could never fire and a cancelled job ran anyway.
+    if await _is_cancelled(job_id):
+        await _finish_cancelled(job_id, when="before start")
+        return
+
     _jobs[job_id]["status"] = "running"
     run_started_at = datetime.now(timezone.utc).isoformat()
     _jobs[job_id]["run_started_at"] = run_started_at
     await repo.mark_running(job_id, run_started_at, _jobs[job_id].get("submitted_at"))
-    await audit_repo.mark_running(job_id, run_started_at)
-    repo.insert_event(job_id, "running", {})
 
+    # From here on every failure must land in the except block below, which is
+    # the only code that turns a crash into a terminal 'failed' status in the
+    # hot cache and the run row. Anything that raised *before* the try
+    # used to leave the job 'running' forever (and re-run after a restart).
     try:
-        if await repo.is_cancelled(job_id):
-            _jobs[job_id]["status"] = "cancelled"
-            logger.info("[combined] job %s cancelled before start", job_id)
-            return
-    except Exception:
-        pass
+        if payload.lang == "auto":
+            resolved_lang = await detect_page_language(url)
+            logger.info(f"[combined] job {job_id}: detected page language: {resolved_lang}")
+        else:
+            resolved_lang = payload.lang
 
-    url = str(payload.url)
+        _lang_ctx.set(resolved_lang)
+        try:
+            from ka11y.utils import crawler_timing
+            crawler_timing.set_run_id(job_id)
+        except Exception:  # noqa: BLE001 — timing is telemetry, never fatal
+            logger.debug("crawler_timing.set_run_id failed", exc_info=True)
 
-    if payload.lang == "auto":
-        resolved_lang = await detect_page_language(url)
-        logger.info(f"[combined] job {job_id}: detected page language: {resolved_lang}")
-    else:
-        resolved_lang = payload.lang
+        config = load_config()
+        domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
+        ts = time.strftime("%m%d_%H%M")
+        output_dir = Path(
+            f"{config['input']['output_dir']}/{domain}_{ts}_{job_id[:8]}_combined"
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _jobs[job_id]["output_dir"] = str(output_dir)
+        step_logger = ExecutionStepLogger(
+            output_dir=output_dir,
+            name="combined_execution_steps",
+            job_id=job_id,
+        )
+        _jobs[job_id]["step_log_path"] = str(step_logger.jsonl_path)
+        _jobs[job_id]["step_summary_path"] = str(step_logger.summary_path)
 
-    _lang_ctx.set(resolved_lang)
-    try:
-        from ka11y.utils import crawler_timing
-        crawler_timing.set_run_id(job_id)
-    except Exception:
-        pass
-
-    config = load_config()
-    domain = urlparse(url).netloc.replace("www.", "").replace(".", "_")
-    ts = time.strftime("%m%d_%H%M")
-    output_dir = Path(
-        f"{config['input']['output_dir']}/{domain}_{ts}_{job_id[:8]}_combined"
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    _jobs[job_id]["output_dir"] = str(output_dir)
-    step_logger = ExecutionStepLogger(
-        output_dir=output_dir,
-        name="combined_execution_steps",
-        job_id=job_id,
-    )
-    _jobs[job_id]["step_log_path"] = str(step_logger.jsonl_path)
-    _jobs[job_id]["step_summary_path"] = str(step_logger.summary_path)
-
-    try:
         step_logger.record(
             step="combined_job",
             status="running",
@@ -534,6 +564,13 @@ async def _run_job_body_inner(
             raise TimeoutError(
                 f"audit exceeded {_JOB_TIMEOUT_SECONDS}s overall budget"
             )
+
+        # The stages run as one gather, so "between stages" is here: a cancel
+        # that arrived during the crawl skips merge, persistence, upload and
+        # e-mail instead of publishing a report nobody asked for.
+        if await _is_cancelled(job_id):
+            await _finish_cancelled(job_id, when="after the audit engines finished")
+            return
 
         # ── Resolve Python result ────────────────────────────────────────
         python_findings: List[Dict] = []
@@ -772,13 +809,6 @@ async def _run_job_body_inner(
             summary=report.get("summary"),
             output_dir=str(output_dir),
         )
-        repo.insert_event(job_id, "job_complete", {"summary": report.get("summary")})
-        await audit_repo.mark_completed(
-            job_id,
-            summary=report.get("summary"),
-            completed_at=completed_at,
-            run_started_at=_jobs[job_id].get("run_started_at"),
-        )
 
         # Artifacts → object storage (S3 / local): report.json, findings.csv,
         # report.pdf, HTML snapshots, OCR reports, step logs. Best-effort.
@@ -900,14 +930,6 @@ async def _run_job_body_inner(
                     "current_stage": None,
                 }
             )
-        await repo.mark_failed(
-            job_id,
-            completed_at=failed_at,
-            run_started_at=_jobs[job_id].get("run_started_at"),
-            error_id=error_id,
-            error_stage=current_stage,
-        )
-        repo.insert_event(job_id, "job_failed", {"error_id": error_id, "stage": current_stage})
         from ka11y.storage.uploader import upload_crash
 
         crash_ref = await upload_crash(
@@ -926,14 +948,15 @@ async def _run_job_body_inner(
                 "stages": _jobs[job_id].get("stages", []),
             },
         )
-        await audit_repo.mark_failed(
+        await repo.mark_failed(
             job_id,
-            stage=current_stage,
+            completed_at=failed_at,
+            run_started_at=_jobs[job_id].get("run_started_at"),
+            error_id=error_id,
+            error_stage=current_stage,
             error_type=err_type,
             error_message=str(exc),
             stack_trace=tb,
-            error_id=error_id,
-            completed_at=failed_at,
             object_key=crash_ref.key if crash_ref else None,
         )
 
@@ -950,16 +973,17 @@ async def _run_job_body_inner(
             error_stage=current_stage,
         )
         emit_stage_timing_summary(job_id)
-        step_logger.finalize(
-            status="error",
-            message="Combined audit job failed",
-            context={
-                "error_type": err_type,
-                "error": str(exc),
-                "stage": current_stage,
-                "location": where,
-            },
-        )
+        if step_logger is not None:
+            step_logger.finalize(
+                status="error",
+                message="Combined audit job failed",
+                context={
+                    "error_type": err_type,
+                    "error": str(exc),
+                    "stage": current_stage,
+                    "location": where,
+                },
+            )
 
         await _broadcast(
             job_id,
@@ -974,6 +998,10 @@ async def _run_job_body_inner(
         )
 
     finally:
+        # Stage helpers schedule their SSE broadcasts with create_task(); two
+        # loop turns let those already-queued tasks deliver before the queues
+        # are closed, so the last stage_complete is not lost behind the
+        # terminal job_* event.
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         await _close_subscribers(job_id)

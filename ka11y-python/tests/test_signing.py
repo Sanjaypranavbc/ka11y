@@ -100,3 +100,19 @@ def test_host_prefix_follows_secure(monkeypatch):
     monkeypatch.setenv("KA11Y_COOKIE_SECURE", "0")
     cfg = settings()
     assert cfg.session_cookie == "ka11y_session" and not cfg.force_https
+
+
+@pytest.mark.asyncio
+async def test_auth_config_hides_every_method_without_secret(monkeypatch):
+    """Production symptom (2026-09-28): a login page with no button at all.
+    An empty KA11Y_SESSION_SECRET (or no DATABASE_URL) makes /auth/config
+    report configured=false with oidc and password_login both false."""
+    from ka11y.auth.router import auth_config
+
+    monkeypatch.setenv("KA11Y_SESSION_SECRET", "")
+    monkeypatch.setenv("KA11Y_OIDC_CLIENT_ID", "x")
+    monkeypatch.setenv("KA11Y_OIDC_CLIENT_SECRET", "y")
+    monkeypatch.setenv("KA11Y_OIDC_REDIRECT_URI", "https://a11y.example/api/v1/auth/callback")
+    body = await auth_config()
+    assert body["configured"] is False
+    assert body["oidc"] is False and body["password_login"] is False

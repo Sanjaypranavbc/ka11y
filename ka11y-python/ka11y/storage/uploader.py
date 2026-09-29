@@ -68,9 +68,9 @@ async def upload_asset_file(
 
 async def _register_report(job_id: str, ref: ObjectRef, *, report_type: str, fmt: str) -> None:
     try:
-        from ka11y.db import audit_repo
+        from ka11y.store import repo
 
-        await audit_repo.add_report(
+        await repo.add_report(
             job_id,
             report_type=report_type,
             fmt=fmt,

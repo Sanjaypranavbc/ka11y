@@ -129,7 +129,9 @@ class TestSignIn:
         uuid.UUID(body["user_id"])
         uuid.UUID(body["organization_id"])
 
-        assert client.get("/api/v1/combined/history").status_code == 200
+        # /combined/history is the operator view over the raw run store
+        # (no owner column) → admins only; a plain member gets 403.
+        assert client.get("/api/v1/combined/history").status_code == 403
         hist = client.get("/api/v1/audits/history")
         assert hist.status_code == 200
         assert hist.json()["items"] == [] or isinstance(hist.json()["items"], list)
@@ -216,7 +218,7 @@ class TestArtifactsEndpoint:
         monkeypatch.setenv("KA11Y_ARTIFACT_PDF", "0")
         from ka11y.storage.backends import reset_store
         from ka11y.storage.uploader import upload_job_artifacts
-        from ka11y.db import audit_repo
+        from ka11y.store import repo
         from ka11y.storage import keys
 
         reset_store()
@@ -226,14 +228,12 @@ class TestArtifactsEndpoint:
 
         job_id = str(uuid.uuid4())
         asyncio.run(
-            audit_repo.create_job(
-                job_id,
+            repo.create_run(
+                run_id=job_id, url="https://example.com", status="queued", lang_requested="en",
+                wcag_level="AA", params={}, max_depth=0, max_pages=1, submitted_at=None,
                 user_id=uuid.UUID(me["user_id"]),
                 organization_id=uuid.UUID(me["organization_id"]),
                 session_id=None,
-                target_url="https://example.com",
-                crawl_depth=0,
-                requested_pages=1,
             )
         )
         keys.forget_job(job_id)
@@ -501,7 +501,7 @@ class TestAdminApi:
     def test_overview_reflects_a_real_job(self, client, monkeypatch):
         import asyncio
 
-        from ka11y.db import audit_repo
+        from ka11y.store import repo
 
         email = f"admin-{uuid.uuid4().hex[:8]}@kao.com"
         self._admin(client, monkeypatch, email)
@@ -510,12 +510,14 @@ class TestAdminApi:
         job_id = str(uuid.uuid4())
 
         async def _make():
-            await audit_repo.create_job(
-                job_id, user_id=uuid.UUID(me["user_id"]), organization_id=uuid.UUID(me["organization_id"]),
-                session_id=None, target_url="https://www.kao.com/global/en/", crawl_depth=1, requested_pages=5,
+            await repo.create_run(
+                run_id=job_id, url="https://www.kao.com/global/en/", status="queued", lang_requested="en",
+                wcag_level="AA", params={}, max_depth=1, max_pages=5, submitted_at=None,
+                user_id=uuid.UUID(me["user_id"]), organization_id=uuid.UUID(me["organization_id"]),
+                session_id=None,
             )
-            await audit_repo.mark_running(job_id)
-            await audit_repo.mark_completed(
+            await repo.mark_running(job_id)
+            await repo.mark_completed(
                 job_id,
                 summary={"page_count": 3, "violations": 7, "passes": 40, "needs_review": 2,
                          "by_severity": {"critical": 2, "serious": 3, "moderate": 1, "minor": 1}, "score": 81},

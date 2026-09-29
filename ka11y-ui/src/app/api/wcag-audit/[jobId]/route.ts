@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { forwardedHeaders } from "@/lib/forwardedHeaders";
+
 const WCAG_API_URL =
   process.env.WCAG_API_URL ??
   "http://ec2-34-228-40-177.compute-1.amazonaws.com:8000/api/v1/combined";
@@ -14,7 +16,7 @@ export async function GET(
 
   try {
     const pollRes = await fetch(`${WCAG_API_URL}/${jobId}`, {
-      headers: { cookie: request.headers.get("cookie") ?? "" },
+      headers: { ...forwardedHeaders(request.headers), cookie: request.headers.get("cookie") ?? "" },
       signal: AbortSignal.timeout(10000),
     });
 

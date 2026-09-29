@@ -28,27 +28,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class PythonStagesResult(BaseModel):
-    """Typed return value from :func:`_run_python_stages`.
-
-    Replaces the prior ``(all_findings, contrast_report, image_audit_report)``
-    positional tuple, which silently broke whenever a stage was added or
-    reordered (the caller's positional unpack would point at the wrong
-    object). Named fields make the contract explicit at the type level."""
-
-    # Findings entries are deeply nested heterogeneous dicts; we do not want
-    # Pydantic to deep-copy or revalidate them on every field assignment.
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    findings: List[Dict[str, Any]] = Field(default_factory=list)
-    contrast_report: Optional[Dict[str, Any]] = None
-    image_audit_report: Optional[Dict[str, Any]] = None
-    # Pages Python's own crawl (UniversalPageLoader, via _load_universal_snapshot)
-    # visited — success and failed — as {page_url, depth?, status, error?}.
-    # Empty when the run didn't need a crawl (max_depth=0 and no media/captions
-    # stage requested it).
-    crawled_pages: List[Dict[str, Any]] = Field(default_factory=list)
-
 from ka11y.config.logger import setup_logger
 from ka11y.utils.crawler_settings import (
     get_max_ocr_images_ceiling,
@@ -81,6 +60,28 @@ from ka11y.crawler.optimized.optimized_crawler import ImageCrawlerNavigationErro
 from ka11y.utils import stage_timing
 from ka11y.observability import attributes as attrs
 from ka11y.observability import SpanKind, set_span_attributes, traced_span
+
+
+class PythonStagesResult(BaseModel):
+    """Typed return value from :func:`_run_python_stages`.
+
+    Replaces the prior ``(all_findings, contrast_report, image_audit_report)``
+    positional tuple, which silently broke whenever a stage was added or
+    reordered (the caller's positional unpack would point at the wrong
+    object). Named fields make the contract explicit at the type level."""
+
+    # Findings entries are deeply nested heterogeneous dicts; we do not want
+    # Pydantic to deep-copy or revalidate them on every field assignment.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    findings: List[Dict[str, Any]] = Field(default_factory=list)
+    contrast_report: Optional[Dict[str, Any]] = None
+    image_audit_report: Optional[Dict[str, Any]] = None
+    # Pages Python's own crawl (UniversalPageLoader, via _load_universal_snapshot)
+    # visited — success and failed — as {page_url, depth?, status, error?}.
+    # Empty when the run didn't need a crawl (max_depth=0 and no media/captions
+    # stage requested it).
+    crawled_pages: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # NOTE: the unified-pipeline stage wrapper (``_run_pipeline_stage``) that used

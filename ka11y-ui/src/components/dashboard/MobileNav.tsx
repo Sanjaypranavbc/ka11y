@@ -12,6 +12,8 @@ import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
 import { LOGOUT_URL } from "@/lib/auth";
 import { useCurrentUser } from "@/lib/useCurrentUser";
+import { useRunningAudit } from "@/components/dashboard/RunningAuditContext";
+import { RUNNING_AUDIT_PATH } from "@/lib/runningAudit";
 
 const NAV_ICON: Record<string, React.ComponentType<{ size?: number }>> = {
   dashboard: DashboardIcon,
@@ -26,6 +28,16 @@ export function MobileNav() {
   const pathname = usePathname();
   const { t } = useLanguage();
   const me = useCurrentUser();
+  const { isLocked } = useRunningAudit();
+  const lockedProps = (href: string) =>
+    isLocked && href !== RUNNING_AUDIT_PATH
+      ? {
+          "aria-disabled": true as const,
+          tabIndex: -1,
+          title: t.nav.lockedHint,
+          onClick: (e: React.MouseEvent) => e.preventDefault(),
+        }
+      : { onClick: () => setOpen(false) };
   const NAV_LABEL: Record<string, string> = {
     dashboard: t.nav.dashboard,
     violations: t.nav.violations,
@@ -72,10 +84,11 @@ export function MobileNav() {
                     <Link
                       href={item.href}
                       aria-current={active ? "page" : undefined}
-                      onClick={() => setOpen(false)}
+                      {...lockedProps(item.href)}
                       className={cn(
                         "flex items-center gap-3 rounded-lg px-3 py-3 text-p3 font-medium text-gray-60",
                         active && "bg-teal-10 text-brand-teal",
+                        isLocked && "cursor-not-allowed opacity-40",
                       )}
                     >
                       <Icon size={18} aria-hidden="true" />
@@ -85,13 +98,21 @@ export function MobileNav() {
                 );
               })}
             </ul>
+            {isLocked && (
+              <p role="status" className="px-3 text-[13px] leading-5 text-gray-80">
+                {t.nav.lockedHint}
+              </p>
+            )}
             {me?.is_admin && (
               <ul className="mt-3 border-t border-gray-40 pt-3">
                 <li>
                   <Link
                     href="/admin"
-                    onClick={() => setOpen(false)}
-                    className="flex items-center gap-3 rounded-lg px-3 py-3 text-p3 font-medium text-gray-60"
+                    {...lockedProps("/admin")}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-3 text-p3 font-medium text-gray-60",
+                      isLocked && "cursor-not-allowed opacity-40",
+                    )}
                   >
                     <ShieldCheck size={18} aria-hidden="true" />
                     {t.nav.adminConsole}

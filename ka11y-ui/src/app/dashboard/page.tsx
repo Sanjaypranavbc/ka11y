@@ -2,7 +2,7 @@
 
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
+import { DownloadReportMenu } from "@/components/dashboard/DownloadActions";
 import { AuditSummaryCard } from "@/components/dashboard/AuditSummaryCard";
 import { WcagLevelBarChart } from "@/components/dashboard/charts/WcagLevelBarChart";
 import { TopFailingCriteriaChart } from "@/components/dashboard/charts/TopFailingCriteriaChart";
@@ -28,7 +28,7 @@ export default function DashboardPage() {
         actions={
           <>
             <LanguageToggle />
-            <DownloadCsvButton />
+            <DownloadReportMenu />
           </>
         }
       />

@@ -1,0 +1,7415 @@
+{
+ "schema_version": 1,
+ "source": "WCAG_Testing_Report_CodeCoverage.xlsx",
+ "sheet": "All Techniques",
+ "generated_at": "2026-09-25T08:07:11+00:00",
+ "generator": "scripts/build_technique_map.py",
+ "technique_count": 494,
+ "sc_count": 82,
+ "skipped": 62,
+ "cover_counts": {
+  "Partially Implemented": 85,
+  "Implemented": 328,
+  "Not Implemented": 81
+ },
+ "by_sc": {
+  "1.1.1": [
+   {
+    "id": "G94",
+    "name": "Providing short text alternative for non-text content that serves the same purpose and presents the same information as the non-text content",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/enrich_audit.py",
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py"
+    ]
+   },
+   {
+    "id": "ARIA6",
+    "name": "Using aria-label to provide labels for objects",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ],
+    "also_situations": [
+     "B",
+     "C",
+     "D"
+    ]
+   },
+   {
+    "id": "ARIA10",
+    "name": "Using aria-labelledby to provide a text alternative for non-text content",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-python/ka11y/crawler/image_extractor.py"
+    ],
+    "also_situations": [
+     "B",
+     "D"
+    ]
+   },
+   {
+    "id": "G196",
+    "name": "Using a text alternative on one item within a group of images that describes all items in the group",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-python/ka11y/crawler/image_extractor.py"
+    ],
+    "also_situations": [
+     "B",
+     "D"
+    ]
+   },
+   {
+    "id": "H2",
+    "name": "Combining adjacent image and text links for the same resource",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-bypass-blocks",
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/bypass-blocks.check.js",
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ],
+    "also_situations": [
+     "B",
+     "D"
+    ]
+   },
+   {
+    "id": "H37",
+    "name": "Using alt attributes on img elements",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "image-alt"
+    ],
+    "engines": [
+     "axe",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js",
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-python/ka11y/crawler/image_extractor.py"
+    ],
+    "also_situations": [
+     "B",
+     "D"
+    ]
+   },
+   {
+    "id": "H53",
+    "name": "Using the body of the object element",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ],
+    "also_situations": [
+     "B",
+     "D"
+    ]
+   },
+   {
+    "id": "H86",
+    "name": "Providing text alternatives for emojis, emoticons, ASCII art, and leetspeak",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ],
+    "also_situations": [
+     "B",
+     "D"
+    ]
+   },
+   {
+    "id": "PDF1",
+    "name": "Applying text alternatives to images with the Alt entry in PDF documents",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": [],
+    "also_situations": [
+     "B",
+     "D"
+    ]
+   },
+   {
+    "id": "G95",
+    "name": "Providing short text alternatives that provide a brief description of the non-text content",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py"
+    ]
+   },
+   {
+    "id": "ARIA15",
+    "name": "Using aria-describedby to provide descriptions of images",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G73",
+    "name": "Providing a long description in another location with a link to it that is immediately adjacent to the non-text content",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-python/ka11y/crawler/image_extractor.py"
+    ]
+   },
+   {
+    "id": "G74",
+    "name": "Providing a long description in text near the non-text content, with a reference to the location of the long description in the short description",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-python/ka11y/crawler/image_extractor.py"
+    ]
+   },
+   {
+    "id": "G92",
+    "name": "Providing long description for non-text content that serves the same purpose and presents the same information",
+    "situation": "B",
+    "cover": "Partially Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/enrich_audit.py",
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-python/ka11y/crawler/image_extractor.py"
+    ]
+   },
+   {
+    "id": "G82",
+    "name": "Providing a text alternative that identifies the purpose of the non-text content",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py"
+    ]
+   },
+   {
+    "id": "ARIA9",
+    "name": "Using aria-labelledby to concatenate a label from several text nodes",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/pipeline/extractors/element_context_extractor.py"
+    ]
+   },
+   {
+    "id": "H24",
+    "name": "Providing text alternatives for the area elements of image maps",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "area-alt"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "H30",
+    "name": "Providing link text that describes the purpose of a link for anchor elements",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   },
+   {
+    "id": "H36",
+    "name": "Using alt attributes on images used as submit buttons",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "input-image-alt"
+    ],
+    "engines": [
+     "axe",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py"
+    ]
+   },
+   {
+    "id": "H44",
+    "name": "Using label elements to associate text labels with form controls",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "label"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "H65",
+    "name": "Using the title attribute to identify form controls when the label element cannot be used",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "label",
+     "label-title-only"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "G68",
+    "name": "Providing a short text alternative that describes the purpose of live audio-only and live video-only content",
+    "situation": "D",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ]
+   },
+   {
+    "id": "G100",
+    "name": "Providing a short text alternative which is the accepted name or a descriptive name of the non-text content",
+    "situation": "D",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py"
+    ]
+   },
+   {
+    "id": "G143",
+    "name": "Providing a text alternative that describes the purpose of the CAPTCHA",
+    "situation": "E",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ]
+   },
+   {
+    "id": "G144",
+    "name": "Ensuring that the web page contains another CAPTCHA serving the same purpose using a different modality",
+    "situation": "E",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ]
+   },
+   {
+    "id": "C9",
+    "name": "Using CSS to include decorative images",
+    "situation": "F",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py"
+    ]
+   },
+   {
+    "id": "H67",
+    "name": "Using null alt text and no title attribute on img elements for images that assistive technology should ignore",
+    "situation": "F",
+    "cover": "Implemented",
+    "rules": [
+     "image-alt"
+    ],
+    "engines": [
+     "python",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "PDF4",
+    "name": "Hiding decorative images with the Artifact tag in PDF documents",
+    "situation": "F",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "C18",
+    "name": "Using CSS margin and padding rules instead of spacer images for layout design",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ]
+   }
+  ],
+  "1.2.1": [
+   {
+    "id": "G158",
+    "name": "Providing an alternative for time-based media for audio-only content",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-transcript"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-transcript.check.js"
+    ]
+   },
+   {
+    "id": "G159",
+    "name": "Providing an alternative for time-based media for video-only content",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description",
+     "custom-captions-prerecorded"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js",
+     "ka11y-node/src/custom-checks/captions-prerecorded.check.js"
+    ]
+   },
+   {
+    "id": "G166",
+    "name": "Providing audio that describes the important video content and describing it as such",
+    "situation": "B",
+    "cover": "Partially Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H96",
+    "name": "Using the track element to provide audio descriptions",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js",
+     "ka11y-python/ka11y/accessibility/rules/media/media_auditor.py"
+    ]
+   }
+  ],
+  "1.2.2": [
+   {
+    "id": "G93",
+    "name": "Providing open (always visible) captions",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G87",
+    "name": "Providing closed captions",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-captions-live",
+     "custom-captions-prerecorded"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/captions-live.check.js",
+     "ka11y-node/src/custom-checks/captions-prerecorded.check.js"
+    ]
+   },
+   {
+    "id": "SM11",
+    "name": "Providing captions through synchronized text streams in SMIL 1.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SM12",
+    "name": "Providing captions through synchronized text streams in SMIL 2.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H95",
+    "name": "Using the track element to provide captions",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-captions-prerecorded",
+     "video-caption"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/captions-prerecorded.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   }
+  ],
+  "1.2.3": [
+   {
+    "id": "G69",
+    "name": "Providing an alternative for time based media",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-media-alternative",
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/media-alternative.check.js",
+     "ka11y-node/src/custom-checks/audio-description.check.js",
+     "ka11y-python/ka11y/api/v1/combined/findings.py"
+    ]
+   },
+   {
+    "id": "G58",
+    "name": "Placing a link to the alternative for time-based media immediately next to the non-text content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js"
+    ]
+   },
+   {
+    "id": "H53",
+    "name": "Using the body of the object element",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ]
+   },
+   {
+    "id": "G78",
+    "name": "Providing a second, user-selectable, audio track that includes audio descriptions",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js"
+    ]
+   },
+   {
+    "id": "G173",
+    "name": "Providing a version of a movie with audio descriptions",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js"
+    ]
+   },
+   {
+    "id": "SM6",
+    "name": "Providing audio description in SMIL 1.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SM7",
+    "name": "Providing audio description in SMIL 2.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G226",
+    "name": "Providing audio descriptions by incorporating narration in the soundtrack",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G8",
+    "name": "Providing a movie with extended audio descriptions",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-extended-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/extended-audio-description.check.js"
+    ]
+   },
+   {
+    "id": "SM1",
+    "name": "Adding extended audio description in SMIL 1.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SM2",
+    "name": "Adding extended audio description in SMIL 2.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G203",
+    "name": "Using a static text alternative to describe a talking head video",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js"
+    ]
+   },
+   {
+    "id": "H96",
+    "name": "Using the track element to provide audio descriptions",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js",
+     "ka11y-python/ka11y/accessibility/rules/media/media_auditor.py"
+    ]
+   }
+  ],
+  "1.2.4": [
+   {
+    "id": "G9",
+    "name": "Creating captions for live synchronized media",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-captions-live"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/captions-live.check.js"
+    ]
+   },
+   {
+    "id": "G93",
+    "name": "Providing open (always visible) captions",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G87",
+    "name": "Providing closed captions",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-captions-live",
+     "custom-captions-prerecorded"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/captions-live.check.js",
+     "ka11y-node/src/custom-checks/captions-prerecorded.check.js"
+    ]
+   },
+   {
+    "id": "SM11",
+    "name": "Providing captions through synchronized text streams in SMIL 1.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SM12",
+    "name": "Providing captions through synchronized text streams in SMIL 2.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "1.2.5": [
+   {
+    "id": "G78",
+    "name": "Providing a second, user-selectable, audio track that includes audio descriptions",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js"
+    ]
+   },
+   {
+    "id": "G173",
+    "name": "Providing a version of a movie with audio descriptions",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js"
+    ]
+   },
+   {
+    "id": "SM6",
+    "name": "Providing audio description in SMIL 1.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SM7",
+    "name": "Providing audio description in SMIL 2.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G226",
+    "name": "Providing audio descriptions by incorporating narration in the soundtrack",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G8",
+    "name": "Providing a movie with extended audio descriptions",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-extended-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/extended-audio-description.check.js"
+    ]
+   },
+   {
+    "id": "SM1",
+    "name": "Adding extended audio description in SMIL 1.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SM2",
+    "name": "Adding extended audio description in SMIL 2.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G203",
+    "name": "Using a static text alternative to describe a talking head video",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js"
+    ]
+   },
+   {
+    "id": "H96",
+    "name": "Using the track element to provide audio descriptions",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js",
+     "ka11y-python/ka11y/accessibility/rules/media/media_auditor.py"
+    ]
+   }
+  ],
+  "1.2.6": [
+   {
+    "id": "G54",
+    "name": "Including a sign language interpreter in the video stream",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-sign-language"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/sign-language.check.js"
+    ]
+   },
+   {
+    "id": "G81",
+    "name": "Providing a synchronized video of the sign language interpreter that can be displayed in a different viewport or overlaid on the image by the player",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-sign-language"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/sign-language.check.js"
+    ]
+   },
+   {
+    "id": "SM13",
+    "name": "Providing sign language interpretation through synchronized video streams in SMIL 1.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SM14",
+    "name": "Providing sign language interpretation through synchronized video streams in SMIL 2.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "1.2.7": [
+   {
+    "id": "G8",
+    "name": "Providing a movie with extended audio descriptions",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-extended-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/extended-audio-description.check.js"
+    ]
+   },
+   {
+    "id": "SM1",
+    "name": "Adding extended audio description in SMIL 1.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SM2",
+    "name": "Adding extended audio description in SMIL 2.0",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H96",
+    "name": "Using the track element to provide audio descriptions",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js",
+     "ka11y-python/ka11y/accessibility/rules/media/media_auditor.py"
+    ]
+   }
+  ],
+  "1.2.8": [
+   {
+    "id": "G69",
+    "name": "Providing an alternative for time based media",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-media-alternative",
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/media-alternative.check.js",
+     "ka11y-node/src/custom-checks/audio-description.check.js",
+     "ka11y-python/ka11y/api/v1/combined/findings.py"
+    ]
+   },
+   {
+    "id": "G58",
+    "name": "Placing a link to the alternative for time-based media immediately next to the non-text content",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js"
+    ]
+   },
+   {
+    "id": "H53",
+    "name": "Using the body of the object element",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ]
+   },
+   {
+    "id": "G159",
+    "name": "Providing an alternative for time-based media for video-only content",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-description",
+     "custom-captions-prerecorded"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-description.check.js",
+     "ka11y-node/src/custom-checks/captions-prerecorded.check.js"
+    ]
+   }
+  ],
+  "1.2.9": [
+   {
+    "id": "G151",
+    "name": "Providing a link to a text transcript of a prepared statement or script if the script is followed",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-audio-only-live"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-only-live.check.js"
+    ]
+   },
+   {
+    "id": "G150",
+    "name": "Providing text based alternatives for live audio-only content",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-audio-only-live"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-only-live.check.js"
+    ]
+   },
+   {
+    "id": "G157",
+    "name": "Incorporating a live audio captioning service into a web page",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-only-live",
+     "custom-captions-live"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-only-live.check.js",
+     "ka11y-node/src/custom-checks/captions-live.check.js"
+    ]
+   }
+  ],
+  "1.3.1": [
+   {
+    "id": "ARIA11",
+    "name": "Using ARIA landmarks to identify regions of a page",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "region",
+     "landmark-one-main",
+     "landmark-unique"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "H101",
+    "name": "Using semantic HTML elements to identify regions of a page",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "landmark-one-main",
+     "region",
+     "landmark-no-duplicate-banner"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "ARIA12",
+    "name": "Using role=heading to identify headings",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "ARIA13",
+    "name": "Using aria-labelledby to name regions and landmarks",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py"
+    ]
+   },
+   {
+    "id": "ARIA16",
+    "name": "Using aria-labelledby to provide a name for user interface controls",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "aria-input-field-name"
+    ],
+    "engines": [
+     "axe",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-python/ka11y/accessibility/pipeline/extractors/element_context_extractor.py"
+    ]
+   },
+   {
+    "id": "ARIA17",
+    "name": "Using grouping roles to identify related form controls",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "ARIA20",
+    "name": "Using the region role to identify a region of the page",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "G115",
+    "name": "Using semantic elements to mark up structure",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "H49",
+    "name": "Using semantic markup to mark emphasized or special text",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "G117",
+    "name": "Using text to convey information that is conveyed by variations in presentation of text",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-sensory-characteristics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/sensory-characteristics.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G140",
+    "name": "Separating information and structure from presentation to enable different presentations",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "ARIA24",
+    "name": "Semantically identifying a font icon with role=\"img\"",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "ARIA26",
+    "name": "Using aria-current to identify the current item in a set",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-location"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/location.check.js"
+    ]
+   },
+   {
+    "id": "G138",
+    "name": "Using semantic markup whenever color cues are used",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-use-of-color"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/use-of-color.check.js"
+    ]
+   },
+   {
+    "id": "H51",
+    "name": "Using table markup to present tabular information",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "td-has-header",
+     "th-has-data-cells",
+     "table-fake-caption"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "PDF6",
+    "name": "Using table elements for table markup in PDF Documents",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF20",
+    "name": "Using Adobe Acrobat Pro's Table Editor to repair mistagged tables",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H39",
+    "name": "Using caption elements to associate data table captions with data tables",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "H63",
+    "name": "Using the scope attribute to associate header cells with data cells in data tables",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "H43",
+    "name": "Using id and headers attributes to associate data cells with header cells in data tables",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "td-headers-attr"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "H44",
+    "name": "Using label elements to associate text labels with form controls",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "label"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "H65",
+    "name": "Using the title attribute to identify form controls when the label element cannot be used",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "label",
+     "label-title-only"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "PDF10",
+    "name": "Providing labels for interactive form controls in PDF documents",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF12",
+    "name": "Providing name, role, value information for form fields in PDF documents",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H71",
+    "name": "Providing a description for groups of form controls using fieldset and legend elements",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "H85",
+    "name": "Using optgroup to group option elements inside a select",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "H48",
+    "name": "Using ol, ul and dl for lists or groups of links",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "H42",
+    "name": "Using h1-h6 to identify headings",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "heading-order",
+     "page-has-heading-one",
+     "custom-section-headings"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/section-headings.check.js"
+    ]
+   },
+   {
+    "id": "PDF9",
+    "name": "Providing headings by marking content with heading tags in PDF documents",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF11",
+    "name": "Providing links and link text using the Link annotation and the /Link structure element in PDF documents",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF17",
+    "name": "Specifying consistent page numbering for PDF documents",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF21",
+    "name": "Using List tags for lists in PDF documents",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H97",
+    "name": "Grouping related links using the nav element",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "landmark-unique",
+     "custom-multiple-ways",
+     "custom-consistent-navigation"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/multiple-ways.check.js",
+     "ka11y-node/src/custom-checks/consistent-navigation.check.js"
+    ]
+   },
+   {
+    "id": "T1",
+    "name": "Using standard text formatting conventions for paragraphs",
+    "situation": "B",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "T2",
+    "name": "Using standard text formatting conventions for lists",
+    "situation": "B",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "T3",
+    "name": "Using standard text formatting conventions for headings",
+    "situation": "B",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "C22",
+    "name": "Using CSS to control visual presentation of text",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-images-of-text"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/images-of-text.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "G162",
+    "name": "Positioning labels to maximize predictability of relationships",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "ARIA1",
+    "name": "Using the aria-describedby property to provide a descriptive label for user interface controls",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "ARIA2",
+    "name": "Identifying a required field with the aria-required property",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "G141",
+    "name": "Organizing a page using headings",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "heading-order",
+     "custom-section-headings"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/section-headings.check.js"
+    ]
+   }
+  ],
+  "1.3.2": [
+   {
+    "id": "G57",
+    "name": "Ordering the content in a meaningful sequence",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "H34",
+    "name": "Using a Unicode right-to-left mark (RLM) or left-to-right mark (LRM) to mix text direction inline",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "H56",
+    "name": "Using the dir attribute on an inline element to resolve problems with nested directional runs",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "C6",
+    "name": "Positioning content based on structural markup",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "C8",
+    "name": "Using CSS letter-spacing to control spacing within a word",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "C27",
+    "name": "Making the DOM order match the visual order",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-order",
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-order.check.js",
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "PDF3",
+    "name": "Ensuring correct tab and reading order in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "1.3.3": [
+   {
+    "id": "G96",
+    "name": "Providing textual identification of items that otherwise rely only on sensory information to be understood",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-sensory-characteristics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/sensory-characteristics.check.js"
+    ]
+   }
+  ],
+  "1.3.4": [
+   {
+    "id": "G214",
+    "name": "Using a control to allow access to content in different orientations which is otherwise restricted",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-orientation"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/orientation.check.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   }
+  ],
+  "1.3.5": [
+   {
+    "id": "H98",
+    "name": "Using HTML autocomplete attributes",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "autocomplete-valid",
+     "custom-identify-purpose"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/identify-purpose.check.js"
+    ]
+   }
+  ],
+  "1.3.6": [
+   {
+    "id": "ARIA11",
+    "name": "Using ARIA landmarks to identify regions of a page",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "region",
+     "landmark-one-main",
+     "landmark-unique"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   }
+  ],
+  "1.4.1": [
+   {
+    "id": "G14",
+    "name": "Ensuring that information conveyed by color differences is also available in text",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-use-of-color"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/use-of-color.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G205",
+    "name": "Including a text cue for colored form control labels",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-use-of-color"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/use-of-color.check.js"
+    ]
+   },
+   {
+    "id": "G182",
+    "name": "Ensuring that additional visual cues are available when text color differences are used to convey information",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-use-of-color"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/use-of-color.check.js"
+    ]
+   },
+   {
+    "id": "G183",
+    "name": "Using a contrast ratio of at least 3:1 to distinguish inline text links from surrounding text",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "link-in-text-block"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "G111",
+    "name": "Using color and pattern",
+    "situation": "B",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-use-of-color"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/use-of-color.check.js"
+    ]
+   },
+   {
+    "id": "C15",
+    "name": "Using CSS to change the presentation of a user interface component when it receives focus",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-visible"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-visible.check.js"
+    ]
+   }
+  ],
+  "1.4.2": [
+   {
+    "id": "G60",
+    "name": "Playing a sound that turns off automatically within three seconds",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-control"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-control.check.js"
+    ]
+   },
+   {
+    "id": "G170",
+    "name": "Providing a control near the beginning of the web page that turns off sounds that play automatically",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-audio-control"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/audio-control.check.js"
+    ]
+   },
+   {
+    "id": "G171",
+    "name": "Playing sounds only on user request",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   }
+  ],
+  "1.4.3": [
+   {
+    "id": "G18",
+    "name": "Ensuring that a contrast ratio of at least 4.5:1 exists between text (and images of text) and background behind the text",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G148",
+    "name": "Not specifying background color, not specifying text color, and not using technology features that change those defaults",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": [],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G174",
+    "name": "Providing a control with a sufficient contrast ratio that allows users to switch to a presentation that uses sufficient contrast",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-contrast-alternate-theme"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/contrast-alternate-theme.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G145",
+    "name": "Ensuring that a contrast ratio of at least 3:1 exists between text (and images of text) and background behind the text",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "color-contrast"
+    ],
+    "engines": [
+     "axe",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-python/ka11y/accessibility/pipeline/runners/contrast_engine.py"
+    ]
+   },
+   {
+    "id": "G156",
+    "name": "Using a technology that has commonly-available user agents that can change the foreground and background of blocks of text",
+    "situation": "Advisory",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "1.4.4": [
+   {
+    "id": "G142",
+    "name": "Using a technology that has commonly-available user agents that support zoom",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C28",
+    "name": "Specifying the size of text containers using em units",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C12",
+    "name": "Using percent for font sizes",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C13",
+    "name": "Using named font sizes",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C14",
+    "name": "Using em units for font sizes",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "SCR34",
+    "name": "Calculating size and position in a way that scales with text size",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "G146",
+    "name": "Using liquid layout",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "G178",
+    "name": "Providing controls on the web page that allow users to incrementally change the size of all text on the page up to 200 percent",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "G179",
+    "name": "Ensuring that there is no loss of content or functionality when the text resizes and text containers do not change their width",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C17",
+    "name": "Scaling form elements which contain text",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C20",
+    "name": "Using relative measurements to set column widths so that lines can average 80 characters or less when the browser is resized",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "C22",
+    "name": "Using CSS to control visual presentation of text",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-images-of-text"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/images-of-text.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   }
+  ],
+  "1.4.5": [
+   {
+    "id": "C22",
+    "name": "Using CSS to control visual presentation of text",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-images-of-text"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/images-of-text.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "C30",
+    "name": "Using CSS to replace text with images of text and providing user interface controls to switch",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-images-of-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/images-of-text.check.js"
+    ]
+   },
+   {
+    "id": "G140",
+    "name": "Separating information and structure from presentation to enable different presentations",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "PDF7",
+    "name": "Performing OCR on a scanned PDF document to provide actual text",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "C12",
+    "name": "Using percent for font sizes",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C13",
+    "name": "Using named font sizes",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C14",
+    "name": "Using em units for font sizes",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C8",
+    "name": "Using CSS letter-spacing to control spacing within a word",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "C6",
+    "name": "Positioning content based on structural markup",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   }
+  ],
+  "1.4.6": [
+   {
+    "id": "G17",
+    "name": "Ensuring that a contrast ratio of at least 7:1 exists between text (and images of text) and background behind the text",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-contrast-enhanced"
+    ],
+    "engines": [
+     "axe",
+     "custom",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/contrast-enhanced.check.js",
+     "ka11y-python/ka11y/api/v1/combined/findings.py"
+    ]
+   },
+   {
+    "id": "G148",
+    "name": "Not specifying background color, not specifying text color, and not using technology features that change those defaults",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": [],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G174",
+    "name": "Providing a control with a sufficient contrast ratio that allows users to switch to a presentation that uses sufficient contrast",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-contrast-alternate-theme"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/contrast-alternate-theme.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G18",
+    "name": "Ensuring that a contrast ratio of at least 4.5:1 exists between text (and images of text) and background behind the text",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G156",
+    "name": "Using a technology that has commonly-available user agents that can change the foreground and background of blocks of text",
+    "situation": "Advisory",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "1.4.7": [
+   {
+    "id": "G56",
+    "name": "Mixing audio files so that non-speech sounds are at least 20 decibels lower than the speech audio content",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-low-background-audio"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/low-background-audio.check.js"
+    ]
+   }
+  ],
+  "1.4.8": [
+   {
+    "id": "C23",
+    "name": "Specifying text and background colors of secondary content such as banners, features and navigation in CSS while not specifying text and background colors of the main content",
+    "situation": "Req 1",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "C25",
+    "name": "Specifying borders and layout in CSS to delineate areas of a web page while not specifying text and text-background colors",
+    "situation": "Req 1",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G156",
+    "name": "Using a technology that has commonly-available user agents that can change the foreground and background of blocks of text",
+    "situation": "Req 1",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G148",
+    "name": "Not specifying background color, not specifying text color, and not using technology features that change those defaults",
+    "situation": "Req 1",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G175",
+    "name": "Providing a multi color selection tool on the page for foreground and background colors",
+    "situation": "Req 1",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-contrast-alternate-theme",
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/contrast-alternate-theme.check.js",
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "G204",
+    "name": "Not interfering with the user agent's reflow of text as the viewing window is narrowed",
+    "situation": "Req 2",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ],
+    "also_situations": [
+     "Req 5"
+    ]
+   },
+   {
+    "id": "C20",
+    "name": "Using relative measurements to set column widths so that lines can average 80 characters or less when the browser is resized",
+    "situation": "Req 2",
+    "cover": "Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "C19",
+    "name": "Specifying alignment either to the left or right in CSS",
+    "situation": "Req 3",
+    "cover": "Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "G172",
+    "name": "Providing a mechanism to remove full justification of text",
+    "situation": "Req 3",
+    "cover": "Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "G169",
+    "name": "Aligning text on only one side",
+    "situation": "Req 3",
+    "cover": "Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "G188",
+    "name": "Providing a button on the page to increase line spaces and paragraph spaces",
+    "situation": "Req 4",
+    "cover": "Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "C21",
+    "name": "Specifying line spacing in CSS",
+    "situation": "Req 4",
+    "cover": "Implemented",
+    "rules": [
+     "custom-visual-presentation",
+     "custom-text-spacing"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js",
+     "ka11y-node/src/custom-checks/text-spacing.check.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "G146",
+    "name": "Using liquid layout",
+    "situation": "Req 5",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "C12",
+    "name": "Using percent for font sizes",
+    "situation": "Req 5",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C13",
+    "name": "Using named font sizes",
+    "situation": "Req 5",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C14",
+    "name": "Using em units for font sizes",
+    "situation": "Req 5",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C24",
+    "name": "Using percentage values in CSS for container sizes",
+    "situation": "Req 5",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "SCR34",
+    "name": "Calculating size and position in a way that scales with text size",
+    "situation": "Req 5",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "G206",
+    "name": "Providing options within the content to switch to a layout that does not require the user to scroll horizontally to read a line of text",
+    "situation": "Req 5",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   }
+  ],
+  "1.4.9": [
+   {
+    "id": "C22",
+    "name": "Using CSS to control visual presentation of text",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-images-of-text"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/images-of-text.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "C30",
+    "name": "Using CSS to replace text with images of text and providing user interface controls to switch",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-images-of-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/images-of-text.check.js"
+    ]
+   },
+   {
+    "id": "G140",
+    "name": "Separating information and structure from presentation to enable different presentations",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "PDF7",
+    "name": "Performing OCR on a scanned PDF document to provide actual text",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "C12",
+    "name": "Using percent for font sizes",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C13",
+    "name": "Using named font sizes",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C14",
+    "name": "Using em units for font sizes",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "C8",
+    "name": "Using CSS letter-spacing to control spacing within a word",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "C6",
+    "name": "Positioning content based on structural markup",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   }
+  ],
+  "1.4.10": [
+   {
+    "id": "C32",
+    "name": "Using media queries and grid CSS to reflow columns",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "C31",
+    "name": "Using CSS Flexbox to reflow content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "C33",
+    "name": "Allowing for Reflow with Long URLs and Strings of Text",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "C38",
+    "name": "Using CSS width, max-width and flexbox to fit labels and inputs",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "SCR34",
+    "name": "Calculating size and position in a way that scales with text size",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   },
+   {
+    "id": "G206",
+    "name": "Providing options within the content to switch to a layout that does not require the user to scroll horizontally to read a line of text",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-visual-presentation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js"
+    ]
+   },
+   {
+    "id": "G224",
+    "name": "Accounting for meaningful text indentation and Reflow",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "G225",
+    "name": "Section panels that scroll horizontally are designed to fit within a width of 320 CSS pixels on a vertically scrolling page",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "C34",
+    "name": "Using media queries to un-fixing sticky headers / footers",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   },
+   {
+    "id": "C37",
+    "name": "Using CSS max-width and height to fit images",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-reflow"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reflow.check.js"
+    ]
+   }
+  ],
+  "1.4.11": [
+   {
+    "id": "G174",
+    "name": "Providing a control with a sufficient contrast ratio that allows users to switch to a presentation that uses sufficient contrast",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-contrast-alternate-theme"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/contrast-alternate-theme.check.js"
+    ]
+   },
+   {
+    "id": "G195",
+    "name": "Using an author-supplied, visible focus indicator",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-visible",
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-visible.check.js",
+     "ka11y-node/src/custom-checks/focus-appearance.check.js"
+    ]
+   },
+   {
+    "id": "C40",
+    "name": "Creating a two-color focus indicator to ensure sufficient contrast with all components",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-appearance.check.js"
+    ]
+   },
+   {
+    "id": "G207",
+    "name": "Ensuring that a contrast ratio of 3:1 is provided for icons",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "custom-non-text-contrast"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/non-text-contrast.check.js"
+    ]
+   },
+   {
+    "id": "G209",
+    "name": "Provide sufficient contrast at the boundaries between adjoining colors",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "1.4.12": [
+   {
+    "id": "C36",
+    "name": "Allowing for text spacing override",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-text-spacing",
+     "avoid-inline-spacing"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/text-spacing.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "C35",
+    "name": "Allowing for text spacing without wrapping",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-text-spacing"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/text-spacing.check.js"
+    ]
+   },
+   {
+    "id": "C8",
+    "name": "Using CSS letter-spacing to control spacing within a word",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "C21",
+    "name": "Specifying line spacing in CSS",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-visual-presentation",
+     "custom-text-spacing"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/visual-presentation.check.js",
+     "ka11y-node/src/custom-checks/text-spacing.check.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "C28",
+    "name": "Specifying the size of text containers using em units",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-resize-text"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/resize-text.check.js"
+    ]
+   }
+  ],
+  "1.4.13": [
+   {
+    "id": "SCR39",
+    "name": "Making content on focus or hover hoverable, dismissible, and persistent",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-content-on-hover-focus"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/content-on-hover-focus.check.js"
+    ]
+   }
+  ],
+  "2.1.1": [
+   {
+    "id": "G202",
+    "name": "Ensuring keyboard control for all functionality",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-keyboard-operable"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/keyboard-operable.check.js"
+    ]
+   },
+   {
+    "id": "H91",
+    "name": "Using HTML form controls and links",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "nested-interactive",
+     "focus-order-semantics",
+     "custom-keyboard-no-exception"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/custom-checks/keyboard-no-exception.check.js"
+    ]
+   },
+   {
+    "id": "PDF3",
+    "name": "Ensuring correct tab and reading order in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF11",
+    "name": "Providing links and link text using the Link annotation and the /Link structure element in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF23",
+    "name": "Providing interactive form controls in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G90",
+    "name": "Providing keyboard-triggered event handlers",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-keyboard-operable"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/keyboard-operable.check.js"
+    ]
+   },
+   {
+    "id": "SCR20",
+    "name": "Using both keyboard and other device-specific functions",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-keyboard-operable"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/keyboard-operable.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "SCR35",
+    "name": "Making actions keyboard accessible by using the onclick event of anchors and buttons",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-keyboard-operable"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/keyboard-operable.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "SCR2",
+    "name": "Using redundant keyboard and mouse event handlers",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-keyboard-operable"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/keyboard-operable.check.js"
+    ]
+   },
+   {
+    "id": "SCR29",
+    "name": "Adding keyboard-accessible actions to static HTML elements",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-keyboard-operable"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/keyboard-operable.check.js"
+    ]
+   }
+  ],
+  "2.1.2": [
+   {
+    "id": "G21",
+    "name": "Ensuring that users are not trapped in content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "2.1.4": [
+   {
+    "id": "G217",
+    "name": "Providing a mechanism to allow users to remap or turn off character key shortcuts",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-character-key-shortcuts"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/character-key-shortcuts.check.js"
+    ]
+   }
+  ],
+  "2.2.1": [
+   {
+    "id": "G133",
+    "name": "Providing a checkbox on the first page of a multipart form that allows users to ask for longer session time limit or no session time limit",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-session-timeouts"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/session-timeouts.check.js"
+    ]
+   },
+   {
+    "id": "G198",
+    "name": "Providing a way for the user to turn the time limit off",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-session-timeouts"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/runtimeHooks.js",
+     "ka11y-node/src/custom-checks/session-timeouts.check.js"
+    ],
+    "also_situations": [
+     "B",
+     "C"
+    ]
+   },
+   {
+    "id": "G180",
+    "name": "Providing the user with a means to set the time limit to 10 times the default time limit",
+    "situation": "B",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-session-timeouts"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/session-timeouts.check.js"
+    ]
+   },
+   {
+    "id": "SCR16",
+    "name": "Providing a script that warns the user a time limit is about to expire",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-session-timeouts"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/runtimeHooks.js",
+     "ka11y-node/src/custom-checks/session-timeouts.check.js"
+    ]
+   },
+   {
+    "id": "SCR1",
+    "name": "Allowing the user to extend the default time limit",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-session-timeouts"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/runtimeHooks.js",
+     "ka11y-node/src/custom-checks/session-timeouts.check.js"
+    ]
+   },
+   {
+    "id": "G4",
+    "name": "Allowing the content to be paused and restarted from where it was paused",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   },
+   {
+    "id": "SCR33",
+    "name": "Using script to scroll content, and providing a mechanism to pause it",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   },
+   {
+    "id": "SCR36",
+    "name": "Providing a mechanism to allow users to display moving, scrolling, or auto-updating text in a static window or area",
+    "situation": "C",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   }
+  ],
+  "2.2.2": [
+   {
+    "id": "G4",
+    "name": "Allowing the content to be paused and restarted from where it was paused",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   },
+   {
+    "id": "SCR33",
+    "name": "Using script to scroll content, and providing a mechanism to pause it",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   },
+   {
+    "id": "G11",
+    "name": "Creating content that blinks for less than 5 seconds",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   },
+   {
+    "id": "G152",
+    "name": "Setting animated gif images to stop blinking after n cycles (within 5 seconds)",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/media/animated_images.py"
+    ]
+   },
+   {
+    "id": "SCR22",
+    "name": "Using scripts to control blinking and stop it in five seconds or less",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   },
+   {
+    "id": "G186",
+    "name": "Using a control in the web page that stops moving, blinking, or auto-updating content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   },
+   {
+    "id": "G191",
+    "name": "Providing a link, button, or other mechanism that reloads the page without any blinking content",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-pause-stop-hide"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pause-stop-hide.check.js"
+    ]
+   }
+  ],
+  "2.2.3": [
+   {
+    "id": "G5",
+    "name": "Allowing users to complete an activity without any time limit",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-no-timing"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/runtimeHooks.js",
+     "ka11y-node/src/custom-checks/no-timing.check.js"
+    ]
+   }
+  ],
+  "2.2.4": [
+   {
+    "id": "G75",
+    "name": "Providing a mechanism to postpone any updating of content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-interstitials"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/interstitials.check.js"
+    ]
+   },
+   {
+    "id": "G76",
+    "name": "Providing a mechanism to request an update of the content instead of updating automatically",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/change-on-request.check.js"
+    ]
+   },
+   {
+    "id": "SCR14",
+    "name": "Using scripts to make nonessential alerts optional",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-interstitials"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/interstitials.check.js"
+    ]
+   }
+  ],
+  "2.2.5": [
+   {
+    "id": "G105",
+    "name": "Saving data so that it can be used after a user re-authenticates",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-reauth-data-loss"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reauth-data-loss.check.js"
+    ]
+   },
+   {
+    "id": "G181",
+    "name": "Encoding user data as hidden or encrypted data in a re-authorization page",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-reauth-data-loss"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reauth-data-loss.check.js"
+    ]
+   }
+  ],
+  "2.3.1": [
+   {
+    "id": "G19",
+    "name": "Ensuring that no component of the content flashes more than three times in any 1-second period",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-three-flashes",
+     "custom-three-flashes-no-exception"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/three-flashes.check.js",
+     "ka11y-node/src/custom-checks/three-flashes-no-exception.check.js"
+    ]
+   },
+   {
+    "id": "G176",
+    "name": "Keeping the flashing area small enough",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-three-flashes"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/three-flashes.check.js"
+    ]
+   },
+   {
+    "id": "G15",
+    "name": "Using a tool to ensure that content does not violate the general flash threshold or red flash threshold",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-three-flashes"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/three-flashes.check.js"
+    ]
+   }
+  ],
+  "2.3.2": [
+   {
+    "id": "G19",
+    "name": "Ensuring that no component of the content flashes more than three times in any 1-second period",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-three-flashes",
+     "custom-three-flashes-no-exception"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/three-flashes.check.js",
+     "ka11y-node/src/custom-checks/three-flashes-no-exception.check.js"
+    ]
+   }
+  ],
+  "2.3.3": [
+   {
+    "id": "C39",
+    "name": "Using the CSS prefers-reduced-motion query to prevent motion",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-animation-from-interactions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/animation-from-interactions.check.js"
+    ]
+   },
+   {
+    "id": "SCR40",
+    "name": "Using the CSS prefers-reduced-motion query in JavaScript to prevent motion",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-animation-from-interactions"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/runtimeHooks.js",
+     "ka11y-node/src/custom-checks/animation-from-interactions.check.js"
+    ]
+   }
+  ],
+  "2.4.1": [
+   {
+    "id": "G1",
+    "name": "Adding a link at the top of each page that goes directly to the main content area",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-bypass-blocks"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/bypass-blocks.check.js"
+    ]
+   },
+   {
+    "id": "G123",
+    "name": "Adding a link at the beginning of a block of repeated content to go to the end of the block",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-bypass-blocks"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/bypass-blocks.check.js"
+    ]
+   },
+   {
+    "id": "G124",
+    "name": "Adding links at the top of the page to each area of the content",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-bypass-blocks"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/bypass-blocks.check.js"
+    ]
+   },
+   {
+    "id": "ARIA11",
+    "name": "Using ARIA landmarks to identify regions of a page",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "region",
+     "landmark-one-main",
+     "landmark-unique"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "H69",
+    "name": "Providing heading elements at the beginning of each section of content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-section-headings",
+     "bypass"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/section-headings.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "PDF9",
+    "name": "Providing headings by marking content with heading tags in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H64",
+    "name": "Using the title attribute of the iframe element",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "frame-title"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "SCR28",
+    "name": "Using an expandable and collapsible menu to bypass block of content",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-bypass-blocks"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/bypass-blocks.check.js"
+    ]
+   },
+   {
+    "id": "C6",
+    "name": "Positioning content based on structural markup",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "H97",
+    "name": "Grouping related links using the nav element",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "landmark-unique",
+     "custom-multiple-ways",
+     "custom-consistent-navigation"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/multiple-ways.check.js",
+     "ka11y-node/src/custom-checks/consistent-navigation.check.js"
+    ]
+   }
+  ],
+  "2.4.2": [
+   {
+    "id": "G88",
+    "name": "Providing descriptive titles for web pages",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-page-titled"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/page-titled.check.js"
+    ]
+   },
+   {
+    "id": "H25",
+    "name": "Providing a title using the title element",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "document-title"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "PDF18",
+    "name": "Specifying the document title using the Title entry in the document information dictionary of a PDF document",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G127",
+    "name": "Identifying a web page's relationship to a larger collection of web pages",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-page-titled"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/page-titled.check.js"
+    ]
+   }
+  ],
+  "2.4.3": [
+   {
+    "id": "G59",
+    "name": "Placing the interactive elements in an order that follows sequences and relationships within the content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-order"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-order.check.js"
+    ]
+   },
+   {
+    "id": "C27",
+    "name": "Making the DOM order match the visual order",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-order",
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-order.check.js",
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   },
+   {
+    "id": "PDF3",
+    "name": "Ensuring correct tab and reading order in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SCR26",
+    "name": "Inserting dynamic content into the Document Object Model immediately following its trigger element",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-order"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-order.check.js"
+    ]
+   },
+   {
+    "id": "H102",
+    "name": "Creating modal dialogs with the HTML dialog element",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-order"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-order.check.js"
+    ]
+   },
+   {
+    "id": "SCR27",
+    "name": "Reordering page sections using the Document Object Model",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-meaningful-sequence"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/meaningful-sequence.check.js"
+    ]
+   }
+  ],
+  "2.4.4": [
+   {
+    "id": "G91",
+    "name": "Providing link text that describes the purpose of a link",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ],
+    "also_situations": []
+   },
+   {
+    "id": "H30",
+    "name": "Providing link text that describes the purpose of a link for anchor elements",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   },
+   {
+    "id": "H24",
+    "name": "Providing text alternatives for the area elements of image maps",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "area-alt"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "G189",
+    "name": "Providing a control near the beginning of the web page that changes the link text",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SCR30",
+    "name": "Using scripts to change the link text",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G53",
+    "name": "Identifying the purpose of a link using link text combined with the text of the enclosing sentence",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose-in-context"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose-in-context.check.js"
+    ]
+   },
+   {
+    "id": "H33",
+    "name": "Supplementing link text with the title attribute",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose.check.js"
+    ]
+   },
+   {
+    "id": "C7",
+    "name": "Using CSS to hide a portion of the link text",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-link-purpose"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose.check.js"
+    ]
+   },
+   {
+    "id": "ARIA7",
+    "name": "Using aria-labelledby for link purpose",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose",
+     "link-name"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "ARIA8",
+    "name": "Using aria-label for link purpose",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose",
+     "link-name"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "H77",
+    "name": "Identifying the purpose of a link using link text combined with its enclosing list item",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose-in-context"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose-in-context.check.js"
+    ]
+   },
+   {
+    "id": "H78",
+    "name": "Identifying the purpose of a link using link text combined with its enclosing paragraph",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose-in-context"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose-in-context.check.js"
+    ]
+   },
+   {
+    "id": "H79",
+    "name": "Identifying the purpose of a link in a data table using the link text combined with its enclosing table cell and associated table header cells",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose-in-context"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose-in-context.check.js"
+    ]
+   },
+   {
+    "id": "H81",
+    "name": "Identifying the purpose of a link in a nested list using link text combined with the parent list item under which the list is nested",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose-in-context"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose-in-context.check.js"
+    ]
+   },
+   {
+    "id": "PDF11",
+    "name": "Providing links and link text using the Link annotation and the /Link structure element in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF13",
+    "name": "Providing replacement text using the /Alt entry for links in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H2",
+    "name": "Combining adjacent image and text links for the same resource",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-bypass-blocks",
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/bypass-blocks.check.js",
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ]
+   },
+   {
+    "id": "H80",
+    "name": "Identifying the purpose of a link using link text combined with the preceding heading element",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose-in-context"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose-in-context.check.js"
+    ]
+   },
+   {
+    "id": "G201",
+    "name": "Giving users advanced warning when opening a new window",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "SCR24",
+    "name": "Using progressive enhancement to open new windows on user request",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   }
+  ],
+  "2.4.5": [
+   {
+    "id": "G125",
+    "name": "Providing links to navigate to related web pages",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   },
+   {
+    "id": "G64",
+    "name": "Providing a Table of Contents",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-multiple-ways"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/multiple-ways.check.js"
+    ]
+   },
+   {
+    "id": "G63",
+    "name": "Providing a site map",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-multiple-ways",
+     "custom-location"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/multiple-ways.check.js",
+     "ka11y-node/src/custom-checks/location.check.js"
+    ]
+   },
+   {
+    "id": "G161",
+    "name": "Providing a search function to help users find content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-multiple-ways"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/multiple-ways.check.js"
+    ]
+   },
+   {
+    "id": "G126",
+    "name": "Providing a list of links to all other web pages",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   },
+   {
+    "id": "G185",
+    "name": "Linking to all of the pages on the site from the home page",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   },
+   {
+    "id": "PDF2",
+    "name": "Creating bookmarks in PDF documents",
+    "situation": "Advisory",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H99",
+    "name": "Provide a page-selection mechanism",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-multiple-ways"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/multiple-ways.check.js"
+    ]
+   }
+  ],
+  "2.4.6": [
+   {
+    "id": "G130",
+    "name": "Providing descriptive headings",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-headings-and-labels"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/headings-and-labels.check.js"
+    ]
+   },
+   {
+    "id": "G131",
+    "name": "Providing descriptive labels",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "G201",
+    "name": "Giving users advanced warning when opening a new window",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "SCR24",
+    "name": "Using progressive enhancement to open new windows on user request",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   }
+  ],
+  "2.4.7": [
+   {
+    "id": "G149",
+    "name": "Using user interface components that are highlighted by the user agent when they receive focus",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-visible"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-visible.check.js"
+    ]
+   },
+   {
+    "id": "C15",
+    "name": "Using CSS to change the presentation of a user interface component when it receives focus",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-visible"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-visible.check.js"
+    ]
+   },
+   {
+    "id": "G165",
+    "name": "Using the default focus indicator for the platform so that high visibility default focus indicators will carry over",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-visible"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-visible.check.js"
+    ]
+   },
+   {
+    "id": "G195",
+    "name": "Using an author-supplied, visible focus indicator",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-visible",
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-visible.check.js",
+     "ka11y-node/src/custom-checks/focus-appearance.check.js"
+    ]
+   },
+   {
+    "id": "C40",
+    "name": "Creating a two-color focus indicator to ensure sufficient contrast with all components",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-appearance.check.js"
+    ]
+   },
+   {
+    "id": "C45",
+    "name": "Using CSS :focus-visible to provide keyboard focus indication",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-visible"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-visible.check.js"
+    ]
+   },
+   {
+    "id": "SCR31",
+    "name": "Using script to change the background color or border of the element with focus",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-focus-visible"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/focus-visible.check.js"
+    ]
+   }
+  ],
+  "2.4.8": [
+   {
+    "id": "G65",
+    "name": "Providing a breadcrumb trail",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-location"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/location.check.js"
+    ]
+   },
+   {
+    "id": "G63",
+    "name": "Providing a site map",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-multiple-ways",
+     "custom-location"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/multiple-ways.check.js",
+     "ka11y-node/src/custom-checks/location.check.js"
+    ]
+   },
+   {
+    "id": "G128",
+    "name": "Indicating current location within navigation bars",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "ARIA26",
+    "name": "Using aria-current to identify the current item in a set",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-location"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/location.check.js"
+    ]
+   },
+   {
+    "id": "G127",
+    "name": "Identifying a web page's relationship to a larger collection of web pages",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-page-titled"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/page-titled.check.js"
+    ]
+   },
+   {
+    "id": "PDF14",
+    "name": "Providing running headers and footers in PDF documents",
+    "situation": "Advisory",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF17",
+    "name": "Specifying consistent page numbering for PDF documents",
+    "situation": "Advisory",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "2.4.9": [
+   {
+    "id": "ARIA8",
+    "name": "Using aria-label for link purpose",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose",
+     "link-name"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "G91",
+    "name": "Providing link text that describes the purpose of a link",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/rules/non_text/alttext.py",
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   },
+   {
+    "id": "H30",
+    "name": "Providing link text that describes the purpose of a link for anchor elements",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   },
+   {
+    "id": "H24",
+    "name": "Providing text alternatives for the area elements of image maps",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "area-alt"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "G189",
+    "name": "Providing a control near the beginning of the web page that changes the link text",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SCR30",
+    "name": "Using scripts to change the link text",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "C7",
+    "name": "Using CSS to hide a portion of the link text",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-link-purpose"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose.check.js"
+    ]
+   },
+   {
+    "id": "PDF11",
+    "name": "Providing links and link text using the Link annotation and the /Link structure element in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF13",
+    "name": "Providing replacement text using the /Alt entry for links in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H2",
+    "name": "Combining adjacent image and text links for the same resource",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-bypass-blocks",
+     "custom-non-text-content"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/bypass-blocks.check.js",
+     "ka11y-node/src/custom-checks/non-text-content.check.js"
+    ]
+   },
+   {
+    "id": "H33",
+    "name": "Supplementing link text with the title attribute",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-link-purpose"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/link-purpose.check.js"
+    ]
+   },
+   {
+    "id": "G201",
+    "name": "Giving users advanced warning when opening a new window",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "SCR24",
+    "name": "Using progressive enhancement to open new windows on user request",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   }
+  ],
+  "2.4.10": [
+   {
+    "id": "G141",
+    "name": "Organizing a page using headings",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "heading-order",
+     "custom-section-headings"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/section-headings.check.js"
+    ]
+   },
+   {
+    "id": "H69",
+    "name": "Providing heading elements at the beginning of each section of content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-section-headings",
+     "bypass"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/section-headings.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   }
+  ],
+  "2.4.11": [
+   {
+    "id": "C43",
+    "name": "Using CSS scroll-padding to un-obscure content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-not-obscured"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "2.4.12": [
+   {
+    "id": "C43",
+    "name": "Using CSS scroll-padding to un-obscure content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-not-obscured-enhanced"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "2.4.13": [
+   {
+    "id": "C40",
+    "name": "Creating a two-color focus indicator to ensure sufficient contrast with all components",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   },
+   {
+    "id": "C41",
+    "name": "Creating a strong focus indicator within the component",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   },
+   {
+    "id": "G195",
+    "name": "Using an author-supplied, visible focus indicator",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-focus-appearance"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "2.5.1": [
+   {
+    "id": "G215",
+    "name": "Providing controls to achieve the same result as path based or multipoint gestures",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pointer-gestures"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pointer-gestures.check.js"
+    ]
+   },
+   {
+    "id": "G216",
+    "name": "Providing single point activation for a control slider",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-keyboard-operable"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/keyboard-operable.check.js"
+    ]
+   }
+  ],
+  "2.5.2": [
+   {
+    "id": "G210",
+    "name": "Ensuring that drag-and-drop actions can be cancelled",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G212",
+    "name": "Using native controls to ensure functionality is triggered on the up-event.",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pointer-cancellation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pointer-cancellation.check.js"
+    ]
+   }
+  ],
+  "2.5.3": [
+   {
+    "id": "G208",
+    "name": "Including the text of the visible label as part of the accessible name",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "label-content-name-mismatch"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "G211",
+    "name": "Matching the accessible name to the visible label",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "label-content-name-mismatch"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "G162",
+    "name": "Positioning labels to maximize predictability of relationships",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   }
+  ],
+  "2.5.4": [
+   {
+    "id": "G213",
+    "name": "Provide conventional controls and an application setting for motion activated input",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-motion-actuation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/motion-actuation.check.js"
+    ]
+   }
+  ],
+  "2.5.5": [
+   {
+    "id": "C44",
+    "name": "Using CSS to ensure targets are at least 44 by 44 CSS pixels",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-target-size-enhanced"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/target-size-enhanced.check.js"
+    ]
+   }
+  ],
+  "2.5.7": [
+   {
+    "id": "G219",
+    "name": "Ensuring that an alternative is available for dragging movements that operate on content",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-dragging-movements"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "2.5.8": [
+   {
+    "id": "C42",
+    "name": "Using min-height and min-width to ensure sufficient target spacing",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "3.1.1": [
+   {
+    "id": "H57",
+    "name": "Using the language attribute on the HTML element",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "html-has-lang",
+     "html-lang-valid"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "PDF16",
+    "name": "Setting the default language using the /Lang entry in the document catalog of a PDF document",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF19",
+    "name": "Specifying the language for a passage or phrase with the Lang entry in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "SVR5",
+    "name": "Specifying the default language in the HTTP header",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-language-of-page"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/language-of-page.check.js"
+    ]
+   }
+  ],
+  "3.1.2": [
+   {
+    "id": "H58",
+    "name": "Using language attributes to identify changes in the human language",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-language-of-parts"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/language-of-parts.check.js"
+    ]
+   },
+   {
+    "id": "PDF19",
+    "name": "Specifying the language for a passage or phrase with the Lang entry in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "3.1.3": [
+   {
+    "id": "G101",
+    "name": "Providing the definition of a word or phrase used in an unusual or restricted way",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G55",
+    "name": "Linking to definitions",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "H40",
+    "name": "Using description lists",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G112",
+    "name": "Using inline definitions",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "H54",
+    "name": "Using the dfn element to identify the defining instance of a word or phrase",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G62",
+    "name": "Providing a glossary",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ]
+   },
+   {
+    "id": "G70",
+    "name": "Providing a function to search an online dictionary",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ]
+   }
+  ],
+  "3.1.4": [
+   {
+    "id": "G102",
+    "name": "Providing the expansion or explanation of an abbreviation",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-abbreviations"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/abbreviations.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G97",
+    "name": "Providing the first use of an abbreviation immediately before or after the expanded form",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-abbreviations"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/abbreviations.check.js"
+    ]
+   },
+   {
+    "id": "G55",
+    "name": "Linking to definitions",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "PDF8",
+    "name": "Providing definitions for abbreviations via an E entry for a structure element",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": [],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G62",
+    "name": "Providing a glossary",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ]
+   },
+   {
+    "id": "G70",
+    "name": "Providing a function to search an online dictionary",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ]
+   },
+   {
+    "id": "H28",
+    "name": "Providing definitions for abbreviations by using the abbr element",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-abbreviations"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/abbreviations.check.js"
+    ]
+   }
+  ],
+  "3.1.5": [
+   {
+    "id": "G86",
+    "name": "Providing a text summary that can be understood by people with lower secondary education level reading ability",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-reading-level"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reading-level.check.js"
+    ]
+   },
+   {
+    "id": "G103",
+    "name": "Providing visual illustrations, pictures, and symbols to help explain ideas, events, and processes",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G79",
+    "name": "Providing a spoken version of the text",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-reading-level"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/reading-level.check.js"
+    ]
+   },
+   {
+    "id": "G153",
+    "name": "Making the text easier to read",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G160",
+    "name": "Providing sign language versions of information, ideas, and processes that must be understood in order to use the content",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "3.1.6": [
+   {
+    "id": "G120",
+    "name": "Providing the pronunciation immediately following the word",
+    "situation": "Sufficient",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-pronunciation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pronunciation.check.js"
+    ]
+   },
+   {
+    "id": "G121",
+    "name": "Linking to pronunciations",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G62",
+    "name": "Providing a glossary",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-unusual-words"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/unusual-words.check.js"
+    ]
+   },
+   {
+    "id": "G163",
+    "name": "Using standard diacritical marks that can be turned off",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H62",
+    "name": "Using the ruby element",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-pronunciation"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/pronunciation.check.js"
+    ]
+   }
+  ],
+  "3.2.1": [
+   {
+    "id": "G107",
+    "name": "Using \"activate\" rather than \"focus\" as a trigger for changes of context",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-on-focus"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/on-focus.check.js"
+    ]
+   }
+  ],
+  "3.2.2": [
+   {
+    "id": "G80",
+    "name": "Providing a submit button to initiate a change of context",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-on-input"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/on-input.check.js"
+    ]
+   },
+   {
+    "id": "H32",
+    "name": "Providing submit buttons",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-submit-controls"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-submit-controls.check.js"
+    ]
+   },
+   {
+    "id": "H84",
+    "name": "Using a button with a select element to perform an action",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request",
+     "custom-on-input"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/on-input.check.js"
+    ]
+   },
+   {
+    "id": "PDF15",
+    "name": "Providing submit buttons with the submit-form action in PDF forms",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G13",
+    "name": "Describing what will happen before a change to a form control that causes a change of context to occur is made",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-submit-controls"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-submit-controls.check.js"
+    ]
+   },
+   {
+    "id": "SCR19",
+    "name": "Using an onchange event on a select element without causing a change of context",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-on-input",
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/on-input.check.js",
+     "ka11y-node/src/custom-checks/change-on-request.check.js"
+    ]
+   }
+  ],
+  "3.2.3": [
+   {
+    "id": "G61",
+    "name": "Presenting repeated components in the same relative order each time they appear",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   },
+   {
+    "id": "PDF14",
+    "name": "Providing running headers and footers in PDF documents",
+    "situation": "Advisory",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF17",
+    "name": "Specifying consistent page numbering for PDF documents",
+    "situation": "Advisory",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   }
+  ],
+  "3.2.4": [
+   {
+    "id": "G197",
+    "name": "Using labels, names, and text alternatives consistently for content that has the same functionality",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/api/v1/combined/runner.py",
+     "ka11y-python/ka11y/api/v1/combined/site_analysis.py"
+    ]
+   }
+  ],
+  "3.2.5": [
+   {
+    "id": "G76",
+    "name": "Providing a mechanism to request an update of the content instead of updating automatically",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/custom-checks/change-on-request.check.js"
+    ]
+   },
+   {
+    "id": "SVR1",
+    "name": "Implementing automatic redirects on the server side instead of on the client side",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/services/accessibility.service.js"
+    ]
+   },
+   {
+    "id": "G110",
+    "name": "Using an instant client-side redirect",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request",
+     "meta-refresh"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "H76",
+    "name": "Using meta refresh to create an instant client-side redirect",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request",
+     "meta-refresh"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "H83",
+    "name": "Using the target attribute to open a new window on user request and indicating this in link text",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js"
+    ]
+   },
+   {
+    "id": "SCR24",
+    "name": "Using progressive enhancement to open new windows on user request",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   },
+   {
+    "id": "SCR19",
+    "name": "Using an onchange event on a select element without causing a change of context",
+    "situation": "D",
+    "cover": "Implemented",
+    "rules": [
+     "custom-on-input",
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/on-input.check.js",
+     "ka11y-node/src/custom-checks/change-on-request.check.js"
+    ]
+   },
+   {
+    "id": "G200",
+    "name": "Opening new windows and tabs from a link only when necessary",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G201",
+    "name": "Giving users advanced warning when opening a new window",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-change-on-request"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/change-on-request.check.js",
+     "ka11y-node/src/custom-checks/runtimeHooks.js"
+    ]
+   }
+  ],
+  "3.2.6": [
+   {
+    "id": "G220",
+    "name": "Provide a contact-us link in a consistent location",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-consistent-help"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "3.3.1": [
+   {
+    "id": "G83",
+    "name": "Providing text descriptions to identify required fields that were not completed",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "ARIA21",
+    "name": "Using aria-invalid to Indicate An Error Field",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification",
+     "custom-error-suggestion"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js",
+     "ka11y-node/src/custom-checks/error-suggestion.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "SCR18",
+    "name": "Providing client-side validation and alert",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "PDF5",
+    "name": "Indicating required form controls in PDF forms",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "ARIA18",
+    "name": "Using aria-alertdialog to Identify Errors",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "ARIA19",
+    "name": "Using ARIA role=alert or Live Regions to Identify Errors",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-status-messages",
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/status-messages.check.js",
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G84",
+    "name": "Providing a text description when the user provides information that is not in the list of allowed values",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G85",
+    "name": "Providing a text description when user input falls outside the required format or values",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "SCR32",
+    "name": "Providing client-side validation and adding error text via the DOM",
+    "situation": "B",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "PDF22",
+    "name": "Indicating when user input falls outside the required format or values in PDF forms",
+    "situation": "B",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G139",
+    "name": "Creating a mechanism that allows users to jump to errors",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G199",
+    "name": "Providing success feedback when data is submitted successfully",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "ARIA2",
+    "name": "Identifying a required field with the aria-required property",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   }
+  ],
+  "3.3.2": [
+   {
+    "id": "G131",
+    "name": "Providing descriptive labels",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "ARIA1",
+    "name": "Using the aria-describedby property to provide a descriptive label for user interface controls",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "ARIA9",
+    "name": "Using aria-labelledby to concatenate a label from several text nodes",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [],
+    "engines": [
+     "python"
+    ],
+    "evidence": [
+     "ka11y-python/ka11y/accessibility/pipeline/extractors/element_context_extractor.py"
+    ]
+   },
+   {
+    "id": "ARIA17",
+    "name": "Using grouping roles to identify related form controls",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "G89",
+    "name": "Providing expected data format and example",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "G184",
+    "name": "Providing text instructions at the beginning of a form or set of fields that describes the necessary input",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "G162",
+    "name": "Positioning labels to maximize predictability of relationships",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "G83",
+    "name": "Providing text descriptions to identify required fields that were not completed",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "H90",
+    "name": "Indicating required form controls using label or legend",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "PDF5",
+    "name": "Indicating required form controls in PDF forms",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H44",
+    "name": "Using label elements to associate text labels with form controls",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "label"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "PDF10",
+    "name": "Providing labels for interactive form controls in PDF documents",
+    "situation": "Sufficient",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "H71",
+    "name": "Providing a description for groups of form controls using fieldset and legend elements",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-structure-semantics"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/structure-semantics.check.js"
+    ]
+   },
+   {
+    "id": "G167",
+    "name": "Using an adjacent button to label the purpose of a field",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "G13",
+    "name": "Describing what will happen before a change to a form control that causes a change of context to occur is made",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-submit-controls"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-submit-controls.check.js"
+    ]
+   },
+   {
+    "id": "ARIA2",
+    "name": "Identifying a required field with the aria-required property",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   }
+  ],
+  "3.3.3": [
+   {
+    "id": "ARIA18",
+    "name": "Using aria-alertdialog to Identify Errors",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G85",
+    "name": "Providing a text description when user input falls outside the required format or values",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G177",
+    "name": "Providing suggested correction text",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-suggestion"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-suggestion.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "PDF22",
+    "name": "Indicating when user input falls outside the required format or values in PDF forms",
+    "situation": "A",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": [],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G84",
+    "name": "Providing a text description when the user provides information that is not in the list of allowed values",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G139",
+    "name": "Creating a mechanism that allows users to jump to errors",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G199",
+    "name": "Providing success feedback when data is submitted successfully",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "SCR18",
+    "name": "Providing client-side validation and alert",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "SCR32",
+    "name": "Providing client-side validation and adding error text via the DOM",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   }
+  ],
+  "3.3.4": [
+   {
+    "id": "G164",
+    "name": "Providing a stated time within which an online request (or transaction) may be amended or canceled by the user after making the request",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-error-prevention"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-prevention.check.js"
+    ]
+   },
+   {
+    "id": "G98",
+    "name": "Providing the ability for the user to review and correct answers before submitting",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-prevention"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-prevention.check.js"
+    ],
+    "also_situations": [
+     "C"
+    ]
+   },
+   {
+    "id": "G155",
+    "name": "Providing a checkbox in addition to a submit button",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-prevention"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-prevention.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G99",
+    "name": "Providing the ability to recover deleted information",
+    "situation": "B",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-error-prevention"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-prevention.check.js"
+    ]
+   },
+   {
+    "id": "G168",
+    "name": "Requesting confirmation to continue with selected action",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-prevention",
+     "custom-error-prevention-all"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-prevention.check.js",
+     "ka11y-node/src/custom-checks/error-prevention-all.check.js"
+    ],
+    "also_situations": [
+     "C"
+    ]
+   },
+   {
+    "id": "SCR18",
+    "name": "Providing client-side validation and alert",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G199",
+    "name": "Providing success feedback when data is submitted successfully",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   }
+  ],
+  "3.3.5": [
+   {
+    "id": "G71",
+    "name": "Providing a help link on every web page",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-help-mechanism"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/help-mechanism.check.js"
+    ]
+   },
+   {
+    "id": "G193",
+    "name": "Providing help by an assistant in the web page",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-help-mechanism"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/help-mechanism.check.js"
+    ]
+   },
+   {
+    "id": "G194",
+    "name": "Providing spell checking and suggestions for text input",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-help-mechanism"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/help-mechanism.check.js"
+    ]
+   },
+   {
+    "id": "G184",
+    "name": "Providing text instructions at the beginning of a form or set of fields that describes the necessary input",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ],
+    "also_situations": [
+     "B"
+    ]
+   },
+   {
+    "id": "G89",
+    "name": "Providing expected data format and example",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-form-labels-instructions"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/form-labels-instructions.check.js"
+    ]
+   },
+   {
+    "id": "H89",
+    "name": "Using the title attribute to provide context-sensitive help",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-content-on-hover-focus"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/content-on-hover-focus.check.js"
+    ]
+   }
+  ],
+  "3.3.7": [
+   {
+    "id": "G221",
+    "name": "Provide data from a previous step in a process",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-redundant-entry"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "3.3.8": [
+   {
+    "id": "G218",
+    "name": "Email link authentication",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-accessible-auth"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   },
+   {
+    "id": "H100",
+    "name": "Providing properly marked up email and password inputs",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-accessible-auth"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "3.3.9": [
+   {
+    "id": "G218",
+    "name": "Email link authentication",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-accessible-auth-enhanced"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   },
+   {
+    "id": "H100",
+    "name": "Providing properly marked up email and password inputs",
+    "situation": "Sufficient",
+    "cover": "Implemented",
+    "rules": [
+     "custom-accessible-auth-enhanced"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [],
+    "supplement": true
+   }
+  ],
+  "4.1.2": [
+   {
+    "id": "ARIA14",
+    "name": "Using aria-label to provide an accessible name where a visible label cannot be used",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "aria-input-field-name",
+     "button-name"
+    ],
+    "engines": [
+     "axe",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-python/ka11y/accessibility/pipeline/extractors/element_context_extractor.py"
+    ]
+   },
+   {
+    "id": "ARIA16",
+    "name": "Using aria-labelledby to provide a name for user interface controls",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "aria-input-field-name"
+    ],
+    "engines": [
+     "axe",
+     "python"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-python/ka11y/accessibility/pipeline/extractors/element_context_extractor.py"
+    ],
+    "also_situations": [
+     "B",
+     "D"
+    ]
+   },
+   {
+    "id": "G108",
+    "name": "Using markup features to expose the name and role, allow user-settable properties to be directly set, and provide notification of changes",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-name-role-value-states"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/name-role-value-states.check.js"
+    ]
+   },
+   {
+    "id": "H91",
+    "name": "Using HTML form controls and links",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "nested-interactive",
+     "focus-order-semantics",
+     "custom-keyboard-no-exception"
+    ],
+    "engines": [
+     "axe",
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/src/custom-checks/keyboard-no-exception.check.js"
+    ]
+   },
+   {
+    "id": "H44",
+    "name": "Using label elements to associate text labels with form controls",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "label"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "H64",
+    "name": "Using the title attribute of the iframe element",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "frame-title"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "H65",
+    "name": "Using the title attribute to identify form controls when the label element cannot be used",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "label",
+     "label-title-only"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "H88",
+    "name": "Using HTML according to spec",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-name-role-value-states"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/name-role-value-states.check.js"
+    ]
+   },
+   {
+    "id": "G135",
+    "name": "Using the accessibility API features of a technology to expose names and roles, to allow user-settable properties to be directly set, and to provide notification of changes",
+    "situation": "C",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF10",
+    "name": "Providing labels for interactive form controls in PDF documents",
+    "situation": "C",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "PDF12",
+    "name": "Providing name, role, value information for form fields in PDF documents",
+    "situation": "C",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "G10",
+    "name": "Creating components using a technology that supports the accessibility API features of the platforms on which the user agents will be run to expose the names and roles, allow user-settable properties to be directly set, and provide notification of changes",
+    "situation": "D",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "ARIA4",
+    "name": "Using a WAI-ARIA role to expose the role of a user interface component",
+    "situation": "D",
+    "cover": "Implemented",
+    "rules": [
+     "aria-roles",
+     "aria-allowed-role"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js",
+     "ka11y-node/src/utils/axeResultMapper.js",
+     "ka11y-node/al_map.js"
+    ]
+   },
+   {
+    "id": "ARIA5",
+    "name": "Using WAI-ARIA state and property attributes to expose the state of a user interface component",
+    "situation": "D",
+    "cover": "Implemented",
+    "rules": [
+     "aria-required-attr",
+     "aria-valid-attr-value",
+     "aria-allowed-attr"
+    ],
+    "engines": [
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   }
+  ],
+  "4.1.3": [
+   {
+    "id": "ARIA22",
+    "name": "Using role=status to present status messages",
+    "situation": "A",
+    "cover": "Implemented",
+    "rules": [
+     "custom-status-messages"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/status-messages.check.js"
+    ],
+    "also_situations": [
+     "C"
+    ]
+   },
+   {
+    "id": "G199",
+    "name": "Providing success feedback when data is submitted successfully",
+    "situation": "A",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "ARIA19",
+    "name": "Using ARIA role=alert or Live Regions to Identify Errors",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-status-messages",
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/status-messages.check.js",
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G83",
+    "name": "Providing text descriptions to identify required fields that were not completed",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G84",
+    "name": "Providing a text description when the user provides information that is not in the list of allowed values",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G85",
+    "name": "Providing a text description when user input falls outside the required format or values",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "G177",
+    "name": "Providing suggested correction text",
+    "situation": "B",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-suggestion"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-suggestion.check.js"
+    ]
+   },
+   {
+    "id": "G194",
+    "name": "Providing spell checking and suggestions for text input",
+    "situation": "B",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-help-mechanism"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/help-mechanism.check.js"
+    ]
+   },
+   {
+    "id": "ARIA23",
+    "name": "Using role=log to identify sequential information updates",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "custom-status-messages"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/status-messages.check.js"
+    ]
+   },
+   {
+    "id": "ARIA25",
+    "name": "Using an ARIA live region to convey the status of a progress bar",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "custom-status-messages",
+     "aria-progressbar-name"
+    ],
+    "engines": [
+     "custom",
+     "axe"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/status-messages.check.js",
+     "ka11y-node/src/utils/rulesGuide.js",
+     "ka11y-node/src/config/app.config.js"
+    ]
+   },
+   {
+    "id": "G193",
+    "name": "Providing help by an assistant in the web page",
+    "situation": "C",
+    "cover": "Implemented",
+    "rules": [
+     "custom-help-mechanism"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/help-mechanism.check.js"
+    ]
+   },
+   {
+    "id": "ARIA27",
+    "name": "Using ariaNotify to convey the status of a progress bar",
+    "situation": "C",
+    "cover": "Not Implemented",
+    "rules": [],
+    "engines": [],
+    "evidence": []
+   },
+   {
+    "id": "ARIA18",
+    "name": "Using aria-alertdialog to Identify Errors",
+    "situation": "Advisory",
+    "cover": "Implemented",
+    "rules": [
+     "custom-error-identification"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/error-identification.check.js"
+    ]
+   },
+   {
+    "id": "SCR14",
+    "name": "Using scripts to make nonessential alerts optional",
+    "situation": "Advisory",
+    "cover": "Partially Implemented",
+    "rules": [
+     "custom-interstitials"
+    ],
+    "engines": [
+     "custom"
+    ],
+    "evidence": [
+     "ka11y-node/src/custom-checks/interstitials.check.js"
+    ]
+   }
+  ]
+ },
+ "supplement": "wcag-technique-supplement.json",
+ "supplement_count": 13
+}

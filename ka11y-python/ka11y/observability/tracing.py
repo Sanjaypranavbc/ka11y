@@ -60,6 +60,8 @@ from typing import Any, Iterator, Mapping, Optional
 
 from dotenv import load_dotenv
 
+from ka11y.config.env import dotenv_enabled
+
 from ka11y.config.logger import setup_logger
 
 logger = setup_logger(name="KAC", tag="tracing")
@@ -320,7 +322,8 @@ def init_tracing(project_name: Optional[str] = None, *, force: bool = False) -> 
         # CLI callers (enrich_audit.py) get their keys from ka11y-python/.env
         # the same way the Gemini key is loaded; the API already called this
         # at import time, and load_dotenv() never overrides a real env var.
-        load_dotenv()
+        if dotenv_enabled():
+            load_dotenv()
 
         space_id = _env("ARIZE_SPACE_ID")
         api_key = _env("ARIZE_API_KEY")
@@ -382,7 +385,12 @@ def get_tracer(name: str = _TRACER_NAME) -> Any:
 
     if _tracer_provider is not None:
         return _tracer_provider.get_tracer(name)
-    return trace.get_tracer(name)
+    # Tracing is off. Do NOT fall back to trace.get_tracer(): that returns the
+    # process-global provider, which a previous init_tracing() (or any other
+    # library) may have set to a real SDK provider — set_tracer_provider() is
+    # one-shot per process and survives shutdown_tracing(). "Off" must mean
+    # non-recording spans, not "record into whatever provider is lying around".
+    return trace.NoOpTracerProvider().get_tracer(name)
 
 
 class _NoopSpan:

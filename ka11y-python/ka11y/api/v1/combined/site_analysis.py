@@ -273,7 +273,7 @@ def analyze_site(html_snapshots: Dict[str, str], root_url: str) -> List[Dict[str
     if home_cov >= 0.8:
         ways.append(f"home page links to {int(home_cov * 100)}% of crawled pages (G185)")
     if shared_nav >= 0.6 and nav_sets:
-        ways.append(f"a navigation region shared across pages links related pages (G125)")
+        ways.append("a navigation region shared across pages links related pages (G125)")
     if sitemap_pages:
         ways.append(f"{len(sitemap_pages)} page(s) list nearly every crawled page, acting as a site map (G126)")
     findings.append(_make_finding(

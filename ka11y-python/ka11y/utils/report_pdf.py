@@ -58,6 +58,7 @@ _CSS = """
     border: 1px solid #d9d9d9; border-radius: 4px; padding: 2.5mm 4mm; min-width: 26mm;
   }
   .card .n { font-size: 13pt; font-weight: 600; }
+  .tech { white-space: nowrap; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 8pt; }
   .card .k { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .4px; color: #666; }
   h2 {
     font-size: 11pt; margin: 0 0 2mm; padding-bottom: 1.5mm;
@@ -560,13 +561,74 @@ def _page_url_of(finding: Dict[str, Any], fallback: str) -> str:
     return fallback
 
 
+def _techniques_cell(finding: Dict[str, Any]) -> "_Raw":
+    """Technique ids for a finding; names and coverage are in the legend."""
+    techniques = finding.get("techniques") or []
+    if not techniques:
+        return _Raw("—")
+    return _Raw(
+        ", ".join(
+            f"<span class='tech' title='{escape(str(t.get('name') or ''))}'>{escape(str(t.get('id') or ''))}</span>"
+            for t in techniques
+        )
+    )
+
+
+def _review_cell(finding: Dict[str, Any]) -> "_Raw":
+    """Manual-verdict audit trail: the localized message, then the reviewer's
+    note, reviewer and time. Em dash for engine verdicts."""
+    if not finding.get("reviewed"):
+        return _Raw("—")
+    parts = [f"<strong>{escape(str(finding.get('review_message') or 'Reviewed by user.'))}</strong>"]
+    if finding.get("review_note"):
+        parts.append(escape(str(finding["review_note"])))
+    who = finding.get("reviewed_by")
+    when = str(finding.get("reviewed_at") or "")[:19].replace("T", " ")
+    if who or when:
+        parts.append(f"<span class='fname'>{escape(' · '.join(x for x in (str(who or ''), when) if x))}</span>")
+    return _Raw("<br/>".join(parts))
+
+
+def _situations_cell(finding: Dict[str, Any]) -> str:
+    return ", ".join(str(s) for s in (finding.get("situations") or [])) or "—"
+
+
+def _technique_legend(report: Dict[str, Any]) -> str:
+    """Every technique referenced by any finding: id, name, coverage and the
+    SCs it was matched under. Keeps the finding tables narrow."""
+    seen: Dict[str, Dict[str, Any]] = {}
+    for bucket in ("violations", "needs_review", "passes"):
+        for f in report.get(bucket) or []:
+            for t in f.get("techniques") or []:
+                tid = str(t.get("id") or "")
+                if not tid:
+                    continue
+                entry = seen.setdefault(
+                    tid, {"name": t.get("name") or "", "cover": t.get("cover") or "", "scs": []}
+                )
+                sc = f.get("wcag_sc")
+                if sc and sc not in entry["scs"]:
+                    entry["scs"].append(sc)
+    if not seen:
+        return ""
+    rows = [
+        [tid, e["name"], e["cover"], ", ".join(e["scs"])]
+        for tid, e in sorted(seen.items(), key=lambda kv: (kv[1]["scs"][:1], kv[0]))
+    ]
+    return _table("Techniques referenced", ["Technique", "Name", "Coverage", "WCAG SC"], rows, len(rows))
+
+
 def build_report_html(
-    report: Dict[str, Any], images: Optional[Dict[str, str]] = None
+    report: Dict[str, Any],
+    images: Optional[Dict[str, str]] = None,
+    max_rows: Optional[int] = _MAX_ROWS_PER_SECTION,
 ) -> str:
     """Build the printable HTML document for *report*.
 
     *images* maps ``element.image_src`` to an inline data URI (see
     :func:`_collect_images`). Omit it to render the tables without thumbnails.
+    *max_rows* caps each findings table (``None`` = every row, for the HTML
+    export; the PDF keeps the default cap so it stays readable).
     """
     images = images or {}
     site_url = str(report.get("url") or "")
@@ -591,9 +653,12 @@ def build_report_html(
             f.get("dynamic_reason") or f.get("reason") or f.get("reason_code") or "",
             f.get("dynamic_suggested_fix") or f.get("suggested_fix") or "",
             _element_cell(f, images),
+            _techniques_cell(f),
+            _situations_cell(f),
+            _review_cell(f),
             *page_col(f),
         ]
-        for f in violations[:_MAX_ROWS_PER_SECTION]
+        for f in violations[:max_rows]
     ]
     n_rows = [
         [
@@ -602,9 +667,11 @@ def build_report_html(
             f.get("level") or "",
             f.get("dynamic_reason") or f.get("reason") or f.get("reason_code") or "",
             _element_cell(f, images),
+            _techniques_cell(f),
+            _situations_cell(f),
             *page_col(f),
         ]
-        for f in needs_review[:_MAX_ROWS_PER_SECTION]
+        for f in needs_review[:max_rows]
     ]
     p_rows = [
         [
@@ -612,9 +679,12 @@ def build_report_html(
             f.get("criterion_name") or "",
             f.get("level") or "",
             _element_cell(f, images),
+            _techniques_cell(f),
+            _situations_cell(f),
+            _review_cell(f),
             *page_col(f),
         ]
-        for f in passes[:_MAX_ROWS_PER_SECTION]
+        for f in passes[:max_rows]
     ]
 
     score = summary.get("score")
@@ -650,6 +720,9 @@ def build_report_html(
                 "Reason",
                 "Suggested fix",
                 "Element",
+                "Techniques",
+                "Situations",
+                "Review",
                 *page_header,
             ],
             v_rows,
@@ -657,16 +730,17 @@ def build_report_html(
         )
         + _table(
             "Needs review",
-            ["WCAG SC", "Criterion", "Level", "Reason", "Element", *page_header],
+            ["WCAG SC", "Criterion", "Level", "Reason", "Element", "Techniques", "Situations", *page_header],
             n_rows,
             len(needs_review),
         )
         + _table(
             "Passes",
-            ["WCAG SC", "Criterion", "Level", "Element", *page_header],
+            ["WCAG SC", "Criterion", "Level", "Element", "Techniques", "Situations", "Review", *page_header],
             p_rows,
             len(passes),
         )
+        + _technique_legend(report)
         + "</div></body></html>"
     )
 

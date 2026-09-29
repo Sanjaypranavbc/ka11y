@@ -56,7 +56,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import contextvars
-import logging
 import os
 import time
 from typing import Any, AsyncIterator, List, Optional
@@ -69,13 +68,14 @@ from playwright.async_api import (
 )
 
 from ka11y.crawler.context_factory import STEALTH_LAUNCH_ARGS, new_crawler_context
+from ka11y.config.logger import setup_logger
 
 try:  # optional: memory watchdog
     import psutil
 except ImportError:  # pragma: no cover - optional dependency
     psutil = None
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(name="KAC", tag="browser_pool")
 
 
 def _env_int(*names: str, default: int) -> int:

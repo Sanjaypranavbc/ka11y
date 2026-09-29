@@ -8,10 +8,26 @@ import { useDismissable } from "@/lib/admin/useFocusTrap";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { cn } from "@/lib/utils";
 
+export interface ExportMenuLabels {
+  button: string;
+  buttonFor: (subject: string) => string;
+  menuLabel: (subject: string) => string;
+  formats: Record<ExportFormat, string>;
+}
+
 interface ExportMenuProps {
   jobId: string;
   /** Read to screen readers so every row's button is distinguishable. */
   subject: string;
+  /** Formats to list; defaults to the admin console's set. */
+  formats?: readonly ExportFormat[];
+  /** Builds each item's download URL; defaults to the admin export endpoint. */
+  hrefFor?: (jobId: string, format: ExportFormat) => string;
+  /** Labels; default to the admin console's translations. */
+  labels?: ExportMenuLabels;
+  /** Renders the button inert (no job to export yet). */
+  disabled?: boolean;
+  className?: string;
 }
 
 const MENU_WIDTH = 208;
@@ -22,9 +38,17 @@ const MENU_WIDTH = 208;
  * scroll region cannot clip it; it closes on scroll, resize, Escape, Tab and
  * outside clicks, and returns focus to the button.
  */
-export function ExportMenu({ jobId, subject }: ExportMenuProps) {
+export function ExportMenu({
+  jobId,
+  subject,
+  formats = EXPORT_FORMATS,
+  hrefFor = exportAuditHref,
+  labels: labelsProp,
+  disabled = false,
+  className,
+}: ExportMenuProps) {
   const { t } = useLanguage();
-  const labels = t.admin.pages.reports.export;
+  const labels = labelsProp ?? t.admin.pages.reports.export;
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -90,9 +114,13 @@ export function ExportMenu({ jobId, subject }: ExportMenuProps) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
         // Hover darkens the text too: green-80 on the pale green fill is only 4.3:1.
-        className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-brand-green-80 px-3 text-[14px] font-medium text-brand-green-80 hover:bg-adm-completed-bg hover:text-brand-teal-dark"
+        className={cn(
+          "inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-brand-green-80 px-3 text-[14px] font-medium text-brand-green-80 hover:bg-adm-completed-bg hover:text-brand-teal-dark disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-brand-green-80",
+          className,
+        )}
       >
         <FileDown size={16} aria-hidden="true" />
         <span>
@@ -110,7 +138,7 @@ export function ExportMenu({ jobId, subject }: ExportMenuProps) {
           style={{ position: "fixed", top: pos.top, left: pos.left, width: MENU_WIDTH }}
           className="z-40 rounded-xl border border-adm-border bg-white p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
         >
-          {EXPORT_FORMATS.map((format: ExportFormat, i) => (
+          {formats.map((format: ExportFormat, i) => (
             <a
               key={format}
               ref={(el) => {
@@ -118,7 +146,7 @@ export function ExportMenu({ jobId, subject }: ExportMenuProps) {
               }}
               role="menuitem"
               tabIndex={-1}
-              href={exportAuditHref(jobId, format)}
+              href={hrefFor(jobId, format)}
               download
               onClick={close}
               className={cn(

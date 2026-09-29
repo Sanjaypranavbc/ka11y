@@ -445,14 +445,12 @@ crawled_images/
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v1/combined/` | Submit async audit job → `job_id` |
+| `POST` | `/api/v1/combined/combined-audit` | Submit async audit job (query params) → `job_id` |
+| `POST` | `/api/v1/combined/python-audit` | Submit async audit job (JSON body; `success_criteria_id` audits one criterion) |
 | `GET` | `/api/v1/combined/{job_id}` | Poll job status + fetch report |
 | `GET` | `/api/v1/combined/{job_id}/stream` | SSE — real-time stage events |
-| `GET` | `/api/v1/combined/{job_id}/image` | Serve image artefacts |
-| `POST` | `/api/v1/crawl/` | Legacy single-pass crawl |
-| `POST` | `/api/v1/pipeline/` | Full 13-stage pipeline |
-| `POST` | `/api/v1/{rule_id}/run` | Run single WCAG rule audit |
-| `POST` | `/api/v1/{rule_id}/analyse-url` | Single-page rule check |
+| `GET` | `/api/v1/combined/{job_id}/export?format=` | Download the report as JSON / CSV / HTML / PDF |
+| `GET` | `/api/v1/combined/{job_id}/image` | Serve image artefacts (legacy; assets are at `/api/v1/assets/{id}`) |
 | `GET` | `/api/v1/health` | Python service health |
 | `GET` | `/api/v1/system/health` | Combined Python + Node health |
 

@@ -9,8 +9,8 @@ Startup sequence (``ka11y.main`` lifespan → :func:`init_postgres`):
   3. ``alembic upgrade head`` (unless KA11Y_DB_AUTO_MIGRATE=0)
   4. seed the WCAG rule catalogue (idempotent)
 
-The SQLite run store in ``ka11y/store`` is a separate, older layer and keeps
-working with or without this one.
+``ka11y/store`` (the run repository, asset index, telemetry writer) is built
+on this engine; without DATABASE_URL it is inert and audits cannot be queued.
 """
 
 from __future__ import annotations

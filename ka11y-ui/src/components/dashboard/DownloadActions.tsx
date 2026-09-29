@@ -1,58 +1,41 @@
 "use client";
 
-import { Download, FileText } from "lucide-react";
+import { ExportMenu } from "@/components/admin/ExportMenu";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { buildFindingsCsv } from "@/lib/wcagAudit";
-import { cn } from "@/lib/utils";
-
-const BUTTON_CLASS =
-  "inline-flex items-center gap-1.5 rounded-[8px] border border-brand-green-80 px-3 py-2 text-[14px] text-gray-100 hover:bg-gray-10 sm:px-4 sm:text-[16px]";
+import { REPORT_EXPORT_FORMATS, reportExportHref } from "@/lib/reportExport";
 
 /**
- * CSV download is switched off for now (product decision, 2026-09-24): the
- * button stays in place but is always disabled. Flip CSV_DOWNLOAD_ENABLED to
- * bring it back; the export logic below is intact.
+ * Report export is switched off for now (product decision, 2026-09-25): the
+ * button stays in place but is always disabled. Flip REPORT_EXPORT_ENABLED to
+ * bring it back; the menu, the links and the backend endpoint
+ * (GET /api/v1/combined/{jobId}/export) are all intact.
  */
-const CSV_DOWNLOAD_ENABLED = false;
+const REPORT_EXPORT_ENABLED = false;
 
-export function DownloadCsvButton({ className }: { className?: string }) {
-  const { auditData } = useAuditData();
+/**
+ * "Export report" menu for the dashboard header: JSON / CSV / HTML / PDF links
+ * to the backend export endpoint (see lib/reportExport.ts). Replaces the
+ * former client-side CSV build and window.print() PDF (2026-09-25): the
+ * files are generated server-side from the stored report, so the browser
+ * holds nothing the dashboard payload does not already show.
+ *
+ * When enabled, it is still disabled until an audit with a known job id is
+ * loaded (a result restored from an older session may lack one).
+ */
+export function DownloadReportMenu({ className }: { className?: string }) {
+  const { auditData, jobId } = useAuditData();
   const { t } = useLanguage();
-  const handleClick = () => {
-    if (!auditData || !CSV_DOWNLOAD_ENABLED) return;
-    const blob = new Blob([buildFindingsCsv(auditData)], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "a11y-findings.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
+  const subject = auditData?.url ?? "";
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={!CSV_DOWNLOAD_ENABLED || !auditData}
-      className={cn(BUTTON_CLASS, "disabled:cursor-not-allowed disabled:opacity-50", className)}
-    >
-      <Download size={15} aria-hidden="true" />
-      <span className="hidden sm:inline">{t.downloads.csv}</span>
-    </button>
-  );
-}
-
-export function DownloadPdfButton({ className }: { className?: string }) {
-  const { t } = useLanguage();
-  return (
-    <button
-      type="button"
-      onClick={() => window.print()}
-      className={cn(BUTTON_CLASS, className)}
-    >
-      <FileText size={15} aria-hidden="true" />
-      <span className="hidden sm:inline">{t.downloads.pdf}</span>
-    </button>
+    <ExportMenu
+      jobId={jobId ?? ""}
+      subject={subject}
+      formats={REPORT_EXPORT_FORMATS}
+      hrefFor={reportExportHref}
+      labels={t.downloads}
+      disabled={!REPORT_EXPORT_ENABLED || !auditData || !jobId}
+      className={className}
+    />
   );
 }

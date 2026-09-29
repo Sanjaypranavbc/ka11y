@@ -20,7 +20,6 @@ Results are cached per language after the first load.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 from pydantic import BaseModel, ConfigDict
@@ -30,7 +29,9 @@ from typing import Any, Dict, Mapping, Optional
 
 import yaml
 
-logger = logging.getLogger(__name__)
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="i18n")
 
 # Allow Docker override via env var.
 # Prefer the repo-shared i18n directory, then fall back to the service-local copy.

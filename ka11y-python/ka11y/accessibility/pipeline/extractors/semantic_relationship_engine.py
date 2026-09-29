@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from playwright.async_api import Page
-from ..models import ElementContext, SemanticContext
+from ..models import ElementContext
 
 
 class SemanticRelationshipEngine:

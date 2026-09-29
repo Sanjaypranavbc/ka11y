@@ -1,7 +1,7 @@
 import re
 
 from .base_policy import WCAGPolicy
-from ...models import ElementContext, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict
 
 # Strip everything but lowercase alphanumerics for a normalised comparison
 # between OCR text and the accessible name. Compiled once at import.

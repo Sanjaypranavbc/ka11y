@@ -61,8 +61,6 @@
       "group": "API Reference",
       "pages": [
         "api-reference/combined",
-        "api-reference/pipeline",
-        "api-reference/crawl",
         "api-reference/forms"
       ]
     },

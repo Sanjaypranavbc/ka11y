@@ -13,9 +13,14 @@ const PYTHON_ORIGIN = process.env.PYTHON_ORIGIN ?? "http://python:8000";
 //     unaffected. Set KA11Y_HSTS_PRELOAD=1 once the apex is submitted to
 //     hstspreload.org (it then covers every sub-domain, so be sure).
 //   - CSP: no framing by anyone, no <base> hijack, forms only post to us, no
-//     plugins, and every http sub-resource is upgraded. Script/style sources
-//     are left to Next (a nonce-based policy needs per-request middleware and
-//     is a follow-up); frame-ancestors is the part the Kao sheet asks for.
+//     plugins. `upgrade-insecure-requests` is added per request by
+//     src/proxy.ts only when the page was served over https: unlike HSTS the
+//     browser DOES enforce it on http documents, and on a plain-http host
+//     (LAN address, an EC2 name without TLS) it upgraded every chunk, style
+//     and image to https, which failed — the login page rendered but never
+//     hydrated, so "Sign in" did nothing. Script/style sources are left to
+//     Next (a nonce-based policy needs per-request middleware and is a
+//     follow-up); frame-ancestors is the part the Kao sheet asks for.
 //   - The rest close off MIME sniffing, referrer leakage, cross-origin window
 //     handles and powerful browser features the app never uses.
 const HSTS = `max-age=31536000${process.env.KA11Y_HSTS_PRELOAD === "1" ? "; includeSubDomains; preload" : ""}`;
@@ -24,7 +29,6 @@ const CSP = [
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
-  "upgrade-insecure-requests",
 ].join("; ");
 const SECURITY_HEADERS = [
   { key: "Strict-Transport-Security", value: HSTS },
@@ -60,6 +64,12 @@ const nextConfig: NextConfig = {
       { source: "/api/v1/audits/:path*", destination: `${PYTHON_ORIGIN}/api/v1/audits/:path*` },
       // Legacy per-job image serving (fallback for older runs)
       { source: "/api/v1/combined/:jobId/image", destination: `${PYTHON_ORIGIN}/api/v1/combined/:jobId/image` },
+      // Dashboard report download (JSON/CSV/HTML/PDF, built server-side)
+      { source: "/api/v1/combined/:jobId/export", destination: `${PYTHON_ORIGIN}/api/v1/combined/:jobId/export` },
+      // Cancel a running audit from the New Audit screen (POST …/cancel)
+      { source: "/api/v1/combined/:jobId/cancel", destination: `${PYTHON_ORIGIN}/api/v1/combined/:jobId/cancel` },
+      // Manual verdicts on needs_review findings (POST …/findings/{id}/review)
+      { source: "/api/v1/combined/:jobId/findings/:path*", destination: `${PYTHON_ORIGIN}/api/v1/combined/:jobId/findings/:path*` },
     ];
   },
 };

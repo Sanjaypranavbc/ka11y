@@ -4,17 +4,22 @@ ka11y/api/v1/rule_evaluator.py
 Individual Rule Tester — evaluate a single WCAG rule against any URL.
 
 Architecture notes:
-  - Universal-snapshot rules use an in-memory _SNAPSHOT_CACHE to skip re-crawl.
-  - Image and Layout rules spin up their own crawlers (no cache).
-  - Axe-Core rules proxy to the Node microservice.
-  - A dummy job entry is registered in _jobs so stage lifecycle helpers
-    (_stage_start / _stage_complete) don't crash with KeyError.
+  - Universal-snapshot rules reuse the last few snapshots (_SNAPSHOT_CACHE,
+    bounded LRU) so switching rules on one URL skips the crawl.
+  - Image rules run the universal loader with image capture (no cache: the
+    image docs live in the request's temp dir).
+  - Four Node-only rules proxy to the Node microservice.
+  - Each request registers its own short-lived entry in the shared _jobs
+    store (stage lifecycle helpers look the job up by id) and removes it on
+    the way out, so concurrent testers never write into each other's
+    stage list.
 """
 
 import asyncio
-import logging
 import os
 import tempfile
+import uuid
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict
 
@@ -28,18 +33,33 @@ from ka11y.api.v1.combined.stages import (
 )
 from ka11y.api.v1.combined.store import _jobs
 from ka11y.utils.step_logger import ExecutionStepLogger
+from ka11y.config.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(name="KAC", tag="rule_evaluator")
 
 router = APIRouter(tags=["testing"])
 
 # ---------------------------------------------------------------------------
-# Snapshot cache — stores the full UniversalSnapshot per URL so that
-# switching rules in the Individual Rule Tester skips the 10s crawl.
+# Snapshot cache — the normalised UniversalSnapshot per URL so that switching
+# rules in the Individual Rule Tester skips the ~10 s crawl. Bounded: it used
+# to grow by one entry per distinct URL for the life of the process.
 # ---------------------------------------------------------------------------
-_SNAPSHOT_CACHE: Dict[str, Any] = {}
+_SNAPSHOT_CACHE: "OrderedDict[str, Any]" = OrderedDict()
+_SNAPSHOT_CACHE_MAX = 8
 
-JOB_ID = "rule_evaluator"
+
+def _cache_get(url: str) -> Any:
+    snapshot = _SNAPSHOT_CACHE.get(url)
+    if snapshot is not None:
+        _SNAPSHOT_CACHE.move_to_end(url)
+    return snapshot
+
+
+def _cache_put(url: str, snapshot: Any) -> None:
+    _SNAPSHOT_CACHE[url] = snapshot
+    _SNAPSHOT_CACHE.move_to_end(url)
+    while len(_SNAPSHOT_CACHE) > _SNAPSHOT_CACHE_MAX:
+        _SNAPSHOT_CACHE.popitem(last=False)
 
 
 class TestRuleRequest(BaseModel):
@@ -49,45 +69,56 @@ class TestRuleRequest(BaseModel):
     language: str = "en"
 
 
-def _ensure_job_registered() -> None:
-    """Ensure a minimal job entry exists in the shared _jobs store.
+def _register_job(url: str) -> str:
+    """Create this request's own entry in the shared _jobs store and return its id.
 
     Stage lifecycle helpers (_stage_start, _stage_complete, _stage_error)
-    look up _jobs[job_id]. If the entry doesn't exist they raise KeyError.
-    The main Dashboard creates this entry in runner.py; the Individual Rule
-    Tester must create its own.
+    look up _jobs[job_id] and raise KeyError otherwise. One id per request —
+    a shared constant made concurrent testers interleave their stage records
+    and trip "stage not found in running state" warnings.
     """
-    _jobs.setdefault(JOB_ID, {
+    job_id = f"rule-eval-{uuid.uuid4().hex[:12]}"
+    _jobs[job_id] = {
+        "job_id": job_id,
         "status": "running",
+        "url": url,
         "stages": [],
         "warnings": [],
         "current_stage": None,
-    })
+    }
+    return job_id
 
 
 @router.post("/rule")
 async def execute_rule_test(request: TestRuleRequest):
     url_str = str(request.url).rstrip("/")
+    job_id = _register_job(url_str)
+    try:
+        return await _execute_rule_test(request, url_str, job_id)
+    finally:
+        _jobs.pop(job_id, None)
 
+
+async def _execute_rule_test(request: TestRuleRequest, url_str: str, job_id: str) -> Dict[str, Any]:
     # ------------------------------------------------------------------
     # Snapshot helper — create once, reuse across rule switches
     # ------------------------------------------------------------------
     async def get_or_create_snapshot(tmp_dir: Path):
-        cached = _SNAPSHOT_CACHE.get(url_str)
+        cached = _cache_get(url_str)
         if request.force_refresh or cached is None:
             step_logger = ExecutionStepLogger(
                 output_dir=tmp_dir,
                 name="rule_evaluator",
-                job_id=JOB_ID,
+                job_id=job_id,
             )
             snapshot = await _load_universal_snapshot(
                 url=url_str,
                 output_dir=tmp_dir,
                 max_depth=0,
-                job_id=JOB_ID,
+                job_id=job_id,
                 step_logger=step_logger,
             )
-            _SNAPSHOT_CACHE[url_str] = snapshot
+            _cache_put(url_str, snapshot)
             return snapshot
         return cached
 
@@ -109,15 +140,18 @@ async def execute_rule_test(request: TestRuleRequest):
                 resp.raise_for_status()
                 data = resp.json()
                 findings = data.get("results") or []
-        except Exception as exc:
-            logger.exception(f"Node proxy for rule {sc} failed")
-            raise HTTPException(status_code=500, detail=f"Node service error for rule {sc}: {exc}")
+        except Exception:  # noqa: BLE001
+            error_id = uuid.uuid4().hex
+            logger.exception("Node proxy for rule %s failed (error_id=%s)", sc, error_id)
+            raise HTTPException(
+                status_code=502,
+                detail={"message": f"The Node service could not evaluate rule {sc}.", "error_id": error_id},
+            )
         return {"status": "success", "findings": findings}
 
     # ------------------------------------------------------------------
     # Python-based rules
     # ------------------------------------------------------------------
-    _ensure_job_registered()
     findings = []
 
     try:
@@ -136,7 +170,7 @@ async def execute_rule_test(request: TestRuleRequest):
                         output_dir=out_path,
                         run_media_audit=request.rule_id == "wcag_1_2_1",
                         run_captions_audit=request.rule_id == "wcag_1_2_2",
-                        job_id=JOB_ID,
+                        job_id=job_id,
                         snapshot_task=future,
                         lang=request.language,
                     ),
@@ -154,7 +188,7 @@ async def execute_rule_test(request: TestRuleRequest):
                 # snapshot cache is not used here because the image docs live
                 # in this request's temp dir.
                 step_logger = ExecutionStepLogger(
-                    output_dir=out_path, name="rule_evaluator", job_id=JOB_ID,
+                    output_dir=out_path, name="rule_evaluator", job_id=job_id,
                 )
                 image_raw_dir = out_path / "image_raw"
                 await asyncio.wait_for(
@@ -162,7 +196,7 @@ async def execute_rule_test(request: TestRuleRequest):
                         url=url_str,
                         output_dir=out_path,
                         max_depth=0,
-                        job_id=JOB_ID,
+                        job_id=job_id,
                         step_logger=step_logger,
                         image_capture=True,
                         image_raw_dir=image_raw_dir,
@@ -177,7 +211,7 @@ async def execute_rule_test(request: TestRuleRequest):
                         max_depth=0,
                         run_ocr=request.rule_id in ("wcag_1_4_3", "wcag_1_4_6"),
                         run_image_audit=True,
-                        job_id=JOB_ID,
+                        job_id=job_id,
                         lang=request.language,
                         raw_dir=image_raw_dir,
                         image_output_dir=out_path / "images",
@@ -198,11 +232,14 @@ async def execute_rule_test(request: TestRuleRequest):
 
     except HTTPException:
         raise  # Let 400s pass through untouched
-    except Exception as exc:
-        logger.exception(f"Rule evaluation failed for {request.rule_id}")
+    except Exception:  # noqa: BLE001
+        # Same contract as every other route: internals go to the log under an
+        # opaque error_id, never into the response body.
+        error_id = uuid.uuid4().hex
+        logger.exception("Rule evaluation failed for %s (error_id=%s)", request.rule_id, error_id)
         raise HTTPException(
             status_code=500,
-            detail=f"Rule evaluation failed: {type(exc).__name__}: {exc}",
+            detail={"message": "Rule evaluation failed due to an internal error.", "error_id": error_id},
         )
 
     return {"status": "success", "findings": findings}

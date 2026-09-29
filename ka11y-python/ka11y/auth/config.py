@@ -31,8 +31,10 @@ Sessions (cookie is an AES-256-GCM sealed session id; no tokens stored):
 
 Transport (TLS is terminated in front of this service — ALB, Caddy, nginx):
   KA11Y_FORCE_HTTPS            "1"/"0"; default: same as KA11Y_COOKIE_SECURE.
-                               Plain-http requests (X-Forwarded-Proto: http)
-                               are answered with a 308 to the https URL.
+                               Requests the edge reports as plain http
+                               (X-Forwarded-Proto: http) are answered with a
+                               308 to the https URL; a proxy that omits the
+                               scheme is trusted to be https (ka11y/main.py).
   KA11Y_HSTS_MAX_AGE           seconds, default 31536000 (1 year); "0"
                                disables the Strict-Transport-Security header.
                                Only sent on https responses.

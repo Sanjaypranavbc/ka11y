@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import asyncio
+import ipaddress
 import json
 import os
+import re
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
@@ -22,10 +24,12 @@ from ka11y.errors import (
     classify_validation_error,
 )
 from ka11y.api.v1.combined import _evict_old_jobs
+from ka11y.config.env import dotenv_enabled
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
 
-load_dotenv()
+if dotenv_enabled():  # see ka11y/config/env.py
+    load_dotenv()
 
 
 class _RateLimitMiddleware(BaseHTTPMiddleware):
@@ -159,14 +163,86 @@ class _BodyTooLarge(Exception):
     pass
 
 
+_SCHEME_HEADERS = ("x-forwarded-proto", "x-forwarded-scheme", "cloudfront-forwarded-proto")
+_PROXY_HEADERS = ("x-forwarded-for", "x-forwarded-host", "x-real-ip", "forwarded", "via")
+_FORWARDED_PROTO_RE = re.compile(r'proto\s*=\s*"?(https?)\b', re.IGNORECASE)
+_missing_scheme_warned = False
+
+
+def _edge_scheme(request: StarletteRequest) -> str | None:
+    """The scheme the browser used at the TLS terminator, as the proxy in front
+    reports it; ``None`` when no header says. Reads the usual spellings —
+    ``X-Forwarded-Proto`` (ALB, Caddy, nginx, Cloudflare; first hop wins when
+    several are chained, e.g. "https,http" after Next's proxy appended its own
+    hop), ``X-Forwarded-Scheme``, ``CloudFront-Forwarded-Proto``, RFC 7239
+    ``Forwarded: proto=``, and the ``X-Forwarded-Ssl`` / ``Front-End-Https``
+    ``on`` flags (Apache, IIS/ARR)."""
+    for name in _SCHEME_HEADERS:
+        value = request.headers.get(name, "")
+        if value:
+            first = value.split(",")[0].strip().lower()
+            if first in ("http", "https"):
+                return first
+    forwarded = request.headers.get("forwarded", "")
+    if forwarded:
+        match = _FORWARDED_PROTO_RE.search(forwarded.split(",")[0])
+        if match:
+            return match.group(1).lower()
+    for name in ("x-forwarded-ssl", "front-end-https"):
+        if request.headers.get(name, "").strip().lower() == "on":
+            return "https"
+    return None
+
+
+def _behind_proxy(request: StarletteRequest) -> bool:
+    """A reverse proxy is in front of us: it added at least one forwarding header."""
+    return any(name in request.headers for name in _PROXY_HEADERS)
+
+
+def _private_peer(request: StarletteRequest) -> bool:
+    """The TCP peer (or the X-Forwarded-For client Uvicorn resolved) is on a
+    private / loopback network: the compose bridge, a VPC subnet, the host."""
+    host = request.client.host if request.client else ""
+    try:
+        ip = ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return False
+    return ip.is_private or ip.is_loopback or ip.is_link_local
+
+
 def _is_https(request: StarletteRequest) -> bool:
-    """TLS is terminated in front of us (ALB / Caddy / nginx). Uvicorn runs with
-    --proxy-headers so request.url.scheme already reflects X-Forwarded-Proto
-    from a trusted hop; the header is consulted as a fallback for setups that
-    forgot the flag."""
+    """TLS is terminated in front of us (ALB / Caddy / nginx / Apache). Uvicorn
+    runs with --proxy-headers so request.url.scheme already reflects a clean
+    X-Forwarded-Proto from a trusted hop; the headers are consulted directly
+    for everything Uvicorn does not parse (chained values, RFC 7239, the
+    Apache/IIS flags).
+
+    When a proxy is evidently in front (it added X-Forwarded-For / -Host /
+    Forwarded / Via) but told us nothing about the scheme — Apache ProxyPass
+    and some ALB/nginx configs do exactly that — the operator's own
+    declaration wins: KA11Y_FORCE_HTTPS (defaulted on by an https redirect
+    URI) says this deployment is https. Redirecting in that situation was the
+    production 308 loop: every https request looked like http, was bounced to
+    the same https URL, and arrived looking like http again. Assuming https
+    fails safe: if the edge really were plain http the Secure cookie would
+    simply be dropped by the browser, never accepted over http."""
     if request.url.scheme == "https":
         return True
-    return request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower() == "https"
+    scheme = _edge_scheme(request)
+    if scheme is not None:
+        return scheme == "https"
+    if _behind_proxy(request):
+        global _missing_scheme_warned
+        if not _missing_scheme_warned:
+            _missing_scheme_warned = True
+            logger.warning(
+                "A reverse proxy forwards requests without X-Forwarded-Proto; "
+                "assuming https because KA11Y_FORCE_HTTPS=%s. Configure the proxy to "
+                "send X-Forwarded-Proto (Apache: RequestHeader set X-Forwarded-Proto https).",
+                _auth_settings().force_https,
+            )
+        return _auth_settings().force_https
+    return False
 
 
 class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -221,11 +297,22 @@ _PERMISSIONS_POLICY = ", ".join(
 
 
 class _HttpsRedirectMiddleware(BaseHTTPMiddleware):
-    """With KA11Y_FORCE_HTTPS on, a request that reached us over plain http
-    (its own scheme, or X-Forwarded-Proto from the TLS terminator) is sent
-    back as a 308 to the https URL. Loopback is exempt so the compose
-    health-check and local curl keep working. Never enabled by default
-    unless the cookies are already Secure, i.e. the deployment is https."""
+    """With KA11Y_FORCE_HTTPS on, a request the browser made over plain http
+    is sent back as a 308 to the https URL. That is decided from what the
+    edge reports (see ``_is_https``): a proxy saying ``X-Forwarded-Proto:
+    http``, or a request with no forwarding headers at all that reached the
+    port directly from outside. Never redirected:
+
+    * loopback hosts and ``/api/v1/health`` (compose health-check, local curl);
+    * requests from a private-network peer that carry no forwarding headers:
+      those are service-to-service calls inside the compose network / VPC
+      (the UI's server-side fetches to this API), which have no browser to
+      redirect and no TLS listener on this port to redirect to;
+    * requests behind a proxy that does not state the scheme: assumed https
+      (the 308 loop this middleware used to cause).
+
+    Never enabled by default unless the cookies are already Secure, i.e. the
+    deployment is https."""
 
     _LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 
@@ -234,6 +321,8 @@ class _HttpsRedirectMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
         if host.split(":")[0] in self._LOOPBACK or request.url.path == "/api/v1/health":
+            return await call_next(request)
+        if _edge_scheme(request) is None and _private_peer(request):
             return await call_next(request)
         url = request.url.replace(scheme="https")
         if host:
@@ -261,6 +350,28 @@ async def lifespan(app: FastAPI):
     # first login: the cookie sealer refuses a short secret.
     try:
         cfg = _auth_settings()
+        if not cfg.disabled:
+            from ka11y.db.engine import is_configured as _db_configured
+
+            missing = [name for name, ok in (
+                ("KA11Y_SESSION_SECRET", bool(cfg.session_secret)),
+                ("DATABASE_URL", _db_configured()),
+            ) if not ok]
+            if missing:
+                # /api/v1/auth/config then reports configured=false and the
+                # login page offers no sign-in method at all — say so here,
+                # where a deploy log is read, not only on the blank page.
+                logger.error(
+                    "Sign-in is NOT configured: %s missing or empty in the python service's "
+                    "environment (ka11y-python/.env via compose env_file). Both the OIDC and "
+                    "the password sign-in are disabled until set.",
+                    " and ".join(missing),
+                )
+            elif not cfg.oidc_configured and not cfg.password_login:
+                logger.error(
+                    "Sign-in is NOT configured: neither OIDC (KA11Y_OIDC_CLIENT_ID / "
+                    "_CLIENT_SECRET / _REDIRECT_URI) nor password login (KA11Y_PASSWORD_LOGIN=1) is set."
+                )
         if cfg.session_secret and not cfg.session_secret_ok:
             logger.error(
                 "KA11Y_SESSION_SECRET is shorter than 32 characters; sign-in will fail. "
@@ -288,30 +399,28 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("tracing failed to initialise; running untraced")
 
-    # Durable store: open SQLite (WAL) and start the single writer thread before
-    # anything that might persist. Degrades to memory-only if it can't start.
-    try:
-        from ka11y.store import init_db
-
-        init_db()
-    except Exception:  # noqa: BLE001
-        logger.exception("SQLite store failed to initialise; running memory-only")
-
-    # Production PostgreSQL (users, OIDC identities, sessions, audit ownership
-    # and history). Inert when DATABASE_URL is unset; runs Alembic migrations
-    # and seeds the WCAG catalogue otherwise. Never blocks startup.
+    # PostgreSQL: users, sessions, and — since 2026-09-28 — the whole run
+    # store (queue, reports, findings, assets index, verdicts, telemetry).
+    # Runs Alembic migrations and seeds the WCAG catalogue. Never blocks
+    # startup; without DATABASE_URL audits cannot be queued (503).
     try:
         from ka11y.db import init_postgres
 
         await init_postgres()
     except Exception:  # noqa: BLE001
         logger.exception("PostgreSQL layer failed to initialise")
+    try:
+        from ka11y.store import init_store
+
+        init_store()  # fire-and-forget writer for events/timings
+    except Exception:  # noqa: BLE001
+        logger.exception("run-store writer failed to start")
 
     eviction_task = asyncio.create_task(_evict_old_jobs())
 
-    # Crash recovery + durable queue dispatcher (P4). On boot any run left
+    # Crash recovery + durable queue dispatcher. On boot any run left
     # 'running' is requeued; the dispatcher drains 'queued' rows FIFO, bounded
-    # by KA11Y_MAX_CONCURRENT_JOBS. Retention sweep (P1) prunes old runs+assets.
+    # by KA11Y_MAX_CONCURRENT_JOBS. Retention sweep prunes old runs+assets.
     dispatcher_task = None
     retention_task = None
     try:
@@ -338,6 +447,12 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             logger.exception("browser pool shutdown failed during lifespan teardown")
         try:
+            from ka11y.store import shutdown_store
+
+            shutdown_store()  # drains queued events/timings first
+        except Exception:  # noqa: BLE001
+            logger.exception("run-store writer shutdown failed")
+        try:
             from ka11y.db import shutdown_postgres
 
             await shutdown_postgres()
@@ -349,12 +464,6 @@ async def lifespan(app: FastAPI):
             shutdown_cpu_pool()
         except Exception:  # noqa: BLE001
             logger.exception("CPU pool shutdown failed")
-        try:
-            from ka11y.store import shutdown_db
-
-            shutdown_db()
-        except Exception:  # noqa: BLE001
-            logger.exception("SQLite store shutdown failed")
         try:
             from ka11y.observability import shutdown_tracing
 
@@ -409,7 +518,6 @@ try:
 except Exception:  # noqa: BLE001
     logger.exception("HTTP tracing middleware not installed; requests run untraced")
 
-from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,

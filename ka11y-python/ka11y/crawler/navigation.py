@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import socket
-import logging
 from urllib.parse import urlparse
 from playwright.async_api import Page
 
-logger = logging.getLogger("KAC.navigation")
+from ka11y.config.logger import setup_logger
+
+logger = setup_logger(name="KAC", tag="navigation")
 
 # Standard retryable tokens
 _RETRYABLE_NAVIGATION_TOKENS = [

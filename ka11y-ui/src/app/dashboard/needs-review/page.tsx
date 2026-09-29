@@ -3,8 +3,9 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
-import { DownloadCsvButton } from "@/components/dashboard/DownloadActions";
+import { DownloadReportMenu } from "@/components/dashboard/DownloadActions";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { refetchAudit, submitVerdict } from "@/lib/reviewApi";
 import { ElementImage } from "@/components/dashboard/ElementImage";
 import { PageFilterDropdown } from "@/components/dashboard/PageFilterDropdown";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
@@ -176,8 +177,9 @@ function hasColor(value: string): boolean {
 }
 
 export default function NeedsReviewPage() {
-  const { auditData } = useAuditData();
+  const { auditData, jobId, setAuditData } = useAuditData();
   const { t } = useLanguage();
+  const [saveError, setSaveError] = useState<string | null>(null);
   const STATUS_LABELS: Record<ReviewStatus, string> = {
     pass: t.needsReview.status.pass,
     violation: t.needsReview.status.violation,
@@ -221,14 +223,28 @@ export default function NeedsReviewPage() {
     );
   }
 
-  function updateStatus(id: string, status: ReviewStatus) {
+  // A row leaves this list the moment it is triaged (optimistic), then the
+  // verdict is persisted and the whole report re-read so the item shows up
+  // under Fail / Passes with its "Reviewed by user…" note. If saving fails
+  // the row comes back and the error is announced. A result restored from an
+  // older session has no job id: then the change stays local, as before.
+  async function updateStatus(id: string, status: ReviewStatus) {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, status } : item)));
+    setSaveError(null);
+    if (!jobId) {
+      setSaveError(t.needsReview.savedLocallyOnly);
+      return;
+    }
+    try {
+      await submitVerdict(jobId, id, status === "pending" ? "needs_review" : status);
+      const fresh = await refetchAudit(jobId);
+      if (fresh) setAuditData(fresh, jobId);
+    } catch (err) {
+      setItems((prev) => prev.map((item) => (item.id === id ? { ...item, status: "pending" } : item)));
+      setSaveError(t.needsReview.saveFailed(err instanceof Error ? err.message : String(err)));
+    }
   }
 
-  // A row leaves this list the moment it is triaged (Move to Pass / Violation) —
-  // no refresh needed. The change is scoped to the current report view and is
-  // not persisted; running a new audit rebuilds the list from source. The
-  // manual-action copy in translations states this.
   const pending = items.filter((item) => item.status === "pending");
 
   const byPage = selectedPage
@@ -250,7 +266,7 @@ export default function NeedsReviewPage() {
   const headerActions = (
     <>
       <LanguageToggle />
-      <DownloadCsvButton />
+      <DownloadReportMenu />
     </>
   );
 
@@ -270,6 +286,11 @@ export default function NeedsReviewPage() {
           <p className="mt-2 text-[16px] leading-[24px] text-gray-80">
             {t.needsReview.subheading}
           </p>
+          {saveError && (
+            <p role="alert" className="mt-3 rounded-[8px] border border-[#c00000] bg-red-50 px-3 py-2 text-[14px] leading-5 text-[#c00000]">
+              {saveError}
+            </p>
+          )}
         </div>
 
         {!auditData ? (

@@ -1,6 +1,6 @@
 import re
 from .base_policy import WCAGPolicy
-from ...models import ElementContext, RuleVerdict, VerdictStatus
+from ...models import ElementContext, RuleVerdict
 from ...config.thresholds import GENERIC_ALT_STRINGS, MIN_ICON_ALT_LENGTH
 
 # Hoisted module-level so we don't pay the regex compile cost per element.

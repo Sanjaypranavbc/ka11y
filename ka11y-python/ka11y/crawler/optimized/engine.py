@@ -14,22 +14,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
 import contextlib
-import hashlib
-import ipaddress
 import json
 import os
 import re
-import socket
 import sys
-import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import urllib.robotparser
-from datetime import datetime, timezone
 from pathlib import Path
 
 from playwright.async_api import Error as PlaywrightError

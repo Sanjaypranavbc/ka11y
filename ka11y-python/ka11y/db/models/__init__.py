@@ -3,13 +3,17 @@
 
 from ka11y.db.base import Base
 from ka11y.db.models.audit import (
+    AuditAsset,
     AuditFail,
     AuditJob,
     AuditLog,
     AuditPage,
+    AuditResult,
     AuditSummary,
     CrashReport,
+    FindingReview,
     Report,
+    StageTiming,
 )
 from ka11y.db.models.catalog import WcagRule
 from ka11y.db.models.feedback import Feedback
@@ -31,8 +35,12 @@ __all__ = [
     "WcagRule",
     "AuditJob",
     "AuditSummary",
+    "AuditResult",
     "AuditPage",
     "AuditFail",
+    "AuditAsset",
+    "FindingReview",
+    "StageTiming",
     "Report",
     "AuditLog",
     "CrashReport",

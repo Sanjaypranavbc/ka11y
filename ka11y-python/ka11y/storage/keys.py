@@ -50,9 +50,9 @@ async def job_prefix(job_id: str) -> str:
         return cached
     owner: Optional[dict] = None
     try:
-        from ka11y.db import audit_repo
+        from ka11y.store import repo
 
-        owner = await audit_repo.get_owner(job_id)
+        owner = await repo.get_owner(job_id)
     except Exception:  # noqa: BLE001
         logger.debug("[storage] owner lookup failed for %s", job_id, exc_info=True)
     if owner and owner.get("user_id"):

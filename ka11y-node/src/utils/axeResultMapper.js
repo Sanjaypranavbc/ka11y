@@ -658,6 +658,14 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
       source: raw.source || null,
       media_query: raw.mediaQuery || raw.media_query || null,
       page_url: pageUrl,
+      // WCAG technique id the check attributed this issue to (e.g. 'G88').
+      // Lifted onto the finding as `technique_id` below and removed from the
+      // element, so it never rides along inside `element` to the frontend.
+      technique: typeof raw.technique === 'string' && raw.technique.trim() ? raw.technique.trim() : null,
+      // The check's own issue type ('generic-title', 'horizontal-scroll', …):
+      // lifted onto the finding as `issue_type` so the Python technique map
+      // can narrow a failure to the technique(s) that issue implicates.
+      issue_type: typeof raw.type === 'string' && raw.type.trim() ? raw.type.trim() : null,
     };
   }
 
@@ -740,9 +748,18 @@ function mapCustomResultsFlat(customResults, pageUrl = null, lang = 'en') {
       }
 
       for (const element of elementList) {
+        const techniqueId = (element && element.technique)
+          || (rule && typeof rule.technique === 'string' && rule.technique.trim() ? rule.technique.trim() : null);
+        const issueType = (element && element.issue_type) || null;
+        if (element && 'technique' in element) delete element.technique;
+        if (element && 'issue_type' in element) delete element.issue_type;
         findings.push({
           source:         'custom',
           rule_id:        (rule && rule.ruleId) || 'custom-unknown-rule',
+          // Exact WCAG technique from the check (see technique_map.py "exact"
+          // tier); null when the check did not name one.
+          technique_id:   techniqueId,
+          issue_type:     issueType,
           wcag_sc:        sc,
           criterion_name: _criterionName(sc, null, (rule && rule.description) || null, lang),
           level:          _criterionLevel(sc),
