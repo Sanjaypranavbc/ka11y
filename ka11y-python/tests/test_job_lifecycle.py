@@ -180,6 +180,41 @@ async def test_combined_history_is_admin_only():
     assert exc.value.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_combined_history_is_closed_when_sign_in_is_off():
+    """With KA11Y_AUTH_DISABLED (the `live` branch) every caller is anonymous.
+    The history lists every audit ever run, so it stays admin-only and is
+    closed with the rest of the admin console."""
+    with pytest.raises(HTTPException) as exc:
+        await routes.list_combined_history(user=routes.ANONYMOUS)
+    assert exc.value.status_code == 403
+
+
+def test_sign_in_routes_are_masked_when_sign_in_is_off():
+    """With KA11Y_AUTH_DISABLED (the `live` branch, and the test default) the
+    sign-in API behind the masked screens answers 404 as well. /me and
+    /config stay open: the UI reads them to know the visitor is anonymous."""
+    from fastapi.testclient import TestClient
+
+    from ka11y.main import app
+
+    # Own client address: the auth rate-limit bucket is per IP and shared by
+    # every test that uses the app, so a fresh address keeps this one exact.
+    with TestClient(app, raise_server_exceptions=False, client=("203.0.113.77", 50000)) as client:
+        for method, path in (
+            ("GET", "/api/v1/auth/login"),
+            ("GET", "/api/v1/auth/callback"),
+            ("POST", "/api/v1/auth/password/login"),
+            ("POST", "/api/v1/auth/password/register"),
+            ("POST", "/api/v1/auth/logout"),
+            ("GET", "/api/v1/auth/logout"),
+        ):
+            status = client.request(method, path, follow_redirects=False).status_code
+            assert status == 404, f"{method} {path} answered {status}, not 404"
+        assert client.get("/api/v1/auth/me").status_code == 200
+        assert client.get("/api/v1/auth/config").status_code == 200
+
+
 def test_admin_metrics_is_mounted_under_admin_router():
     from ka11y.main import app
 
@@ -330,7 +365,7 @@ async def test_assert_public_url_blocks_hostnames_resolving_privately(monkeypatc
     monkeypatch.setattr(routes, "_resolve_hostname", lambda host: ("93.184.216.34", "10.1.2.3"))
     with pytest.raises(HTTPException) as exc:
         await routes.assert_public_url("https://rebinder.example/")
-    assert "private/loopback" in exc.value.detail
+    assert exc.value.detail == routes._NOT_PUBLIC_DETAIL
 
 
 @pytest.mark.asyncio

@@ -204,9 +204,13 @@ async def test_get_after_eviction_reads_from_db(isolated_db):
 async def test_history_endpoint(isolated_db):
     RID = _id()
     from ka11y.api.v1.combined.routes import list_combined_history
+    from ka11y.auth import CurrentUser
 
+    # Admin-only, also with sign-in off (an anonymous caller gets 403).
+    admin = CurrentUser(user_id=uuid.uuid4(), email="ops@example.com", name=None,
+                        session_id=None, is_admin=True)
     await _seed_completed(RID)
-    out = await list_combined_history(limit=10, offset=0, url=None, status="completed")
+    out = await list_combined_history(limit=10, offset=0, url=None, status="completed", user=admin)
     assert out["count"] == 1
     assert out["runs"][0]["run_id"] == RID
 
@@ -571,8 +575,10 @@ def test_new_routes_registered(isolated_db):
     from ka11y.main import app
 
     with TestClient(app) as client:
+        # Admin-only, and closed with sign-in off: the caller here is
+        # anonymous → 403 (route exists, gated).
         h = client.get("/api/v1/combined/history")
-        assert h.status_code == 200 and "runs" in h.json()
+        assert h.status_code == 403
         # Admin-only since 2026-09-27: with auth disabled the caller is
         # anonymous, which is not an admin → 403 (route exists, gated).
         m = client.get("/api/v1/admin/metrics")

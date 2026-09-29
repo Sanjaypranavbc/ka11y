@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from typing import Any, AsyncGenerator
 from ka11y.utils.run_timing import compute_run_timing
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from .dispatcher import enqueue
 from .models import ALLOWED_CRAWL_DEPTHS, CRAWL_DEPTH_ERROR, CombinedRequest, JobStatusResponse
 from ka11y.observability import attributes as attrs
@@ -56,7 +56,15 @@ class FindingReviewRequest(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
     reviewer: str | None = Field(default=None, max_length=200)
 
-router = APIRouter(prefix="/combined", tags=["combined audit"])
+# One sentence for every reason a target is refused, so the response cannot be
+# used to tell an internal hostname from a non-existent one. Wording matches
+# `url_not_allowed` in ka11y.errors.
+_NOT_PUBLIC_DETAIL = (
+    "The specified target is not permitted. "
+    "Only publicly routable hosts may be audited."
+)
+
+router =APIRouter(prefix="/combined", tags=["combined audit"])
 
 
 def _caller(user: Any) -> CurrentUser:
@@ -95,19 +103,24 @@ async def assert_public_url(url: str) -> None:
             )
         return
 
+    # Every rejection below answers with the same sentence and never names a
+    # resolved address. Reporting the address, or distinguishing "does not
+    # resolve" from "resolves internally", would let anyone who can submit an
+    # audit use this endpoint to map internal DNS. The specific reason is
+    # logged instead. _resolve_hostname returns an empty tuple on failure.
     resolved = await asyncio.to_thread(_resolve_hostname, host)
     if not resolved:
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL hostname '{host}' could not be resolved.",
-        )
+        logger.info("[ssrf] refused %s: hostname does not resolve", host)
+        raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
+
     blocked = [ip for ip in resolved if _ip_is_blocked(ip)]
     if blocked:
-        sample = ", ".join(blocked[:3])
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL hostname '{host}' resolves to private/loopback address(es): {sample}.",
+        logger.warning(
+            "[ssrf] refused %s: resolves to non-public address(es) %s",
+            host,
+            ", ".join(blocked[:3]),
         )
+        raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
 
 
 @router.post("/python-audit", response_model=JobStatusResponse, status_code=202)
@@ -130,11 +143,17 @@ async def submit_python_audit(
 
 @router.post("/combined-audit", response_model=JobStatusResponse, status_code=202)
 async def submit_combined_audit(
-    url: str,
+    # HttpUrl, not str: as a plain str the CombinedRequest below is built
+    # inside the handler, so a bad URL raised pydantic.ValidationError rather
+    # than a request-validation error and the caller got 500 for a typo.
+    url: HttpUrl = Query(...),
     max_depth: int = Query(0),
     max_pages: int = Query(20, ge=1, le=200),
     wcag_level: str = Query("AAA", pattern=r"^(A|AA|AAA)$"),
-    email: str | None = Query(None, max_length=254),
+    # Same pattern as CombinedRequest.email. Checked here too: the request
+    # below is built inside the handler, so a bad address raised
+    # pydantic.ValidationError there and the caller got 500, not 422.
+    email: str | None = Query(None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"),
     lang: str = Query("auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$"),
     user: CurrentUser = Depends(require_user),
 ):
@@ -165,7 +184,7 @@ async def submit_combined_audit(
     if max_depth not in ALLOWED_CRAWL_DEPTHS:
         raise HTTPException(status_code=422, detail=CRAWL_DEPTH_ERROR)
     payload = CombinedRequest(
-        url=url,
+        url=str(url),
         max_depth=max_depth,
         max_pages=max_pages,
         wcag_level=wcag_level,
@@ -367,11 +386,13 @@ async def list_combined_history(
     """Paginated history of *every* audit run in the durable store.
 
     The ``runs`` table has no owner column, so this is an operator view:
-    admins only (``KA11Y_ADMIN_EMAILS``), or anyone when auth is disabled.
+    admins only (``KA11Y_ADMIN_EMAILS``). With sign-in off
+    (``KA11Y_AUTH_DISABLED``, the ``live`` branch) nobody is an admin, so it
+    is closed with the rest of the admin console.
     Signed-in users get their own history from ``GET /audits/history``.
     """
     caller = _caller(user)
-    if not caller.is_anonymous and not caller.is_admin:
+    if not caller.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required.")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
@@ -401,6 +422,9 @@ async def _job_from_db(job_id: str) -> dict | None:
         "report_path": run.get("output_dir"),
         "result": result,
         "error": None if run.get("status") != "failed" else "Audit failed due to an internal error.",
+        # Reconstructed from the durable store, which has no error_code column
+        # until the Postgres migration. The UI falls back to `error` above.
+        "error_code": run.get("error_code"),
         "error_id": run.get("error_id"),
         "error_stage": run.get("error_stage"),
         "current_stage": None,
@@ -677,6 +701,11 @@ async def get_combined_audit_timings(job_id: str, user: CurrentUser = Depends(re
         if not run:
             raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
         rows = await repo.get_timings(job_id)
+        # The stored error is repr(exc) of the failed step: internal paths,
+        # hosts and library text. It stays in the table and the logs; the
+        # client gets the step's status only.
+        for row in rows:
+            row["error"] = None
         return {
             "job_id": job_id,
             "url": run.get("url"),
@@ -820,10 +849,12 @@ async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require
                     f"data: {json.dumps({'job_id': job_id, 'summary': rep.get('summary', {})})}\n\n"
                 )
             elif status == "failed":
-                yield (
-                    f"event: job_failed\n"
-                    f"data: {json.dumps({'job_id': job_id, 'error': 'Audit failed due to an internal error.'})}\n\n"
-                )
+                failure = {
+                    "job_id": job_id,
+                    "error": "Audit failed due to an internal error.",
+                    "error_code": _jobs.get(job_id, {}).get("error_code"),
+                }
+                yield f"event: job_failed\ndata: {json.dumps(failure)}\n\n"
             elif status == "cancelled":
                 yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
             else:

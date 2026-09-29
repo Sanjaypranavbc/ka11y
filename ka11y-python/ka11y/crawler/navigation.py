@@ -24,6 +24,35 @@ _RETRYABLE_NAVIGATION_TOKENS = [
     "NS_ERROR_CONNECTION_REFUSED",
     "NS_ERROR_NET_RESET",
     "TIMEOUT",
+    "ERR_INTERNET_DISCONNECTED",
+    "ERR_ADDRESS_UNREACHABLE",
+]
+
+# Browser error token → the code the caller reports. Ordered: the first match
+# wins, so the specific tokens come before the ones that are substrings of
+# them. Anything unmatched stays "page_navigation_failed".
+_CODE_BY_TOKEN = [
+    ("ERR_NAME_NOT_RESOLVED", "dns_resolution_failed"),
+    ("NS_ERROR_UNKNOWN_HOST", "dns_resolution_failed"),
+    ("ERR_CONNECTION_REFUSED", "connection_refused"),
+    ("NS_ERROR_CONNECTION_REFUSED", "connection_refused"),
+    ("ERR_TOO_MANY_REDIRECTS", "too_many_redirects"),
+    ("ERR_INTERNET_DISCONNECTED", "network_unavailable"),
+    ("ERR_ADDRESS_UNREACHABLE", "network_unavailable"),
+    ("ERR_NETWORK_CHANGED", "network_unavailable"),
+    ("ERR_TIMED_OUT", "navigation_timeout"),
+    ("NS_ERROR_NET_TIMEOUT", "navigation_timeout"),
+    ("TIMEOUT", "navigation_timeout"),
+]
+
+# A redirect loop, a bad certificate or a blocked address cannot succeed on a
+# second attempt; retrying only spends the raised 60s timeout twice over.
+_PERMANENT_NAVIGATION_TOKENS = [
+    "ERR_TOO_MANY_REDIRECTS",
+    "ERR_CERT_",
+    "ERR_SSL_",
+    "ERR_BLOCKED_BY_CLIENT",
+    "ERR_UNKNOWN_URL_SCHEME",
 ]
 
 _DNS_PRECHECK_ATTEMPTS = 3
@@ -62,7 +91,23 @@ def _host_from_url(url: str) -> str | None:
 
 def _is_retryable_navigation_error(message: str) -> bool:
     upper = str(message or "").upper()
+    if any(token in upper for token in _PERMANENT_NAVIGATION_TOKENS):
+        return False
     return any(token in upper for token in _RETRYABLE_NAVIGATION_TOKENS)
+
+
+def classify_navigation_error(error: object) -> str:
+    """The reporting code for a navigation failure.
+
+    The browser already says which of the S2-03 conditions this is; without
+    this the caller collapses all of them into "page_navigation_failed" and
+    the user is told only that something went wrong.
+    """
+    upper = str(error or "").upper()
+    for token, code in _CODE_BY_TOKEN:
+        if token in upper:
+            return code
+    return "page_navigation_failed"
 
 
 async def dns_preflight(url: str) -> None:
@@ -116,7 +161,7 @@ async def navigate_with_resilience(
     *,
     wait_until: str = "domcontentloaded",
     timeout_ms: int = 30000,
-) -> None:
+):
     await dns_preflight(url)
     last_error: Exception | None = None
     attempts_used = 0
@@ -125,15 +170,21 @@ async def navigate_with_resilience(
         attempts_used = attempt
         current_timeout = timeout_ms if attempt == 1 else max(timeout_ms, 60000)
         try:
-            await page.goto(
+            # The response is returned rather than discarded so the caller can
+            # see the HTTP status. A seed page answering 404 or 503 is why an
+            # audit has nothing to report, and that was previously invisible.
+            return await page.goto(
                 url,
                 wait_until=wait_until,
                 timeout=current_timeout,
             )
-            return
         except Exception as exc:
             last_error = exc
             if attempt >= _NAVIGATION_ATTEMPTS:
+                break
+            if not _is_retryable_navigation_error(str(exc)):
+                # Permanent: a second and third attempt cost up to 60s each
+                # and cannot change the outcome.
                 break
 
             delay = _NAVIGATION_BACKOFF_SECONDS[
@@ -148,21 +199,15 @@ async def navigate_with_resilience(
                 delay,
             )
             await asyncio.sleep(delay)
-            if _is_retryable_navigation_error(str(exc)):
-                try:
-                    await dns_preflight(url)
-                except Exception:
-                    pass
+            # Only retryable errors reach here, so the preflight always runs.
+            try:
+                await dns_preflight(url)
+            except Exception:
+                pass
 
     message = str(last_error)
-    upper = message.upper()
-    code = (
-        "dns_resolution_failed"
-        if "ERR_NAME_NOT_RESOLVED" in upper or "NS_ERROR_UNKNOWN_HOST" in upper
-        else "page_navigation_failed"
-    )
     raise NavigationError(
-        code=code,
+        code=classify_navigation_error(last_error),
         url=url,
         host=_host_from_url(url),
         original_message=message,

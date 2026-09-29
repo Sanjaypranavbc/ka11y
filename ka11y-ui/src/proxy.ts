@@ -27,6 +27,17 @@ const CANONICAL_LOCAL_HOST = "localhost";
 const CSP_HTTPS =
   "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests";
 
+// `live` branch: sign-in and the admin console are masked
+// (KA11Y_AUTH_DISABLED=1, matching the python service). The dashboard needs no
+// session, and the sign-in and admin screens send the visitor to New Audit.
+// Those screens stay in the code base; unset or "0" restores them.
+const NEW_AUDIT_PATH = "/dashboard/new-audit";
+const MASKED_WHEN_AUTH_DISABLED = ["/login", "/register", "/admin"];
+
+function authDisabled(): boolean {
+  return process.env.KA11Y_AUTH_DISABLED === "1";
+}
+
 function servedOverHttps(request: NextRequest): boolean {
   const forwarded = request.headers.get("x-forwarded-proto");
   if (forwarded) return forwarded.split(",")[0].trim() === "https";
@@ -44,10 +55,17 @@ export function proxy(request: NextRequest) {
     const proto = request.headers.get("x-forwarded-proto") ?? "http";
     return NextResponse.redirect(`${proto}://${CANONICAL_LOCAL_HOST}${port}${pathname}${search}`, 308);
   }
+  const signInOff = authDisabled();
+  if (signInOff && MASKED_WHEN_AUTH_DISABLED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    const url = request.nextUrl.clone();
+    url.pathname = NEW_AUDIT_PATH;
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
   const hasSession = SESSION_COOKIE_NAMES.some((name) => Boolean(request.cookies.get(name)?.value));
 
   const gated = pathname.startsWith("/dashboard") || pathname.startsWith("/admin");
-  if (gated && !hasSession) {
+  if (gated && !signInOff && !hasSession) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";

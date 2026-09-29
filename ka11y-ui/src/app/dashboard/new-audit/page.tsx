@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo, useRef } from "react";
+import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, ChevronRight, ExternalLink, Info } from "lucide-react";
 import { CrawlDepthStepper } from "@/components/dashboard/CrawlDepthStepper";
@@ -80,6 +80,20 @@ function NewAuditPage() {
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The API reports a failure as a code (ka11y/errors.py) plus an English
+  // fallback. Prefer the translated text; fall back to the server's own
+  // sentence so a build older than a new code still reads properly.
+  const errorText = useCallback(
+    (data: { error_code?: string | null; error?: string | null; error_id?: string | null } | null) => {
+      const code = data?.error_code;
+      const translated = code ? t.newAudit.errorCodes[code] : undefined;
+      const base = translated ?? data?.error ?? t.newAudit.errorGeneric;
+      return data?.error_id ? `${base} ${t.newAudit.errorReference(data.error_id)}` : base;
+    },
+    [t],
+  );
+
   // Arrived here because another screen is locked (AuditLockGuard).
   const lockedNotice = searchParams.get("locked") === "1";
 
@@ -201,7 +215,7 @@ function NewAuditPage() {
       }
 
       if (!res.ok || !data?.jobId) {
-        setError(data?.error ?? t.newAudit.errorGeneric);
+        setError(errorText(data));
         setSubmitting(false);
         return;
       }

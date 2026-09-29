@@ -96,10 +96,19 @@ export async function POST(request: Request) {
     const data = await submitRes.json().catch(() => null);
 
     if (!submitRes.ok) {
+      // A 422's `detail` is FastAPI's list of field errors, not text; passed
+      // on as `error` it made New Audit render an object and crash. Send text
+      // only: the API's own sentence where it gave one, else a fixed one.
+      const text = (v: unknown) => (typeof v === "string" && v ? v : undefined);
       return NextResponse.json(
         {
           error:
-            data?.detail || data?.message || "Failed to start combined audit",
+            text(data?.detail) ??
+            text(data?.error) ??
+            text(data?.message) ??
+            (submitRes.status === 422
+              ? "Check the URL and email address, then try again."
+              : "Failed to start combined audit"),
         },
         { status: submitRes.status },
       );

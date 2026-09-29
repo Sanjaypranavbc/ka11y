@@ -66,7 +66,7 @@ class KaLogger(logging.LoggerAdapter):
     def process(self, msg: str, kwargs: dict) -> tuple[str, dict]:
         tag = self.extra.get("tag", "GENERAL")
         kwargs["extra"] = {**self.extra, **kwargs.get("extra", {})}
-        return f"[bold cyan]\\[{tag}][/bold cyan] {msg}", kwargs
+        return f"[{tag}] {msg}", kwargs
 
     def success(self, msg: str, *args, **kwargs) -> None:
         """Log at SUCCESS level (25 — between DEBUG and INFO)."""
@@ -106,7 +106,10 @@ def setup_logger(name: str = "KAC", tag: str | None = None) -> KaLogger:
             show_time=True,
             show_level=True,
             show_path=False,
-            markup=True,
+            # Off: messages carry submitted URLs and audited-page text, and
+            # with markup on a value such as "[/x]" raised MarkupError out of
+            # the logging call itself (a URL like that failed with a 503).
+            markup=False,
             highlighter=NullHighlighter(),
         )
         # Only the message column — Rich draws time/level/path itself

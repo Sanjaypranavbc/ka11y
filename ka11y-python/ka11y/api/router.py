@@ -31,23 +31,21 @@ async def health():
 
 @router.get("/system/health", tags=["health"])
 async def system_health():
-    """Full system health check including Node connectivity."""
+    """Full system health check including Node connectivity.
+
+    Answers "ok" or "down" only. It needs no sign-in, so it names neither the
+    internal Node address nor the connection error.
+    """
     node_base_url = os.getenv("NODE_BASE_URL", "http://localhost:3000")
     node_health_url = f"{node_base_url.rstrip('/')}/api/v1/health"
 
-    node_status = "unknown"
+    node_status = "down"
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
             resp = await client.get(node_health_url)
             if resp.status_code == 200:
                 node_status = "ok"
-            else:
-                node_status = f"error: {resp.status_code}"
-    except Exception as e:
-        node_status = f"unreachable: {e}"
+    except Exception:
+        pass
 
-    return {
-        "python": "ok",
-        "node": node_status,
-        "node_base_url": node_base_url,
-    }
+    return {"python": "ok", "node": node_status}

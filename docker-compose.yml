@@ -278,6 +278,11 @@ services:
       # (ka11y-python/ka11y/db, ka11y-python/ka11y/store). Alembic migrations
       # + the WCAG catalogue seed run at startup unless this is "0".
       KA11Y_DB_AUTO_MIGRATE: "1"
+      # `live` branch: sign-in and the admin console are masked (Rad,
+      # 2026-09-29). Every visitor runs as anonymous and every audit is still
+      # stored in PostgreSQL, without an owner. "0" restores sign-in; no code
+      # was removed. Must match KA11Y_AUTH_DISABLED on the ui service.
+      KA11Y_AUTH_DISABLED: "1"
       # Everything secret for this block is read from ka11y-python/.env via
       # env_file below (see ka11y-python/.env.example), NOT listed here — an
       # `environment:` entry would override the file with an empty string:
@@ -462,6 +467,9 @@ services:
       WCAG_API_URL: "http://python:8000/api/v1/combined"
       # Target of the /api/v1/auth/* and /api/v1/assets/* rewrites.
       PYTHON_ORIGIN: "http://python:8000"
+      # Sign-in masked on `live` (see the python service). Read by src/proxy.ts
+      # at request time; must match the python service's value.
+      KA11Y_AUTH_DISABLED: "1"
 
     ports:
       - "0.0.0.0:8080:3001"

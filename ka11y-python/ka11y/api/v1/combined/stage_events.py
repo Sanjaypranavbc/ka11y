@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ka11y.config.logger import setup_logger
+from ka11y.errors import code_of
 from ka11y.utils.step_logger import append_step_log
 from ka11y.utils import stage_timing
 
@@ -22,6 +23,14 @@ from .constants import STAGE_WEIGHTS
 from .store import _broadcast, _jobs
 
 logger = setup_logger(name="KAC", tag="combined")
+
+# What the client is told when a stage fails: the error code (allow-listed by
+# ka11y.errors.code_of, so never free text) and what was skipped. The
+# exception text itself stays in the server log (see _stage_error_and_warn).
+_SKIPPED_BY_STAGE = {
+    "image_audit": "OCR and image-audit checks were skipped.",
+    "media_audit": "Media and caption checks were skipped.",
+}
 
 
 def _emit_stage_timing(
@@ -272,11 +281,17 @@ def _stage_error(job_id: str, name: str, error: str) -> None:
 
 
 def _stage_error_and_warn(job_id: str, name: str, exc: Exception | None) -> None:
-    """Record a non-fatal stage failure: update stages, broadcast, log a warning."""
+    """Record a non-fatal stage failure: update stages, broadcast, log a warning.
+
+    The exception text goes to the server log and the trace only. It carries
+    file paths, internal hosts and library internals, and it used to reach the
+    client through warnings, stages[].error, the SSE event and /timings.
+    """
     msg = str(exc) if exc is not None else "unknown error"
     logger.warning(f"[combined] {name} stage error: {msg}")
-    _stage_error(job_id, name, msg)
-    _jobs[job_id].setdefault("warnings", []).append(f"{name}: {msg}")
+    shown = f"{code_of(exc)}; {_SKIPPED_BY_STAGE.get(name, 'This check was skipped.')}"
+    _stage_error(job_id, name, shown)
+    _jobs[job_id].setdefault("warnings", []).append(f"{name}: {shown}")
     # This is the path a stage failure actually takes: the stage catches its
     # own exception and returns an empty result so the audit degrades instead
     # of failing. The span is still open here (this runs inside the stage

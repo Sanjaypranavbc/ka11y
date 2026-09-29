@@ -106,13 +106,18 @@ class JobStatusResponse(BaseModel):
     submitted_at: str
     lang: str
     completed_at: Optional[str] = None
-    report_path: Optional[str] = None
+    # No report_path: it was the absolute server path of the report file, and
+    # nothing outside the server uses it.
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     # Opaque correlation id for failed jobs. Maps a 5xx response to the
     # server-side log entry that holds the real traceback. Never contains
     # exception type, message, file path, or any other internal detail.
     error_id: Optional[str] = None
+    # Machine-readable reason, from ka11y.errors. The UI
+    # renders it through its own translations; `error` above stays as the
+    # English fallback so a client built before this field keeps working.
+    error_code: Optional[str] = None
     error_stage: Optional[str] = None
     current_stage: Optional[str] = None
     stages: List[Dict[str, Any]] = []

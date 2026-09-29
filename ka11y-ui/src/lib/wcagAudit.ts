@@ -88,6 +88,9 @@ export interface WcagPageScan {
   needs_review: number;
   passes: number;
   error: string | null;
+  // Machine-readable reason (ka11y/errors.py). Preferred over `error` so the
+  // message renders in the viewer's language; `error` stays as the fallback.
+  error_code?: string | null;
 }
 
 export interface WcagAuditResponse {

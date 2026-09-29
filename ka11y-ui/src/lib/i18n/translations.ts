@@ -363,6 +363,37 @@ export const translations = {
         `This scan covers multiple pages and takes a while. We'll email the report to ${email} when it's ready — you can close this page.`,
       queuedNewScan: "Start another scan",
       errorGeneric: "Failed to start the scan. Please try again.",
+      // Keyed by `error_code` from the API (ka11y/errors.py). An unknown code
+      // falls back to the English `error` field, then to errorGeneric, so a
+      // code added server-side never shows a blank message here.
+      errorCodes: {
+        url_empty: "A target URL is required.",
+        url_malformed: "The supplied value is not a valid absolute URL.",
+        url_missing_scheme:
+          "The URL must specify a scheme. An absolute http or https URL is required.",
+        url_unsupported_scheme:
+          "The URL scheme is not supported. Only http and https are permitted.",
+        url_invalid_port:
+          "The port specified in the URL is outside the permitted range 1-65535.",
+        url_not_allowed:
+          "The specified target is not permitted. Only publicly routable hosts may be audited.",
+        dns_resolution_failed: "DNS resolution failed for the specified host.",
+        connection_refused: "The target host refused the connection.",
+        navigation_timeout:
+          "The target did not respond within the configured navigation timeout.",
+        network_unavailable:
+          "The audit service could not establish an outbound network connection.",
+        too_many_redirects: "The request exceeded the maximum redirect limit.",
+        http_not_found: "The target returned HTTP 404 Not Found.",
+        http_forbidden:
+          "The target returned HTTP 403 Forbidden. Automated access may be restricted by the site's policy.",
+        http_server_error: "The target returned HTTP 500 Internal Server Error.",
+        http_unavailable: "The target returned HTTP 503 Service Unavailable.",
+        zero_pages_crawled: "No pages could be retrieved from the specified target.",
+        page_navigation_failed: "Page navigation failed.",
+        internal_error: "The audit could not be completed.",
+      } as Record<string, string>,
+      errorReference: (id: string) => `Reference: ${id}`,
       errorUnreachable: "Unable to reach the scan service. Please try again.",
       errorStillRunning: "The scan is taking longer than expected. It may still be running on the server, check back shortly or try again.",
       auditProgress: "Audit Progress",
@@ -867,6 +898,34 @@ export const translations = {
         `このスキャンは複数ページを対象とするため時間がかかります。完了後、${email}宛にレポートをメールで送信します。このページは閉じていただいて構いません。`,
       queuedNewScan: "別のスキャンを開始",
       errorGeneric: "スキャンを開始できませんでした。もう一度お試しください。",
+      errorCodes: {
+        url_empty: "監査対象のURLを指定してください。",
+        url_malformed: "指定された値は有効な絶対URLではありません。",
+        url_missing_scheme:
+          "URLにスキームを指定してください。http または https の絶対URLが必要です。",
+        url_unsupported_scheme:
+          "このURLスキームはサポートされていません。http および https のみ使用できます。",
+        url_invalid_port:
+          "URLで指定されたポート番号が許容範囲(1〜65535)外です。",
+        url_not_allowed:
+          "指定された対象は許可されていません。監査できるのは公開されているホストのみです。",
+        dns_resolution_failed: "指定されたホストのDNS解決に失敗しました。",
+        connection_refused: "対象ホストによって接続が拒否されました。",
+        navigation_timeout:
+          "設定されたナビゲーションタイムアウト内に対象から応答がありませんでした。",
+        network_unavailable:
+          "監査サービスから外部ネットワークへの接続を確立できませんでした。",
+        too_many_redirects: "リダイレクトの上限回数を超えました。",
+        http_not_found: "対象から HTTP 404 Not Found が返されました。",
+        http_forbidden:
+          "対象から HTTP 403 Forbidden が返されました。サイトのポリシーにより自動アクセスが制限されている可能性があります。",
+        http_server_error: "対象から HTTP 500 Internal Server Error が返されました。",
+        http_unavailable: "対象から HTTP 503 Service Unavailable が返されました。",
+        zero_pages_crawled: "指定された対象からページを取得できませんでした。",
+        page_navigation_failed: "ページのナビゲーションに失敗しました。",
+        internal_error: "監査を完了できませんでした。",
+      } as Record<string, string>,
+      errorReference: (id: string) => `参照番号: ${id}`,
       errorUnreachable:
         "スキャンサービスに接続できません。もう一度お試しください。",
       errorStillRunning:

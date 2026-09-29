@@ -34,6 +34,7 @@ from .findings import _lang_ctx
 from ka11y.utils.lang_detector import detect_page_language
 from ka11y.utils.run_timing import log_run_timing
 from ka11y.utils.stage_timing import emit_summary as emit_stage_timing_summary
+from ka11y.errors import code_of
 from .models import CombinedRequest
 from .report import _build_report
 from .stage_events import emit_job_plan
@@ -909,9 +910,12 @@ async def _run_job_body_inner(
         )
 
         error_id = uuid.uuid4().hex
+        # NavigationError, ImageCrawlerNavigationError and CrawlFailedError all
+        # carry .code; anything else, or an unrecognised value, falls back.
+        error_code = code_of(exc)
         logger.error(
             f"[combined] job {job_id} (error_id={error_id}) failed during stage "
-            f"'{current_stage}' ({err_type}: {exc}) at {where}\n{tb}"
+            f"'{current_stage}' ({err_type}: {exc}) code={error_code} at {where}\n{tb}"
         )
         failed_at = datetime.now(timezone.utc).isoformat()
         async with _get_job_lock(job_id):
@@ -920,6 +924,7 @@ async def _run_job_body_inner(
                     "status": "failed",
                     "completed_at": failed_at,
                     "error": "Audit failed due to an internal error.",
+                    "error_code": error_code,
                     "error_id": error_id,
                     "error_stage": current_stage,
                     "current_stage": None,
@@ -986,6 +991,7 @@ async def _run_job_body_inner(
             {
                 "job_id": job_id,
                 "error": "Audit failed due to an internal error.",
+                "error_code": error_code,
                 "error_id": error_id,
                 "stage": current_stage,
             },

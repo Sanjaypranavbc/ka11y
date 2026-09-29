@@ -47,7 +47,18 @@ from ka11y.db.engine import is_configured as db_configured
 
 logger = setup_logger(name="KAC", tag="auth")
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+
+async def _masked_when_sign_in_is_off(request: Request) -> None:
+    """With KA11Y_AUTH_DISABLED (the `live` branch) the sign-in screens are
+    masked in the UI, and every route here answers 404 as well, except /me and
+    /config, which the UI reads to learn the visitor is anonymous. A session
+    would grant nothing then (optional_user returns ANONYMOUS); this stops
+    accounts being created and passwords being tried behind the masked screens."""
+    if settings().disabled and not request.url.path.endswith(("/auth/me", "/auth/config")):
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
+router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(_masked_when_sign_in_is_off)])
 
 _OIDC_COOKIE_TTL = 600  # seconds between /login and /callback
 

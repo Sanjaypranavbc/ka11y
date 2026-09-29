@@ -121,13 +121,17 @@ export function MobileNav() {
               </ul>
             )}
             </div>
-            <a
-              href={LOGOUT_URL}
-              className="inline-flex items-center gap-2 px-3 py-3 text-p3 font-medium text-brand-teal"
-            >
-              <LogOut size={16} aria-hidden="true" />
-              {t.nav.logout}
-            </a>
+            {/* Hidden for an anonymous visitor (sign-in masked via
+                KA11Y_AUTH_DISABLED): there is no session to end. */}
+            {!me?.anonymous && (
+              <a
+                href={LOGOUT_URL}
+                className="inline-flex items-center gap-2 px-3 py-3 text-p3 font-medium text-brand-teal"
+              >
+                <LogOut size={16} aria-hidden="true" />
+                {t.nav.logout}
+              </a>
+            )}
           </nav>
         </div>
       )}

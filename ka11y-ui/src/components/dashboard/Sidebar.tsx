@@ -150,21 +150,24 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* Logout */}
-      <div className="border-t border-gray-40 px-6 py-5">
-        {/* Plain anchor, not <Link>: this is a rewrite to the Python API that
-            ends the session, clears the cookie and redirects to /login. */}
-        <a
-          href={LOGOUT_URL}
-          className={cn(
-            "inline-flex items-center gap-2 text-[16px] leading-6 text-brand-green-80 hover:opacity-80",
-            collapsed && "justify-center",
-          )}
-        >
-          <LogOut size={16} aria-hidden="true" />
-          {!collapsed && t.nav.logout}
-        </a>
-      </div>
+      {/* Logout. Hidden when the API reports an anonymous visitor (sign-in
+          masked via KA11Y_AUTH_DISABLED): there is no session to end. */}
+      {!me?.anonymous && (
+        <div className="border-t border-gray-40 px-6 py-5">
+          {/* Plain anchor, not <Link>: this is a rewrite to the Python API that
+              ends the session, clears the cookie and redirects to /login. */}
+          <a
+            href={LOGOUT_URL}
+            className={cn(
+              "inline-flex items-center gap-2 text-[16px] leading-6 text-brand-green-80 hover:opacity-80",
+              collapsed && "justify-center",
+            )}
+          >
+            <LogOut size={16} aria-hidden="true" />
+            {!collapsed && t.nav.logout}
+          </a>
+        </div>
+      )}
     </aside>
   );
 }
