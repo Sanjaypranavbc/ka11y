@@ -99,6 +99,10 @@ class JobStatusResponse(BaseModel):
     # server-side log entry that holds the real traceback. Never contains
     # exception type, message, file path, or any other internal detail.
     error_id: Optional[str] = None
+    # Machine-readable reason, from ka11y.errors. The UI
+    # renders it through its own translations; `error` above stays as the
+    # English fallback so a client built before this field keeps working.
+    error_code: Optional[str] = None
     error_stage: Optional[str] = None
     current_stage: Optional[str] = None
     stages: List[Dict[str, Any]] = []

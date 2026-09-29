@@ -21,6 +21,7 @@ import inspect
 import json
 import os
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -665,6 +666,48 @@ async def _stage_image_audit(
         return [], None, None
 
 
+# A page inside an otherwise-successful crawl that could not be captured. The
+# crawler's warning holds `str(exc)`, which reaches the downloaded report and
+# the dashboard, so only the code and a fixed sentence are carried across; the
+# raw text stays in the server log.
+_PAGE_FAILURE_TEXT = "This page could not be captured during the crawl."
+
+
+def page_failure_entry(warning: Dict[str, Any]) -> Dict[str, Any]:
+    """The report entry for one failed page."""
+    return {
+        "page_url": warning.get("page_url"),
+        "status": "failed",
+        "error": _PAGE_FAILURE_TEXT,
+        "error_code": warning.get("code") or "page_extract_failed",
+    }
+
+
+class CrawlFailedError(Exception):
+    """A crawl that produced nothing, carrying why.
+
+    ``code`` follows the same convention as ``NavigationError.code`` and
+    ``ImageCrawlerNavigationError.code`` so the runner can read ``.code`` off
+    any of them without caring which failed.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        self.code = code
+        super().__init__(message)
+
+
+def _failure_code(warnings: List[Dict[str, Any]]) -> str:
+    """The reason to report when a crawl yields no pages.
+
+    Every page failure already recorded its own code on the way through; the
+    most frequent one is what was wrong with the site. Without this the caller
+    sees "0 pages extracted" and the reason is lost.
+    """
+    counts = Counter(w.get("code") for w in warnings if w.get("code"))
+    ranked = counts.most_common(1)
+    return ranked[0][0] if ranked else "zero_pages_crawled"
+
+
 async def _load_universal_snapshot(
     *,
     url: str,
@@ -749,7 +792,10 @@ async def _load_universal_snapshot(
                 },
             )
     if normalized.pages_crawled == 0:
-        raise Exception("Universal crawl failed: 0 pages extracted")
+        code = _failure_code(normalized.warnings)
+        raise CrawlFailedError(
+            code, f"Universal crawl failed: 0 pages extracted ({code})"
+        )
     return normalized
 
 
@@ -907,7 +953,7 @@ async def _run_python_stages(
             if not pu or pu in seen_pages or pu in seen_failed:
                 continue
             seen_failed.add(pu)
-            crawled_pages.append({"page_url": pu, "status": "failed", "error": w.get("message")})
+            crawled_pages.append(page_failure_entry(w))
 
     snapshot_task = asyncio.Future()
     snapshot_task.set_result(snapshot)

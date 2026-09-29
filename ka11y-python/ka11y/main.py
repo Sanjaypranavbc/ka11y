@@ -9,12 +9,18 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse, RedirectResponse
 
 from ka11y.api.router import router
+from ka11y.errors import (
+    VALIDATION_MESSAGES_EN,
+    classify_validation_error,
+)
 from ka11y.api.v1.combined import _evict_old_jobs
 from ka11y.config.logger import setup_logger
 from ka11y.utils.config_loader import load_config
@@ -366,6 +372,24 @@ app = FastAPI(
     version="0.0.1",
     lifespan=lifespan,
 )
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: StarletteRequest, exc):
+    """Give a rejected request a reason the UI can translate.
+
+    FastAPI's default body is a nested list written for developers, and the
+    audit screen renders whatever it gets. `detail` is left exactly as it was
+    — the Next.js proxy reads it — and the two fields below are added beside
+    it, matching how a failed job already reports itself.
+    """
+    errors = exc.errors()
+    code = classify_validation_error(errors)
+    body: dict = {"detail": jsonable_encoder(errors)}
+    if code:
+        body["error_code"] = code
+        body["error"] = VALIDATION_MESSAGES_EN[code]
+    return JSONResponse(status_code=422, content=body)
+
 
 app.add_middleware(_RateLimitMiddleware)
 app.add_middleware(_SecurityHeadersMiddleware)

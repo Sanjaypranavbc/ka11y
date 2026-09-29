@@ -17,6 +17,7 @@ from ka11y.utils.url_canonical import canonicalize_url
 
 from ka11y.config.logger import setup_logger
 from ka11y.crawler.navigation import navigate_with_resilience, NavigationError
+from ka11y.errors import code_for_status
 from ka11y.crawler.policy import CrawlPolicy
 from ka11y.crawler.cookie_handler import handle_cookies
 from ka11y.utils.step_logger import ExecutionStepLogger
@@ -947,7 +948,22 @@ class UniversalPageLoader:
                     context={"url": url, "depth": depth},
                 )
 
-            await cls._prepare_page(page, url, step_logger=step_logger)
+            response = await cls._prepare_page(page, url, step_logger=step_logger)
+            http_status = response.status if response else None
+            if depth == 0 and http_status is not None and http_status >= 400:
+                # Only the URL the user asked for. A child page answering 404
+                # is a finding about the site; the seed answering 404 is why
+                # the audit has nothing to report. The page still renders, so
+                # the crawl continues and the code is recorded — if nothing
+                # usable comes back, this is what gets reported instead of
+                # "0 pages extracted".
+                output.warnings.append(
+                    {
+                        "code": code_for_status(http_status),
+                        "page_url": url,
+                        "message": f"HTTP {http_status}",
+                    }
+                )
 
             # Stamp every finding with the URL the page actually resolved to,
             # not the URL we queued. A child discovered as ``/worldwide`` may
@@ -1167,8 +1183,10 @@ class UniversalPageLoader:
         url: str,
         *,
         step_logger: ExecutionStepLogger | None,
-    ) -> None:
-        await navigate_with_resilience(page, url)
+    ):
+        """Navigate and settle the page. Returns the navigation response so
+        the caller can read the HTTP status."""
+        response = await navigate_with_resilience(page, url)
 
         try:
             await page.wait_for_load_state(
@@ -1198,6 +1216,8 @@ class UniversalPageLoader:
                 message="Page reached extraction-ready state",
                 context={"url": url},
             )
+
+        return response
 
     @classmethod
     async def _extract_page_chunked(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronRight, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
@@ -110,6 +110,20 @@ export default function NewAuditPage() {
   const [completedCount, setCompletedCount] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The API reports a failure as a code (ka11y/errors.py) plus an English
+  // fallback. Prefer the translated text; fall back to the server's own
+  // sentence so a build older than a new code still reads properly.
+  const errorText = useCallback(
+    (data: { error_code?: string | null; error?: string | null; error_id?: string | null } | null) => {
+      const code = data?.error_code;
+      const translated = code ? t.newAudit.errorCodes[code] : undefined;
+      const base = translated ?? data?.error ?? t.newAudit.errorGeneric;
+      return data?.error_id ? `${base} ${t.newAudit.errorReference(data.error_id)}` : base;
+    },
+    [t],
+  );
+
   const [scanResult, setScanResult] = useState<WcagAuditResponse | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStages, setJobStages] = useState<JobStage[]>([]);
@@ -183,7 +197,7 @@ export default function NewAuditPage() {
 
       if (!res.ok || !data?.jobId) {
         setPhase("form");
-        setError(data?.error ?? t.newAudit.errorGeneric);
+        setError(errorText(data));
         setSubmitting(false);
         return;
       }
@@ -233,7 +247,7 @@ export default function NewAuditPage() {
 
         if (!res.ok) {
           setPhase("form");
-          setError(data?.error ?? t.newAudit.errorGeneric);
+          setError(errorText(data));
           setSubmitting(false);
           return;
         }
@@ -257,7 +271,7 @@ export default function NewAuditPage() {
 
         if (data.status === "failed" || data.status === "cancelled") {
           setPhase("form");
-          setError(data.error ?? t.newAudit.errorGeneric);
+          setError(errorText(data));
           setSubmitting(false);
           return;
         }

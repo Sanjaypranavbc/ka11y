@@ -354,7 +354,11 @@ export default function NeedsReviewPage() {
         {selectedPageInfo?.status === "failed" ? (
           <div className="flex min-h-[50vh] items-center justify-center rounded-2xl bg-gray-10">
             <p className="text-[16px] leading-6 text-gray-60">
-              {t.filters.pageFailedMessage(selectedPageInfo.error)}
+              {t.filters.pageFailedMessage(
+                (selectedPageInfo.error_code
+                  ? t.newAudit.errorCodes[selectedPageInfo.error_code]
+                  : undefined) ?? selectedPageInfo.error,
+              )}
             </p>
           </div>
         ) : (

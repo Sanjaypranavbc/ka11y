@@ -18,13 +18,18 @@ scripts
 ka11y-python/scripts/
 ka11y-python/scripts/live_stage_audit.py
 ka11y-python/scripts/live_stage_plan.example.yml
-.pptx
+*.pptx
 
 /ka11y-python/ka11y/devtools/
 /ka11y-python/tests/test_dual_cli_chat.py
 
+*.docx
+*.png
+
+
 # Protect Environment Variables
 .env
+.env.example    
 
 # Auto-generated outputs
 combined_report_*.json
@@ -57,3 +62,12 @@ criteria-extraction-rules.md
 SKILL.md
 MASTER_SYSTEM_ANALYSIS_2026-07-06.md
 json-output-schema.md
+STAGE1_ERROR_HANDLING_PLAN.md
+.gitignore
+【花王AWSマネージドサイト】サービス導入ガイドライン-202404.pdf
+a11y-findings (4).csv
+.gitignore
+scratchpad/stage1-baseline-result.txt
+
+ka11y-python/.env.example
+ka11y-python/.env.example

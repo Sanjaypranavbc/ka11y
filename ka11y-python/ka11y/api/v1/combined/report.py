@@ -386,6 +386,7 @@ def _build_report(
                 "needs_review": 0,
                 "passes": 0,
                 "error": cp.get("error") if status == "failed" else None,
+                "error_code": cp.get("error_code") if status == "failed" else None,
             }
         )
 

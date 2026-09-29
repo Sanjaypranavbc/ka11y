@@ -26,8 +26,9 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from typing import AsyncGenerator
+from ka11y.config.logger import setup_logger
 from ka11y.utils.run_timing import compute_run_timing
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from .dispatcher import enqueue
 from .models import CombinedRequest, JobStatusResponse
 from ka11y.observability import attributes as attrs
@@ -78,6 +79,16 @@ def _ip_is_blocked(ip_str: str) -> bool:
         return False
     return any(addr in net for net in _BLOCKED_NETWORKS)
 
+
+logger = setup_logger(name="KAC", tag="combined")
+
+# One sentence for every reason a target is refused, so the response cannot be
+# used to tell an internal hostname from a non-existent one. Wording matches
+# `url_not_allowed` in ka11y.errors.
+_NOT_PUBLIC_DETAIL = (
+    "The specified target is not permitted. "
+    "Only publicly routable hosts may be audited."
+)
 
 router = APIRouter(prefix="/combined", tags=["combined audit"])
 
@@ -176,41 +187,45 @@ async def assert_public_url(url: str) -> None:
             detail="URL hostname 'localhost' is not allowed (private/loopback address).",
         )
 
-    # Literal IP host
+    # Literal IP host. The check has to be made here, not inferred from
+    # _is_non_public_ip raising: that helper swallows the ValueError and
+    # returns False, so the old `except ValueError` never ran and the `return`
+    # below it fired for every hostname — skipping DNS resolution entirely.
     try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass  # a name, not an address: resolve it below
+    else:
         if _is_non_public_ip(host):
             raise HTTPException(
                 status_code=400,
                 detail=f"URL hostname '{host}' is not allowed (private/loopback address).",
             )
         return
-    except ValueError:
-        # Not a literal IP, continue with DNS resolution.
-        pass
 
+    # Every rejection below answers with the same sentence and never names a
+    # resolved address. Reporting the address, or distinguishing "does not
+    # resolve" from "resolves internally", would let anyone who can submit an
+    # audit use this endpoint to map internal DNS. The specific reason is
+    # logged instead.
     try:
         resolved = await _resolve_all_ips(host)
     except socket.gaierror:
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL hostname '{host}' could not be resolved.",
-        )
+        logger.info("[ssrf] refused %s: hostname does not resolve", host)
+        raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
 
     if not resolved:
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL hostname '{host}' resolved to no addresses.",
-        )
+        logger.info("[ssrf] refused %s: resolved to no addresses", host)
+        raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
 
     blocked = [ip for ip in resolved if _is_non_public_ip(ip)]
     if blocked:
-        sample = ", ".join(blocked[:3])
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"URL hostname '{host}' resolves to private/loopback address(es): {sample}."
-            ),
+        logger.warning(
+            "[ssrf] refused %s: resolves to non-public address(es) %s",
+            host,
+            ", ".join(blocked[:3]),
         )
+        raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
 
 
 @router.post("/python-audit", response_model=JobStatusResponse, status_code=202)
@@ -233,7 +248,10 @@ async def submit_python_audit(
 
 @router.post("/combined-audit", response_model=JobStatusResponse, status_code=202)
 async def submit_combined_audit(
-    url: str,
+    # HttpUrl, not str: as a plain str the CombinedRequest below is built
+    # inside the handler, so a bad URL raised pydantic.ValidationError rather
+    # than a request-validation error and the caller got 500 for a typo.
+    url: HttpUrl = Query(...),
     max_depth: int = Query(0, ge=0, le=5),
     max_pages: int = Query(20, ge=1, le=200),
     wcag_level: str = Query("AAA", pattern=r"^(A|AA|AAA)$"),
@@ -263,7 +281,7 @@ async def submit_combined_audit(
     for status and the full report.
     """
     payload = CombinedRequest(
-        url=url,
+        url=str(url),
         max_depth=max_depth,
         max_pages=max_pages,
         wcag_level=wcag_level,
@@ -331,9 +349,6 @@ async def _admit_run(
         )
 
     await enqueue(job_id, payload)
-    from ka11y.config.logger import setup_logger
-    logger = setup_logger(name="KAC", tag="combined")
-
     logger.info(f"[combined] Job {job_id} submitted for {url}")
     # Stamp the job id on the HTTP span (the middleware's, still current here).
     # The audit runs as its own trace, so this attribute is the thread that
@@ -466,6 +481,9 @@ async def _job_from_db(job_id: str) -> dict | None:
         "report_path": run.get("output_dir"),
         "result": result,
         "error": None if run.get("status") != "failed" else "Audit failed due to an internal error.",
+        # Reconstructed from the durable store, which has no error_code column
+        # until the Postgres migration. The UI falls back to `error` above.
+        "error_code": run.get("error_code"),
         "error_id": run.get("error_id"),
         "error_stage": run.get("error_stage"),
         "current_stage": None,
@@ -748,10 +766,12 @@ async def stream_combined_audit(job_id: str):
                     f"data: {json.dumps({'job_id': job_id, 'summary': rep.get('summary', {})})}\n\n"
                 )
             elif status == "failed":
-                yield (
-                    f"event: job_failed\n"
-                    f"data: {json.dumps({'job_id': job_id, 'error': 'Audit failed due to an internal error.'})}\n\n"
-                )
+                failure = {
+                    "job_id": job_id,
+                    "error": "Audit failed due to an internal error.",
+                    "error_code": _jobs.get(job_id, {}).get("error_code"),
+                }
+                yield f"event: job_failed\ndata: {json.dumps(failure)}\n\n"
             else:
                 yield f"event: job_state\ndata: {json.dumps({'status': status})}\n\n"
 
