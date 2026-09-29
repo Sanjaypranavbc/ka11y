@@ -311,3 +311,58 @@ def test_capture_failure_still_reports_as_capture_failure():
         PAGE_URL,
     )
     assert findings[0]["reason_code"] == "capture_failed"
+
+
+# ── Crawl depth is limited to 0, 1, 2 ─────────────────────────────────────────
+
+
+def test_combined_request_accepts_depth_0_to_2():
+    for depth in (0, 1, 2):
+        assert CombinedRequest(url="https://example.com", max_depth=depth).max_depth == depth
+
+
+def test_combined_request_defaults_missing_depth_to_0():
+    assert CombinedRequest(url="https://example.com").max_depth == 0
+
+
+def test_submit_endpoint_defaults_missing_depth_to_0():
+    import inspect
+
+    from ka11y.api.v1.combined.routes import submit_combined_audit
+
+    default = inspect.signature(submit_combined_audit).parameters["max_depth"].default
+    assert default.default == 0
+
+
+def test_combined_request_rejects_depth_outside_0_to_2():
+    import pytest
+    from pydantic import ValidationError
+
+    for depth in (-1, 3, 5):
+        with pytest.raises(ValidationError, match="Crawl depth must be 0, 1 or 2."):
+            CombinedRequest(url="https://example.com", max_depth=depth)
+
+
+# ── TEMPORARILY DISABLED: logo classification ignored in fails / needs_review / passes
+
+
+def test_logo_helpers_recognise_crawler_records_and_ocr_results():
+    from ka11y.api.v1.combined.findings import (
+        _is_logo_image,
+        _is_logo_ocr_result,
+        _without_logos,
+    )
+
+    assert _is_logo_image({"sub_type": "logos"})
+    assert _is_logo_image({"sub_type": "images", "is_logo": "True"})
+    assert _is_logo_image(SimpleNamespace(sub_type="logos", is_logo=False))
+    assert not _is_logo_image({"sub_type": "images", "is_logo": False})
+    assert not _is_logo_image(SimpleNamespace())
+
+    assert _is_logo_ocr_result(SimpleNamespace(category="logo_text", original_path="/x/a.png"))
+    assert _is_logo_ocr_result(SimpleNamespace(category="", original_path="/x/informative/logos/a.png"))
+    assert not _is_logo_ocr_result(SimpleNamespace(category="button_text", original_path="/x/a.png"))
+
+    records = [{"sub_type": "logos"}, {"sub_type": "images"}]
+    assert _without_logos(records) == [{"sub_type": "images"}]
+    assert _without_logos([]) == []

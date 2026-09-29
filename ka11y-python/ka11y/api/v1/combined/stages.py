@@ -44,7 +44,9 @@ from .findings import (
     _build_contrast_report,
     _build_image_audit_report,
     _contrast_capture_failed_to_findings,
+    _is_logo_ocr_result,
     _media_to_findings,
+    _without_logos,
 )
 from .stage_events import (
     _record_crawler_time,
@@ -552,6 +554,8 @@ async def _stage_image_audit(
                 if _fn and _sc:
                     src_by_filename[_fn] = _sc
             contrast_report = _build_contrast_report(ocr_results, page_by_filename)
+            # TEMPORARILY DISABLED: logo classification ignored in fails / needs_review / passes
+            ocr_results_for_findings = _without_logos(ocr_results, _is_logo_ocr_result)
             for rule_sc, converter in OCR_RESULT_CONVERTERS:
                 with stage_timing.time_stage(
                     job_id,
@@ -562,14 +566,20 @@ async def _stage_image_audit(
                 ):
                     findings.extend(
                         converter(
-                            ocr_results,
+                            # TEMPORARILY DISABLED: logo classification ignored in fails / needs_review / passes
+                            # ocr_results,
+                            ocr_results_for_findings,
                             url,
                             page_by_filename=page_by_filename,
                             src_by_filename=src_by_filename,
                         )
                     )
+            # TEMPORARILY DISABLED: logo classification ignored in fails / needs_review / passes
+            # findings.extend(
+            #     _contrast_capture_failed_to_findings(image_crawler.images_data, url)
+            # )
             findings.extend(
-                _contrast_capture_failed_to_findings(image_crawler.images_data, url)
+                _contrast_capture_failed_to_findings(_without_logos(image_crawler.images_data), url)
             )
 
         if run_image_audit:
@@ -606,12 +616,20 @@ async def _stage_image_audit(
                 from ka11y.accessibility.rules.media.animated_images import animated_images_to_findings
 
                 with stage_timing.time_stage(job_id, "image_audit", sub_stage="animated_images", rule="2.2.2"):
+                    # TEMPORARILY DISABLED: logo classification ignored in fails / needs_review / passes
+                    # findings.extend(
+                    #     await asyncio.to_thread(animated_images_to_findings, image_crawler.images_data, url)
+                    # )
                     findings.extend(
-                        await asyncio.to_thread(animated_images_to_findings, image_crawler.images_data, url)
+                        await asyncio.to_thread(
+                            animated_images_to_findings, _without_logos(image_crawler.images_data), url
+                        )
                     )
             except Exception as _anim_exc:  # best-effort
                 logger.warning(f"[combined] image_audit: animated image scan skipped: {_anim_exc}")
 
+            # TEMPORARILY DISABLED: logo classification ignored in fails / needs_review / passes
+            records_for_findings = _without_logos(records)
             for status_key, converter in IMAGE_AUDIT_RECORD_CONVERTERS:
                 _rule = (
                     status_key.replace("wcag_", "")
@@ -623,9 +641,11 @@ async def _stage_image_audit(
                     "image_audit",
                     sub_stage="image_audit_converter",
                     rule=_rule,
-                    extra={"input_count": len(records)},
+                    extra={"input_count": len(records_for_findings)},
                 ):
-                    findings.extend(converter(records, url))
+                    # TEMPORARILY DISABLED: logo classification ignored in fails / needs_review / passes
+                    # findings.extend(converter(records, url))
+                    findings.extend(converter(records_for_findings, url))
         else:
             records = []
 

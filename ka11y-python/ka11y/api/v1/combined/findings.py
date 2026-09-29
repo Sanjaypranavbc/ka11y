@@ -353,6 +353,39 @@ def _infer_classification(path: str) -> str:
     return "other"
 
 
+# ── Logo classification filter ────────────────────────────────────────────────
+#
+# TEMPORARILY DISABLED: logo classification ignored in fails / needs_review / passes.
+# Images the crawler classified as logos (sub_type "logos" / is_logo, OCR
+# category "logo_text") are dropped before they are turned into findings, so
+# they reach no bucket, summary count, chart or export. The image audit itself
+# still runs on them; only the conversion is skipped. To re-enable, restore the
+# commented-out converter calls in stages._stage_image_audit.
+
+
+def _is_logo_image(item: Any) -> bool:
+    """True for a crawler image or image-audit record classified as a logo."""
+    if isinstance(item, dict):
+        sub_type, is_logo = item.get("sub_type"), item.get("is_logo")
+    else:
+        sub_type, is_logo = getattr(item, "sub_type", None), getattr(item, "is_logo", False)
+    return str(sub_type or "").strip().lower() == "logos" or is_logo in (True, "True", "true", 1)
+
+
+def _is_logo_ocr_result(result: Any) -> bool:
+    """True for an OCR result taken from an image classified as a logo."""
+    if str(getattr(result, "category", "") or "").lower() == "logo_text":
+        return True
+    return _infer_classification(str(getattr(result, "original_path", "") or "")) in (
+        "logo",
+        "functional_logo",
+    )
+
+
+def _without_logos(items: list, is_logo=_is_logo_image) -> list:
+    return [item for item in items if not is_logo(item)]
+
+
 # ── Contrast report builder ───────────────────────────────────────────────────
 
 

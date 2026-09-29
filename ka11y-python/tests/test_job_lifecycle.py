@@ -337,3 +337,17 @@ async def test_assert_public_url_blocks_hostnames_resolving_privately(monkeypatc
 async def test_assert_public_url_accepts_public_hostname(monkeypatch):
     monkeypatch.setattr(routes, "_resolve_hostname", lambda host: ("93.184.216.34",))
     await routes.assert_public_url("https://example.com/page")  # no exception
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("depth", [-1, 3, 5])
+async def test_submit_combined_audit_rejects_depth_outside_0_to_2(depth):
+    """The query-string endpoint the UI uses answers 422 with a readable
+    message (not a 500 from a ValidationError inside the handler)."""
+    with pytest.raises(HTTPException) as exc:
+        await routes.submit_combined_audit(
+            url="https://example.com", max_depth=depth, max_pages=20, wcag_level="AA",
+            email=None, lang="auto", user=_user(),
+        )
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "Crawl depth must be 0, 1 or 2."

@@ -27,7 +27,7 @@ from typing import Any, AsyncGenerator
 from ka11y.utils.run_timing import compute_run_timing
 from pydantic import BaseModel, Field
 from .dispatcher import enqueue
-from .models import CombinedRequest, JobStatusResponse
+from .models import ALLOWED_CRAWL_DEPTHS, CRAWL_DEPTH_ERROR, CombinedRequest, JobStatusResponse
 from ka11y.observability import attributes as attrs
 from ka11y.observability import current_span, set_span_attributes
 from .report import apply_reviews, review_message
@@ -131,7 +131,7 @@ async def submit_python_audit(
 @router.post("/combined-audit", response_model=JobStatusResponse, status_code=202)
 async def submit_combined_audit(
     url: str,
-    max_depth: int = Query(0, ge=0, le=5),
+    max_depth: int = Query(0),
     max_pages: int = Query(20, ge=1, le=200),
     wcag_level: str = Query("AAA", pattern=r"^(A|AA|AAA)$"),
     email: str | None = Query(None, max_length=254),
@@ -145,7 +145,8 @@ async def submit_combined_audit(
     of a full JSON request body. All active Python audit stages are enabled by
     default (image audit, OCR/contrast, media, captions).
 
-    `max_depth` (0-5): extra pages to crawl beyond `url` itself. 0 = single page.
+    `max_depth` (0, 1 or 2): link depth to crawl beyond `url` itself. 0 = single
+    page. Any other value is rejected with 422.
     `max_pages` (default 20): page budget for the whole crawl; values above the
     20-page policy ceiling are silently capped rather than rejected (see
     ``CombinedRequest._cap_max_pages``).
@@ -159,6 +160,10 @@ async def submit_combined_audit(
     Returns `job_id` immediately (HTTP 202). Poll **GET /api/v1/combined/{job_id}**
     for status and the full report.
     """
+    # Checked here rather than left to CombinedRequest: a ValidationError raised
+    # inside the handler would surface as a 500, not a 422.
+    if max_depth not in ALLOWED_CRAWL_DEPTHS:
+        raise HTTPException(status_code=422, detail=CRAWL_DEPTH_ERROR)
     payload = CombinedRequest(
         url=url,
         max_depth=max_depth,

@@ -8,7 +8,7 @@ import { AuditStatusDonut } from "@/components/admin/charts/AuditStatusDonut";
 import { PagesAuditedChart } from "@/components/admin/charts/PagesAuditedChart";
 import { RecentAuditsTable } from "@/components/admin/RecentAuditsTable";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
-import { formatCompact, formatNumber } from "@/lib/admin/format";
+import { formatNumber } from "@/lib/admin/format";
 
 export default function AdminOverviewPage() {
   const { t, lang } = useLanguage();
@@ -60,12 +60,11 @@ export default function AdminOverviewPage() {
                 trend={data.stats.totalAuditsTrend}
               />
               <StatCard
-                label={s.totalFails}
-                value={formatCompact(data.stats.totalFails, lang)}
-                valueLabel={formatNumber(data.stats.totalFails, lang)}
+                label={s.failedWebsites}
+                value={formatNumber(data.stats.failedWebsites, lang)}
                 icon={<AlertTriangle size={22} />}
                 iconTone="amber"
-                trend={data.stats.totalFailsTrend}
+                trend={data.stats.failedWebsitesTrend}
               />
               <StatCard
                 label={s.systemHealth}

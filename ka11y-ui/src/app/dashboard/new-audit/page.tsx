@@ -2,7 +2,8 @@
 
 import { Suspense, useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckCircle2, ChevronRight, ExternalLink } from "lucide-react";
+import { CheckCircle2, ChevronRight, ExternalLink, Info } from "lucide-react";
+import { CrawlDepthStepper } from "@/components/dashboard/CrawlDepthStepper";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadReportMenu } from "@/components/dashboard/DownloadActions";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
@@ -11,6 +12,7 @@ import { computeRealProgress, isActive } from "@/lib/runningAudit";
 import type { Translations } from "@/lib/i18n/translations";
 import { cn } from "@/lib/utils";
 import { redirectToLogin } from "@/lib/auth";
+import { DEFAULT_CRAWL_DEPTH, isCrawlDepth, type CrawlDepth } from "@/lib/crawlDepth";
 
 type WcagLevel = "A" | "AA" | "AAA";
 function buildScanSteps(t: Translations) {
@@ -71,7 +73,7 @@ function NewAuditPage() {
   const SCAN_STEPS = useMemo(() => buildScanSteps(t), [t]);
   const ACTUAL_STEPS = useMemo(() => SCAN_STEPS.filter((s) => s.type === "step"), [SCAN_STEPS]);
   const [url, setUrl] = useState("");
-  const [depth, setDepth] = useState(0);
+  const [depth, setDepth] = useState<CrawlDepth>(DEFAULT_CRAWL_DEPTH);
   const [showCrawlTooltip, setShowCrawlTooltip] = useState(false);
   const [wcagLevel, setWcagLevel] = useState<WcagLevel>("AA");
   const [email, setEmail] = useState("");
@@ -153,6 +155,12 @@ function NewAuditPage() {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) {
       setError(t.newAudit.errorEmptyUrl);
+      return;
+    }
+
+    // The stepper cannot produce anything else; this guards the request body.
+    if (!isCrawlDepth(depth)) {
+      setError(t.newAudit.errorDepthRange);
       return;
     }
 
@@ -270,21 +278,25 @@ function NewAuditPage() {
         <main className="flex flex-1 px-4 py-6 sm:px-8 sm:py-8 lg:px-16 lg:py-10">
           <div className="w-full rounded-[16px] bg-gray-10 px-4 py-6 flex flex-col gap-6 sm:px-10 sm:py-10">
 
-            {(lockedNotice || running.depth > 0 || error) && (
-              <div className="flex flex-col gap-2">
-                {lockedNotice && (
-                  <p role="status" className="rounded-[8px] border border-brand-green-80 bg-white px-4 py-3 text-[14px] leading-6 text-gray-100">
-                    {t.newAudit.lockedNotice}
-                  </p>
-                )}
-                {running.depth > 0 && running.email && (
-                  <p className="text-[14px] leading-6 text-gray-80">{t.newAudit.deepCrawlNote(running.email)}</p>
-                )}
-                {error && (
-                  <p role="alert" className="text-[14px] leading-6 text-red-600">{error}</p>
-                )}
-              </div>
-            )}
+            <div className="flex flex-col gap-2">
+              {/* Only rendered on this scanning screen, so it goes away as soon
+                  as the audit completes, fails or is cancelled. */}
+              <p className="flex items-start gap-2 rounded-[8px] border border-brand-teal bg-white px-4 py-3 text-[14px] leading-6 text-gray-100">
+                <Info size={18} className="mt-[3px] shrink-0 text-brand-teal-dark" aria-hidden="true" />
+                <span>{t.newAudit.waitNotice}</span>
+              </p>
+              {lockedNotice && (
+                <p role="status" className="rounded-[8px] border border-brand-green-80 bg-white px-4 py-3 text-[14px] leading-6 text-gray-100">
+                  {t.newAudit.lockedNotice}
+                </p>
+              )}
+              {running.depth > 0 && running.email && (
+                <p className="text-[14px] leading-6 text-gray-80">{t.newAudit.deepCrawlNote(running.email)}</p>
+              )}
+              {error && (
+                <p role="alert" className="text-[14px] leading-6 text-red-600">{error}</p>
+              )}
+            </div>
 
             {/* Progress bar */}
             <div className="flex flex-col gap-2">
@@ -399,9 +411,9 @@ function NewAuditPage() {
               {/* Crawl Depth */}
               <div className="relative flex flex-1 flex-col gap-2">
                 <div className="flex items-center gap-1.5">
-                  <label htmlFor="max-depth" className="text-[16px] leading-6 text-gray-100">
+                  <span className="text-[16px] leading-6 text-gray-100">
                     {t.newAudit.maxDepthLabel}
-                  </label>
+                  </span>
                   <button
                     type="button"
                     onClick={() => setShowCrawlTooltip((prev) => !prev)}
@@ -427,45 +439,13 @@ function NewAuditPage() {
                     {t.newAudit.crawlDepthLevels.map((lvl, idx) => (
                       <div key={idx} className={cn(idx > 0 && "mt-4 border-t border-gray-100 pt-4")}>
                         <h4 className="text-[14px] font-bold text-gray-900">{lvl.label}</h4>
-                        {lvl.bullets ? (
-                          <ul className="mt-1.5 list-disc space-y-1 pl-4 text-[13px] leading-relaxed text-gray-600">
-                            {lvl.bullets.map((line) => (
-                              <li key={line}>{line}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">{lvl.body}</p>
-                        )}
+                        <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">{lvl.body}</p>
                       </div>
                     ))}
                   </div>
                 )}
 
-                <div className="flex h-12 items-center justify-between rounded-[8px] border border-gray-40 bg-white px-4">
-                  <span className="text-[16px] leading-6 text-gray-100">{depth}</span>
-                  <div className="flex flex-col gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setDepth((d) => d + 1)}
-                      aria-label={t.newAudit.increaseDepth}
-                      className="flex h-4 w-4 items-center justify-center text-gray-60 hover:text-gray-100"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M4 10L8 6L12 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDepth((d) => Math.max(0, d - 1))}
-                      aria-label={t.newAudit.decreaseDepth}
-                      className="flex h-4 w-4 items-center justify-center text-gray-60 hover:text-gray-100"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+                <CrawlDepthStepper value={depth} onChange={setDepth} />
               </div>
 
               {/* WCAG Level */}

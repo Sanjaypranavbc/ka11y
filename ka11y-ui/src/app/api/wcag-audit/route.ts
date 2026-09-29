@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { forwardedHeaders } from "@/lib/forwardedHeaders";
+import { buildCombinedAuditUrl } from "@/lib/combinedAuditUrl";
+import { CRAWL_DEPTH_ERROR, parseCrawlDepth } from "@/lib/crawlDepth";
 
 const WCAG_API_URL =
   process.env.WCAG_API_URL ??
@@ -14,7 +16,7 @@ const WCAG_API_URL =
 export async function POST(request: Request) {
   let body: {
     url?: string;
-    maxDepth?: number;
+    maxDepth?: unknown;
     wcagLevel?: string;
     email?: string;
     lang?: string;
@@ -39,14 +41,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Enter a valid URL" }, { status: 400 });
   }
 
-  // Extra pages to crawl from the site's sitemap/links beyond `url` itself.
-  // Clamped to match the Python/Node-side cap (0-5) so an out-of-range value
-  // here fails fast instead of being silently reinterpreted downstream.
-  const rawDepth = body.maxDepth;
-  const maxDepth =
-    typeof rawDepth === "number" && Number.isFinite(rawDepth)
-      ? Math.min(Math.max(Math.trunc(rawDepth), 0), 5)
-      : 0;
+  // Link depth to crawl beyond `url` itself. Only 0, 1 and 2 are offered and
+  // a missing value means 0; anything else is rejected (the Python API
+  // enforces the same rule) rather than clamped, so a hand-crafted request
+  // cannot widen the crawl.
+  const maxDepth = parseCrawlDepth(body.maxDepth);
+  if (maxDepth === null) {
+    return NextResponse.json({ error: CRAWL_DEPTH_ERROR }, { status: 400 });
+  }
 
   // Conformance level to report against. The backend filter is cumulative —
   // "AA" returns A + AA findings and suppresses AAA. Anything unrecognised
@@ -67,15 +69,15 @@ export async function POST(request: Request) {
   const lang = UI_LANG_TO_LOCALE[body.lang ?? ""] ?? "auto";
 
   try {
-    const submitUrl = new URL(`${WCAG_API_URL}/combined-audit`);
-    submitUrl.searchParams.set("url", url);
-    submitUrl.searchParams.set("max_depth", String(maxDepth));
-    submitUrl.searchParams.set("wcag_level", wcagLevel);
-    submitUrl.searchParams.set("lang", lang);
-    // Only sent when the user supplied one. A deep crawl outlives the browser's
-    // wait, so this is how the finished report reaches them.
-    const email = body.email?.trim();
-    if (email) submitUrl.searchParams.set("email", email);
+    // Email is only sent when the user supplied one. A deep crawl outlives
+    // the browser's wait, so this is how the finished report reaches them.
+    const submitUrl = buildCombinedAuditUrl(WCAG_API_URL, {
+      url,
+      maxDepth,
+      wcagLevel,
+      lang,
+      email: body.email,
+    });
 
     const submitRes = await fetch(submitUrl.toString(), {
       method: "POST",

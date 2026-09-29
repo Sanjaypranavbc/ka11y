@@ -1,8 +1,8 @@
 "use client";
 
 import { useId, useRef } from "react";
-import { CircleAlert, CircleCheck, CircleX, Clock, Download, ExternalLink, FileText, Play, X } from "lucide-react";
-import type { AuditEvent, AuditJob, Severity } from "@/lib/admin/data";
+import { CircleAlert, CircleCheck, Clock, Download, ExternalLink, FileText, X } from "lucide-react";
+import type { AuditJob, Severity } from "@/lib/admin/data";
 import { SEVERITY_ORDER } from "@/lib/admin/data";
 import { formatBytes, formatDateTime, formatNumber, formatTime } from "@/lib/admin/format";
 import { useFocusTrap } from "@/lib/admin/useFocusTrap";
@@ -16,14 +16,6 @@ const SEVERITY_DOT: Record<Severity, string> = {
   serious: "bg-adm-sev-serious",
   moderate: "bg-adm-sev-moderate",
   minor: "bg-adm-sev-minor",
-};
-
-const EVENT_ICON: Record<AuditEvent["code"], { Icon: typeof CircleCheck; className: string }> = {
-  JOB_COMPLETED: { Icon: CircleCheck, className: "bg-adm-completed-bg text-adm-completed" },
-  REPORT_GENERATED: { Icon: FileText, className: "bg-adm-running-bg text-adm-running" },
-  JOB_STARTED: { Icon: Play, className: "bg-adm-running-bg text-adm-running" },
-  JOB_FAILED: { Icon: CircleX, className: "bg-adm-failed-bg text-adm-failed" },
-  NEEDS_REVIEW: { Icon: CircleAlert, className: "bg-adm-review-bg text-adm-review" },
 };
 
 interface AuditDetailsDrawerProps {
@@ -262,33 +254,6 @@ function OverviewTab({ job }: { job: AuditJob }) {
             <span className="sr-only">({t.admin.drawer.opensInNewTab})</span>
           </a>
         </div>
-      </Panel>
-
-      <Panel id={`${id}-events`} title={t.admin.drawer.recentEvents}>
-        <ol className="flex flex-col divide-y divide-adm-border">
-          {job.events.map((event) => {
-            const { Icon, className } = EVENT_ICON[event.code];
-            return (
-              <li key={`${event.code}-${event.at}`} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
-                <span aria-hidden="true" className={cn("inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full", className)}>
-                  <Icon size={14} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-[13px] font-semibold uppercase leading-5 tracking-wide text-gray-100">
-                      <span aria-hidden="true">{event.code}</span>
-                      <span className="sr-only">{t.admin.drawer.eventCodes[event.code]}</span>
-                    </p>
-                    <time dateTime={event.at} className="text-[12px] leading-4 text-gray-80">
-                      {formatTime(event.at, lang)}
-                    </time>
-                  </div>
-                  <p className="text-[13px] leading-5 text-gray-80">{event.message}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
       </Panel>
     </div>
   );

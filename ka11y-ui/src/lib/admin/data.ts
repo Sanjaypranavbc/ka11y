@@ -29,8 +29,10 @@ export interface OverviewStats {
   totalUsersTrend: StatTrend;
   totalAudits: number;
   totalAuditsTrend: StatTrend;
-  totalFails: number;
-  totalFailsTrend: StatTrend;
+  /** Distinct websites (target hosts) with at least one audit that recorded fails. */
+  failedWebsites: number;
+  /** Failed websites among audits created in the last 30 days. */
+  failedWebsitesTrend: StatTrend;
   systemHealth: "healthy" | "degraded";
 }
 
@@ -78,12 +80,6 @@ export interface AuditLogLine {
   message: string;
 }
 
-export interface AuditEvent {
-  code: "JOB_STARTED" | "JOB_COMPLETED" | "JOB_FAILED" | "REPORT_GENERATED" | "NEEDS_REVIEW";
-  at: string;
-  message: string;
-}
-
 export interface AuditJob {
   id: string;
   targetHost: string;
@@ -107,7 +103,6 @@ export interface AuditJob {
   failList: AuditFail[];
   reports: AuditReport[];
   logs: AuditLogLine[];
-  events: AuditEvent[];
   s3Href: string;
   reportHref: string;
   csvHref: string;

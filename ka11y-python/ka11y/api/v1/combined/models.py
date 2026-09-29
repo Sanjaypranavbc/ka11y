@@ -30,10 +30,17 @@ _SC_STAGE_PREREQUISITES = {
 }
 
 
+# Crawl depths the product offers: 0 = the target page only, 1 = its direct
+# links, 2 = one level further. Anything else is rejected, not clamped, so an
+# out-of-range value from a hand-crafted request fails loudly.
+ALLOWED_CRAWL_DEPTHS = (0, 1, 2)
+CRAWL_DEPTH_ERROR = "Crawl depth must be 0, 1 or 2."
+
+
 class CombinedRequest(BaseModel):
     url: HttpUrl
-    # max_depth: 0 = single-page; capped at 5 to prevent exponential crawl DoS
-    max_depth: int = Field(default=0, ge=0, le=5)
+    # max_depth: 0 = single-page; see ALLOWED_CRAWL_DEPTHS
+    max_depth: int = 0
     # internal_links: retained as a safeguard. The crawl ALWAYS follows only
     # exact-hostname (domain-specific) links and never leaves the audited domain
     # — in both the Python crawl and the Node BFS — regardless of this flag.
@@ -60,6 +67,13 @@ class CombinedRequest(BaseModel):
         max_length=254,
         pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
     )
+
+    @field_validator("max_depth")
+    @classmethod
+    def _check_max_depth(cls, v: int) -> int:
+        if v not in ALLOWED_CRAWL_DEPTHS:
+            raise ValueError(CRAWL_DEPTH_ERROR)
+        return v
 
     @field_validator("max_pages")
     @classmethod

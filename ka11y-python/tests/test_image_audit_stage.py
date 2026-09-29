@@ -187,3 +187,68 @@ async def test_stage_image_audit_surfaces_dns_resolution_warning():
     assert stage["status"] == "error"
 
     store._jobs.pop(job_id, None)
+
+
+@pytest.mark.asyncio
+async def test_stage_image_audit_ignores_logo_images(tmp_path):
+    """TEMPORARILY DISABLED logo classification: a logo image yields no finding
+    in any bucket, while the other images on the page still do."""
+    from types import SimpleNamespace
+
+    from ka11y.api.v1.combined import store
+    from ka11y.api.v1.combined.stages import _stage_image_audit
+
+    job_id = "image-audit-logo-filter"
+    store._jobs[job_id] = {
+        "job_id": job_id, "status": "running", "url": "https://example.com/",
+        "submitted_at": "2026-09-29T00:00:00+00:00", "_created_at": 0,
+        "completed_at": None, "report_path": None, "result": None, "error": None,
+        "current_stage": None, "stages": [], "warnings": [], "step_log_path": None,
+    }
+    logo = SimpleNamespace(src="https://example.com/brand.png", url="https://example.com/",
+                           sub_type="logos", is_logo=True, capture_status="ok")
+    photo = SimpleNamespace(src="https://example.com/photo.png", url="https://example.com/",
+                            sub_type="images", is_logo=False, capture_status="ok")
+
+    class DummyCrawler:
+        def __init__(self, **kwargs):
+            self.images_data = [logo, photo]
+            self.output_dir = str(tmp_path)
+
+        async def crawl_page(self, **kwargs):
+            return None
+
+        def save_results(self):
+            return None
+
+    def record(img):
+        return {"src": img.src, "url": img.url, "sub_type": img.sub_type, "is_logo": img.is_logo,
+                "alt_text": None, "wcag_1_1_1_status": "FAILED", "wcag_1_1_1_reason": "missing alt"}
+
+    class DummyAuditor:
+        def generate_audit_report(self, *, images_data, **kwargs):
+            return [record(img) for img in images_data]
+
+    animated_input = []
+
+    def fake_animated(images_data, page_url):
+        animated_input.extend(images_data)
+        return []
+
+    with patch("ka11y.crawler.optimized.optimized_crawler.OptimizedImageCrawler", DummyCrawler), patch(
+        "ka11y.accessibility.rules.non_text.alttext.AltTextAccessibilityAuditor", DummyAuditor
+    ), patch(
+        "ka11y.accessibility.rules.media.animated_images.animated_images_to_findings", fake_animated
+    ):
+        findings, _contrast, image_audit_report = await _stage_image_audit(
+            url="https://example.com/", output_dir=tmp_path, max_depth=0,
+            run_ocr=False, run_image_audit=True, job_id=job_id, lang="en", step_logger=None,
+        )
+    store._jobs.pop(job_id, None)
+
+    html = " ".join((f.get("element") or {}).get("html", "") for f in findings)
+    assert "photo.png" in html
+    assert "brand.png" not in html
+    assert animated_input == [photo]
+    # The raw image-audit report still lists every audited image.
+    assert image_audit_report["summary"]["total_images"] == 2

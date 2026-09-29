@@ -377,11 +377,21 @@ async def _stats() -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         jobs_prev = await count(
             select(func.count()).select_from(AuditJob).where(AuditJob.created_at >= d60, AuditJob.created_at < d30)
         )
-        fails_stmt = select(func.coalesce(func.sum(AuditSummary.total_fails), 0)).select_from(AuditSummary)
-        fails_total = await count(fails_stmt)
-        joined = fails_stmt.join(AuditJob, AuditJob.id == AuditSummary.job_id)
-        fails_30 = await count(joined.where(AuditJob.created_at >= d30))
-        fails_prev = await count(joined.where(AuditJob.created_at >= d60, AuditJob.created_at < d30))
+        # A website counts as failed when any of its audits recorded at least
+        # one fail. Websites are target hosts, so several audited pages of one
+        # site count once.
+        failing_urls = (
+            select(AuditJob.target_url)
+            .join(AuditSummary, AuditSummary.job_id == AuditJob.id)
+            .where(AuditSummary.total_fails > 0)
+            .distinct()
+        )
+
+        async def failed_websites(stmt) -> int:
+            return len({_host(u) for u in (await s.execute(stmt)).scalars().all() if u})
+
+        failed_sites_total = await failed_websites(failing_urls)
+        failed_sites_30 = await failed_websites(failing_urls.where(AuditJob.created_at >= d30))
 
         status_rows = (await s.execute(select(AuditJob.status, func.count()).group_by(AuditJob.status))).all()
 
@@ -394,8 +404,8 @@ async def _stats() -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         "totalUsersTrend": _trend(users_30, 0, absolute=True),
         "totalAudits": jobs_total,
         "totalAuditsTrend": _trend(jobs_30, jobs_prev),
-        "totalFails": fails_total,
-        "totalFailsTrend": _trend(fails_30, fails_prev),
+        "failedWebsites": failed_sites_total,
+        "failedWebsitesTrend": _trend(failed_sites_30, 0, absolute=True),
     }
     slices = [{"status": k, "count": v} for k, v in status_counts.items()]
     return stats, slices

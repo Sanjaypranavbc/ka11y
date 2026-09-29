@@ -239,6 +239,35 @@ async def test_admin_metrics(isolated_db):
     assert m["totals"]["total_runs"] >= 1
 
 
+@pytest.mark.asyncio
+async def test_admin_overview_counts_failed_websites_not_fails(isolated_db):
+    """Overview's failed-websites stat counts distinct target hosts with at
+    least one fail, not the sum of individual fails."""
+    from datetime import datetime, timezone
+
+    from ka11y.api.v1.admin import _stats
+
+    now = datetime.now(timezone.utc).isoformat()
+    for url, fails in [
+        ("https://a.example.com/one", 3),
+        ("https://a.example.com/two", 1),  # same website as above
+        ("https://b.example.com/", 0),  # audited, nothing failed
+        ("https://c.example.com/", 2),
+    ]:
+        rid = _id()
+        await repo.create_run(
+            run_id=rid, url=url, status="queued", lang_requested="auto",
+            wcag_level="AA", params={"url": url, "max_depth": 0}, max_depth=0,
+            max_pages=5, submitted_at=now,
+        )
+        await repo.mark_completed(rid, summary={"violations": fails, "passes": 1})
+
+    stats, _slices = await _stats()
+    assert stats["failedWebsites"] == 2
+    assert stats["failedWebsitesTrend"] == {"value": "2", "direction": "up"}
+    assert "totalFails" not in stats
+
+
 
 
 
