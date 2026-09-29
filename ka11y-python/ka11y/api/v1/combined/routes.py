@@ -22,14 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query
-<<<<<<< HEAD
-from fastapi.responses import FileResponse, StreamingResponse
-from typing import AsyncGenerator
-from ka11y.config.logger import setup_logger
-=======
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from typing import Any, AsyncGenerator
->>>>>>> 0549e899754bab590546175537618660581ab70f
 from ka11y.utils.run_timing import compute_run_timing
 from pydantic import BaseModel, Field, HttpUrl
 from .dispatcher import enqueue
@@ -62,40 +56,6 @@ class FindingReviewRequest(BaseModel):
     note: str | None = Field(default=None, max_length=2000)
     reviewer: str | None = Field(default=None, max_length=200)
 
-<<<<<<< HEAD
-# Private/reserved IP ranges that must never be fetched (SSRF guard for redirects).
-# These CIDR networks cover: loopback, RFC-1918 private, link-local, unique-local
-# (IPv6), documentation ranges, and the IPv4-mapped IPv6 loopback.
-_BLOCKED_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),  # IPv4 loopback
-    ipaddress.ip_network("10.0.0.0/8"),  # RFC-1918 class A private
-    ipaddress.ip_network("172.16.0.0/12"),  # RFC-1918 class B private
-    ipaddress.ip_network("192.168.0.0/16"),  # RFC-1918 class C private
-    ipaddress.ip_network("169.254.0.0/16"),  # IPv4 link-local
-    ipaddress.ip_network("100.64.0.0/10"),  # Shared address space (RFC 6598)
-    ipaddress.ip_network("192.0.0.0/24"),  # IETF protocol assignments
-    ipaddress.ip_network("192.0.2.0/24"),  # TEST-NET-1
-    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2
-    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3
-    ipaddress.ip_network("0.0.0.0/8"),  # "This" network
-    ipaddress.ip_network("::1/128"),  # IPv6 loopback
-    ipaddress.ip_network("fc00::/7"),  # IPv6 unique-local (fc00 + fd00)
-    ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
-    ipaddress.ip_network("::ffff:127.0.0.1/128"),  # IPv4-mapped IPv6 loopback
-]
-
-
-def _ip_is_blocked(ip_str: str) -> bool:
-    """Return True if *ip_str* falls within any blocked private/reserved network."""
-    try:
-        addr = ipaddress.ip_address(ip_str)
-    except ValueError:
-        return False
-    return any(addr in net for net in _BLOCKED_NETWORKS)
-
-
-logger = setup_logger(name="KAC", tag="combined")
-
 # One sentence for every reason a target is refused, so the response cannot be
 # used to tell an internal hostname from a non-existent one. Wording matches
 # `url_not_allowed` in ka11y.errors.
@@ -104,9 +64,7 @@ _NOT_PUBLIC_DETAIL = (
     "Only publicly routable hosts may be audited."
 )
 
-=======
->>>>>>> 0549e899754bab590546175537618660581ab70f
-router = APIRouter(prefix="/combined", tags=["combined audit"])
+router =APIRouter(prefix="/combined", tags=["combined audit"])
 
 
 def _caller(user: Any) -> CurrentUser:
@@ -136,64 +94,31 @@ async def assert_public_url(url: str) -> None:
             detail=f"URL hostname '{host}' is not allowed (private/loopback address).",
         )
 
-<<<<<<< HEAD
-    # Literal IP host. The check has to be made here, not inferred from
-    # _is_non_public_ip raising: that helper swallows the ValueError and
-    # returns False, so the old `except ValueError` never ran and the `return`
-    # below it fired for every hostname — skipping DNS resolution entirely.
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        pass  # a name, not an address: resolve it below
-    else:
-        if _is_non_public_ip(host):
-=======
     literal = _parse_literal_ip(host)
     if literal is not None:
         if _classify_blocked(literal):
->>>>>>> 0549e899754bab590546175537618660581ab70f
             raise HTTPException(
                 status_code=400,
                 detail=f"URL hostname '{host}' is not allowed (private/loopback address).",
             )
         return
 
-<<<<<<< HEAD
     # Every rejection below answers with the same sentence and never names a
     # resolved address. Reporting the address, or distinguishing "does not
     # resolve" from "resolves internally", would let anyone who can submit an
     # audit use this endpoint to map internal DNS. The specific reason is
-    # logged instead.
-    try:
-        resolved = await _resolve_all_ips(host)
-    except socket.gaierror:
+    # logged instead. _resolve_hostname returns an empty tuple on failure.
+    resolved = await asyncio.to_thread(_resolve_hostname, host)
+    if not resolved:
         logger.info("[ssrf] refused %s: hostname does not resolve", host)
         raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
 
-    if not resolved:
-        logger.info("[ssrf] refused %s: resolved to no addresses", host)
-        raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
-
-    blocked = [ip for ip in resolved if _is_non_public_ip(ip)]
+    blocked = [ip for ip in resolved if _ip_is_blocked(ip)]
     if blocked:
         logger.warning(
             "[ssrf] refused %s: resolves to non-public address(es) %s",
             host,
             ", ".join(blocked[:3]),
-=======
-    resolved = await asyncio.to_thread(_resolve_hostname, host)
-    if not resolved:
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL hostname '{host}' could not be resolved.",
-        )
-    blocked = [ip for ip in resolved if _ip_is_blocked(ip)]
-    if blocked:
-        sample = ", ".join(blocked[:3])
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL hostname '{host}' resolves to private/loopback address(es): {sample}.",
->>>>>>> 0549e899754bab590546175537618660581ab70f
         )
         raise HTTPException(status_code=400, detail=_NOT_PUBLIC_DETAIL)
 
@@ -225,7 +150,10 @@ async def submit_combined_audit(
     max_depth: int = Query(0, ge=0, le=5),
     max_pages: int = Query(20, ge=1, le=200),
     wcag_level: str = Query("AAA", pattern=r"^(A|AA|AAA)$"),
-    email: str | None = Query(None, max_length=254),
+    # Same pattern as CombinedRequest.email. Checked here too: the request
+    # below is built inside the handler, so a bad address raised
+    # pydantic.ValidationError there and the caller got 500, not 422.
+    email: str | None = Query(None, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"),
     lang: str = Query("auto", max_length=20, pattern=r"^(auto|[A-Za-z][A-Za-z0-9_-]*)$"),
     user: CurrentUser = Depends(require_user),
 ):
@@ -313,12 +241,7 @@ async def _admit_run(
         _jobs.pop(job_id, None)
         raise HTTPException(status_code=503, detail="Audit queue is unavailable. Please try again.")
 
-<<<<<<< HEAD
-    await enqueue(job_id, payload)
-    logger.info(f"[combined] Job {job_id} submitted for {url}")
-=======
     logger.info("[combined] job %s submitted for %s", job_id, url)
->>>>>>> 0549e899754bab590546175537618660581ab70f
     # Stamp the job id on the HTTP span (the middleware's, still current here).
     # The audit runs as its own trace, so this attribute is the thread that
     # leads from "this request was slow / errored" to the audit it started.
@@ -771,6 +694,11 @@ async def get_combined_audit_timings(job_id: str, user: CurrentUser = Depends(re
         if not run:
             raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
         rows = await repo.get_timings(job_id)
+        # The stored error is repr(exc) of the failed step: internal paths,
+        # hosts and library text. It stays in the table and the logs; the
+        # client gets the step's status only.
+        for row in rows:
+            row["error"] = None
         return {
             "job_id": job_id,
             "url": run.get("url"),
@@ -914,21 +842,14 @@ async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require
                     f"data: {json.dumps({'job_id': job_id, 'summary': rep.get('summary', {})})}\n\n"
                 )
             elif status == "failed":
-<<<<<<< HEAD
                 failure = {
                     "job_id": job_id,
                     "error": "Audit failed due to an internal error.",
                     "error_code": _jobs.get(job_id, {}).get("error_code"),
                 }
                 yield f"event: job_failed\ndata: {json.dumps(failure)}\n\n"
-=======
-                yield (
-                    f"event: job_failed\n"
-                    f"data: {json.dumps({'job_id': job_id, 'error': 'Audit failed due to an internal error.'})}\n\n"
-                )
             elif status == "cancelled":
                 yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
->>>>>>> 0549e899754bab590546175537618660581ab70f
             else:
                 yield f"event: job_state\ndata: {json.dumps({'status': status})}\n\n"
 

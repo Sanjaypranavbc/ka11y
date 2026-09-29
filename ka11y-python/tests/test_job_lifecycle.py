@@ -330,7 +330,7 @@ async def test_assert_public_url_blocks_hostnames_resolving_privately(monkeypatc
     monkeypatch.setattr(routes, "_resolve_hostname", lambda host: ("93.184.216.34", "10.1.2.3"))
     with pytest.raises(HTTPException) as exc:
         await routes.assert_public_url("https://rebinder.example/")
-    assert "private/loopback" in exc.value.detail
+    assert exc.value.detail == routes._NOT_PUBLIC_DETAIL
 
 
 @pytest.mark.asyncio

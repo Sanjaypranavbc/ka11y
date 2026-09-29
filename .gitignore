@@ -14,17 +14,8 @@ wcag_reports
 crawled_images
 mcp
 Scripts
-# Ad-hoc scripts stay untracked; directory contents are matched (not the
-# directory itself) so a named exception below can re-include a file.
-scripts/*
-ka11y-python/scripts/*
-# Regenerates ka11y/data/wcag-technique-map.json from the WCAG workbook —
-# tracked so the map can be rebuilt from any checkout.
-!ka11y-python/scripts/build_technique_map.py
-# Operator scripts the python image COPYs (Dockerfile) — must be tracked or
-# a fresh checkout cannot build the image.
-!ka11y-python/scripts/set_password.py
-!ka11y-python/scripts/import_sqlite_store.py
+scripts
+ka11y-python/scripts/
 ka11y-python/scripts/live_stage_audit.py
 ka11y-python/scripts/live_stage_plan.example.yml
 *.pptx
@@ -38,13 +29,11 @@ ka11y-python/scripts/live_stage_plan.example.yml
 
 # Protect Environment Variables
 .env
-.env.example    
+   
 
 # Auto-generated outputs
 combined_report_*.json
 reports/
-# ...but not the Next.js admin route of the same name (ka11y-ui/src/app/admin/reports)
-!ka11y-ui/src/app/admin/reports/
 test_output/
 ka11y-node/axe_rules.json
 
@@ -80,5 +69,4 @@ a11y-findings (4).csv
 .gitignore
 scratchpad/stage1-baseline-result.txt
 
-ka11y-python/.env.example
-ka11y-python/.env.example
+

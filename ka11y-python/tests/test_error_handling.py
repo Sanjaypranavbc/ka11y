@@ -224,3 +224,40 @@ def test_failed_page_entry_without_a_code_still_reports():
     entry = page_failure_entry({"page_url": "https://x.test/b", "message": "boom"})
     assert entry["error_code"] == "page_extract_failed"
     assert "boom" not in str(entry)
+
+
+# ── Step 2 gaps: crashes and leaked internals (2a, 2c) ───────────────────────
+
+def test_log_line_with_bracket_text_does_not_raise():
+    """
+    2a. The console handler parsed Rich markup, so a value containing "[/x]"
+    raised MarkupError out of the logging call itself. The queue logs the
+    submitted URL, so https://example.com/?a=[/x] failed with a 503.
+    """
+    from ka11y.config.logger import setup_logger
+
+    log = setup_logger(name="KAC", tag="test")
+    log.info("Enqueuing audit for URL: %s", "https://example.com/?a=[/x]")
+    log.warning("page declares lang %s", "x[/y]")
+
+
+def test_caption_url_failure_reason_carries_no_exception_text(monkeypatch):
+    """
+    2c. An unreachable caption file put the raw requests exception into the
+    finding's reason, and so into the client's report: internal host, port
+    and library internals included.
+    """
+    from ka11y.accessibility.rules.media import media_auditor
+
+    def _refused(*args, **kwargs):
+        raise ConnectionError(
+            "HTTPConnectionPool(host='10.0.0.5', port=22): Max retries exceeded"
+        )
+
+    monkeypatch.setattr(media_auditor.requests, "head", _refused)
+    status, reason, gate = media_auditor._gate_5_validate_track_url(
+        "https://example.com/captions.vtt"
+    )
+    assert (status, gate) == ("FAILED", 5), "the broken link must still fail Gate 5"
+    for leaked in ("10.0.0.5", "HTTPConnectionPool", "Max retries"):
+        assert leaked not in reason, f"exception text in the report: {reason!r}"

@@ -382,8 +382,11 @@ def _gate_5_validate_track_url(track_url: str) -> Optional[Tuple[str, str, int]]
                 return ("FAILED", f"Caption file URL returned 404 Not Found: {track_url} (F8 violation)", 5)
             return ("FAILED", f"Caption file URL returned HTTP error {status_code}: {track_url} (F8 violation)", 5)
     except Exception as e:
-        # Network errors = broken link
-        return ("FAILED", f"Caption file URL is unreachable: {str(e)} (F8 violation)", 5)
+        # Network errors = broken link. The exception text is logged, not put
+        # in the reason: the reason reaches the client's report, and the text
+        # names internal hosts, ports and library internals.
+        logger.warning("Caption track %s unreachable: %s", track_url, e)
+        return ("FAILED", "Caption file URL is unreachable (F8 violation)", 5)
 
     return None
 

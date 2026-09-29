@@ -92,7 +92,8 @@ class JobStatusResponse(BaseModel):
     submitted_at: str
     lang: str
     completed_at: Optional[str] = None
-    report_path: Optional[str] = None
+    # No report_path: it was the absolute server path of the report file, and
+    # nothing outside the server uses it.
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     # Opaque correlation id for failed jobs. Maps a 5xx response to the

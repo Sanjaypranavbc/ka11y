@@ -1,12 +1,7 @@
 "use client";
 
-<<<<<<< HEAD
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
-=======
-import { Suspense, useState, useEffect, useMemo, useRef } from "react";
+import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
->>>>>>> 0549e899754bab590546175537618660581ab70f
 import { CheckCircle2, ChevronRight, ExternalLink } from "lucide-react";
 import { LanguageToggle } from "@/components/dashboard/LanguageToggle";
 import { DownloadReportMenu } from "@/components/dashboard/DownloadActions";
@@ -83,7 +78,6 @@ function NewAuditPage() {
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-<<<<<<< HEAD
 
   // The API reports a failure as a code (ka11y/errors.py) plus an English
   // fallback. Prefer the translated text; fall back to the server's own
@@ -98,14 +92,8 @@ function NewAuditPage() {
     [t],
   );
 
-  const [scanResult, setScanResult] = useState<WcagAuditResponse | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [jobStages, setJobStages] = useState<JobStage[]>([]);
-  const [jobStatus, setJobStatus] = useState<string | null>(null);
-=======
   // Arrived here because another screen is locked (AuditLockGuard).
   const lockedNotice = searchParams.get("locked") === "1";
->>>>>>> 0549e899754bab590546175537618660581ab70f
 
   const totalSteps = ACTUAL_STEPS.length;
   // The run itself lives in RunningAuditContext (root layout): it keeps
@@ -219,12 +207,7 @@ function NewAuditPage() {
       }
 
       if (!res.ok || !data?.jobId) {
-<<<<<<< HEAD
-        setPhase("form");
         setError(errorText(data));
-=======
-        setError(data?.error ?? t.newAudit.errorGeneric);
->>>>>>> 0549e899754bab590546175537618660581ab70f
         setSubmitting(false);
         return;
       }
@@ -240,88 +223,8 @@ function NewAuditPage() {
   }
 
 
-<<<<<<< HEAD
-    let cancelled = false;
-    const startTime = Date.now();
-    // The server (KA11Y_JOB_TIMEOUT_SECONDS, 30 min) decides when a job is
-    // actually dead, so wait just past that rather than guessing per depth —
-    // a shorter client budget abandons healthy multi-page crawls mid-run.
-    // A genuine failure still stops early via the status === "failed" branch.
-    const TIMEOUT_MS = 1_860_000;
-    let timer: ReturnType<typeof setTimeout>;
-
-    async function poll() {
-      try {
-        const res = await fetch(`/api/wcag-audit/${jobId}`);
-        const data = await res.json().catch(() => null);
-        if (cancelled) return;
-
-        if (res.status === 401) {
-          await redirectToLogin();
-          return;
-        }
-
-        if (!res.ok) {
-          setPhase("form");
-          setError(errorText(data));
-          setSubmitting(false);
-          return;
-        }
-
-        // Real stage lifecycle from the backend — drives the progress bar
-        // (see computeRealProgress) independently of the cosmetic step list.
-        setJobStages((data.stages as JobStage[]) ?? []);
-        setJobStatus(data.status ?? null);
-
-        if (data.status === "completed") {
-          setScanResult(data.result as WcagAuditResponse);
-          setAuditData(data.result as WcagAuditResponse);
-          setCompletedCount(totalSteps);
-          setSubmitting(false);
-          // Brief pause so the user sees every step marked done before the
-          // redirect, then land on the dashboard with the real result already
-          // in AuditDataContext (no modal — straight to the real data).
-          setTimeout(() => router.push("/dashboard"), 600);
-          return;
-        }
-
-        if (data.status === "failed" || data.status === "cancelled") {
-          setPhase("form");
-          setError(errorText(data));
-          setSubmitting(false);
-          return;
-        }
-
-        if (Date.now() - startTime > TIMEOUT_MS) {
-          setPhase("form");
-          setError(t.newAudit.errorStillRunning);
-          setSubmitting(false);
-          return;
-        }
-
-        timer = setTimeout(poll, 3000);
-      } catch {
-        if (!cancelled) {
-          setPhase("form");
-          setError(t.newAudit.errorUnreachable);
-          setSubmitting(false);
-        }
-      }
-    }
-
-    poll();
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [phase, jobId, scanResult, totalSteps, t, setAuditData, router]);
-
-  /* ─── Queued screen (deep crawl — result arrives by email) ─── */
-  if (phase === "queued") {
-=======
   /* ─── Completed screen (run finished while the user was elsewhere) ─── */
   if (completed && running) {
->>>>>>> 0549e899754bab590546175537618660581ab70f
     return (
       <>
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-gray-10 px-4 py-4 sm:h-20 sm:px-8 sm:py-0 lg:px-16">
