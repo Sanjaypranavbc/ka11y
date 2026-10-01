@@ -6,22 +6,16 @@ import { useLanguage } from "@/components/dashboard/LanguageContext";
 import { REPORT_EXPORT_FORMATS, reportExportHref } from "@/lib/reportExport";
 
 /**
- * Report export is switched off for now (product decision, 2026-09-25): the
- * button stays in place but is always disabled. Flip REPORT_EXPORT_ENABLED to
- * bring it back; the menu, the links and the backend endpoint
- * (GET /api/v1/combined/{jobId}/export) are all intact.
- */
-const REPORT_EXPORT_ENABLED = false;
-
-/**
- * "Export report" menu for the dashboard header: JSON / CSV / HTML / PDF links
- * to the backend export endpoint (see lib/reportExport.ts). Replaces the
- * former client-side CSV build and window.print() PDF (2026-09-25): the
- * files are generated server-side from the stored report, so the browser
- * holds nothing the dashboard payload does not already show.
+ * "Export report" menu for the dashboard header: Summary (HTML) / CSV / PDF
+ * links to the backend export endpoint (see lib/reportExport.ts). Every
+ * format carries the WCAG technique and situation tags for each finding,
+ * which the dashboard payload itself omits for failures. The files are
+ * generated server-side from the stored report (2026-09-25), so the browser
+ * holds nothing the dashboard does not already show.
  *
- * When enabled, it is still disabled until an audit with a known job id is
- * loaded (a result restored from an older session may lack one).
+ * Re-enabled 2026-10-01 (it had been switched off since 2026-09-25). The
+ * button stays disabled until an audit with a known job id is loaded (a
+ * result restored from an older session may lack one).
  */
 export function DownloadReportMenu({ className }: { className?: string }) {
   const { auditData, jobId } = useAuditData();
@@ -34,7 +28,7 @@ export function DownloadReportMenu({ className }: { className?: string }) {
       formats={REPORT_EXPORT_FORMATS}
       hrefFor={reportExportHref}
       labels={t.downloads}
-      disabled={!REPORT_EXPORT_ENABLED || !auditData || !jobId}
+      disabled={!auditData || !jobId}
       className={className}
     />
   );

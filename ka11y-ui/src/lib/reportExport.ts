@@ -1,7 +1,12 @@
 import type { ExportFormat } from "@/lib/admin/data";
 
-/** Formats the dashboard's "Export report" menu offers, in menu order. */
-export const REPORT_EXPORT_FORMATS: readonly ExportFormat[] = ["json", "csv", "html", "pdf"];
+/**
+ * Formats the dashboard's "Export report" menu offers, in menu order:
+ * Summary (the self-contained HTML report), CSV (one row per finding and
+ * technique) and PDF. JSON stays available on the endpoint but is not
+ * listed here.
+ */
+export const REPORT_EXPORT_FORMATS: readonly ExportFormat[] = ["html", "csv", "pdf"];
 
 /**
  * Download link for the full audit report. The file is generated and streamed

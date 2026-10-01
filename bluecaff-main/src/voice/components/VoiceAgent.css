@@ -1,0 +1,36 @@
+.glass-card {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(13, 110, 253, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transcript-box {
+  width: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.orb-lg {
+  width: 260px;
+  height: 260px;
+}
+.glass-card {
+  border-radius: 40px;
+  padding: 16px 32px;
+  border: 1px solid #d2e3f1;
+  background: #f8f9fb;
+}
+.glass-card:hover {
+  border: 1px solid #d2e3f1;
+  background: #f8f9fb;
+}

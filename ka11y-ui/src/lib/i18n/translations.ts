@@ -30,7 +30,7 @@ export const translations = {
       button: "Export report",
       buttonFor: (subject: string) => `for ${subject}`,
       menuLabel: (subject: string) => `Export formats for ${subject}`,
-      formats: { json: "JSON data", csv: "CSV spreadsheet", html: "HTML page", pdf: "PDF document" },
+      formats: { json: "JSON data", csv: "CSV spreadsheet", html: "Summary (HTML)", pdf: "PDF document" },
     },
     comingSoon: {
       message: (title: string) => `${title} is coming soon.`,
@@ -533,7 +533,7 @@ export const translations = {
       button: "レポートをエクスポート",
       buttonFor: (subject: string) => `${subject} の`,
       menuLabel: (subject: string) => `${subject} のエクスポート形式`,
-      formats: { json: "JSONデータ", csv: "CSVスプレッドシート", html: "HTMLページ", pdf: "PDFドキュメント" },
+      formats: { json: "JSONデータ", csv: "CSVスプレッドシート", html: "サマリー（HTML）", pdf: "PDFドキュメント" },
     },
     comingSoon: {
       message: (title: string) => `${title}は近日公開予定です。`,

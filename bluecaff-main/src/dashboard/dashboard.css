@@ -1,0 +1,123 @@
+.chatCards{
+    background: #F8F9FB;
+    border: 1px solid #E9E9EB;
+    border-radius: 4px;
+    box-shadow: none;
+    padding: 32px;
+}
+
+/* Floating Add Button */
+.floating-add-btn {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #000000 !important;
+    border: none;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.floating-add-btn:hover {
+    background: #333333 !important;
+    transform: scale(1.1);
+    box-shadow: 0 6px 25px rgba(0, 0, 0, 0.4);
+}
+
+.floating-add-btn:active {
+    transform: scale(0.95);
+}
+
+.floating-add-btn:focus {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Delete Button Styles */
+.chat-card-delete-btn,
+.chat-card-eye-btn {
+    opacity: 0;
+    transition: all 0.3s ease;
+    /* background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(220, 53, 69, 0.2) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); */
+    color: #202833 !important;
+}
+
+.chat-card-delete-btn:hover,
+.chat-card-eye-btn:hover {
+    /* background: rgba(220, 53, 69, 0.1) !important;
+    border-color: rgba(220, 53, 69, 0.4) !important; */
+    transform: scale(1.1);
+}
+
+/* Show delete button on card hover */
+.card:hover .chat-card-delete-btn,
+.card:hover .chat-card-eye-btn {
+    opacity: 1;
+}
+
+/* Alternative: Always visible but subtle */
+.chat-card-delete-btn-visible,
+.chat-card-eye-btn-visible {
+    opacity: 0.6;
+    transition: all 0.3s ease;
+}
+
+.chat-card-delete-btn-visible:hover,
+.chat-card-eye-btn-visible:hover {
+    opacity: 1;
+    /* background: rgba(220, 53, 69, 0.1) !important; */
+    transform: scale(1.1);
+}
+
+/* Responsive adjustments for floating button */
+@media (max-width: 768px) {
+    .dashboard-layout .main-content {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    .body-container,
+    .body-container.container,
+    .body-container.container-fluid {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        max-width: 100% !important;
+    }
+
+    .floating-add-btn {
+        bottom: 1rem;
+        right: 1rem;
+        width: 50px;
+        height: 50px;
+    }
+
+    .chatCards {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .dashboard-layout .main-content {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+
+    .body-container,
+    .body-container.container,
+    .body-container.container-fluid {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+        max-width: 100% !important;
+    }
+
+    .chatCards {
+        padding: 12px;
+    }
+}
