@@ -3,15 +3,9 @@
 import { ExportMenu } from "@/components/admin/ExportMenu";
 import { useAuditData } from "@/components/dashboard/AuditDataContext";
 import { useLanguage } from "@/components/dashboard/LanguageContext";
+import { useRunningAudit } from "@/components/dashboard/RunningAuditContext";
+import { isActive } from "@/lib/runningAudit";
 import { REPORT_EXPORT_FORMATS, reportExportHref } from "@/lib/reportExport";
-
-/**
- * Report export is switched off for now (product decision, 2026-09-25): the
- * button stays in place but is always disabled. Flip REPORT_EXPORT_ENABLED to
- * bring it back; the menu, the links and the backend endpoint
- * (GET /api/v1/combined/{jobId}/export) are all intact.
- */
-const REPORT_EXPORT_ENABLED = false;
 
 /**
  * "Export report" menu for the dashboard header: JSON / CSV / HTML / PDF links
@@ -20,13 +14,17 @@ const REPORT_EXPORT_ENABLED = false;
  * files are generated server-side from the stored report, so the browser
  * holds nothing the dashboard payload does not already show.
  *
- * When enabled, it is still disabled until an audit with a known job id is
- * loaded (a result restored from an older session may lack one).
+ * Enabled once an audit has completed: it needs a loaded result with a known
+ * job id (a result restored from an older session may lack one), and it stays
+ * inert while a new audit is queued or running, so the previous audit's report
+ * cannot be exported under the new target's header (re-enabled 2026-10-08).
  */
 export function DownloadReportMenu({ className }: { className?: string }) {
   const { auditData, jobId } = useAuditData();
+  const { running } = useRunningAudit();
   const { t } = useLanguage();
   const subject = auditData?.url ?? "";
+  const auditInProgress = running !== null && isActive(running.status);
   return (
     <ExportMenu
       jobId={jobId ?? ""}
@@ -34,7 +32,7 @@ export function DownloadReportMenu({ className }: { className?: string }) {
       formats={REPORT_EXPORT_FORMATS}
       hrefFor={reportExportHref}
       labels={t.downloads}
-      disabled={!REPORT_EXPORT_ENABLED || !auditData || !jobId}
+      disabled={!auditData || !jobId || auditInProgress}
       className={className}
     />
   );
