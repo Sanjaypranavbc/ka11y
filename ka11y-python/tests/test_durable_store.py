@@ -1,6 +1,6 @@
 """
 Integration tests for the run store (PostgreSQL): run lifecycle, report and
-findings, asset index, durable queue dispatcher, telemetry mirroring, and the
+findings, asset index, telemetry mirroring, and the
 DB-backed API fallbacks (history, cancel, get-after-eviction, metrics).
 
 Needs a reachable PostgreSQL (``docker compose up -d postgres``); skipped
@@ -133,54 +133,6 @@ async def test_retention_sweep_removes_old(isolated_db):
     removed = await repo.retention_sweep(retention_days=0)
     assert RID in removed
     assert await repo.get_run(RID) is None
-
-
-@pytest.mark.asyncio
-async def test_dispatcher_executes_queued_run(isolated_db, monkeypatch):
-    """The dispatcher should pick a queued row and drive it through the runner."""
-    RID = _id()
-    from ka11y.api.v1.combined import dispatcher
-    from ka11y.api.v1.combined import runner as runner_mod
-    from ka11y.api.v1.combined.store import _jobs
-
-    ran: list[str] = []
-
-    async def fake_body(job_id, payload, filter_rule=None):
-        ran.append(job_id)
-        await repo.mark_completed(
-            job_id, completed_at="2026-06-02T00:00:09+00:00",
-            run_started_at="2026-06-02T00:00:08+00:00", summary={"violations": 0},
-            output_dir="/tmp",
-        )
-        _jobs[job_id]["status"] = "completed"
-
-    monkeypatch.setattr(runner_mod, "_run_job_body", fake_body)
-
-    await repo.create_run(
-        run_id=RID, url="https://example.com", status="queued",
-        lang_requested="auto", wcag_level="AA",
-        params={"url": "https://example.com", "max_depth": 0},
-        max_depth=0, max_pages=5, submitted_at="2026-06-02T00:00:00+00:00",
-    )
-
-    task = asyncio.create_task(dispatcher.run_dispatcher())
-    try:
-        dispatcher.notify()
-        for _ in range(100):
-            await asyncio.sleep(0.05)
-            # ``ran`` is appended before the fake body persists 'completed';
-            # wait for the row, not just the call.
-            if RID in ran and (await repo.get_run(RID))["status"] == "completed":
-                break
-    finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-
-    assert RID in ran
-    assert (await repo.get_run(RID))["status"] == "completed"
 
 
 @pytest.mark.asyncio

@@ -1,11 +1,17 @@
 # =============================================================================
 # ka11y — Docker Compose (project root)
-# Services: ka11y-node · ka11y-python · ka11y-frontend · ka11y-docs · ka11y-ui
+# Services: ka11y-node · ka11y-python (API) · ka11y-worker · ka11y-localstack · ka11y-ui
 #
 # Port map
 #   host:8080  →  ui (Next.js)      →  internal:3001  (frontend, also 8080, stays disabled below)
 #   host:8000  →  python (FastAPI)  →  internal:8000
 #   host:3000  →  node (axe-core)   →  internal:3000  (debug only; not needed by frontend)
+#   host:4566  →  localstack (SQS)  →  internal:4566  (local stand-in for Amazon SQS)
+#
+# Job execution: the API only writes state.json and publishes an AuditJobMessage
+# to SQS; the worker service (same image, `python -m ka11y.worker.worker`)
+# consumes the queue and runs at most WORKER_MAX_CONCURRENCY audits at once.
+# Both read/write the same object storage (S3, or ./output/artifacts locally).
 #
 # Usage:
 #   docker compose build --parallel        # build all images in parallel
@@ -27,6 +33,46 @@
 # =============================================================================
 
 services:
+
+  # ── LocalStack — Amazon SQS stand-in ───────────────────────────────────────
+  # Creates ka11y-audit-jobs (+ its DLQ, maxReceiveCount=3) on start via
+  # ./localstack/init-sqs.sh. In production remove this service and point
+  # SQS_QUEUE_URL / SQS_ENDPOINT_URL (empty) at the real queue.
+  localstack:
+    image: localstack/localstack:3
+    container_name: ka11y-localstack
+    restart: unless-stopped
+
+    networks:
+      - ka11y-net
+
+    environment:
+      SERVICES: "sqs,s3"
+      AWS_DEFAULT_REGION: "${AWS_REGION:-us-east-1}"
+      # Queue layout knobs read by init-sqs.sh
+      KA11Y_SQS_QUEUE_NAME: "ka11y-audit-jobs"
+      KA11Y_SQS_MAX_RECEIVE_COUNT: "3"
+      SQS_VISIBILITY_TIMEOUT: "300"
+
+    ports:
+      - "127.0.0.1:4566:4566"
+
+    volumes:
+      - ./localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh:ro
+
+    healthcheck:
+      test:         ["CMD-SHELL", "awslocal sqs get-queue-url --queue-name ka11y-audit-jobs >/dev/null 2>&1"]
+      interval:     5s
+      timeout:      5s
+      start_period: 20s
+      retries:      20
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
 
   # ── Node axe-core engine ───────────────────────────────────────────────────
   node:
@@ -107,46 +153,47 @@ services:
 #      options:
 #        max-size: "10m"
 #        max-file: "5"
-  # ── PostgreSQL — users, OIDC identities, sessions, audit history ──────────
-  postgres:
-    image: postgres:16-alpine
-    container_name: ka11y-postgres
-    restart: unless-stopped
-
-    networks:
-      - ka11y-net
-
-    # PostgreSQL credentials
-    env_file:
-      - ./ka11y-python/.env
-
-    ports:
-      - "127.0.0.1:5432:5432"
-
-    # Bind mount, like every other stateful path in this stack (./output/*):
-    # a named volume is deleted by `docker compose down -v` / `docker volume
-    # prune`, which is exactly how the audit history kept disappearing. The
-    # directory must be empty (or absent) on first start — initdb refuses a
-    # non-empty data dir — so never put a .gitkeep in it.
-    volumes:
-      - ./output/pg:/var/lib/postgresql/data
-
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
-        ]
-      interval: 10s
-      timeout: 5s
-      start_period: 20s
-      retries: 10
-
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
+  # ── PostgreSQL — SWITCHED OFF (S3-only for now; uncomment to bring it back) ──
+#  # ── PostgreSQL — users, OIDC identities, sessions, audit history ──────────
+#  postgres:
+#    image: postgres:16-alpine
+#    container_name: ka11y-postgres
+#    restart: unless-stopped
+#
+#    networks:
+#      - ka11y-net
+#
+#    # PostgreSQL credentials
+#    env_file:
+#      - ./ka11y-python/.env
+#
+#    ports:
+#      - "127.0.0.1:5432:5432"
+#
+#    # Bind mount, like every other stateful path in this stack (./output/*):
+#    # a named volume is deleted by `docker compose down -v` / `docker volume
+#    # prune`, which is exactly how the audit history kept disappearing. The
+#    # directory must be empty (or absent) on first start — initdb refuses a
+#    # non-empty data dir — so never put a .gitkeep in it.
+#    volumes:
+#      - ./output/pg:/var/lib/postgresql/data
+#
+#    healthcheck:
+#      test:
+#        [
+#          "CMD-SHELL",
+#          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""
+#        ]
+#      interval: 10s
+#      timeout: 5s
+#      start_period: 20s
+#      retries: 10
+#
+#    logging:
+#      driver: json-file
+#      options:
+#        max-size: "10m"
+#        max-file: "5"
 
 
   # ── Python FastAPI auditors ────────────────────────────────────────────────
@@ -180,8 +227,13 @@ services:
 #      node:
 #        condition: service_healthy
 
+#    depends_on:          # PostgreSQL is switched off (S3 only)
+#      postgres:
+#        condition: service_healthy
+
     depends_on:
-      postgres:
+      # Submitting an audit publishes to SQS; without the queue POST answers 503.
+      localstack:
         condition: service_healthy
 
     networks:
@@ -190,6 +242,15 @@ services:
     environment:
       NODE_BASE_URL:        "http://node:3000"
       DEEPGRAM_API_KEY:     "${DEEPGRAM_API_KEY}"
+
+      # ── Job queue (Amazon SQS) ───────────────────────────────────────────
+      # Defaults target the localstack service above. Set SQS_QUEUE_URL in the
+      # root .env (and SQS_ENDPOINT_URL to empty) to use a real AWS queue; the
+      # AWS credentials/role come from ka11y-python/.env (env_file below).
+      SQS_QUEUE_URL:        "${SQS_QUEUE_URL:-http://localstack:4566/000000000000/ka11y-audit-jobs}"
+      SQS_ENDPOINT_URL:     "${SQS_ENDPOINT_URL-http://localstack:4566}"
+      AWS_REGION:           "${AWS_REGION:-us-east-1}"
+      SQS_VISIBILITY_TIMEOUT: "300"
       # Gemini key for enrich_audit.py's dynamic reason / suggested fix. The
       # enrichment step is best-effort: with this unset the audit still
       # completes, falling back to the static reason/fix on every finding.
@@ -254,9 +315,10 @@ services:
       SENDER_PASSWORD:  "${SENDER_PASSWORD:-}"
 
       # ── Run store + assets + telemetry ───────────────────────────────────
-      # Run state, reports, findings, the asset index and per-(page,stage,rule)
-      # telemetry all live in PostgreSQL (DATABASE_URL from the env_file
-      # below). There is no SQLite any more: one row per fact, one database.
+      # PostgreSQL is switched off for now: job state (state.json), reports,
+      # manual verdicts (reviews.json) and every asset live in object storage
+      # (S3 via KA11Y_S3_BUCKET, else KA11Y_ARTIFACT_DIR). DATABASE_URL is
+      # ignored by the API and the worker until the db blocks are uncommented.
       # Content-addressed asset bytes (screenshots, OCR crops, contrast regions).
       KA11Y_ASSET_DIR:      "/data/assets"
       # Delete runs (+ their findings/reports/assets) older than this many days.
@@ -273,11 +335,13 @@ services:
       # of a second Puppeteer crawl in Node. Default OFF; flip to "1" to trial.
       KA11Y_UNIFIED_CRAWL:  "0"
 
-      # ── PostgreSQL + OIDC sign-in ─────────────────────────────────────────
+      # ── PostgreSQL + OIDC sign-in — SWITCHED OFF ─────────────────────────
       # Users, OAuth identities, browser sessions and every audit run
       # (ka11y-python/ka11y/db, ka11y-python/ka11y/store). Alembic migrations
       # + the WCAG catalogue seed run at startup unless this is "0".
-      KA11Y_DB_AUTO_MIGRATE: "1"
+      # Sign-in needs PostgreSQL, so KA11Y_AUTH_DISABLED must stay "1" while
+      # the database is off.
+      # KA11Y_DB_AUTO_MIGRATE: "1"
       # `live` branch: sign-in and the admin console are masked (Rad,
       # 2026-09-29). Every visitor runs as anonymous and every audit is still
       # stored in PostgreSQL, without an owner. "0" restores sign-in; no code
@@ -309,7 +373,8 @@ services:
     ports:
       - "0.0.0.0:8000:8000"
 
-    # Required now: it carries DATABASE_URL and the OIDC/session settings.
+    # Carries the S3 settings (and, when PostgreSQL returns, DATABASE_URL and
+    # the OIDC/session settings).
     env_file:
       - path: ./ka11y-python/.env
         required: true
@@ -400,6 +465,92 @@ services:
 #      options:
 #        max-size: "10m"
 #        max-file: "5"
+
+
+  # ── Audit worker — consumes the SQS queue, runs the audits ─────────────────
+  # Same image as the API; only the command differs. Scale with
+  # `docker compose up --scale worker=2` (drop container_name first) or raise
+  # WORKER_MAX_CONCURRENCY. Shares ./output/* with the API so state.json,
+  # reports and assets are visible to both when no S3 bucket is configured.
+  worker:
+    image: ka11y-python:latest
+    container_name: ka11y-worker
+    restart: unless-stopped
+    shm_size: '256m'
+    command: ["python", "-m", "ka11y.worker.worker"]
+    # SIGTERM → stop polling, finish in-flight audits (WORKER_SHUTDOWN_TIMEOUT).
+    stop_grace_period: 15m
+
+    security_opt:
+      - seccomp:unconfined
+
+    depends_on:
+      localstack:
+        condition: service_healthy
+      node:
+        condition: service_healthy
+      # The image is built by the python service; make sure that happened.
+      python:
+        condition: service_started
+
+    networks:
+      - ka11y-net
+
+    environment:
+      NODE_BASE_URL:        "http://node:3000"
+      DEEPGRAM_API_KEY:     "${DEEPGRAM_API_KEY}"
+      GEMINI_API_KEY:       "${GEMINI_API_KEY}"
+      KA11Y_TRACING_ENABLED: "0"
+      PYTHONUNBUFFERED:     "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+      # ── Job queue (Amazon SQS) — must match the python service ──────────
+      SQS_QUEUE_URL:        "${SQS_QUEUE_URL:-http://localstack:4566/000000000000/ka11y-audit-jobs}"
+      SQS_ENDPOINT_URL:     "${SQS_ENDPOINT_URL-http://localstack:4566}"
+      AWS_REGION:           "${AWS_REGION:-us-east-1}"
+      SQS_VISIBILITY_TIMEOUT: "300"
+      SQS_WAIT_TIME_SECONDS:  "20"
+      # Audits run at once in this process (one Chromium-heavy audit each).
+      WORKER_MAX_CONCURRENCY: "${WORKER_MAX_CONCURRENCY:-2}"
+      # Deliveries before a job is failed; equals the DLQ's maxReceiveCount.
+      WORKER_MAX_ATTEMPTS:    "3"
+      # "1" also redelivers audits the runner itself recorded as failed.
+      WORKER_RETRY_FAILED_AUDITS: "0"
+
+      # ── Same audit knobs as the API ─────────────────────────────────────
+      KA11Y_SNAPSHOT_URLS_WAIT_SECONDS: "1200"
+      KA11Y_JOB_TIMEOUT_SECONDS: "1800"
+      KA11Y_NODE_HTTP_BASE_TIMEOUT_SECONDS: "60"
+      KA11Y_NODE_HTTP_PER_PAGE_TIMEOUT_SECONDS: "75"
+      SMTP_SERVER:      "${SMTP_SERVER:-smtp.gmail.com}"
+      SMTP_PORT:        "${SMTP_PORT:-587}"
+      SENDER_EMAIL:     "${SENDER_EMAIL:-}"
+      SENDER_PASSWORD:  "${SENDER_PASSWORD:-}"
+      KA11Y_ASSET_DIR:      "/data/assets"
+      KA11Y_TELEMETRY_FILES: "0"
+      KA11Y_CPU_WORKERS:    "0"
+      KA11Y_UNIFIED_CRAWL:  "0"
+      KA11Y_AUTH_DISABLED:  "1"
+      KA11Y_ARTIFACT_DIR:   "/data/artifacts"
+
+    env_file:
+      - path: ./ka11y-python/.env
+        required: true
+
+    volumes:
+      - ./output/crawled_images:/app/crawled_images
+      - ./output/logs:/app/logs
+      - ./output/assets:/data/assets
+      - ./output/artifacts:/data/artifacts
+      - huggingface_cache:/root/.cache/huggingface
+      - paddlex_models:/root/.paddlex/official_models
+      - easyocr_models:/root/.EasyOCR
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 
   # ── React + nginx frontend ─────────────────────────────────────────────────

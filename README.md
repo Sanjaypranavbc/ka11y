@@ -142,10 +142,41 @@ A combined endpoint is available to run Node and Python checks simultaneously on
 3. **Request Combined Results:**
    Send a `GET` request to `http://localhost:3000/api/ka11y/combined?url=https://example.com`.
 
+### Queue + worker (Amazon SQS)
+
+Audits no longer run inside the API process. `POST /api/v1/combined` writes the
+job's `state.json` to object storage, publishes an `AuditJobMessage` (job id,
+URL, request parameters — a few hundred bytes) to SQS and answers `202`. A
+separate **worker** process consumes the queue and runs the audit:
+
+```bash
+cd ka11y-python
+poetry run python -m ka11y.worker.worker     # needs SQS_QUEUE_URL (+ SQS_ENDPOINT_URL for LocalStack)
+```
+
+| Rule | Where |
+|------|-------|
+| A concurrency slot (`WORKER_MAX_CONCURRENCY`, default 2) is taken **before** a message is received, and at most *free slots* messages are pulled | `ka11y/worker/concurrency.py`, `Worker.run` |
+| The message is deleted only **after** the final `state.json` is written (completed / failed / cancelled) | `Worker._settle_outcome` |
+| A visibility heartbeat extends the message every `SQS_VISIBILITY_TIMEOUT/2` s while the audit runs | `Worker._heartbeat` |
+| Already-terminal jobs (duplicate deliveries) are deleted and skipped; a cancel marker settles the job without running it | `Worker._handle` |
+| `SIGTERM`/`SIGINT` stop polling and let in-flight audits finish (`WORKER_SHUTDOWN_TIMEOUT`) | `Worker.request_stop` |
+| A runner crash leaves the message for redelivery; after `WORKER_MAX_ATTEMPTS` (3) the job is failed. The queue's dead-letter `RedrivePolicy` uses the same `maxReceiveCount=3` | `Worker._settle_crash`, `localstack/init-sqs.sh` |
+
+Locally, `docker compose` starts a **LocalStack** service and
+`localstack/init-sqs.sh` creates `ka11y-audit-jobs` (visibility 300 s, long
+poll 20 s) plus `ka11y-audit-jobs-dlq`. In AWS create the same two queues and
+set `SQS_QUEUE_URL` (leave `SQS_ENDPOINT_URL` empty); the code never creates
+queues. The API and the worker share one object store — an S3 bucket
+(`KA11Y_S3_BUCKET`) or, without one, the `./output/artifacts` bind mount —
+which is where `state.json`, `reviews.json`, `reports/` and every asset live.
+PostgreSQL is switched off for now (see `docker-compose.yml`), so sign-in
+stays disabled (`KA11Y_AUTH_DISABLED=1`).
+
 ### Running with Docker
 
 ```bash
-docker compose up --build      # first start: creates ./output/* and initialises PostgreSQL
+docker compose up --build      # first start: creates ./output/*, LocalStack queues, API + worker
 docker compose down            # stop; history is kept
 ./run.sh                       # stop + rebuild + start (non-destructive)
 ./run.sh --wipe                # clean slate: deletes ./output/* after confirmation
