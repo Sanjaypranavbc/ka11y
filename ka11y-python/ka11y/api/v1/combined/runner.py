@@ -52,7 +52,7 @@ from ka11y.observability import (
     set_span_attributes,
     traced_span,
 )
-from ka11y.store import repo
+# from ka11y.store import repo  # PostgreSQL run store: switched off (S3 only)
 
 logger = setup_logger(name="KAC", tag="combined")
 
@@ -324,11 +324,12 @@ async def _run_job(
     • Python failure → job fails (Python is the primary source of truth).
 
     Concurrency:
-    • Bounded by the module-level semaphore so the worker cannot launch more
-      Chromium processes than _MAX_CONCURRENT_JOBS at once.
-    • Only used when the durable dispatcher is not running (the store failed to
-      initialise) — see ``dispatcher.enqueue``. Normally the dispatcher's own
-      in-flight cap is the single limit; the two never apply at the same time.
+    • Bounded by the module-level semaphore (KA11Y_MAX_CONCURRENT_JOBS) so an
+      in-process caller cannot launch more Chromium processes than that.
+    • Production does not go through here: the SQS worker (ka11y/worker) calls
+      ``_run_job_body`` directly and its own ``ConcurrencyLimiter``
+      (WORKER_MAX_CONCURRENCY) is the single cap. This wrapper remains for the
+      in-process path (rule tester, tests).
     """
     sem = _get_job_semaphore()
     if sem.locked() and sem._value <= 0:
@@ -425,16 +426,16 @@ def _stamp_job_outcome(job_span: Any, job_id: str) -> None:
 
 
 async def _is_cancelled(job_id: str) -> bool:
-    """Cancelled in the run store (``repo.is_cancelled``) or flagged in object
-    storage (``jobstate.is_cancel_requested`` — the API process writes the
-    marker, this worker process reads it). A read error is treated as "not
-    cancelled": a momentary storage problem must not abort an audit that was
-    never cancelled."""
-    try:
-        if await repo.is_cancelled(job_id):
-            return True
-    except Exception:  # noqa: BLE001
-        logger.warning("[combined] job %s: cancellation check failed; continuing", job_id, exc_info=True)
+    """Flagged in object storage (``jobstate.is_cancel_requested`` — the API
+    process writes the marker, this worker process reads it). A read error is
+    treated as "not cancelled": a momentary storage problem must not abort an
+    audit that was never cancelled. (The PostgreSQL check, ``repo.is_cancelled``,
+    is switched off.)"""
+    # try:
+    #     if await repo.is_cancelled(job_id):
+    #         return True
+    # except Exception:  # noqa: BLE001
+    #     logger.warning("[combined] job %s: cancellation check failed; continuing", job_id, exc_info=True)
     try:
         from ka11y.storage import jobstate
 
@@ -455,7 +456,7 @@ async def _finish_cancelled(job_id: str, *, when: str) -> None:
             current_stage=None,
         )
     logger.info("[combined] job %s cancelled %s", job_id, when)
-    repo.insert_event(job_id, repo.JOB_CANCELLED, {"when": when, "settled": True})
+    # repo.insert_event(job_id, repo.JOB_CANCELLED, {"when": when, "settled": True})  # PostgreSQL: off
     await _broadcast(job_id, "job_cancelled", {"job_id": job_id, "when": when})
 
 
@@ -479,7 +480,7 @@ async def _run_job_body_inner(
     _jobs[job_id]["status"] = "running"
     run_started_at = datetime.now(timezone.utc).isoformat()
     _jobs[job_id]["run_started_at"] = run_started_at
-    await repo.mark_running(job_id, run_started_at, _jobs[job_id].get("submitted_at"))
+    # await repo.mark_running(job_id, run_started_at, _jobs[job_id].get("submitted_at"))  # PostgreSQL: off
 
     # From here on every failure must land in the except block below, which is
     # the only code that turns a crash into a terminal 'failed' status in the
@@ -807,18 +808,21 @@ async def _run_job_body_inner(
                 }
             )
 
-        await repo.save_report(job_id, report)
-        await repo.save_findings(job_id, report)
-        await repo.save_pages(
-            job_id, (report.get("pages") or []) if isinstance(report.get("pages"), list) else []
-        )
-        await repo.mark_completed(
-            job_id,
-            completed_at=completed_at,
-            run_started_at=_jobs[job_id].get("run_started_at"),
-            summary=report.get("summary"),
-            output_dir=str(output_dir),
-        )
+        # PostgreSQL run store — switched off. The report, findings, pages and
+        # the completed row used to be written here; reports/report.json and
+        # state.json (progress sink) are the record now.
+        # await repo.save_report(job_id, report)
+        # await repo.save_findings(job_id, report)
+        # await repo.save_pages(
+        #     job_id, (report.get("pages") or []) if isinstance(report.get("pages"), list) else []
+        # )
+        # await repo.mark_completed(
+        #     job_id,
+        #     completed_at=completed_at,
+        #     run_started_at=_jobs[job_id].get("run_started_at"),
+        #     summary=report.get("summary"),
+        #     output_dir=str(output_dir),
+        # )
 
         # Artifacts → object storage (S3 / local): report.json, findings.csv,
         # report.pdf, HTML snapshots, OCR reports, step logs. Best-effort.
@@ -958,17 +962,18 @@ async def _run_job_body_inner(
                 "stages": _jobs[job_id].get("stages", []),
             },
         )
-        await repo.mark_failed(
-            job_id,
-            completed_at=failed_at,
-            run_started_at=_jobs[job_id].get("run_started_at"),
-            error_id=error_id,
-            error_stage=current_stage,
-            error_type=err_type,
-            error_message=str(exc),
-            stack_trace=tb,
-            object_key=crash_ref.key if crash_ref else None,
-        )
+        # PostgreSQL run store — switched off (crash/crash.json + state.json hold it).
+        # await repo.mark_failed(
+        #     job_id,
+        #     completed_at=failed_at,
+        #     run_started_at=_jobs[job_id].get("run_started_at"),
+        #     error_id=error_id,
+        #     error_stage=current_stage,
+        #     error_type=err_type,
+        #     error_message=str(exc),
+        #     stack_trace=tb,
+        #     object_key=crash_ref.key if crash_ref else None,
+        # )
 
         job_rec = _jobs.get(job_id, {})
         log_run_timing(

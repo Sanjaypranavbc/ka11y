@@ -405,22 +405,23 @@ async def _amain() -> int:
     except Exception:  # noqa: BLE001
         logger.exception("[worker] tracing failed to initialise; running untraced")
 
-    # PostgreSQL is optional (and switched off in the compose stack). When
-    # DATABASE_URL is set the run store mirrors what the worker does; when it
-    # is not, every repo call is a no-op and object storage is the only store.
-    from ka11y.db.engine import is_configured as pg_configured
-
-    if pg_configured():
-        try:
-            from ka11y.db import init_postgres
-            from ka11y.store import init_store
-
-            await init_postgres()
-            init_store()
-        except Exception:  # noqa: BLE001
-            logger.exception("[worker] PostgreSQL layer failed to initialise; continuing on object storage only")
-    else:
-        logger.info("[worker] DATABASE_URL not set; job state lives in object storage only")
+    # PostgreSQL — switched off (S3 only). Every repo call in the runner is
+    # commented out; object storage is the only store. Uncomment to mirror
+    # runs into the run store again when DATABASE_URL is set.
+    # from ka11y.db.engine import is_configured as pg_configured
+    #
+    # if pg_configured():
+    #     try:
+    #         from ka11y.db import init_postgres
+    #         from ka11y.store import init_store
+    #
+    #         await init_postgres()
+    #         init_store()
+    #     except Exception:  # noqa: BLE001
+    #         logger.exception("[worker] PostgreSQL layer failed to initialise; continuing on object storage only")
+    # else:
+    #     logger.info("[worker] DATABASE_URL not set; job state lives in object storage only")
+    logger.info("[worker] PostgreSQL is switched off; job state lives in object storage only")
 
     if not jobstate.storage_available():
         logger.error("[worker] KA11Y_STORAGE_BACKEND=off: there is nowhere to write job state; exiting")
@@ -443,8 +444,8 @@ async def _amain() -> int:
     finally:
         for label, shutdown in (
             ("browser pool", "ka11y.crawler.browser_pool:shutdown_pool"),
-            ("run-store writer", "ka11y.store:shutdown_store"),
-            ("PostgreSQL", "ka11y.db:shutdown_postgres"),
+            # ("run-store writer", "ka11y.store:shutdown_store"),  # PostgreSQL: off
+            # ("PostgreSQL", "ka11y.db:shutdown_postgres"),        # PostgreSQL: off
             ("CPU pool", "ka11y.store.cpu_pool:shutdown_pool"),
             ("tracing", "ka11y.observability:shutdown_tracing"),
         ):

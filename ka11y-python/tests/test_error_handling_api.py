@@ -353,33 +353,31 @@ async def test_system_health_names_no_internal_address(monkeypatch):
 
 def test_timings_from_the_store_carry_no_exception_text(client, monkeypatch):
     """
-    Last Step 2 item. Once a job has left memory, /timings is rebuilt from the
-    stage_timings table, whose error column holds repr(exc) of the failed
-    step. The row must still say the step failed; the text stays server-side.
+    Last Step 2 item. Once a job has left memory, /timings is rebuilt from
+    state.json, whose stage entries may carry repr(exc) of the failed step.
+    The stage must still be reported as failed; the text stays server-side.
     """
-    from ka11y.store import repo
+    from ka11y.storage import jobstate
 
-    async def _owner(job_id):
-        return None
+    async def _state(job_id):
+        return {
+            "job_id": job_id, "url": "https://example.com", "status": "failed",
+            "submitted_at": "2026-09-29T00:00:00+00:00",
+            "run_started_at": "2026-09-29T00:00:01+00:00",
+            "completed_at": "2026-09-29T00:00:13+00:00",
+            "error": "Audit failed due to an internal error.",
+            "error_stage": "media_audit",
+            "stages": [{"stage": "media_audit", "status": "error",
+                        "started_at": "2026-09-29T00:00:01+00:00",
+                        "completed_at": "2026-09-29T00:00:13+00:00",
+                        "error": "ConnectError('All connection attempts failed: node:3000')"}],
+        }
 
-    async def _run(job_id):
-        return {"url": "https://example.com", "status": "completed",
-                "queue_wait_ms": 0, "wall_ms": 1000}
-
-    async def _timings(job_id):
-        return [{"page_url": "https://example.com", "depth": 0, "stage": "media_audit",
-                 "sub_stage": "video_analysis", "rule": None, "duration_ms": 12.0,
-                 "item_count": None, "status": "error",
-                 "error": "ConnectError('All connection attempts failed: node:3000')",
-                 "ts": "2026-09-29T00:00:00+00:00"}]
-
-    monkeypatch.setattr(repo, "get_owner", _owner)
-    monkeypatch.setattr(repo, "get_run", _run)
-    monkeypatch.setattr(repo, "get_timings", _timings)
+    monkeypatch.setattr(jobstate, "get_state", _state)
 
     resp = client.get("/api/v1/combined/test-job-timings-store/timings")
     assert resp.status_code == 200, resp.text[:200]
-    steps = resp.json()["steps"]
-    assert steps[0]["status"] == "error", "the step must still be reported as failed"
+    body = resp.json()
+    assert body["status"] == "failed" and body.get("error_stage") == "media_audit"
     for leaked in ("node:3000", "ConnectError", "connection attempts"):
-        assert leaked not in resp.text, f"/timings leaked {leaked!r}: {steps}"
+        assert leaked not in resp.text, f"/timings leaked {leaked!r}: {body}"

@@ -11,7 +11,8 @@ Object-key layout (spec §18). UUIDs only — never emails — in the path::
 
 A job the production DB does not know (anonymous submission, auth disabled,
 DATABASE_URL unset) lands under ``anonymous/jobs/{job_id}/`` instead, so an
-upload never has to wait on ownership data.
+upload never has to wait on ownership data. PostgreSQL is switched off for
+now, so *every* job lands there (the owner lookup below is commented out).
 """
 
 from __future__ import annotations
@@ -49,12 +50,13 @@ async def job_prefix(job_id: str) -> str:
     if cached:
         return cached
     owner: Optional[dict] = None
-    try:
-        from ka11y.store import repo
-
-        owner = await repo.get_owner(job_id)
-    except Exception:  # noqa: BLE001
-        logger.debug("[storage] owner lookup failed for %s", job_id, exc_info=True)
+    # PostgreSQL ownership lookup — switched off (S3 only): every job is anonymous.
+    # try:
+    #     from ka11y.store import repo
+    #
+    #     owner = await repo.get_owner(job_id)
+    # except Exception:  # noqa: BLE001
+    #     logger.debug("[storage] owner lookup failed for %s", job_id, exc_info=True)
     if owner and owner.get("user_id"):
         prefix = (
             f"organizations/{owner.get('organization_id') or 'none'}/"

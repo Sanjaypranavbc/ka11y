@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 import math
 import re
 from html import escape
@@ -405,8 +406,37 @@ _IMAGE_BUDGET_BYTES = 6_000_000
 _ASSET_URL_RE = re.compile(r"^/api/v1/assets/(\d+)$")
 
 
+_BY_KEY_PREFIX = "/api/v1/assets/by-key/"
+
+
+async def _object_to_temp(key: str) -> Optional[str]:
+    """Fetch one object from the store into a temporary file (S3-only mode:
+    the PDF is built in the worker, which has no asset row to map the key
+    back to its local copy). None when storage is off or the key is unknown."""
+    import tempfile
+
+    try:
+        from ka11y.storage.backends import get_store
+
+        store = get_store()
+        if store is None:
+            return None
+        data = await store.get_bytes(key)
+        if not data:
+            return None
+        suffix = Path(key).suffix or ".bin"
+        with tempfile.NamedTemporaryFile(prefix="ka11y-pdf-", suffix=suffix, delete=False) as tmp:
+            tmp.write(data)
+            return tmp.name
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def _src_to_path(src: str) -> Optional[str]:
     """Map a report image src back to an absolute file path, if it is local."""
+    if src.startswith(_BY_KEY_PREFIX):
+        return await _object_to_temp(src[len(_BY_KEY_PREFIX):])
+
     if src.startswith("/api/v1/assets/"):
         match = _ASSET_URL_RE.match(src)
         if not match:
@@ -482,6 +512,11 @@ async def _collect_images(report: Dict[str, Any], limit: int) -> Dict[str, str]:
         if not path or not Path(path).is_file():
             continue
         made = _thumbnail_data_uri(path)
+        if src.startswith(_BY_KEY_PREFIX):
+            try:
+                os.unlink(path)  # the temporary copy fetched from the object store
+            except OSError:
+                pass
         if not made:
             continue
         uri, size = made

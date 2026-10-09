@@ -12,7 +12,7 @@ On completion (``runner``)      → :func:`upload_job_artifacts`
         assets/html/…        (rendered HTML of every crawled page)
         raw/ocr/…            (text_detection_report.json, contrast_report.*)
         raw/steps/…          (execution step log)
-    and one ``reports`` row per report file in PostgreSQL (spec §13).
+    (the ``reports`` row per report file in PostgreSQL is switched off)
 On failure (``runner``)         → :func:`upload_crash`  → crash/crash.json
 On retention delete             → :func:`delete_job_artifacts` (opt-in)
 """
@@ -67,19 +67,22 @@ async def upload_asset_file(
 
 
 async def _register_report(job_id: str, ref: ObjectRef, *, report_type: str, fmt: str) -> None:
-    try:
-        from ka11y.store import repo
-
-        await repo.add_report(
-            job_id,
-            report_type=report_type,
-            fmt=fmt,
-            bucket=ref.bucket if ref.backend == "s3" else None,
-            key=ref.key,
-            size=ref.size,
-        )
-    except Exception:  # noqa: BLE001
-        logger.warning("[storage] reports row failed (job=%s %s)", job_id, fmt, exc_info=True)
+    """PostgreSQL ``reports`` row — switched off; the key listing under
+    ``reports/`` is the index now (``audits.audit_artifacts``)."""
+    return None
+    # try:
+    #     from ka11y.store import repo
+    #
+    #     await repo.add_report(
+    #         job_id,
+    #         report_type=report_type,
+    #         fmt=fmt,
+    #         bucket=ref.bucket if ref.backend == "s3" else None,
+    #         key=ref.key,
+    #         size=ref.size,
+    #     )
+    # except Exception:  # noqa: BLE001
+    #     logger.warning("[storage] reports row failed (job=%s %s)", job_id, fmt, exc_info=True)
 
 
 async def upload_job_artifacts(

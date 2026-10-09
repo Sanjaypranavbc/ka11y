@@ -205,12 +205,13 @@ def _write_row(run_id: str, row: Dict[str, Any]) -> None:
     # P3: mirror every fine-grained step into the durable stage_timings table
     # (fire-and-forget; never blocks or raises). This is the queryable sink that
     # /admin/metrics and /{run_id}/timings read from.
-    try:
-        from ka11y.store import repo
-
-        repo.insert_timing(row)
-    except Exception:  # noqa: BLE001
-        pass
+    # PostgreSQL stage_timings mirror — switched off (S3 only).
+    # try:
+    #     from ka11y.store import repo
+    #
+    #     repo.insert_timing(row)
+    # except Exception:  # noqa: BLE001
+    #     pass
 
     if not _files_enabled():
         return

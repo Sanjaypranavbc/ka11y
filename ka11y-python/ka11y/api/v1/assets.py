@@ -3,11 +3,15 @@ ka11y/api/v1/assets.py
 =====================
 Content-addressed asset serving.
 
-  GET /api/v1/assets/{asset_id}     Serve a stored asset (screenshot/crop/HAR)
+  GET /api/v1/assets/by-key/{key}   Serve an asset straight from object storage
+  GET /api/v1/assets/{asset_id}     Serve a stored asset by its PostgreSQL id
+                                    (404 while the DB is switched off)
 
-The asset endpoint replaces the per-job ``?path=`` scheme: an asset is served by
-its DB id, the row is the authority for the on-disk location, and a containment
-check in :func:`store.assets.get_asset` blocks path traversal.
+``by-key`` is the S3-only path: the runner registers every report image with
+``store.assets.put_asset``, which uploads it and points ``image_src`` /
+``image_url`` at this route. The key must sit under the jobs root
+(``anonymous/jobs/…``) and contain no ``..`` segment, so the route can never
+read outside the audit artifacts.
 """
 
 from __future__ import annotations
@@ -19,8 +23,39 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 
 from ka11y.store.assets import get_asset_record
 from ka11y.storage.backends import LocalObjectStore, get_store
+from ka11y.storage.jobstate import JOBS_ROOT
 
 router = APIRouter(tags=["assets"])
+
+
+def _safe_key(key: str) -> str:
+    parts = key.split("/")
+    if not key.startswith(JOBS_ROOT) or any(p in ("", ".", "..") for p in parts):
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return key
+
+
+@router.get("/assets/by-key/{key:path}")
+async def serve_asset_by_key(key: str):
+    """Serve one object from the store: 302 to a presigned S3 URL, or the
+    bytes / local file when the backend cannot presign."""
+    key = _safe_key(key)
+    store = get_store()
+    if store is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    media_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+    if isinstance(store, LocalObjectStore):
+        local = store.local_path(key)
+        if local is None:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        return FileResponse(str(local), media_type=media_type)
+    url = await store.download_url(key)
+    if url:
+        return RedirectResponse(url, status_code=302)
+    data = await store.get_bytes(key)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return Response(content=data, media_type=media_type)
 
 
 @router.get("/assets/{asset_id}")

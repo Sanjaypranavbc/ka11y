@@ -102,24 +102,25 @@ class CrawlerTimingLogger:
             scope = scope[: _W_SCOPE - 1] + "…"  # ellipsis
         # P3: mirror the crawler row into the durable stage_timings table
         # (queryable; survives TTL). Fire-and-forget; never raises.
-        run_id = _run_id_ctx.get()
-        if run_id:
-            try:
-                from ka11y.store import repo
-
-                repo.insert_timing(
-                    {
-                        "run_id": run_id,
-                        "stage": crawler,
-                        "sub_stage": "crawl",
-                        "page_url": scope or None,
-                        "duration_ms": duration_s * 1000.0,
-                        "item_count": pages,
-                        "status": status,
-                    }
-                )
-            except Exception:  # noqa: BLE001
-                pass
+        # PostgreSQL stage_timings mirror — switched off (S3 only).
+        # run_id = _run_id_ctx.get()
+        # if run_id:
+        #     try:
+        #         from ka11y.store import repo
+        #
+        #         repo.insert_timing(
+        #             {
+        #                 "run_id": run_id,
+        #                 "stage": crawler,
+        #                 "sub_stage": "crawl",
+        #                 "page_url": scope or None,
+        #                 "duration_ms": duration_s * 1000.0,
+        #                 "item_count": pages,
+        #                 "status": status,
+        #             }
+        #         )
+        #     except Exception:  # noqa: BLE001
+        #         pass
 
         if not _files_enabled():
             return

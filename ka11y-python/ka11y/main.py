@@ -399,43 +399,47 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("tracing failed to initialise; running untraced")
 
-    # PostgreSQL: users, sessions, and — since 2026-09-28 — the whole run
-    # store (queue, reports, findings, assets index, verdicts, telemetry).
-    # Runs Alembic migrations and seeds the WCAG catalogue. Never blocks
-    # startup; without DATABASE_URL audits cannot be queued (503).
-    try:
-        from ka11y.db import init_postgres
-
-        await init_postgres()
-    except Exception:  # noqa: BLE001
-        logger.exception("PostgreSQL layer failed to initialise")
-    try:
-        from ka11y.store import init_store
-
-        init_store()  # fire-and-forget writer for events/timings
-    except Exception:  # noqa: BLE001
-        logger.exception("run-store writer failed to start")
+    # ── PostgreSQL — switched off (S3 only) ──────────────────────────────
+    # Users, sessions and the whole run store (queue, reports, findings,
+    # assets index, verdicts, telemetry) used to live here; Alembic + the
+    # WCAG catalogue seed ran at startup. Job state is state.json in object
+    # storage now and the SQS worker (ka11y/worker) runs the audits, so the
+    # PostgreSQL queue dispatcher and the retention sweep stay off too.
+    # Uncomment this block (and the matching shutdown below) to bring it back.
+    #
+    # try:
+    #     from ka11y.db import init_postgres
+    #
+    #     await init_postgres()
+    # except Exception:  # noqa: BLE001
+    #     logger.exception("PostgreSQL layer failed to initialise")
+    # try:
+    #     from ka11y.store import init_store
+    #
+    #     init_store()  # fire-and-forget writer for events/timings
+    # except Exception:  # noqa: BLE001
+    #     logger.exception("run-store writer failed to start")
+    logger.info("PostgreSQL is switched off: job state and reports live in object storage only")
 
     eviction_task = asyncio.create_task(_evict_old_jobs())
 
-    # Crash recovery + durable queue dispatcher. On boot any run left
-    # 'running' is requeued; the dispatcher drains 'queued' rows FIFO, bounded
-    # by KA11Y_MAX_CONCURRENT_JOBS. Retention sweep prunes old runs+assets.
-    dispatcher_task = None
+    # Audits run in the SQS worker process (ka11y/worker); the in-process
+    # PostgreSQL queue dispatcher was removed with the migration. The
+    # retention sweep (ka11y/store/retention.py) is PostgreSQL-backed and
+    # stays off with it; an S3 lifecycle rule expires old artifacts instead.
+    # retention_task = None
+    # try:
+    #     from ka11y.store.retention import run_retention_loop
+    #
+    #     retention_task = asyncio.create_task(run_retention_loop())
+    # except Exception:  # noqa: BLE001
+    #     logger.exception("retention failed to start")
     retention_task = None
-    try:
-        from ka11y.api.v1.combined.dispatcher import run_dispatcher
-        from ka11y.store.retention import run_retention_loop
-
-        dispatcher_task = asyncio.create_task(run_dispatcher())
-        retention_task = asyncio.create_task(run_retention_loop())
-    except Exception:  # noqa: BLE001
-        logger.exception("dispatcher/retention failed to start")
 
     try:
         yield
     finally:
-        for _t in (eviction_task, dispatcher_task, retention_task):
+        for _t in (eviction_task, retention_task):
             if _t is not None:
                 _t.cancel()
         # Sprint-2 (#9): tear down the shared Chromium pool on shutdown so
@@ -446,18 +450,19 @@ async def lifespan(app: FastAPI):
             await shutdown_pool()
         except Exception:  # noqa: BLE001
             logger.exception("browser pool shutdown failed during lifespan teardown")
-        try:
-            from ka11y.store import shutdown_store
-
-            shutdown_store()  # drains queued events/timings first
-        except Exception:  # noqa: BLE001
-            logger.exception("run-store writer shutdown failed")
-        try:
-            from ka11y.db import shutdown_postgres
-
-            await shutdown_postgres()
-        except Exception:  # noqa: BLE001
-            logger.exception("PostgreSQL dispose failed during lifespan teardown")
+        # PostgreSQL — switched off (see startup).
+        # try:
+        #     from ka11y.store import shutdown_store
+        #
+        #     shutdown_store()  # drains queued events/timings first
+        # except Exception:  # noqa: BLE001
+        #     logger.exception("run-store writer shutdown failed")
+        # try:
+        #     from ka11y.db import shutdown_postgres
+        #
+        #     await shutdown_postgres()
+        # except Exception:  # noqa: BLE001
+        #     logger.exception("PostgreSQL dispose failed during lifespan teardown")
         try:
             from ka11y.store.cpu_pool import shutdown_pool as shutdown_cpu_pool
 

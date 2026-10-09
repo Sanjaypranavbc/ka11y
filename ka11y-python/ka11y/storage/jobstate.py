@@ -8,11 +8,13 @@ One small JSON document per job, next to its artifacts (same key layout as
 
     anonymous/jobs/{job_id}/state.json     status, stages, progress, errors, params
     anonymous/jobs/{job_id}/cancel.json    present = cancellation requested
+    anonymous/jobs/{job_id}/reviews.json   manual verdicts on needs_review items
     anonymous/jobs/{job_id}/reports/report.json   the full report (uploader.py)
 
 Who writes what
     API (submit)   state.json  status=queued, with the request params
     API (cancel)   cancel.json, and state.json → cancelled while still queued
+    API (review)   reviews.json (read-modify-write; one reviewer at a time)
     worker         state.json on every stage event (throttled) and at the end
     runner         reports/report.json via ``uploader.upload_job_artifacts``
 
@@ -43,6 +45,11 @@ logger = setup_logger(name="KAC", tag="storage.jobstate")
 
 STATE_FILE = "state.json"
 CANCEL_FILE = "cancel.json"
+REVIEWS_FILE = "reviews.json"
+
+#: Where every job lives while there is no ownership store (PostgreSQL is
+#: switched off): ``keys.job_prefix`` always answers under this root.
+JOBS_ROOT = "anonymous/jobs/"
 
 #: Statuses after which a job never runs again.
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
@@ -91,6 +98,28 @@ async def _state_key(job_id: str) -> str:
 
 async def _cancel_key(job_id: str) -> str:
     return f"{await keys.job_prefix(job_id)}/{CANCEL_FILE}"
+
+
+async def _reviews_key(job_id: str) -> str:
+    return f"{await keys.job_prefix(job_id)}/{REVIEWS_FILE}"
+
+
+async def _read_json(key: str, *, what: str, job_id: str) -> Optional[Any]:
+    store = get_store()
+    if store is None:
+        return None
+    try:
+        raw = await store.get_bytes(key)
+    except Exception:  # noqa: BLE001
+        logger.warning("[jobstate] job %s: %s read failed", job_id, what, exc_info=True)
+        return None
+    if not raw:
+        return None
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        logger.warning("[jobstate] job %s: %s is not valid JSON", job_id, what)
+        return None
 
 
 def storage_available() -> bool:
@@ -226,21 +255,7 @@ async def request_cancel(job_id: str) -> bool:
 
 
 async def get_state(job_id: str) -> Optional[Dict[str, Any]]:
-    store = get_store()
-    if store is None:
-        return None
-    try:
-        raw = await store.get_bytes(await _state_key(job_id))
-    except Exception:  # noqa: BLE001
-        logger.warning("[jobstate] job %s: state read failed", job_id, exc_info=True)
-        return None
-    if not raw:
-        return None
-    try:
-        doc = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        logger.warning("[jobstate] job %s: state.json is not valid JSON", job_id)
-        return None
+    doc = await _read_json(await _state_key(job_id), what="state.json", job_id=job_id)
     return doc if isinstance(doc, dict) else None
 
 
@@ -262,22 +277,8 @@ async def is_cancel_requested(job_id: str) -> bool:
 
 async def get_report(job_id: str) -> Optional[Dict[str, Any]]:
     """The full report the runner uploaded on completion (reports/report.json)."""
-    store = get_store()
-    if store is None:
-        return None
-    try:
-        prefix = await keys.job_prefix(job_id)
-        raw = await store.get_bytes(keys.report_key(prefix, "report.json"))
-    except Exception:  # noqa: BLE001
-        logger.warning("[jobstate] job %s: report read failed", job_id, exc_info=True)
-        return None
-    if not raw:
-        return None
-    try:
-        doc = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        logger.warning("[jobstate] job %s: report.json is not valid JSON", job_id)
-        return None
+    prefix = await keys.job_prefix(job_id)
+    doc = await _read_json(keys.report_key(prefix, "report.json"), what="report.json", job_id=job_id)
     return doc if isinstance(doc, dict) else None
 
 
@@ -288,7 +289,7 @@ async def list_job_ids(limit: int = 200) -> List[str]:
     if store is None:
         return []
     try:
-        found = await store.list_keys("anonymous/jobs/")
+        found = await store.list_keys(JOBS_ROOT)
     except Exception:  # noqa: BLE001
         logger.warning("[jobstate] listing failed", exc_info=True)
         return []
@@ -298,6 +299,147 @@ async def list_job_ids(limit: int = 200) -> List[str]:
         if len(parts) == 4 and parts[3] == STATE_FILE:
             ids.append(parts[2])
     return ids[: max(0, limit)]
+
+
+# ── history (the run store's list view) ──────────────────────────────────────
+
+#: Parallel state.json reads while building the history list.
+_LIST_CONCURRENCY = 16
+
+
+def history_row(state: Dict[str, Any]) -> Dict[str, Any]:
+    """The history/list shape the API layer has always served (the old
+    ``repo._run_dict``), built from a state document."""
+    params = state.get("params") or {}
+    if not isinstance(params, dict):
+        params = {}
+    job_id = state.get("job_id", "")
+    return {
+        "run_id": job_id,
+        "job_id": job_id,
+        "url": state.get("url", ""),
+        "status": state.get("status", "unknown"),
+        "lang_requested": state.get("lang"),
+        "lang_resolved": state.get("lang_resolved"),
+        "wcag_level": params.get("wcag_level"),
+        "params": dict(params),
+        "max_depth": params.get("max_depth"),
+        "max_pages": params.get("max_pages"),
+        "submitted_at": state.get("submitted_at"),
+        "run_started_at": state.get("run_started_at"),
+        "completed_at": state.get("completed_at"),
+        "error_id": state.get("error_id"),
+        "error_stage": state.get("error_stage"),
+        "summary": state.get("result_summary"),
+        "attempt": state.get("attempt", 0),
+        "worker_pid": state.get("worker_pid"),
+        "output_dir": state.get("output_dir"),
+        "rerun_of": state.get("rerun_of"),
+        "user_id": None,
+        "organization_id": None,
+    }
+
+
+async def list_states(
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    url: Optional[str] = None,
+    status: Optional[str] = None,
+    max_scan: int = 2000,
+) -> List[Dict[str, Any]]:
+    """History rows, newest first, from every state.json under the jobs root.
+
+    One listing plus one GET per job (bounded by *max_scan*, read
+    ``_LIST_CONCURRENCY`` at a time): fine for the few hundred jobs an
+    S3-only deployment holds. Filters match the old ``repo.list_runs``:
+    *url* is a case-insensitive substring, *status* an exact match."""
+    import asyncio
+
+    ids = await list_job_ids(limit=max_scan)
+    if not ids:
+        return []
+    gate = asyncio.Semaphore(_LIST_CONCURRENCY)
+
+    async def _one(job_id: str) -> Optional[Dict[str, Any]]:
+        async with gate:
+            return await get_state(job_id)
+
+    states = [st for st in await asyncio.gather(*(_one(j) for j in ids)) if st]
+    needle = (url or "").strip().lower()
+    rows = []
+    for st in states:
+        if status and st.get("status") != status:
+            continue
+        if needle and needle not in str(st.get("url", "")).lower():
+            continue
+        rows.append(history_row(st))
+    rows.sort(key=lambda r: r.get("submitted_at") or "", reverse=True)
+    return rows[max(0, offset): max(0, offset) + max(0, limit)]
+
+
+async def list_artifacts(job_id: str) -> List[str]:
+    """Every object key stored for a job (reports, assets, raw, crash)."""
+    store = get_store()
+    if store is None:
+        return []
+    try:
+        return await store.list_keys(f"{await keys.job_prefix(job_id)}/")
+    except Exception:  # noqa: BLE001
+        logger.warning("[jobstate] job %s: artifact listing failed", job_id, exc_info=True)
+        return []
+
+
+# ── manual verdicts (reviews.json) ───────────────────────────────────────────
+
+
+async def get_reviews(job_id: str) -> Dict[str, Dict[str, Any]]:
+    """``{finding_id: {finding_id, status, note, reviewer, updated_at, …}}``
+    for a run — the shape ``report.apply_reviews`` consumes."""
+    doc = await _read_json(await _reviews_key(job_id), what="reviews.json", job_id=job_id)
+    if not isinstance(doc, dict):
+        return {}
+    return {k: v for k, v in doc.items() if isinstance(v, dict)}
+
+
+async def set_review(
+    job_id: str,
+    finding_id: str,
+    *,
+    status: str,
+    note: Optional[str] = None,
+    reviewer: Optional[str] = None,
+    wcag_sc: Optional[str] = None,
+    page_url: Optional[str] = None,
+) -> Optional[Dict[str, Dict[str, Any]]]:
+    """Upsert a reviewer's decision (pass|violation) for one needs_review
+    item; ``status='needs_review'`` clears it (re-opens the item). Returns the
+    full review map after the write, or None when storage is off/failed.
+    Read-modify-write on one small object: reviewers are people, so two
+    verdicts on the same run never race in practice."""
+    store = get_store()
+    if store is None:
+        logger.warning("[jobstate] job %s: storage is off; review not written", job_id)
+        return None
+    reviews = await get_reviews(job_id)
+    if status == "needs_review":
+        reviews.pop(finding_id, None)
+    else:
+        reviews[finding_id] = {
+            "finding_id": finding_id,
+            "status": status,
+            "note": note,
+            "reviewer": reviewer,
+            "wcag_sc": wcag_sc,
+            "page_url": page_url,
+            "updated_at": _now(),
+        }
+    try:
+        await store.put_bytes(await _reviews_key(job_id), _json(reviews), content_type="application/json")
+    except Exception:  # noqa: BLE001
+        logger.warning("[jobstate] job %s: reviews write failed", job_id, exc_info=True)
+        return None
+    return reviews
 
 
 # ── progress sink (worker side) ──────────────────────────────────────────────

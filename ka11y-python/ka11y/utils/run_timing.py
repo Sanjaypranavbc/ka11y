@@ -224,12 +224,13 @@ def log_run_timing(
         # P3: mirror the computed aggregate into the durable run_events table so
         # the per-run timing summary is queryable (and survives TTL/restart),
         # not only tailable from run_timings.log. Fire-and-forget; never raises.
-        try:
-            from ka11y.store import repo
-
-            repo.insert_event(job_id, "run_timing", data)
-        except Exception:  # noqa: BLE001
-            pass
+        # PostgreSQL run_events mirror — switched off (S3 only).
+        # try:
+        #     from ka11y.store import repo
+        #
+        #     repo.insert_event(job_id, "run_timing", data)
+        # except Exception:  # noqa: BLE001
+        #     pass
 
         path = _log_path()
         if os.environ.get("KA11Y_TELEMETRY_FILES", "1") != "0":

@@ -1,12 +1,18 @@
 """
 ka11y/store/assets.py
 =====================
-Content-addressed asset store (bytes on disk, index in PostgreSQL).
+Content-addressed asset store (bytes on disk, mirrored to object storage).
 
 ``put_asset`` hashes the bytes, writes them under ``KA11Y_ASSET_DIR`` at a
-path derived from the sha256 (so the same logo across 50 pages is stored once),
-and records a row in ``audit_assets``. ``get_asset`` resolves a row → absolute
-path for the serving endpoint.
+path derived from the sha256 (so the same logo across 50 pages is stored once)
+and uploads them to the object store (S3 / local artifact dir). The returned
+ref's ``url`` is ``/api/v1/assets/by-key/{object key}``, which the API serves
+straight from the store — so the UI can load an image whichever process
+(API or worker) produced it.
+
+PostgreSQL is switched off for now: the ``audit_assets`` index and the
+``/api/v1/assets/{id}`` ids it handed out are commented out below, not
+removed. ``get_asset`` / ``get_asset_record`` answer None without a DB.
 
 Nothing here may fail an audit: ``put_asset`` returns ``None`` on any error and
 logs it. The caller keeps its existing on-disk path as a fallback.
@@ -47,9 +53,12 @@ class AssetRef:
     rel_path: str
     sha256: str
     bytes: int
+    object_key: Optional[str] = None  # key in the object store (S3-only mode)
 
     @property
     def url(self) -> str:
+        if self.object_key:
+            return f"/api/v1/assets/by-key/{self.object_key}"
         return f"/api/v1/assets/{self.asset_id}"
 
 
@@ -99,41 +108,47 @@ async def put_asset(
             tmp.write_bytes(raw)
             os.replace(tmp, dest)  # atomic publish
 
-        # The id is taken from the INSERT's RETURNING, or — when the UNIQUE
-        # (job_id, rel_path) row already exists — from a SELECT in the same
+        try:
+            uuid.UUID(str(run_id))
+        except (ValueError, TypeError):
+            logger.warning("[store] put_asset(run=%s): job id is not a UUID", run_id)
+            return None
+
+        # ── PostgreSQL index — switched off (S3-only deployment) ─────────────
+        # The id was taken from the INSERT's RETURNING, or — when the UNIQUE
+        # (job_id, rel_path) row already existed — from a SELECT in the same
         # transaction. Never from a "last insert id": with the old SQLite
         # INSERT OR IGNORE that pointed at the PREVIOUS successful insert, so
         # every image referenced by more than one finding (the same crop is
         # registered once per rule: 1.1.1, then 4.1.2, 1.4.5 …) rendered as
         # whichever image had been inserted before it.
-        try:
-            jid = uuid.UUID(str(run_id))
-        except (ValueError, TypeError):
-            logger.warning("[store] put_asset(run=%s): job id is not a UUID", run_id)
-            return None
-        if not is_configured():
-            return None
-        async with session_scope() as s:
-            stmt = (
-                pg_insert(AuditAsset)
-                .values(job_id=jid, page_url=page_url, kind=kind, rel_path=rel_path, sha256=sha,
-                        mime=mime, width=width, height=height, bytes=len(raw))
-                .on_conflict_do_nothing(constraint="uq_audit_assets_job_rel_path")
-                .returning(AuditAsset.id)
-            )
-            asset_id = (await s.execute(stmt)).scalar()
-            if asset_id is None:
-                asset_id = (
-                    await s.execute(
-                        select(AuditAsset.id).where(AuditAsset.job_id == jid, AuditAsset.rel_path == rel_path)
-                    )
-                ).scalar()
-        if not asset_id:
-            logger.warning(
-                "[store] put_asset(run=%s kind=%s) could not resolve an asset id",
-                run_id, kind,
-            )
-            return None
+        #
+        # jid = uuid.UUID(str(run_id))
+        # if not is_configured():
+        #     return None
+        # async with session_scope() as s:
+        #     stmt = (
+        #         pg_insert(AuditAsset)
+        #         .values(job_id=jid, page_url=page_url, kind=kind, rel_path=rel_path, sha256=sha,
+        #                 mime=mime, width=width, height=height, bytes=len(raw))
+        #         .on_conflict_do_nothing(constraint="uq_audit_assets_job_rel_path")
+        #         .returning(AuditAsset.id)
+        #     )
+        #     asset_id = (await s.execute(stmt)).scalar()
+        #     if asset_id is None:
+        #         asset_id = (
+        #             await s.execute(
+        #                 select(AuditAsset.id).where(AuditAsset.job_id == jid, AuditAsset.rel_path == rel_path)
+        #             )
+        #         ).scalar()
+        # if not asset_id:
+        #     logger.warning("[store] put_asset(run=%s kind=%s) could not resolve an asset id", run_id, kind)
+        #     return None
+        # await _upload_if_needed(int(asset_id), run_id=run_id, kind=kind, dest=dest,
+        #                         filename=object_name, page_url=page_url, mime=mime)
+        # return AssetRef(asset_id=int(asset_id), rel_path=rel_path, sha256=sha, bytes=len(raw))
+        # ─────────────────────────────────────────────────────────────────────
+
         # Object-storage name: content hash for images/HTML (deduped, stable);
         # hash-prefixed original name for report-like files so raw/ocr/ keeps
         # "text_detection_report.json" and "contrast_report.csv" readable.
@@ -142,57 +157,64 @@ async def put_asset(
             if kind in ("ocr_report", "step_log", "crawler_json") and src_name
             else f"{sha}.{ext}"
         )
-        await _upload_if_needed(
-            int(asset_id), run_id=run_id, kind=kind, dest=dest,
-            filename=object_name, page_url=page_url, mime=mime,
+        from ka11y.storage.uploader import upload_asset_file
+
+        ref = await upload_asset_file(
+            run_id, kind=kind, path=dest, filename=object_name, page_url=page_url, content_type=mime
         )
-        return AssetRef(asset_id=int(asset_id), rel_path=rel_path, sha256=sha, bytes=len(raw))
+        if ref is None:
+            # Storage off or the upload failed: the local copy stays usable
+            # through the legacy ?path= route; nothing to register.
+            return None
+        return AssetRef(asset_id=0, rel_path=rel_path, sha256=sha, bytes=len(raw), object_key=ref.key)
     except Exception:  # noqa: BLE001
         logger.warning("[store] put_asset(run=%s kind=%s) failed", run_id, kind, exc_info=True)
         return None
 
 
-async def _upload_if_needed(
-    asset_id: int,
-    *,
-    run_id: str,
-    kind: str,
-    dest: Path,
-    filename: str,
-    page_url: Optional[str],
-    mime: Optional[str],
-) -> None:
-    """Mirror the bytes to object storage (S3 / local artifact dir) once per
-    row and remember the key. Storage off, or already uploaded → no-op.
-    Never raises: the local copy is the fallback."""
-    try:
-        from ka11y.storage.backends import get_store
-
-        if get_store() is None:
-            return
-        async with session_scope() as s:
-            existing = (await s.execute(select(AuditAsset.object_key).where(AuditAsset.id == asset_id))).scalar()
-        if existing:
-            return
-        from ka11y.storage.uploader import upload_asset_file
-
-        ref = await upload_asset_file(
-            run_id, kind=kind, path=dest, filename=filename, page_url=page_url, content_type=mime
-        )
-        if ref:
-            async with session_scope() as s:
-                await s.execute(
-                    update(AuditAsset)
-                    .where(AuditAsset.id == asset_id)
-                    .values(object_key=ref.key, object_bucket=ref.bucket if ref.backend == "s3" else None)
-                )
-    except Exception:  # noqa: BLE001
-        logger.debug("[store] asset %s upload skipped", asset_id, exc_info=True)
+# ── PostgreSQL-era upload bookkeeping — switched off; put_asset uploads directly ──
+# async def _upload_if_needed(
+#     asset_id: int,
+#     *,
+#     run_id: str,
+#     kind: str,
+#     dest: Path,
+#     filename: str,
+#     page_url: Optional[str],
+#     mime: Optional[str],
+# ) -> None:
+#     """Mirror the bytes to object storage (S3 / local artifact dir) once per
+#     row and remember the key. Storage off, or already uploaded → no-op.
+#     Never raises: the local copy is the fallback."""
+#     try:
+#         from ka11y.storage.backends import get_store
+#
+#         if get_store() is None:
+#             return
+#         async with session_scope() as s:
+#             existing = (await s.execute(select(AuditAsset.object_key).where(AuditAsset.id == asset_id))).scalar()
+#         if existing:
+#             return
+#         from ka11y.storage.uploader import upload_asset_file
+#
+#         ref = await upload_asset_file(
+#             run_id, kind=kind, path=dest, filename=filename, page_url=page_url, content_type=mime
+#         )
+#         if ref:
+#             async with session_scope() as s:
+#                 await s.execute(
+#                     update(AuditAsset)
+#                     .where(AuditAsset.id == asset_id)
+#                     .values(object_key=ref.key, object_bucket=ref.bucket if ref.backend == "s3" else None)
+#                 )
+#     except Exception:  # noqa: BLE001
+#         logger.debug("[store] asset %s upload skipped", asset_id, exc_info=True)
 
 
 async def get_asset_record(asset_id: int) -> Optional[Dict[str, Any]]:
     """The asset row plus ``abs_path`` (None when the local file is gone, e.g.
-    pruned by retention — the object store copy may still exist)."""
+    pruned by retention — the object store copy may still exist). Always
+    None while PostgreSQL is switched off: there are no asset rows."""
     if not is_configured():
         return None
     async with session_scope() as s:
@@ -266,7 +288,8 @@ async def register_report_assets(run_id: str, report: Dict[str, Any]) -> int:
                     run_id=run_id, kind=kind, data=path, page_url=img.get("page_url")
                 )
                 if ref:
-                    img["asset_id"] = ref.asset_id
+                    img["asset_id"] = ref.asset_id or None
+                    img["asset_key"] = ref.object_key
                     img["asset_url"] = ref.url
                     img["image_url"] = ref.url  # served via /assets, not ?path=
                     n += 1
@@ -288,7 +311,8 @@ async def register_report_assets(run_id: str, report: Dict[str, Any]) -> int:
                 )
                 if ref:
                     element["image_src"] = ref.url
-                    element["asset_id"] = ref.asset_id
+                    element["asset_id"] = ref.asset_id or None
+                    element["asset_key"] = ref.object_key
                     n += 1
     except Exception:  # noqa: BLE001
         logger.warning("[store] register_report_assets(%s) failed", run_id, exc_info=True)
@@ -296,8 +320,7 @@ async def register_report_assets(run_id: str, report: Dict[str, Any]) -> int:
 
 
 def prune_run_assets(run_id: str) -> None:
-    """Delete the on-disk asset directory for a run (rows are removed by the
-    ON DELETE CASCADE in the retention sweep). Best-effort; never raises."""
+    """Delete the on-disk asset directory for a run. Best-effort; never raises."""
     try:
         run_dir = asset_dir() / run_id
         if run_dir.is_dir():

@@ -9,6 +9,19 @@ FastAPI route handlers for accessibility audit endpoints.
   GET  /combined/{job_id}/timings  200  Per-stage timing breakdown (JSON)
   GET  /combined/{job_id}/stream   200  SSE real-time stage events
   GET  /combined/{job_id}/image         Serve a job's image artifact
+
+Execution model
+  Submitting writes the job's state.json to object storage (S3, or the local
+  artifact dir) and publishes an AuditJobMessage to SQS. A separate worker
+  process (ka11y/worker) runs the audit and keeps state.json current. Every
+  read here serves from the in-process hot cache when this process ran the
+  job (rule tester), otherwise from state.json + reports/report.json. Manual
+  verdicts live next to them in reviews.json.
+
+  PostgreSQL is switched off for now: every ``repo.*`` call (run rows,
+  ownership, verdicts, timings) is commented out, not removed, so object
+  storage is the only store. Re-enable by restoring the ``repo`` import and
+  the blocks marked "PostgreSQL".
 """
 
 from __future__ import annotations
@@ -26,14 +39,17 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from typing import Any, AsyncGenerator
 from ka11y.utils.run_timing import compute_run_timing
 from pydantic import BaseModel, Field, HttpUrl
-from .dispatcher import enqueue
+# from ka11y.db.engine import is_configured as _pg_configured  # PostgreSQL: switched off
+from ka11y.queue import AuditJobMessage
+from ka11y.queue.sqs import SQSNotConfigured, get_client as _get_sqs
+from ka11y.storage import jobstate
 from .models import ALLOWED_CRAWL_DEPTHS, CRAWL_DEPTH_ERROR, CombinedRequest, JobStatusResponse
 from ka11y.observability import attributes as attrs
 from ka11y.observability import current_span, set_span_attributes
 from .report import apply_reviews, review_message
 from ka11y.accessibility.technique_map import annotate_findings, strip_failure_techniques
 from .store import _broadcast, _close_subscribers, _get_job_lock, _get_subscribers_lock, _jobs, _subscribers
-from ka11y.store import repo
+# from ka11y.store import repo  # PostgreSQL run store: switched off (S3 only)
 from ka11y.auth import ANONYMOUS, CurrentUser, require_user
 from ka11y.api.v1.audits import _assert_can_view
 from ka11y.config.logger import setup_logger
@@ -199,16 +215,26 @@ async def submit_combined_audit(
 
 
 
+async def _publish_job(job_id: str, message: AuditJobMessage) -> str:
+    """Publish one job to SQS. Raises when the queue is not configured or the
+    send fails; the caller turns that into a 503. Patched in tests."""
+    client = _get_sqs()
+    if not client.configured:
+        raise SQSNotConfigured("SQS_QUEUE_URL is not set")
+    return await client.send_message(message)
+
+
 async def _admit_run(
     payload: CombinedRequest,
     *,
     rerun_of: str | None = None,
     user: CurrentUser | None = None,
 ) -> dict:
-    """Create the hot-cache entry and enqueue a run through the durable queue.
+    """Create the job (state.json, status 'queued') and publish it to SQS.
 
     Shared by fresh submissions and re-audits so both go through the exact same
-    SSRF guard, queue, and dispatcher path."""
+    SSRF guard, state write and publish. Answers 503 — and hands out no job id —
+    when the state cannot be written or the message cannot be published."""
     job_id = str(uuid.uuid4())
     url = str(payload.url)
     now = datetime.now(timezone.utc).isoformat()
@@ -216,15 +242,13 @@ async def _admit_run(
     # SSRF guard: reject private / loopback / link-local endpoints.
     await assert_public_url(url)
 
-    _jobs[job_id] = {
+    job: dict[str, Any] = {
         "job_id": job_id,
         "status": "queued",
         "url": url,
         "submitted_at": now,
         "lang": payload.lang,
-        "_created_at": time.time(),
         "completed_at": None,
-        "report_path": None,
         "result": None,
         "error": None,
         "current_stage": None,
@@ -232,24 +256,49 @@ async def _admit_run(
         "warnings": [],
     }
 
-    # One row: the audit_jobs record carries the owner (when the caller is
-    # signed in) and is the queue entry the dispatcher drains. isinstance,
-    # not a None check: when a test calls the route function directly the
-    # parameter is FastAPI's Depends() sentinel, not a user.
-    owner = user if isinstance(user, CurrentUser) else None
-    try:
-        await enqueue(job_id, payload, user=owner)
-    except Exception:  # noqa: BLE001
-        # The queue row is the job. Without it nothing will ever run, so the
-        # caller must not receive a job id: drop the hot entry and answer 503.
-        logger.exception("[combined] job %s could not be queued", job_id)
-        _jobs.pop(job_id, None)
+    # state.json is the job: without it nothing can be polled or run.
+    state = jobstate.new_state(
+        job_id, url=url, lang=payload.lang, params=payload.model_dump(mode="json"),
+        submitted_at=now, rerun_of=rerun_of,
+    )
+    if not await jobstate.put_state(job_id, state):
+        logger.error("[combined] job %s could not be written to object storage", job_id)
         raise HTTPException(status_code=503, detail="Audit queue is unavailable. Please try again.")
 
-    logger.info("[combined] job %s submitted for %s", job_id, url)
+    # PostgreSQL mirror (ownership, history) — switched off: state.json is the
+    # only run record. Restore with the `repo` import to bring ownership back.
+    # owner = user if isinstance(user, CurrentUser) else None
+    # if _pg_configured():
+    #     owned = owner is not None and not getattr(owner, "is_anonymous", True)
+    #     try:
+    #         await repo.create_run(
+    #             run_id=job_id, url=url, status="queued", lang_requested=payload.lang,
+    #             wcag_level=payload.wcag_level, params=payload.model_dump(mode="json"),
+    #             max_depth=payload.max_depth, max_pages=payload.max_pages, submitted_at=now,
+    #             user_id=owner.user_id if owned else None,
+    #             organization_id=owner.organization_id if owned else None,
+    #             session_id=owner.session_id if owned else None,
+    #         )
+    #     except Exception:  # noqa: BLE001
+    #         logger.warning("[combined] job %s: PostgreSQL mirror row failed", job_id, exc_info=True)
+
+    try:
+        message_id = await _publish_job(
+            job_id, AuditJobMessage.for_request(job_id, payload, created_at=now, rerun_of=rerun_of)
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("[combined] job %s could not be published to SQS", job_id)
+        await jobstate.update_state(
+            job_id, status="failed", completed_at=datetime.now(timezone.utc).isoformat(),
+            error="Audit could not be queued.", error_stage="queue", error_id=uuid.uuid4().hex,
+        )
+        raise HTTPException(status_code=503, detail="Audit queue is unavailable. Please try again.")
+
+    logger.info("[combined] job %s submitted for %s (sqs message %s)", job_id, url, message_id)
     # Stamp the job id on the HTTP span (the middleware's, still current here).
-    # The audit runs as its own trace, so this attribute is the thread that
-    # leads from "this request was slow / errored" to the audit it started.
+    # The audit runs as its own trace in the worker, so this attribute is the
+    # thread that leads from "this request was slow / errored" to the audit it
+    # started.
     set_span_attributes(
         current_span(),
         {
@@ -260,7 +309,7 @@ async def _admit_run(
             attrs.JOB_RERUN_OF: rerun_of,
         },
     )
-    return _jobs[job_id]
+    return job
 
 
 @router.post("/{job_id}/rerun", status_code=202)
@@ -270,11 +319,11 @@ async def rerun_combined_audit(job_id: str, user: CurrentUser = Depends(require_
     Returns a NEW ``job_id`` (the original run is preserved for comparison). Use
     this to refresh a result after an engine improvement — e.g. the per-page OCR
     budget change that recovers image findings on deep-crawl child pages — without
-    re-entering the URL and toggles. The new run flows through the normal durable
-    queue + dispatcher.
+    re-entering the URL and toggles. The new run is published to SQS like a
+    fresh submission.
     """
     await _assert_can_view(job_id, _caller(user))
-    run = await repo.get_run(job_id)
+    run = await jobstate.get_state(job_id)  # PostgreSQL fallback (repo.get_run) switched off
     if not run:
         raise HTTPException(
             status_code=404,
@@ -292,6 +341,20 @@ async def rerun_combined_audit(job_id: str, user: CurrentUser = Depends(require_
         )
     new_job = await _admit_run(payload, rerun_of=job_id, user=user)
     return {**new_job, "rerun_of": job_id}
+
+
+def _slim_passes(result: dict | None) -> dict | None:
+    """The runner keeps only the first 100 passes in its in-memory report
+    (and flags it); the stored report.json is complete. Mirror the slimming
+    on read so the status endpoint answers the same whichever store served it."""
+    if not isinstance(result, dict):
+        return result
+    passes = result.get("passes")
+    if isinstance(passes, list) and len(passes) > 100:
+        result = dict(result)
+        result["passes"] = passes[:100]
+        result["summary"] = {**(result.get("summary") or {}), "passes_truncated": True}
+    return result
 
 
 def _inject_image_urls(job: dict, job_id: str) -> None:
@@ -338,7 +401,7 @@ async def _apply_reviews_to_job(job: dict, job_id: str) -> None:
     if not any(result.get(k) for k in ("violations", "needs_review", "passes")):
         return
     try:
-        reviews = await repo.get_reviews(job_id)
+        reviews = await jobstate.get_reviews(job_id)  # reviews.json (was repo.get_reviews)
     except Exception:  # noqa: BLE001
         return
     apply_reviews(result, reviews)
@@ -383,12 +446,12 @@ async def list_combined_history(
     status: str | None = None,
     user: CurrentUser = Depends(require_user),
 ):
-    """Paginated history of *every* audit run in the durable store.
+    """Paginated history of *every* audit run in object storage (one row per
+    state.json under the jobs root, newest first).
 
-    The ``runs`` table has no owner column, so this is an operator view:
-    admins only (``KA11Y_ADMIN_EMAILS``). With sign-in off
-    (``KA11Y_AUTH_DISABLED``, the ``live`` branch) nobody is an admin, so it
-    is closed with the rest of the admin console.
+    There is no owner column, so this is an operator view: admins only
+    (``KA11Y_ADMIN_EMAILS``). With sign-in off (``KA11Y_AUTH_DISABLED``)
+    nobody is an admin, so it is closed with the rest of the admin console.
     Signed-in users get their own history from ``GET /audits/history``.
     """
     caller = _caller(user)
@@ -397,41 +460,80 @@ async def list_combined_history(
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     try:
-        runs = await repo.list_runs(limit=limit, offset=offset, url=url, status=status)
+        # runs = await repo.list_runs(limit=limit, offset=offset, url=url, status=status)  # PostgreSQL
+        runs = await jobstate.list_states(limit=limit, offset=offset, url=url, status=status)
     except Exception:
         raise HTTPException(status_code=503, detail="History store unavailable.")
     return {"runs": runs, "limit": limit, "offset": offset, "count": len(runs)}
 
 
-async def _job_from_db(job_id: str) -> dict | None:
-    """Reconstruct a JobStatusResponse-shaped dict from the durable store for a
-    run no longer in the in-memory hot cache (restart / TTL eviction)."""
-    run = await repo.get_run(job_id)
-    if not run:
+async def _job_from_state(job_id: str) -> dict | None:
+    """Reconstruct a JobStatusResponse-shaped dict from the job's state.json
+    (and reports/report.json once completed) in object storage — the normal
+    read path, since the worker that runs the audit is another process."""
+    state = await jobstate.get_state(job_id)
+    if not state:
         return None
     result = None
-    if run.get("status") == "completed":
-        result = await repo.get_report(job_id)
-    job = {
+    if state.get("status") == "completed":
+        result = _slim_passes(await jobstate.get_report(job_id))
+    return {
         "job_id": job_id,
-        "status": run.get("status", "unknown"),
-        "url": run.get("url", ""),
-        "submitted_at": run.get("submitted_at") or "",
-        "lang": run.get("lang_resolved") or run.get("lang_requested") or "auto",
-        "completed_at": run.get("completed_at"),
-        "report_path": run.get("output_dir"),
+        "status": state.get("status", "unknown"),
+        "url": state.get("url", ""),
+        "submitted_at": state.get("submitted_at") or "",
+        "lang": state.get("lang") or "auto",
+        "completed_at": state.get("completed_at"),
+        "run_started_at": state.get("run_started_at"),
+        "report_path": None,
+        "output_dir": state.get("output_dir"),
         "result": result,
-        "error": None if run.get("status") != "failed" else "Audit failed due to an internal error.",
-        # Reconstructed from the durable store, which has no error_code column
-        # until the Postgres migration. The UI falls back to `error` above.
-        "error_code": run.get("error_code"),
-        "error_id": run.get("error_id"),
-        "error_stage": run.get("error_stage"),
-        "current_stage": None,
-        "stages": [],
-        "warnings": (result or {}).get("warnings", []) if result else [],
+        "error": state.get("error"),
+        "error_code": state.get("error_code"),
+        "error_id": state.get("error_id"),
+        "error_stage": state.get("error_stage"),
+        "current_stage": state.get("current_stage"),
+        "stages": list(state.get("stages") or []),
+        "warnings": list(state.get("warnings") or ((result or {}).get("warnings") or [])),
     }
-    return job
+
+
+async def _job_from_store(job_id: str) -> dict | None:
+    """Object storage only. (The PostgreSQL run store used to be the last
+    resort here: ``_job_from_db`` below, switched off.)"""
+    return await _job_from_state(job_id)
+
+
+# ── PostgreSQL read fallback — switched off ──────────────────────────────────
+# async def _job_from_db(job_id: str) -> dict | None:
+#     """Reconstruct a JobStatusResponse-shaped dict from the PostgreSQL run store
+#     (only when DATABASE_URL is set) for a run that has no state.json."""
+#     run = await repo.get_run(job_id)
+#     if not run:
+#         return None
+#     result = None
+#     if run.get("status") == "completed":
+#         result = await repo.get_report(job_id)
+#     job = {
+#         "job_id": job_id,
+#         "status": run.get("status", "unknown"),
+#         "url": run.get("url", ""),
+#         "submitted_at": run.get("submitted_at") or "",
+#         "lang": run.get("lang_resolved") or run.get("lang_requested") or "auto",
+#         "completed_at": run.get("completed_at"),
+#         "report_path": run.get("output_dir"),
+#         "result": result,
+#         "error": None if run.get("status") != "failed" else "Audit failed due to an internal error.",
+#         # Reconstructed from the durable store, which has no error_code column
+#         # until the Postgres migration. The UI falls back to `error` above.
+#         "error_code": run.get("error_code"),
+#         "error_id": run.get("error_id"),
+#         "error_stage": run.get("error_stage"),
+#         "current_stage": None,
+#         "stages": [],
+#         "warnings": (result or {}).get("warnings", []) if result else [],
+#     }
+#     return job
 
 
 _EXPORT_MEDIA = {
@@ -454,11 +556,12 @@ async def _full_report(job_id: str) -> dict | None:
             if snapshot.get("status") == "completed":
                 result = snapshot.get("result")
     if result is None:
-        run = await repo.get_run(job_id)
-        if not run:
+        state = await jobstate.get_state(job_id)
+        if state is None:
             return None
-        if run.get("status") == "completed":
-            result = await repo.get_report(job_id)
+        if state.get("status") == "completed":
+            result = await jobstate.get_report(job_id)
+        # PostgreSQL fallback (repo.get_run / repo.get_report) switched off.
     if not result:
         return None
     report = json.loads(json.dumps(result, ensure_ascii=False, default=str))
@@ -523,20 +626,26 @@ async def export_combined_audit(
 async def cancel_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
     """Cooperatively cancel a queued/running audit.
 
-    Queued: settled immediately (hot cache + ``job_cancelled`` SSE event).
-    Running: the runner re-reads the stored status before it starts and again
+    Queued: settled immediately (state.json → 'cancelled'; the worker deletes
+    the message when it arrives). Running: a cancel marker is written next to
+    state.json; the worker's runner re-reads it before it starts and again
     once the crawl/OCR/Node engines finish, and stops there — an in-flight
     browser pass is not interrupted."""
     await _assert_can_view(job_id, _caller(user))
-    run = await repo.get_run(job_id)
+    state = await jobstate.get_state(job_id)
     in_hot = job_id in _jobs
-    if not run and not in_hot:
+    if state is None and not in_hot:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-    current = (run or {}).get("status") or _jobs.get(job_id, {}).get("status")
+    current = (state or {}).get("status") or _jobs.get(job_id, {}).get("status")
     if current in ("completed", "failed", "cancelled"):
         return {"job_id": job_id, "status": current, "cancelled": False}
     completed_at = datetime.now(timezone.utc).isoformat()
-    await repo.mark_cancelled(job_id, completed_at)
+    # await repo.mark_cancelled(job_id, completed_at)  # PostgreSQL: switched off
+    await jobstate.request_cancel(job_id)
+    if state is not None and current != "running":
+        # No worker has this job yet: settle it here. A running one keeps its
+        # state until the runner reaches a checkpoint and records 'cancelled'.
+        await jobstate.update_state(job_id, status="cancelled", completed_at=completed_at, current_stage=None)
     if in_hot:
         # A queued job has no runner to notice the flag: settle it here. A
         # running one is left 'running' for the runner, which checks the flag
@@ -557,13 +666,13 @@ async def get_combined_audit(job_id: str, user: CurrentUser = Depends(require_us
     """Poll the status or retrieve the result of a combined audit job."""
     await _assert_can_view(job_id, _caller(user))
     if job_id not in _jobs:
-        # Durable fallback: the run may have been evicted from the hot cache or
-        # the process may have restarted — reconstruct it from the run store.
-        db_job = await _job_from_db(job_id)
-        if db_job is None:
+        # The normal path: the audit runs (or ran) in the worker process, so
+        # this process has no hot-cache entry — serve state.json / report.json.
+        stored = await _job_from_store(job_id)
+        if stored is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-        await _finalize_job_view(db_job, job_id)
-        return db_job
+        await _finalize_job_view(stored, job_id)
+        return stored
     # Snapshot under the per-job lock so a concurrent runner._run_job() update
     # cannot publish a half-applied state to a polling client. Shallow copy is
     # sufficient because we only read top-level fields below.
@@ -584,10 +693,9 @@ async def get_combined_audit(job_id: str, user: CurrentUser = Depends(require_us
 async def get_finding_reviews(job_id: str, user: CurrentUser = Depends(require_user)):
     """List the manual-review decisions recorded for a run's needs_review items."""
     await _assert_can_view(job_id, _caller(user))
-    run = await repo.get_run(job_id)
-    if not run and job_id not in _jobs:
+    if job_id not in _jobs and await jobstate.get_state(job_id) is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-    reviews = await repo.get_reviews(job_id)
+    reviews = await jobstate.get_reviews(job_id)  # reviews.json (was repo.get_reviews)
     return {"job_id": job_id, "reviews": reviews, "count": len(reviews)}
 
 
@@ -623,12 +731,17 @@ async def review_finding(
     """
     user = _caller(user)
     await _assert_can_view(job_id, user)
-    run = await repo.get_run(job_id)
     in_hot = job_id in _jobs
-    if not run and not in_hot:
+    state = None if in_hot else await jobstate.get_state(job_id)
+    if not in_hot and state is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
-    result = (_jobs.get(job_id, {}).get("result")) or (await repo.get_report(job_id)) or {}
+    result = (
+        (_jobs.get(job_id, {}).get("result"))
+        or (await jobstate.get_report(job_id))
+        # or (await repo.get_report(job_id))  # PostgreSQL: switched off
+        or {}
+    )
     target = _find_reviewable(result, finding_id)
     if target is None:
         known = any(
@@ -646,18 +759,20 @@ async def review_finding(
     # The reviewer is the signed-in user; the request body can only name one
     # when there is no identity (auth disabled / anonymous).
     reviewer = user.email or user.name or body.reviewer or "user"
-    await repo.set_finding_review(
-        run_id=job_id,
-        finding_id=finding_id,
+    # Was repo.set_finding_review (PostgreSQL); the verdict now lives in reviews.json.
+    reviews = await jobstate.set_review(
+        job_id,
+        finding_id,
         status=body.status,
         note=body.note,
         reviewer=reviewer,
         wcag_sc=target.get("wcag_sc"),
         page_url=(target.get("element") or {}).get("page_url"),
     )
-    reviews = await repo.get_reviews(job_id)
+    if reviews is None:
+        raise HTTPException(status_code=503, detail="Review store unavailable.")
     rev = reviews.get(finding_id)
-    lang = result.get("lang") or (run or {}).get("lang_resolved") or "en"
+    lang = result.get("lang") or (state or {}).get("lang_resolved") or "en"
     return {
         "job_id": job_id,
         "finding_id": finding_id,
@@ -695,25 +810,29 @@ async def get_combined_audit_timings(job_id: str, user: CurrentUser = Depends(re
             job = None
 
     if job is None:
-        # Durable fallback: rebuild the per-(page,stage,rule) breakdown from the
-        # stage_timings table for runs no longer in the hot cache.
-        run = await repo.get_run(job_id)
-        if not run:
-            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-        rows = await repo.get_timings(job_id)
-        # The stored error is repr(exc) of the failed step: internal paths,
-        # hosts and library text. It stays in the table and the logs; the
-        # client gets the step's status only.
-        for row in rows:
-            row["error"] = None
-        return {
-            "job_id": job_id,
-            "url": run.get("url"),
-            "status": run.get("status"),
-            "queue_wait_ms": run.get("queue_wait_ms"),
-            "wall_ms": run.get("wall_ms"),
-            "steps": rows,
-        }
+        # The worker process ran it: the stage timestamps are in state.json.
+        job = await _job_from_state(job_id)
+        if job is not None:
+            job.setdefault("result", {})
+            summary = (await jobstate.get_state(job_id) or {}).get("result_summary")
+            if summary and not (job.get("result") or {}).get("summary"):
+                job["result"] = {"summary": summary}
+
+    if job is None:
+        # PostgreSQL last resort (the per-(page,stage,rule) breakdown from the
+        # stage_timings table) — switched off:
+        # run = await repo.get_run(job_id)
+        # if not run:
+        #     raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        # rows = await repo.get_timings(job_id)
+        # # The stored error is repr(exc) of the failed step: internal paths,
+        # # hosts and library text. It stays in the table and the logs; the
+        # # client gets the step's status only.
+        # for row in rows:
+        #     row["error"] = None
+        # return {"job_id": job_id, "url": run.get("url"), "status": run.get("status"),
+        #         "queue_wait_ms": run.get("queue_wait_ms"), "wall_ms": run.get("wall_ms"), "steps": rows}
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
     result = job.get("result") or {}
     return compute_run_timing(
@@ -744,7 +863,7 @@ async def get_job_image(job_id: str, path: str, user: CurrentUser = Depends(requ
     recorded in ``result.contrast_report.images`` for the given job.
     """
     await _assert_can_view(job_id, _caller(user))
-    job = _jobs.get(job_id)
+    job = _jobs.get(job_id) or await _job_from_state(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
@@ -820,6 +939,71 @@ async def get_job_image(job_id: str, path: str, user: CurrentUser = Depends(requ
     return FileResponse(str(canonical_path), media_type=media_type or "image/png")
 
 
+# state.json poll cadence for the SSE stream, and a ceiling so a stream to a
+# job that never settles (worker gone) does not hold the connection forever.
+_STREAM_POLL_SECONDS = float(__import__("os").getenv("KA11Y_STREAM_POLL_SECONDS", "1.0"))
+_STREAM_KEEPALIVE_SECONDS = 25.0
+_STREAM_MAX_SECONDS = float(__import__("os").getenv("KA11Y_JOB_TIMEOUT_SECONDS", "1800")) + 300.0
+
+
+async def _state_stream(job_id: str) -> AsyncGenerator[str, None]:
+    """SSE events derived from state.json. Emits ``job_state`` (status,
+    current_stage, stages, warnings, plan) whenever something changed, a
+    keepalive comment otherwise, and the terminal ``job_complete`` /
+    ``job_failed`` / ``job_cancelled`` event before closing."""
+    last_signature: str | None = None
+    last_sent = time.monotonic()
+    deadline = last_sent + _STREAM_MAX_SECONDS
+    while True:
+        state = await jobstate.get_state(job_id)
+        if state is None:
+            yield f"event: job_state\ndata: {json.dumps({'job_id': job_id, 'status': 'unknown'})}\n\n"
+            return
+        status = state.get("status")
+        if status == "completed":
+            summary = state.get("result_summary")
+            if summary is None:
+                summary = (await jobstate.get_report(job_id) or {}).get("summary", {})
+            yield f"event: job_complete\ndata: {json.dumps({'job_id': job_id, 'summary': summary or {}})}\n\n"
+            return
+        if status == "failed":
+            failure = {
+                "job_id": job_id,
+                "error": state.get("error") or "Audit failed due to an internal error.",
+                "error_code": state.get("error_code"),
+                "error_id": state.get("error_id"),
+                "stage": state.get("error_stage"),
+            }
+            yield f"event: job_failed\ndata: {json.dumps(failure)}\n\n"
+            return
+        if status == "cancelled":
+            yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
+            return
+
+        payload = {
+            "job_id": job_id,
+            "status": status,
+            "current_stage": state.get("current_stage"),
+            "stages": state.get("stages") or [],
+            "warnings": state.get("warnings") or [],
+        }
+        if state.get("plan"):
+            payload["plan"] = state["plan"]
+        signature = json.dumps(payload, sort_keys=True, default=str)
+        now = time.monotonic()
+        if signature != last_signature:
+            last_signature = signature
+            last_sent = now
+            yield f"event: job_state\ndata: {signature}\n\n"
+        elif now - last_sent >= _STREAM_KEEPALIVE_SECONDS:
+            last_sent = now
+            yield ": keepalive\n\n"
+        if now > deadline:
+            yield f"event: job_state\ndata: {json.dumps({'job_id': job_id, 'status': status, 'stream': 'timeout'})}\n\n"
+            return
+        await asyncio.sleep(_STREAM_POLL_SECONDS)
+
+
 @router.get("/{job_id}/stream")
 async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require_user)):
     """
@@ -833,38 +1017,48 @@ async def stream_combined_audit(job_id: str, user: CurrentUser = Depends(require
     await _assert_can_view(job_id, _caller(user))
     job = _jobs.get(job_id)
     if not job:
-        # Durable fallback: the run may have completed before this client
-        # connected (or the process restarted). Emit its terminal state from the
-        # store and close, rather than 404-ing a finished run.
-        run = await repo.get_run(job_id)
-        if not run:
-            raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
-
-        async def _terminal() -> AsyncGenerator[str, None]:
-            status = run.get("status")
-            if status == "completed":
-                rep = await repo.get_report(job_id) or {}
-                yield (
-                    f"event: job_complete\n"
-                    f"data: {json.dumps({'job_id': job_id, 'summary': rep.get('summary', {})})}\n\n"
-                )
-            elif status == "failed":
-                failure = {
-                    "job_id": job_id,
-                    "error": "Audit failed due to an internal error.",
-                    "error_code": _jobs.get(job_id, {}).get("error_code"),
-                }
-                yield f"event: job_failed\ndata: {json.dumps(failure)}\n\n"
-            elif status == "cancelled":
-                yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
-            else:
-                yield f"event: job_state\ndata: {json.dumps({'status': status})}\n\n"
-
-        return StreamingResponse(
-            _terminal(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
+        # The normal path: the audit runs in the worker process, which mirrors
+        # every stage event into state.json. Poll it and turn changes into
+        # events until the job reaches a terminal state.
+        if await jobstate.get_state(job_id) is not None:
+            return StreamingResponse(
+                _state_stream(job_id),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+            )
+        # ── PostgreSQL-only run (DATABASE_URL set, no state.json) — switched off ──
+        # # PostgreSQL-only run (DATABASE_URL set, no state.json): emit its
+        # # terminal state from the run store and close, rather than 404-ing.
+        # run = await repo.get_run(job_id)
+        # if not run:
+        #     raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
+        #
+        # async def _terminal() -> AsyncGenerator[str, None]:
+        #     status = run.get("status")
+        #     if status == "completed":
+        #         rep = await repo.get_report(job_id) or {}
+        #         yield (
+        #             f"event: job_complete\n"
+        #             f"data: {json.dumps({'job_id': job_id, 'summary': rep.get('summary', {})})}\n\n"
+        #         )
+        #     elif status == "failed":
+        #         failure = {
+        #             "job_id": job_id,
+        #             "error": "Audit failed due to an internal error.",
+        #             "error_code": _jobs.get(job_id, {}).get("error_code"),
+        #         }
+        #         yield f"event: job_failed\ndata: {json.dumps(failure)}\n\n"
+        #     elif status == "cancelled":
+        #         yield f"event: job_cancelled\ndata: {json.dumps({'job_id': job_id})}\n\n"
+        #     else:
+        #         yield f"event: job_state\ndata: {json.dumps({'status': status})}\n\n"
+        #
+        # return StreamingResponse(
+        #     _terminal(),
+        #     media_type="text/event-stream",
+        #     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        # )
+        raise HTTPException(status_code=404, detail=f"Job {job_id!r} not found")
 
     q: asyncio.Queue = asyncio.Queue()
     async with _get_subscribers_lock():

@@ -18,7 +18,6 @@ from ka11y.api.v1.combined import _build_report, _make_finding
 from ka11y.api.v1.combined.report import REVIEW_FIELDS, apply_reviews, review_message
 from ka11y.api.v1.combined.store import _jobs
 from ka11y.main import app
-from ka11y.store import repo
 from ka11y.utils.report_csv import EXPORT_CSV_HEADERS
 
 
@@ -76,16 +75,10 @@ def client():
 
 
 @pytest.fixture
-def hot_job(client, pg_db):
+def hot_job(client):
+    # Verdicts live in reviews.json next to the job's artifacts (the local
+    # artifact dir in tests), so no PostgreSQL row is needed any more.
     job_id = str(uuid.uuid4())
-    # finding_reviews has a FK to audit_jobs, so the run row must exist.
-    client.portal.call(
-        lambda: repo.create_run(
-            run_id=job_id, url="https://example.com", status="completed", lang_requested="en",
-            wcag_level="AA", params={}, max_depth=0, max_pages=1,
-            submitted_at="2026-09-25T00:00:00+00:00",
-        )
-    )
     _jobs[job_id] = {
         "job_id": job_id, "status": "completed", "url": "https://example.com",
         "submitted_at": "2026-09-25T00:00:00+00:00", "lang": "en",

@@ -25,21 +25,21 @@ from ka11y.api.v1.combined.findings import _lang_ctx
 def client():
     """App under test with job *execution* stubbed out.
 
-    The submit routes are real (validation, hot-cache entry, 202), but the
-    durable enqueue is replaced so the dispatcher never picks the job up and
-    no Chromium / OCR / Node call runs inside the test process. The SSRF
-    check is stubbed too so the tests need no DNS."""
+    The submit routes are real (validation, state.json, 202), but the SQS
+    publish is replaced so no worker ever picks the job up and no Chromium /
+    OCR / Node call runs inside the test process. The SSRF check is stubbed
+    too so the tests need no DNS."""
     from unittest.mock import patch
 
     from ka11y.api.v1.combined import routes
 
-    async def _no_enqueue(job_id, payload, filter_rule=None, **kwargs):
-        return None
+    async def _no_publish(job_id, message):
+        return "test-message-id"
 
     async def _no_ssrf(url):
         return None
 
-    with patch.object(routes, "enqueue", _no_enqueue), patch.object(
+    with patch.object(routes, "_publish_job", _no_publish), patch.object(
         routes, "assert_public_url", _no_ssrf
     ), TestClient(app) as c:
         yield c
