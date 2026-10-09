@@ -425,12 +425,22 @@ def _stamp_job_outcome(job_span: Any, job_id: str) -> None:
 
 
 async def _is_cancelled(job_id: str) -> bool:
-    """``repo.is_cancelled`` with a read error treated as "not cancelled": a
-    momentary database problem must not abort an audit that was never cancelled."""
+    """Cancelled in the run store (``repo.is_cancelled``) or flagged in object
+    storage (``jobstate.is_cancel_requested`` — the API process writes the
+    marker, this worker process reads it). A read error is treated as "not
+    cancelled": a momentary storage problem must not abort an audit that was
+    never cancelled."""
     try:
-        return await repo.is_cancelled(job_id)
+        if await repo.is_cancelled(job_id):
+            return True
     except Exception:  # noqa: BLE001
         logger.warning("[combined] job %s: cancellation check failed; continuing", job_id, exc_info=True)
+    try:
+        from ka11y.storage import jobstate
+
+        return await jobstate.is_cancel_requested(job_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("[combined] job %s: cancel-marker check failed; continuing", job_id, exc_info=True)
         return False
 
 

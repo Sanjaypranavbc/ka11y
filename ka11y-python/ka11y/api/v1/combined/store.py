@@ -16,7 +16,7 @@ import asyncio
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Awaitable, Callable, Dict, List
 
 from ka11y.config.logger import setup_logger
 
@@ -112,9 +112,29 @@ _JOB_TTL_SECONDS: int = 3600
 
 # ── SSE subscriber bus ────────────────────────────────────────────────────────
 
+# Out-of-process mirrors of the event stream. The worker registers
+# ``storage.jobstate.progress_sink`` here so every broadcast also refreshes the
+# job's state.json, which is what the API (a different process) serves live
+# progress from. Sinks are best-effort: a failing sink is logged, never raised.
+BroadcastSink = Callable[[str, str, Dict[str, Any]], Awaitable[None]]
+_broadcast_sinks: List[BroadcastSink] = []
+
+
+def add_broadcast_sink(sink: BroadcastSink) -> None:
+    if sink not in _broadcast_sinks:
+        _broadcast_sinks.append(sink)
+
+
+def remove_broadcast_sink(sink: BroadcastSink) -> None:
+    try:
+        _broadcast_sinks.remove(sink)
+    except ValueError:
+        pass
+
 
 async def _broadcast(job_id: str, event_type: str, data: Dict[str, Any]) -> None:
-    """Push an SSE event dict to every subscriber queue for this job.
+    """Push an SSE event dict to every subscriber queue for this job, then to
+    every registered sink.
 
     Acquires the subscribers lock before iterating so that a concurrent
     add-subscriber coroutine cannot slip between the snapshot and the
@@ -124,6 +144,11 @@ async def _broadcast(job_id: str, event_type: str, data: Dict[str, Any]) -> None
     async with _get_subscribers_lock():
         for q in list(_subscribers.get(job_id, [])):
             q.put_nowait(msg)
+    for sink in list(_broadcast_sinks):
+        try:
+            await sink(job_id, event_type, data)
+        except Exception:  # noqa: BLE001 — a mirror must never break the audit
+            logger.debug("broadcast sink failed for job %s (%s)", job_id, event_type, exc_info=True)
 
 
 async def _close_subscribers(job_id: str) -> None:
