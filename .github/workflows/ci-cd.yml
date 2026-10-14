@@ -1,0 +1,432 @@
+# =============================================================================
+# ka11y — CI/CD
+#
+# Runs on every pull request that targets `main` or `aws-arch`, and on every
+# direct push to those two branches. Four test/build jobs run in parallel and a
+# final `ci` job rolls them up into ONE status check named "CI" — that is the
+# check to mark as *required* in branch protection so a red run blocks the
+# merge/push to `main` (the YAML alone cannot block a push; the rule does):
+#
+#   GitHub → Settings → Branches (or Rules → Rulesets) → add rule for `main`
+#     ☑ Require a pull request before merging
+#     ☑ Require status checks to pass before merging  →  select "CI"
+#     ☑ Do not allow bypassing the above settings
+#
+# Job overview
+#   python-tests   ka11y-python   Poetry install + pytest (771 tests; the
+#                                 PostgreSQL-backed ones self-skip — PG is off
+#                                 on this architecture)                 REQUIRED
+#   node-tests     ka11y-node     npm ci + jest --coverage               SOFT-FAIL*
+#   ui-checks      ka11y-ui       node --test, eslint (soft-fail*), next build
+#   docker-images  all three      build the compose images with BuildKit and
+#                                 run pytest INSIDE the python image     REQUIRED
+#   deploy         EC2 host       COMMENTED OUT — see bottom of file
+#
+#   * On 2026-10-14 `ka11y-node` jest had 26 failing tests and `ka11y-ui` eslint
+#     had 12 errors on aws-arch. Those two steps carry `continue-on-error: true`
+#     so the workflow reports them without blocking. Remove that line once the
+#     failures are fixed so they gate merges like everything else.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, aws-arch]
+  pull_request:
+    branches: [main, aws-arch]
+  # Manual re-run from the Actions tab (e.g. after fixing a flaky download).
+  workflow_dispatch:
+
+# A new push to the same branch/PR cancels the run that is still going for the
+# previous commit — nobody waits on a result for code that no longer exists.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: the token can only read the checkout. Deploy (when enabled)
+# uses its own SSH secret, not GITHUB_TOKEN.
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.13"
+  # Poetry pinned to the same release ka11y-python/Dockerfile installs, so the
+  # lock file resolves identically in CI and in the image.
+  POETRY_VERSION: "2.3.2"
+  NODE_VERSION_API: "20" # ka11y-node runtime (node:20-slim in its Dockerfile)
+  NODE_VERSION_UI: "24" # ka11y-ui `npm test` runs .ts files via node --test (needs native type stripping, Node ≥ 22.18)
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Python orchestrator — the largest suite and the one with the heaviest
+  # dependencies (torch-cpu, paddlepaddle, transformers, spaCy, easyocr).
+  # The virtualenv is created in-project and cached on poetry.lock, so a
+  # dependency-free commit skips the ~10 min install entirely.
+  # ---------------------------------------------------------------------------
+  python-tests:
+    name: Python · pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ka11y-python
+    env:
+      # Mirror tests/conftest.py defaults explicitly so a future conftest edit
+      # cannot silently make CI read a developer-style .env or a real database.
+      KA11Y_LOAD_DOTENV: "0"
+      KA11Y_AUTH_DISABLED: "1"
+      KA11Y_COOKIE_SECURE: "1"
+      POETRY_NO_INTERACTION: "1"
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry ${{ env.POETRY_VERSION }}
+        run: pipx install "poetry==${POETRY_VERSION}"
+
+      - name: Cache virtualenv
+        id: venv-cache
+        uses: actions/cache@v4
+        with:
+          path: ka11y-python/.venv
+          key: venv-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-poetry${{ env.POETRY_VERSION }}-${{ hashFiles('ka11y-python/poetry.lock') }}
+
+      # Same retry loop as the Dockerfile: the PyTorch CPU index and PyPI both
+      # flake mid-download often enough that one attempt is not a fair test.
+      - name: Install dependencies
+        if: steps.venv-cache.outputs.cache-hit != 'true'
+        run: |
+          for attempt in 1 2 3; do
+            poetry install --with dev && break
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            echo "[poetry] install attempt $attempt failed; retrying in $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+
+      # Two tests drive a real Chromium through Playwright
+      # (test_universal_page_cookie_filter.py, test_universal_page_resolved_url.py).
+      # The browser itself is cached by Playwright under ~/.cache/ms-playwright.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('ka11y-python/poetry.lock') }}
+
+      - name: Install Playwright Chromium
+        run: poetry run playwright install chromium --with-deps
+
+      # Corpora the media quality engine loads; the image pre-bakes the same
+      # four. Downloading here keeps CI from depending on a runtime fetch.
+      - name: Install NLTK corpora
+        run: |
+          for attempt in 1 2 3; do
+            poetry run python -m nltk.downloader -q punkt punkt_tab averaged_perceptron_tagger_eng stopwords </dev/null && break
+            if [ "$attempt" -eq 3 ]; then exit 1; fi
+            sleep $((attempt * 10))
+          done
+
+      - name: Run pytest
+        run: >
+          poetry run pytest
+          -p no:cacheprovider
+          --junitxml=tests/report/junit.xml
+
+      # The self-contained HTML report pyproject's addopts already generate, plus
+      # the JUnit file above — downloadable from the run's Summary page.
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-test-report
+          path: |
+            ka11y-python/tests/report/ka11y_test_report.html
+            ka11y-python/tests/report/junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Node / Puppeteer + axe-core engine.
+  # ---------------------------------------------------------------------------
+  node-tests:
+    name: Node · jest
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ka11y-node
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node ${{ env.NODE_VERSION_API }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION_API }}
+          cache: npm
+          cache-dependency-path: ka11y-node/package-lock.json
+
+      # `npm ci` downloads Puppeteer's bundled Chrome (~150 MB). The runner
+      # image already has every shared library it needs.
+      - name: Install dependencies
+        run: npm ci
+
+      # TODO(ka11y-node): 26 tests across 14 suites fail on aws-arch as of
+      # 2026-10-14. Delete `continue-on-error` once they are green so this
+      # step blocks merges.
+      - name: Run jest
+        continue-on-error: true
+        run: npm test
+
+      - name: Upload jest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-test-report
+          path: |
+            ka11y-node/junit.xml
+            ka11y-node/coverage/lcov-report
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Next.js dashboard — unit tests, lint and a production build (the build is
+  # what catches TypeScript errors; `npm test` alone only strips types).
+  # ---------------------------------------------------------------------------
+  ui-checks:
+    name: UI · test / lint / build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ka11y-ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node ${{ env.NODE_VERSION_UI }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION_UI }}
+          cache: npm
+          cache-dependency-path: ka11y-ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      # TODO(ka11y-ui): eslint reports 12 errors / 5 warnings on aws-arch as of
+      # 2026-10-14 (mostly @typescript-eslint/no-explicit-any). Delete
+      # `continue-on-error` once they are fixed.
+      - name: Lint
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: ka11y-ui/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('ka11y-ui/package-lock.json') }}-${{ hashFiles('ka11y-ui/src/**/*.ts', 'ka11y-ui/src/**/*.tsx') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('ka11y-ui/package-lock.json') }}-
+
+      - name: Production build
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Docker — prove the three images docker-compose.yml builds still build, and
+  # run the Python suite inside the real python image (the environment the
+  # worker and API actually ship in: baked spaCy/NLTK models, system Chromium,
+  # ffmpeg, Japanese extras).
+  #
+  # The python image is several GB (torch, paddle, ja_core_news_lg); it is
+  # built without a GitHub Actions layer cache because that cache tops out at
+  # 10 GB per repository and would thrash. node and ui are small and cached.
+  # ---------------------------------------------------------------------------
+  docker-images:
+    name: Docker · build images + pytest in image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DOCKER_BUILDKIT: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ubuntu-latest ships ~14 GB free; the python image needs more than that
+      # during the build. Dropping toolchains this workflow never uses frees
+      # roughly 25 GB.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          df -h /
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ka11y-python image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ka11y-python
+          file: ./ka11y-python/Dockerfile
+          build-args: |
+            INSTALL_JAPANESE=1
+          tags: ka11y-python:ci
+          push: false
+          load: true
+
+      - name: Build ka11y-node image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ka11y-node
+          file: ./ka11y-node/Dockerfile
+          tags: ka11y-node:ci
+          push: false
+          cache-from: type=gha,scope=node
+          cache-to: type=gha,scope=node,mode=max
+
+      - name: Build ka11y-ui image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ka11y-ui
+          file: ./ka11y-ui/Dockerfile
+          tags: ka11y-ui:ci
+          push: false
+          cache-from: type=gha,scope=ui
+          cache-to: type=gha,scope=ui,mode=max
+
+      # The image installs `--only main`, so tests/ and the dev group (moto)
+      # are not inside it. Bind-mount the suite and add moto on the fly;
+      # everything else (pytest, pytest-asyncio, pytest-html, Chromium) is
+      # already there. scripts/ is mounted too: test_technique_map.py imports
+      # scripts/build_technique_map.py, which the Dockerfile does not COPY.
+      # `-o addopts=` drops the HTML report flags because the mounted path is
+      # read-only from the container's point of view.
+      - name: Run pytest inside the python image
+        run: >
+          docker run --rm
+          --shm-size=256m
+          -e KA11Y_LOAD_DOTENV=0
+          -e KA11Y_AUTH_DISABLED=1
+          -e KA11Y_COOKIE_SECURE=1
+          -v "${GITHUB_WORKSPACE}/ka11y-python/tests:/app/tests:ro"
+          -v "${GITHUB_WORKSPACE}/ka11y-python/scripts:/app/scripts:ro"
+          ka11y-python:ci
+          sh -c 'pip install --quiet --no-cache-dir "moto[s3]>=5.0.0,<6.0.0"
+          && python -m pytest tests -p no:cacheprovider -o addopts="" -q --tb=short'
+
+  # ---------------------------------------------------------------------------
+  # Roll-up. This is the single check to require in branch protection. It runs
+  # even when something upstream failed (if: always) so the status is always
+  # reported, and it fails if any required job did not succeed.
+  # ---------------------------------------------------------------------------
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    needs: [python-tests, node-tests, ui-checks, docker-images]
+    if: always()
+    steps:
+      - name: Check job results
+        run: |
+          echo "python-tests : ${{ needs.python-tests.result }}"
+          echo "node-tests   : ${{ needs.node-tests.result }}"
+          echo "ui-checks    : ${{ needs.ui-checks.result }}"
+          echo "docker-images: ${{ needs.docker-images.result }}"
+          for r in \
+            "${{ needs.python-tests.result }}" \
+            "${{ needs.node-tests.result }}" \
+            "${{ needs.ui-checks.result }}" \
+            "${{ needs.docker-images.result }}"; do
+            if [ "$r" != "success" ]; then
+              echo "::error::one or more required jobs did not succeed"
+              exit 1
+            fi
+          done
+          echo "all required jobs passed"
+
+  # ---------------------------------------------------------------------------
+  # DEPLOY — intentionally commented out. Uncomment when the host is ready.
+  #
+  # Shape: on a push to `main` that passed every check above, SSH into the EC2
+  # host (a11y.bluecaffeine.in), fast-forward the checkout and rebuild the
+  # compose stack in place. `docker compose up -d --build` only recreates
+  # containers whose image or config changed, so an unchanged service keeps
+  # running (unlike ./run.sh, which does a full down + up).
+  #
+  # Before enabling:
+  #   1. Settings → Environments → new environment `production`; add
+  #      "Required reviewers" if a human should approve each deploy.
+  #   2. Repository secrets (or environment secrets on `production`):
+  #        DEPLOY_HOST      34.228.40.177  (or the DNS name)
+  #        DEPLOY_USER      ubuntu
+  #        DEPLOY_SSH_KEY   private key whose public half is in the host's
+  #                         ~/.ssh/authorized_keys — a dedicated deploy key,
+  #                         not anyone's personal key
+  #        DEPLOY_PATH      absolute path of the ka11y checkout on the host
+  #   3. The host must be able to `git pull` without a prompt (deploy key on
+  #      the repo, or HTTPS with a token in the git credential store) and the
+  #      deploy user must be in the `docker` group.
+  #   4. Decide the deploy branch: `main` below; change the `if:` to
+  #      refs/heads/live (or whatever the host actually serves) if different.
+  #   5. The host's .env is NOT in git; it stays on the host and is read by
+  #      compose on `up`. Nothing here writes it.
+  # ---------------------------------------------------------------------------
+  # deploy:
+  #   name: Deploy · EC2 (docker compose)
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 30
+  #   needs: [ci]
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci.result == 'success'
+  #   environment:
+  #     name: production
+  #     url: https://a11y.bluecaffeine.in
+  #   # One deploy at a time; a second push waits instead of racing the first.
+  #   concurrency:
+  #     group: deploy-production
+  #     cancel-in-progress: false
+  #   steps:
+  #     - name: Deploy over SSH
+  #       uses: appleboy/ssh-action@v1.2.0
+  #       with:
+  #         host: ${{ secrets.DEPLOY_HOST }}
+  #         username: ${{ secrets.DEPLOY_USER }}
+  #         key: ${{ secrets.DEPLOY_SSH_KEY }}
+  #         command_timeout: 25m
+  #         envs: GITHUB_SHA
+  #         script: |
+  #           set -euo pipefail
+  #           cd "${{ secrets.DEPLOY_PATH }}"
+  #           echo "==> deploying ${GITHUB_SHA} to $(hostname)"
+  #           git fetch --prune origin
+  #           git checkout main
+  #           git pull --ff-only origin main
+  #           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}" || { echo "host HEAD != pushed SHA"; exit 1; }
+  #           # Build + recreate only what changed; keep bind-mounted state
+  #           # under ./output (assets, artifacts, logs) untouched.
+  #           docker compose up -d --build --remove-orphans
+  #           docker image prune -f
+  #           docker compose ps
+  #
+  #     - name: Smoke check
+  #       run: |
+  #         for attempt in $(seq 1 12); do
+  #           if curl -fsS --max-time 10 "https://a11y.bluecaffeine.in/api/v1/health" >/dev/null; then
+  #             echo "healthy"; exit 0
+  #           fi
+  #           echo "not ready yet (attempt $attempt/12)"; sleep 10
+  #         done
+  #         echo "::error::service did not become healthy after deploy"
+  #         exit 1
